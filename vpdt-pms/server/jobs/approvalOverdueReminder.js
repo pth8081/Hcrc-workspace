@@ -21,6 +21,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 const { getAllAppData } = require('../lib/appData');
 const { MODULE_CONFIGS, resolveWorkflowStepApprovers } = require('../lib/workflowEngine');
 const { computeApprovalOverdueStatus } = require('../lib/approvalOverdue');
@@ -87,10 +88,10 @@ async function checkApprovalOverdueReminders() {
           const rawRecipients = [];
           for (const uname of approverUsernames) {
             const u = users.find(x => x.username === uname && x.active !== false);
-            if (u && u.email) rawRecipients.push({ email: u.email, name: u.name || uname });
+            if (u && u.email && !isUserOptedOutOfEmailModule(u, 'APPROVAL_OVERDUE')) rawRecipients.push({ email: u.email, name: u.name || uname });
           }
           const creator = users.find(u => u.username === item.creator && u.active !== false);
-          if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });
+          if (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'APPROVAL_OVERDUE')) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });
           for (const cc of ccEmails) {
             const email = String(cc || '').trim();
             if (email) rawRecipients.push({ email, name: email });

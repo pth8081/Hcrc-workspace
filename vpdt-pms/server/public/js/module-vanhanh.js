@@ -247,6 +247,7 @@ function setVanHanhShelfSubTab(tab) {
     renderShelfExpiryGroups();
   } else if (tab === 'THRESHOLD') {
     editingShelfStockThresholdId = null;
+    populateShelfThresholdExtraRecipientsPicker('stExtraRecipientsPicker', []);
     renderShelfStockThresholdsList();
   } else if (tab === 'RECON') {
     loadShelfReconciliation();
@@ -1004,30 +1005,40 @@ function runShelfBarcodeZxingLoop(video, statusEl) {
   }
 }
 
-// ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026). Ngưỡng tồn tối thiểu + email cảnh báo, tính
-// trên shelfRecords đã ghi nhận (KHÔNG cần API tồn kho đối tác — xem jobs/shelfStockThresholdAlert.js).
-// scope/scopeValue BẤT BIẾN sau khi tạo — chỉ Sửa được minQuantity/recipientEmails/active (PATCH
-// /api/shelf-stock/thresholds/:id). DÙNG LẠI quyền shelfLocationManage (canManageShelfLocationsClient). =====
+// ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026), THIẾT KẾ LẠI 11/2026 (xem khối
+// shelfStockThresholds ở lib/createValidation.js cho đầy đủ bối cảnh). Ngưỡng tồn tối thiểu tính trên
+// shelfRecords đã ghi nhận (KHÔNG cần API tồn kho đối tác — xem jobs/shelfStockThresholdAlert.js).
+// maHang/maVach/category BẤT BIẾN sau khi tạo — chỉ Sửa được minQuantity/extraRecipientUsernames/active
+// (PATCH /api/shelf-stock/thresholds/:id). DÙNG LẠI quyền shelfLocationManage
+// (canManageShelfLocationsClient). Người nhận cảnh báo giờ là 4 tầng (3 tầng tự động theo quyền + 1
+// tầng "tự thêm thêm" ở đây, picker CHỈ hiện nhân viên siêu thị mình — server re-validate lại, không tin
+// riêng lọc phía client). =====
+function populateShelfThresholdExtraRecipientsPicker(containerId, initialSelected) {
+  const candidates = (DB.users || []).filter(u => u && u.dept === currentUser.dept && u.active !== false);
+  renderPeopleMultiSelect(containerId, candidates, initialSelected || [], 'stExtraRecipientCheckbox', {});
+}
 async function submitShelfStockThreshold(e) {
   e.preventDefault();
   if (!canManageShelfLocationsClient(currentUser)) return alert('⛔ Bạn không có quyền quản lý Ngưỡng Tồn!');
-  const scope = document.getElementById('stScope').value;
-  const scopeValue = document.getElementById('stScopeValue').value.trim();
-  if (!scopeValue) return alert(scope === 'SKU' ? 'Vui lòng nhập Mã SKU!' : 'Vui lòng nhập Ngành Hàng!');
+  const maHang = document.getElementById('stMaHang').value.trim();
+  const maVach = document.getElementById('stMaVach').value.trim();
+  const category = document.getElementById('stCategory').value.trim();
+  if (!maHang && !maVach && !category) return alert('Vui lòng nhập ít nhất 1 trong 3: Mã Hàng (nội bộ), Mã Vạch, hoặc Ngành Hàng!');
   const minQuantity = Number(document.getElementById('stMinQuantity').value);
   if (!Number.isFinite(minQuantity) || minQuantity < 0) return alert('Ngưỡng tối thiểu không hợp lệ!');
-  const recipientEmails = document.getElementById('stRecipientEmails').value.split(',').map(s => s.trim()).filter(Boolean);
-  if (!recipientEmails.length) return alert('Vui lòng nhập ít nhất 1 email người nhận (phân cách bằng dấu phẩy)!');
-  const payload = { scope, scopeValue, minQuantity, recipientEmails };
+  const extraRecipientUsernames = [...document.querySelectorAll('input.stExtraRecipientCheckbox:checked')].map(cb => cb.value);
+  const payload = { maHang, maVach, category, minQuantity, extraRecipientUsernames };
   let newItem;
   try {
     const result = await callCreateAction('shelfStockThresholds', payload);
     newItem = result.item;
   } catch (err) { return alert(`⛔ ${err.message}`); }
   DB.shelfStockThresholds.unshift(newItem);
-  logSystemAction('SHELF_STOCK_THRESHOLD', 'CREATE', `Thêm ngưỡng tồn [${scope === 'SKU' ? 'SKU' : 'Ngành hàng'} ${scopeValue}, min ${minQuantity}]`, 'SUCCESS', '');
+  const idLogLabel = [maHang && `Mã Hàng ${maHang}`, maVach && `Mã Vạch ${maVach}`, category && `Ngành Hàng ${category}`].filter(Boolean).join(', ');
+  logSystemAction('SHELF_STOCK_THRESHOLD', 'CREATE', `Thêm ngưỡng tồn [${idLogLabel}, min ${minQuantity}]`, 'SUCCESS', '');
   alert('✅ Đã thêm ngưỡng tồn!');
   document.getElementById('stForm').reset();
+  populateShelfThresholdExtraRecipientsPicker('stExtraRecipientsPicker', []);
   renderShelfStockThresholdsList();
 }
 let editingShelfStockThresholdId = null;
@@ -1043,13 +1054,12 @@ async function saveShelfStockThresholdEdit(id) {
   const numId = Number(id);
   const minQuantity = Number(document.getElementById(`stEditMinQuantity_${numId}`).value);
   if (!Number.isFinite(minQuantity) || minQuantity < 0) return alert('Ngưỡng tối thiểu không hợp lệ!');
-  const recipientEmails = document.getElementById(`stEditRecipientEmails_${numId}`).value.split(',').map(s => s.trim()).filter(Boolean);
-  if (!recipientEmails.length) return alert('Vui lòng nhập ít nhất 1 email người nhận!');
+  const extraRecipientUsernames = [...document.querySelectorAll(`input.stEditExtraRecipientCheckbox_${numId}:checked`)].map(cb => cb.value);
   const active = document.getElementById(`stEditActive_${numId}`).checked;
   try {
     const res = await fetch(`/api/shelf-stock/thresholds/${numId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ minQuantity, recipientEmails, active })
+      body: JSON.stringify({ minQuantity, extraRecipientUsernames, active })
     });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
@@ -1065,14 +1075,14 @@ function renderShelfStockThresholdsList() {
   const tbody = document.getElementById('vhShelfThresholdBody');
   if (!tbody) return;
   const items = [...(DB.shelfStockThresholds || [])].sort((a, b) => b.id - a.id);
+  const idLabel = (t) => [t.maHang ? `Mã Hàng: ${t.maHang}` : null, t.maVach ? `Mã Vạch: ${t.maVach}` : null, t.category ? `Ngành Hàng: ${t.category}` : null].filter(Boolean).join(' / ') || '(thiếu dữ liệu)';
   tbody.innerHTML = items.length ? items.map(t => {
-    const scopeLabel = t.scope === 'SKU' ? `SKU: ${t.scopeValue}` : `Ngành hàng: ${t.scopeValue}`;
     if (editingShelfStockThresholdId === t.id) {
       return `
     <tr class="border-b bg-cyan-50">
-      <td class="p-2 font-semibold">${escapeHtml(scopeLabel)}</td>
+      <td class="p-2 font-semibold">${escapeHtml(idLabel(t))}</td>
       <td class="p-2"><input id="stEditMinQuantity_${t.id}" type="number" min="0" value="${escapeHtml(String(t.minQuantity))}" class="w-24 border p-1 rounded"></td>
-      <td class="p-2"><input id="stEditRecipientEmails_${t.id}" value="${escapeHtml((t.recipientEmails || []).join(', '))}" class="w-full border p-1 rounded"></td>
+      <td class="p-2"><div id="stEditExtraRecipientsPicker_${t.id}" class="border rounded p-1 bg-white"></div></td>
       <td class="p-2"><label class="inline-flex items-center gap-1"><input type="checkbox" id="stEditActive_${t.id}" ${t.active !== false ? 'checked' : ''}> Đang áp dụng</label></td>
       <td class="p-2 whitespace-nowrap">
         <button type="button" data-op="saveShelfStockThresholdEdit" data-arg0="${t.id}" class="text-cyan-700 font-bold hover:underline mr-2">💾 Lưu</button>
@@ -1083,15 +1093,86 @@ function renderShelfStockThresholdsList() {
     const badge = t.active !== false
       ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Đang áp dụng</span>`
       : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Ngừng dùng</span>`;
+    const extraNames = (t.extraRecipientUsernames || []).map(un => {
+      const u = (DB.users || []).find(x => x.username === un);
+      return u ? (u.name || un) : un;
+    }).join(', ');
+    const unmigrated = (t.unmigratedExternalEmails || []).length
+      ? `<div class="text-amber-600 mt-1">⚠️ Email cũ chưa gắn tài khoản: ${escapeHtml(t.unmigratedExternalEmails.join(', '))}</div>` : '';
     return `
     <tr class="border-b">
-      <td class="p-2 font-semibold">${escapeHtml(scopeLabel)}</td>
+      <td class="p-2 font-semibold">${escapeHtml(idLabel(t))}</td>
       <td class="p-2 text-right">${escapeHtml(String(t.minQuantity))}</td>
-      <td class="p-2">${escapeHtml((t.recipientEmails || []).join(', '))}</td>
+      <td class="p-2">${extraNames ? escapeHtml(extraNames) : '<span class="text-gray-400 italic">Không có</span>'}${unmigrated}</td>
       <td class="p-2">${badge}</td>
       <td class="p-2"><button type="button" data-op="enterShelfStockThresholdEditMode" data-arg0="${t.id}" class="text-gray-500 hover:underline">Sửa</button></td>
     </tr>`;
   }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo ngưỡng tồn nào</td></tr>`;
+  // renderPeopleMultiSelect() GÁN LẠI innerHTML của container đích — phải gọi SAU khi tbody.innerHTML đã
+  // dựng xong khung div rỗng ở trên (đúng khuôn 2 bước mọi nơi khác trong app dùng widget này).
+  if (editingShelfStockThresholdId !== null) {
+    const editing = items.find(t => t.id === editingShelfStockThresholdId);
+    if (editing) {
+      const candidates = (DB.users || []).filter(u => u && u.dept === editing.dept && u.active !== false);
+      renderPeopleMultiSelect(`stEditExtraRecipientsPicker_${editing.id}`, candidates, editing.extraRecipientUsernames || [], `stEditExtraRecipientCheckbox_${editing.id}`, {});
+    }
+  }
+}
+
+// ===== Nhập Excel Ngưỡng Tồn — đọc/xem trước qua routes/shelfStock.js (chỉ đọc, KHÔNG ghi), client tự
+// lọc dòng "isNew" rồi gọi callCreateAction('shelfStockThresholds', ...) cho TỪNG dòng (tái dùng dup-
+// check/forceOwnDept/validate 1-trong-3 đã có ở lib/createValidation.js) — cùng khuôn Nhập Excel Quầy Kệ
+// ở trên, KHÔNG có route "confirm add hàng loạt" riêng. =====
+let shelfThresholdImportPreviewItems = [];
+async function openShelfThresholdImportModal() {
+  document.getElementById('stImportFile').value = '';
+  document.getElementById('stImportPreviewWrap').classList.add('hidden');
+  shelfThresholdImportPreviewItems = [];
+  document.getElementById('stImportModal').classList.remove('hidden');
+}
+function closeShelfThresholdImportModal() {
+  document.getElementById('stImportModal').classList.add('hidden');
+}
+async function parseShelfThresholdImportFile() {
+  const fileInput = document.getElementById('stImportFile');
+  if (!fileInput.files.length) return alert('Vui lòng chọn file Excel/CSV!');
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  try {
+    const res = await fetch('/api/shelf-stock/thresholds/parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không đọc được file'}`);
+    shelfThresholdImportPreviewItems = body.items || [];
+    const tbody = document.getElementById('stImportPreviewBody');
+    tbody.innerHTML = shelfThresholdImportPreviewItems.map((it) => `
+      <tr class="border-b">
+        <td class="p-1.5">${escapeHtml(it.maHang || '')}</td>
+        <td class="p-1.5">${escapeHtml(it.maVach || '')}</td>
+        <td class="p-1.5 text-gray-500">${escapeHtml(it.category || '')}</td>
+        <td class="p-1.5 text-right">${escapeHtml(String(it.minQuantity))}</td>
+        <td class="p-1.5">${it.isNew
+          ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Mới</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Đã có — bỏ qua</span>`}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="p-3 text-center text-gray-400">Không có dòng nào</td></tr>`;
+    document.getElementById('stImportPreviewWrap').classList.remove('hidden');
+  } catch (err) { alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+}
+async function confirmShelfThresholdImport() {
+  const newItems = shelfThresholdImportPreviewItems.filter(it => it.isNew);
+  if (!newItems.length) return alert('Không có dòng mới nào để thêm.');
+  let added = 0, failed = 0;
+  for (const it of newItems) {
+    try {
+      const result = await callCreateAction('shelfStockThresholds', { maHang: it.maHang, maVach: it.maVach, category: it.category, minQuantity: it.minQuantity });
+      DB.shelfStockThresholds.unshift(result.item);
+      added++;
+    } catch (err) { failed++; }
+  }
+  logSystemAction('SHELF_STOCK_THRESHOLD', 'IMPORT', `Nhập Excel ngưỡng tồn — thêm ${added}/${newItems.length} dòng`, failed ? 'WARNING' : 'SUCCESS', '');
+  alert(failed ? `✅ Đã thêm ${added} ngưỡng tồn, ${failed} dòng lỗi (có thể do trùng tổ hợp Mã Hàng/Mã Vạch/Ngành Hàng).` : `✅ Đã thêm ${added} ngưỡng tồn!`);
+  closeShelfThresholdImportModal();
+  renderShelfStockThresholdsList();
 }
 
 // ===== Cấp lồng thứ 2 trong tab "🏬 Siêu Thị" — Mở mới/Sửa chữa (đổi tên, giữ nguyên logic hiện có) +

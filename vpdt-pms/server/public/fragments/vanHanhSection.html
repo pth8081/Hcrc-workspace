@@ -978,39 +978,49 @@
         <p class="text-gray-400 text-[11px]">Chỉ hiện sản phẩm đã ghi nhận có nhập Hạn Sử Dụng, sắp theo hạn gần nhất lên đầu.</p>
       </div>
 
-      <!-- Sub-tab 4: Ngưỡng Tồn — bổ sung sau Phase 1 MVP. CHỈ shelfLocationManage/admin thấy được. -->
+      <!-- Sub-tab 4: Ngưỡng Tồn — bổ sung sau Phase 1 MVP, THIẾT KẾ LẠI 11/2026. CHỈ shelfLocationManage/
+           admin thấy được. -->
       <div id="vanHanhShelfThresholdWrap" class="hidden space-y-4">
         <form id="stForm" data-op-submit="submitShelfStockThreshold" class="bg-white p-3 rounded border text-xs space-y-3">
+          <p class="text-gray-500">Điền ít nhất 1 trong 3 ô nhận diện bên dưới — điền càng nhiều thì hệ thống càng kiểm càng nhiều điều kiện độc lập (VD điền cả Mã Hàng lẫn Ngành Hàng sẽ cảnh báo riêng cho từng điều kiện).</p>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-              <label class="block font-semibold text-gray-600 mb-1">Phạm Vi Áp Dụng *</label>
-              <select id="stScope" class="w-full border p-1.5 rounded">
-                <option value="CATEGORY">Ngành Hàng</option>
-                <option value="SKU">Mã Vạch</option>
-              </select>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Hàng (nội bộ)</label>
+              <input id="stMaHang" class="w-full border p-1.5 rounded">
             </div>
             <div>
-              <label class="block font-semibold text-gray-600 mb-1">Ngành Hàng / Mã Vạch *</label>
-              <input id="stScopeValue" class="w-full border p-1.5 rounded" required>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Vạch</label>
+              <input id="stMaVach" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ngành Hàng</label>
+              <input id="stCategory" class="w-full border p-1.5 rounded">
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Ngưỡng Tối Thiểu *</label>
               <input id="stMinQuantity" type="number" min="0" step="1" class="w-full border p-1.5 rounded" required>
             </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Email Người Nhận * (phân cách bằng dấu phẩy)</label>
-              <input id="stRecipientEmails" class="w-full border p-1.5 rounded" placeholder="a@hcrc.vn, b@hcrc.vn" required>
-            </div>
           </div>
-          <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Ngưỡng</button>
+          <div class="bg-cyan-50 border border-cyan-200 rounded p-2 text-[11px] text-cyan-900">
+            📧 Tự động gửi cảnh báo cho: Cửa hàng trưởng/Tổ trưởng siêu thị này, Quản lý vùng phụ trách, và tài khoản được cấp xem toàn hệ thống — không cần cấu hình gì thêm. Ai không muốn nhận có thể tự tắt ở Hồ Sơ Cá Nhân &gt; "🔔 Thông Báo Email".
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">➕ Thêm người nhận khác (ngoài danh sách tự động, chỉ chọn được nhân viên siêu thị bạn)</label>
+            <div id="stExtraRecipientsPicker" class="border rounded p-2 bg-white"></div>
+          </div>
+          <div class="flex gap-2">
+            <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Ngưỡng</button>
+            <button type="button" data-op="openShelfThresholdImportModal" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">⬆️ Nhập Excel</button>
+            <a href="/api/shelf-stock/thresholds/import-template" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50 inline-block">⬇️ Tải Mẫu Excel</a>
+          </div>
         </form>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
             <thead class="bg-gray-100">
               <tr>
-                <th class="border p-2">Phạm Vi</th>
+                <th class="border p-2">Mã Hàng / Mã Vạch / Ngành Hàng</th>
                 <th class="border p-2">Ngưỡng Tối Thiểu</th>
-                <th class="border p-2">Email Người Nhận</th>
+                <th class="border p-2">Người Nhận Thêm</th>
                 <th class="border p-2">Trạng Thái</th>
                 <th class="border p-2"></th>
               </tr>
@@ -1018,7 +1028,28 @@
             <tbody id="vhShelfThresholdBody"></tbody>
           </table>
         </div>
-        <p class="text-gray-400 text-[11px]">Phạm vi áp dụng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
+        <p class="text-gray-400 text-[11px]">Mã Hàng/Mã Vạch/Ngành Hàng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
+      </div>
+
+      <!-- Modal Nhập Excel Ngưỡng Tồn -->
+      <div id="stImportModal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full p-4 text-xs space-y-3 max-h-[85vh] overflow-y-auto">
+          <div class="font-bold text-sm">⬆️ Nhập Excel Ngưỡng Tồn</div>
+          <p class="text-gray-500">Tải mẫu Excel (nút "⬇️ Tải Mẫu Excel" ở trên), điền ít nhất 1 trong Mã Hàng/Mã Vạch/Ngành Hàng + Ngưỡng Tối Thiểu, rồi chọn file đã điền ở đây để xem trước.</p>
+          <input type="file" id="stImportFile" accept=".xlsx,.xls,.csv" class="w-full border p-1.5 rounded">
+          <button type="button" data-op="parseShelfThresholdImportFile" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Xem Trước</button>
+          <div id="stImportPreviewWrap" class="hidden space-y-2">
+            <div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100"><tr><th class="p-1.5 text-left">Mã Hàng</th><th class="p-1.5 text-left">Mã Vạch</th><th class="p-1.5 text-left">Ngành Hàng</th><th class="p-1.5 text-left">Ngưỡng</th><th class="p-1.5 text-left">Trạng Thái</th></tr></thead>
+                <tbody id="stImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <p class="text-gray-400">Chỉ các dòng "Mới" sẽ được thêm — dòng "Đã có" (trùng tổ hợp Mã Hàng/Mã Vạch/Ngành Hàng trong siêu thị bạn) sẽ bị bỏ qua.</p>
+            <button type="button" data-op="confirmShelfThresholdImport" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">✅ Xác Nhận Thêm</button>
+          </div>
+          <button type="button" data-op="closeShelfThresholdImportModal" class="text-gray-500 hover:underline">Đóng</button>
+        </div>
       </div>
 
       <!-- Sub-tab 5: Đối Chiếu Kệ & Tồn Kho (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1,

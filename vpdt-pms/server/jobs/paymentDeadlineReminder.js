@@ -19,6 +19,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const REMINDER_DAYS = [3, 1, 0];
 
@@ -76,7 +77,7 @@ async function checkPaymentDeadlineReminders() {
     // "custodian" giữ tiền = mọi user đang có quyền paymentManage (kế toán) — TÁCH RIÊNG khỏi người
     // tạo đề nghị, vì người tạo (createdBy) có thể không giữ quyền này (VD custodianDept khác), và kế
     // toán quản lý payment KHÔNG nhất thiết là người đã tạo đề nghị đó.
-    const custodians = users.filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.paymentManage))
+    const custodians = users.filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.paymentManage) && !isUserOptedOutOfEmailModule(u, 'PAYMENT_DEADLINE'))
       .map(u => ({ email: u.email, name: u.name || u.username }));
 
     for (const pr of approved) {
@@ -98,7 +99,7 @@ async function checkPaymentDeadlineReminders() {
             : `còn khoảng ${threshold} ngày là đến hạn`;
 
           const rawRecipients = [];
-          if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || pr.createdByName || pr.createdBy });
+          if (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'PAYMENT_DEADLINE')) rawRecipients.push({ email: creator.email, name: creator.name || pr.createdByName || pr.createdBy });
           rawRecipients.push(...custodians);
           const seenEmails = new Set();
           const recipients = rawRecipients.filter(r => {

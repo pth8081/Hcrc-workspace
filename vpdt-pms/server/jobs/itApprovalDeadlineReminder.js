@@ -22,6 +22,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 const { parseVNDateTime } = require('../lib/recordActions');
 
 const PENDING_REMINDER_DAYS = 2;
@@ -115,7 +116,7 @@ async function checkItApprovalDeadlineReminders() {
         const days = daysSince(ticket.escalatedAt);
         if (days === null || days < PENDING_REMINDER_DAYS) continue;
         const approver = users.find(u => u.username === ticket.approvalApprover && u.active !== false);
-        const recipients = (approver && approver.email) ? [{ email: approver.email, name: approver.name || approver.username }] : [];
+        const recipients = (approver && approver.email && !isUserOptedOutOfEmailModule(approver, 'IT_APPROVAL_DEADLINE')) ? [{ email: approver.email, name: approver.name || approver.username }] : [];
         const subject = `[VPDT] Yêu cầu phê duyệt IT "${ticket.title || ''}" (${ticket.code || ticket.id}) đang chờ xử lý quá ${PENDING_REMINDER_DAYS} ngày`;
         const plainBody = `Yêu cầu phê duyệt cho ticket IT "${ticket.title || ''}" (${ticket.code || ''}) gửi tới bạn từ ${ticket.escalatedAt} vẫn chưa được xử lý. Lý do: ${ticket.approvalReason || ''}.`;
         const body = `${plainBody}${buildReminderEmailLink('itSupport', ticket.code)}`;
@@ -153,7 +154,7 @@ async function checkItApprovalDeadlineReminders() {
           const days = daysSince(openInfoReq.requestedAt);
           if (days !== null && days >= PENDING_REMINDER_DAYS) {
             const creator = users.find(u => u.username === item.creator && u.active !== false);
-            const recipients = (creator && creator.email) ? [{ email: creator.email, name: creator.name || creator.username }] : [];
+            const recipients = (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'IT_APPROVAL_DEADLINE')) ? [{ email: creator.email, name: creator.name || creator.username }] : [];
             const subject = `[VPDT] Đề xuất giá "${item.code || item.id}" đang chờ bạn bổ sung quá ${PENDING_REMINDER_DAYS} ngày`;
             const plainBody = `Đề xuất giá của bạn (${item.code || item.id}) có yêu cầu bổ sung từ ${openInfoReq.requestedByName} (từ ${openInfoReq.requestedAt}) chưa được phản hồi: ${openInfoReq.reason}`;
             const body = `${plainBody}${buildReminderEmailLink('itSupport', item.code)}`;
@@ -170,7 +171,7 @@ async function checkItApprovalDeadlineReminders() {
           const days = daysSince(item.emergencyRejectRequestedAt);
           if (days !== null && days >= PENDING_REMINDER_DAYS) {
             const flag = item.priceType === 'WHOLESALE' ? 'itPriceEmergencyRejectApproveWholesale' : 'itPriceEmergencyRejectApproveRetail';
-            const recipients = users.filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.[flag]))
+            const recipients = users.filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.[flag]) && !isUserOptedOutOfEmailModule(u, 'IT_APPROVAL_DEADLINE'))
               .map(u => ({ email: u.email, name: u.name || u.username }));
             const subject = `[VPDT] Yêu cầu từ chối khẩn cấp đề xuất giá "${item.code || item.id}" đang chờ xử lý quá ${PENDING_REMINDER_DAYS} ngày`;
             const plainBody = `Yêu cầu từ chối khẩn cấp cho đề xuất giá (${item.code || item.id}) gửi từ ${item.emergencyRejectRequestedByName} (từ ${item.emergencyRejectRequestedAt}) vẫn chưa được xử lý. Lý do: ${item.emergencyRejectReason || ''}.`;

@@ -1019,13 +1019,15 @@ const CORE_FIELD_MANIFEST = {
     { id: 'srNote', label: 'Ghi Chú', required: false }
   ],
   // SHELF_STOCK_THRESHOLD: #stForm (Vận Hành > Kiểm Soát Hàng Hóa > Ngưỡng Tồn, bổ sung sau Phase 1 MVP
-  // 11/2026). scope/scopeValue BẤT BIẾN sau khi tạo (xem lib/createValidation.js) nhưng vẫn là field nhập
-  // tay THẬT lúc tạo, cùng diện Biểu Mẫu như code quầy kệ (slCode) đã có.
+  // 11/2026, THIẾT KẾ LẠI 11/2026 — xem khối shelfStockThresholds ở lib/createValidation.js). maHang/
+  // maVach/category BẤT BIẾN sau khi tạo nhưng vẫn là field nhập tay THẬT lúc tạo (ít nhất 1 trong 3,
+  // không field nào BẮT BUỘC riêng lẻ — required:false cho cả 3, validate "ít nhất 1" nằm ở server).
+  // stRecipientEmails đã bỏ hẳn (4 tầng người nhận tự động/picker, không còn ô nhập tay).
   SHELF_STOCK_THRESHOLD: [
-    { id: 'stScope', label: 'Phạm Vi Áp Dụng', required: true },
-    { id: 'stScopeValue', label: 'Ngành Hàng / Mã Vạch', required: true },
-    { id: 'stMinQuantity', label: 'Ngưỡng Tối Thiểu', required: true },
-    { id: 'stRecipientEmails', label: 'Email Người Nhận Cảnh Báo', required: true }
+    { id: 'stMaHang', label: 'Mã Hàng (nội bộ)', required: false },
+    { id: 'stMaVach', label: 'Mã Vạch', required: false },
+    { id: 'stCategory', label: 'Ngành Hàng', required: false },
+    { id: 'stMinQuantity', label: 'Ngưỡng Tối Thiểu', required: true }
   ],
   // OPERATION_WORK_ITEM: #operationWorkItemFormModal (Vận Hành > Siêu Thị > Thực hiện/Nghiệm thu > Thêm
   // Công Việc, dùng CHUNG cho tạo mới lẫn sửa). owiAssignedToPicker (renderPeopleMultiSelect(), div
@@ -7703,6 +7705,44 @@ const APPROVAL_EMAIL_EVENTS = [
   // đúng file .docx (xem buildApprovalEmailLink()/dispatchRealEmail() ở dưới).
   { configModule: 'MINUTES', label: '📝 Biên Bản Họp', families: [
     { key: 'created', label: 'Biên bản đã lập / cập nhật (gửi người tham dự)', actionTypes: ['NOTIFY_MINUTES_CREATED'] }
+  ] },
+  // SHELF_THRESHOLD + 9 module nhắc hạn bên dưới (11/2026): KHÔNG phải luồng phê duyệt client-side —
+  // đây là các job CRON chạy nền phía server (jobs/*.js), gửi thẳng qua lib/mailer.js, KHÔNG đi qua
+  // notifyRecipientsByEmail()/classifyApprovalEmailEvent() ở file này (actionTypes dưới đây CHỈ tồn tại
+  // để liệt kê cho đủ hình thức — jobs/*.js áp dụng opt-out bằng cách đọc THẲNG user.notifyEmailModules
+  // qua lib/notifyEmailModulesGate.js, không gọi qua classifyApprovalEmailEvent()). Đăng ký vào đây CHỈ
+  // để renderNotifyEmailModulesForm() (Hồ Sơ Cá Nhân > "🔔 Thông Báo Email") tự liệt kê đủ module, và để
+  // NOTIFY_EMAIL_MODULE_KEYS (routes/auth.js, suy ra từ defaults.js approvalEmailConfig) chấp nhận lưu
+  // đúng khoá này — 2 khoá đó BẮT BUỘC khớp tên configModule ở đây (xem defaults.js).
+  { configModule: 'SHELF_THRESHOLD', label: '📋 Kiểm Soát Hàng Hóa (Cảnh báo Ngưỡng Tồn)', personalOnly: true, families: [
+    { key: 'thresholdAlert', label: 'Cảnh báo dưới ngưỡng tồn', actionTypes: [] }
+  ] },
+  { configModule: 'APPROVAL_OVERDUE', label: '⏰ Quá Hạn Xử Lý Phê Duyệt (Văn Bản Trình/Hợp Đồng)', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc quá hạn xử lý tại bước phê duyệt', actionTypes: [] }
+  ] },
+  { configModule: 'CONTRACT_EXPIRY', label: '📑 Nhắc Hạn Hợp Đồng (Hiệu Lực)', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc hợp đồng sắp/đã hết hạn', actionTypes: [] }
+  ] },
+  { configModule: 'HR_TASK_OVERDUE', label: '🧑‍💼 Quá Hạn Công Việc Onboarding/Offboarding', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc công việc Onboarding/Offboarding quá hạn', actionTypes: [] }
+  ] },
+  { configModule: 'IT_APPROVAL_DEADLINE', label: '🖥️ Nhắc Hạn Chờ Xử Lý Hỗ Trợ IT', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc yêu cầu phê duyệt/bổ sung IT đang chờ xử lý quá lâu', actionTypes: [] }
+  ] },
+  { configModule: 'IT_SERVICE_RENEWAL', label: '🔄 Nhắc Gia Hạn Dịch Vụ CNTT', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc dịch vụ CNTT sắp/đã hết hạn', actionTypes: [] }
+  ] },
+  { configModule: 'LABOR_CONTRACT_EXPIRY', label: '👔 Nhắc Hạn Hợp Đồng Lao Động', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc hợp đồng lao động sắp/đã hết hạn', actionTypes: [] }
+  ] },
+  { configModule: 'LICENSE_EXPIRY', label: '📜 Nhắc Hạn Giấy Phép', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc giấy phép sắp/đã hết hạn', actionTypes: [] }
+  ] },
+  { configModule: 'PAYMENT_DEADLINE', label: '💵 Nhắc Hạn Thanh Toán', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc đợt thanh toán sắp/đã đến hạn', actionTypes: [] }
+  ] },
+  { configModule: 'REPORT_PERIOD_DEADLINE', label: '📊 Nhắc Hạn Nộp Báo Cáo Định Kỳ', personalOnly: true, families: [
+    { key: 'reminder', label: 'Nhắc phòng ban chưa nộp báo cáo định kỳ sắp đến hạn', actionTypes: [] }
   ] }
 ];
 
@@ -9161,6 +9201,12 @@ function renderApprovalEmailConfigForm() {
   const mainRows = [];
   const specialBlocks = [];
   APPROVAL_EMAIL_EVENTS.forEach(mod => {
+    // personalOnly (11/2026, job CRON phía server — Ngưỡng Tồn + 9 job nhắc hạn): KHÔNG hề đi qua
+    // notifyRecipientsByEmail()/isApprovalEmailSuppressed() ở file này — job đọc THẲNG
+    // user.notifyEmailModules qua lib/notifyEmailModulesGate.js (phía server), nên tắt/bật ở màn admin
+    // này sẽ KHÔNG có tác dụng gì (ô ảo). Loại khỏi CẢ bảng chính lẫn khối "đặc thù" — các module này
+    // CHỈ nên cấu hình ở lớp cá nhân (renderNotifyEmailModulesForm(), KHÔNG lọc personalOnly).
+    if (mod.personalOnly) return;
     const mainFamilies = mod.families.filter(f => f.key === 'approvalNeeded' || f.key === 'result');
     const specialFamilies = mod.families.filter(f => f.key !== 'approvalNeeded' && f.key !== 'result');
 
@@ -9214,6 +9260,7 @@ async function saveApprovalEmailConfig(e) {
   const prevConfig = DB.approvalEmailConfig;
   const next = {};
   APPROVAL_EMAIL_EVENTS.forEach(mod => {
+    if (mod.personalOnly) return; // không render ở đây -> không có checkbox nào để đọc, giữ nguyên key cũ trong DB.approvalEmailConfig nếu có
     const modOut = {};
     mod.families.forEach(f => {
       if (!(f.actionTypes || []).length) return;

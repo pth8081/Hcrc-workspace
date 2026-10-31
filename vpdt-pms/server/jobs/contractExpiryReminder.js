@@ -16,6 +16,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const DEFAULT_REMINDER_DAYS = [30, 15, 7];
 
@@ -138,7 +139,7 @@ async function checkContractExpiryReminders() {
         });
 
         const rawRecipients = [];
-        if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || c.creator });
+        if (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'CONTRACT_EXPIRY')) rawRecipients.push({ email: creator.email, name: creator.name || c.creator });
         // Người phụ trách của ĐÚNG phòng ban hợp đồng này — bổ sung, không thay thế ccEmails (CC
         // chung nhận thông báo bất kỳ hợp đồng phòng nào, vd Ban Giám Đốc).
         const deptRecipients = Array.isArray(deptContacts[c.dept]) ? deptContacts[c.dept] : [];

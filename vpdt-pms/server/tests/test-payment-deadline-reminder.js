@@ -120,6 +120,20 @@ async function main() {
     assert.ok(!mails.some(m => m.to.includes('')), 'Không được có địa chỉ rỗng trong danh sách gửi');
   });
 
+  await test('kt1 tự tắt notifyEmailModules.PAYMENT_DEADLINE=false -> bị loại khỏi người nhận (11/2026, lib/notifyEmailModulesGate.js)', async () => {
+    APP_DATA.users.find(u => u.username === 'kt1').notifyEmailModules = { PAYMENT_DEADLINE: false };
+    STORE.paymentRequests.push({
+      id: 10, title: 'Thanh toán có kt1 đã tắt nhận email', status: 'APPROVED', createdBy: 'nv1', createdByName: 'Người Tạo Đề Nghị',
+      installments: [makeInstallment({ description: 'Đợt 1', dueDate: todayPlus(2) })]
+    });
+    await checkPaymentDeadlineReminders();
+    const mails = sentMails.filter(m => m.subject.includes('kt1 đã tắt nhận email'));
+    assert.ok(mails.length > 0, 'Vẫn phải gửi (creator vẫn nhận)');
+    assert.ok(!mails.some(m => m.to.includes('kt1@test.vn')), 'kt1 đã tự tắt -> KHÔNG được có trong danh sách người nhận');
+    assert.ok(mails.some(m => m.to.includes('nv1@test.vn')), 'nv1 (creator, chưa tắt gì) vẫn phải nhận bình thường');
+    delete APP_DATA.users.find(u => u.username === 'kt1').notifyEmailModules; // dọn lại, không ảnh hưởng các test sau
+  });
+
   await test('Đợt ĐÃ confirmed (dù quá hạn từ lâu) -> KHÔNG bị nhắc', () => {
     const mails = sentMails.filter(m => m.subject.includes('đã xong đợt 1'));
     assert.strictEqual(mails.length, 0, 'Đợt đã xác nhận thanh toán rồi thì không cần nhắc nữa');

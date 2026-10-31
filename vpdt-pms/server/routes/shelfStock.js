@@ -19,6 +19,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
 const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile } = require('../lib/shelfLocationImport');
+const { buildShelfThresholdTemplateWorkbook, parseShelfThresholdFile } = require('../lib/shelfThresholdImport');
 const { canManageShelfStock, applyShelfLocationEdit, applyShelfStockThresholdEdit } = require('../lib/shelfStockEdit');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -51,7 +52,8 @@ router.patch('/thresholds/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const updated = await withLockedRecordForCollection('shelfStockThresholds', id, (item) => applyShelfStockThresholdEdit(item, req.body, req.freshUser));
+    const allUsers = (await getAppDataValue('users')) || [];
+    const updated = await withLockedRecordForCollection('shelfStockThresholds', id, (item) => applyShelfStockThresholdEdit(item, req.body, req.freshUser, allUsers));
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/thresholds/:id');
@@ -165,6 +167,69 @@ router.post('/locations/parse-import', uploadRateLimiter, (req, res) => {
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/shelf-stock/locations/parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// ===================== NGƯỠNG TỒN: tải mẫu Excel + đọc file đã điền để XEM TRƯỚC =====================
+// SIÊU THỊ TỰ UPLOAD ngưỡng CỦA CHÍNH MÌNH (xác nhận với người dùng, KHÔNG phải màn quản trị) — cùng
+// khuôn Quầy Kệ ở trên, chỉ khác forceOwnDept áp dụng đúng phạm vi "ngưỡng tồn của siêu thị người gọi".
+router.get('/thresholds/import-template', async (req, res) => {
+  if (!canManageShelfLocations(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Ngưỡng Tồn Kiểm Soát Hàng Hóa' });
+  }
+  try {
+    const wb = await buildShelfThresholdTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Nguong_Ton.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/shelf-stock/thresholds/import-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/shelf-stock/thresholds/parse-import — CHỈ đọc + trả xem trước (isNew đối chiếu ĐÚNG phạm
+// vi siêu thị của người gọi — req.freshUser.dept, so khớp CẢ 3 trường maHang/maVach/category giống hệt
+// dup-check ở lib/createValidation.js). Client tự lọc ra các dòng "mới" rồi gọi
+// callCreateAction('shelfStockThresholds', ...) cho TỪNG dòng, không ghi gì ở route này.
+router.post('/thresholds/parse-import', uploadRateLimiter, (req, res) => {
+  if (!canManageShelfLocations(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Ngưỡng Tồn Kiểm Soát Hàng Hóa' });
+  }
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/shelf-stock/thresholds/parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh sách ngưỡng tồn cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
+
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const parsedItems = await parseShelfThresholdFile(buffer, ext);
+      const allThresholds = await getAllForCollection('shelfStockThresholds');
+      const existingOwnDept = (allThresholds || []).filter(t => t.dept === req.freshUser.dept && t.active !== false);
+      const existingKeys = new Set(existingOwnDept.map(t =>
+        `${String(t.maHang || '').trim()}|${String(t.maVach || '').trim().toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`
+      ));
+      const items = parsedItems.map(it => {
+        const key = `${it.maHang}|${it.maVach.toLowerCase()}|${it.category.toLowerCase()}`;
+        return { ...it, isNew: !existingKeys.has(key) };
+      });
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/shelf-stock/thresholds/parse-import');
     } finally {
       fs.unlink(req.file.path, () => {});
     }

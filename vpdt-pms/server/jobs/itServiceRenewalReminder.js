@@ -11,6 +11,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const DEFAULT_REMINDER_DAYS = [30, 15, 7];
 
@@ -72,7 +73,7 @@ async function checkItServiceRenewalReminders() {
 
     const users = await getCollection(pool, 'users', []);
     const itTeamEmails = users
-      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.itServiceRenewalManage))
+      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.itServiceRenewalManage) && !isUserOptedOutOfEmailModule(u, 'IT_SERVICE_RENEWAL'))
       .map(u => ({ email: u.email, name: u.name || u.username }));
 
     for (const item of renewals) {
@@ -106,7 +107,7 @@ async function checkItServiceRenewalReminders() {
         });
 
         const rawRecipients = [];
-        if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });
+        if (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'IT_SERVICE_RENEWAL')) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });
         for (const a of itTeamEmails) rawRecipients.push(a);
         for (const cc of ccEmails) {
           const email = String(cc).trim();

@@ -15,6 +15,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const REMINDER_DAYS = [3, 1, 0];
 
@@ -112,7 +113,7 @@ async function checkReportPeriodDeadlineReminders() {
         let anyTotalFailure = false;
         for (const dept of missingDepts) {
           const recipients = users
-            .filter(u => u && u.active !== false && u.email && u.dept === dept && (u.perms?.admin || u.perms?.reportEntryCreate))
+            .filter(u => u && u.active !== false && u.email && u.dept === dept && (u.perms?.admin || u.perms?.reportEntryCreate) && !isUserOptedOutOfEmailModule(u, 'REPORT_PERIOD_DEADLINE'))
             .map(u => ({ email: u.email, name: u.name || u.username }));
 
           const subject = `[VPDT] Kỳ báo cáo "${period.name}" ${label} — "${dept}" chưa nộp`;

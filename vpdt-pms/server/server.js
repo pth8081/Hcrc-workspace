@@ -93,6 +93,7 @@ const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadl
 const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
 const { checkItApprovalDeadlineReminders } = require('./jobs/itApprovalDeadlineReminder');
 const { migrateLegacyViewScopeViewers } = require('./jobs/legacyViewScopeMigration');
+const { migrateLegacyShelfStockThresholds } = require('./jobs/legacyShelfStockThresholdMigration');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -506,6 +507,10 @@ async function start() {
       // khác (migration tự idempotent, chạy 1 lần/lần khởi động là đủ, dữ liệu users/perms hiếm khi đổi
       // liên tục giữa các lần khởi động) — xem chú thích đầy đủ ở jobs/legacyViewScopeMigration.js.
       migrateLegacyViewScopeViewers();
+      // Di trú Ngưỡng Tồn Kiểm Soát Hàng Hóa sang model mới (maHang/maVach/category + Tầng 4 theo tài
+      // khoản) — CHẠY Ở ĐÂY cùng lý do di trú quyền Xem cũ ở trên (idempotent, 1 lần/lần khởi động là
+      // đủ) — xem jobs/legacyShelfStockThresholdMigration.js.
+      migrateLegacyShelfStockThresholds();
       checkContractExpiryReminders();
       setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Quá Hạn Xử Lý (11/2026) — đếm số ngày ĐÃ CHỜ tại 1 bước phê duyệt (khác hẳn các job nhắc hạn

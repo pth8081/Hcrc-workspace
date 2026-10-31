@@ -11,6 +11,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const DEFAULT_REMINDER_DAYS = [30, 15, 7];
 
@@ -89,7 +90,7 @@ async function checkLicenseExpiryReminders() {
 
     const users = await getCollection(pool, 'users', []);
     const approverEmails = users
-      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.licenseApprove))
+      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.licenseApprove) && !isUserOptedOutOfEmailModule(u, 'LICENSE_EXPIRY'))
       .map(u => ({ email: u.email, name: u.name || u.username }));
 
     for (const l of licenses) {
@@ -129,7 +130,7 @@ async function checkLicenseExpiryReminders() {
         });
 
         const rawRecipients = [];
-        if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || l.creator });
+        if (creator && creator.email && !isUserOptedOutOfEmailModule(creator, 'LICENSE_EXPIRY')) rawRecipients.push({ email: creator.email, name: creator.name || l.creator });
         for (const a of approverEmails) rawRecipients.push(a);
         for (const cc of ccEmails) {
           const email = String(cc).trim();

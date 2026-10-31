@@ -16,6 +16,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 async function getCollection(pool, key, fallback) {
   const result = await pool.request()
@@ -53,7 +54,7 @@ function isPastDue(dateStr) {
 function resolveTaskRecipients(users, item, task) {
   if (task.assignedToUsername) {
     const u = users.find(x => x.username === task.assignedToUsername && x.active !== false);
-    return u && u.email ? [{ email: u.email, name: u.name || u.username }] : [];
+    return u && u.email && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE') ? [{ email: u.email, name: u.name || u.username }] : [];
   }
   let matchesPerm;
   if (task.department === 'HR' || task.department === 'ADMIN') {
@@ -66,11 +67,11 @@ function resolveTaskRecipients(users, item, task) {
   } else if (task.department === 'MANAGER') {
     if (!item.directManagerUsername) return [];
     const u = users.find(x => x.username === item.directManagerUsername && x.active !== false);
-    return u && u.email ? [{ email: u.email, name: u.name || u.username }] : [];
+    return u && u.email && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE') ? [{ email: u.email, name: u.name || u.username }] : [];
   } else {
     return [];
   }
-  return users.filter(u => u && u.active !== false && u.email && matchesPerm(u)).map(u => ({ email: u.email, name: u.name || u.username }));
+  return users.filter(u => u && u.active !== false && u.email && matchesPerm(u) && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE')).map(u => ({ email: u.email, name: u.name || u.username }));
 }
 
 async function checkHrTaskOverdueReminders() {

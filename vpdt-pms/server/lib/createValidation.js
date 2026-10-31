@@ -2021,45 +2021,84 @@ const CREATE_MODULE_CONFIGS = {
       payload.maVach = String(payload.maVach || '').trim().slice(0, 20);
     }
   },
-  // shelfStockThresholds (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — ngưỡng tồn tối thiểu
-  // + danh sách email cảnh báo, tính TRÊN SỐ LIỆU shelfRecords đã ghi nhận (KHÔNG cần API tồn kho đối
-  // tác — xem jobs/shelfStockThresholdAlert.js). forceOwnDept:true mirror shelfLocations/shelfRecords —
-  // chặn store-spoofing. Quyết định (xác nhận với người dùng): DÙNG LẠI quyền `shelfLocationManage`
-  // (không tách quyền riêng cho Ngưỡng Tồn) — cùng vai trò Cửa hàng trưởng/Tổ trưởng quản lý cả Quầy Kệ
-  // lẫn Ngưỡng Tồn của siêu thị mình là hợp lý, tránh phân mảnh quyền không cần thiết ở MVP này.
+  // shelfStockThresholds (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026; THIẾT KẾ LẠI 11/2026
+  // theo loạt câu hỏi người dùng về Ngưỡng Tồn — xem jobs/legacyShelfStockThresholdMigration.js cho dữ
+  // liệu cũ) — ngưỡng tồn tối thiểu tính TRÊN SỐ LIỆU shelfRecords đã ghi nhận HÔM NAY (KHÔNG cần API
+  // tồn kho đối tác — xem jobs/shelfStockThresholdAlert.js). forceOwnDept:true mirror shelfLocations/
+  // shelfRecords — chặn store-spoofing. Quyết định (xác nhận với người dùng): DÙNG LẠI quyền
+  // `shelfLocationManage` (không tách quyền riêng cho Ngưỡng Tồn) — cùng vai trò Cửa hàng trưởng/Tổ
+  // trưởng quản lý cả Quầy Kệ lẫn Ngưỡng Tồn của siêu thị mình là hợp lý, tránh phân mảnh quyền không
+  // cần thiết ở MVP này.
+  //
+  // BỎ HẲN scope ('CATEGORY'|'SKU' ép chọn 1) + scopeValue (1 ô dùng chung mơ hồ) + recipientEmails
+  // (free-text không kiểm soát được — người dùng phản ánh "cửa hàng trưởng tự add email linh tinh").
+  // Thay bằng 3 trường nhận diện ĐỘC LẬP, đều tuỳ chọn (ít nhất 1 trường phải có — "nhập 1 là đủ, nhập
+  // nhiều thì check nhiều điều kiện", nguyên văn người dùng):
+  //   - maHang (Mã Hàng nội bộ) + maVach (Mã Vạch) — ĐÚNG TÊN FIELD đã dùng ở shelfRecords (xem khối
+  //     shelfRecords ở trên) để khớp trực tiếp không cần lớp ánh xạ tên — có 1 trong 2 (hoặc cả 2) là
+  //     ngưỡng mức SKU.
+  //   - category (Ngành Hàng) — "siêu thị họ sẽ không quan tâm đến ngành hàng đâu" (thường để trống),
+  //     nhưng nếu điền thì vẫn tính thêm 1 điều kiện cảnh báo mức Ngành Hàng (CỘNG THÊM, không thay
+  //     thế — xem jobs/shelfStockThresholdAlert.js: 1 ngưỡng có thể bắn ra 2 cảnh báo độc lập/lượt chạy
+  //     nếu điền cả mã SKU lẫn ngành hàng và CẢ 2 đều dưới ngưỡng).
+  // recipientEmails thay bằng extraRecipientUsernames[] (Tầng 4 "tự thêm thêm", CHỈ chọn được nhân viên
+  // THẬT đang thuộc ĐÚNG siêu thị của người tạo — chặn hẳn khả năng gõ email ngoài hệ thống). 3 tầng còn
+  // lại (Cửa hàng trưởng theo quyền shelfLocationManage/Quản lý vùng theo shelfReportView.depts/Toàn hệ
+  // thống theo shelfReportView.all) KHÔNG lưu gì ở bản ghi này — tính ĐỘNG lúc gửi cảnh báo (xem
+  // jobs/shelfStockThresholdAlert.js resolveThresholdRecipients()), giống hệt cách approvers "Theo vị
+  // trí" của workflowEngine tính động, không "đông cứng" lúc tạo.
   shelfStockThresholds: {
     dbKey: 'shelfStockThresholds',
     getScope: () => ({}),
     forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.shelfLocationManage) {
         throw new CreateError(403, 'Bạn không có quyền quản lý Ngưỡng Tồn Kiểm Soát Hàng Hóa');
       }
-      const scope = payload.scope === 'SKU' ? 'SKU' : (payload.scope === 'CATEGORY' ? 'CATEGORY' : null);
-      if (!scope) throw new CreateError(400, 'Phạm vi áp dụng không hợp lệ (phải là Ngành Hàng hoặc SKU)');
-      const scopeValue = String(payload.scopeValue || '').trim();
-      if (!scopeValue) throw new CreateError(400, scope === 'SKU' ? 'Vui lòng nhập Mã SKU' : 'Vui lòng nhập Ngành Hàng');
+      const maHang = String(payload.maHang || '').trim().slice(0, 20);
+      const maVach = String(payload.maVach || '').trim().slice(0, 20);
+      const category = String(payload.category || '').trim().slice(0, 100);
+      if (!maHang && !maVach && !category) {
+        throw new CreateError(400, 'Vui lòng nhập ít nhất 1 trong 3: Mã Hàng (nội bộ), Mã Vạch, hoặc Ngành Hàng');
+      }
       const minQuantity = Number(payload.minQuantity);
       if (!Number.isFinite(minQuantity) || minQuantity < 0) {
         throw new CreateError(400, 'Ngưỡng tối thiểu không hợp lệ (phải là số không âm)');
       }
-      const emails = (Array.isArray(payload.recipientEmails) ? payload.recipientEmails : [])
-        .map(e => String(e || '').trim()).filter(Boolean);
-      if (!emails.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 email người nhận cảnh báo');
-      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const invalid = emails.find(e => !EMAIL_RE.test(e));
-      if (invalid) throw new CreateError(400, `Email không hợp lệ: ${invalid}`);
-      // Trùng phạm vi áp dụng (scope+scopeValue) CHỈ chặn trong CÙNG siêu thị — 2 siêu thị khác nhau được
-      // đặt ngưỡng độc lập cho cùng 1 ngành hàng/SKU.
-      const isDup = (collection || []).some(it => it.dept === user.dept && it.scope === scope
-        && String(it.scopeValue || '').toLowerCase() === scopeValue.toLowerCase() && it.active !== false);
-      if (isDup) throw new CreateError(409, `Đã có ngưỡng tồn đang áp dụng cho "${scopeValue}" ở siêu thị của bạn`);
-      payload.scope = scope;
-      payload.scopeValue = scopeValue;
+      // Tầng 4 "tự thêm thêm" — CHỈ chấp nhận username của user ACTIVE đang thuộc ĐÚNG siêu thị người
+      // tạo (user.dept, server tự tra qua appData.users — KHÔNG tin dept client gửi kèm) — chặn đúng lỗ
+      // hổng người dùng chỉ ra: cửa hàng trưởng không thể tự gõ/chọn email ngoài hệ thống hay của siêu
+      // thị khác. Admin tạo hộ (dept khác user.dept, item.dept đã forceOwnDept thành user.dept ở trên)
+      // vẫn đối chiếu đúng theo user.dept (siêu thị của NGƯỜI TẠO, khớp forceOwnDept).
+      const rawUsernames = Array.isArray(payload.extraRecipientUsernames) ? payload.extraRecipientUsernames : [];
+      const wantedUsernames = [...new Set(rawUsernames.map(u => String(u || '').trim()).filter(Boolean))];
+      const allUsers = Array.isArray(appData?.users) ? appData.users : [];
+      const invalidUsername = wantedUsernames.find(un => {
+        const u = allUsers.find(x => x.username === un);
+        return !u || u.active === false || u.dept !== user.dept;
+      });
+      if (invalidUsername) {
+        throw new CreateError(400, `Người nhận "${invalidUsername}" không hợp lệ (phải là nhân viên đang hoạt động của đúng siêu thị bạn)`);
+      }
+      const extraRecipientUsernames = wantedUsernames;
+      // Trùng phạm vi áp dụng CHỈ chặn trong CÙNG siêu thị (so khớp CẢ 3 trường cùng lúc, không phân
+      // biệt hoa/thường cho maVach/category — maHang giữ nguyên dạng vì có thể có ký tự ý nghĩa) — 2 siêu
+      // thị khác nhau được đặt ngưỡng độc lập cho cùng 1 SKU/ngành hàng.
+      const isDup = (collection || []).some(it => it.dept === user.dept && it.active !== false
+        && String(it.maHang || '').trim() === maHang
+        && String(it.maVach || '').trim().toLowerCase() === maVach.toLowerCase()
+        && String(it.category || '').trim().toLowerCase() === category.toLowerCase());
+      if (isDup) throw new CreateError(409, `Đã có ngưỡng tồn đang áp dụng cho đúng tổ hợp Mã Hàng/Mã Vạch/Ngành Hàng này ở siêu thị của bạn`);
+      payload.maHang = maHang;
+      payload.maVach = maVach;
+      payload.category = category;
       payload.minQuantity = minQuantity;
-      payload.recipientEmails = emails;
+      payload.extraRecipientUsernames = extraRecipientUsernames;
       payload.active = payload.active !== false;
+      delete payload.scope;
+      delete payload.scopeValue;
+      delete payload.recipientEmails;
     }
   },
   // Vận Hành > "Siêu Thị" > "Thực hiện" — "Kỳ Thực Hiện": mỗi hồ sơ Mở mới/Sửa chữa có DANH SÁCH kỳ

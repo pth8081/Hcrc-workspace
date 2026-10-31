@@ -56,10 +56,10 @@ async function runClientScenarios(run) {
   try {
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, REPORTER);
 
-    await run.run('openProfileModal() + renderNotifyEmailModulesForm() hiện đủ 17 dòng phân hệ, mặc định TẤT CẢ tick sẵn', async () => {
+    await run.run('openProfileModal() + renderNotifyEmailModulesForm() hiện đủ 27 dòng phân hệ, mặc định TẤT CẢ tick sẵn', async () => {
       await page.evaluate(() => openProfileModal());
       const count = await page.evaluate(() => document.querySelectorAll('#pfNotifyEmailListWrap .pf-notify-email-module').length);
-      assertEqual(count, 17, 'Phải luôn hiện đủ 17 phân hệ (phương án đơn giản, không lọc theo quyền)');
+      assertEqual(count, 27, 'Phải luôn hiện đủ 27 phân hệ (phương án đơn giản, không lọc theo quyền — 17 cũ + SHELF_THRESHOLD + 9 job nhắc hạn mở rộng 11/2026)');
       const allChecked = await page.evaluate(() => [...document.querySelectorAll('#pfNotifyEmailListWrap .pf-notify-email-module')].every(cb => cb.checked));
       assertEqual(allChecked, true, 'Mặc định phải tick sẵn hết khi currentUser.notifyEmailModules chưa có gì');
     });
@@ -75,7 +75,7 @@ async function runClientScenarios(run) {
       assertEqual(docChecked, true, 'Các phân hệ khác (chưa lưu gì) phải vẫn mặc định tick');
     });
 
-    await run.run('saveNotifyEmailModules() gửi đúng PATCH /api/auth/me với toàn bộ 17 trạng thái checkbox hiện tại', async () => {
+    await run.run('saveNotifyEmailModules() gửi đúng PATCH /api/auth/me với toàn bộ 27 trạng thái checkbox hiện tại', async () => {
       await page.evaluate((u) => { currentUser = { ...u, notifyEmailModules: {} }; openProfileModal(); }, REPORTER);
       await page.evaluate(() => { document.querySelector('#pfNotifyEmailListWrap input[data-config-module="MEETING"]').checked = false; });
       await page.evaluate(() => saveNotifyEmailModules());
@@ -211,11 +211,19 @@ async function runServerScenarios(run) {
       assertEqual(res.body.notifyEmailModules.MEETING, false);
     });
 
-    await run.run('PATCH /api/auth/me notifyEmailModules: loại bỏ khoá KHÔNG hợp lệ (không phải 1 trong 17 configModule)', async () => {
+    await run.run('PATCH /api/auth/me notifyEmailModules: loại bỏ khoá KHÔNG hợp lệ (không phải 1 trong 27 configModule)', async () => {
       const res = await call('PATCH', '/api/auth/me', { notifyEmailModules: { CAR: false, HACKED_MODULE: true, admin: true } });
       assertEqual(res.status, 200);
       assertEqual('HACKED_MODULE' in res.body.notifyEmailModules, false, 'Khoá lạ phải bị loại bỏ, không được lưu nguyên văn');
       assertEqual('admin' in res.body.notifyEmailModules, false, 'Không được để lọt field "admin" qua notifyEmailModules (thử tự cấp quyền)');
+    });
+
+    await run.run('PATCH /api/auth/me notifyEmailModules: chấp nhận SHELF_THRESHOLD + 1 trong 9 job nhắc hạn mới (11/2026)', async () => {
+      const res = await call('PATCH', '/api/auth/me', { notifyEmailModules: { SHELF_THRESHOLD: false, CONTRACT_EXPIRY: false, LICENSE_EXPIRY: true } });
+      assertEqual(res.status, 200);
+      assertEqual(res.body.notifyEmailModules.SHELF_THRESHOLD, false, 'SHELF_THRESHOLD (defaults.js approvalEmailConfig mới) phải được lưu');
+      assertEqual(res.body.notifyEmailModules.CONTRACT_EXPIRY, false, 'CONTRACT_EXPIRY (job nhắc hạn hợp đồng mới) phải được lưu');
+      assertEqual(res.body.notifyEmailModules.LICENSE_EXPIRY, true, 'LICENSE_EXPIRY (job nhắc hạn giấy phép mới) phải được lưu');
     });
 
     await run.run('PATCH /api/auth/me notifyEmailModules: giá trị KHÔNG phải boolean bị bỏ qua (không lưu rác)', async () => {

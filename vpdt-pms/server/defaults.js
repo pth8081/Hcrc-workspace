@@ -511,7 +511,22 @@ const DEFAULTS = {
     TRAINING: { approvalNeeded: false },
     // MINUTES (11/2026): không phải luồng phê duyệt (không approvalNeeded/result), chỉ 1 sự kiện
     // "created" — mặc định BẬT (true), khớp hành vi trước khi đăng ký module này (luôn gửi).
-    MINUTES: { created: true }
+    MINUTES: { created: true },
+    // SHELF_THRESHOLD + 9 module nhắc hạn (11/2026, mở rộng cơ chế "🔔 Thông Báo Email" sang các job
+    // CRON phía server — trước đây CHỈ che được email "Cần phê duyệt" gửi qua luồng client, 10 job
+    // nhắc hạn/cảnh báo này gửi thẳng không ai tự tắt được, xem lib/notifyEmailModulesGate.js). Mỗi
+    // module chỉ 1 khoá "reminder"/"thresholdAlert" (không phải luồng phê duyệt, không có approvalNeeded/
+    // result) — mặc định BẬT (true), khớp hành vi gốc trước khi tính năng tự tắt này tồn tại.
+    SHELF_THRESHOLD: { thresholdAlert: true },
+    APPROVAL_OVERDUE: { reminder: true },
+    CONTRACT_EXPIRY: { reminder: true },
+    HR_TASK_OVERDUE: { reminder: true },
+    IT_APPROVAL_DEADLINE: { reminder: true },
+    IT_SERVICE_RENEWAL: { reminder: true },
+    LABOR_CONTRACT_EXPIRY: { reminder: true },
+    LICENSE_EXPIRY: { reminder: true },
+    PAYMENT_DEADLINE: { reminder: true },
+    REPORT_PERIOD_DEADLINE: { reminder: true }
   },
 
   // Trạng thái đã cảnh báo ổ đĩa gần nhất ({lastAlertAt, lastAlertPercent}) — dùng để tránh dội email

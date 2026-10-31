@@ -1,9 +1,70 @@
 # Phiên bản hiện tại
 
-**28.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.50 (2026-11): Thiết kế lại Ngưỡng Tồn (Kiểm Soát Hàng Hóa) + mở rộng "🔔 Thông Báo Email" cá nhân sang 10 job nhắc hạn
+
+Theo loạt yêu cầu người dùng về tính năng Ngưỡng Tồn (Vận Hành > Kiểm Soát
+Hàng Hóa) sau khi dùng thử phiên bản MVP, và quyết định làm luôn "Phương án
+B" (mở rộng cơ chế opt-out email cá nhân cho MỌI job nhắc hạn, không chỉ
+riêng Ngưỡng Tồn).
+
+**1. Data model Ngưỡng Tồn — bỏ hẳn `scope`/`scopeValue` (ép chọn 1 trong
+Ngành Hàng/SKU) + `recipientEmails` free-text**, thay bằng:
+- 3 trường nhận diện ĐỘC LẬP, đều tuỳ chọn: `maHang` (Mã Hàng nội bộ),
+  `maVach` (Mã Vạch), `category` (Ngành Hàng) — đúng tên field đã dùng ở
+  `shelfRecords`. Validate: phải có ÍT NHẤT 1 trong 3.
+- Cảnh báo: mỗi trường ĐÃ ĐIỀN tự tính tổng + so ngưỡng RIÊNG — "nhập 1 là
+  đủ, nhập nhiều thì check nhiều điều kiện" (nguyên văn người dùng). 1
+  ngưỡng có thể bắn ra 2 email độc lập/lượt chạy nếu điền cả mã SKU lẫn
+  ngành hàng và CẢ 2 đều dưới ngưỡng.
+- Người nhận: BỎ HẲN free-text, thay bằng 4 tầng — 3 tầng tự động tính
+  ĐỘNG lúc gửi (không snapshot): **Cửa hàng trưởng/Tổ trưởng** (quyền
+  `shelfLocationManage` + đúng siêu thị), **Quản lý vùng** (`shelfReportView.depts`
+  chứa đúng siêu thị), **Toàn hệ thống** (`shelfReportView.all`); cộng
+  **Tầng 4 "tự thêm thêm"** — `extraRecipientUsernames[]`, picker chỉ hiện
+  nhân viên ĐÚNG siêu thị mình (server re-validate độc lập, chặn chọn
+  người ngoài siêu thị/không tồn tại — đúng lỗ hổng người dùng chỉ ra "cửa
+  hàng trưởng tự add email linh tinh").
+
+**2. Nhập Excel Ngưỡng Tồn** (`lib/shelfThresholdImport.js`, mới) — siêu
+thị tự upload (không phải màn quản trị), cùng khuôn Nhập Excel Quầy Kệ.
+Mẫu 4 cột: Mã Hàng, Mã Vạch, Ngành Hàng, Ngưỡng Tối Thiểu (không còn cột
+Email — người nhận giờ là 4 tầng ở trên).
+
+**3. Mở rộng "🔔 Thông Báo Email" cá nhân** (Hồ Sơ Cá Nhân) sang 10 module
+mới — trước đây cơ chế này CHỈ che được email "Cần phê duyệt" của luồng
+phê duyệt client-side; 10 job CRON (chạy nền phía server) sau đây gửi
+thẳng, không ai tự tắt được: `SHELF_THRESHOLD` (Ngưỡng Tồn) +
+`APPROVAL_OVERDUE`/`CONTRACT_EXPIRY`/`HR_TASK_OVERDUE`/`IT_APPROVAL_DEADLINE`/
+`IT_SERVICE_RENEWAL`/`LABOR_CONTRACT_EXPIRY`/`LICENSE_EXPIRY`/
+`PAYMENT_DEADLINE`/`REPORT_PERIOD_DEADLINE`. Thêm `lib/notifyEmailModulesGate.js`
+(cổng dùng chung, 1 dòng/job) đọc thẳng `user.notifyEmailModules[configModule]`
+trước khi đưa 1 recipient đã xác định rõ tài khoản vào danh sách gửi — CC/
+liên hệ phòng ban nhập tay (không gắn tài khoản) không bị ảnh hưởng. Đăng
+ký đủ cả `public/js/core.js` (`APPROVAL_EMAIL_EVENTS`, để tự hiện lên màn
+Hồ Sơ Cá Nhân) VÀ `defaults.js` (`approvalEmailConfig`, nguồn
+`NOTIFY_EMAIL_MODULE_KEYS` ở `routes/auth.js` — thiếu 1 trong 2 nơi sẽ
+khiến checkbox hiện ra nhưng Lưu không có tác dụng, đúng lớp lỗi từng gặp
+khi đăng ký MINUTES/UNIFORM/HR_LEAVE/HR_SWAP/TRAINING trước đây). Màn Hồ
+Sơ Cá Nhân giờ liệt kê đủ **27 phân hệ** (17 cũ + 10 mới).
+
+**4. Di trú dữ liệu cũ** (`jobs/legacyShelfStockThresholdMigration.js`,
+mới, chạy 1 lần lúc server khởi động, idempotent — cùng khuôn
+`jobs/legacyViewScopeMigration.js`): `scope=SKU` → `maHang`; `scope=CATEGORY`
+→ `category`; mỗi `recipientEmails[]` cũ khớp ĐÚNG email 1 user active →
+chuyển thành username ở `extraRecipientUsernames[]`; email KHÔNG khớp được
+ai → **GIỮ LẠI** ở field mới `unmigratedExternalEmails[]` (hiện cảnh báo
+trên bảng Ngưỡng Tồn thật) — không bao giờ âm thầm xoá dữ liệu admin đã
+cấu hình.
+
+**Deploy impact**: không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies (toàn bộ dữ liệu vẫn là JSON trong `AppData`, không bảng SQL
+mới) — chỉ cần copy code + `pm2 restart` như thường lệ. Di trú dữ liệu cũ
+tự chạy ngay lúc khởi động server, không cần thao tác tay.
 
 ## v28.49 (2026-12): Vá lỗi kẹt sub-tab "📋 Kiểm Soát Hàng Hóa" (không chuyển được 4/5 sub-tab) + nút "↺ Làm Mới" form Ghi Nhận
 

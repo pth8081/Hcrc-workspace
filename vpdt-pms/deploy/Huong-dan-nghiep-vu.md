@@ -2880,18 +2880,39 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     **Nhập/Xuất Excel** (tải mẫu → điền → xem trước → chỉ dòng "Mới" được
     thêm, dòng trùng mã trong siêu thị bị bỏ qua).
   - "⏰ Hạn Sử Dụng" — tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn.
-  - "🔔 Ngưỡng Tồn" (MỚI) — Cửa hàng trưởng/Tổ trưởng khai báo ngưỡng tồn
-    tối thiểu theo Ngành Hàng hoặc Mã Vạch (tên cũ "Mã SKU", đổi nhãn khi
-    bổ sung mã vạch thật 11/2026, giá trị lưu `scope:'SKU'` không đổi) +
-    danh sách email nhận cảnh báo (phạm vi áp dụng không đổi được sau khi
-    tạo, chỉ sửa được ngưỡng/email/trạng thái). Hệ thống tự kiểm **hằng
-    ngày** (job chạy mỗi 24h kể từ lúc server khởi động — KHÔNG ghim đúng
-    07:00 sáng), tính TỔNG số lượng các "Ghi Nhận Trên Kệ" tạo trong ngày
-    cùng siêu thị khớp phạm vi (Ngành Hàng tra qua quầy kệ, hoặc Mã Vạch so
-    khớp trực tiếp); nếu dưới ngưỡng (kể cả khi chưa có ghi nhận nào hôm
-    nay, tổng=0) sẽ tự gửi email cảnh báo tới danh sách người nhận đã khai
-    báo. **Đây tính trên dữ liệu "Ghi Nhận Trên Kệ" đã có, CHƯA phải tồn
-    kho hệ thống thật.**
+  - "🔔 Ngưỡng Tồn" (MỚI, THIẾT KẾ LẠI 11/2026) — Cửa hàng trưởng/Tổ trưởng
+    tự khai báo ngưỡng tồn tối thiểu của ĐÚNG siêu thị mình, qua form nhập
+    tay hoặc **Nhập Excel** (⬆️ Nhập Excel / ⬇️ Tải Mẫu Excel, cùng khuôn
+    Quầy Kệ — siêu thị tự upload, KHÔNG phải màn quản trị):
+    - **3 ô nhận diện tuỳ chọn, điền ÍT NHẤT 1 trong 3**: "Mã Hàng (nội
+      bộ)", "Mã Vạch", "Ngành Hàng" — không ép chọn "Phạm Vi" như trước
+      nữa. Mã Hàng/Mã Vạch/Ngành Hàng KHÔNG đổi được sau khi tạo (chỉ sửa
+      được Ngưỡng Tối Thiểu/Người Nhận Thêm/Trạng Thái).
+    - **Cảnh báo theo từng ô đã điền, độc lập**: điền 1 ô thì chỉ 1 điều
+      kiện, điền nhiều ô (VD cả Mã Hàng lẫn Ngành Hàng) thì CẢ 2 điều kiện
+      đều được kiểm riêng — 1 ngưỡng có thể bắn ra 2 email độc lập/lượt
+      chạy nếu cả 2 đều dưới ngưỡng. Hệ thống tự kiểm **hằng ngày** (job
+      chạy mỗi 24h kể từ lúc server khởi động — KHÔNG ghim đúng 07:00
+      sáng), tính TỔNG số lượng các "Ghi Nhận Trên Kệ" tạo trong ngày cùng
+      siêu thị khớp điều kiện (Ngành Hàng tra qua quầy kệ; Mã Hàng/Mã Vạch
+      so khớp trực tiếp, khớp 1 trong 2 là đủ); dưới ngưỡng (kể cả tổng=0
+      khi chưa có ghi nhận nào hôm nay) thì gửi cảnh báo. **Đây tính trên
+      dữ liệu "Ghi Nhận Trên Kệ" đã có, CHƯA phải tồn kho hệ thống thật.**
+    - **Người nhận cảnh báo — 4 tầng, KHÔNG còn gõ email tự do**:
+      1. **Cửa hàng trưởng/Tổ trưởng** — tự động, mọi tài khoản đang có
+         quyền "🗄️ Quản Lý Danh Mục Quầy Kệ" của ĐÚNG siêu thị đó.
+      2. **Quản lý vùng** — tự động, mọi tài khoản được gán xem đúng siêu
+         thị đó qua quyền "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa".
+      3. **Toàn hệ thống** — tự động, tài khoản bật "Tất Cả Siêu Thị" ở
+         quyền trên.
+      4. **Tự thêm thêm** — cửa hàng trưởng tự chọn thêm người qua ô tìm-
+         chọn, CHỈ hiện nhân viên đang hoạt động của ĐÚNG siêu thị mình
+         (server kiểm độc lập, không tin riêng bộ lọc phía trình duyệt —
+         chặn hẳn việc tự thêm email ngoài hệ thống hoặc của siêu thị
+         khác).
+      Mỗi người có thể tự tắt nhận email này riêng cho mình ở **Hồ Sơ Cá
+      Nhân → "🔔 Thông Báo Email"** (xem mục ngay dưới) — mặc định hệ
+      thống luôn gửi, ai không muốn nhận thì tự vào đó bỏ tick.
   - "📊 Đối Chiếu" (MỚI, 11/2026) — so khớp tồn kho hệ thống (API BRGMART,
     đồng bộ nền mỗi 20 phút) với tổng số lượng ghi nhận HÔM NAY có Mã Hàng
     (xem sub-tab Ghi Nhận — gõ tay/picker/camera tự khớp đều tính, chỉ cần
@@ -2917,9 +2938,10 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
 - **3 quyền** (Hệ Thống → Phân Quyền → mục "22. Vận Hành", không thêm quyền
   mới cho Ngưỡng Tồn/Đối Chiếu — Đối Chiếu dùng lại quyền vào tab, Ngưỡng
   Tồn dùng lại "🗄️ Quản Lý Danh Mục Quầy Kệ" vì cùng vai trò Cửa hàng
-  trưởng/Tổ trưởng): "📷 Ghi Nhận Trên Kệ" (ghi nhận), "🗄️ Quản
-  Lý Danh Mục Quầy Kệ" (khai báo/sửa/nhập Excel quầy kệ + Ngưỡng Tồn, chỉ
-  của siêu thị mình), "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" — **nâng cấp
+  trưởng/Tổ trưởng, ĐỒNG THỜI cũng chính là Tầng 1 người nhận cảnh báo
+  Ngưỡng Tồn tự động — xem mục ngay trên): "📷 Ghi Nhận Trên Kệ" (ghi nhận),
+  "🗄️ Quản Lý Danh Mục Quầy Kệ" (khai báo/sửa/nhập Excel quầy kệ + Ngưỡng
+  Tồn, chỉ của siêu thị mình), "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" — **nâng cấp
   12/2026** từ công tắc bật/tắt đơn giản (chỉ "tất cả hoặc chỉ 1 siêu thị")
   sang chọn đúng **danh sách siêu thị** (ô tìm-kiếm-gõ-chọn, cùng khuôn
   "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị"): bật "Tất Cả Siêu Thị" = xem hết;
@@ -6736,17 +6758,30 @@ người dùng tự tìm hồ sơ trong danh sách hiện ra.
 TOÀN CỤC ở trên (áp dụng cho mọi người cùng lúc): mỗi người tự bật/tắt nhận
 email "Cần phê duyệt" theo từng phân hệ CHO RIÊNG MÌNH, qua tab mới **"🔔
 Thông Báo Email"** trong modal "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" (góc trên
-bên phải, click tên tài khoản). Luôn hiện đủ 12 phân hệ cho MỌI tài khoản
+bên phải, click tên tài khoản). Luôn hiện đủ **27 phân hệ** cho MỌI tài khoản
 (không lọc theo quyền phê duyệt thật đang có — tránh phải tự dò quy trình
 duyệt động theo phòng ban/chức danh của từng phân hệ, vốn phức tạp và không
 đồng nhất giữa các module), mặc định **tick sẵn (BẬT)**. Bỏ tick 1 dòng ->
-không còn nhận email "Cần phê duyệt" của phân hệ đó nữa (hồ sơ vẫn hiện đầy đủ
-trong Hộp Thư Phê Duyệt, chỉ là không có email nhắc) — **không ảnh hưởng tới
-người khác** cũng đang nhận email đó, và **không ảnh hưởng** tới email "Kết
-quả duyệt" (vẫn gửi đầy đủ nếu chính người đó là người trình hồ sơ). 2 lớp bật/
-tắt (admin toàn cục + cá nhân) độc lập, cộng dồn: admin tắt hẳn 1 phân hệ thì
-không ai nhận được nữa bất kể cấu hình cá nhân; admin để bật thì mới tới lượt
-cấu hình cá nhân của từng người quyết định.
+không còn nhận email của phân hệ đó nữa — **không ảnh hưởng tới người khác**
+cũng đang nhận email đó.
+
+**Mở rộng 11/2026** (từ 17 lên 27 phân hệ): 17 phân hệ gốc chỉ che được email
+"Cần phê duyệt" của luồng phê duyệt (client-side) — **không ảnh hưởng** tới
+email "Kết quả duyệt" (vẫn gửi đầy đủ nếu chính người đó là người trình hồ
+sơ). 10 phân hệ MỚI là các **job CRON chạy nền phía server** (gửi thẳng
+không qua luồng phê duyệt, trước đây không ai tự tắt được): "📋 Kiểm Soát
+Hàng Hóa (Cảnh báo Ngưỡng Tồn)", "⏰ Quá Hạn Xử Lý Phê Duyệt", "📑 Nhắc Hạn
+Hợp Đồng", "🧑‍💼 Quá Hạn Công Việc Onboarding/Offboarding", "🖥️ Nhắc Hạn Chờ
+Xử Lý Hỗ Trợ IT", "🔄 Nhắc Gia Hạn Dịch Vụ CNTT", "👔 Nhắc Hạn Hợp Đồng Lao
+Động", "📜 Nhắc Hạn Giấy Phép", "💵 Nhắc Hạn Thanh Toán", "📊 Nhắc Hạn Nộp
+Báo Cáo Định Kỳ" — bỏ tick 1 dòng trong số này thì KHÔNG còn nhận riêng loại
+nhắc hạn/cảnh báo đó nữa, các job khác và luồng phê duyệt không bị ảnh hưởng.
+
+2 lớp bật/tắt (admin toàn cục + cá nhân) độc lập, cộng dồn — CHỈ áp dụng cho
+17 phân hệ gốc (luồng phê duyệt): admin tắt hẳn 1 phân hệ thì không ai nhận
+được nữa bất kể cấu hình cá nhân; admin để bật thì mới tới lượt cấu hình cá
+nhân của từng người quyết định. 10 phân hệ mới (job cron) CHỈ có đúng 1 lớp
+cá nhân, không có lớp admin toàn cục tương ứng.
 
 ### 7.9. API Đối Tác Ngoài (ExtAuth)
 

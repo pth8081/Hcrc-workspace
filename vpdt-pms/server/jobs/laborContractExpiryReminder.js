@@ -15,6 +15,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 
 const DEFAULT_REMINDER_DAYS = [60, 45, 30];
 
@@ -79,7 +80,7 @@ async function checkLaborContractExpiryReminders() {
 
     const users = await getCollection(pool, 'users', []);
     const hrEmails = users
-      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.hrContractManage))
+      .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.hrContractManage) && !isUserOptedOutOfEmailModule(u, 'LABOR_CONTRACT_EXPIRY'))
       .map(u => ({ email: u.email, name: u.name || u.username }));
 
     for (const c of contracts) {
