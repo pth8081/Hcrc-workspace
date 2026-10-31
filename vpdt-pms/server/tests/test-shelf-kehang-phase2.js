@@ -215,14 +215,25 @@ async function main() {
   const APP_DATA = {
     emailConfig: { enabled: true, smtpHost: 'smtp.test', smtpPort: 587, senderEmail: 'system@test.vn' }
   };
+  // VÁ LẦN 3: mock trước đây CHỈ hỗ trợ đọc (getCollection) — mọi .input() gọi sau đều ghi đè biến `key`
+  // dùng chung, nên setCollection() (gọi .input('k',...) RỒI .input('v',...)) khiến request KHÔNG BAO GIỜ
+  // thực sự ghi lại STORE (test cũ không phát hiện vì chưa test nào kiểm tra lại STORE sau khi job chạy
+  // xong). Nay track input theo ĐÚNG tên tham số + phân biệt câu lệnh SELECT (đọc) với MERGE (ghi), để
+  // test "thất bại thật không đánh dấu đã gửi" (Fix 4) kiểm tra được đúng trạng thái STORE sau khi job
+  // chạy, giống hệt hành vi AppData thật.
   stubModule('db', {
     getPool: async () => ({
       request: () => {
-        let key = null;
+        const inputs = {};
         const req = {
-          input: (name, type, value) => { key = value; return req; },
-          query: async () => {
-            const value = key === 'emailConfig' ? APP_DATA.emailConfig : STORE[key];
+          input: (name, type, value) => { inputs[name] = value; return req; },
+          query: async (sqlText) => {
+            if (/MERGE/i.test(String(sqlText))) {
+              const parsed = JSON.parse(inputs.v);
+              if (inputs.k === 'emailConfig') APP_DATA.emailConfig = parsed; else STORE[inputs.k] = parsed;
+              return { recordset: [] };
+            }
+            const value = inputs.k === 'emailConfig' ? APP_DATA.emailConfig : STORE[inputs.k];
             return { recordset: value === undefined ? [] : [{ DataValue: JSON.stringify(value) }] };
           }
         };
@@ -235,13 +246,20 @@ async function main() {
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('lib/emailTemplate', { buildNotificationEmailHtml: () => '<html></html>' });
   let sentMails = [];
+  // forceMailFailure: VÁ LẦN 3 — test "thất bại thật không được đánh dấu đã gửi" cần giả lập sendMail()
+  // thất bại THẬT (simulated:false, sent rỗng, failed có) cho MỌI người nhận ở 1 lượt chạy cụ thể.
+  let forceMailFailure = false;
   stubModule('lib/mailer', {
-    sendMail: async ({ to, subject, attachments }) => { sentMails.push({ to, subject, attachments }); return { sent: to, failed: [], simulated: false }; },
+    sendMail: async ({ to, subject, attachments }) => {
+      sentMails.push({ to, subject, attachments });
+      if (forceMailFailure) return { sent: [], failed: to, simulated: false };
+      return { sent: to, failed: [], simulated: false };
+    },
     resolveEncryption: () => 'STARTTLS',
     resolveGraphOption: () => null,
     resolveEwsOption: () => null
   });
-  const { checkShelfStockThresholdAlerts, shouldSendDigestNow, getPeriodKey, buildDigestRowsForDept, groupDigestRowsByRecipient } = require('../jobs/shelfStockThresholdAlert');
+  const { checkShelfStockThresholdAlerts, shouldSendDigestNow, getPeriodKey, startOfWeekMonday, formatYmd, buildDigestRowsForDept, groupDigestRowsByRecipient } = require('../jobs/shelfStockThresholdAlert');
 
   // scheduleMatchingNow(): cấu hình lịch LUÔN khớp đúng thời điểm test đang chạy (tránh phải mock Date)
   // — mặc định DAILY ở ĐÚNG giờ hiện tại, lastSentPeriodKey=null (chưa gửi kỳ nào) để job THỰC SỰ chạy.
@@ -450,6 +468,109 @@ async function main() {
     STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 1, createdAt: todayIso() }];
     await checkShelfStockThresholdAlerts();
     assertEqual(sentMails.length, 0, 'kỳ đã gửi rồi (chống trùng khi server restart/tick chạy lại đúng giờ khớp lịch) -> không gửi lại');
+  });
+
+  // ===== VÁ LẦN 3 (rà soát chéo độc lập, 5 fix) =====
+
+  await run.run('shouldSendDigestNow (VÁ LẦN 3): tick TRỄ qua khỏi đúng giờ/ngày cấu hình vẫn "bắt kịp" (self-healing), KHÔNG còn đòi khớp CHÍNH XÁC === như trước', async () => {
+    const monday = new Date(2026, 10, 9, 7, 0, 0); // Thứ 2, 09/11/2026 — xem test shouldSendDigestNow gốc ở trên
+    // Trước đây (===) : tick lúc 08:20 (trễ 20 phút so với giờ cấu hình 07:00) sẽ bị bỏ lỡ -> cả kỳ mất.
+    // Nay (>=) : vẫn nhận ra "đã qua giờ cấu hình" -> bắt kịp, gửi ngay.
+    const tickDelayed = new Date(2026, 10, 9, 8, 20, 0); // CÙNG Thứ 2, trễ 1h20 so với giờ cấu hình
+    assert(!shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: 1 }, new Date(2026, 10, 9, 6, 59, 0)), 'chưa tới 07:00 -> false');
+    assert(shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: 1 }, monday), 'đúng 07:00 Thứ 2 -> true');
+    assert(shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: 1 }, tickDelayed), 'tick trễ 08:20 CÙNG Thứ 2 -> VẪN true (bắt kịp, không bỏ lỡ cả tuần)');
+    // Server down NGUYÊN Thứ 2, tick đầu tiên chạy lại là Thứ 4 (cùng tuần) -> vẫn bắt kịp được.
+    const wednesday = new Date(2026, 10, 11, 9, 0, 0);
+    assert(shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: 1 }, wednesday), 'down nguyên Thứ 2, tick lại Thứ 4 CÙNG TUẦN -> vẫn bắt kịp');
+    // Nhưng KHÔNG được lố sang thứ TRƯỚC ngày cấu hình trong tuần (VD cấu hình Thứ 4, hôm nay mới Thứ 2).
+    assert(!shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: 3 }, monday), 'cấu hình Thứ 4, hôm nay mới Thứ 2 (CÙNG tuần, chưa tới) -> false');
+    // MONTHLY tương tự: quá ngày cấu hình trong CÙNG tháng vẫn bắt kịp.
+    assert(shouldSendDigestNow({ frequency: 'MONTHLY', hour: 7, dayOfMonth: 5 }, new Date(2026, 10, 20, 9, 0, 0)), 'MONTHLY cấu hình ngày 5, hôm nay 20 CÙNG THÁNG -> vẫn bắt kịp');
+    assert(!shouldSendDigestNow({ frequency: 'MONTHLY', hour: 7, dayOfMonth: 20 }, new Date(2026, 10, 5, 9, 0, 0)), 'MONTHLY cấu hình ngày 20, hôm nay mới ngày 5 -> false');
+  });
+
+  await run.run('getPeriodKey WEEKLY (VÁ LẦN 3): khoá theo Thứ 2 ĐẦU TUẦN, không theo ngày gửi thật -> gửi bắt kịp trễ ngày nào trong tuần vẫn CÙNG 1 khoá', async () => {
+    const monday = new Date(2026, 10, 9); // Thứ 2
+    const wednesday = new Date(2026, 10, 11); // Thứ 4 CÙNG tuần
+    const nextMonday = new Date(2026, 10, 16); // Thứ 2 TUẦN SAU
+    assertEqual(getPeriodKey(monday, 'WEEKLY'), getPeriodKey(wednesday, 'WEEKLY'), 'gửi đúng Thứ 2 hay bắt kịp trễ tới Thứ 4 CÙNG tuần phải ra CÙNG 1 khoá kỳ (không gửi trùng khi tick chạy lại)');
+    assert(getPeriodKey(monday, 'WEEKLY') !== getPeriodKey(nextMonday, 'WEEKLY'), 'tuần sau phải khác khoá (được gửi lại bình thường)');
+    assertEqual(startOfWeekMonday(wednesday).getDay(), 1, 'startOfWeekMonday() phải lùi đúng về Thứ 2');
+    assertEqual(formatYmd(startOfWeekMonday(wednesday)), formatYmd(monday));
+  });
+
+  await run.run('groupDigestRowsByRecipient (VÁ LẦN 3 — vá lỗ hổng phạm vi): người CHỈ thuộc Tầng 4 (tự thêm cho ĐÚNG 1 ngưỡng) CHỈ thấy ngưỡng đó, KHÔNG thấy toàn bộ siêu thị', async () => {
+    const users = [
+      { username: 'tier4only', name: 'Nhân Viên Được Thêm', dept: 'Phòng Khác', active: true, email: 'tier4only@hcrc.vn', perms: {} }
+    ];
+    const thresholds = [
+      { id: 1, dept: 'Siêu thị X', maHang: 'SKU_A', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: ['tier4only'], active: true },
+      { id: 2, dept: 'Siêu thị X', maHang: 'SKU_B', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true } // KHÔNG thêm tier4only
+    ];
+    const groups = groupDigestRowsByRecipient(thresholds, users, [], new Map());
+    assertEqual(groups.length, 1, `phải có đúng 1 nhóm cho tier4only, thực tế: ${JSON.stringify(groups)}`);
+    assertEqual(groups[0].rows.length, 1, `CHỈ được thấy đúng 1 dòng (ngưỡng SKU_A họ được thêm), KHÔNG được thấy SKU_B — thực tế: ${JSON.stringify(groups[0].rows)}`);
+    assertEqual(groups[0].rows[0].maHang, 'SKU_A');
+  });
+
+  await run.run('groupDigestRowsByRecipient (VÁ LẦN 3): người VỪA thuộc Tầng 1-3 VỪA được thêm Tầng 4 của ĐÚNG siêu thị đó -> thấy ĐỦ cả siêu thị (không bị thu hẹp lại, không lặp dòng)', async () => {
+    const users = [
+      { username: 'cht_x', name: 'Cửa Hàng Trưởng X', dept: 'Siêu thị X', active: true, email: 'chtx@hcrc.vn', perms: { shelfLocationManage: true } }
+    ];
+    const thresholds = [
+      { id: 1, dept: 'Siêu thị X', maHang: 'SKU_A', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: ['cht_x'], active: true }, // vừa Tầng 1 vừa Tầng 4
+      { id: 2, dept: 'Siêu thị X', maHang: 'SKU_B', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+    ];
+    const groups = groupDigestRowsByRecipient(thresholds, users, [], new Map());
+    assertEqual(groups.length, 1);
+    assertEqual(groups[0].rows.length, 2, `Tầng 1 đã bao trọn cả siêu thị -> phải thấy CẢ SKU_A lẫn SKU_B, không thiếu không lặp — thực tế: ${JSON.stringify(groups[0].rows)}`);
+  });
+
+  await run.run('groupDigestRowsByRecipient (VÁ LẦN 3 — dedup email không phân biệt hoa/thường): 2 tài khoản cùng email khác hoa/thường chỉ gộp thành 1 người nhận', async () => {
+    const users = [
+      { username: 'userA', name: 'Tài Khoản A', dept: 'Siêu thị X', active: true, email: 'Dup@Hcrc.vn', perms: { shelfLocationManage: true } },
+      { username: 'userB', name: 'Tài Khoản B', dept: 'Siêu thị X', active: true, email: 'dup@hcrc.vn', perms: { shelfReportView: { all: false, depts: ['Siêu thị X'] } } }
+    ];
+    const thresholds = [
+      { id: 1, dept: 'Siêu thị X', maHang: 'SKU_A', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+    ];
+    const groups = groupDigestRowsByRecipient(thresholds, users, [], new Map());
+    assertEqual(groups.length, 1, `2 email khác hoa/thường PHẢI gộp thành 1 người nhận, thực tế: ${JSON.stringify(groups.map(g => g.email))}`);
+  });
+
+  await run.run('job (VÁ LẦN 3): TẤT CẢ lần gửi thật đều THẤT BẠI -> KHÔNG đánh dấu đã gửi, tick kế tiếp tự thử lại', async () => {
+    sentMails = [];
+    forceMailFailure = true;
+    STORE.users = [baseUsers()[0]]; // chỉ cht1
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
+    STORE.shelfStockThresholds = [
+      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+    ];
+    STORE.shelfLocations = [];
+    STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }];
+    await checkShelfStockThresholdAlerts();
+    forceMailFailure = false;
+    assertEqual(sentMails.length, 1, 'vẫn CÓ thử gửi (chỉ là thất bại)');
+    assertEqual(STORE.shelfThresholdDigestSchedule.lastSentPeriodKey, null, 'TẤT CẢ thất bại thật -> KHÔNG được đánh dấu lastSentPeriodKey, để tick sau tự thử lại đúng kỳ này');
+
+    // Chạy lại NGAY (giả lập tick kế tiếp), lần này sendMail thành công -> phải THỬ GỬI LẠI (không bị chặn bởi "đã gửi") và đánh dấu đúng.
+    sentMails = [];
+    await checkShelfStockThresholdAlerts();
+    assertEqual(sentMails.length, 1, 'phải tự thử lại ở lần kiểm kế tiếp vì kỳ trước chưa được đánh dấu thành công');
+    assert(STORE.shelfThresholdDigestSchedule.lastSentPeriodKey, 'lần này thành công thật -> phải đánh dấu lastSentPeriodKey');
+  });
+
+  await run.run('job (VÁ LẦN 3): KHÔNG có ai thuộc phạm vi nào -> coi như "đã xử lý xong" kỳ này (đánh dấu lastSentPeriodKey, không lặp lại tính toán mỗi giờ)', async () => {
+    sentMails = [];
+    STORE.users = [];
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
+    STORE.shelfStockThresholds = [];
+    STORE.shelfLocations = [];
+    STORE.shelfRecords = [];
+    await checkShelfStockThresholdAlerts();
+    assertEqual(sentMails.length, 0);
+    assert(STORE.shelfThresholdDigestSchedule.lastSentPeriodKey, 'không có ai cần gửi vẫn phải đánh dấu đã xử lý xong kỳ này');
   });
 
   run.summary();

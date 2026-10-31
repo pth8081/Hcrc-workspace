@@ -225,7 +225,7 @@ function loadShelfThresholdDigestScheduleToForm() {
   document.getElementById('stDigestFrequency').value = cfg.frequency || 'WEEKLY';
   document.getElementById('stDigestDayOfWeek').value = (cfg.dayOfWeek ?? 1);
   document.getElementById('stDigestDayOfMonth').value = cfg.dayOfMonth || 1;
-  document.getElementById('stDigestHour').value = (cfg.hour ?? 7);
+  document.getElementById('stDigestHour').value = (cfg.hour ?? 20);
   showShelfDigestFrequencyFields();
 
   const statusEl = document.getElementById('stDigestLastSentStatus');

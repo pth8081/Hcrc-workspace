@@ -907,11 +907,15 @@ const DEFAULTS = {
   // khác (những job đó vẫn "mỗi 24h kể từ lúc khởi động", hardcode, không đổi — người dùng xác nhận rõ
   // "chỉ áp dụng cho ngưỡng tồn thôi"). dayOfWeek theo đúng quy ước Date.getDay() (0=Chủ Nhật..6=Thứ 7)
   // để job so khớp trực tiếp không cần quy đổi; dayOfMonth chặn trần 28 để tránh lỗi tháng thiếu ngày
-  // (2, 4, 6, 9, 11 có ít hơn 31 ngày). Mặc định: Hàng tuần, Thứ 2, 07:00 — xem
-  // jobs/shelfStockThresholdAlert.js::shouldSendDigestNow() cho logic so khớp + chống gửi trùng.
+  // (2, 4, 6, 9, 11 có ít hơn 31 ngày). Mặc định: Hàng tuần, Thứ 2, 20:00 — xem
+  // jobs/shelfStockThresholdAlert.js::shouldSendDigestNow() cho logic so khớp + chống gửi trùng. Giờ mặc
+  // định ĐỔI từ 07:00 sang 20:00 (rà soát chéo độc lập phát hiện: "Tồn Hôm Nay" chỉ tính từ 0h cùng ngày
+  // -> gửi lúc 07:00 gần như chưa ai ghi nhận gì, báo cáo sẽ toàn màu đỏ sai lệch thực tế; 20:00 phản ánh
+  // đúng hơn hoạt động cả ngày) — CHỈ đổi giá trị mặc định khi admin CHƯA từng cấu hình, admin vẫn tự chọn
+  // giờ khác (kể cả 07:00) bất cứ lúc nào qua panel #adminSubShelfDigest.
   shelfThresholdDigestSchedule: {
     frequency: 'WEEKLY', // 'DAILY' | 'WEEKLY' | 'MONTHLY'
-    hour: 7,
+    hour: 20,
     dayOfWeek: 1, // Thứ 2 (Date.getDay(): 0=CN,1=T2,...,6=T7)
     dayOfMonth: 1,
     lastSentPeriodKey: null // chống gửi trùng trong CÙNG 1 kỳ dù hourly tick chạy nhiều lần/server restart

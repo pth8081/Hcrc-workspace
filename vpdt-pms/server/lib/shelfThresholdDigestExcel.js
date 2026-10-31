@@ -13,6 +13,12 @@ const YELLOW_FONT = { color: { argb: 'FF9C6500' }, bold: true };
 
 const STATUS_LABELS = { RED: '🔴 Dưới ngưỡng', YELLOW: '🟡 Gần ngưỡng (<10%)', GREEN: '🟢 An toàn' };
 
+// DATA_SCOPE_DISCLAIMER: 1 câu ngắn nêu rõ phạm vi dữ liệu "Tồn Hôm Nay" — gắn vào CẢ file Excel này LẪN
+// nội dung email (xem jobs/shelfStockThresholdAlert.js) — VÁ LẦN 3, rà soát chéo độc lập phát hiện: số
+// liệu chỉ tính từ 0h cùng ngày tới lúc gửi, báo cáo gửi sớm trong ngày có thể chưa phản ánh đủ hoạt động
+// cả ngày (không phải lỗi tính toán, chỉ là phạm vi dữ liệu cần nêu rõ cho người đọc).
+const DATA_SCOPE_DISCLAIMER = 'Số liệu "Tồn Hôm Nay" tính từ 00:00 tới thời điểm gửi báo cáo này — có thể chưa đầy đủ nếu gửi vào đầu ngày.';
+
 function styleHeaderRow(row) {
   row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   row.eachCell(cell => {
@@ -65,6 +71,10 @@ async function buildShelfThresholdDigestExcelBuffer(rows) {
   l2.value = '🟡 Vàng — Tồn hôm nay còn CHƯA ĐẾN 10% nữa là chạm ngưỡng (cảnh báo sớm)';
   l2.font = YELLOW_FONT; l2.fill = YELLOW_FILL;
   sheet.getCell(`A${legendStartRow + 3}`).value = '🟢 Không tô — Tồn hôm nay an toàn, còn ≥10% đệm so với ngưỡng';
+  const disclaimerRow = legendStartRow + 5;
+  const disclaimerCell = sheet.getCell(`A${disclaimerRow}`);
+  disclaimerCell.value = DATA_SCOPE_DISCLAIMER;
+  disclaimerCell.font = { italic: true, color: { argb: 'FF6B7280' }, size: 9 };
 
   return wb.xlsx.writeBuffer();
 }
@@ -75,12 +85,23 @@ async function buildShelfThresholdDigestExcelBuffer(rows) {
 // vàng". total < minQuantity -> RED (đã dưới ngưỡng). minQuantity <= total < minQuantity*1.1 -> YELLOW
 // (còn CHƯA ĐẾN 10% nữa là chạm ngưỡng — biên trên 110% là GREEN, không tính vào vùng vàng). Mọi trường
 // hợp còn lại -> GREEN (an toàn, đã có ≥10% đệm).
+// FP_EPSILON: dung sai cực nhỏ bù sai số làm tròn số thực JS tại ĐÚNG biên 110% (VD 50*1.1===
+// 55.00000000000001, không phải đúng 55) — KHÔNG dùng Math.round(t*10) vì sẽ làm sai các trường hợp số
+// lượng có phần thập phân hợp lệ gần biên (VD min=10,total=10.999 phải vẫn là YELLOW vì 10.999 thực sự
+// nhỏ hơn 11, nhưng Math.round(109.99)=110 sẽ làm tròn nhầm thành GREEN — phát hiện qua test có sẵn
+// "classifyThresholdStatus: đúng biên RED/YELLOW/GREEN (10%)"). 1e-9 đủ lớn để triệt sai số FP (~1e-13
+// đến 1e-14) nhưng đủ nhỏ để không ảnh hưởng chênh lệch số lượng thật (luôn ≥ nhiều bậc độ lớn hơn).
+const FP_EPSILON = 1e-9;
 function classifyThresholdStatus(total, minQuantity) {
   const min = Number(minQuantity) || 0;
   const t = Number(total) || 0;
   if (t < min) return 'RED';
-  if (t < min * 1.1) return 'YELLOW';
+  // "t < min*1.1 - FP_EPSILON" thay vì "t < min*1.1" trực tiếp — VÁ LẦN 3, rà soát chéo độc lập phát hiện
+  // lỗi làm tròn số thực JS tại ĐÚNG biên 110% khiến total ĐÚNG BẰNG 110% ngưỡng (lẽ ra AN TOÀN) bị tính
+  // nhầm thành VÀNG. PHẢI giữ giống HỆT công thức ở module-vanhanh.js classifyShelfThresholdStatus(), sửa
+  // 1 bên bắt buộc sửa cả 2 bên.
+  if (t < min * 1.1 - FP_EPSILON) return 'YELLOW';
   return 'GREEN';
 }
 
-module.exports = { buildShelfThresholdDigestExcelBuffer, classifyThresholdStatus, STATUS_LABELS };
+module.exports = { buildShelfThresholdDigestExcelBuffer, classifyThresholdStatus, STATUS_LABELS, DATA_SCOPE_DISCLAIMER };

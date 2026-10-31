@@ -2910,10 +2910,18 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       ⚙️ Quản Trị → "⏰ Lịch Báo Cáo Ngưỡng Tồn": chọn **Hàng ngày / Hàng
       tuần / Hàng tháng** + giờ gửi cụ thể (0-23h); Hàng tuần thêm chọn
       Thứ, Hàng tháng thêm chọn Ngày trong tháng (1-28, tránh lỗi tháng
-      thiếu ngày). Mặc định nếu chưa cấu hình: Hàng tuần, Thứ 2, 07:00.
-      **Chỉ áp dụng cho báo cáo Ngưỡng Tồn này** — 9 job nhắc hạn khác của
-      hệ thống (hạn hợp đồng, hạn giấy phép...) vẫn giữ nguyên "mỗi 24h kể
-      từ lúc server khởi động" như trước, không đổi.
+      thiếu ngày). Mặc định nếu chưa cấu hình: Hàng tuần, Thứ 2, **20:00**
+      (VÁ LẦN 3, 11/2026 — đổi từ 07:00: số liệu "Tồn Hôm Nay" chỉ tính từ
+      0h cùng ngày, gửi lúc 07:00 gần như chưa ai ghi nhận gì nên báo cáo
+      sẽ sai lệch toàn đỏ; admin vẫn tự chọn giờ khác bất cứ lúc nào). Nội
+      dung email + file Excel đều kèm 1 dòng chú thích ngắn nêu rõ phạm vi
+      số liệu này. Lịch gửi **tự "bắt kịp"** nếu server restart/ngừng đúng
+      lúc gần giờ cấu hình hoặc cả ngày đó (không bỏ lỡ cả kỳ như trước),
+      và **tự thử lại** ở lần kiểm kế tiếp nếu lần gửi trước đó thất bại
+      thật (SMTP lỗi) — chỉ coi "đã gửi xong kỳ" khi có ít nhất 1 người
+      nhận được thật. **Chỉ áp dụng cho báo cáo Ngưỡng Tồn này** — 9 job
+      nhắc hạn khác của hệ thống (hạn hợp đồng, hạn giấy phép...) vẫn giữ
+      nguyên "mỗi 24h kể từ lúc server khởi động" như trước, không đổi.
     - **Người nhận cảnh báo — 4 tầng, KHÔNG còn gõ email tự do**:
       1. **Cửa hàng trưởng/Tổ trưởng** — tự động, mọi tài khoản đang có
          quyền "🗄️ Quản Lý Danh Mục Quầy Kệ" của ĐÚNG siêu thị đó.
@@ -2925,7 +2933,10 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
          chọn, CHỈ hiện nhân viên đang hoạt động của ĐÚNG siêu thị mình
          (server kiểm độc lập, không tin riêng bộ lọc phía trình duyệt —
          chặn hẳn việc tự thêm email ngoài hệ thống hoặc của siêu thị
-         khác).
+         khác). Người CHỈ thuộc tầng này (không thuộc cả 3 tầng trên) chỉ
+         thấy ĐÚNG ngưỡng họ được thêm vào trong báo cáo, không thấy toàn
+         bộ siêu thị (VÁ LẦN 3, 11/2026 — bản trước mở rộng nhầm thành cả
+         siêu thị).
       Mỗi người có thể tự tắt nhận email này riêng cho mình ở **Hồ Sơ Cá
       Nhân → "🔔 Thông Báo Email"** (xem mục ngay dưới) — mặc định hệ
       thống luôn gửi, ai không muốn nhận thì tự vào đó bỏ tick.

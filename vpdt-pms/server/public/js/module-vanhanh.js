@@ -1110,11 +1110,15 @@ function computeShelfThresholdTodayTotals(threshold) {
 }
 // total < minQuantity -> RED; minQuantity <= total < minQuantity*1.1 -> YELLOW ("còn chưa tới 10% nữa
 // là chạm ngưỡng", nguyên văn người dùng); còn lại -> GREEN (an toàn, đã có ≥10% đệm).
+// FP_EPSILON: PHẢI giữ giống HỆT lib/shelfThresholdDigestExcel.js classifyThresholdStatus() — xem chú
+// thích đầy đủ bên đó (bù sai số làm tròn số thực JS tại đúng biên 110%, KHÔNG dùng Math.round vì sẽ làm
+// sai các trường hợp số lượng thập phân hợp lệ gần biên).
+const SHELF_THRESHOLD_FP_EPSILON = 1e-9;
 function classifyShelfThresholdStatus(total, minQuantity) {
   const min = Number(minQuantity) || 0;
   const t = Number(total) || 0;
   if (t < min) return 'RED';
-  if (t < min * 1.1) return 'YELLOW';
+  if (t < min * 1.1 - SHELF_THRESHOLD_FP_EPSILON) return 'YELLOW';
   return 'GREEN';
 }
 const SHELF_THRESHOLD_STATUS_BADGE = {

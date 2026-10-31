@@ -524,15 +524,21 @@ async function start() {
       setInterval(checkItServiceRenewalReminders, 24 * 60 * 60 * 1000);
       checkHrTaskOverdueReminders();
       setInterval(checkHrTaskOverdueReminders, 24 * 60 * 60 * 1000);
-      // "📊 Báo Cáo Ngưỡng Tồn" (Kiểm Soát Hàng Hóa, THIẾT KẾ LẠI LẦN 2, 11/2026) — KHÁC HẲN 9 job nhắc
-      // hạn phía trên/dưới (những job đó CỐ Ý giữ nguyên "mỗi 24h kể từ lúc khởi động", không đổi, theo
-      // đúng yêu cầu người dùng "chỉ áp dụng cho ngưỡng tồn thôi, còn cái kia là email báo tự động theo
-      // action thì thôi"): job này giờ là 1 BÁO CÁO TỔNG HỢP gửi theo LỊCH ADMIN TỰ CẤU HÌNH (Hàng ngày/
-      // Hàng tuần/Hàng tháng + giờ — DB.shelfThresholdDigestSchedule, #adminSubShelfDigest), KHÔNG CÒN
-      // gọi ngay lúc khởi động (gọi ngay sẽ gửi email mỗi lần restart server, không phù hợp với 1 báo
-      // cáo ĐỊNH KỲ có lịch cụ thể) — thay vào đó tick MỖI GIỜ, hàm tự kiểm tra bên trong (shouldSendDigestNow()
-      // + periodKey chống gửi trùng) xem có đúng thời điểm cấu hình chưa trước khi thực sự tính + gửi.
-      // Xem đầy đủ lý do thiết kế ở đầu file jobs/shelfStockThresholdAlert.js.
+      // "📊 Báo Cáo Ngưỡng Tồn" (Kiểm Soát Hàng Hóa, THIẾT KẾ LẠI LẦN 2, 11/2026, VÁ LẦN 3 sau rà soát
+      // chéo độc lập) — KHÁC HẲN 9 job nhắc hạn phía trên/dưới (những job đó CỐ Ý giữ nguyên "mỗi 24h kể
+      // từ lúc khởi động", không đổi, theo đúng yêu cầu người dùng "chỉ áp dụng cho ngưỡng tồn thôi, còn
+      // cái kia là email báo tự động theo action thì thôi"): job này là 1 BÁO CÁO TỔNG HỢP gửi theo LỊCH
+      // ADMIN TỰ CẤU HÌNH (Hàng ngày/Hàng tuần/Hàng tháng + giờ — DB.shelfThresholdDigestSchedule,
+      // #adminSubShelfDigest). GỌI NGAY LÚC KHỞI ĐỘNG (khác bản trước — rà soát chéo phát hiện: KHÔNG gọi
+      // ngay + tick mỗi giờ đếm từ lúc boot có thể BỎ LỠ CẢ KỲ nếu server restart đúng lúc gần giờ cấu
+      // hình, VD boot 06:40 -> tick kế tiếp 07:40, nhưng pm2 restart lúc 07:20 dời tick sang 08:20, giờ 7
+      // không bao giờ được kiểm -> kỳ WEEKLY/MONTHLY đó mất hẳn, không ai gửi) — gọi ngay lúc khởi động an
+      // toàn vì shouldSendDigestNow() giờ là so sánh "ĐÃ QUA thời điểm cấu hình của kỳ hiện tại CHƯA" (>=,
+      // không còn so khớp CHÍNH XÁC giờ/ngày nữa) kết hợp periodKey chống gửi trùng — nên dù gọi ngay lúc
+      // khởi động hay tick trễ bao lâu, hàm tự "bắt kịp" đúng 1 lần/kỳ, không gửi thiếu cũng không gửi
+      // trùng. Vẫn giữ tick MỖI GIỜ làm nhịp kiểm tra ổn định sau đó. Xem đầy đủ lý do thiết kế ở đầu file
+      // jobs/shelfStockThresholdAlert.js.
+      checkShelfStockThresholdAlerts();
       setInterval(checkShelfStockThresholdAlerts, 60 * 60 * 1000);
       // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — chu kỳ 20 phút (trong khoảng
       // 15-30 phút tài liệu khuyến nghị, khớp đúng độ trễ đồng bộ 15 phút của chính API nguồn). Tự vô

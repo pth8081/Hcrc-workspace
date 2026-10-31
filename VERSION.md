@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.54 (2026-11): Vá 5 lỗi thật phát hiện qua rà soát chéo độc lập (báo cáo Ngưỡng Tồn v28.53)
+
+Theo yêu cầu người dùng "làm cẩn thận và rà soát lại... cho nhiều agent kiểm tra chéo với nhau" sau
+đợt v28.53 — 2 agent độc lập (1 đọc lại code, 1 lái Playwright thật) cùng rà soát, phát hiện 5 lỗi thật
+(không phải chuyện UI wiring như lần trước — phần đó đã đúng):
+
+1. **[Cao] Bỏ lỡ cả kỳ nếu server restart đúng lúc gần giờ cấu hình.** `shouldSendDigestNow()` trước đây
+   đòi khớp CHÍNH XÁC giờ/thứ/ngày (`===`) — tick bị trễ (VD restart 07:20, tick kế tiếp 08:20) thì giờ
+   cấu hình (07:00) không bao giờ được kiểm lại, cả kỳ WEEKLY/MONTHLY mất hẳn. Đổi sang so sánh "ĐÃ QUA
+   thời điểm cấu hình CHƯA" (`>=`) — tự "bắt kịp" (self-healing) dù tick trễ bao lâu trong cùng kỳ, gọi
+   thêm 1 lần NGAY lúc khởi động (an toàn vì đã tự kiểm tra, không còn gửi vô điều kiện mỗi lần restart
+   như bản MVP cũ). `getPeriodKey()` WEEKLY đổi khoá theo Thứ 2 đầu tuần (không theo ngày gửi thật) để
+   gửi bắt kịp trễ ngày nào trong tuần cũng chỉ tính 1 kỳ, không gửi trùng.
+2. **[TB] Lỗi làm tròn số thực JS tại ĐÚNG biên 110% ngưỡng** — `50*1.1===55.00000000000001` khiến tồn
+   ĐÚNG BẰNG 110% ngưỡng (lẽ ra an toàn) bị tô nhầm vàng. Vá bằng dung sai `1e-9` (không dùng làm tròn số
+   nguyên vì sẽ sai các trường hợp thập phân hợp lệ gần biên, VD 10.999 so ngưỡng 10) — áp dụng ĐỒNG NHẤT
+   cả server (`lib/shelfThresholdDigestExcel.js`) lẫn web (`module-vanhanh.js`).
+3. **[TB] Tầng 4 (tự thêm người) bị mở rộng nhầm thành cả siêu thị** — thiết kế gốc là "thấy ĐÚNG 1
+   ngưỡng được thêm vào", bản trước vô tình cho thấy TOÀN BỘ ngưỡng của siêu thị đó. Vá lại đúng phạm vi
+   hẹp; Tầng 1-3 (vốn đúng là cả siêu thị/hệ thống theo thiết kế) giữ nguyên.
+4. **[TB] Gửi thất bại thật vẫn bị đánh dấu "đã gửi"** — chặn mọi lần thử lại nếu SMTP lỗi đúng lúc tới
+   hạn. Nay chỉ đánh dấu khi có ít nhất 1 người nhận thành công thật hoặc hợp lệ mô phỏng (email chưa cấu
+   hình); thất bại thật 100% thì KHÔNG đánh dấu, tick giờ kế tiếp tự thử lại.
+5. **[Thấp] Dedup email không phân biệt hoa/thường** — `A@x.com`/`a@x.com` nay gộp đúng 1 người nhận.
+
+**Điều chỉnh nghiệp vụ đi kèm**: đổi giờ mặc định (khi admin chưa cấu hình) từ 07:00 sang **20:00** —
+"Tồn Hôm Nay" chỉ tính từ 0h cùng ngày, gửi 07:00 gần như chưa ai ghi nhận gì nên báo cáo sai lệch toàn
+đỏ; 20:00 phản ánh đúng hơn hoạt động cả ngày (admin vẫn tự chọn giờ khác bất kỳ lúc nào). Thêm 1 câu chú
+thích ngắn vào cả email lẫn Excel nêu rõ phạm vi số liệu.
+
+**Test**: 35/35 scenario (`test-shelf-kehang-phase2.js`, +7 scenario mới cho cả 5 lỗi) + 8/8 + 5/5
+Playwright thật (panel lịch gửi + bảng màu, kể cả 5 cặp biên 110% độc lập từ kịch bản rà soát chéo) — tất
+cả PASS. CSP sạch trên mọi file sửa. Full regression suite đã chạy lại xác nhận không phát sinh hồi quy.
 
 ## v28.53 (2026-11): Ngưỡng Tồn — báo cáo tổng hợp Excel tô màu đỏ/vàng, gửi theo lịch tự chọn (ngày/tuần/tháng)
 

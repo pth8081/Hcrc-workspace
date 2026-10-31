@@ -24,7 +24,7 @@ const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
-const { buildShelfThresholdDigestExcelBuffer, classifyThresholdStatus } = require('../lib/shelfThresholdDigestExcel');
+const { buildShelfThresholdDigestExcelBuffer, classifyThresholdStatus, DATA_SCOPE_DISCLAIMER } = require('../lib/shelfThresholdDigestExcel');
 
 async function getCollection(pool, key, fallback) {
   const result = await pool.request()
@@ -111,92 +111,152 @@ function resolveThresholdRecipients(threshold, allUsers) {
   return recipients;
 }
 
-// buildDigestRowsForDept(): mỗi điều kiện ĐÃ ĐIỀN của 1 ngưỡng (maHang/maVach gộp 1 dòng SKU, category 1
-// dòng riêng) -> 1 dòng digest — CÙNG đúng nguyên tắc multi-condition đã có ("nhập 1 là đủ, nhập nhiều
-// thì check nhiều điều kiện", nguyên văn người dùng xác nhận ở thiết kế lần 1), NHƯNG khác bản alert tức
-// thời cũ ở chỗ: liệt kê CẢ dòng an toàn (GREEN), không chỉ dòng vi phạm — vì đây là báo cáo tổng hợp
-// định kỳ, không phải cảnh báo riêng từng sự kiện.
+// buildDigestRowsForThreshold()/buildDigestRowsForDept(): mỗi điều kiện ĐÃ ĐIỀN của 1 ngưỡng (maHang/
+// maVach gộp 1 dòng SKU, category 1 dòng riêng) -> 1 dòng digest — CÙNG đúng nguyên tắc multi-condition
+// đã có ("nhập 1 là đủ, nhập nhiều thì check nhiều điều kiện", nguyên văn người dùng xác nhận ở thiết kế
+// lần 1), NHƯNG khác bản alert tức thời cũ ở chỗ: liệt kê CẢ dòng an toàn (GREEN), không chỉ dòng vi
+// phạm — vì đây là báo cáo tổng hợp định kỳ, không phải cảnh báo riêng từng sự kiện. Tách riêng hàm theo
+// ĐÚNG 1 ngưỡng (buildDigestRowsForThreshold) để groupDigestRowsByRecipient() tái dùng được cho cả phạm
+// vi "cả siêu thị" (Tầng 1-3) lẫn "đúng 1 ngưỡng lẻ" (Tầng 4-only, xem chú thích bên dưới).
+function buildDigestRowsForThreshold(t, shelfRecords, shelfLocationCategoryById) {
+  const rows = [];
+  if (t.maHang || t.maVach) {
+    const total = sumTodaySkuQuantity(t, shelfRecords);
+    rows.push({
+      dept: t.dept, maHang: t.maHang || '', maVach: t.maVach || '', category: '',
+      minQuantity: Number(t.minQuantity), total, status: classifyThresholdStatus(total, t.minQuantity)
+    });
+  }
+  if (t.category) {
+    const total = sumTodayCategoryQuantity(t, shelfRecords, shelfLocationCategoryById);
+    rows.push({
+      dept: t.dept, maHang: '', maVach: '', category: t.category,
+      minQuantity: Number(t.minQuantity), total, status: classifyThresholdStatus(total, t.minQuantity)
+    });
+  }
+  return rows;
+}
 function buildDigestRowsForDept(dept, activeThresholds, shelfRecords, shelfLocationCategoryById) {
   const rows = [];
   for (const t of activeThresholds) {
     if (t.dept !== dept) continue;
-    if (t.maHang || t.maVach) {
-      const total = sumTodaySkuQuantity(t, shelfRecords);
-      rows.push({
-        dept, maHang: t.maHang || '', maVach: t.maVach || '', category: '',
-        minQuantity: Number(t.minQuantity), total, status: classifyThresholdStatus(total, t.minQuantity)
-      });
-    }
-    if (t.category) {
-      const total = sumTodayCategoryQuantity(t, shelfRecords, shelfLocationCategoryById);
-      rows.push({
-        dept, maHang: '', maVach: '', category: t.category,
-        minQuantity: Number(t.minQuantity), total, status: classifyThresholdStatus(total, t.minQuantity)
-      });
-    }
+    rows.push(...buildDigestRowsForThreshold(t, shelfRecords, shelfLocationCategoryById));
   }
   return rows;
 }
 
 // groupDigestRowsByRecipient(): gom theo NGƯỜI NHẬN THẬT (không theo ngưỡng/siêu thị) — 1 quản lý vùng
 // phụ trách 2 siêu thị phải nhận ĐÚNG 1 email duy nhất liệt kê CẢ 2 siêu thị, không phải 2 email riêng.
-// Cách làm: với MỖI siêu thị có ít nhất 1 ngưỡng active, tính lại 4 tầng người nhận theo TỪNG ngưỡng của
-// siêu thị đó (tái dùng nguyên resolveThresholdRecipients() — nó đã tự lọc opt-out), rồi với MỖI người
-// nhận match được, cộng dồn đúng siêu thị đó vào tập "phạm vi" (Set) của người đó. Cuối cùng, với MỖI
-// người nhận, dựng danh sách dòng từ TOÀN BỘ siêu thị trong phạm vi của họ (không chỉ 1 ngưỡng lẻ).
+//
+// VÁ LẦN 3 (rà soát chéo độc lập phát hiện lỗ hổng phạm vi thật): bản trước gọi resolveThresholdRecipients()
+// theo TỪNG ngưỡng rồi gộp CẢ 4 tầng vào chung 1 "phạm vi siêu thị" — khiến người CHỈ thuộc Tầng 4 (cửa
+// hàng trưởng tự thêm họ vào ĐÚNG 1 ngưỡng cụ thể) bị mở rộng nhìn thấy TOÀN BỘ ngưỡng của siêu thị đó,
+// sai thiết kế gốc ("Tầng 4 = tự thêm thêm cho ĐÚNG ngưỡng đó", không phải cả siêu thị). Tầng 1 (shelfLocationManage
+// + đúng dept), Tầng 2 (shelfReportView.depts), Tầng 3 (shelfReportView.all) ĐÚNG là phạm vi cả siêu thị/
+// hệ thống theo thiết kế, GIỮ NGUYÊN. Cách làm mới: tách riêng "phạm vi cả siêu thị" (deptScope, từ Tầng
+// 1-3) và "phạm vi đúng 1 ngưỡng" (thresholdIdScope, từ Tầng 4-only) cho MỖI người nhận — nếu người đó
+// CŨNG thuộc Tầng 1-3 của ĐÚNG siêu thị chứa ngưỡng Tầng 4 đó thì khỏi lặp dòng (đã có đủ qua deptScope).
+//
+// Dedup người nhận theo email CHỮ THƯỜNG (Thấp, rà soát chéo phát hiện) — 2 tài khoản cùng email khác hoa/
+// thường (VD A@x.com và a@x.com) phải gom thành 1 người nhận, không gửi trùng 2 lần.
 function groupDigestRowsByRecipient(allThresholds, allUsers, shelfRecords, shelfLocationCategoryById) {
   const activeThresholds = (allThresholds || []).filter(t => t && t.active !== false);
   const deptsWithThresholds = [...new Set(activeThresholds.map(t => t.dept))];
+  const users = Array.isArray(allUsers) ? allUsers : [];
 
-  const recipientScope = new Map(); // email -> { name, depts: Set<string> }
+  // emailLower -> { name, email(gốc, dùng để gửi), deptScope: Set<dept>, thresholdIdScope: Set<id> }
+  const recipientInfo = new Map();
+  const ensureRecipient = (u) => {
+    const key = u.email.toLowerCase();
+    if (!recipientInfo.has(key)) {
+      recipientInfo.set(key, { name: u.name || u.username, email: u.email, deptScope: new Set(), thresholdIdScope: new Set() });
+    }
+    return recipientInfo.get(key);
+  };
+
   for (const dept of deptsWithThresholds) {
     const deptThresholds = activeThresholds.filter(t => t.dept === dept);
-    for (const t of deptThresholds) {
-      for (const r of resolveThresholdRecipients(t, allUsers)) {
-        if (!recipientScope.has(r.email)) recipientScope.set(r.email, { name: r.name, depts: new Set() });
-        recipientScope.get(r.email).depts.add(dept);
+    for (const u of users) {
+      if (!u || !u.username || u.active === false || !u.email) continue;
+      if (isUserOptedOutOfEmailModule(u, 'SHELF_THRESHOLD')) continue;
+      const isTier1 = !!u.perms?.shelfLocationManage && u.dept === dept;
+      const isTier2 = Array.isArray(u.perms?.shelfReportView?.depts) && u.perms.shelfReportView.depts.includes(dept);
+      const isTier3 = !!u.perms?.shelfReportView?.all;
+      if (isTier1 || isTier2 || isTier3) {
+        ensureRecipient(u).deptScope.add(dept);
+        continue; // đã có cả siêu thị rồi, khỏi cần xét Tầng 4 riêng từng ngưỡng của CHÍNH siêu thị này nữa
+      }
+      for (const t of deptThresholds) {
+        const isTier4 = Array.isArray(t.extraRecipientUsernames) && t.extraRecipientUsernames.includes(u.username);
+        if (isTier4) ensureRecipient(u).thresholdIdScope.add(t.id);
       }
     }
   }
 
   const groups = [];
-  for (const [email, info] of recipientScope) {
+  for (const info of recipientInfo.values()) {
     const rows = [];
-    for (const dept of info.depts) {
+    for (const dept of info.deptScope) {
       rows.push(...buildDigestRowsForDept(dept, activeThresholds, shelfRecords, shelfLocationCategoryById));
     }
-    if (rows.length) groups.push({ email, name: info.name, rows });
+    for (const tid of info.thresholdIdScope) {
+      const t = activeThresholds.find(x => x.id === tid);
+      if (!t) continue; // ngưỡng đã bị xoá/ngừng dùng giữa lúc tính, bỏ qua an toàn
+      rows.push(...buildDigestRowsForThreshold(t, shelfRecords, shelfLocationCategoryById));
+    }
+    if (rows.length) groups.push({ email: info.email, name: info.name, rows });
   }
   return groups;
 }
 
+// startOfWeekMonday(): lùi "d" về đúng Thứ 2 (00:00) của tuần chứa nó — quy ước tuần bắt đầu Thứ 2, khớp
+// đúng cách nhãn UI hiển thị "Thứ 2 → Chủ Nhật" (xem systemSection.html #adminSubShelfDigest). Dùng để
+// định danh "kỳ tuần hiện tại" theo tuần, không theo ngày lẻ (xem getPeriodKey() bên dưới).
+function startOfWeekMonday(d) {
+  const diffToMonday = (d.getDay() + 6) % 7; // Date.getDay(): 0=CN..6=T7 -> Thứ 2=0,...,Chủ Nhật=6
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - diffToMonday);
+}
+function formatYmd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // getPeriodKey(): khoá định danh "kỳ hiện tại" dùng để chống gửi trùng (lưu vào
 // DB.shelfThresholdDigestSchedule.lastSentPeriodKey SAU KHI gửi xong, so sánh LẠI trước khi gửi lần kế
-// tiếp). WEEKLY/DAILY dùng thẳng ngày hiện tại (YYYY-MM-DD) làm khoá — vì WEEKLY chỉ khớp ĐÚNG 1 dayOfWeek
-// cấu hình nên ngày đó đã định danh duy nhất đúng 1 tuần, không cần tính số tuần ISO phức tạp hơn.
+// tiếp). MONTHLY/DAILY giữ nguyên (tháng/ngày hiện tại là đủ định danh 1 kỳ). WEEKLY ĐỔI SANG khoá theo
+// Thứ 2 đầu tuần (VÁ LẦN 3 — trước đây khoá theo NGÀY GỬI THẬT, nếu job "bắt kịp" gửi trễ qua ngày khác
+// trong tuần — VD lẽ ra Thứ 2 nhưng mãi Thứ 4 mới gửi được do server down — thì khoá Thứ 4 không trùng
+// khoá Thứ 2 bình thường, có thể gửi lại lần nữa nếu tick chạy đúng Thứ 2 tiếp theo tính lầm là "tuần
+// khác"; khoá theo Thứ 2 đầu tuần đảm bảo CẢ TUẦN chỉ có ĐÚNG 1 khoá duy nhất bất kể gửi đúng ngày hay
+// gửi bắt kịp trễ ngày nào trong tuần đó).
 function getPeriodKey(now, frequency) {
   const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
   if (frequency === 'MONTHLY') return `M-${y}-${m}`;
-  if (frequency === 'WEEKLY') return `W-${y}-${m}-${d}`;
+  if (frequency === 'WEEKLY') return `W-${formatYmd(startOfWeekMonday(now))}`;
   return `D-${y}-${m}-${d}`; // DAILY (và mặc định an toàn nếu frequency lạ)
 }
 
-// shouldSendDigestNow(): so khớp "now" với lịch cấu hình — gọi mỗi giờ (xem server.js), chỉ TRẢ VỀ true
-// ĐÚNG 1 giờ trong ngày (hoặc đúng 1 ngày/tuần, 1 ngày/tháng tuỳ frequency) mà `now.getHours()` khớp
-// `schedule.hour`. KHÔNG tự xử lý chống gửi trùng ở đây (việc đó là periodKey, tách riêng) — hàm này CHỈ
-// trả lời "có đúng thời điểm cấu hình không".
+// shouldSendDigestNow(): so khớp "now" với lịch cấu hình — gọi mỗi giờ + 1 lần ngay lúc khởi động (xem
+// server.js). VÁ LẦN 3 (rà soát chéo độc lập phát hiện lỗi Cao): bản trước đòi KHỚP CHÍNH XÁC giờ/ngày
+// (===) — nếu tick bị trễ (VD server restart đúng lúc gần giờ cấu hình, dời tick kế tiếp qua khỏi đúng
+// giờ đó) thì giờ/ngày đó KHÔNG BAO GIỜ được kiểm lại, cả kỳ WEEKLY/MONTHLY đó mất hẳn, không ai gửi. Nay
+// đổi logic: "ĐÃ QUA thời điểm cấu hình của kỳ hiện tại CHƯA" (>=, không còn ===) — tự "bắt kịp" (self-
+// healing): dù tick chạy trễ bao lâu trong CÙNG kỳ (DAILY: trong ngày; WEEKLY: từ đúng thứ cấu hình tới
+// hết Chủ Nhật cùng tuần; MONTHLY: từ đúng ngày cấu hình tới hết tháng), vẫn nhận ra "đã tới lúc gửi" và
+// gửi ngay ở lần kiểm kế tiếp. KHÔNG gửi trùng vì periodKey (so khớp NGOÀI hàm này, ở checkShelfStockThresholdAlerts())
+// chỉ cho gửi ĐÚNG 1 lần/kỳ bất kể shouldSendDigestNow() trả về true bao nhiêu lần liên tiếp trong cùng kỳ.
 function shouldSendDigestNow(schedule, now) {
   const freq = schedule?.frequency || 'WEEKLY';
-  const hour = Number.isInteger(schedule?.hour) ? schedule.hour : 7;
-  if (now.getHours() !== hour) return false;
+  const hour = Number.isInteger(schedule?.hour) ? schedule.hour : 20;
+  if (now.getHours() < hour) return false; // chưa tới giờ cấu hình hôm nay
   if (freq === 'DAILY') return true;
   if (freq === 'WEEKLY') {
     const dayOfWeek = Number.isInteger(schedule?.dayOfWeek) ? schedule.dayOfWeek : 1;
-    return now.getDay() === dayOfWeek;
+    const toMondayIdx = (jsDay) => (jsDay + 6) % 7; // Date.getDay() (0=CN..6=T7) -> Thứ 2=0,...,Chủ Nhật=6
+    return toMondayIdx(now.getDay()) >= toMondayIdx(dayOfWeek); // đã qua/đúng thứ cấu hình trong TUẦN NÀY
   }
   if (freq === 'MONTHLY') {
     const dayOfMonth = Number.isInteger(schedule?.dayOfMonth) ? schedule.dayOfMonth : 1;
-    return now.getDate() === dayOfMonth;
+    return now.getDate() >= dayOfMonth; // đã qua/đúng ngày cấu hình trong THÁNG NÀY
   }
   return false;
 }
@@ -211,7 +271,7 @@ async function checkShelfStockThresholdAlerts() {
   }
 
   try {
-    const schedule = await getCollection(pool, 'shelfThresholdDigestSchedule', { frequency: 'WEEKLY', hour: 7, dayOfWeek: 1, dayOfMonth: 1, lastSentPeriodKey: null });
+    const schedule = await getCollection(pool, 'shelfThresholdDigestSchedule', { frequency: 'WEEKLY', hour: 20, dayOfWeek: 1, dayOfMonth: 1, lastSentPeriodKey: null });
     const now = new Date();
     if (!shouldSendDigestNow(schedule, now)) return;
     const periodKey = getPeriodKey(now, schedule.frequency);
@@ -241,12 +301,21 @@ async function checkShelfStockThresholdAlerts() {
 
     const digestGroups = groupDigestRowsByRecipient(thresholds || [], allUsers || [], shelfRecords || [], shelfLocationCategoryById);
 
+    // handledOk: TRUE nếu có ÍT NHẤT 1 người nhận được gửi thành công HOẶC được mô phỏng (simulated:true —
+    // nghĩa là email CHƯA cấu hình SMTP thật, không phải lỗi, không cần gửi lại) — VÁ LẦN 3 (rà soát chéo
+    // phát hiện lỗi TB): bản trước LUÔN đánh dấu "đã gửi kỳ này" (lastSentPeriodKey) dù TẤT CẢ lần gửi
+    // thật đều thất bại thật sự (VD SMTP server lỗi) — khiến kỳ đó KHÔNG BAO GIỜ được gửi lại, periodKey
+    // đã "dùng hết" dù chưa ai nhận được báo cáo thật. Nay CHỈ đánh dấu khi có ít nhất 1 người được xử lý
+    // ổn thoả (thành công thật HOẶC mô phỏng hợp lệ) — nếu TẤT CẢ đều lỗi thật, KHÔNG đánh dấu, để tick
+    // giờ kế tiếp tự thử lại đúng kỳ này (periodKey chưa đổi, vẫn trong kỳ).
+    let handledOk = digestGroups.length === 0; // không có ai cần gửi -> coi như "đã xử lý xong" kỳ này
+
     for (const group of digestGroups) {
       try {
         const redCount = group.rows.filter(r => r.status === 'RED').length;
         const yellowCount = group.rows.filter(r => r.status === 'YELLOW').length;
         const subject = `[VPDT] Báo cáo Ngưỡng Tồn — Kiểm Soát Hàng Hóa (${group.rows.length} dòng, ${redCount} dưới ngưỡng, ${yellowCount} gần ngưỡng)`;
-        const plainBody = `Đính kèm báo cáo tổng hợp Ngưỡng Tồn — ${group.rows.length} dòng (${redCount} đang DƯỚI ngưỡng, ${yellowCount} còn chưa tới 10% nữa là chạm ngưỡng). Xem file Excel đính kèm để biết chi tiết từng dòng (tô màu đỏ/vàng theo đúng mức).`;
+        const plainBody = `Đính kèm báo cáo tổng hợp Ngưỡng Tồn — ${group.rows.length} dòng (${redCount} đang DƯỚI ngưỡng, ${yellowCount} còn chưa tới 10% nữa là chạm ngưỡng). Xem file Excel đính kèm để biết chi tiết từng dòng (tô màu đỏ/vàng theo đúng mức). ${DATA_SCOPE_DISCLAIMER}`;
         const html = buildNotificationEmailHtml({ status: 'info', badge: '📊 Báo cáo Ngưỡng Tồn định kỳ — Kiểm Soát Hàng Hóa', bodyText: plainBody });
         const excelBuffer = await buildShelfThresholdDigestExcelBuffer(group.rows);
 
@@ -270,18 +339,22 @@ async function checkShelfStockThresholdAlerts() {
           console.error(`⛔ [Báo Cáo Ngưỡng Tồn Kiểm Soát Hàng Hóa] Gửi email thật thất bại (${group.email}):`, err.message);
           sendResult = { sent: [], failed: [group.email], simulated: false };
         }
+        const isRealHardFailure = sendResult.simulated === false && sendResult.sent.length === 0 && sendResult.failed.length > 0;
+        if (!isRealHardFailure) handledOk = true;
         await insertSystemLog({
           username: 'system_scheduler', fullName: 'Hệ Thống (Tự Động)', ipAddress: 'SERVER (Scheduled Job)',
           module: 'SHELF_STOCK_THRESHOLD', actionType: 'DIGEST_SENT', targetObject: `${group.name} <${group.email}>`,
-          description: `Gửi báo cáo tổng hợp Ngưỡng Tồn kỳ ${periodKey} — ${group.rows.length} dòng (${redCount} đỏ, ${yellowCount} vàng) tới ${group.email}`,
-          status: sendResult.failed.length && !sendResult.simulated ? 'WARNING' : 'SUCCESS'
+          description: `Gửi báo cáo tổng hợp Ngưỡng Tồn kỳ ${periodKey} — ${group.rows.length} dòng (${redCount} đỏ, ${yellowCount} vàng) tới ${group.email}${isRealHardFailure ? ' — THẤT BẠI THẬT, sẽ tự thử lại ở lần kiểm kế tiếp' : ''}`,
+          status: isRealHardFailure ? 'WARNING' : 'SUCCESS'
         });
       } catch (err) {
         console.error(`⛔ [Báo Cáo Ngưỡng Tồn Kiểm Soát Hàng Hóa] Lỗi khi gửi cho ${group.email}, bỏ qua và tiếp tục:`, err.message);
       }
     }
 
-    await setCollection(pool, 'shelfThresholdDigestSchedule', { ...schedule, lastSentPeriodKey: periodKey });
+    if (handledOk) {
+      await setCollection(pool, 'shelfThresholdDigestSchedule', { ...schedule, lastSentPeriodKey: periodKey });
+    }
   } catch (err) {
     console.error('⛔ [Báo Cáo Ngưỡng Tồn Kiểm Soát Hàng Hóa] Lỗi khi kiểm tra:', err.message);
   }
@@ -290,5 +363,7 @@ async function checkShelfStockThresholdAlerts() {
 module.exports = {
   checkShelfStockThresholdAlerts,
   resolveThresholdRecipients, sumTodaySkuQuantity, sumTodayCategoryQuantity,
-  shouldSendDigestNow, getPeriodKey, buildDigestRowsForDept, groupDigestRowsByRecipient
+  shouldSendDigestNow, getPeriodKey, startOfWeekMonday, formatYmd,
+  buildDigestRowsForThreshold, buildDigestRowsForDept, groupDigestRowsByRecipient,
+  DATA_SCOPE_DISCLAIMER
 };
