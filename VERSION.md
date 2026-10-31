@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**28.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.52 (2026-11): Đổi nhãn + thêm chú thích ô "Mã Khoá Đối Chiếu" (Cấu Hình API dsmart16) tránh nhầm với mật khẩu
+
+Người dùng gửi ảnh chụp màn hình thật: ô "Mã Khoá Đối Chiếu (matchingKey)"
+ở 🔌 Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16 đang hiển thị 1 chuỗi
+trông giống hệt token/API key thật ở dạng chữ thường (không ẩn) — gây lo
+ngại lộ bí mật. Rà lại code xác nhận: field này **từ thiết kế gốc KHÔNG
+phải bí mật** — chỉ là tên trường dùng để 2 hệ thống đối chiếu đơn hàng
+(mặc định `poNumber`), cố ý không mã hoá/ẩn (khác hẳn ô "Giá Trị Header"
+ngay phía trên, ô ĐÓ mới là bí mật thật, write-only, có ẩn đúng chuẩn).
+Nhưng giá trị người dùng đang thấy trong ô "Mã Khoá Đối Chiếu" rất giống 1
+API key thật bị nhập NHẦM vào sai ô (nhãn cũ "Mã Khoá" dễ gây hiểu lầm là
+API key) — trong khi ô "Giá Trị Header" thật lại đang CHƯA cấu hình.
+
+**Không phải lỗi code** (không có hoán đổi dữ liệu giữa 2 ô khi lưu/đọc —
+đã xác nhận qua `module-hethong-tabs.js`), nhưng đổi UX để tránh lặp lại
+nhầm lẫn này:
+- Đổi nhãn: "Mã Khoá Đối Chiếu (matchingKey)" → **"Tên Trường Đối Chiếu
+  (matchingKey)"** (`public/fragments/systemSection.html`).
+- Thêm chú thích nhỏ ngay dưới ô: "⚠️ KHÔNG phải mật khẩu/API key — chỉ
+  là tên trường dùng để đối chiếu đơn hàng... Giá trị xác thực thật nhập
+  ở ô Giá Trị Header bên trên."
+- Cập nhật khớp nhãn mới ở tài liệu Hướng Dẫn (⚙️ Hệ Thống →
+  `sysOpApi` entry, `module-nghiepvu.js`).
+
+Người dùng tự xác nhận chuỗi trong ảnh đúng là key thật — đã được nhắc tự
+đổi/thu hồi key đó với đối tác dsmart16 và nhập lại đúng vào ô "Giá Trị
+Header" (ngoài phạm vi sửa code, dữ liệu thật trên server người dùng).
 
 ## v28.51 (2026-11): Vá kẹt cuộn modal "Cá Nhân Hóa" trên di động (thiếu max-height/overflow)
 

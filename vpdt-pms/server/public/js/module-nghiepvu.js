@@ -1862,7 +1862,7 @@ const SYSTEM_DOCS = {
   // cái kia cho ứng dụng ngoài gọi VÀO hệ thống, cái này hệ thống tự đẩy dữ liệu RA ngoài.
   sysOpApi: {
     icon: '🔌', title: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Cấu hình để hệ thống TỰ ĐỘNG đẩy Đơn Hàng (Vận Hành → Đơn Hàng) sang hệ thống ngoài "dsmart16" theo chu kỳ — khai Base URL nhận đơn, 1 header xác thực tuỳ chỉnh (tên + giá trị, không cố định Bearer/Basic vì mỗi hệ thống ngoài yêu cầu tên header khác nhau), chu kỳ quét (phút) và Mã Khoá Đối Chiếu (mặc định `poNumber` — trường dùng để 2 hệ thống nhận ra cùng 1 đơn). Chỉ đơn ĐÃ CÓ Số Đơn NCC (poNumber) mới được gửi.',
+    desc: 'Cấu hình để hệ thống TỰ ĐỘNG đẩy Đơn Hàng (Vận Hành → Đơn Hàng) sang hệ thống ngoài "dsmart16" theo chu kỳ — khai Base URL nhận đơn, 1 header xác thực tuỳ chỉnh (tên + giá trị, không cố định Bearer/Basic vì mỗi hệ thống ngoài yêu cầu tên header khác nhau), chu kỳ quét (phút) và Tên Trường Đối Chiếu (mặc định `poNumber` — trường dùng để 2 hệ thống nhận ra cùng 1 đơn, KHÔNG phải mật khẩu/API key). Chỉ đơn ĐÃ CÓ Số Đơn NCC (poNumber) mới được gửi.',
     flow: { ariaLabel: 'Quy trình cấu hình đồng bộ Đơn Hàng ra dsmart16', chain: [
       { label: 'Khai Base URL + header', sub: 'Giá trị header là write-only' },
       { label: 'Bật đồng bộ + chu kỳ', sub: 'Tối thiểu 5 phút, mặc định 60' },
@@ -1872,7 +1872,7 @@ const SYSTEM_DOCS = {
     steps: [
       { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔌 Cấu Hình API</b> (tab con cuối cùng trên hàng tab của Quản Trị).' },
       { role: 'Quản trị viên', text: 'điền hàng trên: <b>Trạng thái đồng bộ</b> (Bật/Tắt), <b>Base URL (endpoint nhận đơn hàng)</b> của dsmart16, <b>Chu kỳ tự động (phút)</b> (tối thiểu 5, để trống = 60).' },
-      { role: 'Quản trị viên', text: 'điền hàng dưới: <b>Tên Header Xác Thực</b> (VD "X-Api-Key" hoặc "Authorization" — theo yêu cầu của dsmart16), <b>Giá Trị Header</b> (write-only: nhập 1 lần, sau đó ô luôn trống — để trống khi sửa = GIỮ NGUYÊN giá trị đã lưu), <b>Mã Khoá Đối Chiếu (matchingKey)</b> (mặc định `poNumber`).' },
+      { role: 'Quản trị viên', text: 'điền hàng dưới: <b>Tên Header Xác Thực</b> (VD "X-Api-Key" hoặc "Authorization" — theo yêu cầu của dsmart16), <b>Giá Trị Header</b> (write-only: nhập 1 lần, sau đó ô luôn trống — để trống khi sửa = GIỮ NGUYÊN giá trị đã lưu), <b>Tên Trường Đối Chiếu (matchingKey)</b> (mặc định `poNumber`, KHÔNG phải mật khẩu — giá trị xác thực thật nhập ở ô Giá Trị Header).' },
       { role: 'Quản trị viên', text: 'bấm <b>"Lưu Cấu Hình API"</b> — dòng trạng thái ngay dưới form cho biết đã có giá trị header xác thực hay chưa ("✅ Đã cấu hình..." / "⚠️ Chưa cấu hình giá trị header xác thực.").' },
       { role: 'Quản trị viên', text: 'không muốn chờ tới chu kỳ kế tiếp: bấm <b>"🔄 Đồng Bộ Ngay"</b> — kết quả hiện ngay ở dòng cuối màn ("✅/⚠️/⛔ Lần đồng bộ gần nhất: [thời điểm] — [thông báo]"), cùng 1 hàm xử lý với job tự động nên không có khác biệt hành vi.' },
     ],
