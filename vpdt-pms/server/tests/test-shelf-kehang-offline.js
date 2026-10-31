@@ -84,7 +84,8 @@ async function playwrightTests(run) {
     username: 'nv1', name: 'Nhân Viên 1', dept: 'Siêu thị Quận 1',
     perms: { shelfRecordCreate: true, shelfLocationManage: true }, active: true, totpEnabled: true
   };
-  const state = createMockState({ depts: ['Siêu thị Quận 1', 'Siêu thị Quận 7'], users: [USER] });
+  const SHELF_LOCATION = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Nước giải khát', active: true };
+  const state = createMockState({ depts: ['Siêu thị Quận 1', 'Siêu thị Quận 7'], users: [USER], shelfLocations: [SHELF_LOCATION] });
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   try {
@@ -124,49 +125,58 @@ async function playwrightTests(run) {
       assertEqual(offlineResult, 1, 'DB.shelfLocations rỗng -> phải fallback sang shelfOfflineLocationsCache');
     });
 
-    await run.run('queueShelfRecordOffline()/trySyncPendingShelfRecords(): hàng đợi được xoá khi đồng bộ THÀNH CÔNG', async () => {
+    await run.run('queueShelfRecordOffline()/trySyncPendingShelfRecords(): hàng đợi được xoá khi đồng bộ THÀNH CÔNG (đi qua ĐÚNG route /records/upsert thật, có shelfLocations server-side)', async () => {
       await page.evaluate(async () => {
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Coca-Cola', maVach: '', quantity: 10, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-sync-ok' },
+          { shelfLocationId: 1, productName: 'Coca-Cola', maHang: 'SKU-SYNC-OK', maVach: '', quantity: 10, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-sync-ok' },
           { code: 'A1', name: 'Nước giải khát' });
       });
       const queuedLen = await page.evaluate(() => shelfOfflinePendingCache.length);
       assertEqual(queuedLen, 1, 'phải có 1 bản ghi trong hàng đợi sau queueShelfRecordOffline()');
-      await page.evaluate(() => {
-        window.__origCallCreateAction = window.callCreateAction;
-        window.callCreateAction = async (moduleKey, payload) => ({ ok: true, item: Object.assign({ id: 999, dept: currentUser.dept }, payload) });
-        Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
-      });
+      await page.evaluate(() => { Object.defineProperty(navigator, 'onLine', { value: true, configurable: true }); });
       await page.evaluate(() => trySyncPendingShelfRecords());
       const afterLen = await page.evaluate(() => shelfOfflinePendingCache.length);
-      assertEqual(afterLen, 0, 'đồng bộ thành công phải xoá khỏi hàng đợi');
+      assertEqual(afterLen, 0, 'đồng bộ thành công (route /records/upsert thật) phải xoá khỏi hàng đợi');
       const dbLen = await page.evaluate(() => DB.shelfRecords.length);
       assert(dbLen >= 1, 'bản ghi đồng bộ xong phải được thêm vào DB.shelfRecords');
     });
 
-    await run.run('trySyncPendingShelfRecords(): nhận DUPLICATE_OFFLINE_SYNC vẫn coi là THÀNH CÔNG (xoá khỏi hàng đợi, không lặp vô hạn/không báo lỗi)', async () => {
+    await run.run('trySyncPendingShelfRecords(): retry CÙNG lô (mất response, offline-sync gửi lại nguyên payload cũ) -> idempotent, KHÔNG tạo dòng thứ 2 (thay thế hẳn cơ chế DUPLICATE_OFFLINE_SYNC cũ, nay đi qua lô-matching của chính route upsert)', async () => {
+      const before = await page.evaluate(() => DB.shelfRecords.length);
       await page.evaluate(async () => {
+        // 2 clientRecordId KHÁC nhau (2 lượt scan offline riêng biệt, VD kiểm 2 lần cùng buổi mất mạng)
+        // nhưng CÙNG lô thật (dept+shelfLocationId+maHang+expiryDate) — route upsert dedupe theo LÔ, không
+        // theo clientRecordId (đã bỏ hẳn cơ chế dedupe theo clientRecordId của route generic cũ), nên đây
+        // mới là kịch bản thật cần test, không phải retry-y-hệt-1-request.
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Sting', maVach: '', quantity: 5, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-dup-case' },
+          { shelfLocationId: 1, productName: 'Sting', maHang: 'SKU-DUP-CASE', maVach: '', quantity: 5, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-dup-case-1' },
           { code: 'A1', name: 'Nước giải khát' });
-        window.callCreateAction = async () => { throw new Error('DUPLICATE_OFFLINE_SYNC'); };
+        await queueShelfRecordOffline(
+          { shelfLocationId: 1, productName: 'Sting', maHang: 'SKU-DUP-CASE', maVach: '', quantity: 5, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-dup-case-2' },
+          { code: 'A1', name: 'Nước giải khát' });
       });
+      const queuedLen = await page.evaluate(() => shelfOfflinePendingCache.length);
+      assertEqual(queuedLen, 2, 'phải có 2 bản ghi giống nhau trong hàng đợi (mô phỏng gửi lại)');
       await page.evaluate(() => trySyncPendingShelfRecords());
-      const len = await page.evaluate(() => shelfOfflinePendingCache.length);
-      assertEqual(len, 0, 'DUPLICATE_OFFLINE_SYNC phải được coi là đã đồng bộ xong, xoá khỏi hàng đợi');
+      const afterLen = await page.evaluate(() => shelfOfflinePendingCache.length);
+      assertEqual(afterLen, 0, 'cả 2 lượt gửi (giống nhau) đều phải được server chấp nhận, xoá khỏi hàng đợi');
+      const after = await page.evaluate(() => DB.shelfRecords.filter(r => r.maHang === 'SKU-DUP-CASE').length);
+      assertEqual(after, 1, `2 lượt gửi CÙNG lô (idempotent qua upsert) chỉ phải tạo ĐÚNG 1 dòng, không phải 2, thực tế: ${after}`);
+      assertEqual(await page.evaluate(() => DB.shelfRecords.length), before + 1, 'tổng số bản ghi chỉ tăng đúng 1');
     });
 
     await run.run('trySyncPendingShelfRecords(): lỗi MẠNG thật (TypeError) -> GIỮ LẠI trong hàng đợi, không mất dữ liệu', async () => {
       await page.evaluate(async () => {
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Mì Hảo Hảo', maVach: '', quantity: 8, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-still-offline' },
+          { shelfLocationId: 1, productName: 'Mì Hảo Hảo', maHang: 'SKU-STILL-OFFLINE', maVach: '', quantity: 8, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-still-offline' },
           { code: 'A1', name: 'Nước giải khát' });
-        window.callCreateAction = async () => { throw new TypeError('Failed to fetch'); };
+        window.__origFetch = window.fetch;
+        window.fetch = async () => { throw new TypeError('Failed to fetch'); };
       });
       await page.evaluate(() => trySyncPendingShelfRecords());
       const len = await page.evaluate(() => shelfOfflinePendingCache.length);
       assertEqual(len, 1, 'lỗi mạng thật thì KHÔNG được xoá khỏi hàng đợi — còn offline, phải thử lại sau');
-      await page.evaluate(() => { window.callCreateAction = window.__origCallCreateAction; delete window.__origCallCreateAction; });
+      await page.evaluate(() => { window.fetch = window.__origFetch; delete window.__origFetch; });
     });
   } finally {
     await browser.close();

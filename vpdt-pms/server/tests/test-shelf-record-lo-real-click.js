@@ -3,7 +3,7 @@
 // (1) scan lại ĐÚNG Quầy Kệ+Mã Hàng+Hạn Sử Dụng của 1 dòng ĐANG theo dõi -> CẬP NHẬT số lượng (không
 // cộng dồn), (2) Hạn Sử Dụng khác -> tạo lô MỚI, (3) nút "✏️ Sửa" sửa trực tiếp trên bảng, (4) nút
 // "🗑️ Xóa" xoá vĩnh viễn, (5) "✅ Bán Hết" set quantity=0 -> dừng theo dõi (ẩn khỏi Hạn Sử Dụng mặc
-// định, hiện lại khi tick "Hiện cả dòng đã bán hết"), (6) ô "SL đã bán" + nút "➖ Trừ" trừ đúng số lượng,
+// định, hiện lại khi tick "Hiện cả dòng đã bán hết"), (6) ô "SL hiện tại" + nút "💾 Cập Nhật" SET THẲNG
 // (7) cột "Tồn Kho Hệ Thống" ở tab Hạn Sử Dụng gộp ĐÚNG theo TỔNG nhiều lô/hạn sử dụng khác nhau CỦA
 // CÙNG 1 mã hàng (không so riêng từng dòng) + phân loại đỏ/vàng đúng biên 90% (bù sai số dấu phẩy động,
 // cùng khuôn SHELF_THRESHOLD_FP_EPSILON đã vá ở Ngưỡng Tồn). CHÚ Ý: DB/window là biến TRONG TRÌNH DUYỆT
@@ -17,7 +17,11 @@ async function main() {
   const PORT = 8981;
   const USER = {
     username: 'cht1', name: 'Cửa Hàng Trưởng Q1', dept: 'Siêu thị Quận 1',
-    perms: { vanHanhShelfTab: true, shelfRecordCreate: true }, active: true, totpEnabled: true, email: 'cht1@hcrc.vn'
+    // shelfLocationManage BẮT BUỘC để test được Sửa/Xóa/Bán Hết/Cập Nhật (canManageShelfRecordEdits() ở
+    // lib/shelfStockEdit.js — gác CAO HƠN shelfRecordCreate từ sau đợt tách quyền Sửa/Xóa riêng, xem chú
+    // thích tại canManageShelfRecordEdits()) — thiếu field này mọi PATCH/DELETE sẽ bị server 403 ÂM THẦM
+    // (chỉ alert() phía client, không throw ra Playwright) khiến các bước sau tưởng là lỗi logic khác.
+    perms: { vanHanhShelfTab: true, shelfRecordCreate: true, shelfLocationManage: true }, active: true, totpEnabled: true, email: 'cht1@hcrc.vn'
   };
   const SHELF_LOCATION = { id: 501, code: 'KE-A1', name: 'Kệ A1', category: 'Thực phẩm', dept: 'Siêu thị Quận 1', active: true };
   const state = createMockState({
@@ -84,17 +88,17 @@ async function main() {
       const batch2 = await findRecordByExpiry('2026-06-15');
       await page.click(`[data-op="enterShelfRecordEditMode"][data-arg0="${batch2.id}"]`);
       await page.waitForTimeout(30);
-      await page.fill(`#srEditQuantity_${batch2.id}`, '7');
-      await page.click(`[data-op="saveShelfRecordEdit"][data-arg0="${batch2.id}"]`);
+      await page.fill(`#srEditQuantity_recent_${batch2.id}`, '7');
+      await page.click(`[data-op="saveShelfRecordEdit"][data-arg0="${batch2.id}"][data-arg1="recent"]`);
       await page.waitForTimeout(80);
       const updated = (await getShelfRecords()).find(r => r.id === batch2.id);
       assertEqual(updated.quantity, 7, `phải lưu đúng SL mới 7, thực tế: ${JSON.stringify(updated)}`);
     });
 
-    await run.run('Ô "SL đã bán" + nút "➖ Trừ" -> trừ đúng vào SL đang theo dõi (7 - 3 = 4)', async () => {
+    await run.run('Ô "SL hiện tại" + nút "💾 Cập Nhật" -> SET THẲNG số lượng (đếm lại còn 4, không phải trừ)', async () => {
       const batch2 = await findRecordByExpiry('2026-06-15');
-      await page.fill(`#srDeduct_${batch2.id}`, '3');
-      await page.click(`[data-op="deductShelfRecordSold"][data-arg0="${batch2.id}"]`);
+      await page.fill(`#srQuickQty_recent_${batch2.id}`, '4');
+      await page.click(`[data-op="quickUpdateShelfRecordQuantity"][data-arg0="${batch2.id}"][data-arg1="recent"]`);
       await page.waitForTimeout(80);
       const updated = (await getShelfRecords()).find(r => r.id === batch2.id);
       assertEqual(updated.quantity, 4, `phải còn 4, thực tế: ${JSON.stringify(updated)}`);

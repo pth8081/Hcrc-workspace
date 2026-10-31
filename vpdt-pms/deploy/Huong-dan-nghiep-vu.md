@@ -2887,21 +2887,38 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       (khác hẳn `POST /api/create/shelfRecords` cũ — route cũ vẫn giữ
       nguyên, CHỈ dùng cho hàng đợi đồng bộ offline ở trên, luôn tạo dòng
       mới vì phụ thuộc cơ chế chống trùng theo `clientRecordId`).
-    - **Sửa/Xóa/Bán Hết/Trừ (MỚI 11/2026)** — mỗi dòng ở bảng "Ghi Nhận Gần
-      Đây" (tab này) và bảng "⏰ Hạn Sử Dụng" đều có cột "Thao Tác":
-      **"✏️ Sửa"** (đổi Số Lượng/Hạn Sử Dụng/Ghi Chú ngay tại dòng),
+    - **Cảnh báo SL tăng khi scan lại ĐÚNG lô (MỚI 11/2026)**: nếu scan lại
+      khớp 1 lô ĐANG theo dõi mà Số Lượng vừa nhập **CAO HƠN** Số Lượng lần
+      ghi nhận trước của đúng lô đó (bình thường chỉ giảm dần do bán hàng),
+      hệ thống hỏi lại trước khi lưu: *"Số lượng vừa nhập cao hơn lần ghi
+      nhận trước của lô cùng Hạn Sử Dụng này. Nếu đây là lô hàng MỚI (hạn
+      sử dụng khác), vui lòng Hủy rồi kiểm tra lại đúng Hạn Sử Dụng..."* —
+      phòng đúng lỗi hay gặp: nhập lô mới thật nhưng gõ/giữ nhầm Hạn Sử
+      Dụng của lô CŨ, khiến 2 lô khác nhau bị gộp nhầm vào 1 dòng. Bấm
+      "Hủy" thì KHÔNG lưu gì (SL giữ nguyên như trước khi scan, tự sửa lại
+      Hạn Sử Dụng rồi scan lại); bấm "OK/Xác Nhận" mới thực sự lưu. SL
+      giảm hoặc giữ nguyên (trường hợp thường gặp) thì lưu luôn, không hỏi
+      gì. Chỉ áp dụng cho form scan/lưu chính này — nút tắt "💾 Cập Nhật" ở
+      cột Thao Tác (mục ngay dưới) KHÔNG hỏi lại (người dùng đã chủ động
+      chọn đúng 1 dòng cụ thể để sửa, không phải khớp ẩn).
+    - **Sửa/Xóa/Bán Hết/Cập Nhật (MỚI 11/2026)** — mỗi dòng ở bảng "Ghi
+      Nhận Gần Đây" (tab này) và bảng "⏰ Hạn Sử Dụng" đều có cột "Thao
+      Tác": **"✏️ Sửa"** (đổi Số Lượng/Hạn Sử Dụng/Ghi Chú ngay tại dòng),
       **"🗑️ Xóa"** (xoá **VĨNH VIỄN**, KHÔNG qua Thùng Rác — không khôi
-      phục lại được, chỉ ghi 1 dòng Nhật Ký Hệ Thống), ô **"SL đã bán" +
-      nút "➖ Trừ"** (nhập số đã bán, tự trừ vào Số Lượng đang theo dõi,
-      không về âm), và **"✅ Bán Hết"** (đưa thẳng Số Lượng về 0). Số
-      Lượng = 0 nghĩa là "**dừng theo dõi lô này**" (ẩn khỏi "⏰ Hạn Sử
-      Dụng" mặc định, vẫn giữ lại dòng để tra lịch sử — không xoá) — lần
-      nhập lô mới sau (dù cùng Quầy Kệ/Mã Hàng) LUÔN tạo dòng MỚI tinh,
-      KHÔNG "hồi sinh" lại dòng đã về 0 (tránh gộp nhầm 2 đợt nhập hàng
-      khác thời điểm vào chung 1 dòng). Thao tác này dùng quyền "📷 Ghi
-      Nhận Trên Kệ" (nhân viên quét kệ bình thường cũng tự sửa được đúng
-      ghi nhận của siêu thị mình) — KHÔNG cần quyền "🗄️ Quản Lý Danh Mục
-      Quầy Kệ".
+      phục lại được, chỉ ghi 1 dòng Nhật Ký Hệ Thống), ô **"SL hiện tại" +
+      nút "💾 Cập Nhật"** (phiên bản tắt nhanh 1 ô của "✏️ Sửa" — gõ đúng
+      số lượng vừa đếm lại trên kệ, SET THẲNG về số đó, giống như quét lại
+      đúng lô này với số lượng mới, KHÔNG phải trừ số đã bán), và
+      **"✅ Bán Hết"** (đưa thẳng Số Lượng về 0). Số Lượng = 0 nghĩa là
+      "**dừng theo dõi lô này**" (ẩn khỏi "⏰ Hạn Sử Dụng" mặc định, vẫn
+      giữ lại dòng để tra lịch sử — không xoá) — lần nhập lô mới sau (dù
+      cùng Quầy Kệ/Mã Hàng) LUÔN tạo dòng MỚI tinh, KHÔNG "hồi sinh" lại
+      dòng đã về 0 (tránh gộp nhầm 2 đợt nhập hàng khác thời điểm vào
+      chung 1 dòng). Thao tác này dùng quyền **"🗄️ Quản Lý Danh Mục Quầy
+      Kệ"** (`shelfLocationManage`, thường chỉ Cửa hàng trưởng/Tổ trưởng)
+      — CAO HƠN quyền ghi nhận/scan mới (`shelfRecordCreate`, nhân viên
+      quét kệ bình thường ai cũng có), để tránh 1 nhân viên bất kỳ sửa/xoá
+      vĩnh viễn ghi nhận do người khác tạo trong cùng siêu thị.
   - "🗄️ Quầy Kệ" — Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của
     ĐÚNG siêu thị mình: Thêm tay, **Sửa** (tên/ngành hàng/trạng thái — mã
     quầy kệ và siêu thị không đổi được sau khi tạo), **Ngừng dùng** (ẩn
@@ -2912,8 +2929,8 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     có khai Hạn Sử Dụng), tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn
     hạn — tick checkbox **"Hiện cả dòng đã bán hết (ngừng theo dõi)"** để
     xem lại cả các lô đã về 0 (phục vụ tra lịch sử, không tính vào 3 nhóm
-    hạn trên). Mỗi dòng cũng có cột "Thao Tác" (Sửa/Xóa/Bán Hết/Trừ) y hệt
-    tab "📷 Ghi Nhận".
+    hạn trên). Mỗi dòng cũng có cột "Thao Tác" (Sửa/Xóa/Bán Hết/Cập Nhật)
+    y hệt tab "📷 Ghi Nhận".
     - **Cột "Tồn Kho Hệ Thống" (MỚI 11/2026, gộp theo NHÓM mã hàng, không
       so riêng từng dòng lô)**: so **TỔNG** Số Lượng đang theo dõi của
       TẤT CẢ lô cùng 1 mã hàng (cộng dồn mọi Hạn Sử Dụng khác nhau — 1 mã

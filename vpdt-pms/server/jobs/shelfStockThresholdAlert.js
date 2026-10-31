@@ -58,12 +58,14 @@ function isToday(dateStr) {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-// Tổng quantity shelfRecords hôm nay khớp ĐÚNG dept + (maHang HOẶC maVach, khớp 1 trong 2 là đủ) — GIỮ
-// NGUYÊN 100% logic đã có từ bản thiết kế lần 1 (chưa đổi gì ở đây).
+// Tổng quantity shelfRecords hôm nay khớp ĐÚNG dept + (maHang HOẶC maVach, khớp 1 trong 2 là đủ).
+// "Hôm nay" xét theo lastScannedAt (bị bump mỗi lần CẬP NHẬT lô theo Ghi Nhận Theo Lô), fallback về
+// createdAt cho bản ghi cũ chưa từng có field này — tránh 1 lô được scan lại hôm nay (chỉ đổi quantity,
+// KHÔNG đổi createdAt) bị rơi khỏi tổng "hôm nay" chỉ vì createdAt là của NGÀY TẠO LÔ LẦN ĐẦU.
 function sumTodaySkuQuantity(threshold, shelfRecords) {
   let sum = 0;
   for (const r of shelfRecords) {
-    if (!r || r.dept !== threshold.dept || !isToday(r.createdAt)) continue;
+    if (!r || r.dept !== threshold.dept || !isToday(r.lastScannedAt || r.createdAt)) continue;
     const matchesMaHang = threshold.maHang && r.maHang === threshold.maHang;
     const matchesMaVach = threshold.maVach && r.maVach === threshold.maVach;
     if (matchesMaHang || matchesMaVach) sum += Number(r.quantity) || 0;
@@ -71,13 +73,13 @@ function sumTodaySkuQuantity(threshold, shelfRecords) {
   return sum;
 }
 
-// Tổng quantity shelfRecords hôm nay khớp ĐÚNG dept + category của quầy kệ (case-insensitive) — GIỮ
-// NGUYÊN 100% logic đã có từ bản thiết kế lần 1.
+// Tổng quantity shelfRecords hôm nay khớp ĐÚNG dept + category của quầy kệ (case-insensitive). "Hôm nay"
+// xét theo lastScannedAt || createdAt — xem chú thích tại sumTodaySkuQuantity() ngay trên.
 function sumTodayCategoryQuantity(threshold, shelfRecords, shelfLocationCategoryById) {
   let sum = 0;
   const wanted = String(threshold.category || '').trim().toLowerCase();
   for (const r of shelfRecords) {
-    if (!r || r.dept !== threshold.dept || !isToday(r.createdAt)) continue;
+    if (!r || r.dept !== threshold.dept || !isToday(r.lastScannedAt || r.createdAt)) continue;
     const category = (shelfLocationCategoryById.get(r.shelfLocationId) || '').toLowerCase();
     if (category === wanted) sum += Number(r.quantity) || 0;
   }

@@ -1,9 +1,78 @@
 # Phiên bản hiện tại
 
-**28.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.56 (2026-11): Vá 10 lỗi rà soát chéo "Ghi Nhận Theo Lô" (v28.55) + đổi "➖ Trừ" thành "💾 Cập Nhật" + cảnh báo SL tăng bất thường
+
+Theo yêu cầu người dùng "rà soát lại tất cả những chức năng làm, kiểm tra lại kỹ, cho nhiều agent kiểm
+tra chéo với nhau" sau khi merge "Ghi Nhận Theo Lô" (v28.55, commit `d307f7d`) — 2 agent độc lập (1 đọc
+lại code, 1 lái Playwright thật) cùng rà soát, CROSS-CONFIRMED 1 lỗi NGHIÊM TRỌNG cùng 9 lỗi khác:
+
+1. **[Nghiêm Trọng, cross-confirmed] Trùng id DOM giữa bảng "Ghi Nhận Gần Đây" và "⏰ Hạn Sử Dụng".** Cả
+   2 bảng cùng vẽ hàng của CÙNG 1 bản ghi ĐỒNG THỜI trong DOM (tab không active chỉ bị ẩn bằng class
+   `hidden`, không gỡ khỏi DOM) — `renderShelfRecordActionsCell()`/`renderShelfRecordEditRow()` trước đây
+   đặt id thuần theo `r.id`, khiến Sửa/Trừ bấm từ tab Hạn Sử Dụng âm thầm đọc/ghi nhầm input ẨN của bảng
+   Ghi Nhận gần đây. Vá: thêm tham số `source` ('recent'/'expiry') xuyên suốt, mọi id phần tử + nút Thao
+   Tác đều có tiền tố nguồn (`data-arg1` truyền `source` qua CSP dispatch).
+2. **[Cao] Offline-sync mất `clientRecordId` + bỏ qua hẳn cơ chế lô-khớp.** Route `/records/upsert` MỚI
+   hardcode `clientRecordId: ''`; hàng đợi offline (`trySyncPendingShelfRecords()`) vẫn đi qua route
+   generic CHÈN MỚI cũ (`callCreateAction('shelfRecords',...)`), bỏ qua hẳn "Ghi Nhận Theo Lô" — 2 lượt
+   scan offline CÙNG 1 lô (mất mạng cả buổi) sẽ tạo 2 dòng riêng thay vì ghi đè. Vá: route lưu đúng
+   `clientRecordId` gửi lên; `trySyncPendingShelfRecords()` đổi hẳn sang gọi `/records/upsert` (cùng route
+   với lượt online) — tự giải quyết luôn cả bài toán "gửi trùng do mất response" nhờ chính cơ chế khớp lô.
+3. **[Cao] Quyền Sửa/Xóa/Bán Hết quá rộng.** Dùng chung `canManageShelfRecords()` (`shelfRecordCreate`,
+   ai scan được cũng sửa/xoá được VĨNH VIỄN ghi nhận của BẤT KỲ ai khác cùng siêu thị). Vá: thêm
+   `canManageShelfRecordEdits()` riêng (`admin || shelfLocationManage`) cho Sửa/Xóa/Bán Hết/Cập Nhật —
+   tạo/scan mới vẫn giữ `shelfRecordCreate` như cũ.
+4. **[Cao] Thiếu Khối 0 (`hasModuleAccessServer`) ở 3 route mới** (`/records/upsert`, PATCH/DELETE
+   `/records/:id`) — route tạo generic đã có sẵn, 3 route mới của đợt trước bỏ sót. Đã thêm đủ.
+5. **[Cao] Cập nhật lô không bump "hôm nay"**, làm lệch "Tồn Hôm Nay" của Ngưỡng Tồn/Đối Chiếu (decoupled
+   nhưng cùng đọc `shelfRecords`): lô scan HÔM QUA, chỉ cập nhật SỐ LƯỢNG hôm nay (không đổi `createdAt`)
+   sẽ biến mất khỏi tổng "hôm nay", gây cảnh báo ngưỡng tồn giả. Vá: field mới `lastScannedAt` (bump mỗi
+   lần cập nhật, `createdAt` giữ nguyên ngày tạo gốc) — `jobs/shelfStockThresholdAlert.js` +
+   `module-vanhanh.js` (Đối Chiếu + mirror màu Ngưỡng Tồn) đổi sang đọc `lastScannedAt || createdAt`.
+6. **[TB] Gộp nhóm "Tồn Kho Hệ Thống" sai khi 1 mã hàng có dòng chỉ có `maHang` lẫn dòng chỉ có `maVach`**
+   (gộp theo tổ hợp CHÍNH XÁC trước đây, không bắt được "khớp 1 trong 2" bắc cầu). Vá: Union-Find nhóm
+   theo "chung `maHang` HOẶC chung `maVach`" (khớp đúng quy tắc `findMatchingActiveShelfRecord()`).
+7. **[Cao] So tồn kho hệ thống SAI STORE khi xem chéo siêu thị** (Quản Lý Vùng) — cache tồn kho hệ thống
+   luôn là của NGƯỜI XEM, so với dòng của siêu thị KHÁC là vô nghĩa. Vá: ẩn hẳn cột so sánh + cụm nút
+   Thao Tác cho dòng khác siêu thị (server đã luôn 403 sẵn, chỉ cần ẩn UI mời bấm nhầm).
+8. **[TB] Nút "➖ Trừ" tính absolute quantity phía CLIENT rồi gửi lên** — 2 thiết bị Trừ gần như đồng thời,
+   thiết bị đọc cache CŨ hơn ghi đè mất lượt trừ của thiết bị kia (race condition).
+9. **[Thấp-TB] Dup-check "cùng lô" bỏ sót trường hợp "hồi sinh" dòng đã về 0 bằng Sửa tay trực tiếp** (chỉ
+   kiểm khi đổi Hạn Sử Dụng, không kiểm khi SL 0→dương) + **ô Số Lượng để trống khi Sửa bị coi là 0**
+   (Number('')===0, vô tình "Bán Hết" nhầm). Cả 2 đã vá.
+
+**Thay đổi UX bổ sung sau khi vá (theo yêu cầu người dùng, thay thế hẳn mục 8 ở trên)**: bỏ hẳn ô
+"SL đã bán" + nút "➖ Trừ" (ngữ nghĩa TRỪ tương đối, phải tự tính nhẩm còn lại bao nhiêu) — đổi thành ô
+"SL hiện tại" + nút "💾 Cập Nhật" (SET THẲNG quantity = số vừa đếm lại trên kệ, giống quét lại đúng lô
+này với số mới). Do SET THẲNG không có hiệu ứng dồn/cộng dồn, 2 thiết bị gửi gần như đồng thời chỉ là
+last-write-wins — cùng rủi ro chấp nhận được như "✏️ Sửa" sẵn có, nên bỏ hẳn cơ chế `deductQuantity`
+atomic phía server (mục 8 không còn cần thiết với thiết kế mới).
+
+**Yêu cầu mới trong CÙNG đợt**: cảnh báo khi scan khớp ĐÚNG 1 lô đang theo dõi mà Số Lượng vừa nhập CAO
+HƠN Số Lượng lần ghi nhận trước (bất thường — thường chỉ giảm dần do bán hàng) — phòng lỗi hay gặp: nhập
+lô MỚI thật nhưng gõ/giữ nhầm Hạn Sử Dụng của lô CŨ, gộp nhầm 2 lô khác nhau vào 1 dòng. Form Ghi Nhận
+chính (`submitShelfRecord()`) tự so với `DB.shelfRecords` đã có sẵn phía client (không cần round-trip
+riêng, server vẫn là nguồn thật duy nhất quyết định khớp lô nào khi lưu) — SL tăng thì hỏi lại
+(`confirm()`, Hủy = không lưu gì/Xác Nhận = lưu tiếp), SL giảm/bằng lưu luôn như cũ. CHỈ áp dụng form scan
+chính — nút tắt "💾 Cập Nhật" không hỏi lại (hành động trực tiếp người dùng đã chủ động chọn đúng 1 dòng).
+
+Test mới: `tests/test-shelf-record-quantity-increase-confirm.js` (7 kịch bản — tăng+Hủy/tăng+Xác Nhận/
+giảm/bằng/SKU khác không bị so nhầm). Cập nhật `tests/test-shelf-record-lo-real-click.js` (fixture thiếu
+`shelfLocationManage` — PATCH/DELETE bị 403 âm thầm khiến nhiều bước sau tưởng lỗi logic khác; đổi hẳn
+"➖ Trừ" sang "💾 Cập Nhật") + `tests/test-shelf-kehang-offline.js` (2/3 kịch bản offline-sync mock
+`window.callCreateAction` — route mới không còn gọi hàm đó nữa, mock không còn tác dụng gì; đổi sang mock
+đúng `window.fetch`/dùng route thật qua mock dispatcher, thay kịch bản `DUPLICATE_OFFLINE_SYNC` cũ — không
+còn áp dụng với thiết kế upsert mới — bằng kịch bản retry-idempotent thật). Cập nhật
+`NGHIEP_VU_DOCS.vanHanhShelf` (`module-nghiepvu.js`) + `deploy/Huong-dan-nghiep-vu.md` theo đúng hành vi
+mới (nhãn nút, quyền Sửa/Xóa đúng `shelfLocationManage`, cảnh báo SL tăng).
+
+**Deploy**: chỉ copy code + `pm2 restart` — không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies, không cần thao tác tay nào khác.
 
 ## v28.55 (2026-11): "Ghi Nhận Theo Lô" — scan cập nhật/cộng lô mới + Sửa/Xóa/Bán Hết/Trừ + cảnh báo lệch Tồn Kho Hệ Thống theo nhóm mã hàng
 

@@ -63,12 +63,19 @@ function applyShelfStockThresholdEdit(item, body, user, allUsers) {
   return next;
 }
 
-// Ghi Nhận Trên Kệ (shelfRecords) dùng quyền shelfRecordCreate — KHÁC canManageShelfStock() ở trên
-// (shelfLocationManage, dành cho Cửa Hàng Trưởng quản lý Quầy Kệ/Ngưỡng Tồn). Nhân viên bình thường có
-// shelfRecordCreate (không nhất thiết có shelfLocationManage) vẫn phải Sửa/Xóa được đúng ghi nhận của
-// chính siêu thị mình — mirror đúng quyền TẠO đã có ở lib/createValidation.js shelfRecords.extraValidate.
+// Ghi Nhận Trên Kệ (shelfRecords) — TẠO/scan (kể cả ghi đè theo lô) dùng quyền shelfRecordCreate, bất kỳ
+// nhân viên scan hàng ngày nào cũng có — KHÁC canManageShelfStock() ở trên (shelfLocationManage, dành
+// cho Cửa Hàng Trưởng quản lý Quầy Kệ/Ngưỡng Tồn).
 function canManageShelfRecords(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
+}
+// Sửa/Xóa/Bán Hết/Trừ (xoá VĨNH VIỄN hoặc đổi số liệu của ghi nhận NGƯỜI KHÁC đã tạo) đòi hỏi quyền CAO
+// HƠN tạo mới — đúng nguyên văn đã chốt: "gác theo shelfLocationManage/admin, giống mọi hành động quản lý
+// khác của Kiểm Soát Hàng Hóa" (Quầy Kệ/Ngưỡng Tồn), KHÔNG dùng chung canManageShelfRecords() ở trên (lỗ
+// hổng thật đã xảy ra: 1 nhân viên chỉ có shelfRecordCreate — scan được — lại xoá/sửa vĩnh viễn được ghi
+// nhận của BẤT KỲ ai khác trong cùng siêu thị).
+function canManageShelfRecordEdits(user) {
+  return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
 }
 
 // quantity/expiryDate/note sửa được; shelfLocationId/maHang/maVach/dept BẤT BIẾN (đổi định danh sản phẩm
@@ -76,11 +83,16 @@ function canManageShelfRecords(user) {
 // allRecords (tuỳ chọn, route truyền vào khi body có đổi expiryDate) — để chặn tạo trùng "cùng lô" với 1
 // dòng ĐANG active khác sau khi sửa (xem findMatchingActiveShelfRecord() ở lib/shelfRecordUpsert.js).
 function applyShelfRecordEdit(item, body, user, allRecords) {
-  if (!canManageShelfRecords(user)) throw new HttpError(403, 'Bạn không có quyền ghi nhận trên kệ');
+  if (!canManageShelfRecordEdits(user)) throw new HttpError(403, 'Bạn không có quyền sửa/xóa Ghi Nhận Trên Kệ (cần quyền quản lý Quầy Kệ)');
   if (!user.perms?.admin && item.dept !== user.dept) {
     throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
   }
   const next = { ...item };
+  const prevQuantity = Number(item.quantity) || 0;
+  // body.quantity là ABSOLUTE (SET THẲNG) — dùng chung cho cả "✏️ Sửa" (full edit), "✅ Bán Hết" (set 0)
+  // và nút tắt "💾 Cập Nhật" (set đúng SL vừa đếm trên kệ, thay thế hẳn hướng "➖ Trừ" tương đối cũ — set
+  // thẳng không có hiệu ứng dồn/cộng dồn nên 2 thiết bị gửi gần như đồng thời chỉ là last-write-wins,
+  // CÙNG rủi ro chấp nhận được như "✏️ Sửa" vốn đã có sẵn, không cần cơ chế atomic riêng).
   if (body.quantity !== undefined) {
     const quantity = Number(body.quantity);
     if (!Number.isFinite(quantity) || quantity < 0) {
@@ -88,14 +100,23 @@ function applyShelfRecordEdit(item, body, user, allRecords) {
     }
     next.quantity = quantity;
   }
-  if (body.expiryDate !== undefined) {
-    let expiryDate = '';
-    if (body.expiryDate) {
-      const d = new Date(body.expiryDate);
-      if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Hạn sử dụng không hợp lệ');
-      expiryDate = d.toISOString();
+  // "Hồi sinh" dòng đã Ngừng theo dõi (quantity 0 -> dương) PHẢI chặn trùng "cùng lô" giống hệt lúc tạo
+  // mới/đổi Hạn Sử Dụng — không chỉ check khi expiryDate đổi (dup-check cũ bỏ sót đúng trường hợp này:
+  // Sửa 1 dòng đã về 0 lên lại >0 trong khi 1 dòng KHÁC đã là bản active "chính thức" của đúng lô đó từ
+  // sau khi dòng này bị zero-out — xem chú thích đầu lib/shelfRecordUpsert.js, "không hồi sinh" là CỐ Ý).
+  const quantityRevived = prevQuantity <= 0 && Number(next.quantity) > 0;
+  if (body.expiryDate !== undefined || quantityRevived) {
+    let expiryDate = item.expiryDate;
+    if (body.expiryDate !== undefined) {
+      expiryDate = '';
+      if (body.expiryDate) {
+        const d = new Date(body.expiryDate);
+        if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Hạn sử dụng không hợp lệ');
+        expiryDate = d.toISOString();
+      }
     }
-    if (expiryDate !== item.expiryDate && Number(next.quantity) > 0) {
+    const expiryChanged = expiryDate !== item.expiryDate;
+    if ((expiryChanged || quantityRevived) && Number(next.quantity) > 0) {
       const { findMatchingActiveShelfRecord } = require('./shelfRecordUpsert');
       const dup = findMatchingActiveShelfRecord((allRecords || []).filter(r => r.id !== item.id), {
         dept: item.dept, shelfLocationId: item.shelfLocationId, maHang: item.maHang, maVach: item.maVach, expiryDate
@@ -108,4 +129,4 @@ function applyShelfRecordEdit(item, body, user, allRecords) {
   return next;
 }
 
-module.exports = { canManageShelfStock, canManageShelfRecords, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit };
+module.exports = { canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit };

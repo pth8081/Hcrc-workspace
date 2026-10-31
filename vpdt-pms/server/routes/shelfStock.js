@@ -20,13 +20,14 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { withLockedRecordForCollection, getAllForCollection, deleteRecordForCollection } = require('../lib/recordStore');
 const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile } = require('../lib/shelfLocationImport');
 const { buildShelfThresholdTemplateWorkbook, parseShelfThresholdFile } = require('../lib/shelfThresholdImport');
-const { canManageShelfStock, canManageShelfRecords, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit } = require('../lib/shelfStockEdit');
+const { canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit } = require('../lib/shelfStockEdit');
 const { normalizeShelfRecordPayload, findMatchingActiveShelfRecord, formatCreatedAt } = require('../lib/shelfRecordUpsert');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured } = require('../jobs/inventorySync');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -71,12 +72,20 @@ router.patch('/thresholds/:id', async (req, res) => {
 // trong CÙNG 1 lượt ghi — không có khoảng hở giữa lúc kiểm tra trùng và lúc ghi (race 2 lượt scan gần như
 // đồng thời vẫn chỉ 1 lượt thắng ghi đè, lượt kia tự xếp SAU nó trong cùng transaction).
 router.post('/records/upsert', async (req, res) => {
+  // Khối 0 (hasModuleAccessServer 'vanHanh') — POST /api/create/shelfRecords (route generic) ĐÃ gác chặn
+  // này (xem MODULE_ACCESS_GATED_COLLECTIONS.vanHanh, lib/recordViewScope.js); route MỚI này trước đây
+  // THIẾU, cho phép 1 user đã bị tắt moduleAccess.vanHanh nhưng còn giữ cờ shelfRecordCreate vẫn tạo/sửa
+  // được qua đường vòng — vá cùng mức với pipeline tạo chung.
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module Vận Hành' });
+  }
   if (!canManageShelfRecords(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền ghi nhận trên kệ' });
   }
   try {
     const shelfLocations = await getAllForCollection('shelfLocations');
     const normalized = normalizeShelfRecordPayload(req.body, req.freshUser, { shelfLocations });
+    const clientRecordId = req.body?.clientRecordId ? String(req.body.clientRecordId).trim().slice(0, 100) : '';
     let resultItem = null;
     let wasUpdate = false;
     await withLockedAppDataValue('shelfRecords', (list) => {
@@ -85,19 +94,29 @@ router.post('/records/upsert', async (req, res) => {
         dept: req.freshUser.dept, shelfLocationId: normalized.shelfLocationId,
         maHang: normalized.maHang, maVach: normalized.maVach, expiryDate: normalized.expiryDate
       });
+      // lastScannedAt (KHÁC createdAt — createdAt giữ NGUYÊN thời điểm tạo lô lần đầu, phục vụ lịch sử)
+      // — bump MỖI LẦN quét/cập nhật tại chỗ, kể cả lô đã tạo từ hôm trước. Ngưỡng Tồn
+      // (jobs/shelfStockThresholdAlert.js) và Đối Chiếu "Trên Kệ Hôm Nay" phải đổi sang đọc trường NÀY
+      // thay vì createdAt — nếu không, 1 lô quét lại hôm nay (chỉ update quantity, createdAt vẫn hôm qua)
+      // sẽ ÂM THẦM biến mất khỏi "tổng hôm nay", gây cảnh báo dưới ngưỡng/Lệch giả dù vừa mới kiểm xong —
+      // đúng lỗi thật đã xảy ra (vi phạm yêu cầu giữ Ngưỡng Tồn TÁCH BẠCH, không bị ảnh hưởng gián tiếp
+      // bởi thiết kế lại Ghi Nhận theo lô).
+      const lastScannedAt = formatCreatedAt(new Date());
       if (existing) {
         existing.quantity = normalized.quantity;
         existing.productName = normalized.productName;
         existing.note = normalized.note;
         if (normalized.customData !== undefined) existing.customData = normalized.customData;
+        existing.lastScannedAt = lastScannedAt;
+        if (clientRecordId) existing.clientRecordId = clientRecordId;
         resultItem = existing;
         wasUpdate = true;
       } else {
         const rec = {
           ...normalized, dept: req.freshUser.dept, id: Date.now(),
-          createdAt: formatCreatedAt(new Date()),
+          createdAt: formatCreatedAt(new Date()), lastScannedAt,
           creator: req.freshUser.username, creatorName: req.freshUser.name,
-          clientRecordId: ''
+          clientRecordId
         };
         arr.unshift(rec);
         resultItem = rec;
@@ -112,15 +131,20 @@ router.post('/records/upsert', async (req, res) => {
 });
 
 // ===================== GHI NHẬN TRÊN KỆ: sửa (quantity/expiryDate/note) — dùng CHUNG cho cả "✏️ Sửa" lẫn
-// nút "✅ Bán Hết"/"➖ Trừ" (client tự tính quantity mới rồi gọi route này, xem module-vanhanh.js) =====
+// nút "✅ Bán Hết"/"💾 Cập Nhật" (SET THẲNG quantity, xem applyShelfRecordEdit()) =====
 router.patch('/records/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module Vận Hành' });
+  }
   try {
-    // Chỉ cần đọc trước toàn bộ danh sách khi THẬT SỰ đổi expiryDate (dup-check "cùng lô" — xem
-    // applyShelfRecordEdit()) — các lượt Bán Hết/Trừ/Sửa số lượng thuần không đổi expiryDate nên bỏ qua
-    // được bước đọc thêm này, đỡ tốn 1 lượt đọc AppData cho thao tác phổ biến nhất.
-    const allRecords = req.body?.expiryDate !== undefined ? await getAllForCollection('shelfRecords') : null;
+    // Luôn đọc trước toàn bộ danh sách — applyShelfRecordEdit() cần để chặn trùng "cùng lô" khi đổi
+    // expiryDate HOẶC khi "hồi sinh" 1 dòng đã về 0 lên lại dương (xem chú thích đầy đủ tại
+    // lib/shelfStockEdit.js) — không thể suy ra trước ở đây dòng đang sửa có đang ở quantity 0 hay không
+    // mà không khoá/đọc nó, nên đơn giản nhất và AN TOÀN nhất là luôn đọc (chi phí nhỏ, collection này
+    // không lớn — đổi lại tránh bỏ sót dup-check ở đúng trường hợp hay gặp).
+    const allRecords = await getAllForCollection('shelfRecords');
     const updated = await withLockedRecordForCollection('shelfRecords', id, (item) => applyShelfRecordEdit(item, req.body, req.freshUser, allRecords));
     res.json({ item: updated });
   } catch (err) {
@@ -132,12 +156,18 @@ router.patch('/records/:id', async (req, res) => {
 // shelfRecords là collection AppData thuần (chưa "tốt nghiệp" bảng riêng, xem lib/recordStore.js) — xoá ở
 // đây là XOÁ VĨNH VIỄN theo đúng quy ước đã có cho mọi collection AppData khác (KHÔNG qua Thùng Rác, xem
 // deleteRecordForCollection() nhánh else) — vẫn tự ghi Nhật Ký Hệ Thống qua logRecordDelete() bên trong.
+// canManageShelfRecordEdits() (shelfLocationManage/admin) — KHÔNG dùng canManageShelfRecords() nữa (lỗ
+// hổng thật: trước đây bất kỳ ai có shelfRecordCreate — scan được — cũng xoá VĨNH VIỄN được ghi nhận của
+// BẤT KỲ ai khác cùng siêu thị).
 router.delete('/records/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module Vận Hành' });
+  }
   try {
     await deleteRecordForCollection('shelfRecords', id, (item) => {
-      if (!canManageShelfRecords(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền ghi nhận trên kệ');
+      if (!canManageShelfRecordEdits(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền sửa/xóa Ghi Nhận Trên Kệ (cần quyền quản lý Quầy Kệ)');
       if (!req.freshUser.perms?.admin && item.dept !== req.freshUser.dept) {
         throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
       }
