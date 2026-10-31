@@ -1,9 +1,28 @@
 # Phiên bản hiện tại
 
-**28.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.51 (2026-11): Vá kẹt cuộn modal "Cá Nhân Hóa" trên di động (thiếu max-height/overflow)
+
+Người dùng báo lỗi thật trên điện thoại (ảnh chụp màn hình): mở Hồ Sơ Cá
+Nhân > "🔔 Thông Báo Email" trên di động, danh sách dài không cuộn xuống
+được, màn hình "đơ". Nguyên nhân: hộp nội dung modal `#profileModal`
+(`public/index.html`) từ trước tới giờ KHÔNG có `max-height`/`overflow-y:
+auto` như MỌI modal dài khác trong hệ thống (đã có sẵn pattern
+`max-h-[90vh] overflow-y-auto` ở hàng chục modal khác) — trước đây không
+lộ ra vì nội dung luôn đủ ngắn để vừa màn hình. Sau khi v28.50 mở rộng
+danh sách "🔔 Thông Báo Email" từ ~17 lên 27 dòng (thêm Ngưỡng Tồn + 9 job
+nhắc hạn), tổng chiều cao modal vượt viewport mà không có cơ chế cuộn
+riêng → bị kẹt đúng như ảnh người dùng chụp.
+
+**Fix**: thêm `max-h-[90vh] overflow-y-auto` vào đúng hộp nội dung
+`#profileModal` (dòng `<div class="bg-white p-6 rounded-lg shadow-xl
+max-w-md w-full space-y-4">`), khớp đúng pattern đã dùng ở các modal khác
+trong hệ thống. Chỉ 1 dòng CSS (Tailwind class), không có JS/HTML logic
+nào đổi — không ảnh hưởng module khác.
 
 ## v28.50 (2026-11): Thiết kế lại Ngưỡng Tồn (Kiểm Soát Hàng Hóa) + mở rộng "🔔 Thông Báo Email" cá nhân sang 10 job nhắc hạn
 
