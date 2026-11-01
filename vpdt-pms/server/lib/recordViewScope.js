@@ -368,7 +368,10 @@ function sanitizeReportPeriodsForUser(periods, user) {
 // gradeTrainingTestSubmission()). Chỉ người quản lý đào tạo (canManageTraining — tạo/sửa bài test) mới
 // cần thấy đáp án đúng; học viên chỉ cần text câu hỏi/đáp án để làm bài.
 function sanitizeTrainingTestsForUser(tests, user) {
-  if (canManageTraining(user)) return tests;
+  // 11/2026: canManageTraining() đã bỏ bypass admin cho QUYẾT ĐỊNH/chấm điểm/phê duyệt — nhưng ĐÂY là
+  // quyền XEM chung (admin/trainingManage xem hết như ghi chú trên), giữ riêng `user?.perms?.admin`
+  // (cùng lý do đã áp dụng cho các hàm view-scope Đào Tạo khác trong file này).
+  if (user?.perms?.admin || canManageTraining(user)) return tests;
   return (tests || []).map(t => ({
     ...t,
     questions: (t.questions || []).map(({ correctOptionIds, ...rest }) => rest)
@@ -382,7 +385,9 @@ function sanitizeTrainingTestsForUser(tests, user) {
 // bất kỳ ai gọi thẳng API. Chỉ chính người làm bài, giảng viên được gán cho đúng lớp đó
 // (canManageTrainingClass), hoặc trainingManage/admin mới xem được.
 function filterTrainingTestSubmissionsForUser(submissions, user, appData) {
-  if (canManageTraining(user)) return submissions || [];
+  // 11/2026: xem ghi chú ở sanitizeTrainingTestsForUser() phía trên — vẫn giữ `user?.perms?.admin`
+  // riêng cho quyền XEM dù canManageTraining() đã bỏ bypass admin cho hành vi quyết định.
+  if (user?.perms?.admin || canManageTraining(user)) return submissions || [];
   const classes = appData?.trainingClasses || [];
   return (submissions || []).filter(s => s.username === user.username
     || canManageTrainingClass(user, classes.find(c => c.id === s.classId)));
@@ -394,7 +399,8 @@ function filterTrainingTestSubmissionsForUser(submissions, user, appData) {
 // nhập. Chỉ chính người đăng ký (creator), giảng viên được gán cho đúng lớp đó
 // (canManageTrainingClass), hoặc trainingManage/admin mới xem được.
 function filterTrainingRegistrationsForUser(registrations, user, appData) {
-  if (canManageTraining(user)) return registrations || [];
+  // 11/2026: cùng ghi chú ở sanitizeTrainingTestsForUser() phía trên.
+  if (user?.perms?.admin || canManageTraining(user)) return registrations || [];
   const classes = appData?.trainingClasses || [];
   return (registrations || []).filter(r => r.creator === user.username
     || canManageTrainingClass(user, classes.find(c => c.id === r.classId)));
@@ -410,9 +416,12 @@ function filterTrainingRegistrationsForUser(registrations, user, appData) {
 // Nên thay vì lọc bỏ hẳn field (sẽ làm mọi lớp giới hạn trông như lớp mở tự do ở giao diện), rút gọn về
 // đúng 2 thông tin đó: người được mời thấy [chính mình], người ngoài thấy 1 phần tử ẩn danh. Danh sách
 // THẬT vẫn trả đủ cho trainingManage/admin và giảng viên phụ trách chính lớp đó (họ cần nó để sửa lớp).
+// (11/2026: canManageTraining() đã bỏ bypass admin cho các hành vi QUYẾT ĐỊNH/chấm điểm/phê duyệt —
+// nhưng ĐỌC danh sách mời để quản trị hệ thống là quyền XEM chung, khác hẳn thẩm quyền "duyệt thay ai",
+// nên vẫn giữ `user?.perms?.admin` riêng ở ĐÚNG hàm xem này, không phục hồi lại bypass ở canManageTraining).
 const HIDDEN_INVITE_PLACEHOLDER = '__HIDDEN__';
 function sanitizeTrainingClassesForUser(classes, user) {
-  if (canManageTraining(user)) return classes || [];
+  if (user?.perms?.admin || canManageTraining(user)) return classes || [];
   return (classes || []).map(c => {
     const inviteList = Array.isArray(c.inviteList) ? c.inviteList : [];
     if (!inviteList.length || canManageTrainingClass(user, c)) return c;
@@ -433,7 +442,8 @@ function sanitizeTrainingClassesForUser(classes, user) {
 // trainingManage/admin cần xem ảnh của nó — an toàn hơn là mở cho "công khai toàn công ty" như
 // trainingTests nói chung, vì ảnh câu hỏi không có lý do gì hiển thị ra ngoài luồng làm bài/quản lý.
 function canViewTrainingTestQuestionImage(user, test, appData) {
-  if (canManageTraining(user)) return true;
+  // 11/2026: cùng ghi chú ở sanitizeTrainingTestsForUser() — quyền XEM giữ riêng admin.
+  if (user?.perms?.admin || canManageTraining(user)) return true;
   const classes = (appData?.trainingClasses || []).filter(c => c.testId === test?.id);
   if (!classes.length) return false;
   if (classes.some(c => canManageTrainingClass(user, c))) return true;
@@ -447,7 +457,11 @@ function canViewTrainingTestQuestionImage(user, test, appData) {
 // 1 tài liệu, cùng tinh thần filterTrainingRegistrationsForUser() ở trên: KHÔNG có lý do gì người khác
 // (không phải chính chủ/người quản lý đào tạo) cần đọc được tiến độ xem tài liệu của đồng nghiệp.
 function filterTrainingDocumentProgressForUser(list, user) {
-  if (canManageTraining(user)) return list || [];
+  // 11/2026: canManageTraining() đã bỏ bypass admin cho hành vi QUYẾT ĐỊNH/chấm điểm/phê duyệt — nhưng
+  // ĐỌC tiến độ xem tài liệu để quản trị hệ thống là quyền XEM chung, khác hẳn thẩm quyền "duyệt thay
+  // ai" (cùng lý do đã áp dụng ở sanitizeTrainingClassesForUser() phía trên), nên vẫn giữ
+  // `user?.perms?.admin` riêng ở ĐÚNG hàm xem này.
+  if (user?.perms?.admin || canManageTraining(user)) return list || [];
   return (list || []).filter(p => p.username === user.username);
 }
 
@@ -1227,7 +1241,8 @@ function filterUniformTransfersForUser(items, user) {
 // CŨ).
 function canViewOnboardingProgress(user, item, appData) {
   if (!user) return false;
-  if (canManageTraining(user)) return true;
+  // 11/2026: cùng ghi chú ở sanitizeTrainingTestsForUser() — quyền XEM giữ riêng admin.
+  if (user?.perms?.admin || canManageTraining(user)) return true;
   if (item.employeeUsername === user.username) return true;
   const traineeUser = (appData?.users || []).find(u => u.username === item.employeeUsername);
   return canEvaluateOnboardingStage3(user, traineeUser);
@@ -1305,7 +1320,8 @@ function filterHrProcessesForUser(items, user) {
 // mốc của mình.
 function canViewCareerPathConfirmation(user, item) {
   if (!user) return false;
-  if (canManageTraining(user)) return true;
+  // 11/2026: cùng ghi chú ở sanitizeTrainingTestsForUser() — quyền XEM giữ riêng admin.
+  if (user?.perms?.admin || canManageTraining(user)) return true;
   return item.username === user.username;
 }
 

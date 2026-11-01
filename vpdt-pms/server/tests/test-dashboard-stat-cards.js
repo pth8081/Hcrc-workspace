@@ -21,7 +21,11 @@ async function main() {
   const server = await startStaticServer(PORT_UI);
   const state = createMockState({
     users: [ADMIN],
-    docs: [{ id: 1, status: 'PENDING', dept: 'Phòng CNTT', currentStep: 1, creator: 'admin' }],
+    docs: [{ id: 1, status: 'PENDING', dept: 'Phòng CNTT', currentStep: 1, creator: 'nguoi-khac' }],
+    // 11/2026: đã bỏ hẳn admin-bypass khỏi canApproveStep() (public/js/core.js) — admin chỉ còn được
+    // đếm vào "Tài liệu chờ duyệt" nếu THẬT có tên trong approvers của bước hiện tại, nên phải cấu
+    // hình đúng 1 workflow có admin ở approvers[1] (thay vì dựa vào bypass cũ như trước).
+    deptWorkflows: { 'Phòng CNTT': { steps: [{ order: 1, name: 'Duyệt' }], approvers: { 1: ['admin'] } } },
     tasks: []
   });
   const { browser, page } = await launchPage(PORT_UI, state);

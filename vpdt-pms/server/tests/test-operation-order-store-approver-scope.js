@@ -242,7 +242,7 @@ function freshOrder(overrides) {
   });
 }
 
-// ===================== 6) admin bypass vẫn hoạt động bình thường (không bị Quy Trình Hỗn Hợp chặn nhầm) =====================
+// ===================== 6) 11/2026: KHÔNG còn admin bypass — admin cũng phải nằm đúng trong approvers[bước] =====================
 {
   const admin = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true } };
   const appData = {
@@ -252,9 +252,20 @@ function freshOrder(overrides) {
     operationOrderHOTierWorkflows: {},
     operationOrderStoreMixedApprovalRules: []
   };
-  test('admin: vẫn duyệt được đơn Siêu Thị bất kỳ dù không nằm trong Quy Trình Hỗn Hợp nào (nhánh admin bypass ở applyWorkflowAction())', () => {
+  test('admin: KHÔNG duyệt được đơn Siêu Thị nào nếu không có tên trong approvers[bước] (đã bỏ nhánh admin bypass)', () => {
     const item = freshOrder({ dept: 'Siêu Thị Bất Kỳ' });
-    const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: admin, comment: '', appData });
+    assert.throws(() => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: admin, comment: '', appData }),
+      /không có quyền xử lý ở bước hiện tại/i);
+  });
+  test('admin: ĐƯỢC đặt tên thẳng vào approvers[bước] (HO — PEOPLE mode đọc thẳng từ tier workflow) -> duyệt được bình thường như bất kỳ approver khác', () => {
+    // STORE dùng resolveOperationOrderStoreMixedApprovers() (không đọc tierMap[tier].approvers trực
+    // tiếp — xem resolveOperationOrderWorkflow()), nên dùng HO ở đây để kiểm đúng nhánh PEOPLE mode tĩnh.
+    const appDataNamed = {
+      ...appData,
+      operationOrderHOTierWorkflows: { LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [admin.username] } } }
+    };
+    const item = freshOrder({ dept: 'Phòng Vận Hành', orderLocationType: 'HO', amount: 5000000 });
+    const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: admin, comment: '', appData: appDataNamed });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
 }

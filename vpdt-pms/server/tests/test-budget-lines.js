@@ -139,13 +139,14 @@ async function run() {
     const selfApproveLine = await recordAction(approveLine1.item.id, 'approve');
     check('budgetmgr1 KHÔNG tự duyệt được dòng Phê Duyệt do chính mình tạo', !selfApproveLine.ok && selfApproveLine.message.includes('tự duyệt'), selfApproveLine);
 
-    // ============ Kịch bản 9: budgetmgr1 KHÔNG tự duyệt được -> cần người khác có budgetManage. Không có
-    // user thứ 2 nào trong seed có budgetManage, nên xác nhận admin (khác createdBy, KHÔNG bị chặn vì
-    // admin không phải người tạo dòng này) duyệt được dòng của budgetmgr1 -> tự sinh 1 dòng Sử Dụng cha
-    // đúng field kế thừa ============
-    await loginAs('admin');
+    // ============ Kịch bản 9: budgetmgr1 KHÔNG tự duyệt được -> cần người khác có budgetManage.
+    // budgetmgr2 (11/2026, thêm vào _seed.js) là người thứ 2 có budgetManage, KHÁC budgetmgr1 — từ khi
+    // bỏ hẳn admin-bypass khỏi canDecideBudgetLineProposal()/canDecideBudgetLineFinal(), admin đơn
+    // thuần (không giữ budgetManage) không còn tự động duyệt thay được nữa, nên không dùng 'admin' ở
+    // đây như trước ============
+    await loginAs('budgetmgr2');
     const approveLine1Result = await recordAction(approveLine1.item.id, 'approve');
-    check('admin (khác người tạo budgetmgr1) duyệt được dòng Phê Duyệt -> APPROVED', approveLine1Result.ok && approveLine1Result.item.status === 'APPROVED', approveLine1Result);
+    check('budgetmgr2 (khác người tạo budgetmgr1, có budgetManage) duyệt được dòng Phê Duyệt -> APPROVED', approveLine1Result.ok && approveLine1Result.item.status === 'APPROVED', approveLine1Result);
     check('Duyệt Phê Duyệt -> TỰ SINH đúng 1 dòng Sử Dụng cha', approveLine1Result.ok && !!approveLine1Result.usedItem && approveLine1Result.usedItem.stage === 'USED' && approveLine1Result.usedItem.parentId === null, approveLine1Result.usedItem);
     check('Dòng Sử Dụng cha kế thừa ĐÚNG sourceLineId trỏ về dòng Phê Duyệt gốc', approveLine1Result.ok && approveLine1Result.usedItem.sourceLineId === approveLine1.item.id, approveLine1Result.usedItem);
     check('Dòng Sử Dụng cha kế thừa ĐÚNG Nội dung/Danh Mục/Thành tiền từ dòng Phê Duyệt gốc', approveLine1Result.ok && approveLine1Result.usedItem.content === 'Nâng cấp máy chủ nội bộ' && approveLine1Result.usedItem.itemCategory === 'SYSTEM' && approveLine1Result.usedItem.totalAmount === 180000000, approveLine1Result.usedItem);
@@ -220,7 +221,7 @@ async function run() {
       stage: 'APPROVED', content: 'Bảo trì hệ thống camera an ninh', description: '',
       quantity: 1, unitPrice: 60000000, vatPercent: 0, budgetType: 'OPEX', itemCategory: 'SERVICE'
     }));
-    await loginAs('admin');
+    await loginAs('budgetmgr2'); // 11/2026: admin đơn thuần không còn tự duyệt thay được nữa (đã bỏ admin-bypass)
     const approveLine2Result = await recordAction(approveLine2.item.id, 'approve');
     check('Duyệt dòng Phê Duyệt thứ 2 thành công, tự sinh dòng Sử Dụng chưa có mục con', approveLine2Result.ok && !!approveLine2Result.usedItem, approveLine2Result);
     const usedParent2Id = approveLine2Result.usedItem.id;
@@ -281,7 +282,7 @@ async function run() {
     await loginAs('budgetmgr1');
     const storeApprovedLine = await createBudgetLine(baseLine({ stage: 'APPROVED', location: 'Siêu Thị Test Quận 1', dept: 'bat-ky' }));
     check('budgetManage tạo trực tiếp dòng Phê Duyệt Vị trí = Siêu Thị -> dept tự = tên Siêu Thị', storeApprovedLine.ok && storeApprovedLine.item.dept === 'Siêu Thị Test Quận 1', storeApprovedLine);
-    await loginAs('admin');
+    await loginAs('budgetmgr2'); // 11/2026: admin đơn thuần không còn tự duyệt thay được nữa (đã bỏ admin-bypass)
     const storeApproveResult = await recordAction(storeApprovedLine.item.id, 'approve');
     check('Duyệt dòng Phê Duyệt (Siêu Thị) thành công', storeApproveResult.ok, storeApproveResult);
     const storeUsedParent = h.state.collections.budgetLines.find((l) => l.sourceLineId === storeApprovedLine.item.id);
@@ -355,7 +356,7 @@ async function run() {
 
     // Luồng cũ Phê Duyệt -> tự sinh Sử Dụng KHÔNG bị ảnh hưởng — duyệt cuối dòng vừa chuyển, xác nhận vẫn
     // tự sinh đúng 1 dòng Sử Dụng như mọi dòng Phê Duyệt khác (xem Kịch bản 7-11 ở trên).
-    await loginAs('admin');
+    await loginAs('budgetmgr2'); // 11/2026: admin đơn thuần không còn tự duyệt thay được nữa (đã bỏ admin-bypass)
     const approvePromoted = await recordAction(promote1.newItem.id, 'approve');
     check('Duyệt cuối dòng Phê Duyệt vừa chuyển -> vẫn tự sinh đúng 1 dòng Sử Dụng (luồng cũ không bị ảnh hưởng)', approvePromoted.ok && !!approvePromoted.usedItem && approvePromoted.usedItem.sourceLineId === promote1.newItem.id, approvePromoted);
 

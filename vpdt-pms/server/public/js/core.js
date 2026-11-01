@@ -3797,18 +3797,16 @@ function getStepApprovedUsernames(history, step) {
 // duyệt của bước VÀ CHƯA tự mình duyệt bước này rồi (chặn duyệt trùng 2 lần cùng 1 người).
 function canApproveStep(user, stepApprovers, history, step) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  // Quyết định của người dùng (11/2026): KHÔNG còn bypass cho perms.admin — xem chú thích đầy
+  // đủ ở bản sao server lib/workflowEngine.js (2 bên phải giống hệt nhau).
   const approversList = normalizeApproversList(stepApprovers);
   if (!approversList.includes(user.username)) return false;
   return !getStepApprovedUsernames(history, step).has(user.username);
 }
 
 // Bước đã đủ TẤT CẢ người đồng duyệt bấm Duyệt hay chưa — quyết định có được chuyển sang bước tiếp
-// theo (hoặc hoàn tất quy trình) hay còn phải chờ. Admin bấm Duyệt luôn coi là đủ điều kiện, ghi đè
-// yêu cầu đồng thuận — nhất quán với việc admin luôn có toàn quyền vượt qua mọi cấu hình approver
-// ở những chỗ khác trong hệ thống.
+// theo (hoặc hoàn tất quy trình) hay còn phải chờ.
 function isStepApprovalComplete(user, stepApprovers, history, step) {
-  if (user?.perms?.admin) return true;
   const approversList = normalizeApproversList(stepApprovers);
   if (approversList.length === 0) return true;
   const approved = getStepApprovedUsernames(history, step);
@@ -4331,9 +4329,10 @@ function canBookMeeting(user) {
   return !!user.perms?.meetingBook;
 }
 
+// 11/2026: đã bỏ `if (user.perms?.admin) return true;` — khớp đúng canDecideMeeting() (lib/recordActions.js,
+// đã bỏ bypass admin cùng đợt) để tránh "nút giả" (hiện nút Duyệt nhưng bấm vào luôn bị 403).
 function canApproveMeeting(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return !!user.perms?.meetingApprove;
 }
 

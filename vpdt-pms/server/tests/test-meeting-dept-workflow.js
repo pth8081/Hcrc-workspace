@@ -35,9 +35,11 @@ const appData = {
 };
 
 // ===================== canDecideMeeting() =====================
-test('canDecideMeeting(): admin luôn duyệt được mọi phòng ban bất kể cấu hình', () => {
+// 11/2026: đã bỏ `user.perms?.admin ||` — admin phải có đúng meetingApprove hoặc có tên trong
+// meetingDeptWorkflows[dept] mới duyệt được, không còn "luôn duyệt được mọi phòng ban".
+test('canDecideMeeting(): admin ĐƠN THUẦN (không meetingApprove) KHÔNG còn duyệt được phòng ban chưa cấu hình (đã bỏ bypass)', () => {
   const item = { dept: 'Khối Vận Hành' };
-  assert.strictEqual(recordActions.canDecideMeeting(ADMIN, item, appData), true);
+  assert.strictEqual(recordActions.canDecideMeeting(ADMIN, item, appData), false);
 });
 
 test('canDecideMeeting(): meetingApprove luôn duyệt được mọi phòng ban bất kể cấu hình (ghi đè toàn quyền, không đổi hành vi cũ)', () => {

@@ -331,8 +331,19 @@ async function main() {
       assert.ok(RECORDS.submissions[0].pendingApprovalExtension, 'đề nghị vẫn còn nguyên, chưa bị tự xử lý');
     });
 
-    await test('[Vá #216] Admin KHÔNG phải người tạo hồ sơ vẫn gia hạn được bình thường (không chặn oan)', async () => {
+    // 11/2026 (quyết định của người dùng): đã bỏ bypass admin ở canApproveStep() — ADMIN_SELF không có
+    // tên trong effectiveApprovers[1] (chỉ APPROVER/gd1) nên giờ KHÔNG còn gia hạn được nữa, dù không
+    // phải người tạo hồ sơ. Đổi tên + assertion cho khớp hành vi mới.
+    await test('11/2026: Admin KHÔNG có tên trong effectiveApprovers[bước] KHÔNG còn gia hạn được nữa (đã bỏ admin-bypass ở canApproveStep)', async () => {
       resetRecords();
+      const r = await api('POST', '/api/workflow/submissions/1/extend-approval-deadline',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, ADMIN_SELF);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+    });
+
+    await test('đối chứng: Admin ĐƯỢC đặt tên thẳng vào effectiveApprovers[bước] vẫn gia hạn được bình thường (không chặn oan người thật sự có vị trí)', async () => {
+      resetRecords();
+      RECORDS.submissions[0].effectiveApprovers = { 1: [APPROVER.username, ADMIN_SELF.username] };
       const r = await api('POST', '/api/workflow/submissions/1/extend-approval-deadline',
         { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, ADMIN_SELF);
       assert.strictEqual(r.status, 200, JSON.stringify(r.body));

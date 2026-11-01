@@ -86,7 +86,10 @@ const appData = {
     LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [APPROVER_STEP1] } }
   },
   // carRegs dùng để xác nhận module KHÁC không bị ảnh hưởng (mục A5) — cùng khuôn appData tối thiểu.
-  carRegDeptWorkflows: {
+  // LỖI FIXTURE ĐÃ VÁ (11/2026): khoá đúng của carRegs là carDeptWorkflows (xem MODULE_CONFIGS.carRegs ở
+  // lib/workflowEngine.js) — khoá cũ "carRegDeptWorkflows" (sai tên) không hề được đọc, chỉ "qua" được
+  // nhờ admin-bypass ở canApproveStep() (đã bỏ); giờ phải đúng tên khoá mới approver thật sự có hiệu lực.
+  carDeptWorkflows: {
     [DEPT]: { workflowId: 'WF_1STEP', approvers: { 1: [APPROVER_STEP1] } }
   }
 };
@@ -192,15 +195,22 @@ test('applyWorkflowAction operationOrders — operationOrderAllowSelfApproveStor
   );
 });
 
+// 11/2026: canApproveStep() đã bỏ bypass admin — để test ĐÚNG nhánh tự duyệt (không phải nhánh "không có
+// quyền xử lý ở bước hiện tại" chạy trước đó), acting user phải THẬT SỰ là approver được cấu hình của
+// bước (APPROVER_STEP1), vừa tạo đơn (creator) vừa giữ thêm cờ admin — chứng minh cờ admin không cho
+// thêm miễn trừ gì cho self-check.
 test('applyWorkflowAction operationOrders — admin là người tạo đơn: VẪN bị chặn tự duyệt nếu KHÔNG có operationOrderAllowSelfApproveHO (không có ngoại lệ admin mặc định)', () => {
-  const item = freshOrder({ creator: 'admin' });
-  const selfAdmin = makeUser('admin', { perms: { admin: true } });
+  const item = freshOrder({ creator: APPROVER_STEP1 });
+  const selfAdmin = makeUser(APPROVER_STEP1, { perms: { admin: true } });
   assertThrows(
     () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: selfAdmin, comment: '', appData }),
     403, 'tự xử lý', 'admin tự tạo đơn vẫn phải bị chặn tự duyệt khi chưa có operationOrderAllowSelfApproveHO'
   );
 });
 
+// 11/2026: khoá carDeptWorkflows (đã sửa tên đúng ở appData phía trên — trước là "carRegDeptWorkflows"
+// sai tên, chỉ "qua" được nhờ admin-bypass ở canApproveStep() đã bỏ) nay có hiệu lực thật, APPROVER_STEP1
+// là approver carRegs hợp lệ.
 test('applyWorkflowAction — module KHÁC (carRegs) HOÀN TOÀN không bị ảnh hưởng: Duyệt xong bước cuối vẫn dừng ở APPROVED như trước (không tự AWAITING_RECEIPT)', () => {
   const item = { id: 9, dept: DEPT, status: 'PENDING', currentStep: 1, history: [] };
   const user = makeUser(APPROVER_STEP1, { perms: { admin: true } });

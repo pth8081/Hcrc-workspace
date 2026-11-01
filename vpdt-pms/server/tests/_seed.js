@@ -73,6 +73,13 @@ const USERS = [
     // được thấy khối "Toàn Công Ty" (chỉ budgetManage mới thấy) — xem renderBudgetSummaryResult().
     id: 10, username: 'budgetagg1', pass: '123456', name: 'Bùi Thị Tổng Hợp NS', email: 'budgetagg1@company.com', phone: '0900000010', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên',
     perms: { admin: false, budgetAggregate: true }
+  },
+  {
+    // 11/2026 — ĐÚNG người thứ 2 có budgetManage, KHÁC budgetmgr1 (từ khi bỏ hẳn admin-bypass khỏi
+    // canDecideBudgetLineProposal()/canDecideBudgetLineFinal(), admin đơn thuần không còn tự duyệt thay
+    // được dòng Phê Duyệt của budgetmgr1 nữa — test-budget-lines.js cần 1 người THẬT có budgetManage).
+    id: 11, username: 'budgetmgr2', pass: '123456', name: 'Trịnh Thị Quản Lý NS 2', email: 'budgetmgr2@company.com', phone: '0900000011', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên',
+    perms: { admin: false, budgetManage: true }
   }
 ];
 

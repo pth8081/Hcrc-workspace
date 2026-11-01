@@ -77,10 +77,12 @@ test('đối chứng: user có meetingApprove, creator là người KHÁC -> v�
   assert.strictEqual(sb.canDecideMeetingClient(APPROVER_USER, meeting), true);
 });
 
-test('đối chứng: admin, creator là người KHÁC -> vẫn trả về true', () => {
+// 11/2026: canApproveMeeting()/canDecideMeeting() đã bỏ bypass admin — admin ĐƠN THUẦN (không
+// meetingApprove, không có tên trong meetingDeptWorkflows[dept]) không còn tự động quyết định được nữa.
+test('11/2026: admin ĐƠN THUẦN (không meetingApprove) KHÔNG còn tự động duyệt được lịch của người khác (đã bỏ bypass)', () => {
   const sb = runWithWorkflow([]);
   const meeting = { dept: 'Kế Toán', creator: 'nguoi-khac' };
-  assert.strictEqual(sb.canDecideMeetingClient(ADMIN_USER, meeting), true);
+  assert.strictEqual(sb.canDecideMeetingClient(ADMIN_USER, meeting), false);
 });
 
 // ===== 3) approver theo bước 1 cấu hình phòng ban, là CHÍNH creator -> PHẢI bị chặn =====

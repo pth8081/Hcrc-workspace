@@ -356,10 +356,15 @@ const seedDB = {
   users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2, noDispatchApproverUser, dispatchApproverUser],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
   carRegs: [], workflows: [],
-  // 2 phòng ban RIÊNG cho kịch bản carDispatch bên dưới — chưa dùng bởi bất kỳ phiếu xe nào ở các test
-  // C1-C13 phía trên (đều dùng dept 'Phòng Kinh Doanh', luôn fallback approvers {} -> chỉ admin qua
-  // được canApproveStep), nên thêm 2 dept này KHÔNG ảnh hưởng gì tới các test hiện có.
+  // 2 phòng ban RIÊNG cho kịch bản carDispatch bên dưới, KHÔNG ảnh hưởng tới các test C1-C13 (dùng dept
+  // 'Phòng Kinh Doanh' riêng, xem entry ngay dưới).
+  // 11/2026 (quyết định của người dùng — "admin không ở đúng vị trí trong quy trình phê duyệt thì không
+  // được phê duyệt, không có ngoại lệ"): canApproveStep() đã bỏ hẳn bypass admin. Trước đây 'Phòng Kinh
+  // Doanh' CỐ Ý không cấu hình gì (fallback approvers {} -> chỉ admin qua được nhờ bypass) — giờ phải đặt
+  // THẲNG tên 'admin' làm approver thật của bước 1 (cấu hình thật, không phải cờ admin chung) để các kịch
+  // bản C1-C13 (đều dùng adminUser để duyệt) tiếp tục đúng ý định ban đầu.
   carDeptWorkflows: {
+    'Phòng Kinh Doanh': { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } },
     'Phòng Hành Chính': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_nd'] } },
     'Ban Giám Đốc': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_dp'] } }
   },
@@ -714,7 +719,8 @@ async function main() {
   });
   record('Car: second registration (different time slot request) is accepted — car creation has no room-style lock', c2.count === 2, `count=${c2.count}`);
 
-  // Duyệt & gán biển số cho phiếu 1 (Admin) — workflow mặc định 1 bước, chỉ admin qua được canApproveStep.
+  // Duyệt & gán biển số cho phiếu 1 (Admin) — 'Phòng Kinh Doanh' cấu hình THẬT admin làm approver bước 1
+  // (carDeptWorkflows ở seedDB, 11/2026 — không còn dựa vào bypass admin ở canApproveStep() nữa).
   await loginAs(page, adminUser);
   const c3 = await page.evaluate(async (carId) => {
     window.__alerts = [];
@@ -1081,7 +1087,9 @@ async function main() {
   const c13Outcome = applyWorkflowAction({
     moduleKey: 'carRegs', item: c13Item, action: 'APPROVE', user: adminUser, comment: '',
     extraFields: { assignedDriverUsername: 'lx2', assignedPlate: '29A-111.11' },
-    appData: { carDeptWorkflows: {}, workflows: [] }, existingCollection: [], users: seedDB.users
+    // 11/2026: dùng THẬT seedDB.carDeptWorkflows (có 'Phòng Kinh Doanh' -> admin, xem seedDB phía trên) —
+    // trước đây dùng {} trống rồi "qua" được nhờ bypass admin ở canApproveStep() (đã bỏ).
+    appData: { carDeptWorkflows: seedDB.carDeptWorkflows, workflows: [] }, existingCollection: [], users: seedDB.users
   });
   record(
     'Car: reassigning to a different driver resets a prior driver confirmation',

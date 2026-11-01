@@ -354,12 +354,13 @@ async function runPureTests() {
       moduleKey: 'docs', item, action: 'APPROVE', user: { username: 'active1', name: 'A1', perms: {} },
       comment: '', appData: APP_DATA_DOC, users: allLocked
     }), /không có quyền xử lý ở bước hiện tại/i, '4d');
-    // admin vẫn có lối thoát riêng (isAdminOverride, hành vi CŨ giữ nguyên — không phải phạm vi lỗi này).
-    const out = applyWorkflowAction({
+    // 11/2026: KHÔNG còn lối thoát admin — nếu admin cũng không có tên trong approvers[bước], hồ sơ bị
+    // kẹt đúng như bất kỳ user khác, phải sửa approvers ở cấu hình quy trình để thêm người thay thế.
+    const errAdmin = expectThrow(() => applyWorkflowAction({
       moduleKey: 'docs', item, action: 'APPROVE', user: { username: 'admin', name: 'Admin', perms: { admin: true } },
       comment: '', appData: APP_DATA_DOC, users: allLocked
-    });
-    assert.strictEqual(out.item.status, 'APPROVED');
+    }), /không có quyền xử lý ở bước hiện tại/i, '4d-admin');
+    assert.strictEqual(errAdmin.status, 403);
   });
   await run('4e. resolveStepApproverUsernames() (lib/positionApprovers.js) GIỮ NGUYÊN hành vi cũ — KHÔNG lọc active (công cụ cảnh báo admin trước khi khoá tài khoản cố ý cần thấy người ĐÃ khoá)', () => {
     const cfg = { approvers: { 1: ['active1', 'locked1'] } };

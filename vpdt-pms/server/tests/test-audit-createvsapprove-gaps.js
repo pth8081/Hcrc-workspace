@@ -41,12 +41,13 @@ function test(name, fn) {
     assert.strictEqual(result.approvalStatus, 'APPROVED');
   });
 
-  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
-  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này, nay KHÔNG còn nữa — admin tự
-  // duyệt hồ sơ chính mình tạo cũng bị chặn 403 như mọi tài khoản khác.
-  test('#1 Đồng Phục: admin KHÔNG còn tự duyệt được kỳ do chính mình tạo (đã chặn CẢ admin) -> 403', () => {
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "admin không ở đúng vị trí trong
+  // quy trình phê duyệt thì không được phê duyệt"): canApproveUniform() đã bỏ hẳn bypass admin, nên
+  // admin KHÔNG uniformManage/uniformApprove giờ bị chặn ngay ở CỔNG QUYỀN (trước cả self-check) —
+  // vẫn là 403 như trước, chỉ đổi đúng thông điệp lỗi (không còn đi tới nhánh "tự duyệt").
+  test('#1 Đồng Phục: admin KHÔNG còn tự duyệt được kỳ do chính mình tạo (chặn ngay ở cổng quyền, không có uniformManage/uniformApprove) -> 403', () => {
     const period = { creator: 'admin1', approvalStatus: 'PENDING_APPROVAL' };
-    assert.throws(() => recordActions.approveUniformPeriod(ADMIN, period), /403|tự duyệt/);
+    assert.throws(() => recordActions.approveUniformPeriod(ADMIN, period), /403|không có quyền/);
   });
 }
 
@@ -143,25 +144,33 @@ function test(name, fn) {
   // hẳn scenario #4 ngay trên (tự GIAO việc cho bản thân, assignedBy===assignedTo===admin). Ở đây
   // task.assignedTo là NGƯỜI KHÁC (không phải admin) nên check cũ (chỉ so task.assignedTo) không bắt
   // được — phải so thêm pending.requestedBy.
-  test('#4b Công Việc: LỖI ĐÃ VÁ — admin tự GỬI yêu cầu gia hạn cho task của NGƯỜI KHÁC rồi tự DUYỆT luôn yêu cầu đó -> 403', () => {
+  // 11/2026: resolvePendingTaskAction() đã bỏ hẳn `|| user.perms?.admin` ở CỔNG QUYỀN (chỉ đúng
+  // task.assignedBy mới quyết định được) — admin ở đây KHÔNG phải assignedBy (qly2 mới là) nên giờ bị
+  // chặn ngay ở cổng quyền, không cần đi tới nhánh so sánh pending.requestedBy nữa (message đổi khác).
+  test('#4b Công Việc: LỖI ĐÃ VÁ — admin tự GỬI yêu cầu gia hạn cho task của NGƯỜI KHÁC rồi tự DUYỆT luôn yêu cầu đó -> 403 (chặn ngay ở cổng quyền assignedBy)', () => {
     const task = {
       assignedBy: 'qly2', assignedTo: 'nv1', status: 'IN_PROGRESS',
       pendingExtension: { newDeadline: '2026-12-31', reason: 'bận', requestedBy: 'admin1', requestedByName: 'Admin' }
     };
     assert.throws(
       () => recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task),
-      /403|tự duyệt/
+      /403|chỉ người giao việc/i
     );
   });
 
-  test('#4b Công Việc: đối chứng — admin duyệt yêu cầu gia hạn do NGƯỜI KHÁC gửi (không phải chính mình) vẫn thành công bình thường', () => {
+  // 11/2026: đổi quyết định — admin không phải là NGƯỜI GIAO VIỆC (assignedBy) của task này (qly2 mới
+  // là) nên KHÔNG còn tự động duyệt được nữa, dù yêu cầu gia hạn do người khác (nv1) gửi. Chỉ đúng
+  // qly2 (assignedBy) mới quyết định được — xem test #4 ngay trên cho đúng trường hợp admin IS
+  // assignedBy.
+  test('#4b Công Việc: 11/2026 admin KHÔNG phải assignedBy -> KHÔNG còn duyệt được yêu cầu gia hạn do người khác gửi (đã bỏ admin-bypass)', () => {
     const task = {
       assignedBy: 'qly2', assignedTo: 'nv1', status: 'IN_PROGRESS',
       pendingExtension: { newDeadline: '2026-12-31', reason: 'bận', requestedBy: 'nv1', requestedByName: 'Nhân Viên 1' }
     };
-    const result = recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task);
-    assert.strictEqual(result.deadline, '2026-12-31');
-    assert.strictEqual(result.pendingExtension, null);
+    assert.throws(
+      () => recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task),
+      /403|chỉ người giao việc/i
+    );
   });
 }
 
@@ -190,11 +199,11 @@ function test(name, fn) {
     assert.strictEqual(recordActions.canDecideBudgetLineProposal(CONFIGURED_APPROVER, item, appData), true);
   });
 
-  test('#5 Ngân Sách: phòng ban CHƯA cấu hình -> chỉ budgetManage/admin quyết định được, budgetCreate thường thì không', () => {
+  test('#5 Ngân Sách: phòng ban CHƯA cấu hình -> chỉ budgetManage quyết định được (11/2026: admin KHÔNG còn bypass riêng)', () => {
     const item = { dept: 'Khối Vận Hành', createdBy: 'nv_kd' };
     assert.strictEqual(recordActions.canDecideBudgetLineProposal(CONFIGURED_APPROVER, item, appData), false);
     assert.strictEqual(recordActions.canDecideBudgetLineProposal(BUDGET_MANAGE, item, appData), true);
-    assert.strictEqual(recordActions.canDecideBudgetLineProposal(ADMIN, item, appData), true);
+    assert.strictEqual(recordActions.canDecideBudgetLineProposal(ADMIN, item, appData), false);
   });
 
   test('#5 Ngân Sách: approver đúng cấu hình duyệt được Đề Xuất qua approveBudgetLineProposal()', () => {
@@ -263,11 +272,11 @@ function test(name, fn) {
     assert.strictEqual(recordActions.canDecideBudgetLineFinal(PROPOSAL_APPROVER, item, appData), false);
   });
 
-  test('#5b Ngân Sách: phòng ban CHƯA cấu hình Phê Duyệt cuối -> chỉ budgetManage/admin quyết định được', () => {
+  test('#5b Ngân Sách: phòng ban CHƯA cấu hình Phê Duyệt cuối -> chỉ budgetManage quyết định được (11/2026: admin KHÔNG còn bypass riêng)', () => {
     const item = { dept: 'Khối Vận Hành', createdBy: 'nv_kd' };
     assert.strictEqual(recordActions.canDecideBudgetLineFinal(CONFIGURED_APPROVER, item, appData), false);
     assert.strictEqual(recordActions.canDecideBudgetLineFinal(BUDGET_MANAGE, item, appData), true);
-    assert.strictEqual(recordActions.canDecideBudgetLineFinal(ADMIN, item, appData), true);
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(ADMIN, item, appData), false);
   });
 
   test('#5b Ngân Sách: approver đúng cấu hình duyệt được dòng Phê Duyệt cuối qua approveBudgetLine()', () => {

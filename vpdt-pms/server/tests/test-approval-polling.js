@@ -232,11 +232,14 @@ async function runPartA(run) {
     assertEqual(keys.length, 0, 'người không nằm trong bất kỳ luồng duyệt nào phải nhận mảng rỗng: ' + JSON.stringify(keys));
   });
 
-  await run.run('computeMyPendingApprovalKeys(): admin luôn được tính là approver hợp lệ (canApproveStep() cho admin qua mọi bước)', async () => {
+  // 11/2026 (quyết định của người dùng): canApproveStep() đã bỏ bypass admin — Approval Hub giờ chỉ
+  // báo cho admin đúng những hồ sơ admin THẬT SỰ có tên trong approvers[bước], không còn "admin thấy
+  // mọi hồ sơ mọi phòng ban" nữa (tránh gợi ý sai: admin bấm Duyệt sẽ bị 403 nếu không có tên thật).
+  await run.run('computeMyPendingApprovalKeys(): admin KHÔNG CÒN được tính là approver hợp lệ cho hồ sơ không có tên mình (đã bỏ admin-bypass ở canApproveStep())', async () => {
     const appData = buildFixtureAppData();
     const admin = { username: 'admin1', name: 'Admin', dept: 'Ban Giám Đốc', perms: { admin: true } };
     const keys = computeMyPendingApprovalKeys(admin, appData);
-    assert(keys.includes('doc:2'), 'admin phải duyệt được cả doc:2 (khác phòng ban với admin, nhưng admin bỏ qua mọi giới hạn dept-workflow)');
+    assert(!keys.includes('doc:2'), 'admin KHÔNG có tên trong approvers[bước] của doc:2 -> không còn được gợi ý nữa');
   });
 
   await run.run('computeMyPendingApprovalKeys(): kết quả LUÔN đã sắp xếp + không trùng lặp', async () => {

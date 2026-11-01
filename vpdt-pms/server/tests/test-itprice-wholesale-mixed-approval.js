@@ -95,10 +95,10 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: gdB, comment: '', appData }),
       403, null, 'GĐST khác siêu thị');
   });
-  test('admin vẫn duyệt được đề xuất WHOLESALE bất kỳ dù không nằm trong bất kỳ dòng cấu hình nào', () => {
+  test('11/2026: admin KHÔNG còn duyệt được đề xuất WHOLESALE nếu không nằm trong bất kỳ dòng cấu hình nào (đã bỏ admin bypass)', () => {
     const item = wholesaleItem();
-    const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: admin, comment: '', appData });
-    assert.strictEqual(transition.type, 'COMPLETED');
+    assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: admin, comment: '', appData }),
+      403, null, 'admin không có trong cấu hình');
   });
 }
 

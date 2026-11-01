@@ -395,21 +395,18 @@ function defaultLeaveRequest(employeeCode, valid, workModel) {
 
 // allUsers: toàn bộ users (để xác định quản lý trực tiếp qua isManagerOf).
 function canApproveLeaveRequest(approver, allUsers, employeeProfileUsername) {
-  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): nhánh admin trước đây `return true` NGAY — admin tự tạo đơn
-  // nghỉ phép của chính mình rồi tự duyệt luôn, không ai khác xác nhận. Ngược hẳn quyết định "chặn admin
-  // tự duyệt ở TẤT CẢ module, không có ngoại lệ" (v26.50) — chỉ bị sót vì hàm này không nằm trong "họ"
-  // assertNotSelfDeciding*/assertNotSelfHandling* (lib/workflowEngine.js/lib/recordActions.js) bị quét
-  // theo tên ở đợt đó, mà là hàm gác quyền riêng của module Công & Phép tự phục vụ. Admin vẫn giữ
-  // nguyên đặc quyền vượt mọi cấu hình quản lý trực tiếp/hrLeaveApprove — chỉ thêm đúng 1 điều kiện
-  // không được là chính người xin nghỉ, cùng khuôn nhánh hrAttendanceManage ngay dưới.
-  if (approver?.perms?.admin) return approver.username !== employeeProfileUsername;
+  // 11/2026 (quyết định của người dùng, "admin không ở đúng vị trí trong quy trình phê duyệt thì không
+  // được phê duyệt — không có ngoại lệ"): đã BỎ HOÀN TOÀN nhánh admin `return true` riêng từng có ở đây
+  // (trước đó chỉ thêm điều kiện "không phải chính người xin nghỉ" — vẫn là 1 dạng bypass cấu hình quản
+  // lý trực tiếp/hrLeaveApprove). Admin giờ phải THẬT SỰ có hrAttendanceManage hoặc là quản lý trực
+  // tiếp/hrLeaveApprove hợp lệ (như bất kỳ user khác) mới duyệt được — rơi thẳng xuống 2 nhánh dưới.
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): hrAttendanceManage cho phép
   // duyệt TOÀN CÔNG TY (không cần đúng cây quản lý trực tiếp) nên trước đây return true NGAY, bỏ qua
   // hoàn toàn khả năng approver chính là người xin nghỉ — khác nhánh hrLeaveApprove thường bên dưới, vốn
   // tự động được isManagerOf() chặn (không ai là "quản lý trực tiếp của chính mình", xem
-  // assertNoManagerCycle() ở routes/data.js). Admin vẫn giữ nguyên đặc quyền vượt mọi cấu hình (nhất
-  // quán với quy ước "admin override" xuyên suốt hệ thống, xem assertNotSelfDecidingWorkflowItem() ở
-  // lib/workflowEngine.js) — chỉ thu hẹp đúng nhánh hrAttendanceManage.
+  // assertNoManagerCycle() ở routes/data.js). Người có hrAttendanceManage (quyền đặt tên riêng, không
+  // phải cờ admin chung) vẫn vượt được cấu hình quản lý trực tiếp — chỉ thêm đúng 1 điều kiện không
+  // được là chính người xin nghỉ.
   if (approver?.perms?.hrAttendanceManage) return approver.username !== employeeProfileUsername;
   if (!approver?.perms?.hrLeaveApprove) return false;
   if (!employeeProfileUsername) return false;
@@ -629,7 +626,9 @@ function assertShiftSwapApprover(freshUser, roster, requesterUsername, targetUse
   if (targetUsername && freshUser.username === targetUsername) {
     throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca mà chính mình là người nhận ca');
   }
-  const allowed = freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage
+  // 11/2026: đã bỏ `freshUser.perms?.admin ||` — quyết định của người dùng, admin không còn bypass
+  // riêng, phải THẬT SỰ có hrAttendanceManage hoặc hrShiftSwapApprove đúng siêu thị.
+  const allowed = freshUser.perms?.hrAttendanceManage
     || (freshUser.perms?.hrShiftSwapApprove && roster && roster.storeCode === freshUser.dept);
   if (!allowed) throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu đổi ca này');
 }

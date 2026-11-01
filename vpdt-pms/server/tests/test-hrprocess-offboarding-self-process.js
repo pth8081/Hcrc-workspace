@@ -175,9 +175,29 @@ function runPartB_permissionFunctions() {
     canManageHrProcess({ username: 'hr1', perms: { hrOnboardingManage: true } }, onboarding) === true);
 }
 
+// LỖI ĐÃ VÁ (rà soát admin-bypass toàn hệ thống, 11/2026): route XOÁ (assertHrProcessDeletePermission(),
+// routes/records.js) là nơi DUY NHẤT còn thiếu check tự-liên-quan đã có ở canManageHrProcess()/
+// canActOnHrTask() — người có hrOffboardingManage/hrOffboardingProcessManage (kể cả có thêm admin) vẫn
+// tự xoá được quy trình Offboarding của CHÍNH MÌNH trước khi vá.
+function runPartC_deletePermission() {
+  const { assertHrProcessDeletePermission } = require('../routes/records');
+  const selfOffboarding = { id: 1, processType: 'OFFBOARDING', employeeUsername: 'hr1', creator: 'hr2' };
+  const otherOffboarding = { id: 2, processType: 'OFFBOARDING', employeeUsername: 'nv.a', creator: 'hr1' };
+  const HR1_ADMIN = { username: 'hr1', perms: { hrOffboardingManage: true, hrOffboardingProcessManage: true, admin: true } };
+
+  let threwForSelf = false;
+  try { assertHrProcessDeletePermission(HR1_ADMIN, selfOffboarding); } catch (e) { threwForSelf = /tự xoá/.test(e.message || ''); }
+  check('LỖI ĐÃ VÁ: assertHrProcessDeletePermission() chặn TUYỆT ĐỐI dù có hrOffboardingProcessManage + admin, khi employeeUsername === chính mình', threwForSelf);
+
+  let okForOther = true;
+  try { assertHrProcessDeletePermission(HR1_ADMIN, otherOffboarding); } catch (e) { okForOther = false; }
+  check('đối chứng: assertHrProcessDeletePermission() vẫn cho xoá quy trình Offboarding của NGƯỜI KHÁC (hrOffboardingProcessManage)', okForOther);
+}
+
 async function main() {
   await runPartA_createRoute();
   runPartB_permissionFunctions();
+  runPartC_deletePermission();
   console.log(`\n==== ${pass}/${pass + fail} scenario(s) passed ====`);
   if (fail) process.exitCode = 1;
 }

@@ -335,9 +335,13 @@ MỚI, không dùng chung với module nào khác.
 trước đây chỉ gác bằng ĐÚNG 1 quyền phẳng `meetingApprove` toàn công ty (ai
 giữ quyền này duyệt được lịch của MỌI phòng ban). Nay bổ sung
 `meetingDeptWorkflows` qua `canDecideMeeting()` (`lib/recordActions.js`) —
-màn cấu hình **"🏢 QT Đặt Phòng Họp"**. `meetingApprove`/admin vẫn LUÔN duyệt
-được mọi phòng ban như cũ — map mới chỉ CỘNG THÊM khả năng gán riêng người
-duyệt cho 1 phòng ban cụ thể dù người đó không giữ `meetingApprove`. Nút "🔍
+màn cấu hình **"🏢 QT Đặt Phòng Họp"**. `meetingApprove` vẫn LUÔN duyệt được
+mọi phòng ban như cũ (quyền đặt tên riêng, không đổi) — map mới chỉ CỘNG
+THÊM khả năng gán riêng người duyệt cho 1 phòng ban cụ thể dù người đó
+không giữ `meetingApprove`. **Từ 11/2026** (xem "Lưu ý riêng" ngay dưới):
+`admin` ĐƠN THUẦN (không giữ `meetingApprove`, không có tên trong
+`meetingDeptWorkflows[phòng ban]`) KHÔNG còn tự động duyệt được nữa — đã bỏ
+hẳn nhánh bypass admin khỏi `canDecideMeeting()`. Nút "🔍
 Xem Quy Trình" ở form Đăng Ký hiện GỘP (union) cả người giữ `meetingApprove`
 lẫn người được gán riêng cho đúng phòng ban đang chọn trên form.
 
@@ -351,12 +355,18 @@ PENDING vĩnh viễn. Nay **CHẶN CỨNG** ngay lúc đăng ký/tải lên nế
 khoản đã khoá/nghỉ việc) — báo lỗi rõ + tự thông báo admin, cùng khuôn đã
 áp dụng cho 10 module khác (Tài Liệu/Đăng Ký Xe/Văn Phòng/VPP/Đề Xuất Giá/
 Bản Ngân Sách/Văn Bản Trình/Hợp Đồng/Đơn Hàng Vận Hành/Đề Nghị Thanh Toán).
-**Lưu ý riêng**: đặc quyền admin (luôn duyệt được MỌI hồ sơ cụ thể khi cần
-gỡ kẹt) KHÔNG được tính là "đã có người duyệt" cho cổng chặn ĐĂNG KÝ MỚI
-này — vì tài khoản `admin` luôn tồn tại vĩnh viễn, nếu tính sẽ vô hiệu hoá
-hẳn mục đích chặn. Phải có ÍT NHẤT 1 người được CẤP RIÊNG đúng quyền
-`meetingApprove`/`licenseApprove` (hoặc gán riêng phòng ban với Phòng Họp)
-thì mới đăng ký/tải lên được.
+**Lưu ý riêng**: cổng chặn ĐĂNG KÝ MỚI này đòi ÍT NHẤT 1 người được CẤP
+RIÊNG đúng quyền `meetingApprove`/`licenseApprove` (hoặc gán riêng phòng
+ban với Phòng Họp) — tài khoản `admin` một mình (không giữ quyền đó) KHÔNG
+được tính là "đã có người duyệt". **Từ 11/2026, lý do này còn mạnh hơn nữa**:
+trước đây admin còn có "đặc quyền luôn duyệt được MỌI hồ sơ cụ thể khi cần
+gỡ kẹt" làm lưới đỡ dự phòng dù cổng chặn này không tính nó; nay đặc quyền
+đó đã bị BỎ HẲN khỏi mọi quy trình phê duyệt toàn hệ thống (xem đầu mục —
+`canApproveStep()`/`canDecideMeeting()`...) — nếu phòng ban/kỳ nào thật sự
+chưa có người duyệt thật, sẽ **không còn ai duyệt được nữa, kể cả admin**,
+không chỉ là hồ sơ bị chặn tạo mới mà hồ sơ cũ đã tồn tại từ trước cũng
+treo PENDING vĩnh viễn luôn. Phải rà kỹ cấu hình "Hệ Thống → Quy Trình &
+Phê Duyệt" trước khi dựa vào admin như lưới đỡ dự phòng.
 
 **Hợp Đồng — quy trình "📎 Tài liệu ký" (mục 4.2 bên dưới) cũng được bảo vệ
 tương tự**: trước đây tải lên/nhập kèm sẵn tài liệu ký vẫn "thành công" dù
@@ -1033,9 +1043,11 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   thể TỰ GIAO việc cho chính mình (`assignedBy === assignedTo`), khi đó họ
   vừa là người nhận việc gửi yêu cầu vừa là người duyệt. Nay chặn: người giao
   việc KHÔNG tự duyệt/từ chối được yêu cầu do CHÍNH MÌNH gửi (tức việc đó
-  đang tự giao cho bản thân) — kể cả admin không có ngoại lệ ở đây vì admin
-  hiếm khi tự giao việc cho mình, nhưng nếu có thì vẫn được vượt qua như mọi
-  quy tắc admin-bypass khác trong hệ thống.
+  đang tự giao cho bản thân) — kể cả admin không có ngoại lệ ở đây. **Từ
+  11/2026**: ngoài chặn tự duyệt này, `resolvePendingTaskAction()` còn bỏ hẳn
+  nhánh admin-bypass gia hạn/huỷ nói chung — chỉ ĐÚNG `task.assignedBy` mới
+  quyết định được, admin không giữ vai `assignedBy` của việc đó sẽ không còn
+  tự xử lý thay được nữa (trước đây admin có thể, nay không còn ngoại lệ nào).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
   đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung

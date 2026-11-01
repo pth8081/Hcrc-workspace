@@ -29,9 +29,9 @@ async function partLeave() {
     assert.strictEqual(canApproveLeaveRequest(admin, [], 'admin'), false);
   });
 
-  await test('admin vẫn duyệt được đơn nghỉ phép của NGƯỜI KHÁC (không mất chức năng)', () => {
+  await test('11/2026: admin ĐƠN THUẦN (không hrAttendanceManage/hrLeaveApprove) KHÔNG còn tự động duyệt được đơn nghỉ phép của người khác (đã bỏ bypass)', () => {
     const admin = { username: 'admin', perms: { admin: true } };
-    assert.strictEqual(canApproveLeaveRequest(admin, [], 'nv_khac'), true);
+    assert.strictEqual(canApproveLeaveRequest(admin, [], 'nv_khac'), false);
   });
 
   await test('LỖI ĐÃ VÁ (đã có từ trước, giữ nguyên): hrAttendanceManage KHÔNG tự duyệt được đơn của chính mình', () => {
@@ -57,10 +57,10 @@ async function partMeeting() {
     assert.strictEqual(canDecideMeeting(admin, meeting, {}), false);
   });
 
-  await test('admin vẫn duyệt được lịch họp do NGƯỜI KHÁC đặt (không mất chức năng)', () => {
+  await test('11/2026: admin ĐƠN THUẦN (không meetingApprove) KHÔNG còn tự động duyệt được lịch họp của người khác (đã bỏ bypass)', () => {
     const admin = { username: 'admin', perms: { admin: true } };
     const meeting = { creator: 'nv_khac', dept: 'Phòng IT' };
-    assert.strictEqual(canDecideMeeting(admin, meeting, {}), true);
+    assert.strictEqual(canDecideMeeting(admin, meeting, {}), false);
   });
 
   await test('LỖI ĐÃ VÁ: meetingApprove (quyền phẳng) KHÔNG tự duyệt được lịch họp do chính mình đặt', () => {
@@ -185,11 +185,11 @@ async function partShiftSwap() {
       assert.ok(/không thể tự duyệt/.test(r.json?.error || ''), JSON.stringify(r.json));
     });
 
-    await test('admin vẫn duyệt được yêu cầu đổi ca do NGƯỜI KHÁC tạo (không mất chức năng)', async () => {
+    await test('11/2026: admin ĐƠN THUẦN (không hrAttendanceManage/hrShiftSwapApprove) KHÔNG còn tự động duyệt được yêu cầu đổi ca của người khác (đã bỏ bypass)', async () => {
       resetStore();
       STORE.shiftSwapRequests.push({ id: 3, requesterRosterId: 1, requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', creator: 'store1', status: 'PENDING', history: [] });
       const r = await call('admin', 'POST', '/api/records/shiftSwapRequests/3/approve', {});
-      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.status, 403, JSON.stringify(r.json));
     });
 
     await test('LỖI ĐÃ VÁ: admin KHÔNG tự TỪ CHỐI được yêu cầu đổi ca do chính mình tạo (cùng chặn như approve)', async () => {

@@ -1071,7 +1071,15 @@ function assertAdminForDelete(user) {
 // ĐỔI TIẾP (11/2026, lượt phản hồi 2): hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng
 // hrOnboardingProcessManage/hrOffboardingProcessManage TÁCH RIÊNG theo processType, mirror ĐÚNG
 // canManageHrProcess()/canActOnHrTask() (lib/recordActions.js).
+// LỖI ĐÃ VÁ (rà soát admin-bypass toàn hệ thống, 11/2026): route XOÁ bị bỏ sót khi canActOnHrTask()/
+// canManageHrProcess() (lib/recordActions.js) đã chặn TUYỆT ĐỐI tự xử lý quy trình OFFBOARDING của
+// CHÍNH MÌNH từ re-audit lần 8 — đây là route DUY NHẤT còn thiếu check đó, cho phép người có
+// hrOffboardingManage/hrOffboardingProcessManage tự xoá quy trình nghỉ việc của chính mình (hồ sơ vào
+// Thùng Rác, các hiệu ứng hoàn tất như khoá tài khoản/đồng bộ công-phép/chấm dứt HĐLĐ không chạy).
 function assertHrProcessDeletePermission(user, item) {
+  if (item?.processType === 'OFFBOARDING' && item.employeeUsername && item.employeeUsername === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự xoá quy trình nghỉ việc của chính mình');
+  }
   const hasHrAuthority = !!(
     (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingProcessManage : user.perms?.hrOffboardingProcessManage) ||
     (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage)
@@ -6153,3 +6161,4 @@ module.exports = router;
 // Export riêng cho test (tests/test-operation-danhmuc-dautu-units.js) — xác nhận route xoá
 // operationStoreOpenings/operationRepairs LUÔN từ chối, không phụ thuộc quyền/trạng thái người gọi.
 module.exports.rejectOperationDelete = rejectOperationDelete;
+module.exports.assertHrProcessDeletePermission = assertHrProcessDeletePermission;

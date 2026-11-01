@@ -189,9 +189,9 @@ async function partA() {
     assert.ok(results.every(r => r.record.recordType === 'LEAVE_UNPAID'));
   });
 
-  await test('canApproveLeaveRequest() admin/hrAttendanceManage luôn true, không cần isManagerOf', () => {
-    assert.strictEqual(attendance.canApproveLeaveRequest({ perms: { admin: true } }, [], 'u1'), true);
-    assert.strictEqual(attendance.canApproveLeaveRequest({ perms: { hrAttendanceManage: true } }, [], 'u1'), true);
+  await test('canApproveLeaveRequest() hrAttendanceManage luôn true không cần isManagerOf; admin đơn thuần (11/2026, không còn bypass) thì false', () => {
+    assert.strictEqual(attendance.canApproveLeaveRequest({ username: 'adm', perms: { admin: true } }, [], 'u1'), false);
+    assert.strictEqual(attendance.canApproveLeaveRequest({ username: 'hrm', perms: { hrAttendanceManage: true } }, [], 'u1'), true);
   });
 
   await test('canApproveLeaveRequest() hrLeaveApprove CHỈ true khi thực sự là quản lý trực tiếp (transitive)', () => {

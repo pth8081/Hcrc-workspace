@@ -64,8 +64,11 @@ const PROPOSER = { username: 'kd_dexuat', name: 'Người Đề Xuất Giá', de
 const TP_APPROVER = { username: 'tp_kd', name: 'Trưởng Phòng Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceEmergencyRejectApproveWholesale: true, itPriceEmergencyRejectApproveRetail: true }, active: true };
 const ACCOUNTANT = { username: 'ketoan', name: 'Kế Toán Thanh Toán', dept: 'Tài Chính', perms: { paymentManage: true }, active: true };
 const OUTSIDER = { username: 'nguoi_khac', name: 'Người Ngoài Cuộc', dept: 'Hành Chính', perms: { itManage: true }, active: true };
+// 11/2026: dùng riêng cho setup Fix 2b — ADMIN không còn canApproveItPriceEmergencyReject() bypass,
+// cần 1 approver THẬT có quyền (khác TP_APPROVER để không bị tự chặn "tự duyệt yêu cầu do chính mình gửi").
+const EMERGENCY_REJECT_APPROVER2 = { username: 'bgd_khac', name: 'Ban Giám Đốc Khác', dept: 'Ban Giám Đốc', perms: { itPriceEmergencyRejectApproveRetail: true, itPriceEmergencyRejectApproveWholesale: true }, active: true };
 
-const USERS = [ADMIN, BUDGET_KD_1, BUDGET_KD_2, BUDGET_IT, IT1, PROPOSER, TP_APPROVER, ACCOUNTANT, OUTSIDER];
+const USERS = [ADMIN, BUDGET_KD_1, BUDGET_KD_2, BUDGET_IT, IT1, PROPOSER, TP_APPROVER, ACCOUNTANT, OUTSIDER, EMERGENCY_REJECT_APPROVER2];
 
 const APP_DATA = {
   users: USERS,
@@ -407,7 +410,8 @@ async function main() {
     await run.run('Fix 2b — hồ sơ bị REJECTED do "từ chối khẩn cấp" cũng chặn tệp bổ sung (cùng 1 cổng trạng thái)', async () => {
       const item = makeApprovedPriceItem({ infoRequests: [] });
       recordActions.requestItPriceEmergencyReject(TP_APPROVER, item, { reason: 'Sai giá nghiêm trọng' });
-      recordActions.approveItPriceEmergencyReject(ADMIN, item);
+      // 11/2026: ADMIN không còn canApproveItPriceEmergencyReject() bypass — dùng approver THẬT có quyền.
+      recordActions.approveItPriceEmergencyReject(EMERGENCY_REJECT_APPROVER2, item);
       assertEqual(item.status, 'REJECTED', 'Từ chối khẩn cấp được duyệt -> hồ sơ REJECTED');
       // Giả lập tình huống còn 1 yêu cầu bổ sung treo từ trước (đủ điều kiện đi tiếp ở bản CHƯA vá).
       item.infoRequests = [openInfoRequest()];
@@ -463,22 +467,23 @@ async function main() {
     });
 
     // =====================================================================================
-    // FIX 4 — admin override cho phê duyệt leo thang ticket IT
+    // FIX 4 — 11/2026: ĐỔI QUYẾT ĐỊNH — admin KHÔNG còn override cho phê duyệt leo thang ticket IT nữa
+    // (quyết định của người dùng, "admin không ở đúng vị trí trong quy trình phê duyệt thì không được
+    // phê duyệt" — không có ngoại lệ "gỡ kẹt hộ"). Hồ sơ của người approver đã nghỉ việc giờ xử lý bằng
+    // cách đổi approvalApprover của ticket (dữ liệu), không dùng cờ admin chung.
     // =====================================================================================
-    await run.run('Fix 4 — Quản Trị Viên duyệt thay được yêu cầu phê duyệt leo thang (người được chỉ định không còn xử lý được)', async () => {
+    await run.run('Fix 4 (11/2026): Quản Trị Viên KHÔNG CÒN duyệt thay được yêu cầu phê duyệt leo thang (đã bỏ "lối thoát" admin-bypass)', async () => {
       const ticket = makeEscalatedTicket();
-      recordActions.approveItTicketEscalation(ADMIN, ticket);
-      assertEqual(ticket.approvalStatus, 'APPROVED',
-        'Admin PHẢI duyệt thay được — nếu không, ticket leo thang cho người đã nghỉ việc kẹt vĩnh viễn ở PENDING');
-      assert((ticket.comments || []).some(c => c.username === ADMIN.username),
-        'Ghi lại dấu vết ai là người thực sự bấm duyệt');
+      const err = expectThrows(() => recordActions.approveItTicketEscalation(ADMIN, ticket), 'Đáng lẽ phải chặn');
+      assertEqual(err.status, 403, 'Admin không phải approvalApprover được chỉ định -> 403');
+      assertEqual(ticket.approvalStatus, 'PENDING', 'Vẫn còn PENDING, admin không duyệt thay được nữa');
     });
 
-    await run.run('Fix 4 — Quản Trị Viên cũng từ chối thay được yêu cầu phê duyệt leo thang', async () => {
+    await run.run('Fix 4 (11/2026): Quản Trị Viên cũng KHÔNG CÒN từ chối thay được yêu cầu phê duyệt leo thang', async () => {
       const ticket = makeEscalatedTicket();
-      recordActions.denyItTicketEscalation(ADMIN, ticket, { comment: 'Chi phí vượt hạn mức, không duyệt' });
-      assertEqual(ticket.approvalStatus, 'REJECTED', 'Admin từ chối thay được');
-      assertEqual(ticket.approvalComment, 'Chi phí vượt hạn mức, không duyệt', 'Lý do từ chối được ghi lại');
+      const err = expectThrows(() => recordActions.denyItTicketEscalation(ADMIN, ticket, { comment: 'Chi phí vượt hạn mức, không duyệt' }), 'Đáng lẽ phải chặn');
+      assertEqual(err.status, 403, 'Admin không phải approvalApprover được chỉ định -> 403');
+      assertEqual(ticket.approvalStatus, 'PENDING', 'Vẫn còn PENDING');
     });
 
     await run.run('Fix 4 — người KHÔNG phải admin và KHÔNG được chỉ định vẫn bị chặn (không nới lỏng quá tay)', async () => {

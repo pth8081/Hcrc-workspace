@@ -22,14 +22,21 @@ function getStepApprovedUsernames(history, step) {
 
 function canApproveStep(user, stepApprovers, history, step) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  // Quyết định của người dùng (11/2026): KHÔNG còn bypass cho perms.admin — admin chỉ được
+  // duyệt nếu THẬT SỰ có trong approversList (được gán đúng bước). Trước đây có
+  // `if (user.perms?.admin) return true;` ở đây — đã bỏ theo yêu cầu "không ở đúng vị trí
+  // trong quy trình phê duyệt thì không được phê duyệt", áp dụng cho MỌI hồ sơ. Lối thoát
+  // "người duyệt bị khoá tài khoản" đã không còn cần thiết: findMissingApproverStep() (dùng ở
+  // routes/create.js) đã chặn TẠO MỚI hồ sơ nếu bất kỳ bước nào không còn ai active để duyệt;
+  // trường hợp hiếm người duyệt nghỉ SAU khi hồ sơ đã PENDING thì xử lý bằng cách sửa approvers
+  // ở cấu hình quy trình để thêm người thay thế, không dùng cờ admin chung nữa.
   const approversList = normalizeApproversList(stepApprovers);
   if (!approversList.includes(user.username)) return false;
   return !getStepApprovedUsernames(history, step).has(user.username);
 }
 
 function isStepApprovalComplete(user, stepApprovers, history, step) {
-  if (user?.perms?.admin) return true;
+  // Xem chú thích ở canApproveStep() — đã bỏ `if (user?.perms?.admin) return true;`.
   const approversList = normalizeApproversList(stepApprovers);
   if (approversList.length === 0) return true;
   const approved = getStepApprovedUsernames(history, step);
@@ -1182,10 +1189,13 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   // qua resolveStepApproverUsernames()/lib/positionApprovers.js) trước đây KHÔNG lọc user đã bị khoá tài
   // khoản (active === false) — isStepApprovalComplete() (đồng phê duyệt: TẤT CẢ username trong danh sách
   // phải đã duyệt) không bao giờ đủ điều kiện nếu 1 trong số đó bị khoá, chặn các approver ĐANG HOẠT
-  // ĐỘNG khác hoàn tất bước dù đã duyệt đủ phần của mình — chỉ admin mới có lối thoát (xem chú thích
-  // isAdminOverride bên dưới, "cố ý, dùng làm lối thoát khi 1 approver bị khoá tài khoản giữa chừng" —
-  // lối thoát đó VẪN GIỮ NGUYÊN cho các trường hợp khác, lọc ở đây chỉ giúp approver active không phải
-  // chờ admin can thiệp mỗi khi có người bị khoá).
+  // ĐỘNG khác hoàn tất bước dù đã duyệt đủ phần của mình. (11/2026: trước đây admin có 1 "lối thoát"
+  // riêng ở canApproveStep()/isStepApprovalComplete() cho đúng trường hợp này — đã BỎ theo quyết định
+  // của người dùng, không còn ngoại lệ nào cho cờ admin. Nếu TẤT CẢ approver của 1 bước đều bị khoá,
+  // hồ sơ bị kẹt thật — xử lý bằng cách sửa approvers ở cấu hình quy trình để thêm người thay thế, chứ
+  // không dùng admin bypass nữa. Lưu ý: findMissingApproverStep()/routes/create.js đã chặn TẠO MỚI hồ
+  // sơ nếu có bước nào không còn ai active để duyệt, nên tình huống này chỉ xảy ra khi người duyệt mới
+  // bị khoá SAU KHI hồ sơ đã PENDING ở đúng bước đó.)
   //
   // CỐ Ý lọc CHỈ Ở ĐÂY (điểm canApproveStep()/isStepApprovalComplete() dùng để GÁC hành động THẬT),
   // KHÔNG sửa thẳng resolveStepApproverUsernames() (lib/positionApprovers.js, "ĐIỂM TRA CỨU DUY NHẤT")
@@ -1558,33 +1568,16 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   }
 
   // APPROVE
-  // canApproveStep()/isStepApprovalComplete() (đầu file, PHẢI giữ y hệt bản index.html nên không sửa
-  // trực tiếp) cho admin bấm Duyệt bỏ qua điều kiện "đủ hết các approver được đặt tên ở bước" — cố ý,
-  // dùng làm lối thoát khi 1 approver bị khoá tài khoản giữa chừng. Nhưng history entry ghi ra trước
-  // đây KHÔNG phân biệt được "admin chính là approver hợp lệ cuối cùng của bước" (duyệt bình thường)
-  // với "admin bỏ qua vì các approver khác CHƯA duyệt đủ" (ghi đè quy trình nhiều người ký) — 2 lượt
-  // duyệt trông giống hệt nhau trên lịch sử, không có dấu hiệu nào cho biết bước 2-3 người ký đã bị bỏ
-  // qua. Tính lại NGAY TRƯỚC KHI push entry mới (approvedBeforeThis chưa gồm lượt duyệt này) để biết
-  // đây có phải override hay không, gắn cờ adminOverride:true vào đúng entry đó nếu có.
-  // AUDIT (rà soát chuyên sâu luồng nghiệp vụ): công thức gốc coi TOÀN BỘ approversListForOverrideCheck
-  // (kể cả chính username admin đang thao tác) đều phải có mặt trong approvedBeforeThis (lịch sử TRƯỚC
-  // lượt duyệt này) mới coi là "không override" — nhưng admin không thể nào "đã tự duyệt trước chính
-  // hành động đang thực hiện", nên bất kỳ khi nào admin được đặt tên là 1 trong các approver của bước
-  // (cấu hình hợp lệ, không phải bypass), điều kiện NÀY LUÔN sai -> mọi lượt admin duyệt (kể cả chữ ký
-  // CUỐI CÙNG hợp lệ sau khi mọi approver khác đã ký đủ) đều bị gắn nhầm adminOverride:true, ngược hẳn
-  // với chính mục đích đã nêu ở comment trên. Sửa: chỉ xét những approver KHÁC (loại bỏ username của
-  // chính admin đang duyệt) có đủ người đã ký trước đó hay chưa — đây mới đúng câu hỏi "có ai khác lẽ ra
-  // phải ký mà bị admin bỏ qua không", không phải "chính admin đã ký trước đó chưa" (luôn là chưa).
-  const approversListForOverrideCheck = normalizeApproversList(currentStepApprovers);
-  const approvedBeforeThis = getStepApprovedUsernames(item[historyField], currentStep);
-  const otherApproversRequired = approversListForOverrideCheck.filter(u => u !== user.username);
-  const isAdminOverride = !!user.perms?.admin
-    && !otherApproversRequired.every(u => approvedBeforeThis.has(u));
-
+  // Quyết định của người dùng (11/2026): đã bỏ bypass admin ở canApproveStep()/isStepApprovalComplete()
+  // (đầu file) — admin chỉ ký được khi THẬT SỰ có tên trong approvers[bước]. Vì vậy cờ adminOverride
+  // (trước đây gắn vào history khi admin "ghi đè" bước nhiều người ký chưa ký đủ) không còn ý nghĩa:
+  // nếu admin có tên hợp lệ ở bước, lượt ký của admin giống hệt lượt ký của bất kỳ approver khác (có
+  // thể là PARTIAL_APPROVE bình thường nếu còn người đồng duyệt chưa ký) — không có gì để "override"
+  // nữa, nên không gắn cờ riêng cho admin (nhất quán với người dùng thường, vốn không bao giờ có cờ
+  // này).
   item[historyField].push({
     step: currentStep, stepName, approver: user.name, username: user.username,
-    action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot,
-    ...(isAdminOverride ? { adminOverride: true } : {})
+    action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot
   });
 
   if (!isStepApprovalComplete(user, currentStepApprovers, item[historyField], currentStep)) {

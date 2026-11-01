@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**28.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.57 (2026-11): Bỏ HẲN "admin bypass" ở mọi quy trình phê duyệt toàn hệ thống (quyết định của người dùng)
+
+Theo yêu cầu TRỰC TIẾP của người dùng: "không ở đúng vị trí trong quy trình phê duyệt thì không được
+phê duyệt bất cứ cái gì, không có ngoại lệ cho cờ admin". Trước đây rất nhiều hàm gác quyền có nhánh
+`if (user.perms?.admin) return true;` cho phép admin duyệt BẤT KỲ hồ sơ nào dù không có tên trong
+`approvers[bước]`/cấu hình quy trình phòng ban — đây là tính năng CỐ Ý từ trước (mô tả là "lối thoát"
+khi người duyệt thật bị khoá tài khoản), nhưng đã bị bỏ hoàn toàn theo quyết định mới này.
+
+**Rà soát bằng 6 agent song song** (độc lập đọc code + đối chiếu lịch sử fix cũ) tìm ra bypass nằm ở cả
+hàm lõi dùng chung (`canApproveStep()`/`isStepApprovalComplete()`, `lib/workflowEngine.js` — ảnh hưởng
+TẤT CẢ module dùng engine này: Văn Bản Trình, Đăng Ký Xe, Văn Phòng, VPP, Thanh Toán, Hợp Đồng, Phê
+Duyệt Giá, Ngân Sách...) lẫn ~15 chỗ module riêng. Đã vá:
+
+- **Gốc:** `canApproveStep()`/`isStepApprovalComplete()` (`lib/workflowEngine.js` + bản sao client
+  `public/js/core.js`) — xoá hẳn nhánh admin, admin chỉ duyệt được khi THẬT có tên trong
+  `approvers[bước]`. Dọn luôn cờ `adminOverride` (lịch sử duyệt) đã thành vô nghĩa.
+- **Ngân Sách:** `canDecideBudgetLineProposal()`/`canDecideBudgetLineFinal()` — bỏ `admin ||`, giữ
+  nguyên `budgetManage` (quyền đặt tên riêng, không phải cờ admin chung).
+- **Hợp Đồng:** `isApproverForContractManageWorkflow()` (đổi Hình Thức Thanh Toán).
+- **Phê Duyệt Giá:** `isFinalStepApproverOfItPrice()`, `canApproveItPriceEmergencyReject()`.
+- **Hỗ Trợ IT:** `approveItTicketEscalation()`/`denyItTicketEscalation()` (leo thang phê duyệt) — "lối
+  thoát gỡ kẹt hộ" cũ đã bỏ, xử lý đúng cách giờ là đổi `approvalApprover` của ticket.
+- **Nghỉ Phép/Đổi Ca:** `canApproveLeaveRequest()`/`assertShiftSwapApprover()` (`lib/attendance.js`).
+- **Phòng Họp:** `canDecideMeeting()` (`lib/recordActions.js`) + bản sao client `canApproveMeeting()`.
+- **Đồng Phục:** `canApproveUniform()`.
+- **Đào Tạo:** `canManageTraining()`/`canManageTrainingClass()`, `approve/rejectCancelTrainingRegistration()`,
+  `canEvaluateOnboardingStage3()`; `cancelTrainingRegistration()` — admin không còn huỷ hộ đăng ký của
+  người khác có hiệu lực ngay, đi qua đúng luồng `pendingCancellation` như mọi người.
+- **Công Việc:** `resolvePendingTaskAction()` — chỉ đúng `task.assignedBy` mới quyết định gia hạn/huỷ.
+- **Nhân Sự:** `assertHrProcessDeletePermission()` (`routes/records.js`) — vá luôn 1 lỗ hổng riêng: route
+  XOÁ quy trình Offboarding là nơi DUY NHẤT còn thiếu chặn tự xử lý quy trình nghỉ việc của chính mình
+  (các action khác đã chặn từ trước).
+
+**Giữ nguyên, KHÔNG đổi:** các quyền đặt tên riêng (`budgetManage`, `meetingApprove`,
+`uniformManage`...) vẫn hoạt động như cũ — chỉ bỏ đúng cờ `admin` chung. Chặn tự duyệt hồ sơ của chính
+mình (đã chốt từ trước) không đổi.
+
+**⚠️ Cảnh báo triển khai quan trọng:** nếu có phòng ban/kỳ/dòng dữ liệu nào CHƯA từng được admin cấu
+hình người duyệt thật (approvers rỗng) ở bất kỳ module nào trong danh sách trên, thì từ bản này **sẽ
+không còn ai duyệt được nữa, kể cả admin** — trước đây admin tự động là người duyệt dự phòng cho những
+trường hợp này. Trước khi deploy, admin nên rà lại cấu hình "Hệ Thống → Quy Trình & Phê Duyệt" của từng
+module, đảm bảo MỌI phòng ban đang hoạt động đều có ít nhất 1 người duyệt thật được gán — không chỉ dựa
+vào cờ admin chung nữa.
+
+**Rà soát hồi quy:** chạy lại ~50 file test liên quan trực tiếp (gần 900 scenario, bao gồm phát hiện +
+vá lại 1 test Playwright nặng — `test-meeting-car.js` — bị treo hoàn toàn do giả định cũ "phòng ban
+chưa cấu hình gì thì admin tự động duyệt được", nay phải cấu hình approver thật).
+
+**Còn tồn đọng (chưa làm trong đợt này, cần xác nhận riêng):** `Huong-dan-nghiep-vu.md` còn ~15 đoạn mô
+tả hành vi CŨ ("admin luôn duyệt được mọi hồ sơ") rải rác trong file — chưa cập nhật lại trong đợt này vì
+cần 1 lượt rà soát riêng (đọc đúng ngữ cảnh từng đoạn trước khi sửa).
 
 ## v28.56 (2026-11): Vá 10 lỗi rà soát chéo "Ghi Nhận Theo Lô" (v28.55) + đổi "➖ Trừ" thành "💾 Cập Nhật" + cảnh báo SL tăng bất thường
 

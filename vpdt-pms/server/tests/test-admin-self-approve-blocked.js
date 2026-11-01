@@ -205,13 +205,15 @@ test('claimPriceApply(): itPriceAllowSelfApproveWholesale=true -> người đề
 });
 
 test('approveItPriceEmergencyReject(): itPriceAllowSelfApproveRetail=true -> người gửi yêu cầu từ chối khẩn cấp Bán Lẻ tự phê duyệt được yêu cầu của chính mình', () => {
-  // requestItPriceEmergencyReject() cần isFinalStepApproverOfItPrice() -> dùng admin=true để qua điều
-  // kiện đó (không liên quan tới itPriceAllowSelfApprove*, đang test riêng lớp chặn tự PHÊ DUYỆT yêu cầu).
+  // requestItPriceEmergencyReject() cần isFinalStepApproverOfItPrice() -> 11/2026 không còn admin bypass,
+  // nên ghi THẬT 1 dòng APPROVED đúng step/username vào history để qua điều kiện đó (không liên quan tới
+  // itPriceAllowSelfApprove*, đang test riêng lớp chặn tự PHÊ DUYỆT yêu cầu).
   const item = {
-    status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2, history: [],
+    status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2,
+    history: [{ step: 2, action: 'APPROVED', username: 'nv.gia' }],
     emergencyRejectStatus: null
   };
-  const SELF = { username: 'nv.gia', name: 'NV Giá', perms: { admin: true, itPriceEmergencyRejectApproveRetail: true, itPriceAllowSelfApproveRetail: true } };
+  const SELF = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceEmergencyRejectApproveRetail: true, itPriceAllowSelfApproveRetail: true } };
   requestItPriceEmergencyReject(SELF, item, { reason: 'Phát hiện sai giá sau khi duyệt' });
   assert.strictEqual(item.emergencyRejectRequestedBy, 'nv.gia');
   const result = approveItPriceEmergencyReject(SELF, item);
@@ -220,10 +222,11 @@ test('approveItPriceEmergencyReject(): itPriceAllowSelfApproveRetail=true -> ng�
 
 test('approveItPriceEmergencyReject(): KHÔNG có quyền tương ứng -> vẫn 403 khi tự phê duyệt yêu cầu do chính mình gửi (hành vi CHUẨN không đổi)', () => {
   const item = {
-    status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2, history: [],
+    status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2,
+    history: [{ step: 2, action: 'APPROVED', username: 'nv.gia2' }],
     emergencyRejectStatus: null
   };
-  const SELF_NO_BYPASS = { username: 'nv.gia2', name: 'NV Giá 2', perms: { admin: true, itPriceEmergencyRejectApproveRetail: true } };
+  const SELF_NO_BYPASS = { username: 'nv.gia2', name: 'NV Giá 2', perms: { itPriceEmergencyRejectApproveRetail: true } };
   requestItPriceEmergencyReject(SELF_NO_BYPASS, item, { reason: 'Phát hiện sai giá sau khi duyệt' });
   expectThrows403(() => approveItPriceEmergencyReject(SELF_NO_BYPASS, item), /tự phê duyệt/);
 });

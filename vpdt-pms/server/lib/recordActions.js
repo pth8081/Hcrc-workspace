@@ -306,7 +306,8 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
 // hàm đó giờ dùng quyền phẳng operationOrderReceiptManage riêng, KHÔNG còn đọc lại approvers của quy
 // trình duyệt/từ chối đơn hàng như hàm này.)
 function isApproverForContractManageWorkflow(user, contract, appData) {
-  if (user.perms?.admin) return true;
+  // 11/2026: đã bỏ `if (user.perms?.admin) return true;` — quyết định của người dùng, admin không còn
+  // bypass riêng, phải THẬT SỰ có tên trong approvers của quy trình "Tài liệu ký" mới quyết định được.
   const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = MODULE_CONFIGS.contractsSignedFile.resolveWfConfig(contract, appData) || {};
   return Object.values(approvers || {}).some(list => Array.isArray(list) ? list.includes(user.username) : list === user.username);
@@ -4174,7 +4175,9 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   const config = PENDING_TASK_CONFIGS[kind];
   const pending = task[config.field];
   if (!pending) throw new HttpError(404, 'Không tìm thấy yêu cầu đang chờ duyệt');
-  if (!(task.assignedBy === user.username || user.perms?.admin)) {
+  // 11/2026: đã bỏ `|| user.perms?.admin` — chỉ ĐÚNG người giao việc (assignedBy) mới được quyết định
+  // (admin không có trong "quy trình" này thì không được phê duyệt).
+  if (task.assignedBy !== user.username) {
     throw new HttpError(403, config.resolveErrorMsg);
   }
   // Chặn tự duyệt/tự từ chối yêu cầu do CHÍNH MÌNH gửi (rà soát chuyên sâu 9/2026, phát hiện #4 — việc TỰ
@@ -4952,8 +4955,9 @@ function unpublishReportPeriod(user, period) {
 // - trainingInstruct: KHÔNG tạo lớp mới được, nhưng quản lý được roster/kết quả của ĐÚNG (các) lớp mà
 //   họ được gán làm giảng viên (cls.instructorUsername === username, xem canManageTrainingClass() ngay
 //   dưới) — không đụng được lớp của giảng viên khác, không quản lý lộ trình/ngân hàng câu hỏi.
+// 11/2026: đã bỏ `user.perms?.admin ||` — admin phải có đúng trainingManage mới quản lý được Đào Tạo.
 function canManageTraining(user) {
-  return !!(user.perms?.admin || user.perms?.trainingManage);
+  return !!(user.perms?.trainingManage);
 }
 
 // Quyền quản lý MỘT lớp học cụ thể (roster/kết quả/sửa nội dung/chuyển trạng thái buổi học) — dùng
@@ -4963,8 +4967,10 @@ function canManageTraining(user) {
 // lớp cũ CHƯA có instructorUsername (dữ liệu nhập tay từ trước tính năng này, xem
 // createValidation.js) thì KHÔNG ai thuộc diện trainingInstruct quản lý được, chỉ trainingManage/admin
 // (giảm nhẹ có chủ đích, tránh đoán nhầm giảng viên cho dữ liệu cũ).
+// 11/2026: đã bỏ `user?.perms?.admin ||` — admin phải có đúng trainingManage/trainingInstruct(giảng
+// viên của lớp) mới quản lý được.
 function canManageTrainingClass(user, cls) {
-  if (user?.perms?.admin || user?.perms?.trainingManage) return true;
+  if (user?.perms?.trainingManage) return true;
   return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
@@ -4991,24 +4997,18 @@ function assertNotSelfInTrainingAction(user, targetUsername, actionLabel) {
 }
 
 // Đợt 9 — học viên tự gửi KHÔNG còn huỷ có hiệu lực ngay nữa: chỉ tạo 1 yêu cầu đang chờ
-// (pendingCancellation), phải được trainingManage/admin duyệt mới thật sự chuyển sang CANCELLED (xem
+// (pendingCancellation), phải được trainingManage duyệt mới thật sự chuyển sang CANCELLED (xem
 // approveCancelTrainingRegistration() ngay dưới) — tránh học viên tự ý bỏ lớp giữa chừng phá vỡ sĩ
-// số/kế hoạch đã chốt mà không ai hay biết. Admin tự huỷ (hộ ai đó hoặc của chính mình) vẫn có hiệu lực
-// NGAY như cũ vì admin đã LÀ cấp thẩm quyền cao nhất, không cần qua thêm 1 lớp duyệt của trainingManage.
+// số/kế hoạch đã chốt mà không ai hay biết. 11/2026 (quyết định của người dùng): đã bỏ nhánh admin tự
+// huỷ hộ ai đó + có hiệu lực NGAY — admin giờ đi qua ĐÚNG cùng luồng như bất kỳ user khác (chỉ huỷ được
+// đăng ký của CHÍNH MÌNH, và cũng chỉ tạo pendingCancellation chờ trainingManage duyệt, không còn
+// "cấp thẩm quyền cao nhất" tự động bỏ qua bước duyệt).
 function cancelTrainingRegistration(payload, user, reg) {
-  if (reg.creator !== user.username && !user.perms?.admin) {
+  if (reg.creator !== user.username) {
     throw new HttpError(403, 'Bạn chỉ có thể huỷ đăng ký của chính mình');
   }
   if (reg.result !== 'REGISTERED') {
     throw new HttpError(409, 'Đăng ký này không còn ở trạng thái có thể huỷ');
-  }
-  if (user.perms?.admin) {
-    reg.result = 'CANCELLED';
-    reg.resultBy = user.username;
-    reg.resultByName = user.name;
-    reg.resultAt = nowVN();
-    reg.pendingCancellation = null;
-    return reg;
   }
   if (reg.pendingCancellation) {
     throw new HttpError(409, 'Bạn đã gửi yêu cầu huỷ đăng ký này từ trước, đang chờ duyệt');
@@ -5023,8 +5023,9 @@ function cancelTrainingRegistration(payload, user, reg) {
 // Duyệt/từ chối yêu cầu huỷ ở trên — CỐ Ý chỉ trainingManage/admin (KHÔNG mở cho trainingInstruct dù
 // giảng viên đó quản lý được lớp, vì đây là quyết định ảnh hưởng tới kế hoạch đào tạo chung của Nhân Sự,
 // không phải nghiệp vụ giảng dạy đơn thuần của giảng viên).
+// 11/2026: đã bỏ `!user.perms?.admin &&` — admin phải có đúng trainingManage mới duyệt được.
 function approveCancelTrainingRegistration(payload, user, reg) {
-  if (!user.perms?.admin && !user.perms?.trainingManage) {
+  if (!user.perms?.trainingManage) {
     throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu huỷ đăng ký lớp học');
   }
   if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
@@ -5059,8 +5060,9 @@ function approveCancelTrainingRegistration(payload, user, reg) {
   reg.pendingCancellation = null;
   return reg;
 }
+// 11/2026: đã bỏ `!user.perms?.admin &&` — admin phải có đúng trainingManage mới từ chối được.
 function rejectCancelTrainingRegistration(payload, user, reg) {
-  if (!user.perms?.admin && !user.perms?.trainingManage) {
+  if (!user.perms?.trainingManage) {
     throw new HttpError(403, 'Bạn không có quyền từ chối yêu cầu huỷ đăng ký lớp học');
   }
   if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
@@ -5950,8 +5952,9 @@ function confirmOnboardingStage(payload, user, progress, path) {
 // (đọc SỐNG từ hồ sơ user hiện tại qua users[], KHÔNG snapshot — khác startDate ở trên chủ đích snapshot;
 // ở đây dùng dept THẬT hiện tại để 1 nhân viên chuyển phòng ban/siêu thị giữa chừng thì quản lý MỚI của
 // họ đánh giá được, không kẹt vào quản lý CŨ) với dept của người đánh giá — không có bảng ánh xạ nào khác.
+// 11/2026: đã bỏ `if (user?.perms?.admin) return true;` — admin phải có đúng onboardingEvaluate VÀ
+// cùng phòng ban với học viên mới đánh giá được.
 function canEvaluateOnboardingStage3(user, traineeUser) {
-  if (user?.perms?.admin) return true;
   return !!(user?.perms?.onboardingEvaluate && traineeUser && traineeUser.dept === user.dept);
 }
 
@@ -6331,19 +6334,21 @@ function requestPriceInfoFromIt(user, item, payload) {
 // lib/workflowEngine.js) mà gửi 1 yêu cầu cho người có quyền itPriceEmergencyRejectApprove xét duyệt —
 // nếu được đồng ý, hồ sơ chuyển REJECTED giống hệt bị từ chối ở bước duyệt bình thường (đẩy thêm 1 dòng
 // history action REJECTED, hiển thị lại đúng chỗ "Đã từ chối bởi" trong renderItPriceModal()).
+// 11/2026: đã bỏ `if (user.perms?.admin) return true;` — quyết định của người dùng, admin không còn
+// bypass riêng. Admin chỉ gửi được yêu cầu từ chối khẩn cấp nếu THẬT SỰ là người đã ký bước cuối.
 function isFinalStepApproverOfItPrice(user, item) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return (item.history || []).some(h =>
     h.step === item.currentStep && h.action === 'APPROVED' && !h.invalidated && h.username === user.username
   );
 }
 
 // priceType (RETAIL/WHOLESALE) — tách riêng thành 2 quyền itPriceEmergencyRejectApproveWholesale/
-// Retail (10/2026), ai chỉ phụ trách 1 loại thì chỉ xét duyệt được đúng loại đó.
+// Retail (10/2026), ai chỉ phụ trách 1 loại thì chỉ xét duyệt được đúng loại đó. (11/2026: đã bỏ
+// `if (user.perms?.admin) return true;` — admin cũng phải có đúng quyền itPriceEmergencyRejectApprove*
+// mới xét duyệt được, không còn bypass chung.)
 function canApproveItPriceEmergencyReject(user, priceType) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return !!(priceType === 'WHOLESALE' ? user.perms?.itPriceEmergencyRejectApproveWholesale : user.perms?.itPriceEmergencyRejectApproveRetail);
 }
 
@@ -6351,8 +6356,8 @@ function requestItPriceEmergencyReject(user, item, payload) {
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ gửi được yêu cầu từ chối khẩn cấp khi đề xuất đã được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá xong, không thể từ chối khẩn cấp nữa');
   // KHOÁ CỨNG khi IT đang xử lý ("Tôi đang xử lý" đã bấm, applyClaimedBy có giá trị) — ĐẶT TRƯỚC MỌI
-  // nhánh có thể cho phép admin bỏ qua (isFinalStepApproverOfItPrice() bên dưới CHO admin qua luôn,
-  // nên chặn này phải đứng độc lập, không nằm sau nhánh đó) — áp dụng cho TẤT CẢ mọi người, KỂ CẢ
+  // nhánh khác (độc lập, không nằm sau isFinalStepApproverOfItPrice() bên dưới — kể cả từ 11/2026 hàm đó
+  // đã bỏ hẳn bypass admin, chặn này vẫn nên đứng độc lập làm rõ ý đồ) — áp dụng cho TẤT CẢ mọi người, KỂ CẢ
   // ADMIN, không có ngoại lệ nào (yêu cầu nghiệp vụ mục 5 kế hoạch: tránh huỷ hồ sơ giữa lúc IT đang
   // thao tác áp giá thật vào hệ thống bán hàng ngoài app).
   if (item.applyClaimedBy) {
@@ -6366,7 +6371,7 @@ function requestItPriceEmergencyReject(user, item, payload) {
     throw new HttpError(409, 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể gửi yêu cầu từ chối khẩn cấp');
   }
   if (!isFinalStepApproverOfItPrice(user, item)) {
-    throw new HttpError(403, 'Chỉ người đã duyệt bước cuối cùng (hoặc Quản Trị Viên) mới gửi được yêu cầu từ chối khẩn cấp');
+    throw new HttpError(403, 'Chỉ người đã duyệt bước cuối cùng mới gửi được yêu cầu từ chối khẩn cấp');
   }
   if (item.emergencyRejectStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu từ chối khẩn cấp đang chờ xử lý');
   const reason = (payload?.reason || '').trim().slice(0, 1000);
@@ -6392,9 +6397,10 @@ function requestItPriceEmergencyReject(user, item, payload) {
 
 // Chặn tự phê duyệt/tự từ chối yêu cầu "từ chối khẩn cấp" do CHÍNH MÌNH gửi (LỖI ĐÃ VÁ, rà soát bảo
 // mật chuyên sâu lần 2, mức Trung bình) — requestItPriceEmergencyReject() yêu cầu
-// isFinalStepApproverOfItPrice() (người duyệt bước cuối, HOẶC admin) còn approve/deny yêu cầu
-// canApproveItPriceEmergencyReject (itPriceEmergencyRejectApproveWholesale/Retail, HOẶC admin) — 1
-// người duyệt bước cuối ĐƯỢC GÁN THÊM quyền phê duyệt từ chối khẩn cấp (không loại trừ nhau) tự gửi rồi
+// isFinalStepApproverOfItPrice() (người duyệt bước cuối) còn approve/deny yêu cầu
+// canApproveItPriceEmergencyReject (itPriceEmergencyRejectApproveWholesale/Retail, KHÔNG còn admin
+// bypass từ 11/2026) — 1 người duyệt bước cuối ĐƯỢC GÁN THÊM quyền phê duyệt từ chối khẩn cấp (không
+// loại trừ nhau) tự gửi rồi
 // tự phê duyệt/từ chối ngay yêu cầu của chính mình, không ai kiểm soát độc lập — cùng khuôn
 // assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer().
 // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
@@ -6636,18 +6642,22 @@ function escalateItTicket(user, ticket, payload, usersList) {
 // applyPriceApproval()/releasePriceApplyClaim() ở trên). Không có lối thoát này, 1 ticket leo thang cho
 // người sau đó nghỉ việc/bị khoá tài khoản sẽ kẹt vĩnh viễn ở approvalStatus='PENDING' (updateItTicketStatus()
 // chặn mọi chuyển trạng thái khi còn PENDING) mà không ai gỡ được.
-// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "leo thang ticket IT"): nhánh admin-bypass ở trên ĐÚNG
-// cho trường hợp "gỡ kẹt hộ" (admin KHÁC người đã gửi yêu cầu can thiệp khi approver gốc không xử lý
-// được) — nhưng KHÔNG loại trừ chính người VỪA GỬI yêu cầu leo thang (escalateItTicket()) tự duyệt/từ
-// chối lại yêu cầu của chính mình bằng admin-bypass đó. Thêm assertNotSelfDecidingXxx() ngay dưới —
-// cùng khuôn các chặn tự duyệt khác trong file này (không có ngoại lệ admin, quyết định 11/2026).
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "leo thang ticket IT"): nhánh admin-bypass TRƯỚC ĐÂY ở
+// approve/denyItTicketEscalation() cố ý cho "gỡ kẹt hộ" (admin KHÁC người đã gửi yêu cầu can thiệp khi
+// approver gốc không xử lý được) — nhưng KHÔNG loại trừ chính người VỪA GỬI yêu cầu leo thang
+// (escalateItTicket()) tự duyệt/từ chối lại yêu cầu của chính mình bằng admin-bypass đó. Thêm
+// assertNotSelfDecidingXxx() ngay dưới — cùng khuôn các chặn tự duyệt khác trong file này.
+// 11/2026: chính nhánh admin-bypass đó đã bị BỎ HOÀN TOÀN (quyết định của người dùng, không có ngoại
+// lệ cho cờ admin nữa) — admin chỉ duyệt/từ chối được nếu THẬT SỰ là ticket.approvalApprover; "gỡ kẹt
+// hộ" khi approver gốc không xử lý được thì sửa approvalApprover của ticket (hoặc leo thang lại cho
+// người khác) thay vì dùng cờ admin.
 function assertNotSelfDecidingItTicketEscalation(user, ticket) {
   if (ticket.escalatedBy === user.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối yêu cầu phê duyệt do chính mình gửi');
   }
 }
 function approveItTicketEscalation(user, ticket) {
-  if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
   assertNotSelfDecidingItTicketEscalation(user, ticket);
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   ticket.approvalStatus = 'APPROVED';
@@ -6658,7 +6668,7 @@ function approveItTicketEscalation(user, ticket) {
 }
 
 function denyItTicketEscalation(user, ticket, payload) {
-  if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
   assertNotSelfDecidingItTicketEscalation(user, ticket);
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   const comment = (payload?.comment || '').trim().slice(0, 1000);
@@ -7406,8 +7416,9 @@ function computeAllEmployeeUniformHoldings(allIssuancesOfStore, allAdjustmentsOf
 // tính năng ra mắt — Hành Chính có uniformManage giờ tự duyệt được kỳ mình tạo luôn, không cần cấp
 // thêm quyền uniformApprove riêng nữa, nhưng quyền uniformApprove ĐỘC LẬP vẫn còn tác dụng cho người
 // chỉ cần duyệt mà không cần tạo/quản lý kỳ).
+// 11/2026: đã bỏ `user?.perms?.admin ||` — admin phải có đúng uniformApprove/uniformManage mới duyệt được.
 function canApproveUniform(user) {
-  return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
+  return !!(user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
 // Chặn tự duyệt/tự từ chối kỳ do CHÍNH MÌNH tạo (rà soát chuyên sâu 9/2026, phát hiện #1 — uniformManage
@@ -8040,11 +8051,13 @@ function assertNotSelfDecidingBudgetLine(user, item) {
 // item.dept mới quyết định được — budgetLines không có currentStep nhiều bước như
 // lib/workflowEngine.js's applyWorkflowAction() (chỉ 1 cấp quyết định duy nhất), nên nếu admin lỡ cấu
 // hình quy trình nhiều bước cho Ngân Sách thì CHỈ bước 1 có tác dụng thật ở đây. Phòng ban CHƯA được
-// admin cấu hình gì = approvers rỗng = chỉ budgetManage/admin quyết định được (KHÔNG âm thầm rơi về
-// "ai cũng duyệt chéo được" như hành vi cũ) — admin cần vào cấu hình Ngân Sách theo phòng ban trước khi
-// người chỉ có budgetCreate có thể xử lý Đề Xuất của phòng ban đó.
+// admin cấu hình gì = approvers rỗng = chỉ budgetManage quyết định được (KHÔNG âm thầm rơi về "ai cũng
+// duyệt chéo được" như hành vi cũ) — admin cần vào cấu hình Ngân Sách theo phòng ban trước khi người
+// chỉ có budgetCreate có thể xử lý Đề Xuất của phòng ban đó. (11/2026: đã bỏ `user.perms?.admin ||` —
+// quyết định của người dùng, cờ admin KHÔNG còn là "quyền duyệt chung" nữa; budgetManage là quyền quản
+// lý nghiệp vụ Ngân Sách ĐẶT TÊN riêng, không phải cờ admin chung, nên vẫn giữ nguyên.)
 function canDecideBudgetLineProposal(user, item, appData) {
-  if (user.perms?.admin || user.perms?.budgetManage) return true;
+  if (user.perms?.budgetManage) return true;
   if (!user.perms?.budgetCreate) return false;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.budgetDeptWorkflows?.[item.dept], appData || {});
@@ -8081,13 +8094,14 @@ function rejectBudgetLineProposal(user, item, payload, appData) {
 // ban nào (chỉ chặn tự duyệt đúng dòng mình tạo) — ĐỔI sang cấu hình theo phòng ban
 // (budgetApprovedDeptWorkflows, TÁCH RIÊNG khỏi budgetDeptWorkflows của bước Đề Xuất vì 2 bước có thể
 // cần người duyệt khác nhau — VD Đề Xuất do Trưởng phòng duyệt, Phê Duyệt cuối do Ban Giám Đốc/Tài
-// Chính duyệt), CÙNG KHUÔN canDecideBudgetLineProposal() ở trên. budgetManage/admin vẫn LUÔN quyết
-// định được mọi dòng bất kể cấu hình (ghi đè toàn quyền, nhất quán với mọi module dept-workflow khác —
-// admin luôn bypass, xem canApproveStep() ở lib/workflowEngine.js). Người CHỈ có budgetCreate (không
-// budgetManage) phải là approver BƯỚC 1 của ĐÚNG phòng ban item.dept trong budgetApprovedDeptWorkflows
-// mới quyết định được — phòng ban CHƯA cấu hình = approvers rỗng = chỉ budgetManage/admin xử lý được.
+// Chính duyệt), CÙNG KHUÔN canDecideBudgetLineProposal() ở trên. budgetManage vẫn LUÔN quyết định được
+// mọi dòng bất kể cấu hình (quyền quản lý nghiệp vụ Ngân Sách đặt tên riêng, không phải cờ admin chung
+// — 11/2026: đã bỏ `user.perms?.admin ||`, cờ admin không còn là "quyền duyệt chung" nữa, xem
+// canApproveStep() ở lib/workflowEngine.js). Người CHỈ có budgetCreate (không budgetManage) phải là
+// approver BƯỚC 1 của ĐÚNG phòng ban item.dept trong budgetApprovedDeptWorkflows mới quyết định được —
+// phòng ban CHƯA cấu hình = approvers rỗng = chỉ budgetManage xử lý được.
 function canDecideBudgetLineFinal(user, item, appData) {
-  if (user.perms?.admin || user.perms?.budgetManage) return true;
+  if (user.perms?.budgetManage) return true;
   if (!user.perms?.budgetCreate) return false;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.budgetApprovedDeptWorkflows?.[item.dept], appData || {});
@@ -9015,7 +9029,9 @@ function canDecideMeeting(user, item, appData) {
   // riêng của module, không nằm trong "họ" assertNotSelfDeciding*/assertNotSelfHandling* bị quét theo
   // tên ở đợt v26.50.
   if (item.creator && user.username === item.creator) return false;
-  if (user.perms?.admin || user.perms?.meetingApprove) return true;
+  // 11/2026: đã bỏ `user.perms?.admin ||` — admin phải có đúng meetingApprove hoặc có tên trong
+  // meetingDeptWorkflows[dept] mới quyết định được, không còn bypass chung.
+  if (user.perms?.meetingApprove) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[item.dept], appData || {});
   return (approvers[1] || []).includes(user.username);

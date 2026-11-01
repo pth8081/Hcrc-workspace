@@ -5,10 +5,12 @@
 // dùng "Bạn xử lý luôn giúp tôi nhé". Mỗi kịch bản gắn với ĐÚNG 1 bản vá, viết sao cho hoàn tác bản vá
 // là FAIL ngay:
 //
-//   1. (lib/workflowEngine.js) Admin dùng đặc quyền "bỏ qua điều kiện đủ approver" để Duyệt hộ 1 bước
-//      chưa đủ người ký — lịch sử duyệt trước đây không có dấu hiệu nào phân biệt lượt này với 1 lượt
-//      duyệt bình thường. Bản vá gắn cờ adminOverride:true vào ĐÚNG dòng lịch sử đó khi (và chỉ khi)
-//      còn approver được liệt kê CHƯA duyệt tại thời điểm admin bấm Duyệt.
+//   1. (lib/workflowEngine.js) 11/2026: mục này TRƯỚC ĐÂY kiểm cờ adminOverride (đánh dấu khi admin
+//      dùng đặc quyền "bỏ qua điều kiện đủ approver" để Duyệt hộ 1 bước chưa đủ người ký). Theo quyết
+//      định của người dùng, đặc quyền đó đã bị BỎ HOÀN TOÀN — admin chỉ duyệt được khi THẬT SỰ có tên
+//      trong approvers[bước], giống hệt bất kỳ user khác, nên cờ adminOverride không còn tồn tại. Viết
+//      lại để kiểm đúng bất biến MỚI: không ở đúng vị trí trong quy trình thì không được duyệt, dù có
+//      cờ admin hay không.
 //
 //   2. (lib/createValidation.js + routes/create.js) Mã (code) của 1 hồ sơ đã bị xoá (còn nằm trong
 //      Thùng Rác) trước đây có thể bị hồ sơ MỚI dùng lại (kiểm trùng chỉ quét collection đang sống, bỏ
@@ -61,9 +63,9 @@ function expectHttpError(fn, status, messagePart) {
 }
 
 // ============================================================================
-// 1) workflowEngine.js — cờ adminOverride trên lịch sử duyệt
+// 1) workflowEngine.js — 11/2026: KHÔNG còn admin bypass, admin phải là approver THẬT
 // ============================================================================
-console.log('\n===== 1) applyWorkflowAction(): cờ adminOverride =====');
+console.log('\n===== 1) applyWorkflowAction(): admin không còn đặc quyền bỏ qua approvers[bước] =====');
 
 const DEPT = 'Kinh Doanh';
 const ADMIN_USER = { username: 'admin1', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true } };
@@ -79,33 +81,27 @@ function seedCarReg(history) {
   return { id: 1, code: 'XE-2026-001', dept: DEPT, status: 'PENDING', currentStep: 1, history: history || [] };
 }
 
-run('Admin Duyệt khi CHƯA có approver nào ký -> ghi adminOverride:true (bypass thật sự)', () => {
+run('Admin KHÔNG có tên trong approvers[bước] -> bị từ chối 403, dù chưa ai ký', () => {
   const item = seedCarReg([]);
-  const outcome = applyWorkflowAction({
+  assert.throws(() => applyWorkflowAction({
     moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
     appData: WF_APP_DATA, existingCollection: [item], users: []
-  });
-  const last = outcome.item.history[outcome.item.history.length - 1];
-  assert.strictEqual(last.username, ADMIN_USER.username);
-  assert.strictEqual(last.action, 'APPROVED');
-  assert.strictEqual(last.adminOverride, true, 'Phải đánh dấu adminOverride khi các approver được liệt kê chưa ai duyệt');
+  }), /không có quyền xử lý ở bước hiện tại/i);
 });
 
-run('Admin Duyệt sau khi TẤT CẢ approver được liệt kê đã ký đủ -> KHÔNG đánh dấu (không override gì cả)', () => {
+run('Admin KHÔNG có tên trong approvers[bước] -> vẫn bị từ chối dù approver khác đã ký đủ (bước đã hoàn tất, không còn gì để "ghi đè")', () => {
   const item = seedCarReg([
     { step: 1, action: 'APPROVED', username: APPROVER_X.username, time: 't1' },
     { step: 1, action: 'APPROVED', username: APPROVER_Y.username, time: 't2' }
   ]);
-  const outcome = applyWorkflowAction({
+  item.currentStep = 2; // isStepApprovalComplete() đã đẩy sang bước 2 (hoặc COMPLETED) từ lượt ký thứ 2
+  assert.throws(() => applyWorkflowAction({
     moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
     appData: WF_APP_DATA, existingCollection: [item], users: []
-  });
-  const last = outcome.item.history[outcome.item.history.length - 1];
-  assert.strictEqual(last.username, ADMIN_USER.username);
-  assert.ok(!last.adminOverride, 'Không được đánh dấu override khi bước đã đủ người ký từ trước');
+  }), /không có quyền xử lý ở bước hiện tại|đã xử lý bước này rồi/i);
 });
 
-run('Người dùng thường (không phải admin) Duyệt -> KHÔNG BAO GIỜ có cờ adminOverride', () => {
+run('Người dùng thường (không phải admin) Duyệt -> ghi lịch sử bình thường, không có field đặc biệt nào', () => {
   const item = seedCarReg([]);
   const outcome = applyWorkflowAction({
     moduleKey: 'carRegs', item, action: 'APPROVE', user: APPROVER_X,
@@ -113,48 +109,29 @@ run('Người dùng thường (không phải admin) Duyệt -> KHÔNG BAO GIỜ 
   });
   const last = outcome.item.history[outcome.item.history.length - 1];
   assert.strictEqual(last.username, APPROVER_X.username);
-  assert.ok(!('adminOverride' in last), 'Người dùng thường không đi qua đặc quyền admin, không thể có cờ này');
+  assert.ok(!('adminOverride' in last), 'adminOverride đã bị bỏ hoàn toàn khỏi hệ thống, không còn field này nữa');
 });
 
-run('Cờ CHỈ gắn vào đúng dòng lịch sử của lượt duyệt override, không đụng các dòng khác', () => {
-  const item = seedCarReg([{ step: 1, action: 'APPROVED', username: APPROVER_X.username, time: 't1' }]);
-  const outcome = applyWorkflowAction({
-    moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
-    appData: WF_APP_DATA, existingCollection: [item], users: []
-  });
-  assert.ok(!('adminOverride' in outcome.item.history[0]), 'Dòng của người X (không phải admin) không được đụng tới');
-  assert.strictEqual(outcome.item.history[1].adminOverride, true, 'Chỉ chưa 1/2 approver ký -> admin duyệt vẫn là override');
-});
-
-// ===== PHÁT HIỆN LỖI THẬT (rà soát chuyên sâu luồng nghiệp vụ, đợt sau) =====
-// 4 test ở trên đều dùng ADMIN_USER với username KHÔNG nằm trong danh sách approver được liệt kê ('x1',
-// 'y1') — chưa từng kiểm tra trường hợp chính admin LÀ 1 trong các approver được đặt tên hợp lệ (cấu
-// hình "Theo người" chọn thẳng tài khoản admin, hoàn toàn hợp lệ về nghiệp vụ). Công thức gốc coi TOÀN
-// BỘ approversListForOverrideCheck (kể cả username của chính admin đang thao tác) phải nằm trong
-// approvedBeforeThis (lịch sử TRƯỚC lượt duyệt hiện tại) mới coi là KHÔNG override — nhưng 1 người không
-// thể "đã tự duyệt trước chính hành động đang thực hiện", nên điều kiện này LUÔN sai bất cứ khi nào admin
-// được đặt tên là 1 approver hợp lệ của bước, kể cả khi đây là chữ ký CUỐI CÙNG hợp lệ (mọi approver khác
-// đã ký đủ) hoặc khi admin là approver DUY NHẤT — ngược hẳn với chính mục đích đã nêu ở comment phía trên
-// (phân biệt "admin là approver hợp lệ, duyệt bình thường" với "admin bỏ qua approver khác"). Đã vá:
-// loại trừ username của chính admin đang duyệt khỏi danh sách "phải đủ người ký trước đó".
+// ===== Admin ĐƯỢC đặt tên hợp lệ trong approvers[bước] — phải xử sự GIỐNG HỆT bất kỳ approver khác,
+// không có đặc quyền/đánh dấu gì riêng (cờ adminOverride đã bị xoá hoàn toàn khỏi lib/workflowEngine.js).
 const APPROVER_Y2 = { username: 'y2', name: 'Người Y2', dept: DEPT, perms: {} };
 const WF_APP_DATA_ADMIN_NAMED = {
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
   carDeptWorkflows: { [DEPT]: { workflowId: 'WF_1STEP', approvers: { 1: [ADMIN_USER.username, APPROVER_Y2.username] } } }
 };
 
-run('[VÁ LỖI] Admin ĐƯỢC ĐẶT TÊN hợp lệ trong danh sách approver, ký SAU KHI approver kia đã ký đủ -> KHÔNG phải override', () => {
+run('Admin ĐƯỢC ĐẶT TÊN hợp lệ trong danh sách approver, ký SAU KHI approver kia đã ký đủ -> duyệt được, COMPLETED', () => {
   const item = seedCarReg([{ step: 1, action: 'APPROVED', username: APPROVER_Y2.username, time: 't1' }]);
   const outcome = applyWorkflowAction({
     moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
     appData: WF_APP_DATA_ADMIN_NAMED, existingCollection: [item], users: []
   });
   const last = outcome.item.history[outcome.item.history.length - 1];
-  assert.ok(!last.adminOverride, 'Admin là approver hợp lệ, ký NỐT sau khi người kia đã ký đủ -> chữ ký hợp lệ, không phải ghi đè ai');
+  assert.ok(!('adminOverride' in last), 'Không còn field adminOverride nào trong hệ thống');
   assert.strictEqual(outcome.transition.type, 'COMPLETED');
 });
 
-run('[VÁ LỖI] Admin là approver DUY NHẤT được đặt tên (cấu hình Theo người = chính admin) -> KHÔNG phải override', () => {
+run('Admin là approver DUY NHẤT được đặt tên (cấu hình Theo người = chính admin) -> duyệt được bình thường', () => {
   const soloAppData = {
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     carDeptWorkflows: { [DEPT]: { workflowId: 'WF_1STEP', approvers: { 1: [ADMIN_USER.username] } } }
@@ -164,19 +141,16 @@ run('[VÁ LỖI] Admin là approver DUY NHẤT được đặt tên (cấu hình
     moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
     appData: soloAppData, existingCollection: [item], users: []
   });
-  const last = outcome.item.history[outcome.item.history.length - 1];
-  assert.ok(!last.adminOverride, 'Admin là approver DUY NHẤT hợp lệ của bước -> duyệt bình thường, không override ai cả');
+  assert.strictEqual(outcome.transition.type, 'COMPLETED');
 });
 
-run('[VÁ LỖI] Admin được đặt tên NHƯNG approver kia CHƯA ký -> vẫn là override (bỏ qua đúng người còn thiếu)', () => {
+run('Admin được đặt tên NHƯNG approver kia CHƯA ký -> chỉ PARTIAL_APPROVE, KHÔNG hoàn tất thay người còn thiếu (giống hệt non-admin)', () => {
   const item = seedCarReg([]);
   const outcome = applyWorkflowAction({
     moduleKey: 'carRegs', item, action: 'APPROVE', user: ADMIN_USER,
     appData: WF_APP_DATA_ADMIN_NAMED, existingCollection: [item], users: []
   });
-  const last = outcome.item.history[outcome.item.history.length - 1];
-  assert.strictEqual(last.adminOverride, true, 'y2 chưa ký mà bước đã COMPLETED nhờ đặc quyền admin -> đúng là ghi đè yêu cầu chữ ký của y2');
-  assert.strictEqual(outcome.transition.type, 'COMPLETED');
+  assert.strictEqual(outcome.transition.type, 'PARTIAL_APPROVE', 'y2 chưa ký -> bước CHƯA hoàn tất, admin không còn đặc quyền ghi đè y2 nữa');
 });
 
 // ============================================================================

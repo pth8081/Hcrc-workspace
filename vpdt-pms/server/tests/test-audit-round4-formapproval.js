@@ -84,8 +84,8 @@ function testContractPaymentTypeChangeSelfDeciding() {
     'tự xử lý', 'Đổi Hình Thức Thanh Toán: người tạo hợp đồng KHÔNG tự duyệt được yêu cầu do chính mình gửi (LỖI ĐÃ VÁ)');
   expectThrow(() => recordActions.rejectContractPaymentTypeChange({ username: 'kd1', name: 'KD 1', perms: {} }, makeContract(), { reason: 'không đồng ý' }, appData),
     'tự xử lý', 'Đổi Hình Thức Thanh Toán: người tạo hợp đồng KHÔNG tự từ chối được yêu cầu do chính mình gửi (LỖI ĐÃ VÁ)');
-  expectNoThrow(() => recordActions.approveContractPaymentTypeChange({ username: 'admin', name: 'Admin', perms: { admin: true } }, makeContract(), appData),
-    'Đổi Hình Thức Thanh Toán: admin vẫn duyệt được bình thường (không bị ảnh hưởng)');
+  expectThrow(() => recordActions.approveContractPaymentTypeChange({ username: 'admin', name: 'Admin', perms: { admin: true } }, makeContract(), appData),
+    'không có quyền', '11/2026: admin KHÔNG còn tự động duyệt được nếu không có tên trong quy trình "Tài liệu ký" (đã bỏ bypass)');
 }
 
 // ===== 3) contractsSignedFile — chặn đúng signedUploadedBy (không chỉ creator gốc) =====
@@ -139,8 +139,8 @@ function testLeaveRequestSelfApproval() {
   check('leaveRequests: hrAttendanceManage vẫn duyệt được đơn của NGƯỜI KHÁC bình thường',
     attendance.canApproveLeaveRequest(hrManager, [], 'nv_khac') === true);
   const adminUser = { perms: { admin: true } };
-  check('leaveRequests: admin vẫn tự duyệt được (đặc quyền admin không đổi, nhất quán hệ thống)',
-    attendance.canApproveLeaveRequest(adminUser, [], 'admin') === true);
+  check('leaveRequests: 11/2026 admin ĐƠN THUẦN (không hrAttendanceManage/hrLeaveApprove) KHÔNG còn tự động duyệt được (đã bỏ bypass)',
+    attendance.canApproveLeaveRequest(adminUser, [], 'admin') === false);
 }
 
 // ===== 6) leaveRequests — chặn vượt quỹ phép năm tại thời điểm DUYỆT =====
