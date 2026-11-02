@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.80 (2026-11): Quản Lý Công Việc — xóa công việc Chưa bắt đầu (C3) + thu hẹp dropdown người phụ trách DMĐT (B2)
+
+Tiếp nối v28.79, 2 mục tiếp theo trong file QA test module Vận Hành:
+
+- **Thực hiện > Quản Lý Công Việc (C3)**: thêm nút "🗑️ Xoá" cho công việc còn ở trạng thái "Chưa bắt
+  đầu". `deleteOperationWorkItem()` (lib/recordActions.js) chặn cứng nếu công việc đã bắt đầu/đã nghiệm
+  thu, hoặc nếu bất kỳ công việc con nào trong nhánh đã bắt đầu/đã nghiệm thu — xoá cả nhánh chỉ khi
+  TOÀN BỘ nhánh còn "Chưa bắt đầu". Giữ nguyên gate quyền quản lý hồ sơ hiện có.
+- **Danh Mục Đầu Tư (B2)**: `renderPeopleMultiSelect()` (core.js) thêm tham số tùy chọn thứ 6
+  `dropdownSizeClass` — mặc định giữ nguyên hành vi cũ (`max-h-40 overflow-y-auto w-full`). Chỉ picker
+  người phụ trách ở bảng Danh Mục Đầu Tư truyền class thu hẹp mới (`max-h-24 overflow-y-auto w-64`) để
+  dropdown gợi ý không che mất bảng — 12 picker khác trong hệ thống (Quản Lý Công Việc, Ma Trận Phân
+  Quyền, Chuyển Tiếp Xin Ý Kiến, duyệt ngân sách/IT-tier...) không đổi.
+
+Phát hiện phụ trong lúc rà soát C3 (không phải lỗi của C3, mà là 1 lỗ hổng test-coverage từ đợt v28.79
+trước): `test-operation-store-report-overview.js` đọc nhầm `innerText` của dòng chi tiết đang
+`display:none` (do Báo Cáo Tổng Quan gom nhóm D1 thêm) — đã sửa lại hàm đọc DOM của test để gọi
+`expandAllOperationReportGroups()` trước khi đọc, xác nhận lại logic lọc/xuất Excel chưa từng sai cho
+người dùng thật, chỉ có giả định DOM của test là lỗi thời.
+
+Test: viết mới `test-operation-workitem-delete-c3.js` (20/20) + `test-people-multiselect-dropdown-scope-b2.js`
+(10/10). Chạy lại toàn bộ test hiện có chạm tới `operationWorkItems` (17 file) và
+`renderPeopleMultiSelect`/DMĐT (21 file) — tất cả pass, không regression. CSP self-check sạch (không
+inline `onclick=`/`style=`, không `eval`/`javascript:`). 1 agent kiểm toán độc lập đã rà lại riêng C3
+(quyền quản lý hồ sơ, race condition khi xoá đồng thời) và xác nhận an toàn để merge.
+
+Không cần thao tác deploy nào ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm biến
+môi trường, không thêm dependency.
 
 ## v28.79 (2026-11): DMĐT tải file đính kèm + modal Quản Lý Công Việc kéo-thả + Báo Cáo Tổng Quan gom nhóm
 
