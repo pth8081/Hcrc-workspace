@@ -1,9 +1,24 @@
 # Phiên bản hiện tại
 
-**28.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.79 (2026-11): DMĐT tải file đính kèm + modal Quản Lý Công Việc kéo-thả + Báo Cáo Tổng Quan gom nhóm
+
+Tiếp nối v28.78 (Sửa Chữa), 3 mục tiếp theo trong file QA test (demo ảnh trước/sau đã gửi người dùng
+xác nhận trước khi merge):
+
+- **Danh Mục Đầu Tư**: thêm nút "⬇️ Tải" cạnh tệp đính kèm (quyền tải đã có sẵn, chỉ thiếu điểm bấm).
+- **Thực hiện > Quản Lý Công Việc**: modal "Thêm Công Việc Gốc" nay di dời tự do được (kéo-thả) — thêm
+  hàm dùng chung `makeModalDraggable()` (core.js), chỉ áp dụng cho đúng 1 modal này, reset vị trí mỗi
+  lần mở lại.
+- **Báo cáo > Tổng Quan Toàn Bộ Công Việc**: gom theo mã hồ sơ, mặc định đóng (chỉ 1 dòng tổng quan +
+  số liệu tiến độ), bấm vào mới xổ ra công việc con + 2 nút Mở Hết/Đóng Hết. Giữ nguyên Xuất Excel
+  (vẫn phẳng từng công việc 1 dòng, không đổi).
+- Test mới 14/14 pass + sửa 1 test cũ do đổi cấu trúc cột bảng (hệ quả tất yếu của việc gom nhóm) +
+  chạy lại test liên quan — không hồi quy. CSP self-check sạch.
 
 ## v28.78 (2026-11): Sửa Chữa (Vận Hành) — upload nhiều file, Hủy đề xuất, Sửa đề xuất, tải file đính kèm
 
