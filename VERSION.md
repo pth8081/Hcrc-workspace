@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.77 (2026-11): Kiểm tra sâu v28.76 theo yêu cầu người dùng + 2 fix phát hiện thêm
+
+Người dùng yêu cầu rõ: *"Đây là cũng là cái mà ảnh hưởng nhiều ấy, thì tôi cũng yêu cầu là test thật kỹ,
+cho nhiều agent test thật kỹ, sau khi ko lỗi mơi merge vào main nhé"* — vì v28.76 đụng vào 3 file CHUNG
+(`core.js`, `module-itsupport-price.js`, `module-internalcomms-daotao-viewer.js`) dùng bởi rất nhiều
+module khác. Đã rà soát sâu SAU KHI v28.76 đã merge (gồm: chạy mẫu 76 file test trải rộng khắp các module
+KHÔNG liên quan trực tiếp — Nhân Sự/Hệ Thống/Văn Bản/Công Việc/Xe/Phòng Họp/VPP/Ngân Sách/Báo Cáo/Tài
+Liệu/Vận Hành/Mua Hàng/IT/Đào Tạo — 74/76 pass, 2 fail xác nhận là lỗi CŨ có sẵn từ trước v28.76, không
+liên quan; audit toàn bộ 9 module đang dùng chung modal xem Excel + stress-test bằng file `.xlsx` thật
+với nhiều ca khó — số âm, số 0%, text lẫn vào cột số, công thức, ô gộp, ô rỗng, số rất lớn, 30 cột trộn
+định dạng; audit toàn bộ 7 nơi dùng chung `buildApprovalSlipShellHTML()`/`APPROVAL_SLIP_CSS` — xác nhận
+bằng so sánh chuỗi HTML trực tiếp rằng chỉ đúng 1 phiếu (Giá Bán Buôn) có class `as-landscape`, 6 phiếu
+còn lại (Xe/Hợp Đồng/Văn Bản Trình/Đơn Hàng/Đăng Ký VPP/Đề Xuất Văn Phòng) giữ nguyên y hệt). Phát hiện
+và vá thêm 2 vấn đề qua đợt rà soát này:
+
+- **Ô ngày tháng trong modal xem Excel chung** (`renderExcelProtected()`, `module-internalcomms-daotao-
+  viewer.js`): trường hợp `cell.numFmt` không khớp đúng mẫu ngày, ô sẽ rơi xuống hiện chuỗi
+  `Date.toString()` dài/xấu kiểu "Sat Nov 07 2026 00:00:00 GMT+0000..." — tệ hơn cả hành vi CŨ (trước
+  v28.76, mọi ô ngày đều hiện rỗng). Nay format MỌI giá trị `Date` thành `dd/mm/yyyy` không điều kiện,
+  không còn khả năng rơi xuống nhánh xấu đó nữa.
+- **CSS khổ in ngang thiếu đồng bộ ở `public/app.css`**: `APPROVAL_SLIP_CSS` tồn tại 2 bản song song theo
+  thiết kế có sẵn từ trước (bản trong `core.js` phục vụ "⬇️ Tải Phiếu" độc lập; bản tĩnh `app.css` phục vụ
+  "👁️ Xem"/"🖨️ In" NGAY TRONG app, vì CSP chặn `<style>` nhúng inline ở đó). v28.76 chỉ thêm khối CSS
+  `as-landscape` vào bản `core.js`, thiếu đồng bộ sang `app.css` — nên fix (c) (in khổ ngang) chỉ có hiệu
+  lực khi TẢI phiếu về máy, KHÔNG có hiệu lực khi bấm "🖨️ In" trực tiếp trong app. Đã thêm đúng khối CSS
+  tương ứng vào `app.css`, xác nhận khớp y hệt bản `core.js`.
+
+Cả 2 fix đều test lại đầy đủ (bộ test riêng 17/17 pass + CSP self-check sạch) trước khi merge.
 
 ## v28.76 (2026-11): Phê Duyệt Giá Bán Buôn — 4 fix phiếu/định dạng hiển thị (theo ảnh người dùng gửi)
 
