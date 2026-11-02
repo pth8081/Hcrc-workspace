@@ -7620,7 +7620,14 @@ const APPROVAL_EMAIL_EVENTS = [
   ] },
   { configModule: 'OFFICE', label: '🛒 Văn Phòng (Mua / Sửa Chữa / Đầu Tư)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
-    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] },
+    // paymentApprovalNeeded (11/2026, phát hiện khi rà soát toàn hệ thống "người phê duyệt không nhận
+    // được email" — Đề Nghị Thanh Toán (sub-tab Thanh Toán, cùng configModule OFFICE vì dùng chung
+    // tab 'office' + APPROVAL_EMAIL_RECORD_OPENER.OFFICE đã có sẵn dbKeys paymentRequests) TRƯỚC ĐÂY
+    // CHƯA TỪNG gửi email "Cần phê duyệt" ở bất kỳ điểm nào dù có quy trình duyệt theo bước/phòng ban
+    // riêng (paymentDeptWorkflows) — tách actionType/checkbox RIÊNG khỏi "approvalNeeded" (officeReqs)
+    // ở trên để tắt/mở độc lập, không gộp chung 1 công tắc với Mua/Sửa Chữa/Đầu Tư.
+    { key: 'paymentApprovalNeeded', label: 'Cần phê duyệt (Đề Nghị Thanh Toán)', defaultOn: false, actionTypes: ['NOTIFY_PAYMENT_APPROVAL_NEEDED'] }
   ] },
   { configModule: 'MEETING', label: '📅 Phòng Họp', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
@@ -7884,6 +7891,10 @@ const EMAIL_STATUS_THEME = {
 // DEFAULT_EMAIL_META, vẫn được bọc khung chuyên nghiệp đầy đủ, chỉ khác màu/nhãn trung tính.
 const ACTION_TYPE_EMAIL_META = {
   NOTIFY_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Cần phê duyệt' },
+  // NOTIFY_PAYMENT_APPROVAL_NEEDED (11/2026 — xem notifyPaymentApprovalNeeded() ở module-thanhtoan.js):
+  // cùng badge "Cần phê duyệt" như trên, chỉ tách actionType riêng để có checkbox tắt/mở ĐỘC LẬP ở Quản
+  // Trị > "🔔 Thông Báo Email Phê Duyệt" (xem APPROVAL_EMAIL_EVENTS.OFFICE.paymentApprovalNeeded).
+  NOTIFY_PAYMENT_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Cần phê duyệt' },
   NOTIFY_APPROVED: { status: 'success', badge: '✅ Đã duyệt' },
   NOTIFY_REJECTED: { status: 'danger', badge: '❌ Từ chối' },
   NOTIFY_REQUEST_CHANGES: { status: 'warning', badge: '✏️ Yêu cầu bổ sung' },

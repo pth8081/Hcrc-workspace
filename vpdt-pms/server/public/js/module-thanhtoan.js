@@ -612,6 +612,28 @@ async function savePaymentManageDraft(id) {
   renderPaymentManageTab();
 }
 
+// notifyPaymentApprovalNeeded() — gửi email "Cần phê duyệt" cho đúng người duyệt BƯỚC hiện tại của 1 đề
+// nghị thanh toán (11/2026, phát hiện khi rà soát toàn hệ thống "người phê duyệt không nhận được email"
+// — Đề Nghị Thanh Toán TRƯỚC ĐÂY CHƯA TỪNG gửi email này ở bất kỳ điểm nào dù đã có quy trình duyệt theo
+// bước/phòng ban riêng từ lâu, paymentDeptWorkflows). Dùng module 'OFFICE' (TÁI DÙNG đúng hạ tầng link/mở
+// hồ sơ + opt-out cá nhân đã có sẵn cho paymentRequests — xem APPROVAL_EMAIL_RECORD_OPENER.OFFICE ở
+// core.js, dbKeys đã có 'paymentRequests' từ trước) nhưng actionType RIÊNG
+// 'NOTIFY_PAYMENT_APPROVAL_NEEDED' (khác hẳn 'NOTIFY_APPROVAL_NEEDED' của officeReqs) để có checkbox
+// tắt/mở ĐỘC LẬP ở Quản Trị > "🔔 Thông Báo Email Phê Duyệt" — xem
+// APPROVAL_EMAIL_EVENTS.OFFICE.paymentApprovalNeeded (core.js). paymentRequests KHÔNG có field `code`
+// (chỉ có id) — dùng String(pr.id) làm targetCode, khớp đúng nhánh fallback-theo-id đã có sẵn ở
+// openLinkedApprovalRecordByCode().
+function notifyPaymentApprovalNeeded(pr, approvers, stepName) {
+  if (!approvers || !approvers.length) return;
+  notifyUsersByEmail('OFFICE', 'NOTIFY_PAYMENT_APPROVAL_NEEDED', String(pr.id), approvers,
+    `[VPDT] Đề nghị thanh toán "${pr.title}" cần bạn phê duyệt`,
+    buildApprovalNeededEmailBody({
+      ticketType: 'Đề Nghị Thanh Toán', ticketNumber: String(pr.id), summary: pr.title,
+      creatorName: pr.submittedByName, creatorDept: pr.dept, createdAt: pr.submittedAt,
+      stepName: stepName || 'Bước 1'
+    }));
+}
+
 // "📨 Chuyển Xác Nhận Thanh Toán" (DRAFT -> PENDING) — kiểm tra CLIENT trước (mirror đúng luật server:
 // mọi đợt phải có số tiền > 0) để báo lỗi rõ ràng NGAY, không cần round-trip; server (submitPaymentRequest(),
 // lib/recordActions.js) vẫn tự kiểm tra lại 400 nếu có ai bỏ qua bước này (DevTools/API trực tiếp).
@@ -663,6 +685,10 @@ function submitPaymentRequestAction(id) {
       const idx = DB.paymentRequests.findIndex(x => x.id === id);
       if (idx !== -1) DB.paymentRequests[idx] = updated;
       logSystemAction('OFFICE', 'SUBMIT_PAYMENT_REQUEST', `Chuyển xác nhận thanh toán đề nghị [${updated.title}]`, 'SUCCESS', String(updated.id));
+      // Gửi đi là LUÔN bắt đầu lại từ Bước 1 (submitPaymentRequest() luôn set currentStep=1, history=[])
+      // — xem notifyPaymentApprovalNeeded() ở trên.
+      const wfAfterSubmit = resolvePaymentApprovalWorkflow(updated);
+      notifyPaymentApprovalNeeded(updated, wfAfterSubmit.approvers?.[1] || [], wfAfterSubmit.steps?.[0]?.name);
       alert('✅ Đã gửi đề nghị thanh toán đi duyệt theo phòng ban!');
       managePaymentExpandedId = null;
       renderPaymentManageTab();
@@ -923,7 +949,10 @@ function approvePaymentRequestAction(id) {
         if (activeContractSubTab) renderContracts();
         if (activeOfficeSubTab && activeOfficeSubTab !== 'PAYMENT') renderOfficeReqs();
       }
-      else if (transition.type === 'ADVANCED') msg = getStepAdvanceMessage(transition.stepApprovers);
+      else if (transition.type === 'ADVANCED') {
+        msg = getStepAdvanceMessage(transition.stepApprovers);
+        notifyPaymentApprovalNeeded(updated, transition.nextApprovers, transition.nextStepName);
+      }
       else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
       alert(msg);
       renderPaymentRequests();

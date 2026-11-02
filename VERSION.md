@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**28.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.65 (2026-11): Thêm email "Cần phê duyệt" cho Đề Nghị Thanh Toán (trước đây CHƯA TỪNG có)
+
+Theo yêu cầu người dùng ("Bạn xem giúp mình ở tất cả các module sao người phê duyệt đang không nhận
+được email khi họ có phê duyệt nhỉ? Nếu là bug bạn xử lý luôn nhé"): rà soát toàn bộ cơ chế email
+"Cần phê duyệt" (~15 module) và xác nhận với người dùng đây **KHÔNG phải bug** — family "Cần phê duyệt"
+mặc định TẮT cho MỌI module từ khi tính năng "🔔 Thông Báo Email Phê Duyệt" ra mắt (10/2026, tránh trùng
+lặp/spam với Hub Phê Duyệt), admin tự bật lại module nào mình muốn ở Quản Trị → "🔔 Thông Báo Email Phê
+Duyệt". Người dùng xác nhận tự bật lại các module hiện có, chỉ yêu cầu rà soát xem module nào CHƯA CÓ
+checkbox để bật.
+
+Rà soát phát hiện 1 gap thật (khác biệt với lỗi cấu hình trên): **Đề Nghị Thanh Toán** (`paymentRequests`,
+sub-tab "💵 Thanh Toán" trong Văn Phòng) có quy trình duyệt theo bước/phòng ban riêng
+(`paymentDeptWorkflows`) từ lâu nhưng **CHƯA TỪNG gửi email "Cần phê duyệt" ở bất kỳ điểm nào** (khác
+`officeReqs` cùng module đã có từ trước) — đã bổ sung thật trong bản này:
+
+- `notifyPaymentApprovalNeeded()` (`module-thanhtoan.js`) — gửi email cho đúng người duyệt BƯỚC hiện
+  tại, gọi ở 2 điểm: "📨 Chuyển Xác Nhận Thanh Toán" (DRAFT→PENDING, Bước 1) và sau khi Duyệt mà quy
+  trình còn chuyển tiếp bước (ADVANCED, dùng đúng `transition.nextApprovers`/`nextStepName` server trả
+  về).
+- Dùng module `'OFFICE'` (TÁI DÙNG hạ tầng link "🔗 Xem trực tiếp hồ sơ" + mở hồ sơ + opt-out cá nhân đã
+  có sẵn cho `paymentRequests` từ trước) nhưng actionType RIÊNG `NOTIFY_PAYMENT_APPROVAL_NEEDED` — có
+  checkbox ĐỘC LẬP "Cần phê duyệt (Đề Nghị Thanh Toán)" ở Quản Trị → "🔔 Thông Báo Email Phê Duyệt",
+  tách khỏi checkbox "Cần phê duyệt" hiện có của Mua/Sửa Chữa/Đầu Tư (officeReqs).
+- `paymentRequests` không có field `code` — dùng `id` làm mã tham chiếu trong email/link (khớp đúng
+  nhánh fallback-theo-id đã có sẵn ở `openLinkedApprovalRecordByCode()`).
+
+Test mới: `test-payment-approval-needed-email.js` (6 kịch bản — gửi đúng Bước 1 lúc submit, gửi đúng
+Bước 2 lúc Duyệt-chuyển-tiếp lấy từ `transition.nextApprovers`, KHÔNG gửi gì khi quy trình đã hoàn tất).
+Chạy lại toàn bộ 7 bộ test liên quan Thanh Toán + `test-approval-email-config.js` (85 kịch bản, màn admin
+cấu hình) + `test-notify-email-modules.js` + `test-perm-matrix-client.js` đều pass, không regression
+(1 lỗi FAIL tiền tồn ở `test-contract-payment-type-change.js` xác nhận đã có TRƯỚC thay đổi này, không
+liên quan).
 
 ## v28.64 (2026-11): Tên file tải về (Phê Duyệt Giá Bán Lẻ/Bán Buôn) cộng thêm mã phiếu đằng trước
 

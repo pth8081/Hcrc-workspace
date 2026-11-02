@@ -481,7 +481,9 @@ const DEFAULTS = {
     // LICENSE: KHÔNG có "result" — Duyệt/Từ chối Giấy Phép hiện không gửi email ở bất kỳ điểm nào.
     LICENSE: { approvalNeeded: false },
     BUDGET: { approvalNeeded: false, result: true },
-    OFFICE: { approvalNeeded: false, result: true },
+    // paymentApprovalNeeded (11/2026): xem chú thích đầy đủ tại APPROVAL_EMAIL_EVENTS.OFFICE (core.js) —
+    // checkbox RIÊNG cho Đề Nghị Thanh Toán, tách khỏi "approvalNeeded" (officeReqs).
+    OFFICE: { approvalNeeded: false, result: true, paymentApprovalNeeded: false },
     MEETING: { approvalNeeded: false, result: true },
     VPP: { approvalNeeded: false, result: true },
     SUBMISSION: {

@@ -6854,6 +6854,15 @@ Lưu, hệ thống **fail-open** — email vẫn gửi như hành vi gốc; ch�
 lưu rõ ràng giá trị tắt thì email mới thực sự bị chặn (vẫn ghi đầy đủ 1 dòng
 Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
 
+**"Cần phê duyệt (Đề Nghị Thanh Toán)" — ô riêng (11/2026)**: nằm cùng dòng
+🛒 Văn Phòng nhưng là ô **ĐỘC LẬP** với "Cần phê duyệt" của Mua/Sửa Chữa/Đầu Tư
+(`officeReqs`) — bật/tắt ô này KHÔNG ảnh hưởng ô kia. Lý do tách riêng: Đề
+Nghị Thanh Toán có quy trình duyệt theo bước/phòng ban khác (`paymentDeptWorkflows`)
+và trước bản 11/2026 **CHƯA TỪNG gửi email "Cần phê duyệt" ở bất kỳ điểm nào**
+dù đã có quy trình duyệt từ lâu — nay đã bổ sung đủ cả lúc "📨 Chuyển Xác Nhận
+Thanh Toán" (gửi người duyệt Bước 1) và mỗi lần Duyệt mà quy trình còn chuyển
+tiếp bước (gửi đúng người duyệt bước kế tiếp).
+
 **Mẫu nội dung email "Cần phê duyệt" — DÙNG CHUNG cho TOÀN BỘ ~13 module có
 phê duyệt (11/2026, theo yêu cầu người dùng)**: mọi email `approvalNeeded`
 (Đăng Ký Xe/Tài Liệu/Giấy Phép/Văn Phòng/Văn Phòng Phẩm/Văn Bản Trình/Hợp
