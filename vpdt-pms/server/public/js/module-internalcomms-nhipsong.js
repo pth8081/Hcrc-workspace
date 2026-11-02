@@ -1239,6 +1239,22 @@ function unpinRecruitmentJobUi(id, evt) {
   }).catch(err => alert(`⛔ ${err.message}`));
 }
 
+// Click 1 tin "🔥 Tin ưu tiên" từ khối "📣 Tin Tức Nổi Bật" ở Trang Chủ (core-dashboard.js,
+// renderDashboardNews() — 11/2026, yêu cầu người dùng "tin ưu tiên mặc định hiển thị ở trang chủ") —
+// tin tuyển dụng không có modal chi tiết riêng như internalPosts (card hiện thẳng trong danh sách), nên
+// điều hướng sang đúng tab con "Tuyển Dụng" > "Tin Đăng" thay vì mở modal, tự mở rộng Mô tả/Yêu cầu +
+// cuộn tới đúng thẻ tin đó.
+async function openRecruitmentJobFromDashboard(id) {
+  const jobId = Number(id);
+  expandedRecruitmentJobs.add(jobId);
+  await switchTab('internal');
+  activeRecruitmentTab = 'JOBS';
+  setInternalSubTab('RECRUITMENT');
+  requestAnimationFrame(() => {
+    document.querySelector(`#recruitmentJobsContainer .rj-card[data-job-id="${jobId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
 function onRecruitmentJobsFilterChange() {
   resetListPage('recruitmentJobs');
   renderRecruitmentJobs();

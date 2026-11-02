@@ -236,7 +236,20 @@ function renderDashboardNews() {
   const isActivePinned = p => p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > now;
   const pinnedPosts = visiblePosts.filter(isActivePinned).sort((a, b) => new Date(b.pinExpiresAt) - new Date(a.pinExpiresAt));
   const otherPosts = visiblePosts.filter(p => !isActivePinned(p)).sort((a, b) => b.id - a.id);
-  const posts = [...pinnedPosts, ...otherPosts].slice(0, 6);
+  // "Tin ưu tiên" (tuyển dụng) hiện mặc định ở đây (11/2026, yêu cầu người dùng: "các tin ưu tiên sẽ
+  // được mặc định hiển thị ở trang chủ trong phần tin tức nổi bật khi người dùng đăng nhập vào là sẽ
+  // thấy") — trước đây CHỈ nổi lên đầu danh sách NGAY TRONG tab Tuyển Dụng (isRecruitmentJobPriority(),
+  // module-internalcomms-nhipsong.js — "pinned && status OPEN"), KHÔNG lộ ra Trang Chủ. Mirror NGUYÊN
+  // VĂN điều kiện đó tại đây (không gọi hàm của module-internalcomms-nhipsong.js vì đó là cụm script tải
+  // lười RIÊNG, có thể CHƯA được nạp lúc Dashboard render — DB.recruitmentJobs thì luôn có sẵn, tải cùng
+  // initDatabase() không phụ thuộc module JS nào). Cùng gate module "internal" như internalPosts ở trên
+  // (canAccessInternalModule() đã chặn sớm đầu hàm) nên không lộ thêm dữ liệu ngoài phạm vi đã cho xem.
+  // Xếp TRƯỚC CẢ bài ghim Nhịp Sống (ưu tiên tuyển dụng là tín hiệu "cần tuyển gấp", đẩy MỚI NHẤT trước).
+  const priorityJobs = (DB.recruitmentJobs || [])
+    .filter(j => j && j.pinned && j.status === 'OPEN')
+    .sort((a, b) => (new Date(b.pinnedAt).getTime() || 0) - (new Date(a.pinnedAt).getTime() || 0))
+    .map(j => Object.assign({ __kind: 'recruitmentJob' }, j));
+  const posts = [...priorityJobs, ...pinnedPosts, ...otherPosts].slice(0, 6);
 
   section.classList.remove('hidden');
   const container = document.getElementById('dashboardNewsContainer');
@@ -283,6 +296,26 @@ function renderDashboardNews() {
   // đúng bài đó, KHÔNG còn làm hỏng/để trống nguyên khung tin.
   container.innerHTML = posts.map(p => {
     try {
+      // Tin tuyển dụng ưu tiên dùng khung riêng (field khác hẳn internalPosts: bannerUrl/title/hiringDept,
+      // không có author/nội dung bài viết) — click điều hướng sang tab "Tuyển Dụng" (không có modal chi
+      // tiết riêng như internalPosts) qua openRecruitmentJobFromDashboard() (module-internalcomms-nhipsong.js).
+      if (p.__kind === 'recruitmentJob') {
+        const thumbSizeClasses = 'w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24';
+        const thumbHTML = p.bannerUrl
+          ? `<img src="${escapeHtml(p.bannerUrl)}" alt="${escapeHtml(p.title || '')}" loading="lazy" class="dash-news-thumb ${thumbSizeClasses} rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
+          : `<div class="dash-news-thumb dash-news-thumb-placeholder ${thumbSizeClasses} rounded border border-gray-200 bg-gray-100 text-gray-400 text-2xl sm:text-3xl flex items-center justify-center flex-shrink-0" aria-hidden="true">💼</div>`;
+        const addressText = [p.location, p.hiringDept].filter(Boolean).join(' — ');
+        return `
+      <div data-op="openRecruitmentJobFromDashboard" data-arg0="${Number(p.id)}" class="dash-news-card group relative flex gap-3 bg-white rounded border border-amber-300 ring-1 ring-amber-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-amber-50">
+        ${thumbHTML}
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] font-bold text-red-700">🔥 Tin ưu tiên — Tuyển dụng</div>
+          <div class="font-bold text-gray-800 text-sm break-words">${escapeHtml(p.title)}</div>
+          <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(addressText || 'Chưa rõ địa chỉ')}</div>
+        </div>
+        <span class="dash-news-more absolute bottom-1.5 right-3 text-xs font-semibold text-amber-700 group-hover:underline">Xem thêm →</span>
+      </div>`;
+      }
       const cover = getInternalPostCoverImage(p);
       const thumbSizeClasses = 'w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24';
       const thumbHTML = cover

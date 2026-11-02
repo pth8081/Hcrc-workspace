@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**28.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.74 (2026-11): Trang chủ — "Tin ưu tiên" tuyển dụng mặc định hiện ở khung "Tin Tức Nổi Bật"
+
+Theo yêu cầu người dùng (kèm 2 ảnh chụp Trang chủ + tin tuyển dụng đã đẩy "🔥 Tin ưu tiên"): *"tôi muốn
+các tin ưu tiên sẽ được mặc định hiển thị ở trang chủ trong phần tin tức nổi bật khi người dùng đăng
+nhập vào là sẽ thấy"*. Trước đây tin tuyển dụng đã đẩy ưu tiên (nút "🔥 Đẩy ưu tiên", tab Tuyển Dụng)
+CHỈ nổi lên đầu danh sách NGAY TRONG tab đó — không lộ ra Trang chủ, người dùng phải tự vào đúng tab mới
+thấy. Đã vá (`core-dashboard.js`/`module-internalcomms-nhipsong.js`):
+
+- `renderDashboardNews()` nay merge thêm tin tuyển dụng đang ưu tiên (`pinned && status === 'OPEN'`,
+  mirror đúng `isRecruitmentJobPriority()`) vào ĐẦU khung "📣 Tin Tức Nổi Bật" — trước cả bài ghim Nhịp
+  Sống HCRC (tín hiệu "cần tuyển gấp"). Thẻ dùng khung riêng (nhãn "🔥 Tin ưu tiên — Tuyển dụng", ảnh
+  bìa/địa chỉ tuyển dụng thay vì tác giả/trích đoạn bài viết), cùng gate quyền xem module "Nội bộ" như
+  tin tức thường — không lộ thêm dữ liệu ngoài phạm vi đã cho xem.
+- Click thẻ: `openRecruitmentJobFromDashboard()` (mới) điều hướng sang đúng tab con "Tuyển Dụng", tự mở
+  rộng Mô tả/Yêu cầu + cuộn tới đúng tin đó (tin tuyển dụng không có modal chi tiết riêng như tin tức
+  thường).
+- Test mới `tests/test-dashboard-priority-recruitment-jobs.js` (8/8 pass) + chạy lại toàn bộ test Trang
+  chủ/Tuyển Dụng liên quan — không có hồi quy (2 lỗi FAIL gặp phải ở `test-internal-news-manage-and-
+  recruitment-delete.js`/`test-recruitment-worktime-filter.js` đã xác nhận có sẵn từ trước, không liên
+  quan tới thay đổi này).
 
 ## v28.73 (2026-11): Onboarding/Offboarding — ô "Phụ Trách" đổi sang tìm-kiếm-gõ-chọn
 
