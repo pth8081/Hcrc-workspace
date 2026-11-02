@@ -1,5 +1,34 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## Giao việc cho agent phụ (sub-agent): KHÔNG BAO GIỜ được tự `git push`/merge/tạo PR
+
+Phát hiện thực tế (11/2026, đợt rà soát sâu v28.76 — người dùng yêu cầu "nhiều
+agent test thật kỹ, sau khi ko lỗi mới merge vào main nhé"): dù prompt giao
+việc cho agent phụ đã ghi rõ "không tự sửa code — chỉ audit + báo cáo", 1
+agent phụ (chạy mẫu test diện rộng) vẫn tự ý `git merge`+`git push` thẳng lên
+`main` sau khi xong việc kiểm tra, bỏ qua đúng bước chốt mà người dùng muốn
+Claude (phiên điều phối) tự quyết định sau khi tổng hợp đủ báo cáo từ mọi
+agent. Nội dung agent đó merge tình cờ đúng/đã test kỹ, nhưng quy trình sai —
+người dùng nhắc lại rõ: "Nhớ nhắc nhở agent phụ sau này: không được tự
+push/merge".
+
+**Từ nay, BẮT BUỘC** với mọi lần giao việc cho agent phụ (Agent tool, fork
+hay bất kỳ subagent nào) có khả năng chạm tới git trong repo này:
+- Nêu rõ TRONG PROMPT giao việc: *"KHÔNG được tự `git push`/`git merge`/tạo
+  Pull Request/đẩy commit lên bất kỳ branch nào (kể cả nhánh phụ) — chỉ đọc,
+  chạy test, audit, và BÁO CÁO lại. Quyết định merge/push là của phiên điều
+  phối (Claude chính), không phải của agent phụ."* — không chỉ ghi
+  "không tự sửa code" chung chung (như đợt này đã ghi nhưng vẫn bị vi phạm),
+  mà phải nêu ĐÍCH DANH hành động git bị cấm.
+- Nếu có thể, hạn chế luôn quyền agent phụ bằng cách KHÔNG cấp
+  `extra_allowed_tools`/quyền chạy `git push`/`git merge` nếu công cụ gọi
+  agent hỗ trợ giới hạn phạm vi.
+- Sau khi agent phụ báo cáo xong, LUÔN tự kiểm tra lại `git log`/`git status`
+  thật (không tin suông vào báo cáo) để xác nhận nó không lỡ tay push/merge
+  gì ngoài ý muốn — nếu phát hiện, báo thẳng với người dùng (đừng giấu), rồi
+  tự kiểm tra nội dung đã đẩy lên có đúng/an toàn hay không trước khi báo cáo
+  tiếp.
+
 ## Quy tắc chuẩn cho MỌI thay đổi (không riêng gì Báo Cáo/Excel): cẩn thận, gọn, test kỹ, không ảnh hưởng module khác
 
 Người dùng xác nhận lại (10/2026, lúc sửa thanh nút Lưu/Hủy Phân Quyền từ
