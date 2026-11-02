@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**28.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.64 (2026-11): Tên file tải về (Phê Duyệt Giá Bán Lẻ/Bán Buôn) cộng thêm mã phiếu đằng trước
+
+Theo yêu cầu người dùng ("team IT muốn tên file tải về cộng thêm mã phiếu đằng trước, để sau này đối
+chiếu lại"): cả 3 điểm tải file của module Phê Duyệt Giá (`module-itsupport-price.js`, dùng chung cho cả
+Bán Lẻ lẫn Bán Buôn — khác nhau qua `priceType`, cùng 1 modal chi tiết) nay cộng `"<mã phiếu> - "` đằng
+trước tên file khi TẢI VỀ — chỉ đổi tên lúc tải, không đụng tới tên file gốc lưu trong CSDL/hiển thị ở
+tiêu đề:
+
+- **"⬇️ Tải file gốc"** (file chính của đề xuất, cả khi còn PENDING-đang-chờ-người-duyệt-bước-hiện-tại
+  lẫn khi đã APPROVED) — `module-itsupport-price.js`.
+- **"⬇️ Tải"** (Tài liệu bổ sung đính kèm, `extraFiles[]`) — cùng file.
+- **"⬇️ Tải file đã đánh dấu"** (`POST /api/it-price/:id/download-marked`, server tự tô màu cột đã chọn
+  rồi trả về file mới) — `routes/priceFile.js`, cộng `item.code` vào `Content-Disposition`.
+
+Test: 1 kịch bản mới ở `test-itprice-download.js` (xác nhận `Content-Disposition` chứa đúng mã phiếu cho
+route `download-marked`) + file test mới `test-itprice-download-filename-code.js` (3 kịch bản, dùng
+nguyên luồng tạo + duyệt THẬT qua Playwright để lấy mã phiếu SINH THẬT ở server, không hard-code giả —
+xác nhận link "Tải file gốc" cộng đúng mã phiếu ở cả 2 nhánh PENDING-đang-chờ-duyệt lẫn APPROVED). Chạy
+lại toàn bộ 10 bộ test liên quan tới module Phê Duyệt Giá + `test-csp-full-audit.js` (42 điểm điều
+hướng) đều pass, không regression.
 
 ## v28.63 (2026-11): Gộp "Cấu Hình API Đơn Hàng" + "Cấu Hình API Tồn Kho" thành 1 tab cha "Cấu Hình API Đối Tác"
 

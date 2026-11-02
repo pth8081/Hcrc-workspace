@@ -328,6 +328,35 @@ async function main() {
     fs.unlinkSync(filePath);
   });
 
+  // LỖI ĐÃ VÁ (11/2026, yêu cầu người dùng "team IT đối chiếu lại sau này biết file này cập nhật từ mã
+  // phiếu nào"): tên file TẢI VỀ (Content-Disposition) phải cộng thêm "mã phiếu" (item.code) đằng trước —
+  // trước đây chỉ có <tên file gốc>-danh-dau.xlsx, không có cách nào biết file này thuộc đề xuất nào nếu
+  // đã đổi tên/di chuyển khỏi hệ thống.
+  await run('[3] download-marked: tên file TẢI VỀ (Content-Disposition) cộng thêm mã phiếu đằng trước', async () => {
+    const fileName = `test-itprice-mark-code-${crypto.randomBytes(6).toString('hex')}.xlsx`;
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    fs.writeFileSync(filePath, await buildPriceXlsx());
+
+    ITEMS = [baseItem({
+      id: 13, code: 'ITP-0099', status: 'APPROVED', approvedFileId: 1300,
+      files: [{ id: 1300, fileUrl: `/uploads/${fileName}`, fileName, columnLabels: COLUMN_LABELS, items: [] }]
+    })];
+
+    CURRENT_USER = IT_MANAGER;
+    await withServer(app, async (base) => {
+      const res = await fetch(`${base}/api/it-price/13/download-marked`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columnKeys: ['name'] })
+      });
+      assert.strictEqual(res.status, 200, 'phải trả về 200 kèm file đã đánh dấu');
+      const cd = res.headers.get('content-disposition') || '';
+      assert.ok(cd.includes('ITP-0099'), `Content-Disposition phải chứa mã phiếu "ITP-0099" — nhận được: ${cd}`);
+      assert.ok(cd.includes(encodeURIComponent('ITP-0099 - ')), `tên file UTF-8 (filename*=) phải có dạng "ITP-0099 - <tên gốc>" — nhận được: ${cd}`);
+    });
+
+    fs.unlinkSync(filePath);
+  });
+
   // Tái hiện lỗi thật ngoài production: file .xlsx thật có 1 dòng trống/tiêu đề phụ phía TRÊN dòng tiêu đề
   // cột thật (VD dòng tên công ty/tiêu đề bảng để trống ở cột A) — dòng tiêu đề cột không nằm ở dòng 1 vật
   // lý. lib/priceFileParser.js (qua streamFirstSheetRows, includeEmpty:false) đã coi dòng KHÔNG-TRỐNG ĐẦU

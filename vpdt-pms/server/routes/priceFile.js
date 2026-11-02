@@ -295,8 +295,13 @@ router.post('/:id/download-marked', uploadRateLimiter, async (req, res) => {
     // ĐÚNG cách routes/download.js đã làm với downloadName — rà soát bảo mật trước golive (9/2026, mức
     // Thấp) phát hiện chỗ này thiếu bước sanitize dù cùng khuôn Content-Disposition. file.fileName gốc
     // do client tự đặt tên lúc tải file lên (originalname), không qua kiểm soát nào khác.
+    // Cộng "mã phiếu" (item.code) đằng trước tên file TẢI VỀ (11/2026, yêu cầu người dùng "team IT đối
+    // chiếu lại sau này biết file này cập nhật từ mã phiếu nào") — cùng quy ước với "Tải file gốc"/"Tải"
+    // (tài liệu bổ sung) ở module-itsupport-price.js, chỉ khác đây là route SERVER tự dựng tên (file
+    // không đi qua attachmentDownloadUrl()/routes/download.js).
+    const safeCode = String(item.code || '').replace(/[\r\n"]/g, '');
     const safeFileName = String(file.fileName || 'bang-gia').replace(/[\r\n"]/g, '');
-    const outName = `${safeFileName.replace(/\.xlsx?$/i, '')}-danh-dau.xlsx`;
+    const outName = `${safeCode ? safeCode + ' - ' : ''}${safeFileName.replace(/\.xlsx?$/i, '')}-danh-dau.xlsx`;
     const asciiFallback = outName.replace(/[^\x20-\x7E]/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(outName)}`);

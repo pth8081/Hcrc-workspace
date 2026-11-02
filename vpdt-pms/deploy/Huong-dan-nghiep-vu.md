@@ -1816,6 +1816,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     được cấp sẵn CẢ 2 quyền từ chối khẩn cấp mới — chạy đúng 1 lần, admin có
     thể vào cây phân quyền thu hẹp lại sau nếu muốn tách đúng theo vai trò
     thực tế của từng người.
+  - **Tên file tải về cộng thêm mã phiếu đằng trước (MỚI 11/2026)**: theo yêu
+    cầu đội Hỗ Trợ IT ("đối chiếu lại sau này biết file này cập nhật từ mã
+    phiếu nào") — cả 3 nút tải file của 1 hồ sơ Phê Duyệt Giá ("⬇️ Tải file
+    gốc", "⬇️ Tải" ở Tài liệu bổ sung, "⬇️ Tải file đã đánh dấu") nay tải về
+    với tên dạng `<mã phiếu> - <tên file gốc>` thay vì chỉ `<tên file gốc>`
+    như trước — CHỈ đổi tên lúc TẢI, không đụng tới tên file đã lưu/hiển thị
+    trong hệ thống. Áp dụng như nhau cho cả Bán Lẻ lẫn Bán Buôn (cùng 1 modal
+    chi tiết, không cần cấu hình gì thêm).
   - **"🏪 QT Giá Bán Buôn (Siêu Thị)" — người duyệt Phê Duyệt Giá Bán Buôn
     (10/2026, CÙNG CƠ CHẾ "🏬 Quy Trình Đặt Hàng Siêu Thị" ở mục 4.4 Vận Hành,
     xem đầy đủ cách khớp Chức danh/Người cụ thể/Siêu Thị Phụ Trách ở đó)**:

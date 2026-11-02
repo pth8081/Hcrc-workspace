@@ -1574,8 +1574,13 @@ function renderItPriceModal() {
     // tiếp file .xlsx gốc — KHÁC hẳn downloadLinkHTML (chỉ TẢI mới giới hạn, XEM thì không).
     const viewLinkHTML = ` · <button type="button" data-op="viewItPriceMainFile" data-arg0="${p.id}" data-arg1="${f.id}" data-arg-event="2" class="text-blue-600 hover:underline font-semibold">👁️ Xem</button>`;
     const canDownloadThisFile = isApprovedFile || (isLatest && canDownloadPendingFile);
+    // Tên file TẢI VỀ cộng thêm "mã phiếu" đằng trước (11/2026, yêu cầu người dùng "team IT đối chiếu lại
+    // sau này biết file này cập nhật từ mã phiếu nào") — chỉ đổi TÊN FILE lúc tải (tham số `name` của
+    // attachmentDownloadUrl()/routes/download.js), KHÔNG đụng tới f.fileName gốc lưu trong DB/hiển thị ở
+    // tiêu đề <summary> phía trên.
+    const downloadFileNameWithCode = `${p.code} - ${f.fileName}`;
     const downloadLinkHTML = canDownloadThisFile
-      ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
+      ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, downloadFileNameWithCode)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
       : ' · <span class="text-gray-400 italic">Chỉ file đã phê duyệt mới tải được</span>';
     // "Đánh dấu cột trước khi tải" (mục 4 kế hoạch) — CHỈ ở đúng file đã duyệt (route mới cũng tự chặn
     // lại y hệt điều kiện này ở server, xem routes/priceFile.js::POST /:id/download-marked).
@@ -1622,15 +1627,20 @@ function renderItPriceModal() {
   const extraFiles = p.extraFiles || [];
   if (extraFiles.length > 0) {
     extraFilesWrap.classList.remove('hidden');
-    document.getElementById('itPriceModalExtraFiles').innerHTML = extraFiles.map((ef, idx) => `
+    document.getElementById('itPriceModalExtraFiles').innerHTML = extraFiles.map((ef, idx) => {
+      // Cộng "mã phiếu" đằng trước tên file TẢI VỀ, cùng quy ước với "Tải file gốc" ở trên — nhãn hiển
+      // thị <span> phía trái giữ NGUYÊN tên file gốc, chỉ tên khi TẢI mới đổi.
+      const efDisplayName = `${p.code} - ${ef.fileName || `Tai-lieu-bo-sung-${idx + 1}`}`;
+      return `
       <div class="flex items-center justify-between gap-2 ${idx > 0 ? 'border-t pt-1.5 mt-1.5' : ''}">
         <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
         <div class="flex gap-1 shrink-0">
           <button type="button" data-op="viewItPriceExtraFile" data-arg0="${p.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
-          <a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${p.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${p.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>
+          <a href="${attachmentDownloadUrl(ef.fileUrl, null, efDisplayName)}" download="${escapeHtml(efDisplayName)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } else {
     extraFilesWrap.classList.add('hidden');
   }
