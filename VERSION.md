@@ -1,9 +1,33 @@
 # Phiên bản hiện tại
 
-**28.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.81 (2026-11): Quản Lý Công Việc — email cảnh báo gán phụ trách + đổi trạng thái (D2)
+
+Tiếp nối v28.80, mục D2 trong file QA test module Vận Hành:
+
+- **Thực hiện > Quản Lý Công Việc**: 2 sự kiện email mới, chốt phạm vi hẹp để tránh spam hộp thư:
+  - Gán phụ trách công việc (tạo mới hoặc sửa thêm người) -> báo NGƯỜI ĐƯỢC GÁN MỚI (không báo lại
+    người đã được gán từ trước khi chỉ sửa field khác).
+  - Đổi trạng thái CHỈ 2 mốc: "bắt đầu" (CHUA_BAT_DAU -> DANG_THUC_HIEN THẬT, không phải lượt lặp lại
+    ghi chú tiến độ) và "hoàn thành nghiệm thu" (ACCEPT -> DA_NGHIEM_THU, không phải yêu cầu bổ sung)
+    -> báo NGƯỜI KHỞI TẠO hồ sơ (ptcv), KHÔNG PHẢI admin hệ thống.
+  - Cả 2 trường hợp tự loại người thao tác khỏi người nhận (không tự báo cho chính mình).
+  - Tái dùng toàn bộ hạ tầng email dùng chung — thêm 2 mục "Công việc Thực hiện — Gán phụ trách"/"Đổi
+    trạng thái" vào khối "🏬 Vận Hành" ở Quản Trị > Thông Báo Email Phê Duyệt (admin tự tắt/mở được),
+    kèm link "🔗 Xem Chi Tiết" mở thẳng vào hồ sơ chứa công việc.
+
+Verify: test mới `test-operation-workitem-email-d2.js` (20/20) + 1 agent kiểm toán độc lập (quyền hạn,
+race condition, rò rỉ dữ liệu) xác nhận an toàn để merge — zero regression trên 160+ scenario liên quan
+đã chạy lại. Agent có nêu 1 race condition mức độ THẤP (2 phiên cùng sửa 1 công việc trong khung thời
+gian hẹp có thể gửi trùng 1 email — KHÔNG BAO GIỜ sai người nhận hay mất thông báo, chỉ trùng lặp vô
+hại) — ghi nhận làm theo dõi kỹ thuật sau, không chặn merge đợt này.
+
+Không cần thao tác deploy nào ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm biến
+môi trường, không thêm dependency.
 
 ## v28.80 (2026-11): Quản Lý Công Việc — xóa công việc Chưa bắt đầu (C3) + thu hẹp dropdown người phụ trách DMĐT (B2)
 
