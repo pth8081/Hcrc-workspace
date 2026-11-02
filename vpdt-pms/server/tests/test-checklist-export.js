@@ -302,6 +302,10 @@ async function main() {
       // Cột thứ 3 (index 2) là "Mẫu Checklist" (thêm ở đợt Dashboard VSATTP, commit 826023b) — dòng tổng
       // kết/cây tiêu chí đều lùi thêm 1 cột so với bản gốc v21.1, index bên dưới đã cập nhật theo đúng
       // layout hiện tại (xem addDeductionStoreSheet() ở lib/checklistReportExport.js).
+      // 11/2026 (theo yêu cầu người dùng, đồng bộ với việc bỏ "Mức độ rủi ro" + đổi "Ghi chú" -> "Kiến
+      // nghị" khỏi form làm bài VSATTP): cột "Mức Độ Rủi Ro" đã BỊ BỎ HẲN khỏi sheet (không chỉ để trống)
+      // — mọi index TỪ "Thời Hạn Hoàn Thành" trở đi lùi lên 1 so với bản gốc test này; cột cuối đổi tên
+      // "Ghi Chú" -> "Kiến Nghị" (vẫn đọc từ field d.note như cũ, chỉ đổi nhãn cột).
       assertEqual(summaryRow[8], 'Tổng điểm: 24/30 (80.0%)', 'Dòng tổng kết đầu mỗi bài phải đúng điểm/%.');
       const critRow = findRowTexts(sheet, 3);
       assertEqual(critRow[3], 'CHẤT LƯỢNG SẢN PHẨM', 'Cột Hạng Mục Lớn phải đúng');
@@ -310,9 +314,10 @@ async function main() {
       assertEqual(critRow[6], 30, 'Điểm Tối Đa phải dùng trần hạng mục lớn (hạng mục con để trống trần riêng)');
       assertEqual(critRow[7], 6, 'Điểm Trừ Thực Tế phải đúng deductedPoints đã nộp');
       assertEqual(critRow[8], 'Rách bao bì 3 sản phẩm', 'Mô tả nội dung không phù hợp phải đúng');
-      assertEqual(critRow[9], 'B', 'Mức độ rủi ro phải đúng');
-      assertEqual(critRow[10], '20/09/2026', 'Thời hạn hoàn thành phải đúng');
-      assertEqual(critRow[11], 'Đã nhắc nhở', 'Ghi chú phải đúng');
+      assertEqual(critRow[9], '20/09/2026', 'Thời hạn hoàn thành phải đúng (cột Mức Độ Rủi Ro đã bị bỏ, lùi lên 1)');
+      assertEqual(critRow[10], 'Đã nhắc nhở', 'Cột Kiến Nghị (trước là Ghi Chú) phải đúng giá trị note');
+      assertEqual(sheet.getRow(1).getCell(11).value, 'Kiến Nghị', 'Header cột cuối phải đổi tên thành "Kiến Nghị"');
+      assertEqual(sheet.columnCount, 11, 'Sheet DEDUCTION phải còn đúng 11 cột sau khi bỏ "Mức Độ Rủi Ro"');
     });
 
     await run.run('export-report: admin (không cần checklistReportView riêng) vẫn xuất được', async () => {

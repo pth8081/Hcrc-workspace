@@ -164,7 +164,11 @@ async function main() {
     // rồi gọi render + hàm cập nhật field, không gọi lưu nháp/nộp bài qua mạng) — luồng lưu/nộp bài DEDUCTION
     // ĐÃ được test đầy đủ qua HTTP THẬT ở tests/test-checklist.js ("Finalize DEDUCTION: nộp bài KHÔNG cần ảnh
     // minh chứng").
-    await run.run('renderChecklistSubmissionForm() dựng đúng form làm bài DEDUCTION (cây hạng mục/tiêu chí) + cập nhật deductedPoints/riskLevel qua DOM thật', async () => {
+    // 11/2026 (theo yêu cầu người dùng): ô chọn "Mức độ rủi ro" (A/B/C) đã BỊ BỎ HẲN khỏi form làm bài
+    // DEDUCTION (xem renderChecklistDeductionSubmissionForm(), module-checklist.js) — thay bằng kiểm tra
+    // ô "Kiến nghị" (trước là "Ghi chú", nay là <textarea> thay vì <input> 1 dòng) để vẫn giữ nguyên độ
+    // phủ test cho việc cập nhật field qua DOM thật (input/change event) của form này.
+    await run.run('renderChecklistSubmissionForm() dựng đúng form làm bài DEDUCTION (cây hạng mục/tiêu chí) + cập nhật deductedPoints/note (Kiến nghị) qua DOM thật, KHÔNG còn ô Mức độ rủi ro', async () => {
       const s = await page.evaluate(() => {
         const t = DB.checklistTemplates.find(x => x.templateCode === 'CL_UI_DEDUCTION');
         checklistActiveTemplateForSubmission = t;
@@ -176,20 +180,23 @@ async function main() {
         const pointsInput = document.querySelector(`#checklistSubmissionFormWrap input[data-arg0="${firstCriteriaId}"][data-arg1="deductedPoints"]`);
         pointsInput.value = '15';
         pointsInput.dispatchEvent(new Event('input', { bubbles: true }));
-        const riskSelect = document.querySelector(`#checklistSubmissionFormWrap select[data-arg0="${firstCriteriaId}"][data-arg1="riskLevel"]`);
-        riskSelect.value = 'B';
-        riskSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        const noteTextarea = document.querySelector(`#checklistSubmissionFormWrap textarea[data-arg0="${firstCriteriaId}"][data-arg1="note"]`);
+        noteTextarea.value = 'Đề nghị khắc phục ngay';
+        noteTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+        const riskSelectStillExists = !!document.querySelector(`#checklistSubmissionFormWrap select[data-arg0="${firstCriteriaId}"][data-arg1="riskLevel"]`);
         return {
           criteriaRowCount: criteriaRows.length,
           deductions: JSON.parse(JSON.stringify(checklistActiveSubmission.deductions)),
-          firstCriteriaId
+          firstCriteriaId,
+          riskSelectStillExists
         };
       });
       assertEqual(s.criteriaRowCount, 3, 'Phải render đủ 3 ô nhập điểm trừ (khớp 3 tiêu chí đã tạo)');
       const d = s.deductions.find(x => x.criteriaId === s.firstCriteriaId);
       assertEqual(!!d, true, 'Phải tạo bản ghi deduction cho tiêu chí vừa nhập điểm');
       assertEqual(d.deductedPoints, 15, 'deductedPoints phải cập nhật đúng từ input DOM thật (input event)');
-      assertEqual(d.riskLevel, 'B', 'riskLevel phải cập nhật đúng từ select DOM thật (change event)');
+      assertEqual(d.note, 'Đề nghị khắc phục ngay', 'note (nhãn "Kiến nghị") phải cập nhật đúng từ textarea DOM thật (input event)');
+      assertEqual(s.riskSelectStillExists, false, 'Ô chọn Mức độ rủi ro (A/B/C) phải KHÔNG còn tồn tại trong form');
     });
 
     await run.run('Không có ngoại lệ JS chưa bắt nào phát sinh trong suốt bộ test', async () => {

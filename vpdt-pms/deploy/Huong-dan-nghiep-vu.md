@@ -4367,6 +4367,24 @@ bấm vào ô này sẽ mở THẲNG camera chụp ảnh, không hiện lựa ch
 thư viện" — đảm bảo ảnh đính kèm là ảnh chụp thật tại hiện trường lúc đánh
 giá, không phải ảnh cũ chọn lại từ máy. Trên máy tính/thiết bị không có
 camera, ô vẫn hoạt động bình thường như chọn file thường (không ảnh hưởng).
+**Xoá được ảnh minh chứng đã đính kèm (11/2026)** — trước đây chỉ có đường
+THÊM ảnh, chụp nhầm/sai thì không có cách gỡ ra; nay mỗi ảnh có nút ✕ riêng
+để xoá đúng 1 ảnh, và khi có từ 2 ảnh trở lên hiện thêm nút "🗑️ Xoá hết ảnh"
+(xoá sạch, có hỏi xác nhận) — áp dụng cho cả Checklist Thường lẫn Kiểm Soát/
+VSATTP, chỉ xoá được khi bài còn NHÁP và vẫn còn đúng quyền thực hiện (mirror
+quy tắc huỷ bài Nháp ở trên).
+
+**Form làm bài Kiểm Soát/VSATTP ("Trừ điểm theo hạng mục", 11/2026)** — theo
+yêu cầu người dùng, bỏ hẳn ô chọn "Mức độ rủi ro" (A/B/C) khỏi màn làm bài
+(dữ liệu cũ của các bài đã làm trước đó vẫn giữ nguyên, chỉ là từ nay không
+nhập mới được nữa); ô "Ghi chú" đổi thành ô nhập nhiều dòng (xuống dòng được)
+và đổi nhãn thành "Kiến nghị"; dòng mô tả quy tắc trừ điểm dưới mỗi tiêu chí
+đổi chữ "tham khảo X điểm/lần" thành "quy định X điểm/lần" (chỉ đổi câu chữ
+hiển thị — điểm trừ mỗi lần vẫn là con số THAM KHẢO, người kiểm tra tự nhập
+tổng điểm trừ thực tế khi có nhiều vị trí vi phạm, không bị ép tính tự động).
+File Excel xuất báo cáo VSATTP (cả xuất theo 1 mẫu lẫn Dashboard VSATTP) đã
+đồng bộ theo: bỏ cột "Mức Độ Rủi Ro", đổi tên cột "Ghi Chú" thành "Kiến
+Nghị".
 
 **Chấm điểm & kết luận** — khi hoàn tất (Kết Thúc & Nộp), hệ thống tự tính
 `scorePercent` (tỉ lệ lựa chọn `isPassing`/tổng số câu bắt buộc) và

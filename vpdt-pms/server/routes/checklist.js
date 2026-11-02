@@ -376,6 +376,49 @@ router.post('/submissions/:id/attachments', async (req, res) => {
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/attachments`); }
 });
 
+// ===================== SUBMISSION: xoá ảnh minh chứng đã đính kèm =====================
+// Body: { questionId, fileUrl } xoá ĐÚNG 1 ảnh (so khớp fileUrl); { questionId, removeAll: true } xoá
+// TOÀN BỘ ảnh đã đính kèm cho câu hỏi/tiêu chí đó. "questionId" tái dùng đúng tên field như route thêm
+// ảnh ở trên (với DEDUCTION, giá trị thực chất là criteriaId). Không xoá tệp vật lý trong /uploads —
+// mirror đúng các chỗ "gỡ liên kết" khác trong hệ thống (ảnh có thể đang được tham chiếu ở nơi khác),
+// chỉ bỏ khỏi mảng attachments của câu trả lời/tiêu chí này.
+router.post('/submissions/:id/attachments/remove', async (req, res) => {
+  const submissionId = Number(req.params.id);
+  if (!Number.isFinite(submissionId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const questionId = Number(req.body?.questionId);
+    const fileUrl = req.body?.fileUrl ? String(req.body.fileUrl).trim() : '';
+    const removeAll = req.body?.removeAll === true;
+    if (!Number.isFinite(questionId)) return res.status(400).json({ error: 'Thiếu câu hỏi/tiêu chí' });
+    if (!removeAll && !fileUrl) return res.status(400).json({ error: 'Thiếu ảnh cần xoá' });
+
+    const templates = await getAllForCollection('checklistTemplates');
+    const updated = await withLockedRecordForCollection('checklistSubmissions', submissionId, (sub) => {
+      if (sub.submittedByUsername !== req.freshUser.username) {
+        throw new HttpError(403, 'Bạn chỉ có thể sửa bài làm của chính mình');
+      }
+      if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp, không thể sửa thêm');
+      const template = templates.find(t => t.id === sub.templateId);
+      if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
+      assertCanContinueChecklistSubmission(req.freshUser, template);
+      const filterAttachments = (list) => removeAll ? [] : (list || []).filter(a => a.fileUrl !== fileUrl);
+      if (template?.templateKind === 'DEDUCTION') {
+        const deductions = [...(sub.deductions || [])];
+        const idx = deductions.findIndex(d => d.criteriaId === questionId);
+        if (idx < 0) return sub;
+        deductions[idx] = { ...deductions[idx], attachments: filterAttachments(deductions[idx].attachments) };
+        return { ...sub, deductions };
+      }
+      const answers = [...(sub.answers || [])];
+      const idx = answers.findIndex(a => a.questionId === questionId);
+      if (idx < 0) return sub;
+      answers[idx] = { ...answers[idx], attachments: filterAttachments(answers[idx].attachments) };
+      return { ...sub, answers };
+    });
+    res.json({ ok: true, item: updated });
+  } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/attachments/remove`); }
+});
+
 // ===================== SUBMISSION: nộp bài (Mục 6 — tính điểm + khoá) =====================
 router.post('/submissions/:id/finalize', async (req, res) => {
   const submissionId = Number(req.params.id);
