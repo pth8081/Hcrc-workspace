@@ -80,6 +80,16 @@
 .approval-slip .as-comment-meta { margin-top: 4px; font-size: 11px; color: #666; text-align: right; }
 .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
 @media print { .approval-slip { padding: 0; } }
+/* "as-landscape" (11/2026) — PHẢI giữ y hệt khối tương ứng ở APPROVAL_SLIP_CSS (core.js), xem chú thích
+   2-bản-CSS ở đầu file này. Thiếu đồng bộ bản này thì nút "🖨️ In" bấm trực tiếp trong modal app (dùng
+   app.css đã load sẵn) sẽ KHÔNG áp dụng khổ ngang, chỉ "⬇️ Tải Phiếu" (tự nhúng bản core.js) mới có. */
+.approval-slip.as-landscape { max-width: 100%; }
+.approval-slip.as-landscape table.as-items-table { font-size: 10.5px; }
+.approval-slip.as-landscape table.as-items-table th, .approval-slip.as-landscape table.as-items-table td { padding: 3px 4px; }
+@media print {
+  .approval-slip.as-landscape { max-width: none; width: 100%; page: approval-slip-landscape; }
+}
+@page approval-slip-landscape { size: landscape; margin: 10mm; }
 
 /* .minutes-doc — khung "Biên Bản Họp" dùng chung cho cả Xem (viewMeetingMinutesDetails) lẫn Tải/In
    (buildMeetingMinutesDocumentHTML), xem buildMeetingMinutesCoreHTML() ở public/js/module-bienbanhop.js
