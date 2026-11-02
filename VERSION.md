@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.78 (2026-11): Sửa Chữa (Vận Hành) — upload nhiều file, Hủy đề xuất, Sửa đề xuất, tải file đính kèm
+
+Theo file QA test (`Test_Module_Setup_XD.xlsx`) bên quản lý dự án gửi sau khi test module Vận Hành —
+đã phân tích rủi ro + đưa phương án cho từng mục, người dùng xác nhận triển khai theo đúng thứ tự rủi
+ro tăng dần. Đợt này ("Nhóm A" — Sửa Chữa, `operationRepairs`):
+
+- **Upload nhiều file đính kèm** lúc tạo đề xuất (tối đa 10 tệp, tải ngay khi chọn, lỗi 1 tệp không
+  chặn các tệp còn lại) — mirror đúng pattern `estimateItems[].attachments[]` đã có sẵn ở Danh Mục Đầu
+  Tư. Giữ nguyên field `fileUrl/fileName/fileType` cũ (gán theo tệp đầu tiên) để mọi chỗ đọc cũ không
+  cần sửa thêm.
+- **"🚫 Hủy" đề xuất** — đổi trạng thái `CANCELLED`, **KHÔNG xóa vật lý** (giữ nguyên quyết định chặn
+  xóa hồ sơ Sửa Chữa/Mở Mới đã chốt trước đây). Chỉ cho hủy khi hồ sơ CHƯA có công việc nào đang thực
+  hiện/đã nghiệm thu dở dang (tránh mất dấu vết); hồ sơ đã "Đóng hồ sơ/đưa vào sử dụng" cũng không cho
+  hủy.
+- **"✏️ Sửa Đề Xuất"** — sửa Tiêu đề/Ngân sách/Mô tả hiện trạng/thêm file. Nếu hồ sơ **đã có công việc
+  triển khai** (bất kể trạng thái) thì khóa lại Tiêu đề/Ngân sách (tránh sửa ngân sách sau khi đã có
+  việc triển khai thực tế), vẫn cho sửa Mô tả + thêm file tự do mọi lúc. Validate cả server lẫn client.
+- **Nút "⬇️ Tải"** cạnh nút "👁️ Xem" cho tệp đính kèm (quyền tải đã có sẵn, chỉ thiếu điểm bấm).
+- Test mới `test-operation-repair-attach-cancel-edit.js` (18/18 pass) + chạy lại 4 bộ test liên quan
+  (estimate attachments, owner scope, approval slip, file authz) — không hồi quy.
+
+Các mục còn lại trong file QA (Danh Mục Đầu Tư, Quản Lý Công Việc, Báo Cáo, Email cảnh báo) đang triển
+khai tiếp theo đúng thứ tự rủi ro đã thống nhất với người dùng; 2 mục đảo ngược quyết định nghiệp vụ cũ
+(thêm lại bước duyệt DMĐT, siết quyền sửa DMĐT theo người tạo) đang chờ trao đổi thêm với quản lý dự án.
 
 ## v28.77 (2026-11): Kiểm tra sâu v28.76 theo yêu cầu người dùng + 2 fix phát hiện thêm
 
