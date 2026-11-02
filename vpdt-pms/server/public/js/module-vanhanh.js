@@ -4816,6 +4816,60 @@ function resolveOwiAcceptorInput(rawValue) {
   const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
   document.getElementById('owiAcceptorUsername').value = m ? m[2].trim() : '';
 }
+
+// D2 (11/2026, yêu cầu QA "có cảnh báo gửi email khi gán phụ trách + đổi trạng thái công việc") — CHỈ 2
+// mốc trạng thái (bắt đầu + hoàn thành/nghiệm thu), KHÔNG phải mọi lần cập nhật ghi chú tiến độ, để
+// tránh spam hộp thư như yêu cầu gốc đã nêu rõ. Người nhận: (1) gán phụ trách -> NGƯỜI ĐƯỢC GÁN MỚI
+// (không phải người gán); (2) đổi trạng thái -> NGƯỜI KHỞI TẠO hồ sơ (ptcv/record creator), KHÔNG PHẢI
+// admin hệ thống (người dùng xác nhận rõ "ptcv ko phải admin" khi chốt phạm vi mục này). Tự loại
+// currentUser khỏi người nhận ở cả 2 trường hợp (tự gán cho mình/tự cập nhật trạng thái việc mình tạo)
+// — không cần báo lại chính người vừa bấm. CHỈ áp dụng operationStoreOpenings/operationRepairs (2 kind
+// duy nhất có "Thực hiện"/Công Việc — operationOrders không có, xem operationSourceType() ở trên).
+function operationWorkItemSourceRecord(kind, recordId) {
+  const meta = OPERATION_KIND_META[kind];
+  return meta ? meta.list().find(x => x.id === recordId) : null;
+}
+function operationKindFromSourceType(sourceType) {
+  return sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
+}
+function notifyOperationWorkItemAssigned(item, newlyAssignedUsernames, sourceRecord, kind) {
+  if (!sourceRecord || !newlyAssignedUsernames || !newlyAssignedUsernames.length) return;
+  const recipients = newlyAssignedUsernames.filter(u => u && u !== currentUser.username);
+  if (!recipients.length) return;
+  const meta = OPERATION_KIND_META[kind];
+  const subject = `[Vận Hành] Bạn được gán phụ trách công việc "${item.title}"`;
+  const body = [
+    'Bạn vừa được gán phụ trách 1 công việc Thực hiện trong hệ thống:',
+    '',
+    `- Hồ sơ: ${meta.titleField(sourceRecord)} (${sourceRecord.code})`,
+    `- Công việc: ${item.title}`,
+    `- Hạn hoàn thành: ${item.deadline || 'Không quy định'}`,
+    '',
+    'Vui lòng truy cập hệ thống để xem chi tiết và thực hiện.'
+  ].join('\n');
+  notifyUsersByEmail(meta.logModule, 'NOTIFY_WORK_ITEM_ASSIGNED', sourceRecord.code, recipients, subject, body);
+}
+function notifyOperationWorkItemStatusMilestone(item, milestone, sourceRecord, kind) {
+  if (!sourceRecord || !sourceRecord.creator || sourceRecord.creator === currentUser.username) return;
+  const meta = OPERATION_KIND_META[kind];
+  const actionType = milestone === 'STARTED' ? 'NOTIFY_WORK_ITEM_STARTED' : 'NOTIFY_WORK_ITEM_ACCEPTED';
+  const subject = milestone === 'STARTED'
+    ? `[Vận Hành] Công việc "${item.title}" đã bắt đầu thực hiện`
+    : `[Vận Hành] Công việc "${item.title}" đã hoàn thành nghiệm thu`;
+  const body = [
+    milestone === 'STARTED'
+      ? 'Công việc dưới đây trong hồ sơ của Anh/Chị đã bắt đầu thực hiện:'
+      : 'Công việc dưới đây trong hồ sơ của Anh/Chị đã hoàn thành nghiệm thu:',
+    '',
+    `- Hồ sơ: ${meta.titleField(sourceRecord)} (${sourceRecord.code})`,
+    `- Công việc: ${item.title}`,
+    `- Người phụ trách: ${(item.assignedToName || []).join(', ') || '(chưa gán)'}`,
+    '',
+    'Vui lòng truy cập hệ thống để xem chi tiết.'
+  ].join('\n');
+  notifyUsersByEmail(meta.logModule, actionType, sourceRecord.code, [sourceRecord.creator], subject, body);
+}
+
 async function submitOperationWorkItemForm(e) {
   e.preventDefault();
   const title = document.getElementById('owiTitle').value.trim();
@@ -4852,6 +4906,9 @@ async function submitOperationWorkItemForm(e) {
   }
 
   if (currentEditWorkItemId != null) {
+    // D2: chụp lại người phụ trách CŨ trước khi gửi payload — để sau khi sửa xong chỉ báo email cho
+    // người MỚI được thêm vào (không báo lại người đã có từ trước, tránh spam mỗi lần sửa khác).
+    const oldAssignedTo = workItemAssignees(DB.operationWorkItems.find(w => w.id === currentEditWorkItemId));
     const payload = { title, description, assignedTo, acceptorUsername, acceptorName, deadline, acceptanceMode, acceptanceDelayDays, startDate, progressUpdateFrequencyDays };
     let updated;
     try {
@@ -4860,6 +4917,10 @@ async function submitOperationWorkItemForm(e) {
     } catch (err) { return alert(`⛔ ${err.message}`); }
     const idx = DB.operationWorkItems.findIndex(w => w.id === updated.id);
     if (idx !== -1) DB.operationWorkItems[idx] = updated;
+    const newlyAssigned = workItemAssignees(updated).filter(u => !oldAssignedTo.includes(u));
+    if (newlyAssigned.length) {
+      notifyOperationWorkItemAssigned(updated, newlyAssigned, operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId), currentWorkItemModalKind);
+    }
     closeOperationWorkItemFormModal();
     renderOperationWorkItemModalBody();
     renderOperationExecutionList();
@@ -4894,6 +4955,10 @@ async function submitOperationWorkItemForm(e) {
   // nào tính lại cascade sau khi TẠO (chỉ /progress và /accept mới gọi). No-op nếu vừa tạo việc GỐC
   // (parentWorkItemId null).
   syncOperationWorkItemAncestorsClient(newItem.parentWorkItemId);
+  // D2: báo email ngay cho người được gán phụ trách lúc TẠO (nếu có chọn sẵn).
+  if (workItemAssignees(newItem).length) {
+    notifyOperationWorkItemAssigned(newItem, workItemAssignees(newItem), operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId), currentWorkItemModalKind);
+  }
   closeOperationWorkItemFormModal();
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
@@ -5024,6 +5089,10 @@ async function confirmOperationWorkItemImport() {
 }
 
 async function updateOperationWorkItemProgressAction(id, newStatus, note) {
+  // D2: chụp lại trạng thái CŨ trước khi gọi action — để phân biệt lượt chuyển THẬT CHUA_BAT_DAU ->
+  // DANG_THUC_HIEN (mốc "bắt đầu") với lượt LẶP LẠI DANG_THUC_HIEN (chỉ ghi thêm ghi chú tiến độ, cùng
+  // newStatus gửi lên nhưng KHÔNG phải mốc "bắt đầu" — xem openOperationWorkItemProgressModal()).
+  const oldStatus = DB.operationWorkItems.find(w => w.id === id)?.status;
   let result;
   try {
     result = await callRecordAction('operationWorkItems', id, 'progress', { status: newStatus, note: note || '' });
@@ -5031,6 +5100,10 @@ async function updateOperationWorkItemProgressAction(id, newStatus, note) {
   const idx = DB.operationWorkItems.findIndex(w => w.id === id);
   if (idx !== -1) DB.operationWorkItems[idx] = result.item;
   syncOperationWorkItemAncestorsClient(result.item.parentWorkItemId);
+  if (oldStatus === 'CHUA_BAT_DAU' && result.item.status === 'DANG_THUC_HIEN') {
+    const kind = operationKindFromSourceType(result.item.sourceType);
+    notifyOperationWorkItemStatusMilestone(result.item, 'STARTED', operationWorkItemSourceRecord(kind, result.item.sourceId), kind);
+  }
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
   renderOperationAcceptanceList();
@@ -5147,7 +5220,13 @@ async function confirmOperationAcceptanceAction() {
   } catch (err) { return alert(`⛔ ${err.message}`); }
   const idx = DB.operationWorkItems.findIndex(w => w.id === result.item.id);
   if (idx !== -1) DB.operationWorkItems[idx] = result.item;
-  if (actionType === 'ACCEPT') syncOperationWorkItemAncestorsClient(result.item.parentWorkItemId);
+  if (actionType === 'ACCEPT') {
+    syncOperationWorkItemAncestorsClient(result.item.parentWorkItemId);
+    // D2: mốc "hoàn thành/nghiệm thu" — CHỈ ACCEPT thật (REQUEST_INFO giữ nguyên DANG_NGHIEM_THU, chưa
+    // xong, không phải mốc này).
+    const kind = operationKindFromSourceType(result.item.sourceType);
+    notifyOperationWorkItemStatusMilestone(result.item, 'ACCEPTED', operationWorkItemSourceRecord(kind, result.item.sourceId), kind);
+  }
   closeOperationAcceptanceActionModal();
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
