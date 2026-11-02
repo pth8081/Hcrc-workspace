@@ -3837,7 +3837,16 @@ router.post('/operationWorkItems/:id/contract', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedWorkItemById(itemId, async (item) => {
       const sourceRecord = await getOperationWorkItemSourceRecord(item);
-      return recordActions.updateOperationWorkItemContract(freshUser, item, req.body || {}, sourceRecord);
+      const exemptFileUrls = (item.contractAttachments || []).map(a => a?.fileUrl).filter(Boolean);
+      const updated = recordActions.updateOperationWorkItemContract(freshUser, item, req.body || {}, sourceRecord);
+      // LỖI ĐÃ VÁ (agent kiểm toán độc lập C2): thiếu assertPayloadFileUrlsOwnedByUser() — cùng lớp lỗ
+      // hổng "giả mạo quyền sở hữu file" đã vá ở 14 route khác (VD hrProcesses/:id/attachments ngay
+      // trên) — người có quyền sửa Giá Trị Hợp Đồng CỦA VIỆC NÀY (toàn quyền/phụ trách) có thể gửi
+      // fileUrl THẬT của người khác ở module khác để "gắn" vào contractAttachments, rồi tải được qua
+      // lib/fileAuthz.js checker mới thêm — exemptFileUrls giữ nguyên tệp cũ đã có sẵn, chỉ soát tệp
+      // MỚI xuất hiện trong payload.
+      await assertPayloadFileUrlsOwnedByUser({ contractAttachments: updated.contractAttachments }, freshUser, { exemptFileUrls });
+      return updated;
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/contract`, err); }

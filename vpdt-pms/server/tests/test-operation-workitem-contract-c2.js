@@ -137,6 +137,20 @@ async function runPureLogicTests() {
     assert(rows.length >= 1, 'phải đọc được ít nhất 1 dòng (dòng ví dụ)');
     assert(rows[0].contractValue > 0, `contractValue dòng ví dụ phải > 0, nhận được ${rows[0].contractValue}`);
   });
+
+  // ===== 2 vá lỗi phát hiện từ agent kiểm toán độc lập (11/2026) =====
+  await run.run('C2 (vá #1): route /operationWorkItems/:id/contract có gọi assertPayloadFileUrlsOwnedByUser (chặn giả mạo quyền sở hữu file)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'records.js'), 'utf8');
+    const routeBlock = src.slice(src.indexOf(`router.post('/operationWorkItems/:id/contract'`), src.indexOf(`router.post('/operationWorkItems/:id/contract'`) + 900);
+    assert(routeBlock.includes('assertPayloadFileUrlsOwnedByUser'), 'route /contract thiếu assertPayloadFileUrlsOwnedByUser() — lỗ hổng giả mạo quyền sở hữu file (xem hrProcesses/:id/attachments làm mẫu)');
+    assert(routeBlock.includes('exemptFileUrls'), 'route /contract thiếu exemptFileUrls (phải exempt tệp ĐÃ có sẵn trước khi sửa)');
+  });
+
+  await run.run('C2 (vá #2): isFileUrlStillReferenced() có quét dbo.OperationWorkItems (chống sweep xoá nhầm tệp đính kèm hợp đồng còn sống)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'recordStore.js'), 'utf8');
+    const fnBody = src.slice(src.indexOf('async function isFileUrlStillReferenced'), src.indexOf('async function isFileUrlStillReferenced') + 1500);
+    assert(fnBody.includes('dbo.OperationWorkItems'), 'isFileUrlStillReferenced() thiếu quét dbo.OperationWorkItems — sweepOrphanedUploads() sẽ coi contractAttachments là mồ côi và xoá sau 48h dù công việc còn sống');
+  });
 }
 
 // ===================== Phần 2: Playwright (UI thật) =====================
