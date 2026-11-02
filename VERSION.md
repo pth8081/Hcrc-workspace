@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**28.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.82 (2026-11): Quản Lý Công Việc — Giá Trị Đầu Tư/Hợp Đồng + tệp đính kèm (C2)
+
+Tiếp nối v28.81, mục C2 trong file QA test module Vận Hành — mục cuối cùng trong đợt 10 mục xác nhận
+(A1-A4, B2-B3, C1-C3, D1-D2; B1/B4 vẫn tạm hoãn chờ thảo luận PM):
+
+- **Thực hiện > Quản Lý Công Việc**: nút 💰 mới trên mỗi dòng, mở modal hiển thị **"Giá trị đầu tư"**
+  (chỉ xem — luôn đọc trực tiếp từ tổng giá trị DMĐT gốc của hồ sơ, không phải field lưu riêng) và cho
+  điền **"Giá trị hợp đồng"** (số không âm) + đính kèm tối đa 10 tệp. Ai có toàn quyền quản lý module
+  HOẶC đúng người phụ trách công việc đó đều tự điền được, không bị khoá theo trạng thái công việc (vì
+  giá trị hợp đồng thường chỉ biết sau khi việc đã xong — khác `editOperationWorkItem()` vốn khoá sau
+  mốc nghiệm thu).
+- Mẫu Excel xuất/nhập Quản Lý Công Việc thêm cột "Giá Trị Hợp Đồng"; cột "Giá Trị Đầu Tư" chỉ có ở Xuất
+  (không nhập, vì là field suy diễn từ hồ sơ gốc).
+
+Verify: test mới `test-operation-workitem-contract-c2.js` (33/33) + 1 agent kiểm toán độc lập đầu tiên
+phát hiện 2 vấn đề cần vá trước khi merge, đã vá cả 2 và được 2 agent kiểm toán độc lập KHÁC xác nhận
+riêng từng điểm vá — đúng, đủ, không còn lỗ hổng/khoảng trống liên quan:
+1. [Mức Cao — bảo mật] Route `POST /operationWorkItems/:id/contract` ban đầu thiếu
+   `assertPayloadFileUrlsOwnedByUser()` (cùng lớp lỗ hổng "giả mạo quyền sở hữu file" đã vá ở ~14 route
+   khác) — người có quyền sửa Giá Trị Hợp Đồng (ngưỡng thấp) có thể gắn fileUrl thật của người khác ở
+   module khác vào `contractAttachments` để vượt kiểm soát truy cập gốc của file đó. Đã vá.
+2. [Mất dữ liệu] `isFileUrlStillReferenced()` chưa quét `dbo.OperationWorkItems` (bảng riêng, ngoài
+   `DEDICATED_TABLES`) — job nền dọn tệp mồ côi (6h/lần, ân hạn 48h) sẽ xoá vật lý mọi tệp đính kèm hợp
+   đồng sau 48h dù công việc còn sống, gây lỗi 404 âm thầm. Đã vá.
+
+Zero regression trên 100+ scenario liên quan (file-authz, Sửa Chữa/DMĐT đính kèm, audit cluster) chạy
+lại sau cả 2 lần vá.
+
+Không cần thao tác deploy nào ngoài copy code + `pm2 restart` — không đổi `schema.sql` (field mới nằm
+trong JSON blob `Payload` của `dbo.OperationWorkItems`, không cần migration), không thêm biến môi
+trường, không thêm dependency.
 
 ## v28.81 (2026-11): Quản Lý Công Việc — email cảnh báo gán phụ trách + đổi trạng thái (D2)
 
