@@ -24,14 +24,21 @@
 //        dept-workflow của quy trình Duyệt/Từ chối như trước (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung").
 //      - cancelOperationOrderReceipt() bắt buộc có lý do (400 nếu thiếu).
 //      - Thành công: đúng status đích + timestamp ISO tương ứng + 1 dòng lịch sử mới.
-//   3. seedDefaults.migrateApprovedOperationOrdersToAwaitingReceipt() — vẫn giữ nguyên (script migrate 1
-//      lần cho dữ liệu cũ thời điểm tính năng ra đời, không liên quan tới việc tạm tắt lần này): hồ sơ CŨ
-//      kẹt APPROVED (từ trước đợt "Báo Cáo + Nhập Hàng") tự động chuyển sang AWAITING_RECEIPT, approvedAt
-//      lấy lại từ lịch sử APPROVED cuối cùng nếu parse được; idempotent; KHÔNG đụng hồ sơ đã ở trạng thái
-//      khác hoặc đã đúng AWAITING_RECEIPT.
+//   3. seedDefaults.migrateApprovedOperationOrdersToAwaitingReceipt() — hàm vẫn GIỮ NGUYÊN định nghĩa
+//      (test ở đây vẫn đúng khi gọi TRỰC TIẾP), nhưng KHÔNG CÒN được seedDefaults() gọi nữa (11/2026, LỖI
+//      ĐÃ VÁ: hàm này chạy lặp lại mỗi lần khởi động server, không phải chỉ 1 lần như tên/chú thích cũ
+//      ngỡ — nên sau đợt tạm tắt luồng Nhập/Hủy Hàng, mọi đơn hàng MỚI duyệt xong [dừng ở APPROVED là CHỦ
+//      Ý] đều bị quét NHẦM sang AWAITING_RECEIPT ở lần restart kế tiếp, đúng lỗi người dùng phát hiện qua
+//      ảnh chụp Phê Duyệt Hub). seedDefaults() giờ gọi migrateAwaitingReceiptBackToApproved() thay vào đó
+//      — xem Phần 4 ngay dưới.
+//   4. seedDefaults.migrateAwaitingReceiptBackToApproved() (MỚI, 11/2026) — sửa dữ liệu đã bị ảnh hưởng
+//      bởi lỗi ở Phần 3: đưa NGƯỢC mọi hồ sơ đang AWAITING_RECEIPT về lại APPROVED (không còn cách nào xử
+//      lý tiếp qua UI nữa vì cả 2 lối vào — sub-tab Vận Hành lẫn Phê Duyệt Hub — đều đã ẩn/xoá hẳn);
+//      idempotent; KHÔNG đụng hồ sơ đã ở trạng thái khác.
 //
 // Chạy: node server/tests/test-operation-order-receiving.js
 const assert = require('assert');
+const fs = require('fs');
 const { applyWorkflowAction, WorkflowError } = require('../lib/workflowEngine');
 const recordActions = require('../lib/recordActions');
 
@@ -462,9 +469,10 @@ function requireFreshMigrationFn(seed) {
   const seedDefaultsPath = require.resolve('../seedDefaults');
   require.cache[recordStorePath] = { id: recordStorePath, filename: recordStorePath, loaded: true, exports: makeFakeRecordStore(seed) };
   delete require.cache[seedDefaultsPath];
-  const { migrateApprovedOperationOrdersToAwaitingReceipt } = require('../seedDefaults');
+  const { migrateApprovedOperationOrdersToAwaitingReceipt, migrateAwaitingReceiptBackToApproved } = require('../seedDefaults');
   return {
     migrateApprovedOperationOrdersToAwaitingReceipt,
+    migrateAwaitingReceiptBackToApproved,
     cleanup: () => { delete require.cache[recordStorePath]; delete require.cache[seedDefaultsPath]; }
   };
 }
@@ -525,6 +533,65 @@ async function main() {
       await migrateApprovedOperationOrdersToAwaitingReceipt();
       assert.deepStrictEqual(seed.operationOrders, snapshotBefore, 'không có hồ sơ nào trong nhóm này được đổi gì');
     } finally { cleanup(); }
+  });
+
+  // ===================== 4) seedDefaults.migrateAwaitingReceiptBackToApproved() (MỚI, 11/2026) =====================
+  await testAsync('migrateAwaitingReceiptBackToApproved(): hồ sơ đang AWAITING_RECEIPT -> APPROVED, ghi thêm 1 dòng SYSTEM_MIGRATION, giữ nguyên approvedAt cũ', async () => {
+    const seed = {
+      operationOrders: [
+        { id: 11, code: 'DH-STUCK-1', status: 'AWAITING_RECEIPT', currentStep: 0, approvedAt: '2026-11-01T02:00:00.000Z',
+          history: [{ step: 1, approver: 'Trưởng Phòng', username: APPROVER_STEP1, action: 'APPROVED', comment: '', time: '08:30:00 01/11/2026' }] }
+      ]
+    };
+    const { migrateAwaitingReceiptBackToApproved, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateAwaitingReceiptBackToApproved();
+      const rec = seed.operationOrders[0];
+      assert.strictEqual(rec.status, 'APPROVED');
+      assert.strictEqual(rec.approvedAt, '2026-11-01T02:00:00.000Z', 'không được đổi approvedAt cũ');
+      assert(rec.history.some(h => h.action === 'SYSTEM_MIGRATION'), 'phải ghi thêm 1 dòng SYSTEM_MIGRATION giải thích lý do đưa về lại APPROVED');
+    } finally { cleanup(); }
+  });
+
+  await testAsync('migrateAwaitingReceiptBackToApproved(): idempotent — chạy 2 lần liên tiếp không đổi gì thêm ở lần 2', async () => {
+    const seed = {
+      operationOrders: [
+        { id: 12, code: 'DH-STUCK-2', status: 'AWAITING_RECEIPT', currentStep: 0, history: [] }
+      ]
+    };
+    const { migrateAwaitingReceiptBackToApproved, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateAwaitingReceiptBackToApproved();
+      await migrateAwaitingReceiptBackToApproved();
+      const rec = seed.operationOrders[0];
+      assert.strictEqual(rec.status, 'APPROVED');
+      const migrationEntries = rec.history.filter(h => h.action === 'SYSTEM_MIGRATION');
+      assert.strictEqual(migrationEntries.length, 1, 'chạy lần 2 không được thêm SYSTEM_MIGRATION lần nữa (đã ở APPROVED, không còn AWAITING_RECEIPT để sửa)');
+    } finally { cleanup(); }
+  });
+
+  await testAsync('migrateAwaitingReceiptBackToApproved(): hồ sơ đang APPROVED/PENDING/REJECTED/RECEIVED không bị đụng tới', async () => {
+    const seed = {
+      operationOrders: [
+        { id: 13, code: 'DH-OK', status: 'APPROVED', currentStep: 0, history: [] },
+        { id: 14, code: 'DH-P', status: 'PENDING', currentStep: 1, history: [] },
+        { id: 15, code: 'DH-R', status: 'REJECTED', currentStep: 1, history: [] },
+        { id: 16, code: 'DH-RECEIVED', status: 'RECEIVED', currentStep: 0, history: [], receivedAt: '2026-01-01T00:00:00.000Z' }
+      ]
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify(seed.operationOrders));
+    const { migrateAwaitingReceiptBackToApproved, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateAwaitingReceiptBackToApproved();
+      assert.deepStrictEqual(seed.operationOrders, snapshotBefore, 'không có hồ sơ nào trong nhóm này được đổi gì');
+    } finally { cleanup(); }
+  });
+
+  await testAsync('seedDefaults() (orchestrator thật, kiểm bằng cách đọc lại mã nguồn) KHÔNG còn wire migrateApprovedOperationOrdersToAwaitingReceipt() nữa, PHẢI wire migrateAwaitingReceiptBackToApproved() thay vào đó', async () => {
+    const src = fs.readFileSync(require.resolve('../seedDefaults'), 'utf8');
+    const orchestratorBody = src.slice(src.indexOf('async function seedDefaults'), src.indexOf('async function migrateHrLifecycleV2Perms'));
+    assert(!/\bawait migrateApprovedOperationOrdersToAwaitingReceipt\(\)/.test(orchestratorBody), 'seedDefaults() KHÔNG được gọi migrateApprovedOperationOrdersToAwaitingReceipt() nữa (đã TẮT, xem chú thích)');
+    assert(/\bawait migrateAwaitingReceiptBackToApproved\(\)/.test(orchestratorBody), 'seedDefaults() PHẢI gọi migrateAwaitingReceiptBackToApproved() để sửa dữ liệu đã bị lỗi ảnh hưởng');
   });
 
   console.log(`\n==== ${passed}/${passed + failed} scenario(s) passed${failed ? `, ${failed} FAILED` : ''} ====`);

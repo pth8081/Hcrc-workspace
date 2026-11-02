@@ -310,41 +310,18 @@ function getMyPendingApprovals(user) {
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   }, undefined, o => operationOrderStoreApproverFilterFor(o));
-  // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — người dùng đã xác nhận đưa vào Hub ("Có, đưa vào
-  // Hub"): người chịu trách nhiệm vẫn cần HÀNH ĐỘNG (xác nhận nhập hàng/hủy nhập), dù đây KHÔNG phải
-  // quyết định duyệt/từ chối nên KHÔNG dùng addDeptWorkflowItems() (hàm đó chỉ bắt status==='PENDING') —
-  // thêm 1 loại riêng ('operationOrderReceipt') với 2 nút hành động ĐÚNG như ở list Vận Hành gốc
-  // (openOperationOrderReceiptActionModal(), module-vanhanh.js — KHÔNG viết lại modal riêng cho Hub).
-  // Quyền dùng ĐÚNG canManageOperationOrderReceiptClient() (module-vanhanh.js) — không tạo logic quyền
-  // mới. Hàm đó thuộc cụm nạp LƯỜI "vanhanh" (Hạ tầng: nạp module theo cụm) trong khi core-approvalhub.js
-  // luôn nạp EAGER — guard `typeof` trước khi gọi (mirror đúng guard updateHrFeedbackBadge() ở
-  // updateApprovalHubBadge() bên dưới): nếu cụm "vanhanh" chưa từng mở trong phiên, bỏ qua nhóm này ở
-  // LẦN GỌI NÀY (không throw ReferenceError làm hỏng toàn bộ Hub) + âm thầm nạp nền rồi tự làm mới lại
-  // Hub/badge ngay khi xong, không bao giờ bỏ sót vĩnh viễn.
-  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Thiếu chặn tự duyệt ở receiveOperationOrderGoods/
-  // cancelOperationOrderReceipt"): mirror đúng assertNotSelfHandlingOperationOrderReceipt()
-  // (lib/recordActions.js) — người TẠO đơn hàng không được tự xác nhận/hủy nhập hàng của chính mình,
-  // dù có quyền operationOrderReceiptManageHO/Store (2 quyền độc lập, không loại trừ việc này). KHÔNG
-  // có ngoại lệ admin (cùng chính sách "không tự duyệt ở TẤT CẢ module" đã áp dụng toàn hệ thống).
-  if (typeof canManageOperationOrderReceiptClient === 'function') {
-    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && o.creator !== user.username && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
-      items.push({
-        type: 'operationOrderReceipt',
-        typeLabel: `📦 Vận Hành - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,
-        code: o.code, title: o.title, dept: o.dept,
-        stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
-        statusBadge: `<span class="badge-info">📥 Chờ Nhập Hàng</span>`,
-        actions: [
-          { label: '✅ Nhập Hàng', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'RECEIVE'], primary: true },
-          { label: '🚫 Hủy Nhập', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'CANCEL'] }
-        ]
-      });
-    });
-  } else if (typeof loadModuleGroup === 'function') {
-    loadModuleGroup('vanhanh').then(() => {
-      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
-    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "vanhanh" cho mục AWAITING_RECEIPT', err));
-  }
+  // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — KHÔNG còn hiện ở Hub nữa (11/2026, người dùng
+  // nhắc lại: "chỉ còn phê duyệt [là xong], không còn Nhập/Hủy Nhập Hàng" — xác nhận lại quyết định đã
+  // có từ trước ở lib/workflowEngine.js, commit "tạm vô hiệu hoá luồng Nhập Hàng/Hủy Nhập, dừng hẳn ở
+  // Đã phê duyệt": applyWorkflowAction() KHÔNG còn tự chuyển operationOrders từ APPROVED sang
+  // AWAITING_RECEIPT, và sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" cũng đã ép ẩn khỏi module-vanhanh.js bất
+  // kể quyền). Khối TỪNG thêm mục 'operationOrderReceipt' riêng ở đây (lọc status==='AWAITING_RECEIPT',
+  // dùng canManageOperationOrderReceiptClient()) nay là CODE CHẾT đối với mọi hồ sơ MỚI — chỉ còn khớp
+  // đúng các hồ sơ CŨ vẫn còn kẹt ở AWAITING_RECEIPT từ trước đợt tạm tắt, khiến Hub vẫn hiện nhầm 2 nút
+  // Nhập Hàng/Hủy Nhập cho các hồ sơ đó dù nghiệp vụ đã dừng hẳn. Xoá hẳn khối này khỏi Hub (KHÔNG xoá
+  // hàm/route receive-goods/cancel-receipt bên dưới, cùng tinh thần "tạm tắt, không xoá hẳn" của commit
+  // gốc) — hồ sơ operationOrders vẫn hiện ở "Hồ Sơ Đã Xử Lý > Đã Duyệt" bình thường (xem matchStatuses ở
+  // getMyProcessedApprovals() bên dưới, không đụng tới).
 
   // LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): 5 luồng phê duyệt sau đây
   // (Đồng Phục/Nghỉ Phép/Đổi Ca/Huỷ Đăng Ký Đào Tạo/Gia Hạn-Huỷ Công Việc) hoàn toàn chưa có mặt ở Hub

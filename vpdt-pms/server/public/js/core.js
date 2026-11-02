@@ -8057,9 +8057,23 @@ function buildNotificationEmailHtml({ status, badge, bodyRowsHtml, ctaUrl, ctaTe
 // DB.users rồi giao cho notifyRecipientsByEmail() xử lý gửi + ghi log dùng chung.
 function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText) {
   const recipients = [];
+  const missingEmail = [];
   for (const uname of new Set((usernames || []).filter(Boolean))) {
     const u = DB.users.find(x => x.username === uname);
     if (u && u.email) recipients.push(u);
+    else if (u) missingEmail.push(u); // tài khoản có thật nhưng CHƯA khai báo email -> không gửi được
+  }
+  // LỖI ĐÃ VÁ (11/2026, người dùng phản ánh "quản lý lúc nhận được email thông báo phê duyệt lúc
+  // không" — itPriceApprovals Bán Lẻ/Bán Buôn, nhưng đây là cổng DÙNG CHUNG cho ~13 module nên áp dụng
+  // cho TẤT CẢ): người duyệt được cấu hình ĐÚNG (có mặt trong danh sách approvers truyền vào) nhưng tài
+  // khoản của họ CHƯA khai báo email ở Hệ Thống > Người Dùng trước đây bị loại ÂM THẦM khỏi recipients
+  // (vòng lặp trên), không để lại dấu vết gì — admin/người nhận không có cách nào tự tra ra nguyên nhân.
+  // Ghi thêm 1 dòng Nhật Ký Hệ Thống để tra cứu được NGAY — KHÔNG đổi hành vi gửi (vẫn chỉ gửi cho người
+  // có email như trước, chỉ thêm log).
+  if (missingEmail.length) {
+    logSystemAction(module, actionType,
+      `⚠️ ${missingEmail.length} người nhận dự kiến KHÔNG có email trong hồ sơ nên không nhận được thông báo "${subject}": ${missingEmail.map(u => `${u.name || u.username} (${u.username})`).join(', ')} — vào Hệ Thống > Người Dùng bổ sung email để khắc phục.`,
+      'MISSING_EMAIL', targetCode);
   }
   notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText);
 }

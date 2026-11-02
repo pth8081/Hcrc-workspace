@@ -59,7 +59,11 @@ async function seedDefaults() {
   await migrateLegacyTasks();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
-  await migrateApprovedOperationOrdersToAwaitingReceipt();
+  // migrateApprovedOperationOrdersToAwaitingReceipt() — TẮT (xem chú thích đầy đủ tại định nghĩa hàm):
+  // chạy lặp lại mỗi lần khởi động nên quét nhầm mọi đơn hàng MỚI duyệt sau đợt tạm dừng luồng Nhập/Hủy
+  // Hàng, không chỉ hồ sơ cũ như tên hàm ngỡ. migrateAwaitingReceiptBackToApproved() ngay dưới sửa lại
+  // dữ liệu đã bị ảnh hưởng.
+  await migrateAwaitingReceiptBackToApproved();
   await migrateOperationOrdersDefaultLocationType();
   await migratePaymentRequestsMissingCurrentStep();
   await migrateApprovalGroupsToConfigurable();
@@ -374,6 +378,17 @@ async function migrateStuckOperationApprovalStatuses() {
 // Báo Cáo, không ảnh hưởng gì khác. Cùng khuôn/idempotent với migrateStuckOperationApprovalStatuses() ở
 // trên — chạy mỗi lần khởi động, chỉ còn tác dụng khi thực sự còn bản ghi APPROVED (rất hiếm sau lần
 // chạy đầu, vì mọi lượt duyệt MỚI từ giờ đã tự đi thẳng AWAITING_RECEIPT).
+// LỖI ĐÃ VÁ (11/2026, người dùng phát hiện qua ảnh chụp Phê Duyệt Hub — đơn hàng duyệt NGAY HÔM NAY vẫn
+// hiện "Chờ Nhập Hàng"): chú thích cũ ở hàm này ("chỉ còn tác dụng khi thực sự còn bản ghi APPROVED, rất
+// hiếm sau lần chạy đầu") SAI — hàm được gọi lại ở MỌI lần khởi động server (seedDefaults() chạy mỗi lần
+// `npm start`/pm2 restart), và nó quét TẤT CẢ bản ghi operationOrders đang ở status==='APPROVED' mà
+// KHÔNG phân biệt được "hồ sơ CŨ kẹt lại từ trước khi tính năng Nhập Hàng ra đời" (đúng mục tiêu ban đầu)
+// với "hồ sơ MỚI vừa được duyệt sau đợt tạm vô hiệu hoá luồng Nhập/Hủy Hàng" (lib/workflowEngine.js,
+// commit "tạm vô hiệu hoá luồng Nhập Hàng/Hủy Nhập, dừng hẳn ở Đã phê duyệt") — từ đợt đó, MỌI đơn hàng
+// duyệt xong đều dừng ở APPROVED là CHỦ Ý, không phải "kẹt", nhưng hàm bên dưới vẫn coi đó là dấu hiệu
+// cần di trú, nên mỗi lần server restart lại qua đúng từng đơn MỚI duyệt sang AWAITING_RECEIPT. TẮT lời
+// gọi hàm này ở seedDefaults() (giữ nguyên định nghĩa để bật lại dễ dàng nếu tính năng được mở lại —
+// xem migrateAwaitingReceiptBackToApproved() ngay dưới, hàm SỬA DỮ LIỆU ĐÃ BỊ ẢNH HƯỞNG bởi lỗi này).
 async function migrateApprovedOperationOrdersToAwaitingReceipt() {
   const records = await getAllRecords('operationOrders');
   const stuck = records.filter(r => r.status === 'APPROVED');
@@ -395,6 +410,36 @@ async function migrateApprovedOperationOrdersToAwaitingReceipt() {
   }
   if (stuck.length) {
     console.log(`   ↳ Đã di trú ${stuck.length} đơn hàng (operationOrders) đã duyệt trước đợt "Nhập Hàng" sang chờ nhập hàng (AWAITING_RECEIPT).`);
+  }
+}
+
+// VÁ DỮ LIỆU đã bị ảnh hưởng bởi lỗi migrateApprovedOperationOrdersToAwaitingReceipt() chạy lặp lại mỗi
+// lần khởi động (xem chú thích đầy đủ tại định nghĩa hàm đó, ngay trên) — mọi đơn hàng operationOrders
+// hiện đang kẹt ở AWAITING_RECEIPT (dù là hồ sơ CŨ thật sự hay bị quét NHẦM từ hồ sơ mới duyệt) đều
+// KHÔNG CÒN CÁCH NÀO xử lý tiếp qua UI nữa (cả sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" ở module Vận Hành lẫn
+// mục tương ứng ở Phê Duyệt Hub đều đã ẩn/xoá hẳn — luồng Nhập/Hủy Hàng tạm dừng vô thời hạn) — để nguyên
+// AWAITING_RECEIPT là ngõ cụt, đưa NGƯỢC về APPROVED mới khớp đúng chính sách nghiệp vụ hiện tại ("dừng
+// hẳn ở Đã phê duyệt"). Idempotent, chạy mỗi lần khởi động — chỉ còn tác dụng khi thực sự còn bản ghi
+// AWAITING_RECEIPT (hết tác dụng vĩnh viễn ngay sau lần chạy đầu tiên trên 1 CSDL, trừ khi tính năng Nhập
+// Hàng được bật lại và tạo thêm bản ghi AWAITING_RECEIPT mới — khi đó cần bỏ hàm này đi trước).
+async function migrateAwaitingReceiptBackToApproved() {
+  const records = await getAllRecords('operationOrders');
+  const stuck = records.filter(r => r.status === 'AWAITING_RECEIPT');
+  for (const rec of stuck) {
+    await withLockedRecordById('operationOrders', rec.id, (item) => {
+      if (item.status !== 'AWAITING_RECEIPT') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+      item.status = 'APPROVED';
+      item.history = item.history || [];
+      item.history.push({
+        step: item.currentStep || 0, approver: 'Hệ Thống', username: 'system', action: 'SYSTEM_MIGRATION',
+        comment: 'Luồng "Chờ nhập hàng" đã tạm dừng — tự động đưa đơn hàng về lại trạng thái Đã phê duyệt.',
+        time: nowVNForMigration()
+      });
+      return item;
+    });
+  }
+  if (stuck.length) {
+    console.log(`   ↳ Đã đưa ${stuck.length} đơn hàng (operationOrders) từ AWAITING_RECEIPT về lại APPROVED (luồng Nhập/Hủy Hàng đã tạm dừng).`);
   }
 }
 
@@ -591,6 +636,7 @@ function nowVNForMigration() {
 // bộ test hồi quy MỚI của đợt "Tách Đơn Hàng Siêu Thị/HO" (cùng lý do, cùng khuôn mock recordStore).
 module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
+  migrateAwaitingReceiptBackToApproved,
   migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep,
   migrateApprovalGroupsToConfigurable,
   migrateWorkflowParticipatingDeptGroups,

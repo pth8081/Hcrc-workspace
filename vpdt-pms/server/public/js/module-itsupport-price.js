@@ -686,10 +686,21 @@ async function submitItPriceApproval(e) {
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(newItem);
   const firstStepApprovers = resolveEffectiveStepApprovers(wfConfig, 1);
   if (firstStepApprovers.length) {
+    // LỖI ĐÃ VÁ (11/2026, người dùng phản ánh "quản lý lúc nhận được email lúc không" cho cả Phê Duyệt
+    // Giá Bán Lẻ (Mua Hàng) lẫn Bán Buôn (Vận Hành)): email "Cần phê duyệt" gửi lúc NỘP ĐỀ XUẤT (ở đây)
+    // trước đây LUÔN hardcode ticketType="...(Bán Buôn)" + summary=newItem.wholesaleApplyUnit dù
+    // activeItPriceSubTab đang là RETAIL — với đề xuất Bán Lẻ, wholesaleApplyUnit luôn null (xem
+    // lib/createValidation.js, payload.wholesaleApplyUnit = null cho RETAIL) nên summary rỗng trơn VÀ
+    // tiêu đề loại phiếu ghi sai "Bán Buôn" cho cả đề xuất Bán Lẻ, khiến người duyệt dễ hiểu nhầm/bỏ qua
+    // email tưởng gửi nhầm. Mirror ĐÚNG khuôn đã có sẵn ở approveItPriceConfirmed() (nhánh ADVANCED, ngay
+    // dưới hàm này) — hàm đó vốn đã tính đúng theo updated.priceType, chỉ riêng điểm gọi NÀY (bước 1, lúc
+    // nộp mới) bị bỏ sót khi tách Bán Lẻ/Bán Buôn.
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
       `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
       buildApprovalNeededEmailBody({
-        ticketType: 'Phê Duyệt Giá IT (Bán Buôn)', ticketNumber: code, summary: newItem.wholesaleApplyUnit,
+        ticketType: newItem.priceType === 'WHOLESALE' ? 'Phê Duyệt Giá IT (Bán Buôn)' : 'Phê Duyệt Giá IT (Bán Lẻ)',
+        ticketNumber: code,
+        summary: newItem.wholesaleApplyUnit || (newItem.priceZone ? `Khu vực giá: ${newItem.priceZone}` : ''),
         creatorName: currentUser.name, creatorDept: newItem.dept, createdAt: newItem.createdAt,
         stepName: 'Bước 1'
       }));

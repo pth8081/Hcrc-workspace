@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**28.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.71 (2026-11): Vá 3 lỗi phát hiện qua phản hồi người dùng — Phê Duyệt Hub + email Phê Duyệt Giá
+
+**1. Phê Duyệt Hub vẫn hiện "Chờ Nhập Hàng" dù luồng Nhập/Hủy Hàng đã tạm dừng từ trước** (người dùng
+phát hiện qua ảnh chụp màn hình — đơn hàng Vận Hành duyệt NGAY TRONG NGÀY vẫn hiện "CHỜ NHẬP HÀNG" + 2
+nút Nhập Hàng/Hủy Nhập). 2 lỗi độc lập cộng dồn:
+- `seedDefaults.js::migrateApprovedOperationOrdersToAwaitingReceipt()` — chú thích cũ ngỡ hàm "chỉ còn
+  tác dụng 1 lần", nhưng thực tế hàm chạy lại ở MỌI lần khởi động server và quét TẤT CẢ operationOrders
+  đang `APPROVED` — sau đợt tạm dừng luồng Nhập/Hủy Hàng ("dừng hẳn ở Đã phê duyệt"), MỌI đơn hàng MỚI
+  duyệt xong (dừng ở APPROVED là CHỦ Ý) đều bị quét NHẦM sang `AWAITING_RECEIPT` ở lần restart kế tiếp.
+  Đã TẮT lời gọi hàm này trong `seedDefaults()` (giữ nguyên định nghĩa để bật lại dễ dàng) và thêm hàm
+  MỚI `migrateAwaitingReceiptBackToApproved()` tự sửa lại dữ liệu đã bị ảnh hưởng (đưa NGƯỢC về
+  `APPROVED`, chạy 1 lần khi khởi động, idempotent). **Deploy-impact: chỉ cần copy code + `pm2 restart`
+  là dữ liệu tự sửa lại ngay ở lần khởi động kế tiếp, không cần thao tác DB thủ công.**
+- `core-approvalhub.js::getMyPendingApprovals()` — xoá hẳn khối mục `'operationOrderReceipt'` (từng
+  thêm "Chờ Nhập Hàng" + nút Nhập Hàng/Hủy Nhập vào Phê Duyệt Hub) — khối này lẽ ra phải bị gỡ cùng lúc
+  với đợt tạm dừng luồng (Oct/2026) nhưng bị sót, khiến Hub vẫn hiện nhầm cho MỌI hồ sơ còn kẹt ở
+  `AWAITING_RECEIPT` (kể cả admin không thực sự là người duyệt — người dùng cũng nhắc lại ý "admin không
+  trong luồng phê duyệt thì không cần hiển thị", khối này xoá hẳn giải quyết luôn).
+
+**2. Email "Cần phê duyệt" lúc NỘP đề xuất giá (Mua Hàng > Phê Duyệt Giá Bán Lẻ / Vận Hành > Phê Duyệt
+Giá Bán Buôn) luôn ghi sai "Bán Buôn"** (người dùng phản ánh "quản lý lúc nhận được email lúc không", kèm
+2 ảnh màn Cấu Hình Email xác nhận cả 2 checkbox "Cần Phê Duyệt"/"Kết Quả Duyệt" của Hỗ Trợ IT đã BẬT —
+nghĩa là không phải lỗi cấu hình, mà là lỗi code): `module-itsupport-price.js::submitItPriceApproval()`
+hardcode `ticketType: 'Phê Duyệt Giá IT (Bán Buôn)'` + `summary: newItem.wholesaleApplyUnit` cho MỌI đề
+xuất — với đề xuất Bán Lẻ, `wholesaleApplyUnit` luôn `null` (RETAIL không có field này) nên email vừa ghi
+sai loại phiếu vừa có trích yếu rỗng, dễ khiến người duyệt Bán Lẻ hiểu nhầm/bỏ qua. Đã sửa theo đúng
+khuôn đã có sẵn (và đúng) ở `approveItPriceConfirmed()` ngay bên dưới — ghi `ticketType`/`summary` theo
+ĐÚNG `newItem.priceType`.
+
+Nhân tiện, thêm 1 lớp chẩn đoán cho triệu chứng "có lúc nhận được, có lúc không" nói chung (áp dụng cho
+TOÀN BỘ ~13 module dùng chung `notifyUsersByEmail()`, không riêng Phê Duyệt Giá): người duyệt được cấu
+hình ĐÚNG nhưng tài khoản CHƯA khai báo email (Hệ Thống > Người Dùng) trước đây bị loại ÂM THẦM khỏi danh
+sách nhận, không để lại dấu vết gì. Nay ghi thêm 1 dòng Nhật Ký Hệ Thống (status `MISSING_EMAIL`) mỗi khi
+việc này xảy ra, để admin tự tra cứu được nguyên nhân — KHÔNG đổi hành vi gửi email (vẫn chỉ gửi cho
+người có email như trước).
+
+Test mới/cập nhật: `tests/test-approval-hub.js` (57/57, sửa lại kịch bản AWAITING_RECEIPT theo đúng hành
+vi mới — KHÔNG còn hiện cho ai), `tests/test-operation-order-receiving.js` (43/43, thêm 4 kịch bản cho
+`migrateAwaitingReceiptBackToApproved()` + xác nhận `seedDefaults()` không còn wire hàm cũ),
+`tests/test-itprice-submit-email-label.js` (mới, 4/4). Chạy lại đầy đủ `test-seed-defaults-fresh-install.js`
+(3/3), `test-operation-order-location-tiers.js` (34/34), `test-migrate-workflow-dept-groups.js` (5/5),
+`test-approval-polling.js` (25/25), `test-approval-email-config.js` (85/85),
+`test-approvalneeded-email-uniform-leave-swap-training.js` (11/11), `test-payment-approval-needed-email.js`
+(6/6), `test-itprice-approval-and-emergency.js` (17/17), `test-itprice-wholesale-mixed-approval.js`
+(20/20), `test-itprice-supplement-invalidate.js` (9/9), `test-itprice-forward-opinion.js` (11/11),
+`test-itprice-download.js` (28/28) — không regression.
 
 ## v28.70 (2026-11): Module Tài Liệu — hub "📣 Tài Liệu Phát Hành" (duyệt được, không cần gửi link)
 
