@@ -3827,6 +3827,31 @@ router.post('/operationWorkItems/:id/dependencies', async (req, res) => {
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/dependencies`, err); }
 });
 
+// POST /api/records/operationWorkItems/:id/contract — C2: "Giá trị hợp đồng" + tệp đính kèm hợp đồng
+// (route sub-endpoint RIÊNG, mirror /dependencies — xem lib/recordActions.js updateOperationWorkItemContract()
+// cho lý do tách riêng khỏi /edit: quyền mở rộng cho CẢ người phụ trách, không chỉ toàn quyền hồ sơ).
+router.post('/operationWorkItems/:id/contract', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      const exemptFileUrls = (item.contractAttachments || []).map(a => a?.fileUrl).filter(Boolean);
+      const updated = recordActions.updateOperationWorkItemContract(freshUser, item, req.body || {}, sourceRecord);
+      // LỖI ĐÃ VÁ (agent kiểm toán độc lập C2): thiếu assertPayloadFileUrlsOwnedByUser() — cùng lớp lỗ
+      // hổng "giả mạo quyền sở hữu file" đã vá ở 14 route khác (VD hrProcesses/:id/attachments ngay
+      // trên) — người có quyền sửa Giá Trị Hợp Đồng CỦA VIỆC NÀY (toàn quyền/phụ trách) có thể gửi
+      // fileUrl THẬT của người khác ở module khác để "gắn" vào contractAttachments, rồi tải được qua
+      // lib/fileAuthz.js checker mới thêm — exemptFileUrls giữ nguyên tệp cũ đã có sẵn, chỉ soát tệp
+      // MỚI xuất hiện trong payload.
+      await assertPayloadFileUrlsOwnedByUser({ contractAttachments: updated.contractAttachments }, freshUser, { exemptFileUrls });
+      return updated;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/contract`, err); }
+});
+
 router.post('/operationWorkItems/:id/accept', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });

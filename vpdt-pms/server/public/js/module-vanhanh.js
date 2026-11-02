@@ -4316,6 +4316,7 @@ function renderOperationWorkItemModalBody() {
             <th class="p-1 text-left">Người Phụ Trách</th>
             <th class="p-1 text-left">Người Nghiệm Thu</th>
             <th class="p-1 text-left">Hạn</th>
+            <th class="p-1 text-left">Giá Trị HĐ</th>
             <th class="p-1 text-left">Ghi Chú</th>
           </tr>
         </thead>
@@ -4586,6 +4587,14 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // ACCEPTANCE nửa vời (lý do bắt buộc nhập nhưng người phụ trách không bao giờ thấy). Thêm nút "📜"
     // mirror ĐÚNG bảng lịch sử của Task (xem openOperationWorkItemHistoryModal() ngay dưới) — hiện ở MỌI
     // dòng (cả có/không con, cả 2 mode) vì ai mở được cây công việc này đều đã có quyền xem hồ sơ.
+    // C2 (11/2026, yêu cầu QA "Giá trị đầu tư/Giá trị hợp đồng/Tệp đính kèm") — nút mở modal riêng
+    // (openOperationWorkItemContractModal()) thay vì chèn thẳng 3 cột vào bảng (bảng đã khá chật với
+    // nameCell/assigneeCell/deadlineCell/statusCell/actionCell hiện có — modal giữ bảng gọn, vẫn đủ 3
+    // thông tin). Gate HIỆN nút: canEditWorkItems (toàn quyền) HOẶC đúng người phụ trách (isOwner) — mirror
+    // ĐÚNG quyền server updateOperationWorkItemContract().
+    if (canEditWorkItems || isOwner) {
+      actionHTML += ` <button type="button" data-op="openOperationWorkItemContractModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200" title="Giá trị đầu tư/hợp đồng + tệp đính kèm">💰</button>`;
+    }
     actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
     // Đợt sửa lỗi (phản hồi người dùng, modal thu hẹp còn max-w-4xl): bọc actionHTML trong 1 hàng flex
     // wrap — trước đây các nút chỉ nối chuỗi trần (inline, mr-1) trong 1 <td>, dễ bị dồn cứng 1 hàng dài
@@ -4661,6 +4670,83 @@ function openOperationWorkItemHistoryModal(id) {
 }
 function closeOperationWorkItemHistoryModal() {
   document.getElementById('operationWorkItemHistoryModal').classList.add('hidden');
+}
+
+// C2 (11/2026, yêu cầu QA "Giá trị đầu tư/Giá trị hợp đồng/Tệp đính kèm") — modal riêng, mirror ĐÚNG
+// khuôn openEditOperationRepairModal()/onEditVrFileAttachmentChange() (A3) cho phần tải nhiều tệp.
+// "Giá trị đầu tư" LUÔN hiển thị READ-ONLY (sourceRecord.estimateTotalAmount, Option A đã chốt với
+// người dùng — KHÔNG có input nào cho field này, không gửi lên server).
+let owiContractPendingAttachments = [];
+let owiContractAttachmentUploading = false;
+function openOperationWorkItemContractModal(id) {
+  const w = (DB.operationWorkItems || []).find(x => x.id === id);
+  if (!w) return;
+  const sourceRecord = operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId);
+  document.getElementById('owiContractId').value = id;
+  document.getElementById('owiContractTitle').innerText = `💰 Giá trị đầu tư/hợp đồng: ${w.title}`;
+  document.getElementById('owiContractInvestmentValue').innerText = formatMoneyDisplay(sourceRecord?.estimateTotalAmount || 0) || '0';
+  document.getElementById('owiContractValue').value = w.contractValue ? formatMoneyDisplay(w.contractValue) : '';
+  owiContractPendingAttachments = (w.contractAttachments || []).slice();
+  renderOwiContractAttachmentChips();
+  document.getElementById('operationWorkItemContractModal').classList.remove('hidden');
+}
+function closeOperationWorkItemContractModal() {
+  document.getElementById('operationWorkItemContractModal').classList.add('hidden');
+}
+async function onOwiContractFileChange(inputEl) {
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!files.length) return;
+  if (owiContractAttachmentUploading) return alert('⏳ Đang tải tệp, vui lòng đợi tải xong rồi thử lại.');
+  const remaining = 10 - owiContractPendingAttachments.length;
+  if (remaining <= 0) return alert('⛔ Đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
+  const toUpload = files.slice(0, remaining);
+  const overflowCount = files.length - toUpload.length;
+  owiContractAttachmentUploading = true;
+  const failed = [];
+  try {
+    for (const file of toUpload) {
+      try {
+        const data = await uploadFileToServer(file, 'operationWorkItemContract');
+        owiContractPendingAttachments.push({
+          fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
+          uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
+        });
+      } catch (err) { failed.push(`${file.name}: ${err.message}`); }
+    }
+  } finally { owiContractAttachmentUploading = false; }
+  renderOwiContractAttachmentChips();
+  const notices = [];
+  if (failed.length) notices.push(`⛔ ${failed.length} tệp tải lỗi:\n${failed.join('\n')}`);
+  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — chỉ nhận tối đa 10 tệp đính kèm.`);
+  if (notices.length) alert(notices.join('\n\n'));
+}
+function removeOwiContractAttachment(idx) {
+  owiContractPendingAttachments.splice(idx, 1);
+  renderOwiContractAttachmentChips();
+}
+function renderOwiContractAttachmentChips() {
+  const chipEl = document.getElementById('owiContractFileChip');
+  if (!chipEl) return;
+  chipEl.innerHTML = owiContractPendingAttachments.map((a, idx) => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="hover:underline">${escapeHtml(a.fileName)}</a><button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeOwiContractAttachment" data-arg0="${idx}">✕</button></span>`).join('');
+}
+async function submitOperationWorkItemContract() {
+  const id = Number(document.getElementById('owiContractId').value);
+  if (!Number.isFinite(id)) return;
+  const payload = {
+    contractValue: getMoneyValue(document.getElementById('owiContractValue')),
+    contractAttachments: owiContractPendingAttachments
+  };
+  try {
+    const result = await callRecordAction('operationWorkItems', id, 'contract', payload);
+    const idx = DB.operationWorkItems.findIndex(x => x.id === id);
+    if (idx !== -1) DB.operationWorkItems[idx] = result.item;
+    alert('✅ Đã lưu giá trị hợp đồng!');
+    closeOperationWorkItemContractModal();
+    renderOperationWorkItemModalBody();
+    renderOperationExecutionList();
+    renderOperationAcceptanceList();
+  } catch (err) { alert(`⛔ ${err.message}`); }
 }
 
 // --- Modal "🔗 Liên kết" công việc (VHST-5) — chọn NHIỀU công việc LÁ KHÁC cùng hồ sơ mà công việc đang
@@ -4977,14 +5063,25 @@ async function exportOperationWorkItems() {
     { header: 'Tên Công Việc', key: 'title', width: 30 }, { header: 'Mô Tả', key: 'description', width: 26 },
     { header: 'Người Phụ Trách', key: 'assignedTo', width: 26 }, { header: 'Người Nghiệm Thu', key: 'acceptor', width: 22 },
     { header: 'Hạn Hoàn Thành', key: 'deadline', width: 16 }, { header: 'Trạng Thái', key: 'status', width: 20 },
+    // C2 (11/2026) — "Giá Trị Đầu Tư" TỰ ĐỘNG/LINK (sourceRecord.estimateTotalAmount, Option A đã chốt
+    // với người dùng — tổng ngân sách DMĐT đã duyệt của CẢ HỒ SƠ, giống nhau ở mọi dòng, KHÔNG tính
+    // riêng theo từng công việc vì operationWorkItems không liên kết trực tiếp tới 1 hạng mục DMĐT cụ
+    // thể nào). "Giá Trị Hợp Đồng" nhập tay/import, người phụ trách tự điền qua updateOperationWorkItemContract().
+    { header: 'Giá Trị Đầu Tư (VNĐ)', key: 'investmentValue', width: 20 },
+    { header: 'Giá Trị Hợp Đồng (VNĐ)', key: 'contractValue', width: 20 },
+    { header: 'Tệp Đính Kèm HĐ', key: 'contractAttachments', width: 30 },
     { header: 'Việc Con Của', key: 'parentTitle', width: 30 }
   ];
   const byId = new Map(items.map(w => [w.id, w]));
+  const sourceRecord = operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId);
+  const investmentValue = sourceRecord?.estimateTotalAmount || 0;
   const rows = items.map(w => ({
     title: w.title, description: w.description || '',
     assignedTo: (Array.isArray(w.assignedToName) ? w.assignedToName : (w.assignedToName ? [w.assignedToName] : [])).join(', '),
     acceptor: w.acceptorName || '', deadline: w.deadline || '',
     status: OPERATION_WORK_ITEM_STATUS_LABELS[w.status] || w.status || '',
+    investmentValue, contractValue: w.contractValue || 0,
+    contractAttachments: (w.contractAttachments || []).map(a => a.fileName).join(', '),
     parentTitle: w.parentWorkItemId != null ? (byId.get(w.parentWorkItemId)?.title || '') : ''
   }));
   await downloadXlsxFromServer('Danh_Sach_Cong_Viec.xlsx', 'Danh Sách Công Việc', columns, rows);
@@ -5044,6 +5141,7 @@ async function onOperationWorkItemImportFileChange(event) {
         <td class="p-1">${escapeHtml((it.assignedTo || []).join(', '))}</td>
         <td class="p-1">${escapeHtml(it.acceptorUsername || '')}</td>
         <td class="p-1">${escapeHtml(it.deadline || '')}</td>
+        <td class="p-1">${it.contractValue ? escapeHtml(formatMoneyDisplay(it.contractValue)) : ''}</td>
         <td class="p-1 text-amber-700">${escapeHtml([it.description, dupNote].filter(Boolean).join(' — '))}</td>
       </tr>`;
     }).join('');
@@ -5074,7 +5172,8 @@ async function confirmOperationWorkItemImport() {
       const result = await callRecordCreate('operationWorkItems', {
         sourceType: operationSourceType(currentWorkItemModalKind), sourceId: currentWorkItemModalRecordId,
         parentWorkItemId: null, title: row.title, description: row.description || '',
-        assignedTo: row.assignedTo || [], acceptorUsername: row.acceptorUsername || null, deadline: row.deadline || ''
+        assignedTo: row.assignedTo || [], acceptorUsername: row.acceptorUsername || null, deadline: row.deadline || '',
+        contractValue: row.contractValue || 0
       });
       DB.operationWorkItems.push(result.item);
       created += 1;

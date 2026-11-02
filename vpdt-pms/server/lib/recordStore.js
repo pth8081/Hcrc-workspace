@@ -1286,7 +1286,15 @@ async function isFileUrlStillReferenced(pool, fileUrl) {
   const queries = [
     ...dedicatedTableNames.map(t => `SELECT TOP 1 1 AS c FROM dbo.${t} WHERE Payload LIKE @pat`),
     'SELECT TOP 1 1 AS c FROM dbo.TrashBin WHERE Payload LIKE @pat',
-    'SELECT TOP 1 1 AS c FROM dbo.AppData WHERE DataValue LIKE @pat'
+    'SELECT TOP 1 1 AS c FROM dbo.AppData WHERE DataValue LIKE @pat',
+    // dbo.OperationWorkItems (lib/operationWorkItemStore.js) — bảng RIÊNG, KHÔNG nằm trong
+    // DEDICATED_TABLES (schema cột khác hẳn: Id/CreatedAt/Status/ParentWorkItemId/SourceType/SourceId/
+    // Payload, không theo khuôn {table, hasCode, columns} ở trên) nhưng Payload cũng là JSON blob đầy đủ
+    // CÙNG kiểu — LỖI ĐÃ VÁ (agent kiểm toán độc lập C2, 11/2026): từ khi có contractAttachments[] (C2),
+    // đây là field file ĐẦU TIÊN trên bảng này — thiếu dòng quét này khiến sweepOrphanedUploads()/
+    // unlinkUnreferencedUploads() coi MỌI tệp đính kèm hợp đồng là "mồ côi" và xoá vật lý sau 48h dù
+    // công việc vẫn còn sống, gây 404 âm thầm cho người dùng.
+    'SELECT TOP 1 1 AS c FROM dbo.OperationWorkItems WHERE Payload LIKE @pat'
   ];
   const results = await Promise.all(queries.map(q => pool.request().input('pat', sql.NVarChar(sql.MAX), pattern).query(q)));
   return results.some(r => r.recordset.length > 0);
