@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.75 (2026-11): Onboarding/Offboarding — bắt buộc gán Phụ Trách lúc Tạo + bỏ email gửi cả phòng ban
+
+Theo yêu cầu người dùng: *"nếu không gán ai thì không ai được nhận email và yêu cầu phải gán người mới
+chạy tiếp nhé"*. Sau khi xác nhận phạm vi cụ thể với người dùng (chặn "Hoàn thành" khi task bắt buộc
+chưa gán, chặn Tạo quy trình nếu task bắt buộc chưa gán Phụ Trách ngay trên form Tạo, CHỈ áp dụng cho
+quy trình tạo MỚI từ nay — không hồi tố quy trình đang chạy dở):
+
+- **Form "+ Tạo Onboarding"/"+ Tạo Offboarding"** (`module-hrlifecycle.js`) có thêm khối **"👤 Gán Phụ
+  Trách Cho Từng Việc Bắt Buộc"** — liệt kê đúng các việc bắt buộc sẽ sinh ra theo Checklist Mẫu hiện
+  hành, mỗi việc 1 ô tìm-kiếm-gõ-chọn (widget `sdd*` dùng chung). Thiếu người phụ trách cho bất kỳ việc
+  bắt buộc nào → chặn "Tạo Quy Trình" (chặn CẢ client lẫn server, `hrProcesses.extraValidate` ở
+  `lib/createValidation.js`) — việc không bắt buộc vẫn tuỳ chọn.
+- Quy trình tạo kèm đủ thông tin gán được đánh dấu `requireTaskAssignment=true` — `completeHrTask()`
+  (`lib/recordActions.js`) chặn "✓ Hoàn thành" cho việc bắt buộc nào đang không có người phụ trách cụ thể
+  (VD vừa bị "✕ Bỏ gán"). Quy trình tạo TRƯỚC khi có tính năng này không có cờ → **không hồi tố**, vận
+  hành y hệt cũ.
+- **`jobs/hrTaskOverdueReminder.js`::`resolveTaskRecipients()`** — bỏ hẳn nhánh gửi email cảnh báo quá
+  hạn cho CẢ phòng ban (mọi người có quyền quản lý Onboarding/Offboarding/IT/Tài Chính) khi task chưa
+  gán riêng; nay chỉ gửi đúng người được gán riêng (hoặc đúng Quản Lý Trực Tiếp với nhãn MANAGER, vẫn
+  giữ nguyên — đây là 1 người cụ thể chịu trách nhiệm, không phải broadcast theo phòng ban). Áp dụng
+  NGAY cho mọi quy trình (hành vi gửi email ở các lượt quét từ nay, không phải dữ liệu đã lưu).
+- Test: 6 kịch bản mới trong `test-hr-lifecycle.js` (47/47 pass) + viết lại 4/10 kịch bản trong
+  `test-hr-task-overdue-reminder.js` cho đúng hành vi mới (10/10 pass) + chạy lại toàn bộ suite Nhân Sự
+  liên quan — không có hồi quy.
 
 ## v28.74 (2026-11): Trang chủ — "Tin ưu tiên" tuyển dụng mặc định hiện ở khung "Tin Tức Nổi Bật"
 

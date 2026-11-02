@@ -296,6 +296,12 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi chú thêm (tuỳ chọn)</label>
             <textarea id="hrpOnbNote" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: cần cấp thêm phần mềm/thiết bị gì đặc biệt..."></textarea>
           </div>
+          <!-- "Gán Phụ Trách Cho Từng Việc Bắt Buộc" (11/2026, theo yêu cầu người dùng "yêu cầu phải gán
+               người mới chạy tiếp") — nạp động theo DB.hrTaskTemplates (ONBOARDING, isActive, isRequired)
+               qua renderHrpCreateTaskAssignments() ngay khi mở form (showHrCreateForm()), xem chú thích
+               đầy đủ ở hàm đó. Server (hrProcesses.extraValidate, lib/createValidation.js) validate lại
+               ĐỘC LẬP — đây chỉ là lớp UI, không phải chỗ gác duy nhất. -->
+          <div id="hrpOnbTaskAssignWrap" class="bg-white border rounded p-3"></div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_HR_ONBOARDING" class="contents"></div>
           <div class="flex justify-end gap-2">
@@ -343,6 +349,9 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi Chú Thêm (tuỳ chọn)</label>
             <textarea id="hrpOffbReason" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: nghỉ việc từ ngày..."></textarea>
           </div>
+          <!-- "Gán Phụ Trách Cho Từng Việc Bắt Buộc" — xem chú thích đầy đủ ở khối tương ứng của form
+               Onboarding (#hrpOnbTaskAssignWrap) ngay trên, cùng khuôn, chỉ đổi processType. -->
+          <div id="hrpOffbTaskAssignWrap" class="bg-white border rounded p-3"></div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_HR_OFFBOARDING" class="contents"></div>
           <div class="flex justify-end gap-2">

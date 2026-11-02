@@ -8,6 +8,73 @@
 let activeHrLifecycleView = 'LIST';
 let activeHrCreateForm = null; // null | 'ONBOARDING' | 'OFFBOARDING'
 
+// "Gán Phụ Trách Cho Từng Việc Bắt Buộc" lúc Tạo quy trình (11/2026, theo yêu cầu người dùng: "nếu không
+// gán ai thì không ai được nhận email và yêu cầu phải gán người mới chạy tiếp") — trạng thái đang gõ/chọn
+// ở form Tạo, map theo processType -> {templateId: username}. Chỉ ÁP DỤNG cho quy trình MỚI tạo từ đây về
+// sau (đã xác nhận với người dùng KHÔNG hồi tố quy trình đang chạy dở) — payload.taskAssignments gửi kèm
+// khi Tạo khiến server set item.requireTaskAssignment=true, bật gate sau này ở completeHrTask()
+// (lib/recordActions.js, "✓ Hoàn thành" chặn nếu task bắt buộc chưa có assignedToUsername) — xem
+// extraValidate hrProcesses (lib/createValidation.js) cho phần validate THẬT (lớp dưới đây chỉ là UI,
+// không phải chỗ gác duy nhất).
+let hrpCreateTaskAssignments = { ONBOARDING: {}, OFFBOARDING: {} };
+
+function hrpRequiredCreateTemplates(processType) {
+  return (DB.hrTaskTemplates || [])
+    .filter(t => t && t.processType === processType && t.isActive !== false && t.isRequired !== false)
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+}
+
+// Nạp lại khối gán Phụ Trách mỗi khi mở form Tạo (showHrCreateForm()) — tính TƯƠI theo DB.hrTaskTemplates
+// hiện có (admin có thể đã sửa danh mục checklist mẫu từ lần mở form trước). Xoá sạch state cũ (nếu còn
+// dở từ lần mở trước rồi đóng form không submit) để không lỡ gửi lên 1 lựa chọn đã không còn hiện trên
+// form.
+function renderHrpCreateTaskAssignments(processType) {
+  const wrapId = processType === 'ONBOARDING' ? 'hrpOnbTaskAssignWrap' : 'hrpOffbTaskAssignWrap';
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  hrpCreateTaskAssignments[processType] = {};
+  const templates = hrpRequiredCreateTemplates(processType);
+  if (templates.length === 0) {
+    wrap.innerHTML = '<p class="text-[11px] text-gray-400 italic">Danh mục checklist bắt buộc hiện đang trống — không có việc nào cần gán Phụ Trách trước khi tạo.</p>';
+    return;
+  }
+  wrap.innerHTML = `
+    <p class="text-xs font-bold text-gray-700 mb-1">👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc <span class="text-red-500">*</span></p>
+    <p class="text-[11px] text-gray-500 mb-2">Mỗi việc bắt buộc dưới đây phải có 1 người phụ trách cụ thể thì mới tạo được quy trình — việc không có người phụ trách sẽ không gửi được email nhắc khi quá hạn.</p>
+    ${templates.map(t => {
+      const ddId = `hrpCreateTaskAssignDd_${processType}_${t.id}`;
+      return `
+      <div class="flex flex-wrap items-center gap-2 text-xs border-b border-gray-100 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
+        <span class="w-full sm:w-48 flex-shrink-0 font-semibold text-gray-700">${escapeHtml(t.taskName)}</span>
+        <div class="relative flex-1 min-w-[180px]">
+          <input type="text" data-sdd-list="${ddId}" autocomplete="off"
+            data-op-input="resolveHrpCreateTaskAssignInput" data-arg-value="0" data-arg1="${processType}" data-arg2="${t.id}"
+            placeholder="Gõ tên hoặc tài khoản để chọn Phụ Trách..." class="w-full border rounded p-1 text-xs">
+          <div id="${ddId}" class="hidden sdd-dropdown hrp-create-task-assign-dropdown" data-sdd-dropdown></div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+  populateHrpCreateTaskAssignDropdowns();
+}
+
+function populateHrpCreateTaskAssignDropdowns() {
+  const candidates = (DB.users || []).filter(u => u.active !== false).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map(u => `${u.name || u.username} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`);
+  document.querySelectorAll('.hrp-create-task-assign-dropdown[data-sdd-dropdown]').forEach(dd => sddSetOptions(dd.id, candidates));
+}
+
+// Resolver cho ô gõ-chọn ở trên — mirror ĐÚNG resolveItTicketApproverInput()/hrpReassignTaskFromInput()
+// (cùng khuôn "Tên — Phòng (username)"), chỉ khác là ghi vào object state thay vì input ẩn (nhiều dòng
+// cùng lúc, không có form field cố định nào để gửi kèm payload — gom lại ở submitHrpOnboarding()/
+// submitHrpOffboarding() ngay lúc Tạo).
+function resolveHrpCreateTaskAssignInput(rawValue, processType, templateId) {
+  const m = (rawValue || '').match(/^(.*) — .*\(([^()]+)\)$/);
+  const username = m ? m[2].trim() : '';
+  if (username) hrpCreateTaskAssignments[processType][templateId] = username;
+  else delete hrpCreateTaskAssignments[processType][templateId];
+}
+
 const HR_STAGE_LABELS = {
   PRE_BOARDING: 'Chuẩn Bị Trước Ngày Đi Làm', FIRST_DAY: 'Ngày Đầu Tiên', TRAINING: 'Tuần/Tháng Đầu',
   PROBATION_REVIEW: 'Kết Thúc Thử Việc',
@@ -85,11 +152,13 @@ function showHrCreateForm(type) {
     document.getElementById('hrpOnbRehirePanel')?.classList.add('hidden');
     document.getElementById('hrpOnbRehireResultsWrap')?.classList.add('hidden');
     renderDynamicInputsForModule('HR_ONBOARDING', 'dynamicFieldsContainer_HR_ONBOARDING');
+    renderHrpCreateTaskAssignments('ONBOARDING');
   } else if (type === 'OFFBOARDING') {
     populateSystemUsersDatalist();
     sddSetOptions('resignationReasonDatalist', (DB.resignationReasons || []).map(r => ({ label: r, value: r })));
     updateHrpOffboardingSubmitState();
     renderDynamicInputsForModule('HR_OFFBOARDING', 'dynamicFieldsContainer_HR_OFFBOARDING');
+    renderHrpCreateTaskAssignments('OFFBOARDING');
   }
 }
 function hideHrCreateForms() {
@@ -234,6 +303,11 @@ function onHrpOnbPlannedContractTypeChange() {
 async function submitHrpOnboarding(e) {
   e.preventDefault();
   const posType = document.getElementById('hrpOnbPosType').value;
+  const requiredOnbTemplates = hrpRequiredCreateTemplates('ONBOARDING');
+  const missingOnbAssign = requiredOnbTemplates.filter(t => !hrpCreateTaskAssignments.ONBOARDING[t.id]);
+  if (missingOnbAssign.length) {
+    return alert(`⛔ Vui lòng gán Phụ Trách cho các việc bắt buộc: ${missingOnbAssign.map(t => t.taskName).join(', ')}`);
+  }
   let customData;
   try {
     customData = await collectDynamicFieldsData('HR_ONBOARDING');
@@ -242,6 +316,7 @@ async function submitHrpOnboarding(e) {
   }
   const payload = {
     processType: 'ONBOARDING',
+    taskAssignments: { ...hrpCreateTaskAssignments.ONBOARDING },
     employeeCode: document.getElementById('hrpOnbEmployeeCode').value.trim(),
     fullName: document.getElementById('hrpOnbFullName').value.trim(),
     employeePosType: posType,
@@ -302,6 +377,7 @@ function resetHrpOnboardingForm() {
   populateLaborContractTypeSelect('hrpOnbPlannedContractType', '', { includeEmpty: true });
   onHrpOnbPlannedContractTypeChange();
   onHrpOnboardingPosTypeChange();
+  renderHrpCreateTaskAssignments('ONBOARDING');
 }
 
 async function submitHrpOffboarding(e) {
@@ -310,6 +386,11 @@ async function submitHrpOffboarding(e) {
   if (!employeeUsername) return alert('⛔ Vui lòng gõ tên/tài khoản rồi bấm chọn đúng 1 nhân viên trong gợi ý!');
   const lastWorkingDate = document.getElementById('hrpOffbLastWorkingDate').value;
   if (!lastWorkingDate) return alert('⛔ Vui lòng nhập Ngày nghỉ việc!');
+  const requiredOffbTemplates = hrpRequiredCreateTemplates('OFFBOARDING');
+  const missingOffbAssign = requiredOffbTemplates.filter(t => !hrpCreateTaskAssignments.OFFBOARDING[t.id]);
+  if (missingOffbAssign.length) {
+    return alert(`⛔ Vui lòng gán Phụ Trách cho các việc bắt buộc: ${missingOffbAssign.map(t => t.taskName).join(', ')}`);
+  }
   let customData;
   try {
     customData = await collectDynamicFieldsData('HR_OFFBOARDING');
@@ -318,6 +399,7 @@ async function submitHrpOffboarding(e) {
   }
   const payload = {
     processType: 'OFFBOARDING',
+    taskAssignments: { ...hrpCreateTaskAssignments.OFFBOARDING },
     employeeUsername, lastWorkingDate,
     isManagerialPosition: document.getElementById('hrpOffbIsManagerial').checked,
     directManagerUsername: document.getElementById('hrpOffbDirectManagerUsername').value || null,
@@ -349,6 +431,7 @@ function resetHrpOffboardingForm() {
   document.getElementById('hrpOffbEmployeeInfo').classList.add('hidden');
   document.getElementById('hrpOffbEmployeeInfo').innerHTML = '';
   updateHrpOffboardingSubmitState();
+  renderHrpCreateTaskAssignments('OFFBOARDING');
 }
 
 // ----- Danh sách quy trình -----

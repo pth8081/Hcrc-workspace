@@ -3337,10 +3337,33 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   mốc + số ngày lệch cấu hình sẵn trong danh mục.
 - Trong màn **Chi Tiết Quy Trình**: đánh dấu **Hoàn thành**/**Bỏ qua** từng
   việc (bỏ qua việc bắt buộc chỉ người quản lý quy trình mới làm được, phải
-  nhập lý do), **Giao lại** việc cho người khác, đính kèm tài liệu, xem lịch
-  sử. Quy trình **tự động chuyển "Hoàn tất"** ngay khi mọi việc bắt buộc ở mọi
-  giai đoạn đã xong/bỏ qua — không có nút "chuyển giai đoạn" thủ công. Có thể
-  **Huỷ quy trình** (bắt buộc lý do) khi đang thực hiện.
+  nhập lý do), **Giao lại** việc cho người khác (ô tìm-kiếm-gõ-chọn, từ
+  11/2026 — trước đó là `<select>` liệt kê toàn bộ user, khó dùng khi hệ
+  thống nhiều tài khoản; nút "✕ Bỏ gán" bên cạnh trả việc về "Không giao
+  riêng"), đính kèm tài liệu, xem lịch sử. Quy trình **tự động chuyển "Hoàn
+  tất"** ngay khi mọi việc bắt buộc ở mọi giai đoạn đã xong/bỏ qua — không có
+  nút "chuyển giai đoạn" thủ công. Có thể **Huỷ quy trình** (bắt buộc lý do)
+  khi đang thực hiện.
+- **Bắt buộc gán Phụ Trách cho việc bắt buộc ngay lúc Tạo** (11/2026, theo
+  yêu cầu người dùng — áp dụng cho quy trình tạo TỪ NAY, KHÔNG hồi tố quy
+  trình đã tạo trước đó): ngay dưới form "+ Tạo Onboarding"/"+ Tạo
+  Offboarding" có thêm khối "👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc" — liệt
+  kê đúng các việc bắt buộc sẽ được sinh ra theo Checklist Mẫu hiện hành,
+  mỗi việc có 1 ô tìm-kiếm-gõ-chọn người phụ trách. Thiếu người phụ trách
+  cho bất kỳ việc bắt buộc nào → chặn "Tạo Quy Trình", báo rõ tên việc còn
+  thiếu. Với quy trình đã bật cơ chế này, nếu sau đó "✕ Bỏ gán" 1 việc bắt
+  buộc thì **không bấm "✓ Hoàn thành" được nữa** cho tới khi gán lại đúng 1
+  người — việc KHÔNG bắt buộc vẫn gán/bỏ gán/hoàn thành tự do như trước.
+- **Email nhắc quá hạn CHỈ gửi cho người được gán riêng** (11/2026, theo yêu
+  cầu người dùng "nếu không gán ai thì không ai được nhận email"): trước đây
+  việc quá hạn CHƯA gán riêng sẽ gửi cảnh báo cho CẢ bộ phận phụ trách theo
+  nhãn (mọi người có quyền quản lý Onboarding/Offboarding/IT/Tài Chính) — từ
+  nay việc CHƯA gán riêng **không gửi email cho bất kỳ ai** (job quét quá hạn
+  vẫn chuyển trạng thái "Quá hạn" như cũ, chỉ không gửi email). Riêng nhãn
+  "Quản Lý Trực Tiếp" vẫn gửi đúng người đã chọn lúc tạo quy trình (không
+  tính là "chưa gán" vì đã có 1 người cụ thể chịu trách nhiệm). Áp dụng
+  ngay cho MỌI quy trình (kể cả quy trình cũ) vì đây là hành vi gửi email ở
+  các lượt quét chạy từ nay, không phải thay đổi dữ liệu đã lưu.
 - **Chặn tự động Hoàn Tất nếu thiếu người kế nhiệm** (chỉ áp dụng Offboarding)
   — ngay cả khi mọi việc bắt buộc đã xong, hệ thống **kiểm tra SỐNG**: nếu
   nhân viên đang nghỉ việc hiện vẫn là "Quản lý trực tiếp" (`managerUsername`)

@@ -1192,6 +1192,8 @@ const NGHIEP_VU_DOCS = {
     ] },
     steps: [
       { role: 'Nhân Sự', text: 'vào <b>💼 Nhân Sự → 🧑‍💼 Onboarding / Offboarding</b> (sidebar) → bấm <b>"+ Tạo Onboarding"</b> (nhân viên mới) hoặc <b>"+ Tạo Offboarding"</b> (nhân viên nghỉ việc) → điền thông tin → bấm <b>"📨 Tạo Quy Trình"</b> — hệ thống tự sinh danh sách việc cần làm theo mẫu, gán đúng bộ phận phụ trách từng việc.' },
+      { role: 'Nhân Sự', text: '(11/2026) Ngay dưới form Tạo có khối <b>"👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc"</b> — PHẢI gõ-chọn đúng 1 người phụ trách cho MỖI việc bắt buộc trong checklist thì mới bấm "📨 Tạo Quy Trình" được (thiếu bất kỳ việc nào bị chặn, báo rõ tên việc còn thiếu) — việc KHÔNG bắt buộc vẫn có thể để trống, gán sau trong "Chi Tiết Quy Trình" như trước.' },
+      { role: 'Người phụ trách/Nhân Sự', text: '(11/2026) Trong "Chi Tiết Quy Trình", đổi người phụ trách 1 việc bất kỳ (kể cả việc bắt buộc) qua ô tìm-kiếm-gõ-chọn ở cột "Phụ Trách" — nút "✕ Bỏ gán" bên cạnh trả việc về "Không giao riêng". LƯU Ý: với quy trình tạo TỪ 11/2026 trở đi, nếu "✕ Bỏ gán" 1 việc bắt buộc thì KHÔNG bấm "✓ Hoàn thành" được nữa cho tới khi gán lại người cụ thể.' },
       { role: 'Nhân Sự', text: '(10/2026) Nhập hàng loạt qua Excel — 2 LỰA CHỌN tuỳ nhu cầu: <b>"📥 Tải Mẫu (Theo Quy Trình)"</b> + <b>"📤 Nhập Excel (Theo Quy Trình)"</b> dùng cho nhân viên MỚI chưa từng onboarding — mỗi dòng tạo 1 quy trình Onboarding ĐẦY ĐỦ checklist y hệt tạo tay (đi qua đúng 1 hàm dùng chung, không có đường tắt bỏ qua bước nào). Ngược lại, nút <b>"👉 Bỏ Qua Quy Trình"</b> dùng cho nhân viên CŨ đã đang làm việc (di trú dữ liệu) — chuyển thẳng sang Nhập Excel ở Hồ Sơ Nhân Sự, tạo hồ sơ "Đang làm việc" ngay, KHÔNG sinh checklist nào.' },
       { role: 'Nhân Sự', text: '(10/2026) Khi tạo Offboarding, có thêm ô "Lý Do Nghỉ Việc" (gõ-hoặc-chọn từ danh mục "Lý Do Nghỉ Việc", Hệ Thống → Quản Lý Danh Mục) — TÁCH RIÊNG khỏi ô "Ghi Chú Thêm" tự do có sẵn, dùng để thống kê báo cáo theo đúng nhóm lý do nghỉ việc. Cả 2 ô đều tuỳ chọn.' },
       { role: 'Người phụ trách từng việc', text: 'vào tab <b>"✅ Việc Của Tôi"</b> để xem đúng việc được gán cho mình (theo bộ phận Nhân Sự/IT/Hành Chính/Kế Toán/Quản Lý trực tiếp) → đánh dấu hoàn tất từng việc.' },
@@ -1201,9 +1203,11 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Hoàn tất nghỉ việc tự động', text: 'khi hoàn tất thủ tục nghỉ việc, hệ thống tự khoá tài khoản đăng nhập, huỷ mọi phiên đang mở và chuyển hợp đồng lao động sang trạng thái đã kết thúc — không cần thao tác tay.' },
       { label: 'Chờ chỉ định người kế nhiệm', text: 'nếu người sắp nghỉ còn đang là quản lý trực tiếp của ai, quy trình nghỉ việc sẽ dừng lại ở bước "Chờ chỉ định người kế nhiệm" dù đã xong hết việc khác — Nhân Sự chỉ định xong mới tự hoàn tất.' },
+      { label: 'Bắt buộc gán người cho việc quan trọng (11/2026)', text: 'quy trình tạo TỪ nay trở đi bắt buộc phải gán đúng 1 người phụ trách cho mọi việc bắt buộc ngay lúc Tạo — không hồi tố cho quy trình đã tạo trước đó (vẫn vận hành như cũ, gán sau cũng được).' },
     ], right: [
       { label: 'Cầu nối IT', text: 'việc gắn nhãn IT có thể tự sinh 1 ticket hỗ trợ IT liên kết; hệ thống không tự tạo tài khoản đăng nhập — IT vẫn phải tạo thủ công ngoài hệ thống.' },
       { label: 'Ai được thao tác', text: 'người quản lý đúng loại quy trình (nhận việc hoặc nghỉ việc) mới thao tác được; người chỉ được cấp quyền xem thì chỉ xem, không bỏ qua được bất kỳ việc bắt buộc nào.' },
+      { label: 'Email nhắc quá hạn chỉ gửi cho người được gán riêng (11/2026)', text: 'việc quá hạn mà CHƯA gán người phụ trách cụ thể sẽ KHÔNG gửi email nhắc cho ai (kể cả Nhân Sự/IT/Kế Toán quản lý module) — trừ nhãn "Quản Lý Trực Tiếp" vẫn gửi đúng người đã chọn lúc tạo. Đây là lý do càng nên gán người ngay lúc Tạo.' },
     ] },
   },
   hrProfile: {

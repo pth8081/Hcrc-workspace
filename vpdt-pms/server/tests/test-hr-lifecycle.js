@@ -181,6 +181,81 @@ async function main() {
       itTaskId = itTask.taskId;
     });
 
+    // ===================== "Gán Phụ Trách Cho Từng Việc Bắt Buộc" lúc Tạo (11/2026, yêu cầu người dùng:
+    // "nếu không gán ai thì không ai được nhận email và yêu cầu phải gán người mới chạy tiếp") =====================
+    // ONB_TEMPLATES bắt buộc (isRequired!==false, isActive): id1 (IT, "Chuẩn bị máy tính"), id2 (HR, "Ký
+    // hợp đồng lao động"), id4 (HR, "Đào tạo hội nhập"), id5 (MANAGER, "Đánh giá kết thúc thử việc"). id3
+    // (MANAGER, "Giới thiệu quản lý trực tiếp") KHÔNG bắt buộc -> không cần có mặt trong taskAssignments.
+    await run.run('Tạo Onboarding KÈM taskAssignments nhưng THIẾU 1 việc bắt buộc -> 400, không tạo được', async () => {
+      const err = await page.evaluate(async (payload) => {
+        try { await callCreateAction('hrProcesses', payload); return null; }
+        catch (e) { return e.message; }
+      }, onboardHoPayload({ employeeCode: 'NV0005', fullName: 'Đỗ Thị Thiếu Gán', taskAssignments: { 1: 'it1', 2: 'hr1', 4: 'hr1' } }));
+      assertIncludes(err, 'Đánh giá kết thúc thử việc', 'Phải báo rõ tên việc bắt buộc còn thiếu người phụ trách');
+    });
+
+    await run.run('Tạo Onboarding KÈM taskAssignments có 1 username KHÔNG hợp lệ (không tồn tại) -> 400', async () => {
+      const err = await page.evaluate(async (payload) => {
+        try { await callCreateAction('hrProcesses', payload); return null; }
+        catch (e) { return e.message; }
+      }, onboardHoPayload({ employeeCode: 'NV0005', fullName: 'Đỗ Thị Thiếu Gán', taskAssignments: { 1: 'it1', 2: 'hr1', 4: 'hr1', 5: 'khong-ton-tai' } }));
+      assertIncludes(err, 'không hợp lệ', 'Phải báo người phụ trách không hợp lệ');
+    });
+
+    let gatedOnboardId = null, gatedRequiredTaskId = null;
+    await run.run('Tạo Onboarding KÈM taskAssignments ĐẦY ĐỦ cho mọi việc bắt buộc -> thành công, đúng assignedToUsername, item.requireTaskAssignment=true', async () => {
+      const item = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
+        onboardHoPayload({ employeeCode: 'NV0005', fullName: 'Đỗ Thị Đủ Gán', taskAssignments: { 1: 'it1', 2: 'hr1', 4: 'hr1', 5: 'mgr1' } }));
+      gatedOnboardId = item.id;
+      assertEqual(item.requireTaskAssignment, true, 'Quy trình tạo kèm taskAssignments phải được đánh dấu requireTaskAssignment=true');
+      const itTask2 = item.tasks.find(t => t.templateId === 1);
+      assertEqual(itTask2.assignedToUsername, 'it1', 'Task "Chuẩn bị máy tính" phải được gán đúng it1 ngay lúc tạo');
+      assertEqual(itTask2.assignedToName, 'Nhân Viên IT', 'assignedToName phải điền đúng theo hồ sơ user');
+      const nonRequiredTask = item.tasks.find(t => t.templateId === 3);
+      assertEqual(nonRequiredTask.assignedToUsername, null, 'Việc KHÔNG bắt buộc (không có trong taskAssignments) vẫn giữ assignedToUsername=null, không bị ép gán');
+      gatedRequiredTaskId = item.tasks.find(t => t.templateId === 5).taskId; // "Đánh giá kết thúc thử việc" — MANAGER, do mgr1 phụ trách.
+    });
+
+    await run.run('Quy trình CŨ (tạo KHÔNG kèm taskAssignments, VD onboardId) KHÔNG có cờ requireTaskAssignment -> không hồi tố, Hoàn Thành việc bắt buộc chưa gán vẫn được như trước', async () => {
+      // Đọc thẳng qua directDispatch('GET', '/api/data', ...) (đọc SỐNG từ state server mô phỏng) thay vì
+      // DB.hrProcesses phía client — DB.hrProcesses chỉ được nạp lại mỗi lần loginAs() gọi initDatabase(),
+      // CHƯA chắc đã có onboardId tại đúng thời điểm này trong chuỗi test (không liên quan gì tới tính
+      // năng đang kiểm tra, chỉ là giới hạn của mốc đồng bộ dữ liệu phía client).
+      const res = await directDispatch('GET', '/api/data', null, HR1.username);
+      const oldItem = (res.body.hrProcesses || []).find(p => p.id === onboardId);
+      assert(!!oldItem, 'Phải tìm thấy quy trình onboardId qua GET /api/data');
+      assert(!oldItem.requireTaskAssignment, 'Quy trình tạo trước khi có tính năng này KHÔNG được có cờ requireTaskAssignment');
+    });
+
+    await run.run('Quy trình MỚI (requireTaskAssignment=true): "✓ Hoàn thành" việc bắt buộc ĐANG có người phụ trách -> vẫn thành công bình thường', async () => {
+      await loginAs(page, IT1);
+      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'complete-task', { taskId: args.taskId }),
+        { id: gatedOnboardId, taskId: (await page.evaluate((id) => DB.hrProcesses.find(p => p.id === id).tasks.find(t => t.templateId === 1).taskId, gatedOnboardId)) });
+      assertEqual(result.item.tasks.find(t => t.templateId === 1).status, 'DONE', 'it1 đã được gán sẵn lúc tạo -> hoàn thành bình thường');
+      await loginAs(page, HR1);
+    });
+
+    await run.run('Quy trình MỚI (requireTaskAssignment=true): "✓ Hoàn thành" việc bắt buộc sau khi bị "✕ Bỏ gán" (reassign về null) -> 400, chặn lại', async () => {
+      // HR1 (creator, canManageHrProcess=true) thực hiện reassign-task — mirror đúng quyền thật của nút
+      // "✕ Bỏ gán"/ô Phụ Trách (chỉ hiện cho canManage, xem reassignSelect ở module-hrlifecycle.js).
+      await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'reassign-task', { taskId: args.taskId, assignedToUsername: null }),
+        { id: gatedOnboardId, taskId: gatedRequiredTaskId });
+      // Việc nhãn MANAGER chưa gán riêng vẫn canActOnHrTask()=true cho ĐÚNG directManagerUsername (mgr1,
+      // xem canActOnHrTask() lib/recordActions.js) — phải đăng nhập mgr1 mới qua được lớp quyền đó để
+      // chạm tới gate requireTaskAssignment MỚI đang test (HR1 sẽ bị chặn 403 TRƯỚC đó, không phải lỗi
+      // đang cần xác nhận ở đây).
+      await loginAs(page, MANAGER1);
+      const err = await page.evaluate(async (args) => {
+        try { await callRecordAction('hrProcesses', args.id, 'complete-task', { taskId: args.taskId }); return null; }
+        catch (e) { return e.message; }
+      }, { id: gatedOnboardId, taskId: gatedRequiredTaskId });
+      assertIncludes(err, 'chưa được gán người phụ trách cụ thể', 'Phải chặn Hoàn thành khi việc bắt buộc của quy trình MỚI không còn người phụ trách');
+      await loginAs(page, HR1);
+      // Gán lại đúng người cũ (mgr1) để không ảnh hưởng tới các test sau dùng chung gatedOnboardId.
+      await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'reassign-task', { taskId: args.taskId, assignedToUsername: 'mgr1' }),
+        { id: gatedOnboardId, taskId: gatedRequiredTaskId });
+    });
+
     // ===================== TẠO QUY TRÌNH — OFFBOARDING =====================
 
     await run.run('Offboarding: tên đăng nhập không tồn tại -> 400', async () => {

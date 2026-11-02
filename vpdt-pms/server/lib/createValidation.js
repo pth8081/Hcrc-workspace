@@ -4460,20 +4460,52 @@ const CREATE_MODULE_CONFIGS = {
       const templates = (appData?.hrTaskTemplates || [])
         .filter(t => t && t.processType === processType && t.isActive !== false)
         .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      // taskAssignments (11/2026, theo yêu cầu người dùng: "nếu không gán ai thì không ai được nhận
+      // email và yêu cầu phải gán người mới chạy tiếp") — field TUỲ CHỌN {templateId: username}, do form
+      // Tạo tay MỚI gửi kèm (showHrCreateForm()/renderHrpCreateTaskAssignments(), module-hrlifecycle.js).
+      // CHỈ validate/enforce khi field này THỰC SỰ có mặt trong payload (object, kể cả {}) — caller nào
+      // KHÔNG gửi field này (Nhập Excel hàng loạt "Theo Quy Trình", xem lib/hrProcessCreateImport.js/
+      // lib/hrProcessOnboardingCreate.js — chưa có UI chọn Phụ Trách theo dòng) giữ NGUYÊN hành vi cũ
+      // (tasks[] sinh ra chưa gán ai, HR gán sau trong modal Chi Tiết) — KHÔNG hồi tố/chặn luồng Excel
+      // sẵn có. Khi CÓ gửi: mọi task BẮT BUỘC (isRequired, đang hiện trên form Tạo) phải có đúng 1 username
+      // hợp lệ (active) trong map này, thiếu bất kỳ cái nào -> chặn tạo NGAY (400) — kèm cờ
+      // requireTaskAssignment=true trên bản ghi để completeHrTask() (lib/recordActions.js) gate tiếp lúc
+      // "✓ Hoàn thành" sau này. Quy trình CŨ (tạo trước khi có field này) không có cờ -> không bị hồi tố.
+      const hasTaskAssignments = payload.taskAssignments && typeof payload.taskAssignments === 'object' && !Array.isArray(payload.taskAssignments);
+      if (hasTaskAssignments) {
+        const missingRequired = [];
+        for (const t of templates) {
+          if (t.isRequired === false) continue;
+          const username = String(payload.taskAssignments[t.id] || '').trim();
+          if (!username) { missingRequired.push(t.taskName); continue; }
+          const assignee = (appData?.users || []).find(u => u.username === username && u.active !== false);
+          if (!assignee) throw new CreateError(400, `Người phụ trách đã chọn cho việc "${t.taskName}" không hợp lệ (tài khoản không tồn tại hoặc đã bị khoá)`);
+        }
+        if (missingRequired.length) {
+          throw new CreateError(400, `Vui lòng gán Phụ Trách cho các việc bắt buộc: ${missingRequired.join(', ')}`);
+        }
+      }
+      payload.requireTaskAssignment = hasTaskAssignments;
       const anchorTime = new Date(anchorDate).getTime();
-      payload.tasks = templates.map((t, idx) => ({
-        taskId: idx + 1,
-        templateId: t.id,
-        taskName: String(t.taskName || '').slice(0, 200),
-        department: t.department,
-        stage: t.stage,
-        isRequired: t.isRequired !== false,
-        dueDate: new Date(anchorTime + (Number(t.dueDaysOffset) || 0) * 86400000).toISOString().slice(0, 10),
-        status: 'PENDING',
-        assignedToUsername: null, assignedToName: null,
-        note: '', completedBy: null, completedByName: null, completedAt: null,
-        linkedTicketId: null
-      }));
+      payload.tasks = templates.map((t, idx) => {
+        const assignedUsername = hasTaskAssignments ? String(payload.taskAssignments[t.id] || '').trim() : '';
+        const assignedUser = assignedUsername ? (appData?.users || []).find(u => u.username === assignedUsername) : null;
+        return {
+          taskId: idx + 1,
+          templateId: t.id,
+          taskName: String(t.taskName || '').slice(0, 200),
+          department: t.department,
+          stage: t.stage,
+          isRequired: t.isRequired !== false,
+          dueDate: new Date(anchorTime + (Number(t.dueDaysOffset) || 0) * 86400000).toISOString().slice(0, 10),
+          status: 'PENDING',
+          assignedToUsername: assignedUser ? assignedUser.username : null,
+          assignedToName: assignedUser ? (assignedUser.name || assignedUser.username) : null,
+          note: '', completedBy: null, completedByName: null, completedAt: null,
+          linkedTicketId: null
+        };
+      });
+      delete payload.taskAssignments;
 
       const stages = processType === 'ONBOARDING' ? HR_ONBOARDING_STAGES : HR_OFFBOARDING_STAGES;
       payload.stage = stages[0];

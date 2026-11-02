@@ -40,38 +40,33 @@ function isPastDue(dateStr) {
   return startOfDue.getTime() < startOfNow.getTime();
 }
 
-// Người nhận email cho 1 task quá hạn — đúng người được giao riêng (assignedToUsername) nếu có, không
-// thì theo nhãn trách nhiệm (department), cùng logic canActOnHrTask() ở lib/recordActions.js nhưng chỉ
-// cần DANH SÁCH người có quyền (không cần biết AI đang gọi).
-// LỖI ĐÃ VÁ (11/2026, người dùng phản ánh "sao Onboarding lại gửi email lên tận Tổng Giám Đốc"): trước
-// đây matchesPerm luôn OR thêm `u.perms?.admin` — bất kỳ tài khoản nào bật cờ "Admin - Toàn quyền quản
-// trị" (phục vụ mục đích hoàn toàn khác, VD tài khoản TGĐ) đều tự động nhận email cho MỌI việc chưa gán
-// quá hạn ở MỌI quy trình Onboarding/Offboarding toàn công ty, dù không có quyền chuyên môn phù hợp. Chỉ
-// giữ đúng người có quyền quản lý phòng ban tương ứng (hrOnboardingManage/hrOffboardingManage/itManage/
-// paymentManage) — Admin vẫn xem/thao tác được TOÀN BỘ trong app như cũ (canActOnHrTask()/
-// canManageHrProcess() ở lib/recordActions.js không đổi, admin luôn bypass ở đó), chỉ không còn tự động
-// nhận email khi không có quyền chuyên môn đúng.
+// Người nhận email cho 1 task quá hạn — đúng người được giao riêng (assignedToUsername) nếu có; nhãn
+// MANAGER (chưa gán riêng) lùi về ĐÚNG 1 người — directManagerUsername (quản lý trực tiếp HR đã chỉ định
+// SẴN lúc tạo quy trình) — đây KHÔNG phải broadcast theo phòng ban, mà là 1 người cụ thể gắn liền với
+// CHÍNH quy trình này, giữ nguyên như trước.
+// LỊCH SỬ: trước đây (tới v28.73), department HR/ADMIN/IT/FINANCE chưa gán riêng còn lùi về gửi cho CẢ
+// PHÒNG BAN (mọi user có hrOnboardingManage/hrOffboardingManage/itManage/paymentManage) — đã từng vá 1
+// lỗi liên quan (loại `admin` bypass khỏi nhánh đó, 11/2026) nhưng bản thân cơ chế "gửi cả phòng ban" vẫn
+// giữ nguyên.
+// ĐỔI (11/2026, theo yêu cầu người dùng tiếp theo): "nếu không gán ai thì không ai được nhận email" — bỏ
+// HẲN nhánh gửi-cả-phòng-ban (HR/ADMIN/IT/FINANCE) phía dưới, task chưa gán riêng ở các nhãn này không
+// còn gửi email cho bất kỳ ai nữa (trả về mảng rỗng), đi kèm với bước ép buộc PHẢI gán người mới tạo được
+// quy trình MỚI (xem hrProcesses.extraValidate ở lib/createValidation.js + completeHrTask() ở
+// lib/recordActions.js) — tinh thần: không còn "trách nhiệm chung chung theo phòng ban" nữa, phải có
+// đúng 1 người chịu trách nhiệm. Áp dụng NGAY cho MỌI quy trình (kể cả quy trình cũ tạo trước khi có yêu
+// cầu này) vì đây là hành vi GỬI EMAIL (không phải dữ liệu/workflow đã lưu) — không có khái niệm "hồi
+// tố" ở đây, chỉ ảnh hưởng các lượt quét quá hạn CHẠY TỪ NAY trở đi.
 function resolveTaskRecipients(users, item, task) {
   if (task.assignedToUsername) {
     const u = users.find(x => x.username === task.assignedToUsername && x.active !== false);
     return u && u.email && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE') ? [{ email: u.email, name: u.name || u.username }] : [];
   }
-  let matchesPerm;
-  if (task.department === 'HR' || task.department === 'ADMIN') {
-    const manageFlag = item.processType === 'ONBOARDING' ? 'hrOnboardingManage' : 'hrOffboardingManage';
-    matchesPerm = (u) => !!u.perms?.[manageFlag];
-  } else if (task.department === 'IT') {
-    matchesPerm = (u) => !!u.perms?.itManage;
-  } else if (task.department === 'FINANCE') {
-    matchesPerm = (u) => !!u.perms?.paymentManage;
-  } else if (task.department === 'MANAGER') {
+  if (task.department === 'MANAGER') {
     if (!item.directManagerUsername) return [];
     const u = users.find(x => x.username === item.directManagerUsername && x.active !== false);
     return u && u.email && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE') ? [{ email: u.email, name: u.name || u.username }] : [];
-  } else {
-    return [];
   }
-  return users.filter(u => u && u.active !== false && u.email && matchesPerm(u) && !isUserOptedOutOfEmailModule(u, 'HR_TASK_OVERDUE')).map(u => ({ email: u.email, name: u.name || u.username }));
+  return [];
 }
 
 async function checkHrTaskOverdueReminders() {
@@ -147,7 +142,7 @@ async function checkHrTaskOverdueReminders() {
             module: 'HR_LIFECYCLE', actionType: 'TASK_OVERDUE', targetObject: `${employeeLabel} — ${task.taskName}`,
             description: recipients.length
               ? `Việc "${task.taskName}" (${employeeLabel}) đã quá hạn — đã gửi cảnh báo tới ${recipients.map(r => r.email).join(', ')}`
-              : `Việc "${task.taskName}" (${employeeLabel}) đã quá hạn — chưa có người nhận hợp lệ (chưa ai có quyền phù hợp kèm email)`,
+              : `Việc "${task.taskName}" (${employeeLabel}) đã quá hạn — KHÔNG gửi email cảnh báo (chưa gán người phụ trách cụ thể, hoặc người phụ trách thiếu email/đã tắt nhận thông báo loại này)`,
             status: recipients.length ? (sendResult.failed.length && !sendResult.simulated ? 'WARNING' : 'SUCCESS') : 'WARNING'
           });
         }

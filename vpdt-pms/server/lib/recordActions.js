@@ -6919,6 +6919,15 @@ function completeHrTask(user, item, body, users) {
   if (task.status === 'DONE') throw new HttpError(409, 'Việc này đã được đánh dấu hoàn thành rồi');
   if (task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã bị bỏ qua, không thể đánh dấu hoàn thành');
   if (!canActOnHrTask(user, item, task)) throw new HttpError(403, 'Bạn không có quyền hoàn thành việc này');
+  // item.requireTaskAssignment (11/2026, theo yêu cầu người dùng "yêu cầu phải gán người mới chạy tiếp")
+  // — CHỈ bật cho quy trình MỚI tạo qua form có khối "Gán Phụ Trách Cho Từng Việc Bắt Buộc"
+  // (module-hrlifecycle.js, xem hrProcesses.extraValidate ở lib/createValidation.js) — quy trình tạo
+  // TRƯỚC khi có tính năng này không có cờ, KHÔNG bị hồi tố/chặn giữa chừng. Chỉ chặn việc BẮT BUỘC
+  // (isRequired) — việc không bắt buộc vẫn hoàn thành được dù chưa gán riêng, đúng khuôn trách nhiệm
+  // theo phòng ban mặc định như trước (canActOnHrTask() ngay trên).
+  if (item.requireTaskAssignment && task.isRequired && !task.assignedToUsername) {
+    throw new HttpError(400, 'Việc bắt buộc này chưa được gán người phụ trách cụ thể — vui lòng gán Phụ Trách trước khi đánh dấu Hoàn thành.');
+  }
   // templateId=15 ("Ra quyết định: ký chính thức/gia hạn/chấm dứt", PROBATION_REVIEW) — bắt buộc kèm
   // quyết định hợp lệ NGAY LÚC hoàn thành, vì đây chính là hành động kích hoạt lib/laborContract.js xử
   // lý Hợp Đồng Lao Động kế tiếp (xem routes/records.js::syncLaborContractOnHrTaskEvent()) — validate ở

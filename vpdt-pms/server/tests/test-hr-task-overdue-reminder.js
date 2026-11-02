@@ -1,16 +1,19 @@
 // server/tests/test-hr-task-overdue-reminder.js
 //
-// LỖI ĐÃ VÁ (11/2026, người dùng phản ánh "sao Onboarding lại gửi email lên tận Tổng Giám Đốc"):
-// jobs/hrTaskOverdueReminder.js::resolveTaskRecipients() trước đây luôn OR thêm `u.perms?.admin` vào
-// điều kiện nhận email cho việc chưa gán (department HR/ADMIN/IT/FINANCE) — bất kỳ tài khoản nào bật cờ
-// "Admin - Toàn quyền quản trị" (vì lý do hoàn toàn khác, VD tài khoản Tổng Giám Đốc) đều tự động nhận
-// email cho MỌI việc Onboarding/Offboarding chưa gán bị quá hạn trên toàn công ty, dù không có quyền
-// chuyên môn phù hợp (hrOnboardingManage/hrOffboardingManage/itManage/paymentManage). Test này xác nhận:
-// sau khi vá, người CHỈ có perms.admin (không có quyền chuyên môn đúng) KHÔNG còn nhận email, trong khi
-// người có đúng quyền chuyên môn vẫn nhận như cũ — cho cả 2 processType (ONBOARDING/OFFBOARDING) và cả 3
-// nhãn department (HR, IT, FINANCE). Đồng thời xác nhận KHÔNG đổi hành vi ở 2 nhánh không liên quan tới
-// lỗi này: task đã có assignedToUsername riêng, và nhãn MANAGER (đi theo directManagerUsername cố định,
-// chưa từng có đường lùi admin).
+// LỊCH SỬ (11/2026, người dùng phản ánh "sao Onboarding lại gửi email lên tận Tổng Giám Đốc"):
+// jobs/hrTaskOverdueReminder.js::resolveTaskRecipients() trước đây (tới v28.73), khi 1 task CHƯA gán
+// riêng, lùi về gửi email cho CẢ PHÒNG BAN theo department (hrOnboardingManage/hrOffboardingManage/
+// itManage/paymentManage, hoặc directManagerUsername với nhãn MANAGER) — từng vá 1 lỗi liên quan (loại
+// `u.perms?.admin` khỏi điều kiện nhận, 11/2026) nhưng vẫn giữ nguyên cơ chế "gửi cả phòng ban" đó.
+//
+// ĐỔI (v28.75, 11/2026, theo yêu cầu người dùng tiếp theo): "nếu không gán ai thì không ai được nhận
+// email" — bỏ HẲN nhánh gửi-cả-phòng-ban, task CHƯA gán riêng (assignedToUsername rỗng) giờ KHÔNG gửi
+// email cho BẤT KỲ AI nữa (kể cả người có đúng quyền chuyên môn phòng ban) — đi kèm bắt buộc PHẢI gán
+// người cụ thể mới TẠO được quy trình MỚI (xem test-hr-lifecycle.js, mục "Gán Phụ Trách lúc Tạo"). Các
+// kịch bản "LỖI ĐÃ VÁ ..." bên dưới (giữ nguyên tên để còn dấu vết lịch sử) nay xác nhận ĐÚNG hành vi MỚI
+// (0 email khi chưa gán, bất kể department) thay vì hành vi gửi-cả-phòng-ban cũ đã bị thay thế hoàn toàn.
+// Riêng nhãn MANAGER: trước đây CHƯA từng có đường lùi admin (đi thẳng theo directManagerUsername), nên
+// 2 kịch bản MANAGER giữ nguyên không đổi.
 //
 // Giả lập db/lib/recordStore/mailer/systemLogStore/emailCrypto/emailTemplate — cùng khuôn
 // tests/test-it-approval-deadline-reminder.js.
@@ -138,28 +141,24 @@ async function main() {
 
   const mailsFor = (subjectIncludes) => sentMails.filter(m => m.subject.includes(subjectIncludes));
 
-  await test('LỖI ĐÃ VÁ: ONBOARDING + department HR chưa gán -> CHỈ hrOnboardingManage nhận, ceo_admin (chỉ perms.admin) KHÔNG nhận', async () => {
+  await test('LỖI ĐÃ VÁ (v28.75): ONBOARDING + department HR chưa gán -> KHÔNG gửi email cho ai (kể cả hrOnboardingManage/ceo_admin) — bỏ hẳn fallback gửi cả phòng ban', async () => {
     const m = mailsFor('Tạo email công ty');
-    assert(m.length === 1, `phải gửi đúng 1 email (gộp người nhận), thực tế ${m.length}`);
-    assertSameSet(m[0].to, ['hr_onb@test.vn'], 'recipients HR/ONBOARDING');
+    assert(m.length === 0, `không được gửi email nào khi chưa gán riêng, thực tế ${m.length}`);
   });
 
-  await test('LỖI ĐÃ VÁ: OFFBOARDING + department HR chưa gán -> CHỈ hrOffboardingManage nhận, ceo_admin KHÔNG nhận', async () => {
+  await test('LỖI ĐÃ VÁ (v28.75): OFFBOARDING + department HR chưa gán -> KHÔNG gửi email cho ai (kể cả hrOffboardingManage/ceo_admin)', async () => {
     const m = mailsFor('Thu hồi tài sản');
-    assert(m.length === 1, `phải gửi đúng 1 email, thực tế ${m.length}`);
-    assertSameSet(m[0].to, ['hr_offb@test.vn'], 'recipients HR/OFFBOARDING');
+    assert(m.length === 0, `không được gửi email nào khi chưa gán riêng, thực tế ${m.length}`);
   });
 
-  await test('LỖI ĐÃ VÁ: department IT chưa gán -> CHỈ itManage nhận, ceo_admin KHÔNG nhận', async () => {
+  await test('LỖI ĐÃ VÁ (v28.75): department IT chưa gán -> KHÔNG gửi email cho ai (kể cả itManage/ceo_admin)', async () => {
     const m = mailsFor('Cấp tài khoản IT');
-    assert(m.length === 1, `phải gửi đúng 1 email, thực tế ${m.length}`);
-    assertSameSet(m[0].to, ['it_mgr@test.vn'], 'recipients IT');
+    assert(m.length === 0, `không được gửi email nào khi chưa gán riêng, thực tế ${m.length}`);
   });
 
-  await test('LỖI ĐÃ VÁ: department FINANCE chưa gán -> CHỈ paymentManage nhận, ceo_admin KHÔNG nhận', async () => {
+  await test('LỖI ĐÃ VÁ (v28.75): department FINANCE chưa gán -> KHÔNG gửi email cho ai (kể cả paymentManage/ceo_admin)', async () => {
     const m = mailsFor('Quyết toán lương');
-    assert(m.length === 1, `phải gửi đúng 1 email, thực tế ${m.length}`);
-    assertSameSet(m[0].to, ['finance_mgr@test.vn'], 'recipients FINANCE');
+    assert(m.length === 0, `không được gửi email nào khi chưa gán riêng, thực tế ${m.length}`);
   });
 
   await test('Không đổi hành vi: ceo_admin KHÔNG xuất hiện trong BẤT KỲ email nào ở toàn bộ lượt chạy', async () => {
