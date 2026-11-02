@@ -3790,9 +3790,13 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
   // định .pdf/.docx/.xlsx, xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js) — file chỉ THẬT SỰ lưu vào
   // hồ sơ sau khi bấm "💾 Lưu Danh Mục Đầu Tư" (giống mọi field khác của dòng).
   const canEditAttachments = editable && estimateIsFullManager;
+  // B3 (11/2026, yêu cầu QA "có chức năng tải file đính kèm" cho Danh Mục Đầu Tư) — thêm "⬇️" cạnh link
+  // xem, cùng pattern attachmentDownloadUrl() đã dùng ở A4 (Sửa Chữa). Không cần sửa server — quyền tải
+  // estimateItems[].attachments[].fileUrl đã có sẵn ở lib/fileAuthz.js.
   const attachmentsListHTML = (it.attachments || []).map((a, aIdx) => `
       <div class="flex items-center gap-1">
         <a href="#" data-op="viewOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-blue-600 underline truncate max-w-[100px]" title="${escapeHtml(a.fileName || '')}">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a>
+        <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 font-bold" title="Tải tệp">⬇️</a>
         ${canEditAttachments ? `<button type="button" data-op="removeOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-red-500 font-bold" title="Xoá tệp">✕</button>` : ''}
       </div>`).join('');
   const attachCell = depth !== 0
@@ -4767,6 +4771,10 @@ function openOperationWorkItemFormModal(parentWorkItemId, editItem) {
   syncOwiDateBounds();
   renderDynamicInputsForModule('OPERATION_WORK_ITEM', 'dynamicFieldsContainer_OPERATION_WORK_ITEM');
   document.getElementById('operationWorkItemFormModal').classList.remove('hidden');
+  // C1 (11/2026, yêu cầu QA "di dời tự do được bảng Thêm Công Việc Gốc") — modal cố định giữa màn hình
+  // trước đây che mất bảng danh sách phía sau; makeModalDraggable() (core.js) tự reset vị trí mỗi lần
+  // gọi, nên gọi ngay sau khi hiện modal là đủ, không cần tách theo chế độ Thêm Gốc/Thêm Con/Sửa.
+  makeModalDraggable('operationWorkItemFormModalPanel', '.p-4.border-b');
 }
 // Toggle hiện/ẩn ô số ngày theo lựa chọn radio "Nghiệm thu ngay"/"Nghiệm thu sau N ngày" (Mục D).
 function onOwiAcceptanceModeChange() {
@@ -5663,6 +5671,12 @@ function buildOperationStoreReportOverviewRows(computed) {
   });
   return rows;
 }
+// D1 (11/2026, yêu cầu QA "1 Mã hồ sơ chỉ hiện 1 dòng tổng quan, khi click vào mới xổ ra danh sách các
+// công việc con") — CHỈ đổi phần RENDER (gom `rows` phẳng theo `code` thành từng cụm, 1 dòng tổng quan +
+// N dòng chi tiết ẩn mặc định), KHÔNG đụng buildOperationStoreReportOverviewRows() hay
+// exportOperationStoreReportOverview() — file Xuất Excel vẫn xuất phẳng từng công việc như trước, đúng 1
+// nguồn sự thật nhưng tách biệt 2 cách TRÌNH BÀY cho 2 mục đích khác nhau (xem trên web gọn >< đối chiếu
+// trong Excel đủ dữ liệu).
 function renderOperationStoreReportOverview(computed) {
   const tbody = document.getElementById('operationWorkItemOverviewTableBody');
   const countBox = document.getElementById('operationWorkItemOverviewCount');
@@ -5670,21 +5684,64 @@ function renderOperationStoreReportOverview(computed) {
   const rows = buildOperationStoreReportOverviewRows(computed);
   if (countBox) countBox.innerText = `Tổng ${rows.length} công việc`;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(row => `<tr class="hover:bg-gray-50 border-b">
-      <td class="border p-1.5 font-mono font-bold text-cyan-800">${escapeHtml(row.code)}</td>
-      <td class="border p-1.5">${escapeHtml(row.recordTitle)}</td>
-      <td class="border p-1.5">${escapeHtml(row.title)}</td>
-      <td class="border p-1.5">${escapeHtml(row.assignedToName)}</td>
-      <td class="border p-1.5">${escapeHtml(row.acceptorName)}</td>
-      <td class="border p-1.5">${operationWorkItemStatusBadge(row.status)}</td>
-      <td class="border p-1.5 whitespace-nowrap">${escapeHtml(row.deadlineStatusLabel)}</td>
-      <td class="border p-1.5">${row.startDate ? new Date(row.startDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
-      <td class="border p-1.5">${row.deadline ? new Date(row.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
-      <td class="border p-1.5">${escapeHtml(row.acceptedAt)}</td>
-    </tr>`).join('');
+  const groups = new Map(); // code -> { recordTitle, rows: [] }, giữ thứ tự xuất hiện trong `rows`
+  rows.forEach((row) => {
+    if (!groups.has(row.code)) groups.set(row.code, { recordTitle: row.recordTitle, rows: [] });
+    groups.get(row.code).rows.push(row);
+  });
+  tbody.innerHTML = [...groups.entries()].map(([code, g]) => {
+    const total = g.rows.length;
+    const done = g.rows.filter(r => r.status === 'DA_NGHIEM_THU').length;
+    const doing = g.rows.filter(r => r.status === 'DANG_THUC_HIEN' || r.status === 'DANG_NGHIEM_THU').length;
+    const notStarted = g.rows.filter(r => r.status === 'CHUA_BAT_DAU').length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const groupKey = escapeHtml(code);
+    const summaryRow = `<tr class="hover:bg-gray-50 border-b bg-gray-50/60 font-semibold cursor-pointer" data-op="toggleOperationReportGroup" data-arg0="${groupKey}">
+        <td class="border p-1.5 text-center text-gray-500" data-group-arrow="${groupKey}">▸</td>
+        <td class="border p-1.5 font-mono font-bold text-cyan-800">${groupKey}</td>
+        <td class="border p-1.5" colspan="2">${escapeHtml(g.recordTitle)}</td>
+        <td class="border p-1.5" colspan="2">Tổng ${total} CV — ✅ ${done} · 🔵 ${doing} · ⚪ ${notStarted}</td>
+        <td class="border p-1.5" colspan="5">Tiến độ: <b>${pct}%</b></td>
+      </tr>`;
+    const detailRows = g.rows.map(row => `<tr class="hover:bg-gray-50 border-b hidden" data-group="${groupKey}">
+        <td class="border p-1.5"></td>
+        <td class="border p-1.5 font-mono text-cyan-700">${escapeHtml(row.code)}</td>
+        <td class="border p-1.5">${escapeHtml(row.recordTitle)}</td>
+        <td class="border p-1.5">${escapeHtml(row.title)}</td>
+        <td class="border p-1.5">${escapeHtml(row.assignedToName)}</td>
+        <td class="border p-1.5">${escapeHtml(row.acceptorName)}</td>
+        <td class="border p-1.5">${operationWorkItemStatusBadge(row.status)}</td>
+        <td class="border p-1.5 whitespace-nowrap">${escapeHtml(row.deadlineStatusLabel)}</td>
+        <td class="border p-1.5">${row.startDate ? new Date(row.startDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
+        <td class="border p-1.5">${row.deadline ? new Date(row.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
+        <td class="border p-1.5">${escapeHtml(row.acceptedAt)}</td>
+      </tr>`).join('');
+    return summaryRow + detailRows;
+  }).join('');
+}
+function toggleOperationReportGroup(code) {
+  const tbody = document.getElementById('operationWorkItemOverviewTableBody');
+  if (!tbody) return;
+  const detailRows = tbody.querySelectorAll(`tr[data-group="${CSS.escape(code)}"]`);
+  const arrowEl = tbody.querySelector(`[data-group-arrow="${CSS.escape(code)}"]`);
+  const nowHidden = detailRows[0] ? detailRows[0].classList.contains('hidden') : false;
+  detailRows.forEach(tr => tr.classList.toggle('hidden', !nowHidden));
+  if (arrowEl) arrowEl.textContent = nowHidden ? '▾' : '▸';
+}
+function expandAllOperationReportGroups() {
+  const tbody = document.getElementById('operationWorkItemOverviewTableBody');
+  if (!tbody) return;
+  tbody.querySelectorAll('tr[data-group]').forEach(tr => tr.classList.remove('hidden'));
+  tbody.querySelectorAll('[data-group-arrow]').forEach(el => { el.textContent = '▾'; });
+}
+function collapseAllOperationReportGroups() {
+  const tbody = document.getElementById('operationWorkItemOverviewTableBody');
+  if (!tbody) return;
+  tbody.querySelectorAll('tr[data-group]').forEach(tr => tr.classList.add('hidden'));
+  tbody.querySelectorAll('[data-group-arrow]').forEach(el => { el.textContent = '▸'; });
 }
 // Nút "📥 Xuất Excel" của khối "Tổng Quan Toàn Bộ Công Việc" — cùng cơ chế downloadXlsxFromServer() đã
 // dùng ở exportOperationWorkItems()/exportOperationEstimateItems(), KHÁC Ở CHỖ hàm đó xuất công việc của

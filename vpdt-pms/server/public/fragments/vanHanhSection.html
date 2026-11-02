@@ -571,12 +571,18 @@
       <div>
         <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
           <h4 class="font-bold text-gray-700 text-sm">📋 Tổng Quan Toàn Bộ Công Việc <span id="operationWorkItemOverviewCount" class="font-normal text-gray-400 text-xs"></span></h4>
-          <button type="button" data-op="exportOperationStoreReportOverview" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded">📥 Xuất Excel</button>
+          <div class="flex gap-2">
+            <!-- D1 (11/2026, yêu cầu QA "1 Mã hồ sơ chỉ hiện 1 dòng tổng quan, click mới xổ ra công việc con") -->
+            <button type="button" data-op="expandAllOperationReportGroups" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold px-2.5 py-1.5 rounded border">⬇️ Mở Hết</button>
+            <button type="button" data-op="collapseAllOperationReportGroups" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold px-2.5 py-1.5 rounded border">⬆️ Đóng Hết</button>
+            <button type="button" data-op="exportOperationStoreReportOverview" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded">📥 Xuất Excel</button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead>
               <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-1.5 w-8"></th>
                 <th class="border p-1.5">Mã Hồ Sơ</th>
                 <th class="border p-1.5">Tên Hồ Sơ</th>
                 <th class="border p-1.5">Tên Công Việc</th>

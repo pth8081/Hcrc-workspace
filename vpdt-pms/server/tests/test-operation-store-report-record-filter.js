@@ -44,9 +44,15 @@ async function main() {
     return page.evaluate(() => Array.from(document.querySelectorAll('#operationStoreReportTableBody tr'))
       .map(tr => tr.querySelector('td')?.innerText.trim()).filter(Boolean));
   }
+  // D1 (11/2026, yêu cầu QA "1 Mã hồ sơ chỉ hiện 1 dòng tổng quan, click mới xổ ra công việc con") —
+  // renderOperationStoreReportOverview() nay thêm 1 cột ĐẦU (mũi tên ▸/▾ xổ nhóm) đứng TRƯỚC cột Mã Hồ
+  // Sơ, cả ở dòng tổng quan lẫn dòng chi tiết (dòng chi tiết để trống) — đọc đúng cột THỨ 2 (nth-child(2))
+  // thay vì cột đầu tiên như trước. Dòng chi tiết giờ mặc định ẩn (class hidden) nhưng querySelectorAll
+  // vẫn lấy được DOM node dù đang ẩn (chỉ ảnh hưởng hiển thị, không ảnh hưởng DOM), nên không cần mở
+  // nhóm ra trước khi đọc — hành vi gộp/lọc theo hồ sơ vẫn kiểm đúng như ý định gốc của test này.
   async function readOverviewCodes() {
     return page.evaluate(() => Array.from(document.querySelectorAll('#operationWorkItemOverviewTableBody tr'))
-      .map(tr => tr.querySelector('td')?.innerText.trim()).filter(Boolean));
+      .map(tr => tr.querySelector('td:nth-child(2)')?.innerText.trim()).filter(Boolean));
   }
 
   try {
