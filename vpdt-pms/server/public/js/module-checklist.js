@@ -303,7 +303,7 @@ function renderChecklistSubmissionForm() {
             </label>
           `).join('')}
         </div>
-        <input value="${escapeHtml(ans.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistAnswerNote" data-arg0="${q.id}" data-arg-value="1" class="w-full border p-1.5 rounded text-[11px]">
+        <textarea placeholder="Kiến nghị (không bắt buộc)" data-op-input="updateChecklistAnswerNote" data-arg0="${q.id}" data-arg-value="1" rows="2" class="w-full border p-1.5 rounded text-[11px] resize-y">${escapeHtml(ans.note || '')}</textarea>
         ${anySelectedFailing ? `
         <label class="flex items-center gap-2 text-[11px] text-gray-600">Thời hạn hoàn thành xử lý (không bắt buộc):
           <input type="date" value="${escapeHtml(ans.deadline || '')}" data-op-input="updateChecklistAnswerDeadline" data-arg0="${q.id}" data-arg-value="1" class="border p-1 rounded text-[11px]">
@@ -314,8 +314,13 @@ function renderChecklistSubmissionForm() {
         không phải đỏ, và câu chữ nói rõ "không bắt buộc"), không cản việc bấm "Nộp Bài". -->
         ${selectedFailingNoPhoto ? '<p class="text-[11px] text-amber-700 font-semibold">💡 Nên đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi (không bắt buộc).</p>' : ''}
         <div class="flex items-center gap-2 flex-wrap">
-          ${(ans.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
+          ${(ans.attachments || []).map(a => `
+            <span class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 rounded px-1.5 py-0.5">
+              <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>
+              <button type="button" data-op="removeChecklistAnswerAttachment" data-arg0="${q.id}" data-arg1="${cspArgLiteral(a.fileUrl)}" title="Xoá ảnh này" class="text-red-500 hover:text-red-700 text-[11px] font-bold leading-none">✕</button>
+            </span>`).join('')}
           <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${q.id}" data-arg-el="1" class="text-[11px]">
+          ${(ans.attachments || []).length > 1 ? `<button type="button" data-op="removeAllChecklistAnswerAttachments" data-arg0="${q.id}" class="text-[11px] text-red-600 hover:underline font-semibold">🗑️ Xoá hết ảnh</button>` : ''}
           <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
         </div>
       </div>`;
@@ -351,28 +356,25 @@ function renderChecklistDeductionSubmissionForm() {
               return `
               <div class="bg-white border rounded p-2 space-y-1.5">
                 <div class="text-xs text-gray-800">${escapeHtml(c.description)}</div>
-                ${c.ruleText ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(c.ruleText)} — tham khảo ${c.perInstanceValue} điểm/lần</div>` : ''}
+                ${c.ruleText ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(c.ruleText)} — quy định ${c.perInstanceValue} điểm/lần</div>` : ''}
                 <div class="flex items-center gap-2 flex-wrap">
                   <label class="text-[11px] text-gray-600">Điểm trừ:
                     <input type="number" min="0" value="${d.deductedPoints}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deductedPoints" data-arg-value="2" class="w-20 border p-1 rounded text-[11px]">
-                  </label>
-                  <label class="text-[11px] text-gray-600">Mức độ rủi ro:
-                    <select data-op-change="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="riskLevel" data-arg-value="2" class="border p-1 rounded text-[11px]">
-                      <option value="" ${!d.riskLevel ? 'selected' : ''}>—</option>
-                      <option value="A" ${d.riskLevel === 'A' ? 'selected' : ''}>A</option>
-                      <option value="B" ${d.riskLevel === 'B' ? 'selected' : ''}>B</option>
-                      <option value="C" ${d.riskLevel === 'C' ? 'selected' : ''}>C</option>
-                    </select>
                   </label>
                   <label class="text-[11px] text-gray-600">Thời hạn hoàn thành (không bắt buộc):
                     <input type="date" value="${escapeHtml(d.deadline || '')}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deadline" data-arg-value="2" class="border p-1 rounded text-[11px]">
                   </label>
                 </div>
                 <input value="${escapeHtml(d.description || '')}" placeholder="Mô tả nội dung không phù hợp (nếu có)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="description" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
-                <input value="${escapeHtml(d.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="note" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
+                <textarea placeholder="Kiến nghị (không bắt buộc)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="note" data-arg-value="2" rows="2" class="w-full border p-1.5 rounded text-[11px] resize-y">${escapeHtml(d.note || '')}</textarea>
                 <div class="flex items-center gap-2 flex-wrap">
-                  ${(d.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
+                  ${(d.attachments || []).map(a => `
+                    <span class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 rounded px-1.5 py-0.5">
+                      <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>
+                      <button type="button" data-op="removeChecklistAnswerAttachment" data-arg0="${c.id}" data-arg1="${cspArgLiteral(a.fileUrl)}" title="Xoá ảnh này" class="text-red-500 hover:text-red-700 text-[11px] font-bold leading-none">✕</button>
+                    </span>`).join('')}
                   <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${c.id}" data-arg-el="1" class="text-[11px]">
+                  ${(d.attachments || []).length > 1 ? `<button type="button" data-op="removeAllChecklistAnswerAttachments" data-arg0="${c.id}" class="text-[11px] text-red-600 hover:underline font-semibold">🗑️ Xoá hết ảnh</button>` : ''}
                   <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
                 </div>
               </div>`;
@@ -458,6 +460,27 @@ async function onChecklistAnswerPhotoChosen(questionOrCriteriaId, inputEl) {
     const uploaded = await uploadFileToServer(file, 'checklistAnswerPhoto');
     const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/attachments`, {
       questionId: Number(questionOrCriteriaId), fileUrl: uploaded.fileUrl, fileName: uploaded.fileName || file.name, fileType: file.type
+    });
+    checklistApplySubmissionUpdate(result.item);
+    checklistActiveSubmission = result.item;
+    renderChecklistSubmissionForm();
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+async function removeChecklistAnswerAttachment(questionOrCriteriaId, fileUrl) {
+  try {
+    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/attachments/remove`, {
+      questionId: Number(questionOrCriteriaId), fileUrl
+    });
+    checklistApplySubmissionUpdate(result.item);
+    checklistActiveSubmission = result.item;
+    renderChecklistSubmissionForm();
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+async function removeAllChecklistAnswerAttachments(questionOrCriteriaId) {
+  if (!confirm('Xoá hết ảnh minh chứng đã đính kèm cho mục này?')) return;
+  try {
+    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/attachments/remove`, {
+      questionId: Number(questionOrCriteriaId), removeAll: true
     });
     checklistApplySubmissionUpdate(result.item);
     checklistActiveSubmission = result.item;

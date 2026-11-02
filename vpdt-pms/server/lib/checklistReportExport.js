@@ -305,12 +305,16 @@ function buildQaReportWorkbook(template, submissionsByStore, coverage) {
 // Dashboard VSATTP áp dụng cho MỌI mẫu templateKind==='DEDUCTION', không riêng 1 mẫu, xem lib/checklist.js).
 function addDeductionStoreSheet(wb, sheetName, submissions, getTemplateForSub) {
   const sheet = wb.addWorksheet(sheetName);
+  // LƯU Ý (11/2026, theo yêu cầu người dùng khi bỏ "Mức độ rủi ro" + đổi "Ghi chú" -> "Kiến nghị" khỏi
+  // form làm bài VSATTP — module-checklist.js): đồng bộ luôn 2 cột Excel này cho khớp (xác nhận rõ với
+  // người dùng, không tự ý) — bỏ hẳn cột "Mức Độ Rủi Ro" (riskLevel từ nay luôn trống phía client, không
+  // xoá field/cấu trúc dữ liệu cũ), đổi tên cột "Ghi Chú" -> "Kiến Nghị".
   sheet.columns = [
     { header: 'Ngày kiểm tra', width: 16 }, { header: 'Người kiểm tra', width: 20 }, { header: 'Mẫu Checklist', width: 22 },
     { header: 'Hạng Mục Lớn', width: 26 }, { header: 'Hạng Mục Con', width: 24 }, { header: 'Tiêu Chí', width: 40 },
     { header: 'Điểm Tối Đa', width: 12 }, { header: 'Điểm Trừ Thực Tế', width: 14 },
-    { header: 'Mô Tả Nội Dung Không Phù Hợp', width: 30 }, { header: 'Mức Độ Rủi Ro', width: 12 },
-    { header: 'Thời Hạn Hoàn Thành', width: 16 }, { header: 'Ghi Chú', width: 24 }
+    { header: 'Mô Tả Nội Dung Không Phù Hợp', width: 30 },
+    { header: 'Thời Hạn Hoàn Thành', width: 16 }, { header: 'Kiến Nghị', width: 24 }
   ];
   const headerRow = sheet.getRow(1);
   headerRow.font = { ...FONT, bold: true };
@@ -322,7 +326,7 @@ function addDeductionStoreSheet(wb, sheetName, submissions, getTemplateForSub) {
     const summaryRow = sheet.addRow([
       guard(sub.submittedAt), guard(sub.submittedByName), guard(sub.templateName), '', '', '',
       '', '', `Tổng điểm: ${sub.totalScore ?? '—'}/${sub.maxPossibleScore ?? '—'}` + (sub.scorePercent != null ? ` (${sub.scorePercent.toFixed(1)}%)` : ''),
-      '', '', ''
+      '', ''
     ]);
     summaryRow.font = { ...FONT, bold: true, italic: true };
     if (!template) return; // mẫu gốc đã bị xoá — vẫn giữ dòng tổng điểm, không có cây tiêu chí để liệt kê chi tiết.
@@ -335,7 +339,7 @@ function addDeductionStoreSheet(wb, sheetName, submissions, getTemplateForSub) {
           const d = deductionsByC.get(c.id);
           const row = sheet.addRow([
             '', '', '', guard(cat.name), guard(sub2.name), guard(c.description),
-            effectiveMax, d?.deductedPoints || 0, guard(d?.description || ''), guard(d?.riskLevel || ''),
+            effectiveMax, d?.deductedPoints || 0, guard(d?.description || ''),
             guard(d?.deadline || ''), guard(d?.note || '')
           ]);
           row.font = FONT;

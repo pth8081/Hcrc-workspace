@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**28.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.59 (2026-11): Form làm bài VSATTP — xoá ảnh minh chứng, Ghi chú → Kiến nghị (textarea), bỏ Mức độ rủi ro
+
+Theo yêu cầu người dùng (kèm 2 ảnh chụp màn hình thực tế từ máy di động), 5 thay đổi cho form làm bài
+Checklist VSATTP ("Trừ điểm theo hạng mục") — đã gửi phương án + demo ảnh thật (Chromium), người dùng
+xác nhận trước khi merge:
+
+1. **Thêm nút xoá ảnh minh chứng**: trước đây chỉ có đường THÊM ảnh, không có cách gỡ ra. Thêm route mới
+   `POST /api/checklist/submissions/:id/attachments/remove` (body `{questionId, fileUrl}` xoá 1 ảnh, hoặc
+   `{questionId, removeAll: true}` xoá sạch) — gác đúng quyền sở hữu bài + quyền checklistExecute/
+   checklistAtvstpExecute hiện tại như các route khác (`assertCanContinueChecklistSubmission()`). Mỗi
+   ảnh có nút ✕ riêng; có ≥2 ảnh thì hiện thêm nút "🗑️ Xoá hết ảnh". Áp dụng cho CẢ 2 loại form (QA lẫn
+   DEDUCTION) vì dùng chung 1 cơ chế đính kèm.
+2. **"Ghi chú" đổi thành `<textarea>`** (trước là `<input>` 1 dòng, không xuống dòng được) — cả 2 form.
+3. **Bỏ hẳn ô chọn "Mức độ rủi ro" (A/B/C)** khỏi form DEDUCTION — field `riskLevel` phía server GIỮ
+   NGUYÊN (không xoá cấu trúc dữ liệu cũ), chỉ là từ nay luôn trống.
+4. **Đổi nhãn "Ghi chú" → "Kiến nghị"** (field dữ liệu `note` không đổi tên, chỉ đổi nhãn hiển thị).
+5. **Đổi chữ "tham khảo X điểm/lần" → "quy định X điểm/lần"** ở dòng mô tả quy tắc trừ điểm trên form làm
+   bài — CHỈ đổi câu chữ hiển thị, KHÔNG đổi ý nghĩa nghiệp vụ (điểm trừ vẫn là con số tham khảo, người
+   kiểm tra tự nhập tổng điểm trừ thực tế — xem chú thích `perInstanceValue` ở `lib/checklist.js`; chú
+   thích "THAM KHẢO" ở màn Cấu Hình Checklist giữ nguyên, đã xác nhận với người dùng).
+
+**Đồng bộ Excel export** (`lib/checklistReportExport.js`, `addDeductionStoreSheet()` — dùng chung cho cả
+xuất báo cáo 1 mẫu lẫn Dashboard VSATTP): bỏ hẳn cột "Mức Độ Rủi Ro", đổi tên cột "Ghi Chú" → "Kiến
+Nghị" cho khớp với form.
+
+Test: 11 kịch bản mới cho route `.../attachments/remove` (xoá 1 ảnh, xoá hết, theo đúng tiêu chí
+DEDUCTION, chặn người khác xoá bài mình, chặn khi bài đã nộp, chặn khi quyền bị thu hồi, validate input
+thiếu) + cập nhật 2 test cũ theo layout cột Excel/DOM form mới (`test-checklist-export.js`,
+`test-checklist-deduction-builder-ui.js`) — toàn bộ 20 file test liên quan module Checklist đã chạy lại,
+pass hết.
 
 ## v28.58 (2026-11): Checklist Đánh Giá Siêu Thị — chặn tiếp tục bài khi quyền đã bị thu hồi + thêm nút Huỷ bài Nháp
 
