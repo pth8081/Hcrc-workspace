@@ -1577,7 +1577,15 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
     sourceType, sourceCode: sourceRecord.code,
-    customData: payload?.customData && typeof payload.customData === 'object' ? payload.customData : {}
+    customData: payload?.customData && typeof payload.customData === 'object' ? payload.customData : {},
+    // C2 (11/2026, yêu cầu QA "thêm Giá trị hợp đồng + tệp đính kèm, để người phụ trách điền") —
+    // contractValue CÓ THỂ gửi sẵn lúc tạo (form nhập tay/import Excel đều tuỳ chọn, mặc định 0 nếu
+    // không gửi/không hợp lệ — KHÔNG throw lỗi ở bước tạo vì field này chủ yếu điền SAU qua
+    // updateOperationWorkItemContract(), không phải điều kiện bắt buộc lúc tạo). contractAttachments
+    // CHƯA hỗ trợ gửi lúc tạo (tải file cần làm SAU khi có id, qua đúng action riêng) — luôn rỗng lúc
+    // tạo, không đọc từ payload ở đây.
+    contractValue: (() => { const n = Number(payload?.contractValue); return Number.isFinite(n) && n >= 0 ? n : 0; })(),
+    contractAttachments: []
   };
 }
 
@@ -1803,6 +1811,30 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord, hasChil
   item.startDate = startDate; item.progressUpdateFrequencyDays = progressUpdateFrequencyDays;
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// C2 (11/2026, yêu cầu QA "Giá trị hợp đồng + tệp đính kèm, để người phụ trách điền") — route sub-
+// endpoint RIÊNG (mirror /progress, /accept, /dependencies — mỗi route chỉ đổi đúng phần dữ liệu của
+// thao tác đó), KHÔNG gộp vào editOperationWorkItem() (đó CHỈ mở cho "toàn quyền quản lý hồ sơ", còn
+// giá trị hợp đồng là thông tin THỰC TẾ phát sinh trong lúc làm — đúng người phụ trách (assignedTo[])
+// mới biết rõ nhất, mirror quyền updateOperationWorkItemProgress() ở trên). CỐ Ý KHÔNG chặn theo
+// status/DA_NGHIEM_THU như editOperationWorkItem() — giá trị hợp đồng thật thường chỉ xác định ĐƯỢC
+// sau khi công việc đã hoàn thành/nghiệm thu xong (quyết toán cuối), chặn sửa sau khi nghiệm thu sẽ
+// khiến field này không bao giờ điền đúng được cho phần lớn trường hợp thực tế.
+function updateOperationWorkItemContract(user, item, payload, sourceRecord) {
+  const isOwner = isWorkItemAssignee(item, user.username);
+  if (!canManageOperationRecord(user, sourceRecord, item.sourceType) && !isOwner) {
+    throw new HttpError(403, 'Bạn không có quyền điền giá trị hợp đồng cho công việc này');
+  }
+  const contractValue = Number(payload?.contractValue);
+  if (!Number.isFinite(contractValue) || contractValue < 0) {
+    throw new HttpError(400, 'Giá trị hợp đồng không hợp lệ (phải là số không âm)');
+  }
+  item.contractValue = contractValue;
+  item.contractAttachments = sanitizeOperationEstimateAttachments(payload?.contractAttachments, item.contractAttachments, user);
+  item.history = item.history || [];
+  item.history.push({ action: 'CONTRACT_UPDATED', by: user.username, byName: user.name, time: nowVN() });
   return item;
 }
 
@@ -9285,5 +9317,7 @@ module.exports = {
   resolveOperationWorkItemScheduleFields, computeOperationWorkItemProgressUpdateOverdueDays,
   computeOperationWorkItemDeadlineStatus,
   // "🔗 Liên kết" công việc (VHST-5) — export cho test + routes/records.js.
-  resolveOperationWorkItemDependencyIds, assertNoOperationWorkItemDependencyCycle, setOperationWorkItemDependencies
+  resolveOperationWorkItemDependencyIds, assertNoOperationWorkItemDependencyCycle, setOperationWorkItemDependencies,
+  // C2 (11/2026) — "Giá trị hợp đồng" + tệp đính kèm hợp đồng (operationWorkItems).
+  updateOperationWorkItemContract
 };

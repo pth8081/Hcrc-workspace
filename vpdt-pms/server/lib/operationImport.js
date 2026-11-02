@@ -144,12 +144,18 @@ async function parseOperationEstimateImportXlsx(buffer) {
 // Phạm vi CHỦ ĐÍCH thu hẹp về công việc GỐC (parentWorkItemId null) — import cây đa cấp qua Excel (khớp
 // đúng "việc con của việc nào" bằng tên hàng dễ nhầm/trùng tên) phức tạp không tương xứng lợi ích so với
 // quy mô nghiệp vụ thực tế; việc con vẫn thêm tay bình thường ("➕ Con") sau khi import xong việc gốc.
+// contractValue (C2, 11/2026, yêu cầu QA "Giá trị hợp đồng ... để người phụ trách điền") — TUỲ CHỌN,
+// mặc định 0 nếu bỏ trống/không hợp lệ (xem createOperationWorkItem(), lib/recordActions.js) — dùng
+// LẠI parseAmount() ngay dưới (cùng cách đọc số tiền VNĐ dấu .,/ lẫn lộn như ESTIMATE_COLUMNS.amount).
+// "Giá trị đầu tư" KHÔNG có mặt ở đây — đó là field TỰ ĐỘNG/LINK tới estimateTotalAmount của hồ sơ
+// (Option A đã chốt với người dùng), không phải thứ nhập tay/import được.
 const WORKITEM_COLUMNS = [
   { key: 'title', header: 'Tên Công Việc', hints: ['ten cong viec', 'ten viec'] },
   { key: 'description', header: 'Mô Tả', hints: ['mo ta'] },
   { key: 'assignedTo', header: 'Người Phụ Trách (username, cách nhau dấu phẩy)', hints: ['nguoi phu trach', 'phu trach'] },
   { key: 'acceptorUsername', header: 'Người Nghiệm Thu (username)', hints: ['nguoi nghiem thu', 'nghiem thu'] },
-  { key: 'deadline', header: 'Hạn Hoàn Thành (YYYY-MM-DD)', hints: ['han hoan thanh', 'han'] }
+  { key: 'deadline', header: 'Hạn Hoàn Thành (YYYY-MM-DD)', hints: ['han hoan thanh', 'han'] },
+  { key: 'contractValue', header: 'Giá Trị Hợp Đồng (VNĐ, tuỳ chọn)', hints: ['gia tri hop dong', 'hop dong'] }
 ];
 
 async function buildOperationWorkItemTemplateWorkbook() {
@@ -159,7 +165,8 @@ async function buildOperationWorkItemTemplateWorkbook() {
   styleHeaderRow(sheet.getRow(1));
   sheet.addRow({
     title: 'Thi công mặt bằng (VD, xoá dòng này trước khi nộp)', description: '',
-    assignedTo: 'username1,username2', acceptorUsername: 'username3', deadline: '2026-12-31'
+    assignedTo: 'username1,username2', acceptorUsername: 'username3', deadline: '2026-12-31',
+    contractValue: 50000000
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   return wb;
@@ -188,10 +195,10 @@ async function parseOperationWorkItemImportXlsx(buffer) {
 
   await streamFirstSheetRows(buffer, (cells) => {
     if (!headerSeen) {
-      headerSeen = true;
+  headerSeen = true;
       colMap = detectColumnMap(cells, WORKITEM_COLUMNS);
       if (colMap) return true;
-      colMap = { title: 0, description: 1, assignedTo: 2, acceptorUsername: 3, deadline: 4 };
+      colMap = { title: 0, description: 1, assignedTo: 2, acceptorUsername: 3, deadline: 4, contractValue: 5 };
     }
     const title = String(cells[colMap.title] ?? '').trim();
     if (title) {
@@ -200,7 +207,8 @@ async function parseOperationWorkItemImportXlsx(buffer) {
         title, description: String(cells[colMap.description] ?? '').trim(),
         assignedTo: assignedRaw ? assignedRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
         acceptorUsername: String(cells[colMap.acceptorUsername] ?? '').trim() || null,
-        deadline: String(cells[colMap.deadline] ?? '').trim()
+        deadline: String(cells[colMap.deadline] ?? '').trim(),
+        contractValue: colMap.contractValue != null ? parseAmount(cells[colMap.contractValue]) : 0
       });
     }
     if (rows.length > MAX_WORKITEM_IMPORT_ROWS) { overLimit = true; return false; }

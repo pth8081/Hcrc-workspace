@@ -1219,6 +1219,41 @@
     </div>
   </div>
 
+  <!-- Modal "💰 Giá trị đầu tư/hợp đồng" (C2, 11/2026, yêu cầu QA module Vận Hành) — "Giá Trị Đầu Tư"
+       LUÔN read-only (link tự động tới estimateTotalAmount của hồ sơ, Option A đã chốt với người
+       dùng), "Giá Trị Hợp Đồng" + tệp đính kèm nhập tay bởi người phụ trách/toàn quyền hồ sơ, mirror
+       khuôn #editOperationRepairModal (A3) cho phần tải nhiều tệp. -->
+  <div id="operationWorkItemContractModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+      <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+        <h3 id="owiContractTitle" class="font-bold text-base text-gray-800"></h3>
+        <button data-op="closeOperationWorkItemContractModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <input type="hidden" id="owiContractId">
+        <div>
+          <label class="text-xs font-bold text-gray-600">💵 Giá Trị Đầu Tư (VNĐ) — tự động theo Danh Mục Đầu Tư đã duyệt</label>
+          <div id="owiContractInvestmentValue" class="bg-gray-100 border rounded px-2 py-1.5 text-sm font-bold text-gray-700">0</div>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-600">📝 Giá Trị Hợp Đồng (VNĐ)</label>
+          <input type="text" id="owiContractValue" inputmode="numeric" class="border rounded px-2 py-1.5 text-sm w-full money-input" placeholder="0">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-600">📎 Tệp Đính Kèm (tối đa 10 tệp)</label>
+          <div id="owiContractFileChip" class="flex flex-wrap gap-1 mt-1"></div>
+          <label class="inline-block mt-1 bg-white border px-2.5 py-1 rounded text-xs font-bold text-gray-700 cursor-pointer hover:bg-gray-50">📤 Tải Tệp Lên
+            <input type="file" multiple data-op-change="onOwiContractFileChange" class="hidden">
+          </label>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" data-op="closeOperationWorkItemContractModal" class="bg-gray-200 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
+          <button type="button" data-op="submitOperationWorkItemContract" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal "👁️ Xem Nhanh" công việc theo nhóm (9/2026, theo yêu cầu người dùng) — bấm vào số liệu
        Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu ở bảng "Báo Cáo" (renderOperationStoreReport(),
        module-vanhanh.js) mở modal này, liệt kê ĐÚNG các công việc thuộc nhóm vừa bấm kèm tiến độ/trạng

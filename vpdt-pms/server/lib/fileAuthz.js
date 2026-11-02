@@ -353,7 +353,13 @@ async function findOwningRecord(fileUrl) {
     { records: attendanceRecords, fixed: () => false, build: a => ({ attendanceRecord: true, item: a }) },
     // operationWorkItems (Vận Hành — Thực hiện/Nghiệm thu): xem chú thích đầy đủ ở khai báo
     // getAllWorkItemsCached() phía trên + canViewOperationWorkItem() (lib/recordViewScope.js).
-    { records: operationWorkItems, fixed: () => false, build: w => ({ operationWorkItem: true, item: w }) },
+    // contractAttachments[] (C2, 11/2026, "Giá trị hợp đồng" + tệp đính kèm) — field CỐ ĐỊNH ở cấp cao
+    // nhất của item (qua assertUploadedFileUrlList-tương-đương sanitizeOperationEstimateAttachments(),
+    // lib/recordActions.js updateOperationWorkItemContract()), KHÔNG phải customData — phải khớp ở
+    // Lượt 1 này, KHÔNG để `fixed: () => false` như trước (mirror ĐÚNG lỗi đã vá ở trainingCourses/
+    // trainingDocuments ngay dưới: giả định sai "chỉ mang file qua customData" sẽ rơi thẳng vào
+    // FAIL-OPEN cho field cố định thật).
+    { records: operationWorkItems, fixed: w => (w.contractAttachments || []).some(a => a.fileUrl === fileUrl), build: w => ({ operationWorkItem: true, item: w }) },
     // vppPeriods/vppRegistrations — xem chú thích đầy đủ ở khai báo import canManageVpp/canViewVppRegistration.
     { records: vppPeriods, fixed: () => false, build: p => ({ vppPeriod: true, item: p }) },
     { records: vppRegistrations, fixed: () => false, build: r => ({ vppRegistration: true, item: r }) },

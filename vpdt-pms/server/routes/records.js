@@ -3827,6 +3827,22 @@ router.post('/operationWorkItems/:id/dependencies', async (req, res) => {
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/dependencies`, err); }
 });
 
+// POST /api/records/operationWorkItems/:id/contract — C2: "Giá trị hợp đồng" + tệp đính kèm hợp đồng
+// (route sub-endpoint RIÊNG, mirror /dependencies — xem lib/recordActions.js updateOperationWorkItemContract()
+// cho lý do tách riêng khỏi /edit: quyền mở rộng cho CẢ người phụ trách, không chỉ toàn quyền hồ sơ).
+router.post('/operationWorkItems/:id/contract', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.updateOperationWorkItemContract(freshUser, item, req.body || {}, sourceRecord);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/contract`, err); }
+});
+
 router.post('/operationWorkItems/:id/accept', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
