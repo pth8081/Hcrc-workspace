@@ -1326,6 +1326,33 @@
     </div>
   </div>
 
+  <!-- A3 (11/2026, yêu cầu QA "có chức năng sửa Đề xuất") — modal "✏️ Sửa Đề Xuất Sửa Chữa", riêng cho
+       operationRepairs (chưa mở cho operationStoreOpenings/operationOrders). editVr*() ở module-vanhanh.js. -->
+  <div id="editOperationRepairModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div class="p-4 border-b flex justify-between items-center bg-gray-50 sticky top-0">
+        <h3 class="font-bold text-lg text-gray-800">✏️ Sửa Đề Xuất Sửa Chữa</h3>
+        <button data-op="closeEditOperationRepairModal" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <input type="hidden" id="editVrId">
+        <div id="editVrLockedNote" class="hidden bg-amber-50 border border-amber-300 text-amber-800 rounded p-2">⚠️ Hồ sơ đã có công việc triển khai — không thể sửa Nội Dung Sửa Chữa/Ngân Sách Phê Duyệt nữa, chỉ sửa được Mô Tả và Tệp Đính Kèm.</div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Nội Dung Sửa Chữa</label><input id="editVrTitle" class="w-full border p-1.5 rounded" required></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngân Sách Phê Duyệt (VNĐ)</label><input id="editVrApprovedBudget" type="text" inputmode="numeric" class="w-full border p-1.5 rounded money-input" required></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Mô Tả Chi Tiết Hiện Trạng &amp; Lý Do Sửa Chữa</label><textarea id="editVrDescription" class="w-full border p-1.5 rounded h-16"></textarea></div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tối đa 10)</label>
+          <div id="editVrFileChip" class="flex flex-wrap gap-1 mb-1"></div>
+          <input type="file" id="editVrFile" multiple accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" data-op-change="onEditVrFileAttachmentChange" data-arg-el="0" class="w-full border p-1.5 rounded bg-white">
+        </div>
+      </div>
+      <div class="p-4 border-t flex justify-end gap-2 bg-gray-50 sticky bottom-0">
+        <button type="button" data-op="closeEditOperationRepairModal" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Hủy Bỏ</button>
+        <button type="button" data-op="submitEditOperationRepair" class="bg-amber-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-amber-700">💾 Lưu Thay Đổi</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Màn hình MODULE "Checklist Đánh Giá Siêu Thị" — module ĐỘC LẬP hoàn toàn về dữ liệu/quyền/route
        (xem lib/checklist.js phía server, public/js/module-checklist.js phía client), CHỈ gộp chung
        dropdown sidebar "Vận Hành" cho gọn điều hướng (nút #btnChecklistNav trong #vanHanhDropdownPanel,

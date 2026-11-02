@@ -1937,6 +1937,23 @@ const CREATE_MODULE_CONFIGS = {
       payload.personInCharge = personInChargeUser ? personInChargeUser.username : null;
       payload.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
       assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
+      // attachments[] (A1, 11/2026, yêu cầu QA "upload được nhiều file đính kèm") — client đã tự tải
+      // từng tệp lên /api/upload NGAY khi chọn (xem onVrFileAttachmentChange(), module-vanhanh.js) rồi
+      // mới gửi mảng kết quả vào đây, nên CHỈ cần validate hình dạng/giới hạn, không tải lại.
+      // assertUploadedFileUrlList() đã chặn URL không phải /uploads/ĐÚNG mẫu; cap cứng 10 tệp (chống
+      // phình dữ liệu nếu client cố tình gửi payload tay, cùng giới hạn sanitizeOperationEstimateAttachments()
+      // ở lib/recordActions.js) + chuẩn hoá field text (fileName/fileType/uploadedByName).
+      assertUploadedFileUrlList(payload.attachments, 'Tệp đính kèm');
+      payload.attachments = (Array.isArray(payload.attachments) ? payload.attachments : [])
+        .filter((a) => a && typeof a.fileUrl === 'string')
+        .slice(0, 10)
+        .map((a) => ({
+          fileUrl: a.fileUrl,
+          fileName: String(a.fileName || '').trim().slice(0, 255) || 'Tệp đính kèm',
+          fileType: String(a.fileType || '').trim().slice(0, 100),
+          uploadedByName: String(a.uploadedByName || user?.name || '').trim().slice(0, 200),
+          uploadedAt: a.uploadedAt || new Date().toISOString()
+        }));
       // Mục H — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
       payload.status = 'APPROVED';
       payload.currentStep = 0;
