@@ -344,6 +344,57 @@ async function main() {
       assertIncludes(err, 'Vui lòng nhập lý do bỏ qua', 'Phải bắt buộc lý do khi bỏ qua');
     });
 
+    // ===================== UI THẬT: ô "Phụ Trách" đổi từ <select> sang tìm-kiếm-gõ-chọn (11/2026, phản
+    // hồi người dùng "quá nhiều người mình không thể kéo để chọn được") =====================
+    await run.run('UI thật: ô "Phụ Trách" tìm-kiếm-gõ-chọn — gõ lọc + bấm chọn đúng 1 dòng gợi ý -> gọi đúng reassign-task (y hệt chọn <option> cũ)', async () => {
+      const item3 = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
+        onboardHoPayload({ employeeCode: 'NV0004', fullName: 'Lý Thị Tư' }));
+      // callCreateAction() CHỈ gọi POST /api/create, KHÔNG tự đẩy kết quả vào DB.hrProcesses (hành vi đó
+      // chỉ xảy ra trong handler nút "Tạo" thật, showHrCreateForm()/submitHrCreateForm() —
+      // DB.hrProcesses.unshift(newItem), xem module-hrlifecycle.js) — mirror ĐÚNG bước đó ở đây để
+      // findHrProcessById()/openHrProcessDetail() thấy được item vừa tạo (LỖI PHÁT HIỆN khi viết test
+      // này: thiếu bước unshift khiến #hrpDetailBody render rỗng do item "chưa tồn tại" phía client).
+      await page.evaluate((item) => { DB.hrProcesses.unshift(item); }, item3);
+      const hrTask = item3.tasks.find(t => t.taskName === 'Đào tạo hội nhập');
+      // switchTab()/setHrLifecycleView() PHẢI tách riêng 1 lượt page.evaluate() khỏi openHrProcessDetail()
+      // (mirror ĐÚNG khuôn test "Real click 👤 Xem Hồ Sơ" ở trên) — switchTab() còn phần RENDER LIST
+      // chạy bất đồng bộ sau khi hàm return (lazy fragment), nếu gọi openHrProcessDetail() CHUNG 1 lượt
+      // evaluate() thì phần render list đó có thể chạy SAU, đè mất nội dung modal vừa ghi vào #hrpDetailBody.
+      await page.evaluate(() => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); });
+      await page.evaluate((id) => { openHrProcessDetail(id); }, item3.id);
+
+      const ddId = `hrpTaskAssignDd_${item3.id}_${hrTask.taskId}`;
+      const inputSel = `input[data-sdd-list="${ddId}"]`;
+
+      const initialItemCount = await page.evaluate((id) => document.getElementById(id)._sddItems.length, ddId);
+      const expectedUserCount = state.users.filter(u => u.active !== false).length;
+      assertEqual(initialItemCount, expectedUserCount, 'Dropdown riêng của dòng task này phải được nạp đủ toàn bộ user active (populateHrpTaskAssignDropdowns())');
+
+      await page.evaluate((sel) => {
+        const input = document.querySelector(sel);
+        input.focus();
+        input.value = 'it1';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }, inputSel);
+
+      const matchRowHandle = await page.evaluateHandle((ddId) =>
+        [...document.getElementById(ddId).querySelectorAll('[data-sdd-idx]')].find(r => r.textContent.includes('(it1)')), ddId);
+      assert(!!(await matchRowHandle.asElement()), 'Gõ "it1" phải lọc ra đúng 1 dòng gợi ý chứa "(it1)"');
+      await page.evaluate((el) => el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })), matchRowHandle);
+      await page.evaluate((el) => el.dispatchEvent(new MouseEvent('click', { bubbles: true })), matchRowHandle);
+
+      const updatedTask = (await page.evaluate((id) => DB.hrProcesses.find(p => p.id === id), item3.id)).tasks.find(t => t.taskId === hrTask.taskId);
+      assertEqual(updatedTask.assignedToUsername, 'it1', 'Bấm chọn dòng gợi ý "it1" qua UI thật phải gọi đúng reassign-task, y hệt chọn <option value="it1"> cũ');
+      assertEqual(await page.evaluate(sel => document.querySelector(sel).value, inputSel), 'Nhân Viên IT — Phòng CNTT (it1)', 'Ô input phải hiện đúng nhãn vừa chọn sau khi commit');
+
+      // Render lại để nút "✕ Bỏ gán" xuất hiện đúng theo trạng thái assignedToUsername mới.
+      await page.evaluate((id) => { openHrProcessDetail(id); }, item3.id);
+      await page.evaluate((args) => document.querySelector(`button[data-op="hrpClearTaskAssign"][data-arg0="${args.id}"][data-arg1="${args.taskId}"]`).click(),
+        { id: item3.id, taskId: hrTask.taskId });
+      const clearedTask = (await page.evaluate((id) => DB.hrProcesses.find(p => p.id === id), item3.id)).tasks.find(t => t.taskId === hrTask.taskId);
+      assertEqual(clearedTask.assignedToUsername, null, 'Nút "✕ Bỏ gán" phải trả task về "Không giao riêng" (assignedToUsername=null)');
+    });
+
     await run.run('Task nhãn MANAGER: giao riêng cho người khác (assignedToUsername) -> chỉ đúng người đó thao tác được, quản lý trực tiếp gốc KHÔNG còn quyền', async () => {
       const reassignResult = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'reassign-task', { taskId: args.taskId, assignedToUsername: 'it1' }),
         { id: onboardId, taskId: (await page.evaluate((id) => DB.hrProcesses.find(p => p.id === id).tasks.find(t => t.taskName === 'Giới thiệu quản lý trực tiếp').taskId, onboardId)) });

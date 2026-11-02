@@ -1,9 +1,27 @@
 # Phiên bản hiện tại
 
-**28.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.73 (2026-11): Onboarding/Offboarding — ô "Phụ Trách" đổi sang tìm-kiếm-gõ-chọn
+
+Theo phản hồi người dùng (kèm ảnh chụp 2 màn "Chi Tiết Quy Trình" Onboarding/Offboarding): *"có phần
+chọn người phụ trách công việc bạn làm theo dạng dropdown + searchable... bạn làm ntn thì quá nhiều
+người mình ko thể kéo để chọn được"*. Ô "Phụ Trách" ở mỗi dòng việc cần làm trước đây là `<select>` liệt
+kê TOÀN BỘ user active (khó dùng khi hệ thống có nhiều tài khoản) — đã đổi sang widget "tìm-kiếm-gõ-chọn"
+dùng chung `sdd*` của hệ thống (`module-hrlifecycle.js`, mirror đúng cách đã làm ở ô duyệt Hỗ Trợ IT —
+`module-itsupport-price.js`), KHÔNG đổi dữ liệu/quyền hạn phía server (vẫn gọi đúng action
+`reassign-task` với 1 `assignedToUsername` duy nhất):
+
+- Mỗi dòng việc có 1 ô nhập gõ-lọc + dropdown gợi ý riêng (tối đa 50 kết quả, gõ không dấu vẫn tìm được
+  có dấu) thay cho việc phải kéo cả danh sách `<select>` dài.
+- Nút "✕ Bỏ gán" cạnh ô (chỉ hiện khi đã giao riêng) để quay lại "Không giao riêng" nhanh, không cần tự
+  xoá sạch nội dung ô.
+- Đã viết thêm 1 bài test UI thật (gõ lọc + bấm chọn dòng gợi ý + bấm "✕ Bỏ gán", xác nhận gọi đúng
+  `reassign-task`) vào `tests/test-hr-lifecycle.js`, chạy lại toàn bộ 41 kịch bản của file này + các file
+  test Nhân Sự liên quan khác — không có hồi quy.
 
 ## v28.72 (2026-11): Phê Duyệt Giá Bán Buôn — "Phiếu Phê Duyệt" in được + bảng mặt hàng khớp đúng Excel
 

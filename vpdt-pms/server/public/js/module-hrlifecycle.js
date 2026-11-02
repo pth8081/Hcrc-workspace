@@ -614,12 +614,31 @@ function renderHrProcessDetailBody(item) {
       ${canManage ? `<button type="button" data-op="hrpSkipTask" data-arg0="${item.id}" data-arg1="${t.taskId}" class="text-gray-500 font-bold hover:underline mr-2">⏭ Bỏ qua</button>` : ''}
       ${t.department === 'IT' && !t.linkedTicketId ? `<button type="button" data-op="hrpCreateItTicketForTask" data-arg0="${item.id}" data-arg1="${t.taskId}" class="text-indigo-700 font-bold hover:underline mr-2">🎫 Tạo Ticket IT</button>` : ''}
     ` : (t.linkedTicketId != null ? '<span class="text-gray-400 text-[11px]">🎫 Đã có ticket Hỗ Trợ IT</span>' : '');
+    // Đổi từ <select> liệt kê toàn bộ user sang ô tìm-kiếm-gõ-chọn dùng chung (quy ước "sdd*", xem
+    // CLAUDE.md — mirror ĐÚNG itTicketApproverInput ở module-itsupport-price.js) — theo phản ánh người
+    // dùng 11/2026: "quá nhiều người mình không thể kéo để chọn được". VẪN chọn đúng 1 người (bàn giao
+    // dữ liệu server không đổi: reassign-task vẫn nhận đúng 1 assignedToUsername, y hệt .value của
+    // <select> cũ), chỉ đổi giao diện — dropdown riêng cho TỪNG dòng (id random theo item.id+taskId, vì
+    // nhiều dòng cùng cần picker CÙNG LÚC trong 1 bảng, không dùng chung 1 div như systemUsersDatalist —
+    // mirror khuôn .hrpf-disciplinaryAction-row [data-sdd-dropdown] ở module-hrprofile.js). Nạp danh
+    // sách qua populateHrpTaskAssignDropdowns() NGAY SAU khi gán innerHTML (cuối renderHrProcessDetailBody()).
+    const reassignDdId = `hrpTaskAssignDd_${item.id}_${t.taskId}`;
+    // Điền sẵn giá trị hiện tại vào ô (nếu đã gán) theo ĐÚNG khuôn nhãn nạp ở populateHrpTaskAssignDropdowns()
+    // ("Tên — Phòng (username)") để resolver hrpReassignTaskFromInput() parse lại đúng username khi người
+    // dùng không đổi gì mà chỉ bấm ra ngoài — tránh mất giá trị cũ nếu để trống mặc định.
+    const assignedUserForInput = t.assignedToUsername ? (DB.users || []).find(u => u.username === t.assignedToUsername) : null;
+    const reassignInputValue = assignedUserForInput
+      ? `${assignedUserForInput.name || assignedUserForInput.username} — ${assignedUserForInput.dept || 'Chưa rõ phòng'} (${assignedUserForInput.username})`
+      : (t.assignedToUsername ? `${t.assignedToName || t.assignedToUsername} (${t.assignedToUsername})` : '');
     const reassignSelect = canManage && open ? `
-      <select data-op-change="hrpReassignTaskFromSelect" data-arg-el="0" data-arg1="${item.id}" data-arg2="${t.taskId}" class="text-[11px] border rounded p-0.5 ml-2">
-        <option value="">-- Không giao riêng --</option>
-        ${(DB.users || []).filter(u => u.active !== false).sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(u =>
-          `<option value="${escapeHtml(u.username)}" ${t.assignedToUsername === u.username ? 'selected' : ''}>${escapeHtml(u.name || u.username)}</option>`).join('')}
-      </select>` : '';
+      <div class="relative inline-block ml-2 align-middle">
+        <input type="text" value="${escapeHtml(reassignInputValue)}" data-sdd-list="${reassignDdId}" autocomplete="off"
+          data-op-change="hrpReassignTaskFromInput" data-arg-value="0" data-arg1="${item.id}" data-arg2="${t.taskId}"
+          placeholder="-- Không giao riêng (gõ tên để gán) --"
+          class="text-[11px] border rounded p-0.5 w-44">
+        <div id="${reassignDdId}" class="hidden sdd-dropdown hrp-task-assign-dropdown" data-sdd-dropdown></div>
+        ${t.assignedToUsername ? `<button type="button" data-op="hrpClearTaskAssign" data-arg0="${item.id}" data-arg1="${t.taskId}" class="text-[10px] text-gray-400 hover:text-red-600 ml-1 align-middle" title="Bỏ gán">✕</button>` : ''}
+      </div>` : '';
     return `
       <tr class="border-t ${overdue ? 'bg-red-50' : ''}">
         <td class="p-2">${escapeHtml(HR_STAGE_LABELS[t.stage] || t.stage)}</td>
@@ -714,6 +733,17 @@ function renderHrProcessDetailBody(item) {
     </div>
     ${item.status === 'IN_PROGRESS' && canManage ? `<div class="text-right mt-3"><button type="button" data-op="hrpCancelProcess" data-arg0="${item.id}" class="text-red-600 font-bold text-xs hover:underline">❌ Huỷ Quy Trình</button></div>` : ''}
   `;
+  populateHrpTaskAssignDropdowns();
+}
+
+// Nạp danh sách người (toàn bộ user active, y hệt danh sách <option> cũ của <select>) vào MỌI dropdown
+// "Phụ Trách" đang có trên bảng (mỗi dòng 1 div riêng — xem chú thích tại reassignDdId ở trên, mirror
+// khuôn .hrpf-disciplinaryAction-row [data-sdd-dropdown] ở module-hrprofile.js). Gọi lại mỗi lần render
+// bảng (innerHTML mới -> dropdown div cũ đã mất, phải nạp lại).
+function populateHrpTaskAssignDropdowns() {
+  const candidates = (DB.users || []).filter(u => u.active !== false).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map(u => `${u.name || u.username} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`);
+  document.querySelectorAll('.hrp-task-assign-dropdown[data-sdd-dropdown]').forEach(dd => sddSetOptions(dd.id, candidates));
 }
 
 async function hrpCompleteTask(processId, taskId) {
@@ -735,9 +765,37 @@ async function hrpSkipTask(processId, taskId) {
     alert(`⛔ ${err.message}`);
   }
 }
-async function hrpReassignTaskFromSelect(el, processId, taskId) {
+// Resolver cho ô "Phụ Trách" tìm-kiếm-gõ-chọn (thay <select> cũ, xem reassignSelect/
+// populateHrpTaskAssignDropdowns() ở renderHrProcessDetailBody() + quy ước "sdd*" trong CLAUDE.md) —
+// mirror ĐÚNG resolveItTicketApproverInput() (module-itsupport-price.js): parse nhãn "Tên — Phòng
+// (username)" người dùng vừa gõ/chọn để lấy lại username thật, rồi gọi action reassign-task y hệt
+// hrpReassignTaskFromSelect() cũ (bàn giao dữ liệu server KHÔNG đổi). Để trống ô (bấm ra ngoài không gõ
+// gì) -> assignedToUsername = null, y hệt chọn "-- Không giao riêng --" cũ.
+async function hrpReassignTaskFromInput(rawValue, processId, taskId) {
+  const raw = (rawValue || '').trim();
+  let assignedToUsername = null;
+  if (raw) {
+    const m = raw.match(/^(.*) — .*\(([^()]+)\)$/);
+    if (!m) {
+      alert('⛔ Vui lòng chọn đúng người từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm).');
+      renderHrProcessDetailBody(findHrProcessById(processId));
+      return;
+    }
+    assignedToUsername = m[2].trim();
+  }
   try {
-    const result = await callRecordAction('hrProcesses', processId, 'reassign-task', { taskId: Number(taskId), assignedToUsername: el.value || null });
+    const result = await callRecordAction('hrProcesses', processId, 'reassign-task', { taskId: Number(taskId), assignedToUsername });
+    hrpApplyProcessUpdate(result.item);
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+    renderHrProcessDetailBody(findHrProcessById(processId));
+  }
+}
+// Nút "✕ Bỏ gán" (chỉ hiện khi đã có assignedToUsername) — cách nhanh để quay lại "Không giao riêng"
+// mà không cần tự xoá sạch nội dung ô rồi bấm ra ngoài.
+async function hrpClearTaskAssign(processId, taskId) {
+  try {
+    const result = await callRecordAction('hrProcesses', processId, 'reassign-task', { taskId: Number(taskId), assignedToUsername: null });
     hrpApplyProcessUpdate(result.item);
   } catch (err) {
     alert(`⛔ ${err.message}`);
