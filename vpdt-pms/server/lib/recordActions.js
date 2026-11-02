@@ -1860,15 +1860,85 @@ const OPERATION_STAGE_LABELS = {
   DANH_MUC_DAU_TU: 'Đã lập danh mục đầu tư',
   DANH_SACH_CONG_VIEC: 'Đã lập danh sách công việc',
   NGHIEM_THU: 'Đã nghiệm thu',
-  DONG_HO_SO: 'Đóng hồ sơ và đưa vào sử dụng'
+  DONG_HO_SO: 'Đóng hồ sơ và đưa vào sử dụng',
+  // CANCELLED — PHẢI giữ giống hệt bản mirror client (module-vanhanh.js) — xem chú thích đầy đủ ở đó.
+  CANCELLED: 'Đã hủy'
 };
 function computeOperationRecordStageStatus(record, items) {
+  if (record?.status === 'CANCELLED') return 'CANCELLED';
   if (record?.useConfirmStatus === 'CONFIRMED') return 'DONG_HO_SO';
   const list = items || [];
   if (list.length > 0 && list.every(w => w.status === 'DA_NGHIEM_THU')) return 'NGHIEM_THU';
   if (list.length > 0) return 'DANH_SACH_CONG_VIEC';
   if (record?.estimateStatus === 'APPROVED' && (record?.estimateItems || []).length > 0) return 'DANH_MUC_DAU_TU';
   return 'LAP';
+}
+
+// A2 (11/2026, yêu cầu QA "có chức năng xóa/hủy Đề xuất" — operationRepairs.Sửa Chữa KHÔNG cho xoá vật
+// lý, xem rejectOperationDelete() ở routes/records.js, quyết định nghiệp vụ đã chốt trước đó) — "Hủy" =
+// đổi status sang CANCELLED, GIỮ NGUYÊN toàn bộ dữ liệu để truy vết, không xoá gì. Chỉ cho hủy khi CHƯA
+// có công việc nào đang thực hiện/đã nghiệm thu (tránh mất dấu vết hồ sơ đang triển khai dở) — hồ sơ
+// chưa có công việc nào, HOẶC toàn bộ công việc còn "Chưa bắt đầu", đều cho hủy tự do.
+function cancelOperationRecord(user, sourceRecord, sourceType, allWorkItemsForSource) {
+  if (!canManageOperationRecord(user, sourceRecord, sourceType)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy hồ sơ này');
+  }
+  if (sourceRecord.status === 'CANCELLED') {
+    throw new HttpError(409, 'Hồ sơ này đã được hủy trước đó');
+  }
+  if (sourceRecord.useConfirmStatus === 'CONFIRMED') {
+    throw new HttpError(409, 'Hồ sơ đã đóng/đưa vào sử dụng, không thể hủy');
+  }
+  const items = allWorkItemsForSource || [];
+  if (items.some(w => w.status !== 'CHUA_BAT_DAU')) {
+    throw new HttpError(409, 'Hồ sơ đang có công việc thực hiện/đã nghiệm thu dở dang — không thể hủy');
+  }
+  sourceRecord.status = 'CANCELLED';
+  sourceRecord.cancelledBy = user.username;
+  sourceRecord.cancelledByName = user.name;
+  sourceRecord.cancelledAt = nowVN();
+  return sourceRecord;
+}
+
+// A3 (11/2026, yêu cầu QA "có chức năng sửa Đề xuất") — sửa Tiêu đề/Ngân sách/Mô tả/tệp đính kèm của
+// operationRepairs SAU khi đã tạo (trước đây hoàn toàn không có route nào làm việc này). CHẶN sửa Tiêu
+// đề/Ngân sách nếu hồ sơ ĐÃ CÓ công việc (operationWorkItems) liên kết — bất kể trạng thái công việc gì
+// (người dùng xác nhận: "đã bắt đầu triển khai" = đã có việc, không chỉ việc đang chạy) — vẫn luôn cho
+// sửa Mô tả + tệp đính kèm ở MỌI giai đoạn. Validate CẢ ở đây (server) dù client đã tự khoá input tương
+// ứng — không tin dữ liệu client gửi lên.
+function updateOperationRepairDetails(user, item, payload, allWorkItemsForSource) {
+  if (!canManageOperationRecord(user, item, 'OPERATION_REPAIR')) {
+    throw new HttpError(403, 'Bạn không có quyền sửa hồ sơ này');
+  }
+  if (item.status === 'CANCELLED') {
+    throw new HttpError(409, 'Hồ sơ đã hủy, không thể sửa');
+  }
+  const hasWorkItems = (allWorkItemsForSource || []).length > 0;
+  const newTitle = String(payload?.title || '').trim();
+  const newBudget = Number(payload?.approvedBudget);
+  if (hasWorkItems) {
+    if (newTitle && newTitle !== item.title) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Nội Dung Sửa Chữa nữa');
+    }
+    if (payload?.approvedBudget !== undefined && payload?.approvedBudget !== null && payload?.approvedBudget !== '' && newBudget !== item.approvedBudget) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Ngân Sách Phê Duyệt nữa');
+    }
+  } else {
+    if (!newTitle) throw new HttpError(400, 'Vui lòng nhập nội dung sửa chữa');
+    if (!Number.isFinite(newBudget) || newBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+    item.title = newTitle;
+    item.approvedBudget = newBudget;
+  }
+  item.description = String(payload?.description || '').trim();
+  item.attachments = sanitizeOperationEstimateAttachments(payload?.attachments, item.attachments, user);
+  if (item.attachments.length) {
+    item.fileUrl = item.attachments[0].fileUrl;
+    item.fileName = item.attachments[0].fileName;
+    item.fileType = item.attachments[0].fileType;
+  }
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'UPDATED', comment: '', time: nowVN() });
+  return item;
 }
 
 // ----- Văn Bản Trình (submissions) -----
@@ -9195,7 +9265,7 @@ module.exports = {
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
   startOperationExecutionPeriod, confirmOperationUse,
-  computeOperationRecordStageStatus, OPERATION_STAGE_LABELS,
+  computeOperationRecordStageStatus, OPERATION_STAGE_LABELS, cancelOperationRecord, updateOperationRepairDetails,
   // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
   workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
   resolveOperationAcceptanceConfig,

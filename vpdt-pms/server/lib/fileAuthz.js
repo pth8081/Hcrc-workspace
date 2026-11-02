@@ -288,7 +288,9 @@ async function findOwningRecord(fileUrl) {
     // lib/recordViewScope.js) thay vì khuôn quyền tải "<moduleKey>Download".
     { records: operationOrders, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationOrder: true, item: o }) },
     { records: operationStoreOpenings, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationStoreOpening: true, item: o }) },
-    { records: operationRepairs, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationRepair: true, item: o }) },
+    // attachments[] (A1/A3, 11/2026, "upload nhiều file"/"sửa đề xuất thêm file") — CÙNG quyền xem hồ sơ
+    // như o.fileUrl ở trên (không phải 1 cấp con riêng như estimateItems bên dưới), nên gộp chung 1 rule.
+    { records: operationRepairs, fixed: o => o.fileUrl === fileUrl || (o.attachments || []).some(a => a.fileUrl === fileUrl), build: o => ({ operationRepair: true, item: o }) },
     // Danh Mục Đầu Tư — tệp đính kèm ở "danh mục lớn" (estimateItems[parentId==null].attachments[],
     // xem submitOperationEstimate() ở lib/recordActions.js) — KHÁC hẳn o.fileUrl ở trên (đó là tệp CỦA
     // CHÍNH hồ sơ, không phải của 1 danh mục đầu tư con bên trong). Quyền hẹp hơn canViewOperationStore*:

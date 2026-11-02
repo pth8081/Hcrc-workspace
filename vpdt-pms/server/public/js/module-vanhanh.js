@@ -1716,9 +1716,17 @@ const OPERATION_STAGE_LABELS = {
   DANH_MUC_DAU_TU: 'Đã lập danh mục đầu tư',
   DANH_SACH_CONG_VIEC: 'Đã lập danh sách công việc',
   NGHIEM_THU: 'Đã nghiệm thu',
-  DONG_HO_SO: 'Đóng hồ sơ và đưa vào sử dụng'
+  DONG_HO_SO: 'Đóng hồ sơ và đưa vào sử dụng',
+  // CANCELLED (A2, 11/2026, yêu cầu QA "có chức năng xóa/hủy Đề xuất") — CHỈ operationRepairs hiện có
+  // nút Hủy (xem cancelOperationRecord(), lib/recordActions.js); operationStoreOpenings chưa mở tính
+  // năng này nhưng field status dùng CHUNG nên khai báo nhãn/badge ở đây để không lặp code nếu mở sau.
+  CANCELLED: 'Đã hủy'
 };
 function computeOperationRecordStageStatusClient(record, items) {
+  // CANCELLED override TRƯỚC MỌI nhánh khác (kể cả đã có DMĐT/công việc dở dang) — hồ sơ đã hủy không
+  // còn ở vòng đời bình thường nữa, PHẢI giữ giống hệt thứ tự ưu tiên ở bản mirror server
+  // computeOperationRecordStageStatus() (lib/recordActions.js).
+  if (record?.status === 'CANCELLED') return 'CANCELLED';
   if (record?.useConfirmStatus === 'CONFIRMED') return 'DONG_HO_SO';
   const list = items || [];
   if (list.length > 0 && list.every(w => w.status === 'DA_NGHIEM_THU')) return 'NGHIEM_THU';
@@ -1734,7 +1742,8 @@ const OPERATION_STAGE_BADGE_CLASS = {
   DANH_MUC_DAU_TU: 'bg-cyan-100 text-cyan-800',
   DANH_SACH_CONG_VIEC: 'bg-amber-100 text-amber-800',
   NGHIEM_THU: 'bg-emerald-100 text-emerald-800',
-  DONG_HO_SO: 'bg-indigo-100 text-indigo-800'
+  DONG_HO_SO: 'bg-indigo-100 text-indigo-800',
+  CANCELLED: 'bg-red-100 text-red-700 line-through'
 };
 function operationStageBadge(stageKey) {
   return `<span class="px-2 py-0.5 rounded font-bold text-xs ${OPERATION_STAGE_BADGE_CLASS[stageKey] || 'bg-gray-100 text-gray-700'}">${escapeHtml(OPERATION_STAGE_LABELS[stageKey] || stageKey)}</span>`;
@@ -2510,6 +2519,54 @@ function closeOperationStoreOpenForm() {
   document.getElementById('operationStoreOpenForm').classList.add('hidden');
 }
 
+// A1 (11/2026, yêu cầu QA "upload được nhiều file đính kèm" lúc Tạo Đề Xuất Sửa Chữa) — mirror ĐÚNG
+// pattern tải-ngay-khi-chọn đã có sẵn cho estimateItems[].attachments[] (onOperationEstimateAttachmentFileChange()
+// ở trên): mỗi tệp chọn được tải lên NGAY (không đợi submit form), gộp vào mảng JS module-scope
+// vrPendingAttachments, cap 10 tệp — lỗi 1 tệp không chặn các tệp còn lại. GIỮ NGUYÊN field fileUrl/
+// fileName/fileType cũ (gán = tệp ĐẦU TIÊN trong danh sách) để mọi chỗ đọc cũ (buildOperationDetailsHTML/
+// viewOperationAttachment mặc định, tìm kiếm từ khoá...) vẫn hoạt động đúng không cần sửa thêm.
+let vrPendingAttachments = [];
+let vrAttachmentUploading = false;
+async function onVrFileAttachmentChange(inputEl) {
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!files.length) return;
+  if (vrAttachmentUploading) return alert('⏳ Đang tải tệp, vui lòng đợi tải xong rồi thử lại.');
+  const remaining = 10 - vrPendingAttachments.length;
+  if (remaining <= 0) return alert('⛔ Đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
+  const toUpload = files.slice(0, remaining);
+  const overflowCount = files.length - toUpload.length;
+
+  vrAttachmentUploading = true;
+  const failed = [];
+  try {
+    for (const file of toUpload) {
+      try {
+        const data = await uploadFileToServer(file, 'operationRepair');
+        vrPendingAttachments.push({
+          fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
+          uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
+        });
+      } catch (err) { failed.push(`${file.name}: ${err.message}`); }
+    }
+  } finally { vrAttachmentUploading = false; }
+  renderVrAttachmentChips();
+
+  const notices = [];
+  if (failed.length) notices.push(`⛔ ${failed.length} tệp tải lỗi:\n${failed.join('\n')}`);
+  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — chỉ nhận tối đa 10 tệp đính kèm.`);
+  if (notices.length) alert(notices.join('\n\n'));
+}
+function removeVrAttachment(idx) {
+  vrPendingAttachments.splice(idx, 1);
+  renderVrAttachmentChips();
+}
+function renderVrAttachmentChips() {
+  const chipEl = document.getElementById('vrFileChip');
+  if (!chipEl) return;
+  chipEl.innerHTML = vrPendingAttachments.map((a, idx) => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 ${escapeHtml(a.fileName)}<button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeVrAttachment" data-arg0="${idx}">✕</button></span>`).join('');
+}
+
 async function submitOperationRepair(e) {
   e.preventDefault();
   if (!canCreateOperationRepairClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đề xuất sửa chữa siêu thị!');
@@ -2529,14 +2586,9 @@ async function submitOperationRepair(e) {
   }
   const description = document.getElementById('vrDescription').value.trim();
 
-  let fileUrl = '', fileName = '', fileType = '';
-  const fileInput = document.getElementById('vrFile');
-  if (fileInput.files && fileInput.files[0]) {
-    try {
-      const uploaded = await uploadFileToServer(fileInput.files[0], 'operationRepair');
-      fileUrl = uploaded.fileUrl; fileName = uploaded.fileName; fileType = uploaded.fileType;
-    } catch (err) { return alert(`⛔ ${err.message}`); }
-  }
+  if (!vrPendingAttachments.length) return alert('Vui lòng tải lên ít nhất 1 tệp đính kèm!');
+  const attachments = vrPendingAttachments.slice();
+  const { fileUrl, fileName, fileType } = attachments[0];
 
   let customData;
   try {
@@ -2545,7 +2597,7 @@ async function submitOperationRepair(e) {
     return alert(`⛔ ${err.message}`);
   }
 
-  const payload = { code, storeName, title, approvedBudget, supplier, personInCharge, description, fileUrl, fileName, fileType, customData };
+  const payload = { code, storeName, title, approvedBudget, supplier, personInCharge, description, fileUrl, fileName, fileType, attachments, customData };
   let newItem;
   try {
     const result = await callCreateAction('operationRepairs', payload);
@@ -2570,7 +2622,10 @@ function resetOperationRepairForm() {
   if (!formEl) return;
   formEl.reset();
   document.getElementById('vrCode').value = generateOperationRepairCode();
-  clearSingleFileInput('vrFile', 'vrFileChip');
+  vrPendingAttachments = [];
+  document.getElementById('vrFile').value = '';
+  const chipEl = document.getElementById('vrFileChip');
+  if (chipEl) chipEl.innerHTML = '';
 }
 
 // Thu gọn form "Tạo Đề Xuất Sửa Chữa Siêu Thị" (10/2026) — cùng khuôn openOperationOrderForm() ở trên.
@@ -2580,6 +2635,118 @@ function openOperationRepairForm() {
 }
 function closeOperationRepairForm() {
   document.getElementById('operationRepairForm').classList.add('hidden');
+}
+
+// A2 (11/2026, yêu cầu QA "có chức năng xóa/hủy Đề xuất") — gọi route /operationRepairs/:id/cancel (lib/
+// recordActions.js cancelOperationRecord()), KHÔNG xoá vật lý (rejectOperationDelete() vẫn chặn xoá như
+// cũ). Dùng showConfirmModal() dùng chung thay vì confirm() trình duyệt, cùng khuôn mọi action nguy hiểm
+// khác trong module này.
+function cancelOperationRepairClient(id) {
+  const o = DB.operationRepairs.find(x => x.id === id);
+  if (!o) return;
+  showConfirmModal({
+    title: '🚫 Xác Nhận Hủy Đề Xuất',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>hủy</b> đề xuất sửa chữa "<b>${escapeHtml(o.title)}</b>" (${escapeHtml(o.code)})?</p><p class="mt-2 text-gray-600">Hồ sơ sẽ chuyển sang trạng thái "Đã hủy" — KHÔNG xoá dữ liệu, vẫn tra cứu lại được.</p>`,
+    confirmLabel: 'Hủy Đề Xuất',
+    onConfirm: async () => {
+      try {
+        const result = await callRecordAction('operationRepairs', id, 'cancel', {});
+        const idx = DB.operationRepairs.findIndex(x => x.id === id);
+        if (idx !== -1) DB.operationRepairs[idx] = result.item;
+        logSystemAction(OPERATION_KIND_META.operationRepairs.logModule, 'CANCEL', `Hủy đề xuất sửa chữa siêu thị [${o.code}]`, 'SUCCESS', o.code);
+        alert('✅ Đã hủy đề xuất!');
+        closeOperationProcessModal();
+        renderOperationList('operationRepairs');
+      } catch (err) { alert(`⛔ ${err.message}`); }
+    }
+  });
+}
+
+// A3 (11/2026, yêu cầu QA "có chức năng sửa Đề xuất") — modal riêng #editOperationRepairModal
+// (public/index.html), mirror pattern attachments tải-ngay-khi-chọn của form Tạo ở trên (mảng JS RIÊNG
+// editVrPendingAttachments, không dùng chung vrPendingAttachments để tránh lẫn giữa 2 form mở đồng thời).
+let editVrPendingAttachments = [];
+let editVrAttachmentUploading = false;
+function openEditOperationRepairModal(id) {
+  const o = DB.operationRepairs.find(x => x.id === id);
+  if (!o) return;
+  if (!canManageOperationRecordClient(currentUser, 'operationRepairs', o)) return alert('⛔ Bạn không có quyền sửa hồ sơ này!');
+  if (o.status === 'CANCELLED') return alert('⛔ Hồ sơ đã hủy, không thể sửa!');
+  document.getElementById('editVrId').value = id;
+  document.getElementById('editVrTitle').value = o.title || '';
+  document.getElementById('editVrApprovedBudget').value = o.approvedBudget != null ? Number(o.approvedBudget).toLocaleString('vi-VN') : '';
+  document.getElementById('editVrDescription').value = o.description || '';
+  editVrPendingAttachments = (o.attachments || []).slice();
+  renderEditVrAttachmentChips();
+  const hasWorkItems = getOperationWorkItemsForRecord('operationRepairs', id).length > 0;
+  document.getElementById('editVrLockedNote').classList.toggle('hidden', !hasWorkItems);
+  document.getElementById('editVrTitle').disabled = hasWorkItems;
+  document.getElementById('editVrApprovedBudget').disabled = hasWorkItems;
+  document.getElementById('editVrTitle').classList.toggle('bg-gray-100', hasWorkItems);
+  document.getElementById('editVrApprovedBudget').classList.toggle('bg-gray-100', hasWorkItems);
+  document.getElementById('editOperationRepairModal').classList.remove('hidden');
+}
+function closeEditOperationRepairModal() {
+  document.getElementById('editOperationRepairModal').classList.add('hidden');
+}
+async function onEditVrFileAttachmentChange(inputEl) {
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!files.length) return;
+  if (editVrAttachmentUploading) return alert('⏳ Đang tải tệp, vui lòng đợi tải xong rồi thử lại.');
+  const remaining = 10 - editVrPendingAttachments.length;
+  if (remaining <= 0) return alert('⛔ Đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
+  const toUpload = files.slice(0, remaining);
+  const overflowCount = files.length - toUpload.length;
+  editVrAttachmentUploading = true;
+  const failed = [];
+  try {
+    for (const file of toUpload) {
+      try {
+        const data = await uploadFileToServer(file, 'operationRepair');
+        editVrPendingAttachments.push({
+          fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
+          uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
+        });
+      } catch (err) { failed.push(`${file.name}: ${err.message}`); }
+    }
+  } finally { editVrAttachmentUploading = false; }
+  renderEditVrAttachmentChips();
+  const notices = [];
+  if (failed.length) notices.push(`⛔ ${failed.length} tệp tải lỗi:\n${failed.join('\n')}`);
+  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — chỉ nhận tối đa 10 tệp đính kèm.`);
+  if (notices.length) alert(notices.join('\n\n'));
+}
+function removeEditVrAttachment(idx) {
+  editVrPendingAttachments.splice(idx, 1);
+  renderEditVrAttachmentChips();
+}
+function renderEditVrAttachmentChips() {
+  const chipEl = document.getElementById('editVrFileChip');
+  if (!chipEl) return;
+  chipEl.innerHTML = editVrPendingAttachments.map((a, idx) => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 ${escapeHtml(a.fileName)}<button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeEditVrAttachment" data-arg0="${idx}">✕</button></span>`).join('');
+}
+async function submitEditOperationRepair() {
+  const id = Number(document.getElementById('editVrId').value);
+  if (!Number.isFinite(id)) return;
+  const titleEl = document.getElementById('editVrTitle');
+  const budgetEl = document.getElementById('editVrApprovedBudget');
+  const payload = {
+    title: titleEl.disabled ? undefined : titleEl.value.trim(),
+    approvedBudget: budgetEl.disabled ? undefined : getMoneyValue(budgetEl),
+    description: document.getElementById('editVrDescription').value.trim(),
+    attachments: editVrPendingAttachments
+  };
+  try {
+    const result = await callRecordAction('operationRepairs', id, 'update', payload);
+    const idx = DB.operationRepairs.findIndex(x => x.id === id);
+    if (idx !== -1) DB.operationRepairs[idx] = result.item;
+    logSystemAction(OPERATION_KIND_META.operationRepairs.logModule, 'UPDATE', `Sửa đề xuất sửa chữa siêu thị [${result.item.code}]`, 'SUCCESS', result.item.code);
+    alert('✅ Đã lưu thay đổi!');
+    closeEditOperationRepairModal();
+    closeOperationProcessModal();
+    renderOperationList('operationRepairs');
+  } catch (err) { alert(`⛔ ${err.message}`); }
 }
 
 function notifyOperationApprovalNeeded(kind, item) {
@@ -2907,14 +3074,28 @@ function buildOperationDetailsHTML(kind, o) {
         ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
       </div>`;
   }
+  // A4 (11/2026, yêu cầu QA "có chức năng tải file đính kèm") — thêm nút "⬇️ Tải" cạnh "👁️ Xem" cho
+  // tệp đính kèm CHÍNH (o.fileUrl, tệp đầu tiên trong attachments[] sau A1) + liệt kê riêng các tệp
+  // CÒN LẠI trong attachments[] (idx >= 1) nếu có nhiều hơn 1 tệp. A2 (11/2026) — hiện rõ trạng thái Đã
+  // hủy ngay đầu khối chi tiết nếu có (operationRecordStageStatus() đã tự trả 'CANCELLED', dùng lại badge
+  // dùng chung thay vì tự vẽ màu riêng).
+  const vrExtraAttachments = (o.attachments || []).slice(1);
   return `
+    ${o.status === 'CANCELLED' ? `<div class="mb-2">${operationStageBadge('CANCELLED')}${o.cancelledByName ? ` <span class="text-gray-500">— huỷ bởi ${escapeHtml(o.cancelledByName)} lúc ${escapeHtml(o.cancelledAt || '')}</span>` : ''}</div>` : ''}
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div><b>Nhà cung cấp/Đơn vị thi công:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
       <div><b>Ngân Sách Phê Duyệt (Danh Mục Đầu Tư):</b> ${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div>
       <div><b>Người phụ trách:</b> ${escapeHtml(o.personInChargeName || o.personInCharge || 'N/A')}</div>
       <div class="col-span-2"><b>Mô tả hiện trạng &amp; lý do:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.description || '')}</p></div>
-      ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
+      ${o.fileUrl ? `<div class="col-span-2 flex items-center gap-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a><a href="${attachmentDownloadUrl(o.fileUrl, null, o.fileName)}" download="${escapeHtml(o.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>` : ''}
+      ${vrExtraAttachments.length ? `<div class="col-span-2 space-y-1">${vrExtraAttachments.map((a, i) => `<div class="flex items-center gap-2"><a href="#" data-op="viewVrAttachment" data-arg0="${o.id}" data-arg1="${i + 1}" class="text-blue-600 underline">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>`).join('')}</div>` : ''}
     </div>`;
+}
+function viewVrAttachment(id, attIdx) {
+  const o = DB.operationRepairs.find(x => x.id === id);
+  const a = o && o.attachments && o.attachments[attIdx];
+  if (!a) return;
+  openFileProtectedView({ title: a.fileName || 'Tệp đính kèm', fileSrc: a.fileUrl, fileType: a.fileType, fileName: a.fileName });
 }
 
 // --- "🖨️ Xem/Tải Phiếu Phê Duyệt" (Đặt Hàng NCC — Siêu Thị + HO, 1 collection chung operationOrders,
@@ -3192,6 +3373,18 @@ function openOperationProcessModal(kind, id) {
       <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
         <button data-op="viewOperationOrderApprovalSlip" data-arg0="${o.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700 text-xs">👁️ Xem Phiếu Phê Duyệt</button>
         <button data-op="downloadOperationOrderApprovalSlip" data-arg0="${o.id}" class="bg-sky-100 text-sky-800 border border-sky-600 px-3 py-1.5 rounded font-bold hover:bg-sky-200 text-xs">⬇️ Tải Phiếu Phê Duyệt</button>
+      </div>
+    `;
+  }
+
+  // A2/A3 (11/2026, yêu cầu QA "có chức năng xóa/hủy Đề xuất"/"có chức năng sửa Đề xuất") — CHỈ
+  // operationRepairs, CHỈ người toàn quyền quản lý hồ sơ này (canManageOperationRecordClient, cùng gate
+  // dùng cho Danh Mục Đầu Tư/Quản Lý Công Việc), CHỈ khi hồ sơ chưa hủy.
+  if (kind === 'operationRepairs' && o.status !== 'CANCELLED' && canManageOperationRecordClient(currentUser, kind, o)) {
+    controls.innerHTML += `
+      <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
+        <button data-op="openEditOperationRepairModal" data-arg0="${o.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded font-bold hover:bg-amber-700 text-xs">✏️ Sửa Đề Xuất</button>
+        <button data-op="cancelOperationRepairClient" data-arg0="${o.id}" class="bg-red-100 text-red-700 border border-red-600 px-3 py-1.5 rounded font-bold hover:bg-red-200 text-xs">🚫 Hủy Đề Xuất</button>
       </div>
     `;
   }
