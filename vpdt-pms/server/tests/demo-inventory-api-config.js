@@ -90,8 +90,12 @@ async function main() {
 
   await page.evaluate(() => switchTab('system'));
   await page.waitForTimeout(300);
-  await page.evaluate(() => document.getElementById('btnAdminSubInvApi')?.scrollIntoView());
-  await page.click('#btnAdminSubInvApi');
+  // 11/2026: "Cấu Hình API Tồn Kho" không còn là nút cấp 1 riêng — đã gộp vào tab cha "Cấu Hình API Đối
+  // Tác" (#btnAdminSubPartnerApi), tab con "🧺 Tồn Kho — BRGMART" (#btnPartnerApiInventory).
+  await page.evaluate(() => document.getElementById('btnAdminSubPartnerApi')?.scrollIntoView());
+  await page.click('#btnAdminSubPartnerApi');
+  await page.waitForTimeout(150);
+  await page.click('#btnPartnerApiInventory');
   await page.waitForTimeout(300);
 
   await page.screenshot({ path: path.join(OUT_DIR, '1-cau-hinh-api-ton-kho.png'), fullPage: true });

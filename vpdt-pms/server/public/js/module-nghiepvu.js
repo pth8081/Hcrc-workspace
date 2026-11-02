@@ -114,8 +114,7 @@ const SYSTEM_NAV = [
   { group: 'Tích Hợp & Thông Báo', items: [
     { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
     { key: 'sysExtAuth', icon: '🔑', label: 'API Xác Thực Ngoài' },
-    { key: 'sysOpApi', icon: '🔌', label: 'Cấu Hình API Đơn Hàng — Đồng Bộ Ra dsmart16' },
-    { key: 'sysInvApi', icon: '🧺', label: 'Cấu Hình API Tồn Kho — Đối Chiếu Kệ & Tồn Kho (BRGMART)' },
+    { key: 'sysPartnerApi', icon: '🔌', label: 'Cấu Hình API Đối Tác — Đơn Hàng (dsmart16) & Tồn Kho (BRGMART)' },
     { key: 'sysTlsCert', icon: '🔒', label: 'Chứng Chỉ TLS/HTTPS' },
     { key: 'sysTrustedCa', icon: '🔗', label: 'Chứng Chỉ Tin Cậy (CA Ngoài)' },
   ]},
@@ -1869,63 +1868,35 @@ const SYSTEM_DOCS = {
       { label: '2 API tách biệt vai trò', text: '`verify-credentials` KHÔNG cấp phiên đăng nhập, chỉ trả lời đúng/sai; `GET /api/external/users` chỉ trả field công khai (username/tên/điện thoại/phòng ban/chức danh), không bao giờ kèm mật khẩu/PIN dù đã hash.' },
     ] },
   },
-  // sysOpApi (10/2026, đợt rà soát đối chiếu tài liệu với UI thật): màn admin "🔌 Cấu Hình API — Đồng Bộ
-  // Đơn Hàng Ra dsmart16" (#adminSubOpApi, jobs/operationOrderApiSync.js) trước đây thiếu hẳn entry dù đã
-  // là 1 tab con thật trong ⚙️ Quản Trị. TÁCH BIỆT HOÀN TOÀN với "🔑 API Xác Thực Ngoài" (mục ngay trên):
-  // cái kia cho ứng dụng ngoài gọi VÀO hệ thống, cái này hệ thống tự đẩy dữ liệu RA ngoài.
-  sysOpApi: {
-    icon: '🔌', title: 'Cấu Hình API Đơn Hàng — Đồng Bộ Ra dsmart16', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Cấu hình để hệ thống TỰ ĐỘNG đẩy Đơn Hàng (Vận Hành → Đơn Hàng) sang hệ thống ngoài "dsmart16" theo chu kỳ — khai Base URL nhận đơn, 1 header xác thực tuỳ chỉnh (tên + giá trị, không cố định Bearer/Basic vì mỗi hệ thống ngoài yêu cầu tên header khác nhau), chu kỳ quét (phút) và Tên Trường Đối Chiếu (mặc định `poNumber` — trường dùng để 2 hệ thống nhận ra cùng 1 đơn, KHÔNG phải mật khẩu/API key). Chỉ đơn ĐÃ CÓ Số Đơn NCC (poNumber) mới được gửi.',
-    flow: { ariaLabel: 'Quy trình cấu hình đồng bộ Đơn Hàng ra dsmart16', chain: [
-      { label: 'Khai Base URL + header', sub: 'Giá trị header là write-only' },
-      { label: 'Bật đồng bộ + chu kỳ', sub: 'Tối thiểu 5 phút, mặc định 60' },
-      { label: 'Job quét định kỳ', sub: 'Chỉ đơn có poNumber, nội dung đã đổi', kind: 'decision' },
-      { label: 'dsmart16 nhận đơn', sub: 'Ghi lại kết quả lần đồng bộ gần nhất', kind: 'approved' },
-    ], decision: { atIndex: 2, approveLabel: 'Gửi thành công', rejectLabel: 'Lỗi / URL không an toàn', rejectBox: { label: 'Báo lỗi tại màn này', sub: 'Đơn khác vẫn gửi tiếp bình thường' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại cấu hình' } },
+  // sysPartnerApi (10/2026 tạo sysOpApi, 11/2026 tạo sysInvApi rồi GỘP LẠI thành 1 entry duy nhất — theo
+  // yêu cầu người dùng "gộp 2 tab Cấu Hình API thành 1 tab cha, bên trong có tab con", demo xác nhận
+  // trước khi làm thật). 1 màn cấp 1 "🔌 Cấu Hình API Đối Tác" (#adminSubPartnerApi) có 2 TAB CON hoàn
+  // toàn độc lập về dữ liệu/route/job (giống cách vanHanhShelf gộp 5 sub-tab vào 1 entry) — ĐỪNG nhầm 2
+  // tab con là cùng 1 tích hợp: "📦 Đơn Hàng" (dsmart16, #adminSubOpApi, jobs/operationOrderApiSync.js)
+  // đẩy Đơn Hàng RA; "🧺 Tồn Kho" (BRGMART, #adminSubInvApi, jobs/inventorySync.js) lấy Tồn Kho VÀO —
+  // khác nhà cung cấp, khác chiều dữ liệu, chỉ gộp chung MÀN HÌNH cho gọn sidebar, không gộp chung logic.
+  sysPartnerApi: {
+    icon: '🔌', title: 'Cấu Hình API Đối Tác — Đơn Hàng (dsmart16) & Tồn Kho (BRGMART)', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Màn cấu hình các API trao đổi dữ liệu với hệ thống đối tác BÊN NGOÀI, gồm 2 tab con ĐỘC LẬP hoàn toàn: "📦 Đơn Hàng — dsmart16" (đẩy Đơn Hàng RA theo chu kỳ tuỳ chỉnh) và "🧺 Tồn Kho — BRGMART" (lấy Tồn Kho Hệ Thống VÀO, chu kỳ cố định 20 phút). Cả 2 đều: Base URL + khoá xác thực nhập qua UI (khoá luôn write-only, mã hoá khi lưu), có nút "Đồng Bộ Ngay" chạy thủ công, và Base URL do admin nhập đều được kiểm chặn SSRF trước khi gọi.',
+    flow: { ariaLabel: 'Quy trình cấu hình API Đối Tác (chung cho cả 2 tab con)', chain: [
+      { label: 'Chọn tab con cần cấu hình', sub: '📦 Đơn Hàng (dsmart16) hoặc 🧺 Tồn Kho (BRGMART)' },
+      { label: 'Khai Base URL + khoá xác thực', sub: 'Khoá xác thực luôn write-only, mã hoá khi lưu' },
+      { label: 'Bật đồng bộ (+ chu kỳ nếu có)', sub: 'Job tự động quét định kỳ, hoặc bấm Đồng Bộ Ngay', kind: 'decision' },
+      { label: 'Cập nhật kết quả lần gần nhất', sub: 'Ghi rõ thành công/lỗi ở cuối màn + Nhật Ký Hệ Thống', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Gọi thành công', rejectLabel: 'Lỗi / URL không an toàn', rejectBox: { label: 'Báo lỗi tại màn này', sub: 'Tab con/đối tượng khác không bị ảnh hưởng' }, loopBackToIndex: 1, loopBackLabel: 'Sửa lại cấu hình' } },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔌 Cấu Hình API Đơn Hàng</b> (đổi tên 11/2026 để tách biệt với tab "🧺 Cấu Hình API Tồn Kho" ngay bên cạnh — 2 tích hợp hoàn toàn khác nhau, xem sysInvApi).' },
-      { role: 'Quản trị viên', text: 'điền hàng trên: <b>Trạng thái đồng bộ</b> (Bật/Tắt), <b>Base URL (endpoint nhận đơn hàng)</b> của dsmart16, <b>Chu kỳ tự động (phút)</b> (tối thiểu 5, để trống = 60).' },
-      { role: 'Quản trị viên', text: 'điền hàng dưới: <b>Tên Header Xác Thực</b> (VD "X-Api-Key" hoặc "Authorization" — theo yêu cầu của dsmart16), <b>Giá Trị Header</b> (write-only: nhập 1 lần, sau đó ô luôn trống — để trống khi sửa = GIỮ NGUYÊN giá trị đã lưu), <b>Tên Trường Đối Chiếu (matchingKey)</b> (mặc định `poNumber`, KHÔNG phải mật khẩu — giá trị xác thực thật nhập ở ô Giá Trị Header).' },
-      { role: 'Quản trị viên', text: 'bấm <b>"Lưu Cấu Hình API Đơn Hàng"</b> — dòng trạng thái ngay dưới form cho biết đã có giá trị header xác thực hay chưa ("✅ Đã cấu hình..." / "⚠️ Chưa cấu hình giá trị header xác thực.").' },
-      { role: 'Quản trị viên', text: 'không muốn chờ tới chu kỳ kế tiếp: bấm <b>"🔄 Đồng Bộ Ngay"</b> — kết quả hiện ngay ở dòng cuối màn ("✅/⚠️/⛔ Lần đồng bộ gần nhất: [thời điểm] — [thông báo]"), cùng 1 hàm xử lý với job tự động nên không có khác biệt hành vi.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔌 Cấu Hình API Đối Tác</b> (11/2026, gộp từ 2 nút rời "Cấu Hình API Đơn Hàng" + "Cấu Hình API Tồn Kho" cho gọn sidebar) — mặc định mở sẵn tab con "📦 Đơn Hàng — dsmart16".' },
+      { role: 'Quản trị viên', text: '<u>Tab con "📦 Đơn Hàng — dsmart16"</u> (đẩy Đơn Hàng Vận Hành RA ngoài): điền <b>Trạng thái đồng bộ</b>, <b>Base URL (endpoint nhận đơn hàng)</b>, <b>Chu kỳ tự động (phút)</b> (tối thiểu 5, để trống = 60), <b>Tên Header Xác Thực</b> (VD "X-Api-Key"/"Authorization" — theo yêu cầu của dsmart16), <b>Giá Trị Header</b> (write-only), <b>Tên Trường Đối Chiếu (matchingKey)</b> (mặc định `poNumber`, KHÔNG phải mật khẩu) → bấm <b>"Lưu Cấu Hình API Đơn Hàng"</b>. Chỉ đơn ĐÃ CÓ Số Đơn NCC (poNumber) mới được gửi; đơn gửi rồi mà nội dung đổi (trạng thái/ngày duyệt/số tiền...) sẽ tự gửi LẠI.' },
+      { role: 'Quản trị viên', text: 'bấm pill <b>"🧺 Tồn Kho — BRGMART"</b> để chuyển sang tab con kia — <u>Tab con "🧺 Tồn Kho — BRGMART"</u> (lấy Tồn Kho Hệ Thống VÀO, phục vụ Vận Hành → Kiểm Soát Hàng Hóa → Đối Chiếu): điền <b>Trạng thái</b> và <b>Base URL</b> (mặc định `https://api.brgmart.vn`), <b>API Key</b> (write-only) → bấm <b>"Lưu Cấu Hình API Tồn Kho"</b>. Nếu để TẮT, hệ thống tự rơi về đọc cấu hình cũ trong file .env trên server (nếu có) — không có khái niệm chu kỳ tuỳ chỉnh, job luôn quét lại TOÀN BỘ mỗi 20 phút.' },
+      { role: 'Quản trị viên', text: 'ở CẢ 2 tab con: dòng trạng thái ngay dưới form cho biết đã có khoá xác thực hay chưa ("✅ Đã cấu hình..." / "⚠️ Chưa cấu hình..."); không muốn chờ chu kỳ kế tiếp thì bấm <b>"🔄 Đồng Bộ Ngay"</b> — kết quả hiện ngay ở dòng cuối màn, cùng 1 hàm xử lý với job tự động nên không có khác biệt hành vi.' },
     ],
     footer: { left: [
-      { label: 'Chỉ đẩy RA, không kéo VÀO', text: 'đây là luồng 1 chiều: hệ thống gửi Đơn Hàng ra dsmart16, KHÔNG nhận dữ liệu ngược lại. Đừng nhầm với "DSmart API" của module Mua Hàng (BAS) — luồng đó ngược lại (chỉ KÉO dữ liệu Chiết Khấu/Thưởng NCC vào) và cấu hình bằng biến môi trường `.env`, không phải màn này.' },
-      { label: 'Phạm vi đơn được gửi', text: 'chỉ đơn ĐÃ có "Số Đơn NCC" (poNumber) — thiếu mã này thì không có gì để 2 hệ thống đối chiếu nên bị bỏ qua. Đơn đã gửi thành công sẽ được gửi LẠI khi nội dung thay đổi (đổi trạng thái/ngày duyệt/ngày nhận/số tiền...); nội dung y hệt lần trước thì bỏ qua, không gửi thừa.' },
+      { label: '2 tab con KHÁC CHIỀU dữ liệu, đừng nhầm', text: '"📦 Đơn Hàng" chỉ đẩy RA (dsmart16), KHÔNG nhận dữ liệu ngược lại — đừng nhầm với "DSmart API" của module Mua Hàng (BAS), luồng đó ngược lại (chỉ KÉO Chiết Khấu/Thưởng NCC vào) và cấu hình bằng `.env`, không phải màn này. "🧺 Tồn Kho" chỉ LẤY VÀO (BRGMART), KHÔNG gửi dữ liệu nào của HCRC ra ngoài.' },
+      { label: 'Đường lùi .env chỉ áp dụng cho Tồn Kho', text: 'tab "🧺 Tồn Kho" nếu để TẮT (hoặc chưa từng cấu hình) tự rơi về đọc BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY trong .env trên server (cách cấu hình CŨ trước 11/2026, vẫn hoạt động song song). Tab "📦 Đơn Hàng" KHÔNG có đường lùi .env tương đương — luôn cấu hình qua UI này.' },
     ], right: [
-      { label: 'Chặn SSRF cho Base URL', text: 'Base URL do admin tự nhập được kiểm tra trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS) và có timeout 15 giây — 1 endpoint treo không làm kẹt cả job đồng bộ.' },
-      { label: 'Lỗi 1 đơn không chặn các đơn còn lại', text: 'job cô lập lỗi theo TỪNG đơn — 1 đơn gửi lỗi vẫn ghi nhận rồi đi tiếp, kết quả tổng kết ghi rõ SUCCESS/PARTIAL/FAILED ở dòng "Lần đồng bộ gần nhất" và trong Nhật Ký Hệ Thống.' },
-      { label: 'Giá trị header mã hoá khi lưu', text: 'giá trị header xác thực được mã hoá trong cơ sở dữ liệu và KHÔNG bao giờ trả ngược về giao diện (cùng quy ước write-only với mật khẩu SMTP ở Cấu Hình Email) — mất thì nhập lại giá trị mới, không xem lại được.' },
-    ] },
-  },
-  // sysInvApi (11/2026, theo yêu cầu người dùng "sao không cho cấu hình API tồn kho trên app, bắt buộc
-  // .env tôi không chủ động được" — trước đây tính năng này CHỈ cấu hình được qua biến môi trường
-  // BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY, không hề có màn admin nào). CHIỀU NGƯỢC
-  // LẠI với sysOpApi ngay trên: đây là tích hợp LẤY VÀO (pull) toàn bộ Tồn Kho Hệ Thống từ API đối tác
-  // BRGMART, phục vụ Đối Chiếu Kệ & Tồn Kho (Vận Hành → Kiểm Soát Hàng Hóa) — không có khái niệm "đối
-  // chiếu từng bản ghi"/chu kỳ tuỳ chỉnh như sysOpApi, job luôn quét lại TOÀN BỘ mỗi 20 phút.
-  sysInvApi: {
-    icon: '🧺', title: 'Cấu Hình API Tồn Kho — Đối Chiếu Kệ & Tồn Kho (BRGMART)', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Cấu hình để hệ thống TỰ ĐỘNG lấy "Tồn Kho Hệ Thống" từ API đối tác BRGMART về (chu kỳ cố định 20 phút/lần, quét lại toàn bộ mỗi lần — không có khái niệm đối chiếu từng bản ghi) phục vụ màn Đối Chiếu Kệ & Tồn Kho. Base URL + API Key nhập qua UI (write-only, mã hoá khi lưu). Nếu để TẮT, hệ thống tự rơi về đọc cấu hình cũ trong file .env trên server (nếu có) — giữ đường lùi cho môi trường đã cấu hình theo cách cũ.',
-    flow: { ariaLabel: 'Quy trình cấu hình đồng bộ Tồn Kho Hệ Thống từ BRGMART', chain: [
-      { label: 'Khai Base URL + API Key', sub: 'API Key là write-only' },
-      { label: 'Bật đồng bộ', sub: 'Tắt thì tự rơi về .env (nếu có)' },
-      { label: 'Job quét định kỳ 20 phút', sub: 'Lấy lại TOÀN BỘ siêu thị mỗi lần', kind: 'decision' },
-      { label: 'Cập nhật cache trong tiến trình', sub: 'Đối Chiếu Kệ & Tồn Kho đọc theo maDiem', kind: 'approved' },
-    ], decision: { atIndex: 2, approveLabel: 'Lấy thành công', rejectLabel: 'Lỗi / URL không an toàn', rejectBox: { label: 'Báo lỗi tại màn này', sub: 'Giữ nguyên cache cũ, không xoá' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại cấu hình' } },
-    steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🧺 Cấu Hình API Tồn Kho</b> (tab con nằm ngay cạnh "🔌 Cấu Hình API Đơn Hàng" — 2 tích hợp hoàn toàn khác nhau, đừng nhầm).' },
-      { role: 'Quản trị viên', text: 'điền <b>Trạng thái</b> (Bật/Tắt) và <b>Base URL</b> (mặc định BRGMART là `https://api.brgmart.vn`).' },
-      { role: 'Quản trị viên', text: 'điền <b>API Key</b> (write-only: nhập 1 lần, sau đó ô luôn trống — để trống khi sửa = GIỮ NGUYÊN giá trị đã lưu).' },
-      { role: 'Quản trị viên', text: 'bấm <b>"Lưu Cấu Hình API Tồn Kho"</b> — dòng trạng thái cho biết đã có API Key hay chưa ("✅ Đã cấu hình..." / "⚠️ Chưa cấu hình API Key.").' },
-      { role: 'Quản trị viên', text: 'không muốn chờ tới chu kỳ 20 phút kế tiếp: bấm <b>"🔄 Đồng Bộ Ngay"</b> — kết quả hiện ngay ở dòng cuối màn, cùng 1 hàm xử lý với job tự động nên không có khác biệt hành vi.' },
-    ],
-    footer: { left: [
-      { label: 'Chỉ LẤY VÀO, không đẩy RA', text: 'ngược với sysOpApi ở trên — đây là luồng 1 chiều: hệ thống LẤY Tồn Kho từ BRGMART về, KHÔNG gửi dữ liệu nào của HCRC ra ngoài.' },
-      { label: 'Đường lùi .env', text: 'nếu để TẮT ở màn này (hoặc chưa từng cấu hình), hệ thống tự rơi về đọc BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY trong file .env trên server (nếu có) — cách cấu hình CŨ trước 11/2026, vẫn hoạt động song song.' },
-    ], right: [
-      { label: 'Chặn SSRF cho Base URL (chỉ nguồn UI)', text: 'Base URL do admin tự nhập qua màn này được kiểm tra trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS). Base URL đọc từ .env KHÔNG bị kiểm (do người triển khai server gõ trực tiếp vào máy, mức tin cậy khác).' },
-      { label: 'Lỗi mạng tạm thời giữ nguyên cache cũ', text: 'Đối Chiếu Kệ & Tồn Kho vẫn hiển thị được số liệu gần nhất thay vì trống trơn nếu 1 lượt đồng bộ thất bại — chỉ cập nhật khi có dữ liệu mới thật.' },
+      { label: 'Chặn SSRF cho Base URL (chỉ nguồn UI, cả 2 tab con)', text: 'Base URL admin tự nhập ở BẤT KỲ tab con nào đều được kiểm trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS). Base URL đọc từ .env (riêng tab Tồn Kho) KHÔNG bị kiểm — người triển khai server gõ trực tiếp, mức tin cậy khác.' },
+      { label: 'Khoá xác thực luôn mã hoá + write-only', text: 'Giá Trị Header (Đơn Hàng) và API Key (Tồn Kho) đều được mã hoá trong cơ sở dữ liệu và KHÔNG bao giờ trả ngược về giao diện (cùng quy ước write-only với mật khẩu SMTP ở Cấu Hình Email) — mất thì nhập lại giá trị mới, không xem lại được.' },
+      { label: 'Lỗi không chặn lẫn nhau', text: '1 đơn gửi lỗi (tab Đơn Hàng) không chặn các đơn khác — job cô lập lỗi theo TỪNG đơn; 1 lượt lấy Tồn Kho lỗi (tab Tồn Kho) vẫn giữ nguyên cache cũ thay vì xoá trống. Lỗi ở tab con này cũng không ảnh hưởng tab con kia.' },
     ] },
   },
   // sysTlsCert (10/2026, yêu cầu người dùng: team IT tự tải Private Key/Certificate từ giao diện web để

@@ -614,6 +614,10 @@ let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
 let activeAdminSubTab = 'PERMS';
+// Tab con BÊN TRONG panel "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel Đơn Hàng/Tồn Kho — xem
+// setPartnerApiSubTab() ở module-hethong-tabs.js). 'ORDER' = dsmart16 (đẩy ra), 'INVENTORY' = BRGMART
+// (lấy vào) — ĐỘC LẬP với activeAdminSubTab (tab CẤP 1 của "⚙️ Quản Trị").
+let activePartnerApiSubTab = 'ORDER';
 // Sub-tab của màn "Log" (Hệ Thống) — ACTIVITY (nhật ký hoạt động/nghiệp vụ, dữ liệu DB.systemLogs cũ)
 // / ERROR (nhật ký lỗi hệ thống, MỚI — xem setLogSubTab()/loadErrorLogs() ở module-logsystem-trash.js).
 let activeLogSubTab = 'ACTIVITY';

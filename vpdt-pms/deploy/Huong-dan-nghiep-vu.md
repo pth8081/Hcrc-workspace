@@ -2664,16 +2664,19 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     module rủi ro cao hơn (lương, kỷ luật, hợp đồng lao động, ngân sách, giấy
     phép...) VẪN giữ nguyên chặn cứng tuyệt đối, không có quyền bypass nào.
 - **Cấu Hình API (đồng bộ đơn hàng ra hệ thống dsmart16)** — Hệ Thống → Quản
-  Trị (admin), sub-tab **"🔌 Cấu Hình API"**: bật/tắt đồng bộ, Base URL hệ
-  thống dsmart16, tên + giá trị header xác thực (giá trị nhập 1 lần, sau đó ẩn
-  — giống cơ chế mật khẩu SMTP, không hiện lại giá trị đã lưu), trường dùng để
-  đối chiếu đơn hàng phía dsmart16 (mặc định Số Đơn NCC), chu kỳ đồng bộ (phút).
-  Có nút **"🔄 Đồng Bộ Ngay"** để kích hoạt thủ công ngoài chu kỳ tự động. Job
-  nền chạy mỗi 5 phút (tự bỏ qua nếu chưa tới chu kỳ đã cấu hình hoặc tính
-  năng đang tắt), lấy các đơn hàng cần gửi, gửi từng đơn qua API dsmart16
-  (Base URL + header tuỳ chỉnh), đánh dấu đơn đã đồng bộ khi thành công —
-  lỗi ở 1 đơn không chặn các đơn còn lại trong cùng lượt chạy. Trạng thái/
-  thông báo lần đồng bộ gần nhất hiện ngay trên màn Cấu Hình API.
+  Trị (admin) → **"🔌 Cấu Hình API Đối Tác"** (v28.62, gộp chung 1 màn với
+  cấu hình API Tồn Kho BRGMART cho gọn sidebar — xem mục "Cấu hình kết nối
+  API BRGMART" bên dưới) → tab con **"📦 Đơn Hàng — dsmart16"**: bật/tắt đồng
+  bộ, Base URL hệ thống dsmart16, tên + giá trị header xác thực (giá trị
+  nhập 1 lần, sau đó ẩn — giống cơ chế mật khẩu SMTP, không hiện lại giá trị
+  đã lưu), trường dùng để đối chiếu đơn hàng phía dsmart16 (mặc định Số Đơn
+  NCC), chu kỳ đồng bộ (phút). Có nút **"🔄 Đồng Bộ Ngay"** để kích hoạt thủ
+  công ngoài chu kỳ tự động. Job nền chạy mỗi 5 phút (tự bỏ qua nếu chưa tới
+  chu kỳ đã cấu hình hoặc tính năng đang tắt), lấy các đơn hàng cần gửi, gửi
+  từng đơn qua API dsmart16 (Base URL + header tuỳ chỉnh), đánh dấu đơn đã
+  đồng bộ khi thành công — lỗi ở 1 đơn không chặn các đơn còn lại trong cùng
+  lượt chạy. Trạng thái/thông báo lần đồng bộ gần nhất hiện ngay trên tab
+  con này.
   **Chỉ Quản Trị Viên ĐỌC được cấu hình này (từ 9/2026)**: trước đây giá trị
   header xác thực đã được giấu kỹ, nhưng Base URL/tên header/thông báo lỗi đồng
   bộ vẫn phát cho mọi tài khoản đã đăng nhập (lộ thông tin hạ tầng nội bộ) —
@@ -3030,17 +3033,19 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   BRGMART cấp, KHÔNG tự động đoán/khớp). Siêu thị chưa cấu hình ô này thì
   sub-tab "📊 Đối Chiếu" + picker "🔎 Chọn Từ Tồn Kho Hệ Thống" tự ẩn/báo lỗi
   rõ, các sub-tab khác của Kiểm Soát Hàng Hóa không bị ảnh hưởng.
-- **Cấu hình kết nối API BRGMART qua giao diện web (MỚI v28.61)**: Hệ Thống
-  → Quản Trị → "🧺 Cấu Hình API Tồn Kho" (tab con cạnh "🔌 Cấu Hình API Đơn
-  Hàng" — 2 tích hợp hoàn toàn khác nhau, đừng nhầm: Đơn Hàng ĐẨY dữ liệu RA
-  dsmart16, Tồn Kho LẤY dữ liệu VÀO từ BRGMART). Admin tự nhập Base URL + API
-  Key (API Key write-only, mã hoá khi lưu, không xem lại được), bấm "Lưu Cấu
-  Hình API Tồn Kho" rồi "🔄 Đồng Bộ Ngay" để chạy thử ngay không cần đợi chu
-  kỳ 20 phút. Trước đây tính năng này CHỈ cấu hình được qua file `.env` trên
-  server (`BRGMART_INVENTORY_API_BASE_URL`/`BRGMART_INVENTORY_API_KEY`) —
-  cách cũ vẫn còn tác dụng làm "đường lùi": nếu để TẮT ở màn này (hoặc chưa
-  từng cấu hình), hệ thống tự rơi về đọc `.env` như trước, không cần đổi gì
-  thêm cho các server đã triển khai theo cách cũ.
+- **Cấu hình kết nối API BRGMART qua giao diện web (v28.61, gộp vào 1 màn
+  cha ở v28.62)**: Hệ Thống → Quản Trị → "🔌 Cấu Hình API Đối Tác" → tab con
+  "🧺 Tồn Kho — BRGMART" (tab con "📦 Đơn Hàng — dsmart16" nằm ngay cạnh — 2
+  tích hợp hoàn toàn khác nhau, đừng nhầm: Đơn Hàng ĐẨY dữ liệu RA dsmart16,
+  Tồn Kho LẤY dữ liệu VÀO từ BRGMART, chỉ gộp chung 1 màn cho gọn sidebar).
+  Admin tự nhập Base URL + API Key (API Key write-only, mã hoá khi lưu,
+  không xem lại được), bấm "Lưu Cấu Hình API Tồn Kho" rồi "🔄 Đồng Bộ Ngay"
+  để chạy thử ngay không cần đợi chu kỳ 20 phút. Trước đây tính năng này CHỈ
+  cấu hình được qua file `.env` trên server
+  (`BRGMART_INVENTORY_API_BASE_URL`/`BRGMART_INVENTORY_API_KEY`) — cách cũ
+  vẫn còn tác dụng làm "đường lùi": nếu để TẮT ở màn này (hoặc chưa từng cấu
+  hình), hệ thống tự rơi về đọc `.env` như trước, không cần đổi gì thêm cho
+  các server đã triển khai theo cách cũ.
 - **An toàn dữ liệu**: server luôn tự lấy siêu thị (`dept`) từ tài khoản
   đăng nhập, KHÔNG tin bất kỳ mã siêu thị nào client gửi lên — nhân viên 1
   siêu thị không thể ghi nhận/khai báo/sửa quầy kệ hay ngưỡng tồn cho siêu

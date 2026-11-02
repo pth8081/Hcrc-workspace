@@ -649,8 +649,12 @@
       <button type="button" data-op="setAdminSubTab" data-arg0="CATALOG" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="PERMS" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="EXTAUTH" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
-      <button type="button" data-op="setAdminSubTab" data-arg0="OPAPI" id="btnAdminSubOpApi" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔌 Cấu Hình API Đơn Hàng</button>
-      <button type="button" data-op="setAdminSubTab" data-arg0="INVAPI" id="btnAdminSubInvApi" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧺 Cấu Hình API Tồn Kho</button>
+      <!-- "Cấu Hình API Đối Tác" (11/2026, gộp 2 nút rời "Cấu Hình API Đơn Hàng"/"Cấu Hình API Tồn Kho"
+           thành 1 nút cấp 1 cho gọn sidebar, theo yêu cầu người dùng — demo xác nhận trước khi làm thật).
+           2 panel con #adminSubOpApi/#adminSubInvApi giữ NGUYÊN y hệt (id/field/data-op-submit không đổi
+           gì cả) chỉ đổi chỗ bọc trong #adminSubPartnerApi + thêm 1 dải tab con riêng phía trên chúng —
+           xem setAdminSubTab()/setPartnerApiSubTab() ở module-hethong-tabs.js. -->
+      <button type="button" data-op="setAdminSubTab" data-arg0="PARTNERAPI" id="btnAdminSubPartnerApi" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔌 Cấu Hình API Đối Tác</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="TLSCERT" id="btnAdminSubTlsCert" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔒 Chứng Chỉ TLS/HTTPS</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="TRUSTEDCA" id="btnAdminSubTrustedCa" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔗 Chứng Chỉ Tin Cậy (CA Ngoài)</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="SHELFDIGEST" id="btnAdminSubShelfDigest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Lịch Báo Cáo Ngưỡng Tồn</button>
@@ -964,12 +968,21 @@
       </table>
     </div>
 
-    <!-- CẤU HÌNH API — đồng bộ ĐƠN HÀNG (Vận Hành > Đơn Hàng) ra hệ thống ngoài "dsmart16" (job outbound,
-         xem jobs/operationOrderApiSync.js). Xác thực LINH HOẠT: Base URL + 1 header tuỳ chỉnh tên/giá trị
-         (không cố định Bearer/Basic như "API Xác Thực Ngoài" ở tab bên cạnh — dsmart16 có thể yêu cầu tên
-         header khác). "Mã khoá đối chiếu" mặc định "poNumber" — placeholder trường dùng để đối chiếu bản
-         ghi giữa 2 hệ thống. -->
-    <div id="adminSubOpApi" class="hidden bg-teal-50 p-4 rounded border border-teal-300 space-y-4">
+    <!-- "Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 panel cha có tab con
+         riêng — xem chú thích đầy đủ tại nút #btnAdminSubPartnerApi phía trên). 2 panel con BÊN TRONG
+         (#adminSubOpApi/#adminSubInvApi) GIỮ NGUYÊN y hệt, chỉ đổi phần bọc ngoài + thêm dải tab con. -->
+    <div id="adminSubPartnerApi" class="hidden space-y-4">
+      <div id="partnerApiSubTabBar" class="flex gap-2 border-b pb-2">
+        <button type="button" data-op="setPartnerApiSubTab" data-arg0="ORDER" id="btnPartnerApiOrder" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-teal-700 text-white">📦 Đơn Hàng — dsmart16</button>
+        <button type="button" data-op="setPartnerApiSubTab" data-arg0="INVENTORY" id="btnPartnerApiInventory" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-gray-200 text-gray-700">🧺 Tồn Kho — BRGMART</button>
+      </div>
+
+      <!-- CẤU HÌNH API — đồng bộ ĐƠN HÀNG (Vận Hành > Đơn Hàng) ra hệ thống ngoài "dsmart16" (job outbound,
+           xem jobs/operationOrderApiSync.js). Xác thực LINH HOẠT: Base URL + 1 header tuỳ chỉnh tên/giá trị
+           (không cố định Bearer/Basic như "API Xác Thực Ngoài" ở tab bên cạnh — dsmart16 có thể yêu cầu tên
+           header khác). "Mã khoá đối chiếu" mặc định "poNumber" — placeholder trường dùng để đối chiếu bản
+           ghi giữa 2 hệ thống. -->
+      <div id="adminSubOpApi" class="hidden bg-teal-50 p-4 rounded border border-teal-300 space-y-4">
       <div>
         <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🔌 Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16</h3>
         <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG gửi Đơn Hàng (Vận Hành &gt; Đơn Hàng) sang hệ thống ngoài "dsmart16" — mỗi đơn có "Số Đơn NCC" (poNumber) chỉ được gửi 1 lần khi đủ điều kiện. Giá trị header xác thực là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu).</p>
@@ -1059,6 +1072,7 @@
       </form>
 
       <p id="invApiLastSyncStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
+      </div>
     </div>
 
     <!-- Chứng Chỉ TLS/HTTPS (10/2026, yêu cầu người dùng: team IT tự tải private key/certificate từ

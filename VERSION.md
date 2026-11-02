@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.63 (2026-11): Gộp "Cấu Hình API Đơn Hàng" + "Cấu Hình API Tồn Kho" thành 1 tab cha "Cấu Hình API Đối Tác"
+
+Theo đề xuất người dùng (đã gửi ảnh demo xin xác nhận trước khi làm thật — "Cả hai làm nhé bạn", tức
+đồng ý cả tên gọi lẫn triển khai thật): 2 nút cấp 1 riêng ở Hệ Thống → Quản Trị gộp thành 1 nút
+**"🔌 Cấu Hình API Đối Tác"**, bên trong có 2 tab con độc lập: **"📦 Đơn Hàng — dsmart16"** (mặc định mở
+sẵn) và **"🧺 Tồn Kho — BRGMART"** — giảm dải tab cấp 1 từ 10 xuống 9 nút, chuẩn bị sẵn chỗ cho API đối
+tác mới sau này (chỉ cần thêm 1 tab con, không cần thêm nút cấp 1 mới).
+
+- **Tên gọi KHÔNG dùng "DSmart"** dù người dùng có gợi ý — dsmart16 (đồng bộ Đơn Hàng) và BRGMART (đối
+  chiếu Tồn Kho) là 2 hệ thống đối tác HOÀN TOÀN KHÁC NHAU, gộp dưới tên "DSmart" sẽ gây hiểu nhầm cả 2
+  cùng 1 nhà cung cấp — đã trao đổi rõ với người dùng trước khi chọn tên trung lập này.
+- **2 panel con GIỮ NGUYÊN 100% logic/dữ liệu/route cũ** (`adminSubOpApi`/`adminSubInvApi`,
+  `operationOrderApiConfig`/`inventoryApiConfig`, `jobs/operationOrderApiSync.js`/
+  `jobs/inventorySync.js`) — chỉ đổi phần BỌC NGOÀI (1 panel cha `adminSubPartnerApi` + 1 dải tab con
+  `setPartnerApiSubTab()`), không sửa bất kỳ field id/route/hàm xử lý nào đã có.
+- Gộp 2 entry Hướng Dẫn `sysOpApi`/`sysInvApi` cũ thành 1 entry `sysPartnerApi` duy nhất (đúng mẫu đã
+  dùng cho `vanHanhShelf` — nhiều sub-tab trong 1 entry tài liệu), cập nhật `Huong-dan-nghiep-vu.md`.
+
+Test: chạy lại toàn bộ bộ test liên quan (18 `test-inventory-api-config.js`, 10 `test-inventory-recon.js`,
+165 `test-nghiepvu.js` — giảm từ 168 vì gộp 2 mục Hệ Thống thành 1, đúng dự kiến, không phải lỗi — 6
+`test-nghiepvu-csp.js`, 9 `test-nghiepvu-click.js`, 3 `test-csp-full-audit.js` quét 42 điểm điều hướng)
+đều pass. Demo ảnh thật qua Chromium xác nhận TRƯỚC khi code thật (gửi người dùng xin xác nhận), sau đó
+chạy lại `tests/demo-inventory-api-config.js` (đã cập nhật theo cấu trúc tab mới) trên CHÍNH code thật
+vừa merge — xác nhận load/save/sync-now hoạt động đúng qua đường dẫn click mới.
 
 ## v28.62 (2026-11): [Khẩn] Fix nút "Lưu Cấu Hình API Tồn Kho" vô hình (thiếu build CSS)
 

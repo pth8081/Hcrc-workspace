@@ -185,8 +185,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubCatalog').classList.toggle('hidden', subTab !== 'CATALOG');
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
   document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
-  document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
-  document.getElementById('adminSubInvApi').classList.toggle('hidden', subTab !== 'INVAPI');
+  document.getElementById('adminSubPartnerApi').classList.toggle('hidden', subTab !== 'PARTNERAPI');
   document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
   document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
   document.getElementById('adminSubShelfDigest').classList.toggle('hidden', subTab !== 'SHELFDIGEST');
@@ -198,18 +197,35 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubCatalog').className = subTab === 'CATALOG' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
-  document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
-  document.getElementById('btnAdminSubInvApi').className = subTab === 'INVAPI' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubPartnerApi').className = subTab === 'PARTNERAPI' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubShelfDigest').className = subTab === 'SHELFDIGEST' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
-  if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
-  if (subTab === 'INVAPI') loadInventoryApiConfigToForm();
+  if (subTab === 'PARTNERAPI') setPartnerApiSubTab(activePartnerApiSubTab);
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
   if (subTab === 'SHELFDIGEST') loadShelfThresholdDigestScheduleToForm();
+}
+
+// "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 tab cấp 1 có tab con riêng —
+// xem chú thích đầy đủ tại nút #btnAdminSubPartnerApi, systemSection.html). 2 tab con ĐỘC LẬP hoàn toàn
+// về dữ liệu/route/job (ORDER = dsmart16/operationOrderApiConfig, INVENTORY = BRGMART/inventoryApiConfig)
+// — hàm này CHỈ đổi hiển thị, không đụng gì tới loadOperationOrderApiConfigToForm()/
+// loadInventoryApiConfigToForm()/save*/sync*Now() đã có sẵn (giữ nguyên y hệt).
+function setPartnerApiSubTab(subTab) {
+  activePartnerApiSubTab = subTab;
+  document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'ORDER');
+  document.getElementById('adminSubInvApi').classList.toggle('hidden', subTab !== 'INVENTORY');
+
+  const activeCls = 'px-3 py-1 rounded-full text-[11px] font-semibold bg-teal-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded-full text-[11px] font-semibold bg-gray-200 text-gray-700';
+  document.getElementById('btnPartnerApiOrder').className = subTab === 'ORDER' ? activeCls : inactiveCls;
+  document.getElementById('btnPartnerApiInventory').className = subTab === 'INVENTORY'
+    ? 'px-3 py-1 rounded-full text-[11px] font-semibold bg-lime-700 text-white' : inactiveCls;
+  if (subTab === 'ORDER') loadOperationOrderApiConfigToForm();
+  if (subTab === 'INVENTORY') loadInventoryApiConfigToForm();
 }
 
 // ---------- Lịch Gửi Báo Cáo Ngưỡng Tồn (Kiểm Soát Hàng Hóa, thiết kế lại 11/2026) ----------
