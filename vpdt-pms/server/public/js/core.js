@@ -12023,7 +12023,16 @@ function canAccessOperationModule(user) {
     // cáo (VD nhân viên quầy kệ, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa/Giá Buôn nào) vẫn phải
     // vào được tab Vận Hành để thấy sub-tab "Kiểm Soát Hàng Hóa".
     || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
-    || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll) return true;
+    || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo "có người trong Nhóm Quyền Vận Hành thấy menu, có người không"):
+    // operationOrderReceiptManageHO/Store ("🧾 Quyền Phê Duyệt Đặt Hàng HO/Siêu Thị" — xác nhận NHẬN
+    // HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong, xem renderOperationOrderReceiptScopeCheckboxes()/
+    // systemSection.html mục "22. Vận Hành") là 1 quyền THẬT trong chính cây phân quyền module này
+    // nhưng trước đây KHÔNG nằm trong danh sách OR ở trên — người CHỈ được cấp đúng quyền này (VD nhân
+    // viên kho chỉ xác nhận nhận hàng, không tạo đơn/mở mới/sửa chữa/giá buôn/quầy kệ nào) hoàn toàn
+    // không vào được module dù quyền đó RÕ RÀNG thuộc Vận Hành.
+    || user.perms?.operationOrderReceiptManageHO
+    || user.perms?.operationOrderReceiptManageStore?.all || (user.perms?.operationOrderReceiptManageStore?.depts || []).length) return true;
   // LỖI ĐÃ VÁ (10/2026, đối xứng bản vá canAccessPurchasingModule() ở trên cho Bán Buôn): người CHỈ là
   // approver theo mức Margin/Chiết Khấu (itPriceTierWorkflows) hoặc người có quyền xét Từ Chối Khẩn
   // Wholesale, không giữ bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị nào, vẫn phải vào được tab để

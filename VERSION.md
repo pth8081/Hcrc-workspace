@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**28.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.67 (2026-11): Fix quyền vào module Vận Hành thiếu "Quyền Phê Duyệt Đặt Hàng" + sửa chú thích sai module
+
+Theo báo cáo người dùng ("có user vào được module Vận Hành, có user không, dù cùng Nhóm Quyền cho truy
+cập module"):
+
+- **Lỗi thật đã vá**: `canAccessOperationModule()` (core.js) đòi Mục 0 (`moduleAccess.vanHanh`) CỘNG
+  THÊM ít nhất 1 quyền chi tiết trong module — danh sách OR đó THIẾU đúng 1 quyền thật đang có trong
+  chính cây phân quyền "22. Vận Hành": `operationOrderReceiptManageHO`/`operationOrderReceiptManageStore`
+  ("🧾 Quyền Phê Duyệt Đặt Hàng HO/Siêu Thị" — xác nhận nhận hàng/hủy đơn SAU KHI đã duyệt xong, KHÔNG
+  liên quan `operationOrderCreate`). 1 user CHỈ được cấp đúng quyền này (VD nhân viên kho chỉ xác nhận
+  nhận hàng) trước đây hoàn toàn không vào được module dù quyền đó rõ ràng thuộc Vận Hành — đã bổ sung
+  vào danh sách OR.
+- **Chú thích sai đã sửa** (không phải lỗi phân quyền, chỉ là chữ cũ chưa cập nhật): 2 dòng mô tả ở cây
+  phân quyền (mục "22. Vận Hành" — Phê Duyệt Giá Bán Buôn, và mục "26. Mua Hàng — Phê Duyệt Giá" — Bán
+  Lẻ) vẫn còn ghi "module Hỗ Trợ IT" dù 2 nghiệp vụ này đã chuyển hẳn sang Vận Hành/Mua Hàng từ 10/2026 —
+  sửa lại đúng tên module hiện tại.
+
+Test mới `test-vanhanh-module-access-receipt-perm.js` (4/4 pass — user chỉ có đúng 1 trong 2 dạng quyền
+Phê Duyệt Đặt Hàng vẫn vào được module; đối chứng user không có quyền gì vẫn bị chặn như cũ). Chạy lại
+`test-operation-order-receiving.js` (39/39), `test-approval-email-config.js` (85/85),
+`test-csp-full-audit.js` (3/3) đều pass, không regression.
+
+**Lưu ý còn lại (chưa xử lý)**: người dùng cũng yêu cầu (1) người phê duyệt Phê Duyệt Giá Bán Lẻ/Bán
+Buôn phải xem được file ở bước họ đã duyệt dù đã bấm Duyệt rồi, và (2) hiển thị trạng thái bước duyệt
+dạng "đã làm/tổng bước" (VD 1/2, 0/2) cho TẤT CẢ module có luồng duyệt — 2 việc này đã gửi phương án
+phân tích riêng cho người dùng xác nhận, CHƯA triển khai.
 
 ## v28.66 (2026-11): [Khẩn] Fix khung "📣 Tin Tức Nổi Bật" ở Trang chủ trống trơn ở lần đăng nhập đầu
 
