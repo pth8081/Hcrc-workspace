@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**28.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.83 (2026-11): Checklist — bỏ chặn cứng Bắt Buộc ở mẫu Tự Đánh Giá Hàng Ngày GĐST/CHT
+
+Người dùng báo thật (kèm ảnh chụp màn hình): mẫu **"Checklist Hàng Ngày GĐST/CHT (Tự Đánh Giá)"**
+(mã `CL_STCH_DAILY`, 49 câu) chặn cứng "Còn 47 câu hỏi bắt buộc chưa trả lời", không cho nộp bài trừ
+khi trả lời đủ cả 49 câu — trái đúng yêu cầu đã chốt trước đây ("làm đến đâu tính đến đó, không bắt
+buộc làm hết").
+
+**Gốc rễ**: file seed tạo mẫu này (`seedChecklistStoreSelfDaily.js`) không đặt cờ "Bắt buộc" cho câu
+nào, nhưng hàm lưu mẫu ở server mặc định "không nói rõ = Bắt buộc", nên cả 49 câu bị khoá bắt buộc
+ngay từ lúc tạo. Phần tính Đạt/Không đạt đã đúng sẵn từ trước (chỉ xét câu ĐÃ trả lời, không cần đủ
+49 câu) — chỉ cần gỡ cờ Bắt buộc là đủ, không cần sửa logic chấm điểm.
+
+**2 phần vá** (phạm vi cố ý thu hẹp đúng 1 mẫu, không đụng mẫu VSATTP hay bất kỳ mẫu nào khác):
+- Script vá dữ liệu 1 lần (`scripts/fix-checklist-required-default.js`, dry-run mặc định + `--confirm`
+  để ghi thật — xem hướng dẫn chạy ngay trong file) gỡ cờ Bắt buộc của mẫu `CL_STCH_DAILY` **đang
+  ACTIVE** trên production, giữ nguyên mã mẫu (không ảnh hưởng lịch sử báo cáo cũ).
+- 2 nút mới **"☑️ Bắt Buộc Tất Cả"/"⬜ Bỏ Bắt Buộc Tất Cả"** ở màn Hệ Thống > Cấu Hình Nghiệp Vụ >
+  Checklist > builder câu hỏi — admin tự xử lý hàng loạt cho mẫu hiện tại lẫn mẫu tạo mới sau này,
+  không cần script mỗi lần.
+
+Verify: 2 file test mới (34 kịch bản) + chạy lại 9 bộ test Checklist hiện có (132 kịch bản) — tất cả
+pass, không hồi quy. 2 agent kiểm toán độc lập xác nhận riêng: đúng phạm vi (không lan sang mẫu khác,
+không ảnh hưởng bài nộp cũ), xử lý đúng dữ liệu từ nút bấm (chuỗi "true"/"false"), và 1 agent tự viết
+bộ test Playwright độc lập mô phỏng đúng bug thật + chứng minh bằng chính code chấm điểm thật rằng
+bài trả lời 5/49 câu bị chặn TRƯỚC vá, không còn bị chặn SAU vá.
+
+**Cần thao tác thủ công sau khi deploy code bản này**: chạy `node scripts/fix-checklist-required-default.js
+--confirm` (từ thư mục `server/`) ĐÚNG 1 LẦN để gỡ cờ Bắt buộc cho mẫu `CL_STCH_DAILY` đang live trên
+production (code mới chỉ ảnh hưởng mẫu tạo/sửa SAU KHI deploy — bản ghi cũ đã lưu sẵn trong CSDL từ
+trước không tự đổi). Khuyến nghị sao lưu CSDL trước khi chạy `--confirm`, và `pm2 restart` sau khi
+chạy xong để xoá cache. Không đổi `schema.sql`, không thêm biến môi trường, không thêm dependency.
 
 ## v28.82 (2026-11): Quản Lý Công Việc — Giá Trị Đầu Tư/Hợp Đồng + tệp đính kèm (C2)
 
