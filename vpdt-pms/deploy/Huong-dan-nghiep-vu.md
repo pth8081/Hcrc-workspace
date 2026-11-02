@@ -4378,7 +4378,9 @@ quy tắc huỷ bài Nháp ở trên).
 yêu cầu người dùng, bỏ hẳn ô chọn "Mức độ rủi ro" (A/B/C) khỏi màn làm bài
 (dữ liệu cũ của các bài đã làm trước đó vẫn giữ nguyên, chỉ là từ nay không
 nhập mới được nữa); ô "Ghi chú" đổi thành ô nhập nhiều dòng (xuống dòng được)
-và đổi nhãn thành "Kiến nghị"; dòng mô tả quy tắc trừ điểm dưới mỗi tiêu chí
+và đổi nhãn thành "Kiến nghị"; ô "Mô tả nội dung không phù hợp" cũng đổi
+thành ô nhập nhiều dòng tương tự (v28.60, theo phản hồi người dùng ngay sau
+bản v28.59 — bỏ sót ô này ở đợt đổi trước); dòng mô tả quy tắc trừ điểm dưới mỗi tiêu chí
 đổi chữ "tham khảo X điểm/lần" thành "quy định X điểm/lần" (chỉ đổi câu chữ
 hiển thị — điểm trừ mỗi lần vẫn là con số THAM KHẢO, người kiểm tra tự nhập
 tổng điểm trừ thực tế khi có nhiều vị trí vi phạm, không bị ép tính tự động).

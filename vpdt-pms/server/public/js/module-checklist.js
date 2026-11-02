@@ -365,7 +365,7 @@ function renderChecklistDeductionSubmissionForm() {
                     <input type="date" value="${escapeHtml(d.deadline || '')}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deadline" data-arg-value="2" class="border p-1 rounded text-[11px]">
                   </label>
                 </div>
-                <input value="${escapeHtml(d.description || '')}" placeholder="Mô tả nội dung không phù hợp (nếu có)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="description" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
+                <textarea placeholder="Mô tả nội dung không phù hợp (nếu có)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="description" data-arg-value="2" rows="2" class="w-full border p-1.5 rounded text-[11px] resize-y">${escapeHtml(d.description || '')}</textarea>
                 <textarea placeholder="Kiến nghị (không bắt buộc)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="note" data-arg-value="2" rows="2" class="w-full border p-1.5 rounded text-[11px] resize-y">${escapeHtml(d.note || '')}</textarea>
                 <div class="flex items-center gap-2 flex-wrap">
                   ${(d.attachments || []).map(a => `

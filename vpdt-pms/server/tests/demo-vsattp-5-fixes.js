@@ -59,7 +59,7 @@ const VSATTP_TEMPLATE = {
 const VSATTP_SUBMISSION = {
   id: 2, templateId: 2, storeCode: 'Siêu Thị Quang Trung', status: 'IN_PROGRESS',
   deductions: [{
-    criteriaId: 201, deductedPoints: 2, description: 'Sàn ướt, có vũng nước đọng gần khu sơ chế', riskLevel: 'B', deadline: '',
+    criteriaId: 201, deductedPoints: 2, description: 'Sàn ướt, có vũng nước đọng gần khu sơ chế. Phát hiện lúc 8h30 sáng, khu vực gần bồn rửa rau củ, có nguy cơ trơn trượt cho nhân viên qua lại.', riskLevel: 'B', deadline: '',
     note: 'Yêu cầu bộ phận vệ sinh lau khô sàn khu sơ chế ngay trong ca làm việc. Đề nghị siêu thị bổ sung biển cảnh báo "Sàn trơn ướt" và kiểm tra lại vào cuối mỗi ca để tránh tái diễn.',
     attachments: [
       { fileUrl: '/uploads/demo-vsattp-anh-1.jpg', fileName: 'san-uot-1.jpg', fileType: 'image/jpeg' },

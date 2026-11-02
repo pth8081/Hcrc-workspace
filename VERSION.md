@@ -1,9 +1,19 @@
 # Phiên bản hiện tại
 
-**28.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.60 (2026-11): Form làm bài VSATTP — ô "Mô tả nội dung không phù hợp" cũng xuống dòng được
+
+Theo phản hồi người dùng ngay sau v28.59 (đã đổi "Ghi chú"/"Kiến nghị" sang `<textarea>` nhưng bỏ sót ô
+"Mô tả nội dung không phù hợp (nếu có)" — vẫn còn là `<input>` 1 dòng, không xuống dòng được): đổi nốt ô
+này (DEDUCTION/VSATTP, field `description`) sang `<textarea>` 2 dòng co giãn, cùng khuôn ô Kiến nghị đã
+sửa trước đó. QA form không có ô này nên không cần sửa. Test checklist liên quan chạy lại pass hết (55/55
+`test-checklist.js`, 7/7 `test-checklist-deduction-builder-ui.js`, 11/11 `test-checklist-attachment-
+remove.js`, 5/5 `test-checklist-attachment-ownership.js`, 8/8 `test-checklist-revoked-permission-
+cancel.js`).
 
 ## v28.59 (2026-11): Form làm bài VSATTP — xoá ảnh minh chứng, Ghi chú → Kiến nghị (textarea), bỏ Mức độ rủi ro
 
