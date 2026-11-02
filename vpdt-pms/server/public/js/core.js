@@ -7717,7 +7717,16 @@ const APPROVAL_EMAIL_EVENTS = [
   ] },
   { configModule: 'OPERATION', label: '🏬 Vận Hành (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
-    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] },
+    // workItemAssigned/workItemStatus (D2, 11/2026 — yêu cầu QA "cảnh báo email khi gán phụ trách/đổi
+    // trạng thái công việc") — CHỈ áp dụng công việc Thực hiện (operationWorkItems) của 2 kind
+    // operationStoreOpenings/operationRepairs (operationOrders KHÔNG có "Thực hiện"/Công Việc, xem
+    // operationSourceType() ở module-vanhanh.js) — dispatch qua ĐÚNG 2 alias OPERATION_STORE_OPEN/
+    // OPERATION_REPAIR đã có sẵn ở trên, không cần thêm alias mới. workItemStatus CHỈ 2 mốc (bắt đầu +
+    // hoàn thành nghiệm thu), KHÔNG phải mọi lần cập nhật ghi chú tiến độ — tránh spam hộp thư đúng như
+    // yêu cầu gốc đã nêu rõ.
+    { key: 'workItemAssigned', label: 'Công việc Thực hiện — Gán phụ trách (báo người được gán)', actionTypes: ['NOTIFY_WORK_ITEM_ASSIGNED'] },
+    { key: 'workItemStatus', label: 'Công việc Thực hiện — Đổi trạng thái (Bắt đầu / Hoàn thành nghiệm thu, báo người khởi tạo hồ sơ)', actionTypes: ['NOTIFY_WORK_ITEM_STARTED', 'NOTIFY_WORK_ITEM_ACCEPTED'] }
   ], moduleAliases: ['OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'] },
   // 4 module mới (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): trước đây KHÔNG
   // có bất kỳ email nào ở sự kiện "Cần phê duyệt" cho 4 luồng này (không phải lỗi quên bật cấu hình — code
@@ -7948,7 +7957,12 @@ const ACTION_TYPE_EMAIL_META = {
   NOTIFY_TICKET_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Ticket cần phê duyệt' },
   NOTIFY_TICKET_ESCALATION_APPROVED: { status: 'success', badge: '✅ Ticket leo thang được duyệt' },
   NOTIFY_TICKET_ESCALATION_DENIED: { status: 'danger', badge: '❌ Ticket leo thang bị từ chối' },
-  NOTIFY_TICKET_DONE: { status: 'success', badge: '✅ Ticket hoàn tất' }
+  NOTIFY_TICKET_DONE: { status: 'success', badge: '✅ Ticket hoàn tất' },
+  // D2 (11/2026, Vận Hành > Thực hiện > Quản Lý Công Việc): xem chú thích đầy đủ tại family
+  // 'workItemAssigned'/'workItemStatus' ở APPROVAL_EMAIL_EVENTS phía trên.
+  NOTIFY_WORK_ITEM_ASSIGNED: { status: 'info', badge: '📌 Được gán phụ trách' },
+  NOTIFY_WORK_ITEM_STARTED: { status: 'info', badge: '🔵 Công việc bắt đầu' },
+  NOTIFY_WORK_ITEM_ACCEPTED: { status: 'success', badge: '✅ Công việc hoàn thành nghiệm thu' }
 };
 const DEFAULT_EMAIL_META = { status: 'info', badge: '🔔 Thông báo' };
 
@@ -8248,7 +8262,13 @@ const LINKABLE_EMAIL_FAMILIES = new Set([
   'applied', 'requestInfo', 'emergencyRejectRequest', 'emergencyRejectApproved', 'emergencyRejectDenied',
   'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone',
   // 'created' (MINUTES — 11/2026): xem chú thích tại APPROVAL_EMAIL_EVENTS.
-  'created'
+  'created',
+  // 'workItemAssigned'/'workItemStatus' (D2, 11/2026 — Vận Hành > Thực hiện > Quản Lý Công Việc): targetCode
+  // truyền vào notifyUsersByEmail() ở notifyOperationWorkItemAssigned()/notifyOperationWorkItemStatusMilestone()
+  // (module-vanhanh.js) là sourceRecord.code (mã HỒ SƠ chứa công việc, không phải mã riêng của công việc —
+  // operationWorkItems không có field `code`) — tái dùng ĐÚNG APPROVAL_EMAIL_RECORD_OPENER.OPERATION đã có
+  // sẵn (openOperationProcessModal), mở thẳng vào hồ sơ chứa công việc đó.
+  'workItemAssigned', 'workItemStatus'
 ]);
 
 // buildApprovalEmailUrl(): tách riêng phần dựng URL TRẦN (11/2026, phục vụ nút CTA HTML ở
