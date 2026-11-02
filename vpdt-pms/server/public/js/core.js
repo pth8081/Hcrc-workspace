@@ -3838,6 +3838,29 @@ function getStepApprovalProgressText(stepApprovers, history, step) {
   return ` (Đã ${approved.size}/${approversList.length} người duyệt)`;
 }
 
+// Tỉ lệ "số BƯỚC đã xong / tổng số bước" của 1 quy trình nhiều bước (11/2026, yêu cầu người dùng:
+// "trạng thái phê duyệt nên đánh thứ tự bước theo quy tắc bước đã làm/tổng bước, ví dụ 1/2 là số bước
+// đã thực hiện 1/2, chưa duyệt gì thì 0/2") — KHÁC HẲN "Bước hiện tại" (currentStep, số bước ĐANG CHỜ
+// xử lý) mà nhiều badge trạng thái trước đây lỡ dùng nhầm làm tử số (lúc chưa ai duyệt gì hiện "1/2"
+// thay vì đúng ra phải là "0/2"). Dùng ĐÚNG field currentStep đã có thay vì tự đếm lại qua history —
+// currentStepField chỉ tăng SAU KHI isStepApprovalComplete() xác nhận bước đó đã đủ người ký (xem
+// applyWorkflowAction() ở lib/workflowEngine.js), nên currentStep-1 LUÔN là số bước đã xong thật, kể cả
+// khi 1 bước có nhiều người đồng duyệt. status 'APPROVED' (toàn bộ quy trình đã xong) -> done = total;
+// 'REJECTED' giữ nguyên currentStep tại bước bị từ chối (không coi bước đó là "đã xong").
+function getWorkflowStepProgress(wfConfig, currentStep, status) {
+  const total = Array.isArray(wfConfig?.steps) ? wfConfig.steps.length : 0;
+  if (!total) return { done: 0, total: 0 };
+  const done = status === 'APPROVED' ? total : Math.max(0, Math.min(total, (currentStep || 1) - 1));
+  return { done, total };
+}
+
+// Chuỗi "done/total" dùng chung cho mọi badge trạng thái phê duyệt nhiều bước — trả về '' nếu quy
+// trình không có bước nào (không áp dụng khái niệm bước) để nơi gọi tự quyết định có nối thêm hay không.
+function workflowStepProgressText(wfConfig, currentStep, status) {
+  const { done, total } = getWorkflowStepProgress(wfConfig, currentStep, status);
+  return total ? `${done}/${total}` : '';
+}
+
 // Thông báo khi 1 bước đã hoàn tất (đủ điều kiện chuyển bước/kết thúc quy trình) — dùng đúng chữ
 // "đồng phê duyệt" chỉ khi bước đó thực sự có từ 2 người duyệt trở lên, tránh gây hiểu nhầm ở
 // trường hợp phổ biến nhất (1 người duyệt/bước) vốn luôn chuyển bước ngay như hành vi cũ.

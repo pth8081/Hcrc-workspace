@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**28.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.68 (2026-11): Phê Duyệt Giá — tải file sau khi đã duyệt + "bước đã làm/tổng bước" cho mọi module duyệt nhiều bước
+
+Triển khai đúng 2 phương án đã gửi phân tích ở v28.67, sau khi người dùng xác nhận:
+
+- **Phê Duyệt Giá Bán Lẻ (Mua Hàng)/Bán Buôn (Vận Hành)** (`lib/fileAuthz.js`, nhánh `owning.itPrice`,
+  mode `download`): trước đây người duyệt chỉ tải được file MỚI NHẤT khi hồ sơ CÒN ở ĐÚNG bước hiện tại
+  họ phụ trách (còn PENDING) — vừa duyệt xong bước của mình (hồ sơ chuyển bước kế) là MẤT quyền tải, dù
+  "👁️ Xem" (Khung Xem Bảo Vệ) vẫn luôn mở được (tính theo TOÀN BỘ các bước, không riêng bước hiện tại).
+  Nay ai đã TỪNG duyệt (action APPROVED, không bị invalidated) ở BẤT KỲ bước nào của chính hồ sơ đó giữ
+  quyền tải file mới nhất VĨNH VIỄN, kể cả khi hồ sơ sau đó bị Từ chối ở bước khác (không bao giờ có file
+  "chính thức đã duyệt"). Người chưa từng duyệt bước nào (người đề xuất, approver chưa tới lượt...) vẫn
+  chỉ xem được như cũ — không nới lỏng quá phạm vi yêu cầu.
+- **"Bước đã làm/tổng bước"** (hàm chung mới `getWorkflowStepProgress()`/`workflowStepProgressText()`,
+  `core.js`): chuẩn hoá cách hiển thị trạng thái bước duyệt theo đúng yêu cầu người dùng — VD "1/2" là đã
+  xong 1/2 bước, "0/2" ngay từ đầu khi chưa ai duyệt gì. Áp dụng cho TẤT CẢ module có quy trình duyệt
+  nhiều bước thật (dùng chung `lib/workflowEngine.js`, có field `currentStep`):
+  - **5 module trước đây hiện SAI** (dùng nhầm "bước hiện tại" = số bước ĐANG CHỜ làm tử số, nên lúc chưa
+    duyệt gì lại hiện "1/2" thay vì đúng "0/2"): Đăng Ký Xe, Phòng Họp (đăng ký dùng phòng), Tài Liệu,
+    Văn Bản Trình, Phê Duyệt Giá.
+  - **3 module trước đây THIẾU HẲN tỉ lệ** (chỉ hiện "Chờ duyệt"/"Bước X" không mẫu số): Văn Phòng Phẩm,
+    Vận Hành — Đặt Hàng/Mở Mới/Sửa Chữa, Hợp Đồng.
+  - **Hộp Thư Duyệt Tổng Hợp** (Approval Hub, `core-approvalhub.js`): đồng bộ cùng công thức cho nhãn
+    "Bước X/Y: tên bước" hiện ở mọi hồ sơ đang chờ người dùng xử lý.
+  - Theo yêu cầu người dùng, badge trạng thái CUỐI (✅ Đã duyệt / ❌ Từ chối) cũng hiện kèm tỉ lệ, VD
+    "✅ Đã phê duyệt (2/2)", "❌ Từ chối (bước 1/2)".
+  - **Không áp dụng** cho các badge/"trạng thái" KHÔNG phải quy trình duyệt nhiều bước thật: Ngân Sách
+    (`budgetLines`, chỉ 1 quyết định phẳng, không có `currentStep`), Phòng Họp (quyết định cuộc họp, 1
+    người duyệt phẳng), Thanh Toán (tiến độ đợt thanh toán, khác hẳn phê duyệt), Vận Hành — "Giai đoạn"
+    công trình (Dự toán/Thi công/Nghiệm thu — vòng đời thi công, không phải số bước duyệt), Danh Mục Đầu
+    Tư/Công Việc Vận Hành (tiến độ công việc, không phải phê duyệt).
+
+Test mới `tests/test-workflow-step-progress-ratio.js` (13/13 pass — hàm lõi `getWorkflowStepProgress()`/
+`workflowStepProgressText()` cho mọi tổ hợp PENDING/APPROVED/REJECTED/0-bước/null, spot-check
+`itPriceStatusBadge()`), mở rộng `tests/test-itprice-download.js` thêm 3 kịch bản PA1 (28/28 pass). Chạy
+lại toàn bộ test liên quan: `test-approval-hub.js` (58/58, đã cập nhật 1 kỳ vọng cũ về tỉ lệ bước),
+`test-vanhanh-module-access-receipt-perm.js` (4/4), `test-meeting-approval-hub-self-decide.js` (7/7),
+`test-quick-apply-workflow-steps.js` (44/44), `test-workflow-steps-excel.js` (8/8),
+`test-itprice-download-filename-code.js` (3/3), `test-doc-status-badges.js`/`test-submission-status-badges.js`
+(2/2 mỗi file), `test-doc.js` (24/24), `test-submission.js` (23/23), `test-vpp-registrations-scope.js`/
+`test-office-reqs-scope.js`/`test-docs-scope.js`/`test-submissions-scope.js`/`test-operation-orders-dept-scope.js`
+(7/7 mỗi file), `test-contract.js` (75 pass), `test-itprice-approval-and-emergency.js` (17 pass),
+`test-operation-order-approval-slip.js` (13/13), `test-operation-order-items-and-dates.js` (8/8),
+`test-contract-approval-slip.js` (15/15), `test-operation-order-location-tiers.js` (34/34) — đều pass,
+không regression. `test-hopdong-admin-edit-recovery.js` ban đầu lỗi `workflowStepProgressText is not
+defined` (bài test nạp riêng `module-hopdong.js` qua `vm.runInContext()`, không có `core.js` thật) — đã
+bổ sung 2 stub cho hàm mới, nay 11/11 pass. `test-vpp.js` còn 1 fail (`VPP-exclude: admin removes "Bảo
+vệ"...`) — xác nhận lại là lỗi CŨ có sẵn trước đợt này (dùng `git stash` chạy lại bản gốc vẫn fail y hệt
+28/29), không liên quan tới thay đổi lần này.
 
 ## v28.67 (2026-11): Fix quyền vào module Vận Hành thiếu "Quyền Phê Duyệt Đặt Hàng" + sửa chú thích sai module
 

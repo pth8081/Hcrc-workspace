@@ -553,10 +553,13 @@ function previewVppWorkflow() {
 // Bản Trình/Đăng Ký Xe) -> badge-neutral, không phải warning.
 function vppRegStatusBadge(r) {
   if (r.status === 'DRAFT') return `<span class="badge-neutral">📝 Nháp</span>`;
-  if (r.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt</span>`;
-  if (r.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
+  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
+  // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+  const stepRatioText = workflowStepProgressText(resolveVppWorkflowConfigForItemClient(r), r.currentStep, r.status);
+  if (r.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
+  if (r.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
   if (r.status === 'CANCELLED') return `<span class="badge-danger">🚫 Đã hủy</span>`;
-  return `<span class="badge-info">⏳ Chờ duyệt</span>`;
+  return `<span class="badge-info">⏳ Bước ${stepRatioText}</span>`;
 }
 
 function onVppFilterChange() {

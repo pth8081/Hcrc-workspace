@@ -510,6 +510,17 @@ async function authorizeFileAccess(user, fileUrl, mode) {
           // cùng nguyên tắc này cho submission/contract).
           if (isForwardThreadParticipant(user, owning.item)) return true;
         }
+        // LỖI ĐÃ VÁ (11/2026, yêu cầu người dùng: "người phê duyệt phải xem được file ở bước họ phê
+        // duyệt ngay cả khi họ đã ấn phê duyệt"): ngoại lệ "người duyệt bước hiện tại" ngay trên hết
+        // hiệu lực ngay khi hồ sơ qua bước tiếp theo (hoặc bị từ chối ở bước sau) — dù "👁️ Xem" (Khung
+        // Xem Bảo Vệ) vẫn luôn mở được cho họ vĩnh viễn (canViewItPriceApproval() tính approver theo
+        // TOÀN BỘ các bước, không riêng bước hiện tại — xem lib/recordViewScope.js), chỉ riêng nút TẢI
+        // bị mất quyền 1 cách không nhất quán với "Xem". Ai đã TỪNG ký duyệt (action APPROVED, không bị
+        // invalidated) ở BẤT KỲ bước nào của CHÍNH hồ sơ này thì giữ quyền tải file MỚI NHẤT vĩnh viễn,
+        // không cần đúng bước hiện tại/trạng thái PENDING nữa.
+        const everApprovedByUser = (owning.item.history || []).some(h =>
+          h.action === 'APPROVED' && !h.invalidated && h.username === user.username);
+        if (isLatestFile && everApprovedByUser) return true;
         return false;
       }
       return true; // extraFiles (Tài liệu bổ sung liên quan) — không thuộc diện giới hạn "chỉ file đã duyệt"

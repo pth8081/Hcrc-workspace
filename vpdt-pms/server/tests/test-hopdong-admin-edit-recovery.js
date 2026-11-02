@@ -73,7 +73,12 @@ function buildSandbox() {
     canManageContractPaymentClient: () => false,
     canDownloadFile: () => false,
     hasAnyPaymentRequestForSourceClient: () => false,
-    buildApprovalOverdueBadgeHTML: () => ''
+    buildApprovalOverdueBadgeHTML: () => '',
+    // "bước đã làm/tổng bước" (11/2026) — buildContractRowHTML() nay gọi thêm 2 hàm core.js này để tính
+    // statusBadge; bài test này chỉ quan tâm secondaryOptions (nút Sửa), không quan tâm nội dung badge,
+    // nên stub rỗng là đủ.
+    resolveContractApprovalWorkflow: () => ({ steps: [] }),
+    workflowStepProgressText: () => ''
   };
   vm.createContext(sandbox);
   const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/module-hopdong.js'), 'utf8');

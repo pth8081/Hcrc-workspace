@@ -1651,9 +1651,15 @@ function operationStatusBadge(o) {
   if (o.status === 'AWAITING_RECEIPT') return `<span class="badge-info">📥 Chờ nhập hàng</span>`;
   if (o.status === 'RECEIVED') return `<span class="badge-success">✅ Đã nhập hàng</span>`;
   if (o.status === 'RECEIPT_CANCELLED') return `<span class="badge-danger">🚫 Đã hủy nhập</span>`;
-  if (o.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt</span>`;
-  if (o.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
-  return `<span class="badge-info">⏳ Bước ${o.currentStep}</span>`;
+  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
+  // getWorkflowStepProgress()/workflowStepProgressText() (core.js). AWAITING_RECEIPT/RECEIVED/
+  // RECEIPT_CANCELLED ở trên đều NẰM SAU khi quy trình duyệt đã xong hẳn (APPROVED cũ) nên không cần
+  // ratio — chỉ APPROVED/REJECTED/đang duyệt dở mới cần.
+  const effectiveStatus = o.status === 'APPROVED' ? 'APPROVED' : o.status;
+  const stepRatioText = workflowStepProgressText(resolveOperationOrderWorkflowConfigForItemClient(o), o.currentStep, effectiveStatus);
+  if (o.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
+  if (o.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
+  return `<span class="badge-info">⏳ Bước ${stepRatioText}</span>`;
 }
 // Quần thể được phép Nhập Hàng/Hủy Nhập ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" — MIRROR đúng
 // lib/recordActions.js isApproverForOperationOrderReceipt() (server luôn tự kiểm lại, đây chỉ là lớp UI

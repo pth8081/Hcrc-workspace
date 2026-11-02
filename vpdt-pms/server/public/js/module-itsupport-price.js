@@ -987,19 +987,22 @@ function canViewItPriceApproval(user, p) {
 // getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
 
 function itPriceStatusBadge(p) {
-  if (p.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
+  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
+  // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+  const stepRatioText = workflowStepProgressText(wf, p.currentStep, p.status);
+  if (p.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
   if (p.status === 'APPROVED') {
     if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 IT yêu cầu bổ sung</span>`;
     // autoApproved (server tự đặt, xem itPriceApprovals.extraValidate) — badge riêng để phân biệt với
     // duyệt tay bình thường, giữ minh bạch cho người xem danh sách biết hồ sơ này KHÔNG qua ai duyệt.
     if (p.autoApproved) return `<span class="badge-success">🤖 Tự động duyệt</span>`;
-    return `<span class="badge-success">✅ Đã phê duyệt</span>`;
+    return `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
   }
   if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 Chờ bổ sung</span>`;
-  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
-  return `<span class="badge-info">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
+  return `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
 }
 
 function itPriceAppliedBadge(p) {

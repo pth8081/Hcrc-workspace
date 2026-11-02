@@ -28,7 +28,11 @@ function resolveWfStepsForHub(wfConfig) {
 function buildStepLabelForHub(wfConfig, currentStep) {
   const steps = resolveWfStepsForHub(wfConfig);
   const name = steps[currentStep - 1]?.name;
-  return name ? `Bước ${currentStep}/${steps.length}: ${name}` : `Bước ${currentStep}`;
+  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — mọi hồ sơ trong Hub đều đang PENDING ở
+  // đúng bước currentStep (chờ chính user này xử lý) nên status luôn coi là 'PENDING' ở đây — xem chú
+  // thích tại getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+  const ratio = workflowStepProgressText({ steps }, currentStep, 'PENDING');
+  return name ? `Bước ${ratio} — đang chờ: ${name}` : `Bước ${currentStep}`;
 }
 
 // Gộp toàn bộ hồ sơ PENDING mà ĐÚNG `user` được duyệt NGAY BÂY GIỜ, từ 9 module có luồng duyệt (5

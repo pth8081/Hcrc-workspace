@@ -221,8 +221,11 @@ async function scenario(name, fn) {
       !r.codes.includes('XE-001'), JSON.stringify(r));
     record('aggregator EXCLUDES the pending meeting booking (duyet1 lacks meetingApprove perm) (PH-001)',
       !r.codes.includes('PH-001'), JSON.stringify(r));
+    // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — buildStepLabelForHub() (core-approvalhub.js)
+    // đổi tử số từ "bước hiện tại" (currentStep=1) sang "số bước ĐÃ XONG" (done=0, chưa ai duyệt gì) +
+    // tách riêng cụm "đang chờ: tên bước" để không còn mâu thuẫn kiểu "Bước 1/1: <tên bước chưa duyệt>".
     record('doc item carries the correct step label built from DB.deptWorkflows steps',
-      !!r.docItem && r.docItem.stepLabel === 'Bước 1/1: Trưởng phòng duyệt', JSON.stringify(r.docItem));
+      !!r.docItem && r.docItem.stepLabel === 'Bước 0/1 — đang chờ: Trưởng phòng duyệt', JSON.stringify(r.docItem));
   });
 
   // ==========================================================================

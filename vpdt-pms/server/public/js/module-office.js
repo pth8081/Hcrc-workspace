@@ -354,12 +354,15 @@ function renderOfficeReqs() {
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
     const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
+    // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích đầy đủ tại
+    // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+    const stepRatioText = workflowStepProgressText(wfConfig, o.currentStep, o.status);
     let statusBadge = '';
-    if (o.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt</span>`;
-    else if (o.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối</span>`;
+    if (o.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
+    else if (o.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
     else if (o.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else if (o.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy</span>`;
-    else statusBadge = `<span class="badge-info">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
     const paymentCell = o.status === 'APPROVED'

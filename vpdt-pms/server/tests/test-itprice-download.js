@@ -128,6 +128,39 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), false, 'approver1 chỉ được cấu hình cho bước 1, hồ sơ đang ở bước 2 -> không được tải');
   });
 
+  // LỖI ĐÃ VÁ (11/2026, yêu cầu người dùng: "người phê duyệt phải xem được file ở bước họ phê duyệt ngay
+  // cả khi họ đã ấn phê duyệt"): trước đây ngoại lệ "người duyệt bước hiện tại" ở trên hết hiệu lực NGAY
+  // khi hồ sơ qua bước tiếp theo — approver1 vừa duyệt xong bước 1 (hồ sơ sang bước 2, còn PENDING) lại
+  // KHÔNG tải được nữa, dù "👁️ Xem" họ vẫn luôn mở được. Nay ai đã TỪNG duyệt (action APPROVED, không
+  // invalidated) ở BẤT KỲ bước nào của CHÍNH hồ sơ đó thì giữ quyền tải file MỚI NHẤT vĩnh viễn.
+  await run('[2] (PA1 11/2026) Người ĐÃ TỪNG duyệt 1 bước (dù không còn là approver bước hiện tại) vẫn tải được file mới nhất', async () => {
+    ITEMS = [baseItem({
+      status: 'PENDING', currentStep: 2,
+      history: [{ step: 1, stepName: 'Duyệt', approver: APPROVER.name, username: APPROVER.username, action: 'APPROVED', comment: '', time: 'x' }]
+    })];
+    assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), true, 'approver1 đã duyệt bước 1 -> vẫn tải được file mới nhất dù hồ sơ đã sang bước 2');
+    assert.strictEqual(await authorizeFileAccess(CREATOR, '/uploads/file-goc.xlsx', 'download'), false, 'ĐỐI CHỨNG: người chưa từng duyệt bước nào (creator) vẫn KHÔNG được tải — không nới lỏng quá tay');
+  });
+
+  await run('[2] (PA1 11/2026) Người đã từng duyệt 1 bước vẫn tải được file mới nhất kể cả khi hồ sơ SAU ĐÓ bị TỪ CHỐI ở bước khác (không bao giờ có file "chính thức đã duyệt")', async () => {
+    ITEMS = [baseItem({
+      status: 'REJECTED', currentStep: 2,
+      history: [
+        { step: 1, stepName: 'Duyệt', approver: APPROVER.name, username: APPROVER.username, action: 'APPROVED', comment: '', time: 'x' },
+        { step: 2, stepName: 'Duyệt', approver: 'Khác', username: 'khac', action: 'REJECTED', comment: '', time: 'y' }
+      ]
+    })];
+    assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), true, 'approver1 vẫn tải được file họ đã duyệt dù hồ sơ sau đó bị từ chối ở bước khác');
+  });
+
+  await run('[2] (PA1 11/2026) Lượt duyệt bị invalidated KHÔNG tính — không mở lại quyền tải cho người đã bị huỷ hiệu lực lượt duyệt', async () => {
+    ITEMS = [baseItem({
+      status: 'PENDING', currentStep: 2,
+      history: [{ step: 1, stepName: 'Duyệt', approver: APPROVER.name, username: APPROVER.username, action: 'APPROVED', comment: '', time: 'x', invalidated: true }]
+    })];
+    assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), false, 'lượt duyệt đã invalidated -> không còn tính là "đã từng duyệt"');
+  });
+
   await run('[1] Hồ sơ CHƯA APPROVED vẫn XEM được (mode view không bị giới hạn thêm)', async () => {
     ITEMS = [baseItem({ status: 'PENDING' })];
     assert.strictEqual(await authorizeFileAccess(CREATOR, '/uploads/file-goc.xlsx', 'view'), true, 'mode view chỉ theo canViewItPriceApproval, không giới hạn theo file đã duyệt');

@@ -1125,13 +1125,16 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // không hề có trạng thái phê duyệt). Đồng thời APPROVED trước đây không có badge nào (rỗng), không rõ
   // ràng bằng 3 trạng thái còn lại. Nay chuyển hẳn statusBadge sang cột "Trạng Thái..." (đứng cùng cảnh
   // báo hết hạn, luôn hiện ngay không cần cuộn ngang) + bổ sung badge rõ ràng cho APPROVED.
+  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
+  // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+  const contractStepRatioText = workflowStepProgressText(resolveContractApprovalWorkflow(c), c.currentStep, c.approvalStatus);
   const statusBadge = c.approvalStatus === 'PENDING'
-    ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`
+    ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Bước ${contractStepRatioText}</span>`
     : c.approvalStatus === 'REJECTED'
-      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối</span>`
+      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối${contractStepRatioText ? ` (bước ${contractStepRatioText})` : ''}</span>`
       : (c.approvalStatus === 'DRAFT' || c.approvalStatus === 'NEEDS_SUPPLEMENT')
         ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`
-        : `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã duyệt</span>`;
+        : `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã duyệt${contractStepRatioText ? ` (${contractStepRatioText})` : ''}</span>`;
   const overdueBadge = buildApprovalOverdueBadgeHTML('contracts', c);
 
   const expandToggleHTML = addendumCount > 0

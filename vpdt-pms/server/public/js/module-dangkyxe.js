@@ -989,15 +989,18 @@ function renderCarRegs() {
     // IN_PROGRESS (LX đã xác nhận, đang di chuyển) + pending-ở-bước đều là "đang xử lý" -> info.
     // AWAITING_EVALUATION (chờ đánh giá sau chuyến) cần hành động từ người quản lý -> warning.
     // CANCELLED -> danger (khớp quy ước đã dùng ở Công Việc: huỷ/từ chối cùng bucket).
+    // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích đầy đủ tại
+    // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
+    const stepRatioText = workflowStepProgressText(wfConfig, c.currentStep, c.status);
     let statusBadge = '';
-    if (c.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt</span>`;
+    if (c.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
     else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="badge-info">🚗 LX Đã Xác Nhận Chuyến</span>`;
     else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="badge-warning">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'COMPLETED') statusBadge = `<span class="badge-success">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
-    else if (c.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối</span>`;
+    else if (c.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
     else if (c.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy chuyến</span>`;
     else if (c.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
-    else statusBadge = `<span class="badge-info">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
     // Vừa "Đổi Lộ Trình" (hành động cuối cùng trong lịch sử là ROUTE_CHANGED, chưa ai duyệt lại vòng
     // mới) — thêm nhãn phụ để người duyệt/người đăng ký phân biệt với 1 phiếu PENDING bình thường,
     // tránh nhầm là hồ sơ mới chưa từng đổi gì. Xem changeCarRegRoute() ở lib/recordActions.js.
