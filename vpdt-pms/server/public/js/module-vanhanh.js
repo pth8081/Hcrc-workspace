@@ -3828,7 +3828,11 @@ function renderOperationEstimateItemsTable(editable) {
   if (editable && estimateIsFullManager) {
     topItems.forEach((top) => {
       const topIdx = operationEstimateItems.indexOf(top);
-      renderPeopleMultiSelect(`estimateAssigneePicker_${topIdx}`, (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false), top.assignedToUsernames || [], 'estimate-assignee', {});
+      // B2 (11/2026, QA: "ô gợi ý Người Phụ Trách DMĐT che mất bảng") — truyền dropdownSizeClass thu hẹp
+      // (thấp + hẹp hơn mặc định max-h-40/w-full) CHỈ riêng ở đây, các nơi gọi renderPeopleMultiSelect()
+      // khác (owiAssignedToPicker, groupMembersPicker, fwdPeoplePicker...) không truyền gì -> giữ đúng
+      // mặc định cũ, không đổi hành vi.
+      renderPeopleMultiSelect(`estimateAssigneePicker_${topIdx}`, (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false), top.assignedToUsernames || [], 'estimate-assignee', {}, 'max-h-24 overflow-y-auto w-64');
     });
   }
   populateEstimateNewItemParentSelect();

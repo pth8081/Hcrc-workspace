@@ -14394,7 +14394,13 @@ document.addEventListener('click', (ev) => {
 // submitSubmissionReq()), mỗi người đã chọn vẫn được backing bằng 1 checkbox ẨN mang ĐÚNG
 // class/data-attribute mà code đọc cũ đang query bằng document.querySelectorAll — chỉ đổi PHẦN HIỂN
 // THỊ, giữ nguyên "hợp đồng" dữ liệu giữa các hàm.
-function renderPeopleMultiSelect(containerId, candidates, initialSelected, checkboxClass, checkboxDataAttrs) {
+// B2 (11/2026, yêu cầu QA "ô gợi ý Người Phụ Trách DMĐT che mất bảng"): thêm tham số TUỲ CHỌN cuối
+// `dropdownSizeClass` để nơi gọi tự giới hạn max-height/overflow/width khung dropdown gợi ý — mặc định
+// giữ NGUYÊN y hệt 3 class cũ (`max-h-40 overflow-y-auto w-full`) khi không truyền gì, nên TẤT CẢ các
+// nơi gọi khác (owiAssignedToPicker, groupMembersPicker, fwdPeoplePicker, các picker duyệt
+// ngân sách/IT-tier...) không đổi hành vi. CHỈ lời gọi DMĐT "Thêm hạng mục" (estimateAssigneePicker_,
+// xem renderOperationEstimateItemsTable() ở module-vanhanh.js) truyền giá trị thu hẹp hơn.
+function renderPeopleMultiSelect(containerId, candidates, initialSelected, checkboxClass, checkboxDataAttrs, dropdownSizeClass) {
   const container = document.getElementById(containerId);
   if (!container) return;
   // Lọc bỏ phần tử null/undefined/thiếu username — cùng lớp lỗi vừa sửa ở sddSetOptions(): nếu DB.users
@@ -14443,7 +14449,7 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
     <div class="relative">
       <input type="text" data-pms-search placeholder="Tìm theo tên/username/phòng ban để thêm (dán nhiều Mã Nhân Viên/Username để thêm hàng loạt)..." class="w-full border p-1.5 rounded text-[11px]"
         data-op-input="pmsFilter" data-arg0="${escapeHtml(containerId)}" data-arg-value="1">
-      <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow max-h-40 overflow-y-auto w-full mt-0.5"></div>
+      <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow mt-0.5 ${escapeHtml(dropdownSizeClass || 'max-h-40 overflow-y-auto w-full')}"></div>
     </div>
     <div data-pms-paste-status class="text-[11px] mt-1"></div>
     <div data-pms-hidden></div>
