@@ -8262,7 +8262,13 @@ const LINKABLE_EMAIL_FAMILIES = new Set([
   'applied', 'requestInfo', 'emergencyRejectRequest', 'emergencyRejectApproved', 'emergencyRejectDenied',
   'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone',
   // 'created' (MINUTES — 11/2026): xem chú thích tại APPROVAL_EMAIL_EVENTS.
-  'created'
+  'created',
+  // 'workItemAssigned'/'workItemStatus' (D2, 11/2026 — Vận Hành > Thực hiện > Quản Lý Công Việc): targetCode
+  // truyền vào notifyUsersByEmail() ở notifyOperationWorkItemAssigned()/notifyOperationWorkItemStatusMilestone()
+  // (module-vanhanh.js) là sourceRecord.code (mã HỒ SƠ chứa công việc, không phải mã riêng của công việc —
+  // operationWorkItems không có field `code`) — tái dùng ĐÚNG APPROVAL_EMAIL_RECORD_OPENER.OPERATION đã có
+  // sẵn (openOperationProcessModal), mở thẳng vào hồ sơ chứa công việc đó.
+  'workItemAssigned', 'workItemStatus'
 ]);
 
 // buildApprovalEmailUrl(): tách riêng phần dựng URL TRẦN (11/2026, phục vụ nút CTA HTML ở
