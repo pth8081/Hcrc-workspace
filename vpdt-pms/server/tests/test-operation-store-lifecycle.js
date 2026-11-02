@@ -703,9 +703,14 @@ async function main() {
       // ai nghiệm thu, sẽ chặn nhầm gate đó nếu còn tồn tại trong cây.
       const cleanupIds = [uiTestLeafId, progressLeafId, progressOnlyServerLeafId].filter(id => id != null);
       await page.evaluate((ids) => { DB.operationWorkItems = DB.operationWorkItems.filter(w => !ids.includes(w.id)); }, cleanupIds);
-      for (const id of cleanupIds) {
-        await page.evaluate(async (id) => { await callRecordAction('operationWorkItems', id, 'delete', {}); }, id);
-      }
+      // C3 (11/2026): deleteOperationWorkItem() (lib/recordActions.js) SIẾT LẠI — giờ chỉ xoá được qua
+      // route/action khi item đang CHUA_BAT_DAU (trước đây chỉ chặn DA_NGHIEM_THU, các việc lá dọn ở đây
+      // đang DANG_THUC_HIEN/DANG_NGHIEM_THU vẫn xoá được qua route). Đây CHỈ là dọn dẹp fixture test
+      // (không phải hành vi người dùng thật cần test), nên sửa fixture để dọn thẳng state.operationWorkItems
+      // (mock state phía server, cùng tiến trình Node) thay vì gọi lại route action đã bị siết — đúng quy
+      // tắc đã ghi ở CLAUDE.md ("đổi route dùng chung khiến fixture cũ không còn tạo/dọn được dữ liệu test
+      // như trước, phải sửa fixture đó cho đúng chứ không nới lỏng chặn mới").
+      state.operationWorkItems = state.operationWorkItems.filter(w => !cleanupIds.includes(w.id));
     });
 
     // ===== 7) Chặn cập nhật trực tiếp việc CÓ CON =====

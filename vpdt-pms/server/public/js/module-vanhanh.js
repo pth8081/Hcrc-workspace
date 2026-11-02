@@ -3828,7 +3828,11 @@ function renderOperationEstimateItemsTable(editable) {
   if (editable && estimateIsFullManager) {
     topItems.forEach((top) => {
       const topIdx = operationEstimateItems.indexOf(top);
-      renderPeopleMultiSelect(`estimateAssigneePicker_${topIdx}`, (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false), top.assignedToUsernames || [], 'estimate-assignee', {});
+      // B2 (11/2026, QA: "ô gợi ý Người Phụ Trách DMĐT che mất bảng") — truyền dropdownSizeClass thu hẹp
+      // (thấp + hẹp hơn mặc định max-h-40/w-full) CHỈ riêng ở đây, các nơi gọi renderPeopleMultiSelect()
+      // khác (owiAssignedToPicker, groupMembersPicker, fwdPeoplePicker...) không truyền gì -> giữ đúng
+      // mặc định cũ, không đổi hành vi.
+      renderPeopleMultiSelect(`estimateAssigneePicker_${topIdx}`, (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false), top.assignedToUsernames || [], 'estimate-assignee', {}, 'max-h-24 overflow-y-auto w-64');
     });
   }
   populateEstimateNewItemParentSelect();
@@ -4515,6 +4519,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     if (canEditWorkItems && w.status !== 'DA_NGHIEM_THU') {
       actionHTML += `<button type="button" data-op="openOperationWorkItemEditModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Sửa công việc">✏️ Sửa</button>`;
     }
+    // C3 (11/2026, yêu cầu QA "có chức năng xóa đối với Tên công việc có trạng thái Chưa bắt đầu") —
+    // CHỈ hiện khi chính việc này còn "Chưa bắt đầu" (khớp điều kiện server deleteOperationWorkItem() đã
+    // siết lại) — gate quyền cùng canEditWorkItems như nút "✏️ Sửa" ngay trên (toàn quyền quản lý hồ sơ).
+    if (canEditWorkItems && w.status === 'CHUA_BAT_DAU') {
+      actionHTML += `<button type="button" data-op="deleteOperationWorkItemClient" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-red-100 text-red-700 border border-red-600 rounded font-bold hover:bg-red-200 mr-1" title="Xoá công việc">🗑️ Xoá</button>`;
+    }
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
       actionHTML += `<button type="button" data-op="openOperationWorkItemFormModal" data-parent-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
     }
@@ -5024,6 +5034,44 @@ async function updateOperationWorkItemProgressAction(id, newStatus, note) {
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
   renderOperationAcceptanceList();
+}
+
+// C3 (11/2026, yêu cầu QA "có chức năng xóa đối với Tên công việc có trạng thái Chưa bắt đầu") — mirror
+// ĐÚNG logic BFS gom id công việc con collectOperationWorkItemDescendantIds() ở server (routes/records.js)
+// để tự dọn CẢ NHÁNH khỏi DB.operationWorkItems phía client sau khi server xoá xong (route delete chỉ trả
+// {ok:true}, không trả lại item/descendantIds) — tránh phải gọi lại loadDataGroup() (hàm đó có cache, gọi
+// lại không tự refetch). Dùng showConfirmModal() dùng chung, mirror pattern cancelOperationRepairClient().
+function deleteOperationWorkItemClient(id) {
+  const w = DB.operationWorkItems.find(x => x.id === id);
+  if (!w) return;
+  const descendantIds = [];
+  const queue = DB.operationWorkItems.filter(x => x.parentWorkItemId === id).map(x => x.id);
+  while (queue.length) {
+    const curId = queue.shift();
+    descendantIds.push(curId);
+    DB.operationWorkItems.filter(x => x.parentWorkItemId === curId).forEach(x => queue.push(x.id));
+  }
+  const confirmBody = descendantIds.length
+    ? `<p>Bạn có chắc chắn muốn <b>xoá</b> công việc "<b>${escapeHtml(w.title)}</b>" cùng <b>${descendantIds.length} công việc con</b> trong nhánh?</p><p class="mt-2 text-red-600 font-bold">Thao tác này KHÔNG thể hoàn tác.</p>`
+    : `<p>Bạn có chắc chắn muốn <b>xoá</b> công việc "<b>${escapeHtml(w.title)}</b>"?</p><p class="mt-2 text-red-600 font-bold">Thao tác này KHÔNG thể hoàn tác.</p>`;
+  showConfirmModal({
+    title: '🗑️ Xác Nhận Xoá Công Việc',
+    bodyHTML: confirmBody,
+    confirmLabel: 'Xoá Công Việc',
+    onConfirm: async () => {
+      const parentWorkItemId = w.parentWorkItemId;
+      try {
+        await callRecordAction('operationWorkItems', id, 'delete', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const removedIds = new Set([id, ...descendantIds]);
+      DB.operationWorkItems = DB.operationWorkItems.filter(x => !removedIds.has(x.id));
+      syncOperationWorkItemAncestorsClient(parentWorkItemId);
+      alert('✅ Đã xoá công việc!');
+      renderOperationWorkItemModalBody();
+      renderOperationExecutionList();
+      renderOperationAcceptanceList();
+    }
+  });
 }
 
 // --- Modal "🔄 Cập Nhật Tiến Độ" công việc Vận Hành (Correction 3, mirror #taskProgressModal) ---

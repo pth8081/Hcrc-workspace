@@ -100,10 +100,23 @@ async function main() {
 
   // Helper: đọc lại "computed" bảng Tổng Quan hiện đang hiển thị (đã render) — trả về mảng {code, title,
   // statusLabel, deadlineStatusLabel, acceptedAt,...} đọc trực tiếp DOM (đúng những gì người dùng thấy).
+  //
+  // D1 (11/2026, yêu cầu QA "1 Mã hồ sơ chỉ hiện 1 dòng tổng quan, click mới xổ ra công việc con") —
+  // renderOperationStoreReportOverview() nay trộn 2 LOẠI <tr> trong CÙNG tbody: dòng TỔNG QUAN (1/hồ sơ,
+  // dùng colspan nên SỐ CỘT KHÁC hẳn) + dòng CHI TIẾT (1/công việc, mặc định class "hidden", có thêm 1
+  // cột mũi tên RỖNG đứng đầu trước cột Mã Hồ Sơ cũ). 3 hệ quả PHẢI xử lý ở đây (không đổi gì ở các
+  // assertion bên dưới — chúng vẫn đúng chỉ số cột 0-9 như thiết kế gốc):
+  //   1. .innerText trả về CHUỖI RỖNG cho phần tử đang display:none (class "hidden") — phải
+  //      expandAllOperationReportGroups() TRƯỚC khi đọc, nếu không mọi dòng chi tiết đọc ra toàn rỗng.
+  //   2. Chỉ lấy đúng dòng CHI TIẾT (có data-group), bỏ qua dòng tổng quan (colspan lệch số cột).
+  //   3. Dòng chi tiết có thêm 1 <td> RỖNG đứng đầu (cột mũi tên) — cắt bỏ phần tử đầu mảng để các chỉ số
+  //      cột 0-9 phía dưới khớp lại đúng như trước khi có D1.
   async function readOverviewTableRows() {
+    await page.evaluate(() => { if (typeof expandAllOperationReportGroups === 'function') expandAllOperationReportGroups(); });
     return page.evaluate(() => {
       const tbody = document.getElementById('operationWorkItemOverviewTableBody');
-      return Array.from(tbody.querySelectorAll('tr')).map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()));
+      return Array.from(tbody.querySelectorAll('tr[data-group]'))
+        .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()).slice(1));
     });
   }
   async function resetItemFilters() {
