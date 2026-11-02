@@ -1746,16 +1746,23 @@ function startOperationExecutionPeriod(user, period, sourceRecord) {
 
 // sourceRecord (route tự tra theo item.sourceType/sourceId trước khi gọi) — dùng cho
 // assertCanManageOperationRecord(), item.sourceType tự làm sourceType.
-// descendants (route tự lọc all.filter(w => descendantIds.includes(w.id)) trước khi gọi) — LỖI ĐÃ VÁ
-// (rà soát chuyên sâu mới, mức Cao): trước đây hàm này CHỈ kiểm status của chính item bị xoá TRỰC TIẾP,
-// không kiểm bất kỳ con cháu nào trong descendantIds — computeParentWorkItemStatus() tính cha =
-// DANG_THUC_HIEN (không phải DA_NGHIEM_THU) MIỄN LÀ có ít nhất 1 con chưa xong, dù 1 con KHÁC trong cùng
-// nhánh đã DA_NGHIEM_THU thật (có hồ sơ nghiệm thu). Xoá cha (không tự nó DA_NGHIEM_THU) sẽ cascade xoá
-// theo cả con đã nghiệm thu xong đó — vòng qua đúng bất biến "không xoá được công việc đã nghiệm thu".
+// descendants (route tự lọc all.filter(w => descendantIds.includes(w.id)) trước khi gọi).
+// C3 (11/2026, yêu cầu QA "có chức năng xóa đối với Tên công việc có trạng thái Chưa bắt đầu") — SIẾT
+// LẠI điều kiện: TRƯỚC ĐÂY hàm này cho xoá ở MỌI trạng thái trừ DA_NGHIEM_THU (rộng hơn ý QA); nay CHỈ
+// cho xoá khi chính item VÀ toàn bộ công việc con trong nhánh đều đang "Chưa bắt đầu" (CHUA_BAT_DAU) —
+// khớp đúng yêu cầu, đồng thời vẫn giữ nguyên bất biến cũ "không xoá công việc đã nghiệm thu" (nghiêm
+// ngặt hơn, vì DANG_THUC_HIEN/DANG_NGHIEM_THU/DA_NGHIEM_THU giờ đều bị chặn, không riêng DA_NGHIEM_THU).
+// AN TOÀN ĐỔI: route POST /operationWorkItems/:id/delete (routes/records.js) hiện CHƯA có bất kỳ nút
+// bấm/luồng nào gọi tới (xác nhận lại bằng grep trước khi sửa) — siết điều kiện ở đây không ảnh hưởng
+// bất kỳ hành vi đang chạy thật nào, chỉ ảnh hưởng tính năng MỚI đang thêm (nút "🗑️ Xoá" ở client).
 function deleteOperationWorkItem(user, item, descendantIds, sourceRecord, descendants) {
   assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền xoá công việc này');
-  if (item.status === 'DA_NGHIEM_THU' || (descendants || []).some(d => d.status === 'DA_NGHIEM_THU')) {
-    throw new HttpError(409, 'Công việc (hoặc 1 công việc con trong nhánh) đã nghiệm thu xong, không thể xoá');
+  if (item.status !== 'CHUA_BAT_DAU') {
+    throw new HttpError(409, 'Công việc đã bắt đầu/đã nghiệm thu, chỉ xoá được công việc còn ở trạng thái "Chưa bắt đầu"');
+  }
+  const blockedDescendant = (descendants || []).find(d => d.status !== 'CHUA_BAT_DAU');
+  if (blockedDescendant) {
+    throw new HttpError(409, 'Có công việc con trong nhánh đã bắt đầu/đã nghiệm thu, không thể xoá cả nhánh');
   }
   return [item.id, ...descendantIds];
 }
