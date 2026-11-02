@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.58 (2026-11): Checklist Đánh Giá Siêu Thị — chặn tiếp tục bài khi quyền đã bị thu hồi + thêm nút Huỷ bài Nháp
+
+Theo 2 báo cáo trực tiếp của người dùng (màn Checklist, tài khoản giám đốc siêu thị "Siêu thị số 8 Phạm
+Ngọc Thạch" từng được cấp quyền ATVSTP rồi bị rút lại):
+
+**Vá lỗ hổng bảo mật (Cao)**: `POST /api/checklist/submissions/:id/answers` (lưu nháp), `.../attachments`
+(đính ảnh minh chứng), `.../finalize` (nộp bài) trước đây CHỈ kiểm tra ĐÚNG người đã bắt đầu bài
+(`submittedByUsername`), KHÔNG re-check quyền `checklistExecute`(STORE_SELF)/`checklistAtvstpExecute`
+(CONTROL_AUDIT/VSATTP) HIỆN TẠI — nếu admin RÚT LẠI quyền sau khi người đó đã bắt đầu 1 bài DRAFT, họ vẫn
+lưu nháp/đính ảnh/nộp bài được bình thường như chưa hề mất quyền. Thêm `assertCanContinueChecklistSubmission()`
+(`routes/checklist.js`, cùng khuôn kiểm tra quyền đã dùng lúc BẮT ĐẦU bài ở `resolveStoreCodeForSubmission()`
+— admin luôn qua được, không đổi hành vi test của admin).
+
+**Thêm nút "❌ Huỷ" cho bài Nháp (UX)**: trước đây bài Nháp không muốn làm tiếp nữa (VD admin test bỏ dở,
+hoặc đúng trường hợp trên — mất quyền giữa chừng) nằm MÃI trong "📝 Bài Đang Làm Dở", không ai (kể cả
+chính người tạo) huỷ được — route `.../delete` trước đây CHỈ admin gọi được, không có gì ở client gọi
+tới. Nay mở thêm: chính người đã bắt đầu bài tự huỷ được bài NHÁP của mình (không cần quyền thực hiện —
+huỷ là dọn dẹp, không phải làm tiếp), nút "Tiếp Tục" chỉ hiện khi CÒN đúng quyền (tránh "treo" nút theo
+quy tắc CLAUDE.md), nút "❌ Huỷ" luôn hiện cho mọi bài Nháp của chính mình. Admin vẫn huỷ được bài Nháp
+của BẤT KỲ AI như cũ.
+
+**Rà soát hồi quy**: chạy lại toàn bộ test Checklist hiện có (~30 file, ~250 scenario) + viết mới
+`test-checklist-revoked-permission-cancel.js` (8 kịch bản) + bổ sung 1 kịch bản vào
+`test-checklist-attachment-ownership.js` — không phát sinh regression.
 
 ## v28.57 (2026-11): Bỏ HẲN "admin bypass" ở mọi quy trình phê duyệt toàn hệ thống (quyết định của người dùng)
 

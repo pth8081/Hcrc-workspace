@@ -125,16 +125,33 @@ function renderChecklistExecuteTab() {
     ...((isAdmin && !hasRealAtvstpExecute) ? auditTemplatesAll : [])
   ];
 
+  // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026 — 2 ý):
+  // (1) "siêu thị xem được checklist VSATTP của team kiểm soát riêng": nếu quyền checklistExecute/
+  //     checklistAtvstpExecute của người đã bắt đầu 1 bài DRAFT bị admin RÚT LẠI sau đó, nút "Tiếp Tục"
+  //     trước đây vẫn bấm được (và server vẫn cho lưu/nộp — xem assertCanContinueChecklistSubmission()
+  //     ở routes/checklist.js, đã vá CÙNG đợt) — nay nút "Tiếp Tục" chỉ hiện khi CÒN đúng quyền loại
+  //     checklist đó, tránh "treo" nút (bấm vào chỉ nhận lỗi 403) theo đúng quy tắc CLAUDE.md.
+  // (2) "không có nút Huỷ nếu không làm tiếp": trước đây bài Nháp không muốn làm nữa (VD admin test xong
+  //     bỏ dở, hoặc đúng trường hợp (1) không còn quyền tiếp tục) sẽ nằm MÃI trong danh sách, không có
+  //     cách nào dọn — nay luôn hiện "❌ Huỷ" cho MỌI bài nháp của chính mình (không đòi quyền thực hiện,
+  //     vì huỷ là dọn dẹp chứ không phải tiếp tục làm bài — xem route .../delete đã mở quyền tự huỷ bài
+  //     của chính mình, trước đây CHỈ người quản lý mẫu huỷ được).
   const myDrafts = (DB.checklistSubmissions || []).filter(s => s.submittedByUsername === user.username && s.status === 'DRAFT');
 
   let html = '';
   if (myDrafts.length) {
     html += `<div class="bg-amber-50 p-3 rounded border border-amber-200 space-y-1">
       <h4 class="font-bold text-amber-800 text-xs">📝 Bài Đang Làm Dở</h4>
-      ${myDrafts.map(s => `<div class="flex items-center justify-between text-xs">
-        <span>${escapeHtml(s.templateName)} — ${escapeHtml(s.storeCode)}</span>
-        <button type="button" data-op="resumeChecklistSubmission" data-arg0="${s.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700">Tiếp Tục</button>
-      </div>`).join('')}
+      ${myDrafts.map(s => {
+        const canContinue = isAdmin || (s.templateType === 'STORE_SELF' ? hasRealExecute : hasRealAtvstpExecute);
+        return `<div class="flex items-center justify-between text-xs gap-2">
+        <span>${escapeHtml(s.templateName)} — ${escapeHtml(s.storeCode)}${canContinue ? '' : ' <span class="text-rose-500 italic">(đã mất quyền thực hiện)</span>'}</span>
+        <span class="flex items-center gap-1 shrink-0">
+          ${canContinue ? `<button type="button" data-op="resumeChecklistSubmission" data-arg0="${s.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700">Tiếp Tục</button>` : ''}
+          <button type="button" data-op="cancelChecklistSubmission" data-arg0="${s.id}" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">❌ Huỷ</button>
+        </span>
+      </div>`;
+      }).join('')}
     </div>`;
   }
   if (showHomeStoreBox) {
@@ -221,6 +238,15 @@ async function startChecklistSubmission(templateId, storeCode) {
 }
 function resumeChecklistSubmission(submissionId) {
   openChecklistSubmissionForm(Number(submissionId));
+}
+// Huỷ bài Nháp của CHÍNH MÌNH — mới 11/2026 (xem chú thích ở myDrafts/renderChecklistExecuteTab()).
+async function cancelChecklistSubmission(submissionId) {
+  if (!confirm('Huỷ bài đang làm dở này? Không thể khôi phục lại.')) return;
+  try {
+    await callWorkflowStyleAction(`/api/checklist/submissions/${Number(submissionId)}/delete`, {});
+    DB.checklistSubmissions = (DB.checklistSubmissions || []).filter(s => s.id !== Number(submissionId));
+    renderChecklistExecuteTab();
+  } catch (err) { alert('⛔ ' + err.message); }
 }
 function openChecklistSubmissionForm(submissionId) {
   const sub = (DB.checklistSubmissions || []).find(s => s.id === Number(submissionId));

@@ -4318,6 +4318,28 @@ này tạo `checklistSubmissions` THẬT (không phải dữ liệu ảo) gắn 
 của siêu thị được chọn — nên xoá đi sau khi test xong nếu không muốn lẫn
 vào dữ liệu thật của siêu thị đó.
 
+**"📝 Bài Đang Làm Dở" — nút "❌ Huỷ" + chặn tiếp tục khi quyền đã bị thu hồi
+(11/2026, báo cáo trực tiếp từ người dùng)**: khối này (đầu tab Thực Hiện)
+liệt kê bài NHÁP (`DRAFT`) của CHÍNH tài khoản đang đăng nhập (dù là bài
+"Checklist Thường" hay "Kiểm Soát/VSATTP").
+- **LỖI BẢO MẬT ĐÃ VÁ**: trước đây nếu admin CẤP quyền `checklistExecute`/
+  `checklistAtvstpExecute` cho 1 ai đó, họ bắt đầu 1 bài rồi để dở, SAU ĐÓ
+  admin RÚT LẠI quyền — người này vẫn lưu nháp/đính ảnh/nộp bài tiếp được
+  bình thường như chưa hề mất quyền (3 route lưu nháp/đính ảnh/nộp bài chỉ
+  kiểm tra ĐÚNG người đã tạo bài, không kiểm tra lại quyền hiện tại). Nay
+  chặn cứng (403) ngay khi gọi `.../answers`/`.../attachments`/`.../finalize`
+  nếu không còn đúng quyền loại checklist đó — nút **"Tiếp Tục"** cũng chỉ
+  hiện ở màn hình khi CÒN đúng quyền (ẩn hẳn nếu mất quyền, kèm dòng chữ đỏ
+  "(đã mất quyền thực hiện)"), tránh bấm vào chỉ nhận lỗi.
+- **Nút "❌ Huỷ" (mới)**: trước đây route huỷ bài Nháp CHỈ admin gọi được,
+  không có gì ở màn hình gọi tới — bài Nháp không muốn làm tiếp nữa (VD
+  admin test xong bỏ dở, hoặc đúng trường hợp mất quyền ở trên) nằm MÃI
+  trong danh sách, không ai dọn được. Nay nút "❌ Huỷ" LUÔN hiện cho MỌI bài
+  Nháp của chính mình (kể cả khi đã mất quyền thực hiện — huỷ bỏ là dọn dẹp,
+  không đòi lại quyền như "Tiếp Tục"), bấm vào xoá hẳn bài Nháp đó. Admin
+  vẫn huỷ được bài Nháp của BẤT KỲ AI như trước (không đổi). Chỉ áp dụng cho
+  bài còn NHÁP — bài đã nộp (`SUBMITTED`) không ai huỷ được qua đây.
+
 **Cấu trúc câu hỏi** — mỗi câu có nhiều lựa chọn, mỗi lựa chọn có thể đánh
 dấu `isPassing`/`isCriticalFail`, và có thể **chỉ hiện khi** 1 lựa chọn cụ
 thể của câu hỏi TRƯỚC ĐÓ được chọn (`showIfOptionId`, đánh số ID lựa chọn

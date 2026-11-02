@@ -72,6 +72,27 @@ function requireReportView(req, res, next) {
   next();
 }
 
+// LỖI ĐÃ VÁ (báo cáo người dùng 11/2026 — "siêu thị xem được checklist VSATTP của team kiểm soát riêng"):
+// 3 route dưới đây (answers/attachments/finalize) TRƯỚC ĐÂY chỉ kiểm tra ĐÚNG người đã bắt đầu bài
+// (submittedByUsername === req.freshUser.username) — nếu quyền checklistExecute (STORE_SELF)/
+// checklistAtvstpExecute (CONTROL_AUDIT) của người đó bị admin RÚT LẠI SAU KHI họ đã bắt đầu 1 bài DRAFT
+// (VD giám đốc siêu thị từng có quyền ATVSTP, admin thu lại), họ vẫn lưu nháp/đính kèm ảnh/nộp bài được
+// bình thường — 3 route này không re-check lại quyền HIỆN TẠI, chỉ check quyền sở hữu. Nay chặn thêm:
+// người KHÔNG CÒN giữ đúng quyền thực hiện loại checklist đó (cùng khuôn canExecuteChecklistGeneral()/
+// canExecuteChecklistAtvstp() dùng để chặn BẮT ĐẦU bài mới ở resolveStoreCodeForSubmission(), admin luôn
+// qua được) bị chặn ngay dù vẫn đúng người đã tạo bài — "Bài Đang Làm Dở" phía client cũng đã lọc bớt
+// tương ứng (renderChecklistExecuteTab(), module-checklist.js) để không hiện nút "Tiếp Tục" cho bài họ
+// không còn bấm được nữa (tránh "treo" nút theo đúng quy tắc CLAUDE.md).
+function assertCanContinueChecklistSubmission(user, template) {
+  if (!template) return; // template gốc đã bị xoá — các route gọi hàm này đều tự xử lý lỗi 404 riêng.
+  const allowed = template.templateType === 'STORE_SELF'
+    ? checklist.canExecuteChecklistGeneral(user)
+    : checklist.canExecuteChecklistAtvstp(user);
+  if (!allowed) {
+    throw new HttpError(403, 'Quyền thực hiện loại checklist này của bạn đã bị thu hồi — liên hệ admin nếu cần hỗ trợ.');
+  }
+}
+
 // ===================== TEMPLATE: sửa (chỉ khi còn DRAFT) =====================
 router.post('/templates/:id/edit', requireManage, async (req, res) => {
   const templateId = Number(req.params.id);
@@ -286,6 +307,7 @@ router.post('/submissions/:id/answers', async (req, res) => {
       if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp, không thể sửa thêm');
       const template = templates.find(t => t.id === sub.templateId);
       if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
+      assertCanContinueChecklistSubmission(req.freshUser, template);
       if (template.templateKind === 'DEDUCTION') {
         return { ...sub, deductions: checklist.sanitizeChecklistDeductions(req.body?.deductions, template, sub.deductions) };
       }
@@ -332,6 +354,8 @@ router.post('/submissions/:id/attachments', async (req, res) => {
       }
       if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp, không thể sửa thêm');
       const template = templates.find(t => t.id === sub.templateId);
+      if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
+      assertCanContinueChecklistSubmission(req.freshUser, template);
       if (template?.templateKind === 'DEDUCTION') {
         const deductions = [...(sub.deductions || [])];
         let idx = deductions.findIndex(d => d.criteriaId === questionId);
@@ -365,6 +389,7 @@ router.post('/submissions/:id/finalize', async (req, res) => {
       if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp trước đó');
       const template = templates.find(t => t.id === sub.templateId);
       if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
+      assertCanContinueChecklistSubmission(req.freshUser, template);
 
       // LỖI THẬT vừa phát hiện: trước đây route này CHỈ chấm điểm trên sub.answers/sub.deductions đã lưu
       // NHÁP SẴN trong DB — nếu người dùng điền form rồi bấm thẳng "✅ Nộp Bài" mà CHƯA từng bấm "💾 Lưu
@@ -431,23 +456,28 @@ router.post('/submissions/:id/store-response', async (req, res) => {
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/store-response`); }
 });
 
-// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): route này KHÔNG có gì gọi tới từ client
-// (xác nhận grep public/js/module-checklist.js — mọi thao tác submission khác đều gọi qua
-// callWorkflowStyleAction(), route này thì không), nhưng vẫn tồn tại + gác quyền requireManage với
-// checkFn RỖNG (`() => {}`) — xoá được BẤT KỲ bài nào ở BẤT KỲ trạng thái nào, kể cả bài đã SUBMITTED/
-// đã tính điểm/đã có phản hồi siêu thị (storeResponse), nếu bị gọi trực tiếp (Postman/script) sẽ xoá mất
-// dữ liệu báo cáo/kiểm soát đã hoàn tất mà không có cảnh báo gì — khác hẳn tinh thần chặn xoá của
-// templates/:id/delete (chặn xoá khi "đã có người nộp bài", xem ngay phía trên). Giữ route (không xoá
-// hẳn — có thể phục vụ dọn dẹp DRAFT bỏ dở qua API/Postman) nhưng thêm ĐÚNG state gating mirror tinh thần
-// đó: CHỈ xoá được bài còn DRAFT (chưa nộp — chưa có điểm/phản hồi nào để mất), mirror
-// templates.status!=='DRAFT' bị chặn ở trên.
-router.post('/submissions/:id/delete', requireManage, async (req, res) => {
+// LỖI ĐÃ VÁ (báo cáo người dùng 11/2026 — "Bài Đang Làm Dở" chỉ có nút Tiếp Tục, không có nút Huỷ, bài
+// nháp không muốn làm nữa cứ nằm mãi trong danh sách): route này TRƯỚC ĐÂY gác requireManage với checkFn
+// RỖNG ở route (không có gì gọi tới từ client — xác nhận grep public/js/module-checklist.js, mọi thao
+// tác submission khác đều gọi qua callWorkflowStyleAction(), route này thì không), chỉ tồn tại để phục vụ
+// dọn dẹp DRAFT qua API/Postman. Nay mở thêm: CHÍNH người đã bắt đầu bài (submittedByUsername) cũng huỷ
+// được bài NHÁP của mình (nút "❌ Huỷ" cạnh "Tiếp Tục" ở khối "📝 Bài Đang Làm Dở",
+// cancelChecklistSubmission(), module-checklist.js) — kể cả khi quyền thực hiện loại checklist đó đã bị
+// thu hồi (huỷ bỏ KHÔNG đòi lại đúng quyền như assertCanContinueChecklistSubmission(), vì đây là dọn dẹp
+// chứ không phải tiếp tục làm bài). canManageChecklistTemplates() (quản lý mẫu) vẫn huỷ được BÀI CỦA BẤT
+// KỲ AI, giữ nguyên hành vi cũ. CHỈ huỷ được bài còn DRAFT (chưa nộp — chưa có điểm/phản hồi nào để mất),
+// mirror templates.status!=='DRAFT' bị chặn ở trên — bài ĐÃ NỘP không ai huỷ được qua route này.
+router.post('/submissions/:id/delete', async (req, res) => {
   const submissionId = Number(req.params.id);
   if (!Number.isFinite(submissionId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     await deleteRecordForCollection('checklistSubmissions', submissionId, (sub) => {
+      const isOwner = sub.submittedByUsername === req.freshUser.username;
+      if (!isOwner && !checklist.canManageChecklistTemplates(req.freshUser)) {
+        throw new HttpError(403, 'Bạn không có quyền huỷ bài làm này');
+      }
       if (sub.status !== 'DRAFT') {
-        throw new HttpError(409, 'Chỉ xoá được bài đang ở trạng thái Nháp (chưa nộp) — bài đã nộp giữ lại phục vụ báo cáo/kiểm soát, không thể xoá');
+        throw new HttpError(409, 'Chỉ huỷ được bài đang ở trạng thái Nháp (chưa nộp) — bài đã nộp giữ lại phục vụ báo cáo/kiểm soát, không thể huỷ');
       }
     }, { username: req.freshUser.username, name: req.freshUser.name });
     res.json({ ok: true });

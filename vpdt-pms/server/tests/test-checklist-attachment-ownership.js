@@ -61,8 +61,12 @@ stubModule('db', {
   sql: { NVarChar: (n) => ({ type: 'NVarChar', n }) }
 });
 
-const U1 = { username: 'u1', name: 'Nhân Viên Một', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistTemplateManage: true }, active: true };
-const U2 = { username: 'u2', name: 'Nhân Viên Hai', dept: 'Siêu thị B', posType: 'STORE', perms: { checklistTemplateManage: true }, active: true };
+// checklistExecute: true — 11/2026, sau khi vá assertCanContinueChecklistSubmission() (routes/checklist.js,
+// chặn tiếp tục/đính kèm ảnh/nộp bài khi quyền thực hiện loại checklist đó đã bị thu hồi), 3 route
+// answers/attachments/finalize nay đòi đúng quyền checklistExecute (mẫu STORE_SELF test này dùng) chứ
+// không còn chỉ xét quyền sở hữu bài làm — test này không nhằm kiểm tra luật đó nên cấp sẵn quyền.
+const U1 = { username: 'u1', name: 'Nhân Viên Một', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistTemplateManage: true, checklistExecute: true }, active: true };
+const U2 = { username: 'u2', name: 'Nhân Viên Hai', dept: 'Siêu thị B', posType: 'STORE', perms: { checklistTemplateManage: true, checklistExecute: true }, active: true };
 const USERS = [U1, U2];
 
 let RECORDS;
@@ -197,6 +201,21 @@ async function main() {
     }, U1);
     check('fileUrl không có trong dbo.UploadedFiles (không rõ chủ) vẫn cho qua bình thường (không regression)',
       r3.status === 200, r3.body);
+
+    // ===== Kịch bản 4 (11/2026): u1 MẤT quyền checklistExecute SAU KHI đã có bài DRAFT -> đính ảnh tiếp
+    // phải bị 403 (assertCanContinueChecklistSubmission(), vá CÙNG đợt với route .../answers/.../finalize)
+    // =====
+    resetRecords();
+    uploadedFilesStore.clear();
+    uploadedFilesStore.set('/uploads/u1-photo-after-revoke.jpg', 'u1');
+    const template4 = seedTemplate();
+    const sub4 = seedSubmission(template4, U1);
+    U1.perms.checklistExecute = false;
+    const r4 = await api('POST', `/api/checklist/submissions/${sub4.id}/attachments`, {
+      questionId: 1, fileUrl: '/uploads/u1-photo-after-revoke.jpg', fileName: 'a.jpg', fileType: 'image/jpeg'
+    }, U1);
+    check('u1 mất quyền checklistExecute SAU KHI tạo bài -> đính ảnh tiếp phải bị 403', r4.status === 403, r4.body);
+    U1.perms.checklistExecute = true;
   } finally {
     server.close();
   }

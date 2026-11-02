@@ -28,7 +28,11 @@ function stubModule(relPath, exportsObj) {
 }
 
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', posType: 'HO', perms: { admin: true }, active: true };
-const STORE_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: {}, active: true };
+// perms.checklistExecute: true — 11/2026, sau khi vá assertCanContinueChecklistSubmission()
+// (routes/checklist.js, chặn tiếp tục/đính ảnh/nộp bài khi quyền thực hiện loại checklist đó đã bị thu
+// hồi), route .../attachments nay đòi đúng quyền checklistExecute (mẫu STORE_SELF dùng ở Mục 15 bên
+// dưới) chứ không còn chỉ xét quyền sở hữu bài làm — test này không nhằm kiểm tra luật đó nên cấp sẵn.
+const STORE_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistExecute: true }, active: true };
 const USERS = [ADMIN, STORE_EMP];
 
 let RECORDS = { checklistTemplates: [], checklistSubmissions: [] };
