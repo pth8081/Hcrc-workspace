@@ -1271,10 +1271,14 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       được tin (không cần thêm quyền Admin nữa) — đúng tinh thần "hộp thư
       chung" như sửa/đóng/ghim đã có từ trước.
   - **📝 Quản Lý Nhịp Sống HCRC** (`internalNewsManage`, 11/2026) — quyền
-    RIÊNG cho sửa (khi bài còn Nháp/Yêu cầu bổ sung) + xoá (mọi trạng thái)
-    bài đăng Nhịp Sống HCRC của NGƯỜI KHÁC, dành cho người quản lý đội Truyền
-    Thông — không đụng tới "Góc chia sẻ"/bài Đào Tạo. Cấp ở Phân Quyền → cây
-    phân quyền → mục "8. Truyền Thông Nội Bộ".
+    RIÊNG cho sửa + xoá (mọi trạng thái) bài đăng Nhịp Sống HCRC của NGƯỜI
+    KHÁC, dành cho người quản lý đội Truyền Thông — không đụng tới "Góc chia
+    sẻ"/bài Đào Tạo. Cấp ở Phân Quyền → cây phân quyền → mục "8. Truyền Thông
+    Nội Bộ". **Nút "✏️ Sửa" (11/2026, theo yêu cầu người dùng)**: trước đây
+    CHỈ sửa được khi bài còn Nháp/Yêu cầu bổ sung — nay mở thêm cho bài ĐÃ
+    ĐĂNG CÔNG KHAI (tác giả, admin, hoặc `internalNewsManage` với bài NEWS
+    đều sửa được), sửa xong **giữ nguyên trạng thái đang đăng**, không quay
+    lại hàng chờ duyệt.
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 

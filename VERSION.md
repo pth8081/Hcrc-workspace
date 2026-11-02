@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.69 (2026-11): Nhịp Sống HCRC/Góc Chia Sẻ — mở khoá nút "Sửa" cho bài ĐÃ ĐĂNG CÔNG KHAI
+
+Theo báo cáo người dùng ("đã phân quyền sửa, xóa bài viết trong Nhịp Sống HCRC/Góc Chia Sẻ nhưng vẫn
+không thấy nút Sửa, chỉ có nút Xóa") — rà soát xác nhận: `canEditInternalPostUI()` (client) +
+`editInternalPost()` (server, `lib/recordActions.js`) trước đây CHỈ cho sửa bài khi còn
+`DRAFT`/`NEED_INFO` — bài đã **ĐĂNG CÔNG KHAI** (`APPROVED`) bị khoá CỨNG cả 2 tầng cho **MỌI người kể cả
+admin**, không phải lỗi thiếu quyền (nút "Xóa" không có giới hạn trạng thái nên vẫn luôn hiện, gây cảm
+giác "có quyền mà vẫn thiếu nút").
+
+Theo xác nhận của người dùng: mở thêm nút Sửa cho bài `APPROVED`, **sửa xong giữ nguyên trạng thái**
+(không quay lại hàng chờ duyệt/`PENDING`) — khác với luồng Sửa Nháp/Gửi Lại cũ (vẫn giữ nguyên hành vi
+cho DRAFT/NEED_INFO, không đổi gì).
+
+- `lib/recordActions.js::editInternalPost()`: thêm nhánh `wasApproved` — bỏ qua cờ chặn 409 cho
+  `APPROVED`, và khi đã `APPROVED` thì KHÔNG chạy qua khối chuyển trạng thái Nháp/Gửi Lại (vốn chỉ có ý
+  nghĩa khi đi TỪ DRAFT/NEED_INFO), giữ nguyên `post.status = 'APPROVED'`.
+- `public/js/module-internalcomms-nhipsong.js`: `canEditInternalPostUI()` mở thêm cho `APPROVED` (cùng
+  điều kiện quyền cũ: tác giả, admin, hoặc `internalNewsManage` cho NEWS); `editInternalPostUI()` đổi
+  nhãn nút Gửi thành "Lưu Thay Đổi" + ẩn nút "📝 Lưu Nháp" khi đang sửa bài APPROVED (không có khái niệm
+  nháp hoá bài đã đăng công khai), `setInternalSubTab()` tự hiện lại nút Lưu Nháp khi đổi tab/huỷ Sửa.
+
+Test mới: `tests/test-internalpost-edit-approved.js` (9/9 pass, phần server — admin/internalNewsManage/
+tác giả đều sửa được bài APPROVED giữ nguyên trạng thái; đối chứng người ngoài phạm vi vẫn bị chặn 403,
+`draft:true` không còn hạ bài APPROVED xuống DRAFT, SHARE không quyền duyệt vẫn giữ APPROVED chứ không
+rơi về PENDING, hành vi DRAFT/NEED_INFO/REJECTED/PENDING cũ giữ nguyên không đổi) và
+`tests/test-internalpost-edit-approved-client.js` (6/6 pass, phần client — nút Sửa hiện cho bài APPROVED,
+nhãn nút + ẩn/hiện "Lưu Nháp" đúng, không có lỗi JS). Chạy lại các bộ test liên quan:
+`test-audit-round3-internalposts-edit.js` (7/7), `test-formsplit-internalpost-office.js` (10/10),
+`test-internal-post-training-deadline-utc.js` (4/4), `test-internalpost-comment-own-edit-delete.js`
+(7/7), `test-internalpost-share-video-restriction.js` (10/10),
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js` (24/24),
+`test-collapse-internalcomms-training-forms.js` (11/11), `test-internal-media-client.js` (28/28),
+`test-internal-recruitment-share.js` (25/25) — đều pass, không regression.
 
 ## v28.68 (2026-11): Phê Duyệt Giá — tải file sau khi đã duyệt + "bước đã làm/tổng bước" cho mọi module duyệt nhiều bước
 

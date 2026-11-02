@@ -30,6 +30,9 @@ function setInternalSubTab(subTab) {
   // cancelEditCustomField() ở Biểu Mẫu (đổi tab = huỷ dở dang thao tác Sửa đang mở).
   editingInternalPostId = null;
   document.getElementById('internalCancelEditBtn')?.classList.add('hidden');
+  // Đổi tab/huỷ Sửa = quay lại chế độ Đăng bài mới -> nút "📝 Lưu Nháp" phải hiện lại (chỉ bị ẩn riêng
+  // khi đang Sửa 1 bài ĐÃ ĐĂNG CÔNG KHAI, xem editInternalPostUI()).
+  document.getElementById('internalDraftBtn')?.classList.remove('hidden');
 
   const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', RECRUITMENT: 'btnInternalSubRecruitment', SHARE: 'btnInternalSubShare', QNA: 'btnInternalSubQna' };
   Object.entries(btnMap).forEach(([type, btnId]) => {
@@ -729,10 +732,14 @@ async function submitInternalPost(e) {
 // Sửa bài Nháp/"Yêu cầu bổ sung" (NEED_INFO) — mở lại chính #internalPostForm, điền sẵn dữ liệu cũ rồi
 // chuyển submitInternalPost() sang nhánh gọi POST .../edit thay vì tạo mới. Điều kiện hiện nút PHẢI khớp
 // Y HỆT editInternalPost() (lib/recordActions.js) để không hiện nút rồi vẫn bị server từ chối.
-// internalNewsManage (quyền MỚI, 11/2026) — cho sửa bài NEWS của người khác (chỉ DRAFT/NEED_INFO, giữ
-// nguyên trần cũ), KHÔNG áp dụng SHARE/TRAINING. Mirror đúng editInternalPost() (lib/recordActions.js).
+// internalNewsManage (quyền MỚI, 11/2026) — cho sửa bài NEWS của người khác (DRAFT/NEED_INFO/APPROVED,
+// giữ nguyên trần cũ), KHÔNG áp dụng SHARE/TRAINING. Mirror đúng editInternalPost() (lib/recordActions.js).
+// LỖI ĐÃ VÁ (11/2026, yêu cầu người dùng: "đã phân quyền sửa/xóa bài viết Nhịp Sống HCRC/Góc Chia Sẻ
+// nhưng vẫn không thấy nút Sửa, chỉ có Xóa") — trước đây CHỈ cho sửa khi DRAFT/NEED_INFO, bài đã ĐĂNG
+// CÔNG KHAI (APPROVED) bị khoá cứng cho MỌI người kể cả admin, không phải lỗi thiếu quyền. Nay mở thêm
+// cho APPROVED — sửa xong GIỮ NGUYÊN trạng thái (xem editInternalPost(), KHÔNG quay lại hàng chờ duyệt).
 function canEditInternalPostUI(p) {
-  return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO') &&
+  return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO' || p.status === 'APPROVED') &&
     (p.author === currentUser.username || currentUser.perms?.admin || (p.type === 'NEWS' && currentUser.perms?.internalNewsManage));
 }
 
@@ -777,7 +784,11 @@ async function editInternalPostUI(id) {
   }
 
   document.getElementById('internalFormTitle').innerText = `✏️ Sửa ${INTERNAL_TYPE_LABELS[p.type]}`;
-  document.getElementById('internalSubmitBtn').innerText = p.status === 'NEED_INFO' ? 'Gửi Lại' : 'Gửi';
+  // Sửa bài ĐÃ ĐĂNG CÔNG KHAI (APPROVED, 11/2026) — ghi rõ "Lưu Thay Đổi" (không phải "Gửi"/"Gửi Lại",
+  // dễ hiểu nhầm là gửi duyệt lại) + ẩn hẳn nút "📝 Lưu Nháp" (editInternalPost() nay bỏ qua cờ draft
+  // cho trường hợp này, giữ nguyên APPROVED — hiện nút đó ra chỉ gây hiểu lầm).
+  document.getElementById('internalSubmitBtn').innerText = p.status === 'APPROVED' ? 'Lưu Thay Đổi' : (p.status === 'NEED_INFO' ? 'Gửi Lại' : 'Gửi');
+  document.getElementById('internalDraftBtn')?.classList.toggle('hidden', p.status === 'APPROVED');
   document.getElementById('internalCancelEditBtn').classList.remove('hidden');
   document.getElementById('internalPostForm').classList.remove('hidden');
   document.getElementById('internalNoPermNote').classList.add('hidden');

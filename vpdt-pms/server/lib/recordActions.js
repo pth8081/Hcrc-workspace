@@ -3464,7 +3464,14 @@ const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'att
 function editInternalPost(payload, user, post, appData) {
   const canManageNews = post.type === 'NEWS' && !!user.perms?.internalNewsManage;
   if (post.author !== user.username && !user.perms?.admin && !canManageNews) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
-  if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
+  // LỖI ĐÃ VÁ (11/2026, yêu cầu người dùng: "đã phân quyền sửa, xóa bài viết trong Nhịp Sống HCRC/Góc
+  // Chia Sẻ nhưng vẫn không thấy nút Sửa, chỉ có Xóa"): trước đây CHỈ cho sửa khi còn DRAFT/NEED_INFO —
+  // bài đã ĐĂNG CÔNG KHAI (APPROVED) bị khoá CỨNG cả client lẫn server cho MỌI người kể cả admin, không
+  // phải lỗi thiếu quyền. Theo xác nhận của người dùng: mở thêm cho APPROVED, sửa xong GIỮ NGUYÊN trạng
+  // thái (không quay lại hàng chờ duyệt) — xem nhánh `wasApproved` ở cuối hàm, KHÔNG chạy qua khối
+  // chuyển trạng thái Nháp/Gửi lại bên dưới (vốn chỉ áp dụng cho đường DRAFT/NEED_INFO cũ).
+  const wasApproved = post.status === 'APPROVED';
+  if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO' && !wasApproved) throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
   // "attachment" nằm trong INTERNAL_POST_EDITABLE_FIELDS nên đi thẳng từ payload client vào bản ghi —
   // phải kiểm tra ĐÚNG luật URL như lúc TẠO (createValidation.js internalPosts.extraValidate), nếu
   // không thì lỗ hổng stored XSS qua scheme "javascript:" chỉ bị chặn ở đường tạo mới, còn đường SỬA
@@ -3542,7 +3549,11 @@ function editInternalPost(payload, user, post, appData) {
   } else if (post.type !== 'NEWS') {
     post.publishAt = null;
   }
-  if (payload.draft === true) {
+  if (wasApproved) {
+    // Sửa bài ĐÃ ĐĂNG CÔNG KHAI — giữ nguyên post.status = 'APPROVED' (chưa bị khối editable-fields phía
+    // trên đụng tới, 'status' không nằm trong INTERNAL_POST_EDITABLE_FIELDS), không chạy qua luồng
+    // Nháp/Gửi lại bên dưới (luồng đó chỉ có ý nghĩa khi đang đi TỪ DRAFT/NEED_INFO sang PENDING/APPROVED).
+  } else if (payload.draft === true) {
     post.status = 'DRAFT';
   } else {
     // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #13): gọi lại ĐÚNG luật quyền theo type
