@@ -3615,6 +3615,15 @@
             <button type="button" id="checklistImportConfirmBtn" data-op="confirmChecklistImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
           </div>
 
+          <!-- Bật/tắt "Bắt buộc trả lời" hàng loạt cho TOÀN BỘ câu hỏi đang soạn (v28.83, theo yêu cầu
+               người dùng — mẫu seed CL_STCH_DAILY từng bị cả 49 câu mặc định Bắt buộc, phải gỡ tay từng
+               câu một rất mất công). CHỈ đổi state checklistBuilderQuestions[] đang soạn ở client, chưa
+               lưu gì — người dùng vẫn bấm "💾 Lưu Mẫu" như bình thường sau đó. -->
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-gray-500">Đặt hàng loạt:</span>
+            <button type="button" data-op="setAllChecklistBuilderQuestionsRequired" data-arg0="true" class="bg-amber-100 text-amber-700 px-2.5 py-1 rounded font-bold hover:bg-amber-200">☑️ Bắt Buộc Tất Cả</button>
+            <button type="button" data-op="setAllChecklistBuilderQuestionsRequired" data-arg0="false" class="bg-gray-100 text-gray-700 px-2.5 py-1 rounded font-bold hover:bg-gray-200">⬜ Bỏ Bắt Buộc Tất Cả</button>
+          </div>
           <div id="checklistBuilderQuestionsWrap" class="space-y-3"></div>
         </div>
 

@@ -269,6 +269,17 @@ function addChecklistBuilderQuestion() {
   });
   renderChecklistBuilderQuestions();
 }
+// Bật/tắt "Bắt buộc trả lời" hàng loạt cho TOÀN BỘ câu hỏi đang soạn (v28.83 — phát hiện thật: mẫu seed
+// CL_STCH_DAILY/seedChecklistStoreSelfDaily.js tạo 49 câu không đặt cờ isRequired, server mặc định
+// không nói rõ = Bắt buộc, khiến cả 49 câu bị khoá bắt buộc, chặn cứng nhân viên siêu thị nộp bài trừ
+// khi trả lời đủ hết — người dùng yêu cầu "làm đến đâu tính đến đó", không bắt buộc làm hết). `required`
+// đến từ data-op (cspCoerceArg KHÔNG ép chuỗi "true"/"false" thành boolean thật — chỉ Number hoặc giữ
+// nguyên chuỗi, xem core.js::cspCoerceArg()), nên so sánh === 'true' thay vì dùng thẳng giá trị boolean.
+function setAllChecklistBuilderQuestionsRequired(required) {
+  const value = required === true || required === 'true';
+  checklistBuilderQuestions.forEach(q => { q.isRequired = value; });
+  renderChecklistBuilderQuestions();
+}
 function removeChecklistBuilderQuestion(qIdx) {
   checklistBuilderQuestions.splice(Number(qIdx), 1);
   // Câu hỏi bị xoá có thể là chủ của 1 optionId đang được câu sau tham chiếu qua showIfOptionId — xoá
