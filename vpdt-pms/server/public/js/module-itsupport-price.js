@@ -123,12 +123,20 @@ function formatItPriceCellValue(col, rawValue) {
   if (isItPriceCurrencyColumn(col)) {
     const num = Number(raw);
     if (!Number.isFinite(num)) return raw;
-    return `${num.toLocaleString('vi-VN')} đ`;
+    return `${num.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} đ`;
   }
   if (isItPriceQuantityColumn(col)) {
     const num = Number(raw);
     if (!Number.isFinite(num)) return raw;
-    return num.toLocaleString('vi-VN');
+    return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+  }
+  // Mọi cột số KHÁC không thuộc 3 nhóm trên (VD "Tỷ lệ %", "CP"...) — nếu giá trị có phần thập phân thì
+  // làm tròn còn 2 số (yêu cầu người dùng 11/2026 "làm tròn tất cả các cột đằng sau dấu chấm chỉ còn 2 số
+  // hàng chục"); mã hàng/STT dạng số nguyên không có dấu chấm nên không bị ảnh hưởng. CHỈ đổi cách hiển
+  // thị — không đụng tới dữ liệu gốc/file Excel tải về.
+  if (raw.includes('.') || raw.includes(',')) {
+    const num = Number(raw.replace(',', '.'));
+    if (Number.isFinite(num)) return num.toFixed(2);
   }
   return raw;
 }
@@ -136,9 +144,17 @@ function itPriceCellHTML(it, col) {
   return escapeHtml(formatItPriceCellValue(col, it.values?.[col.key]));
 }
 
+// Cảnh báo (11/2026, yêu cầu người dùng) khi Mẫu Giá/tệp đã có sẵn 1 cột tên "STT" — Phiếu Phê Duyệt tự
+// đánh số thứ tự riêng (xem buildItPriceWholesaleApprovalSlipHTML()) nên cột "STT" đọc từ file là thừa,
+// bị loại khỏi phiếu khi hiển thị. Chỉ CẢNH BÁO (không chặn nộp), để người dùng tự dọn ở Mẫu Giá/tệp gốc.
+function isItPriceSttColumn(col) {
+  return stripVnDiacritics(String(col?.label || '')).toLowerCase().trim() === 'stt';
+}
+
 function renderItPriceFilePreview(data) {
   const columnLabels = data.columnLabels && data.columnLabels.length ? data.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
   document.getElementById('itPriceFilePreviewCount').innerText = data.items.length;
+  document.getElementById('itPriceFilePreviewSttWarning')?.classList.toggle('hidden', !columnLabels.some(isItPriceSttColumn));
   document.getElementById('itPriceFilePreviewHead').innerHTML = `<tr>${columnLabels.map(col =>
     `<th class="border p-1">${escapeHtml(col.label)}</th>`
   ).join('')}</tr>`;
@@ -1023,7 +1039,10 @@ function buildItPriceWholesaleApprovalSlipHTML(p) {
 
   const approvedFileId = resolveApprovedFileIdClient(p);
   const approvedFile = (p.files || []).find(f => f.id === approvedFileId) || p.files?.[p.files.length - 1];
-  const columnLabels = approvedFile?.columnLabels?.length ? approvedFile.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+  const allColumnLabels = approvedFile?.columnLabels?.length ? approvedFile.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+  // Loại cột "STT" đọc nguyên văn từ Mẫu Giá/file (nếu có) — phiếu đã TỰ đánh số thứ tự riêng (idx+1 bên
+  // dưới), giữ cả 2 sẽ ra 2 cột STT trùng y hệt số nhau (lỗi người dùng báo 11/2026, ảnh phiếu dup STT).
+  const columnLabels = allColumnLabels.filter(col => !isItPriceSttColumn(col));
   const itemRows = (approvedFile?.items || []).map((it, idx) => `
     <tr>
       <td class="as-items-center">${idx + 1}</td>
@@ -1057,6 +1076,10 @@ function buildItPriceWholesaleApprovalSlipHTML(p) {
     title: 'Phiếu Phê Duyệt Giá Bán Buôn',
     approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(p.code)}`,
     bodyHTML,
+    // Bảng mặt hàng Giá Bán Buôn thường nhiều cột — khổ dọc mặc định dễ bị tràn/thu nhỏ quá mức khi in
+    // (yêu cầu người dùng 11/2026), nên gắn riêng class "as-landscape" (xem APPROVAL_SLIP_CSS, core.js)
+    // để chỉ phiếu này in khổ ngang, không đụng các Phiếu Phê Duyệt khác.
+    extraClass: 'as-landscape',
     requesterRoleLabel: 'Người đề xuất',
     requesterName: p.creatorName,
     requesterUsername: p.creator,
