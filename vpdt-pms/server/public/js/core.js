@@ -50,8 +50,20 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
-// bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrReport":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh","itsupport-price"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"muaHang":["muahang","itsupport-price"],"nghiepVu":["nghiepvu"]};
+// bac cao hon). Tab khong co trong bang (VD approvalHub) khong can nap gi them.
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "user login lần đầu không thấy Tin Tức Nổi Bật ở Trang chủ"):
+// "dashboard" trước đây để RỖNG ([]) dù renderDashboardNews() (core-dashboard.js, file nạp sẵn/không
+// lazy) GỌI THẲNG internalPostPlainText()/isInternalPostHtml() — 2 hàm CHỈ tồn tại trong cụm
+// "internalcomms-nhipsong" (module-internalcomms-nhipsong.js, lazy-load riêng cho tab "internal"). Vì
+// switchTab(activeTopTabName || 'dashboard') LUÔN rơi về "dashboard" ở lần vào app ĐẦU TIÊN mỗi phiên
+// (activeTopTabName là biến JS thường, reset về null mỗi lần tải lại trang — KHÔNG lưu
+// localStorage/server) — hễ có ít nhất 1 tin đã duyệt hiển thị được (posts.length > 0), cụm
+// "internalcomms-nhipsong" CHƯA từng nạp lần nào trong phiên sẽ làm 2 hàm trên ném ReferenceError NGAY
+// GIỮA CHỪNG .map() dựng thẻ tin, huỷ nguyên lượt gán container.innerHTML — tiêu đề "📣 Tin Tức Nổi
+// Bật" vẫn hiện (section đã unhide TRƯỚC khi lỗi xảy ra) nhưng bên dưới trống trơn, không cả dòng "Chưa
+// có tin tức nào." Khai báo cụm phụ thuộc ở đây để switchTab() tự đợi nạp xong TRƯỚC khi gọi
+// renderDashboard() (đúng cơ chế chọke-point loadTabModuleGroups() đã có sẵn, không cần sửa gì khác).
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrReport":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh","itsupport-price"],"dashboard":["internalcomms-nhipsong"],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"muaHang":["muahang","itsupport-price"],"nghiepVu":["nghiepvu"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau

@@ -271,25 +271,40 @@ function renderDashboardNews() {
   // kèm "…" CSS, không cần tự cắt chữ cho khớp 100% — tránh lệch dòng nếu font-size người dùng tuỳ chỉnh
   // khác máy test). Không hiện gì nếu bài không có nội dung (ảnh/video thuần).
   // Các class mới (sm:w-20/sm:h-20/md:w-24/md:h-24) cần `npm run build:css` lại — xem tailwind.config.js.
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "user login lần đầu không thấy Tin Tức Nổi Bật" — cả
+  // mobile/desktop): CÙNG LỚP LỖI đã vá ở renderInternalNewsCard()/renderInternalFeedStyle()
+  // (module-internalcomms-nhipsong.js, xem chú thích đầy đủ ở đó) nhưng CHƯA được áp dụng ở đây —
+  // .map() KHÔNG có try/catch nghĩa là 1 bài BẤT KỲ lỗi dữ liệu (field thiếu/sai) làm exception ném ra
+  // GIỮA CHỪNG, huỷ NGUYÊN lượt gán container.innerHTML. Với user ĐÃ dùng app trước đó, container còn
+  // giữ nội dung CŨ từ lượt render thành công gần nhất nên nhìn qua vẫn "có vẻ ổn" (dù là Tin Tức cũ) —
+  // nhưng với user login LẦN ĐẦU (chưa có lượt render nào trước đó), container trống trơn ngay từ đầu,
+  // nên kết quả là phần "📣 Tin Tức Nổi Bật" hiện tiêu đề xong KHÔNG có gì bên dưới (không cả thông báo
+  // "Chưa có tin tức nào.") — trông như tính năng biến mất hẳn. Bọc riêng từng bài: 1 bài lỗi chỉ mất
+  // đúng bài đó, KHÔNG còn làm hỏng/để trống nguyên khung tin.
   container.innerHTML = posts.map(p => {
-    const cover = getInternalPostCoverImage(p);
-    const thumbSizeClasses = 'w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24';
-    const thumbHTML = cover
-      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb ${thumbSizeClasses} rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
-      : `<div class="dash-news-thumb dash-news-thumb-placeholder ${thumbSizeClasses} rounded border border-gray-200 bg-gray-100 text-gray-400 text-2xl sm:text-3xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
-    const snippet = internalPostPlainText(p).slice(0, 220);
-    const snippetHTML = snippet ? `<p class="text-xs text-gray-600 mt-1 line-clamp-2">${escapeHtml(snippet)}</p>` : '';
-    return `
-    <div data-op="viewInternalPostDetail" data-arg0="${Number(p.id)}" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
-      ${thumbHTML}
-      <div class="min-w-0 flex-1">
-        <div class="text-[10px] font-bold text-fuchsia-700">${escapeHtml(typeLabel[p.type] || p.type)}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>
-        <div class="font-bold text-gray-800 text-sm break-words">${escapeHtml(p.title)}</div>
-        <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
-        ${snippetHTML}
-      </div>
-      <span class="dash-news-more absolute bottom-1.5 right-3 text-xs font-semibold text-fuchsia-700 group-hover:underline">Xem thêm →</span>
-    </div>`;
+    try {
+      const cover = getInternalPostCoverImage(p);
+      const thumbSizeClasses = 'w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24';
+      const thumbHTML = cover
+        ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb ${thumbSizeClasses} rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
+        : `<div class="dash-news-thumb dash-news-thumb-placeholder ${thumbSizeClasses} rounded border border-gray-200 bg-gray-100 text-gray-400 text-2xl sm:text-3xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
+      const snippet = internalPostPlainText(p).slice(0, 220);
+      const snippetHTML = snippet ? `<p class="text-xs text-gray-600 mt-1 line-clamp-2">${escapeHtml(snippet)}</p>` : '';
+      return `
+      <div data-op="viewInternalPostDetail" data-arg0="${Number(p.id)}" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
+        ${thumbHTML}
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] font-bold text-fuchsia-700">${escapeHtml(typeLabel[p.type] || p.type)}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>
+          <div class="font-bold text-gray-800 text-sm break-words">${escapeHtml(p.title)}</div>
+          <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
+          ${snippetHTML}
+        </div>
+        <span class="dash-news-more absolute bottom-1.5 right-3 text-xs font-semibold text-fuchsia-700 group-hover:underline">Xem thêm →</span>
+      </div>`;
+    } catch (e) {
+      console.error('Lỗi hiển thị 1 tin ở Dashboard (bỏ qua, không làm trống cả khung Tin Tức Nổi Bật):', p?.id, e);
+      return '';
+    }
   }).join('');
 }
 

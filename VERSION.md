@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**28.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.66 (2026-11): [Khẩn] Fix khung "📣 Tin Tức Nổi Bật" ở Trang chủ trống trơn ở lần đăng nhập đầu
+
+Theo báo cáo người dùng kèm 4 ảnh chụp thật (cả desktop lẫn mobile): user login lần đầu trong phiên chỉ
+thấy TIÊU ĐỀ "📣 Tin Tức Nổi Bật" ở Trang chủ, bên dưới trống trơn — không cả dòng "Chưa có tin tức
+nào." như kỳ vọng khi thật sự không có tin.
+
+**Nguyên nhân gốc**: `renderDashboardNews()` (`core-dashboard.js`, file nạp sẵn ngay từ đầu — KHÔNG
+lazy-load) gọi thẳng `internalPostPlainText()`/`isInternalPostHtml()` — 2 hàm CHỈ tồn tại trong cụm
+lazy-load `"internalcomms-nhipsong"` (`module-internalcomms-nhipsong.js`, chỉ nạp khi vào tab "Truyền
+Thông"). `TAB_MODULE_GROUPS.dashboard` (core.js) trước đây để RỖNG (`[]`) nên `switchTab('dashboard')`
+không hề đợi nạp cụm này trước khi gọi `renderDashboard()`. Vì `switchTab(activeTopTabName || 'dashboard')`
+LUÔN rơi về `'dashboard'` ở lần vào app ĐẦU TIÊN mỗi phiên (`activeTopTabName` là biến JS thường, reset
+về `null` mỗi lần tải lại trang, KHÔNG lưu localStorage/server) — hễ có ít nhất 1 tin đã duyệt hiển thị
+được, 2 hàm trên ném `ReferenceError` ngay giữa chừng `.map()` dựng thẻ tin, huỷ nguyên lượt gán
+`container.innerHTML` (tiêu đề vẫn hiện vì section đã unhide TRƯỚC khi lỗi xảy ra).
+
+**Đã vá 2 lớp**:
+1. **Gốc**: `TAB_MODULE_GROUPS.dashboard` đổi thành `["internalcomms-nhipsong"]` — `switchTab('dashboard')`
+   nay tự đợi nạp cụm này xong trước khi render, đúng cơ chế đã có sẵn cho mọi tab khác.
+2. **Phòng thủ** (cùng lớp đã áp dụng ở Nhịp Sống HCRC trước đó, xem `renderInternalFeedStyle()`): bọc
+   try/catch riêng từng thẻ tin trong `renderDashboardNews()` — 1 bài lỗi dữ liệu chỉ mất đúng bài đó,
+   không còn làm trống cả khung.
+
+Test mới `test-dashboard-news-first-login.js` — KHÁC mọi test khác trong thư mục (vốn chủ động eager-load
+toàn bộ module ngay từ đầu, nên chưa từng bắt được lỗi này) — cố tình KHÔNG preload module nào, mô phỏng
+đúng 1 phiên đăng nhập thật đầu tiên. Xác nhận: revert lại `TAB_MODULE_GROUPS.dashboard = []` thì test
+FAIL đúng y hệt triệu chứng ảnh chụp (container rỗng, 0 thẻ tin) — khôi phục bản vá thì PASS lại 6/6.
+Chạy lại `test-dashboard-news-thumbnail.js` (10/10), `test-dashboard-stat-cards.js` (3/3),
+`test-internal-share-feed-style.js` (12/12), `test-login-cache-first-render.js` (7/7), `test-uniform.js`
+(38/38), `test-approval-email-config.js` (85/85), `test-csp-full-audit.js` (3/3) đều pass, không
+regression.
 
 ## v28.65 (2026-11): Thêm email "Cần phê duyệt" cho Đề Nghị Thanh Toán (trước đây CHƯA TỪNG có)
 
