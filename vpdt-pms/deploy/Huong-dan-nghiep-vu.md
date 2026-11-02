@@ -2903,6 +2903,54 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     việc thuộc nhóm vừa bấm (tên việc, trạng thái, người thực hiện, hạn), không
     cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ chỉ để xem nhanh 1 nhóm công việc
     của 1 hồ sơ.
+  - **Đợt vá theo QA test (11/2026)** — 10 mục đã xác nhận triển khai trên
+    cả 3 phần (hồ sơ Sửa Chữa/Danh Mục Đầu Tư/Quản Lý Công Việc), 2 mục
+    (đảo bước phê duyệt Danh Mục Đầu Tư + bổ sung kiểm quyền sửa Danh Mục
+    Đầu Tư cho vai trò "ntcv") **tạm hoãn chờ xác nhận PM, CHƯA triển khai**:
+    - **Hồ sơ Sửa Chữa**: tạo đề xuất cho tải lên **nhiều** file đính kèm
+      cùng lúc (cap 10 file, mirror pattern Tệp Đính Kèm Danh Mục Đầu Tư ở
+      trên); thêm nút **"Hủy"** đề xuất (đổi trạng thái CANCELLED, KHÔNG
+      xóa vật lý — chặn hủy nếu hồ sơ còn công việc Thực hiện/Nghiệm thu
+      dở dang); thêm **"Sửa"** đề xuất đã tạo (Tiêu đề/Ngân sách/Mô tả/
+      thêm file — chặn sửa riêng Tiêu đề/Ngân sách nếu hồ sơ đã có công
+      việc triển khai, tránh đổi ngân sách giữa chừng); thêm nút **tải**
+      file đính kèm đề xuất (quyền tải đã có sẵn ở server từ trước, chỉ
+      thiếu nút bấm).
+    - **Danh Mục Đầu Tư**: ô gợi ý khi gõ tìm người phụ trách thu hẹp
+      chiều cao dropdown (tránh che mất bảng); thêm nút **tải** file đính
+      kèm trực tiếp từ bảng (trước đây chỉ xem được).
+    - **Quản Lý Công Việc**: modal "Thêm Công Việc" **kéo-thả** di chuyển
+      tự do được trên màn hình; thêm nút **"🗑️ Xoá"** cho công việc đang
+      "Chưa bắt đầu" — chỉ xóa được khi CHÍNH công việc đó VÀ TOÀN BỘ
+      nhánh con đều còn "Chưa bắt đầu" (có bất kỳ việc con đã bắt đầu/
+      nghiệm thu nào cũng chặn xóa cả nhánh); thêm nút **"💰"** trên mỗi
+      dòng, mở modal hiển thị **"Giá trị đầu tư"** (chỉ xem — tự động =
+      tổng Danh Mục Đầu Tư đã duyệt của cả hồ sơ, KHÔNG nhập tay/KHÔNG
+      lưu riêng) và cho điền **"Giá trị hợp đồng"** (số tiền) + đính kèm
+      tối đa 10 tệp hợp đồng — toàn quyền quản lý hồ sơ HOẶC đúng người
+      phụ trách công việc đó đều điền được, KHÔNG bị khóa theo trạng thái
+      công việc (giá trị hợp đồng thật thường chỉ biết được sau khi
+      nghiệm thu xong, khác hẳn các field khác bị khóa sau "Đã nghiệm
+      thu"). Mẫu Excel Nhập/Xuất Quản Lý Công Việc thêm cột "Giá Trị Hợp
+      Đồng" (nhập được, mặc định 0 nếu bỏ trống); "Giá Trị Đầu Tư" chỉ có
+      ở Xuất (không có ở mẫu/nhập vì là field tự động).
+    - **Báo Cáo Tổng Quan**: bảng "📋 Tổng Quan Toàn Bộ Công Việc" (tab Báo
+      Cáo) gom nhóm các dòng công việc theo mã hồ sơ, mặc định đóng — bấm
+      vào dòng hồ sơ để xổ ra công việc con, có nút "Mở Hết"/"Đóng Hết" xổ/
+      gập toàn bộ cùng lúc. Xuất Excel vẫn giữ dạng phẳng (mỗi công việc 1
+      dòng, không gộp theo hồ sơ) để không phá cấu trúc báo cáo đang dùng.
+    - **Email cảnh báo** (2 sự kiện mới, admin tự tắt/mở ở Quản Trị >
+      Thông Báo Email Phê Duyệt > khối "🏬 Vận Hành"): gán phụ trách công
+      việc (tạo mới hoặc sửa thêm người) → báo **người được gán mới**
+      (không báo lại người đã có từ trước nếu chỉ sửa field khác); đổi
+      trạng thái công việc ở 2 mốc "bắt đầu thực hiện" và "hoàn thành
+      nghiệm thu" → báo **người khởi tạo hồ sơ**. Cả 2 trường hợp tự loại
+      người thao tác khỏi người nhận, kèm link "🔗 Xem Chi Tiết" mở thẳng
+      hồ sơ.
+    - **Chưa triển khai, tạm hoãn chờ PM xác nhận**: đảo thứ tự 1 bước
+      trong quy trình phê duyệt Danh Mục Đầu Tư, và bổ sung kiểm tra quyền
+      sửa Danh Mục Đầu Tư riêng cho vai trò "ntcv" — cả 2 chưa chốt được
+      phương án cụ thể, chưa có bất kỳ thay đổi code nào.
 
 **"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP 11/2026, bổ sung Sửa/Nhập Excel/Ngưỡng
 Tồn 11/2026, bổ sung Quét Mã Vạch Camera/Offline-First 11/2026, bổ sung Đối
