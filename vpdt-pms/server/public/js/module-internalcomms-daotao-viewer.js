@@ -144,7 +144,6 @@
         const m = /\.([0#]+)/.exec(fmt || '');
         return m ? m[1].length : 0;
       };
-      const isExcelDateNumFmt = (fmt) => /[dmy]/i.test(fmt || '') && !/[#0]/.test(fmt || '');
       const cellText = (cell) => {
         let v = cell.value;
         const numFmt = cell.numFmt || '';
@@ -154,7 +153,13 @@
           else if (v.text !== undefined) v = v.text;
           else if (!(v instanceof Date)) v = '';
         }
-        if (v instanceof Date && isExcelDateNumFmt(numFmt)) {
+        // LƯU Ý: trước đợt sửa numFmt (11/2026), MỌI ô ngày tháng đều rơi vào nhánh "else v = ''" ở trên
+        // (Date không khớp richText/result/text) nên luôn hiện RỖNG — không phải hành vi đúng nhưng cũng
+        // không "xấu". Format LUÔN mọi giá trị Date thành dd/mm/yyyy ở đây (không gate theo numFmt) để
+        // chắc chắn KHÔNG BAO GIỜ rơi xuống String(v) phía dưới — String(Date) sẽ in ra chuỗi rất dài/khó
+        // đọc kiểu "Sat Nov 07 2026 00:00:00 GMT+0000 (Coordinated Universal Time)", còn tệ hơn cả hiện
+        // rỗng như trước — nên luôn quy đổi dd/mm/yyyy bất kể numFmt gốc khớp mẫu ngày hay không.
+        if (v instanceof Date) {
           const dd = String(v.getDate()).padStart(2, '0');
           const mm = String(v.getMonth() + 1).padStart(2, '0');
           return `${dd}/${mm}/${v.getFullYear()}`;
