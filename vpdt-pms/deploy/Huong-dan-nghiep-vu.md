@@ -1828,6 +1828,29 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     như trước — CHỈ đổi tên lúc TẢI, không đụng tới tên file đã lưu/hiển thị
     trong hệ thống. Áp dụng như nhau cho cả Bán Lẻ lẫn Bán Buôn (cùng 1 modal
     chi tiết, không cần cấu hình gì thêm).
+  - **"🖨️ Xem/⬇️ Tải Phiếu Phê Duyệt" (MỚI 11/2026, chỉ Bán Buôn)**: sau khi
+    đề xuất Bán Buôn đã **phê duyệt hoàn tất**, mở modal Chi Tiết hồ sơ sẽ
+    thấy 2 nút này — in/lưu được 1 "Phiếu Phê Duyệt Giá Bán Buôn" đầy đủ thông
+    tin như lúc nhập form (mã đề xuất, phòng ban, mức áp dụng, đơn vị áp dụng
+    giá bán buôn, siêu thị đề xuất, ngành hàng, lý do, mẫu giá, ngày áp dụng/
+    hết hiệu lực) + bảng toàn bộ mã hàng đã phê duyệt (lấy đúng từ file Excel
+    đã duyệt) + chân ký từng bước phê duyệt thực tế (tên, chức danh, thời
+    gian, ý kiến nếu có) — cùng khuôn "Phiếu Phê Duyệt" đang dùng cho Đăng Ký
+    Xe/Hợp Đồng/Văn Bản Trình/Đặt Hàng NCC/VPP. Ai xem/tải được: người tạo đề
+    xuất, bất kỳ ai đã từng duyệt ở bất kỳ bước nào (kể cả bước đã qua lâu),
+    hoặc admin. "⬇️ Tải Phiếu" tải thành 1 file `.html` độc lập mở/in được
+    ngay cả ngoài hệ thống, để lưu bản cứng.
+  - **Bảng mặt hàng hiển thị khớp đúng định dạng Excel (MỚI 11/2026)**: trước
+    đây chỉ cột %  (Margin/Chiết Khấu) được định dạng lại khi hiển thị, còn
+    cột Đơn Giá/Số Lượng hiện nguyên chuỗi thô đọc từ file (VD `185000` thay
+    vì `185.000 đ`). Nay hệ thống tự nhận diện thêm 2 nhóm cột theo TÊN CỘT
+    (không phân biệt hoa/thường/dấu, cùng cơ chế đã có cho %): cột có tên chứa
+    "Đơn Giá"/"Giá Bán"/"Giá Vốn"/"Thành Tiền"... hiện có dấu chấm phân cách
+    nghìn + đơn vị "đ"; cột có tên chứa "Số Lượng"/"SL"... hiện có dấu chấm
+    phân cách nghìn. Áp dụng ở CẢ 3 nơi: bảng xem trước lúc tải Excel lên,
+    bảng mặt hàng trong modal Chi Tiết đề xuất, và bảng mã hàng trong Phiếu
+    Phê Duyệt ở mục ngay trên — **chỉ đổi cách HIỂN THỊ, không đụng tới dữ
+    liệu đã lưu trong hệ thống/file gốc**.
   - **"🏪 QT Giá Bán Buôn (Siêu Thị)" — người duyệt Phê Duyệt Giá Bán Buôn
     (10/2026, CÙNG CƠ CHẾ "🏬 Quy Trình Đặt Hàng Siêu Thị" ở mục 4.4 Vận Hành,
     xem đầy đủ cách khớp Chức danh/Người cụ thể/Siêu Thị Phụ Trách ở đó)**:

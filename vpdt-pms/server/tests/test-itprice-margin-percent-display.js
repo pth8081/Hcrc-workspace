@@ -17,6 +17,14 @@
 // LOẠI TRỪ "Hình Thức..." (cột phân loại kiểu "1"/"2", không phải số %, cũng xuất hiện trong ảnh chụp
 // người dùng gửi — PHẢI giữ nguyên, không bị quy tắc % bắt nhầm).
 //
+// CẬP NHẬT (11/2026, yêu cầu người dùng tiếp theo: "cho xem thông tin trên web các giá trị giống hệt
+// khi nhập excel... cột %, đơn giá, số lượng phải chính xác theo định dạng số tiền, số lượng và số %"):
+// isItPriceCurrencyColumn()/isItPriceQuantityColumn() MỚI thêm — cột "Giá bán lẻ (+VAT)" ở fixture dưới
+// đây giờ ĐÚNG Ý là 1 cột tiền tệ (khớp regex "gia ?ban"), nên PHẢI được định dạng có phân cách nghìn +
+// " đ" thay vì giữ nguyên chuỗi thô như trước — kỳ vọng cũ ở scenario thứ 2 đã lỗi thời, cập nhật lại
+// cho đúng hành vi MỚI (xem tests/test-itprice-wholesale-approval-slip.js cho bộ test đầy đủ của 2 hàm
+// nhận diện cột mới này).
+//
 // Chạy: node server/tests/test-itprice-margin-percent-display.js
 'use strict';
 const { startStaticServer, createMockState, launchPage, createRunner, assertEqual } = require('./testHarness');
@@ -56,11 +64,11 @@ async function main() {
       assertEqual(cells[2][1], '19.59%', 'Dòng 3: Margin bán lẻ phải là 19.59%');
     });
 
-    await run.run('Cột "Giá bán lẻ (+VAT)" (không phải Margin/Chiết Khấu) KHÔNG bị đổi, vẫn hiện nguyên số tiền', async () => {
+    await run.run('Cột "Giá bán lẻ (+VAT)" (không phải Margin/Chiết Khấu) được định dạng ĐÚNG như tiền tệ (phân cách nghìn + " đ")', async () => {
       const cells = await page.evaluate(() =>
         [...document.querySelectorAll('#itPriceFilePreviewBody tr')].map(tr => tr.querySelectorAll('td')[0].textContent)
       );
-      assertEqual(JSON.stringify(cells), JSON.stringify(['36500', '37000', '137000']), 'Giá bán lẻ phải giữ NGUYÊN giá trị đã đọc từ file, không bị nhân/chia gì');
+      assertEqual(JSON.stringify(cells), JSON.stringify(['36.500 đ', '37.000 đ', '137.000 đ']), 'Giá bán lẻ phải định dạng đúng tiền tệ (11/2026) — dữ liệu LƯU trong DB/file gốc vẫn giữ nguyên "36500", chỉ đổi cách HIỂN THỊ');
     });
 
     await run.run('LỖI ĐÃ TRÁNH: cột "Hình Thức Chiết Khấu" (phân loại, không phải %) KHÔNG bị quy tắc % bắt nhầm thành "2.00%"', async () => {

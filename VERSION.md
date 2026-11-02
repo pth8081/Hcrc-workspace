@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**28.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.72 (2026-11): Phê Duyệt Giá Bán Buôn — "Phiếu Phê Duyệt" in được + bảng mặt hàng khớp đúng Excel
+
+Theo yêu cầu người dùng: (1) "khi phê duyệt xong để thực hiện cần in ra phiếu phê duyệt có thông tin đầy
+đủ như khi nhập form và có cả thông tin các mã hàng phê duyệt và chân ký phê duyệt để có thể in phiếu lưu
+bản cứng"; (2) "cho xem thông tin trên web các giá trị giống hệt khi nhập excel... cột %, đơn giá, số
+lượng phải chính xác theo định dạng số tiền, số lượng và số %". Đã gửi demo trước, người dùng xác nhận
+mới triển khai (`module-itsupport-price.js`, CHỈ áp dụng cho Bán Buôn):
+
+- **"🖨️ Xem/⬇️ Tải Phiếu Phê Duyệt"** (mới): tái dùng ĐÚNG hạ tầng Phiếu Phê Duyệt dùng chung đang chạy
+  cho Xe/Hợp Đồng/Văn Bản Trình/Đặt Hàng NCC/VPP (`buildApprovalSlipShellHTML()`/
+  `buildApprovalSignatureColumnHTML()`/`APPROVAL_SLIP_CSS`, core.js) — không xây mới từ đầu. Phiếu gồm
+  đầy đủ thông tin form (mã đề xuất, phòng ban, mức áp dụng, đơn vị áp dụng giá bán buôn, siêu thị đề
+  xuất, ngành hàng, lý do, mẫu giá, ngày áp dụng/hết hiệu lực) + bảng toàn bộ mã hàng đã phê duyệt (lấy từ
+  file Excel đã duyệt, `resolveApprovedFileIdClient()`) + chân ký từng bước phê duyệt thực tế. Chỉ hiện
+  khi đề xuất Bán Buôn đã `APPROVED` hoàn tất, cho người tạo/bất kỳ ai đã từng duyệt bước nào/admin
+  (`canAccessItPriceWholesaleApprovalSlip()`, mirror PA1 — v28.68). Tải xuống thành file `.html` độc lập
+  để in/lưu bản cứng, cùng cơ chế Đặt Hàng NCC đang có.
+- **Định dạng bảng mặt hàng khớp đúng Excel** (`isItPriceCurrencyColumn()`/`isItPriceQuantityColumn()`,
+  mới — mở rộng cơ chế nhận diện theo nhãn cột đã có sẵn cho %): cột đơn giá (`Đơn Giá`/`Giá Bán`/`Giá
+  Vốn`/`Thành Tiền`...) nay hiện có phân cách nghìn + `đ`; cột số lượng (`Số Lượng`/`SL`...) nay hiện có
+  phân cách nghìn — thay vì chuỗi thô không định dạng như trước. Áp dụng CHO CẢ bảng xem trước lúc tải
+  Excel lên, modal Chi Tiết đề xuất, VÀ Phiếu Phê Duyệt mới ở trên (dùng chung đúng 1 hàm
+  `formatItPriceCellValue()`) — không đổi dữ liệu lưu trong DB/file gốc, chỉ đổi cách hiển thị.
+
+Test mới: `tests/test-itprice-wholesale-approval-slip.js` (27/27 — nhận diện cột, quyền truy cập, nội
+dung phiếu, chặn đúng phạm vi ở view/download, hiện/ẩn đúng nút theo điều kiện), `tests/test-itprice-submit-email-label.js`
+giữ nguyên (fix riêng ở v28.71). Cập nhật 1 kỳ vọng lỗi thời ở `tests/test-itprice-margin-percent-display.js`
+(cột "Giá bán lẻ (+VAT)" giờ ĐÚNG Ý phải định dạng tiền tệ, không còn giữ nguyên chuỗi thô — 6/6 pass).
+Chạy lại toàn bộ test itPriceApprovals liên quan (`test-itprice-approval-and-emergency.js` 17/17,
+`test-itprice-wholesale-mixed-approval.js` 20/20, `test-itprice-supplement-invalidate.js` 9/9,
+`test-itprice-forward-opinion.js` 11/11, `test-itprice-download.js` 28/28, `test-itprice-form-split.js`
+13/13, `test-itprice-mastertlist-channel-split.js` 12/12, `test-itprice-scope-dates.js` 25/25,
+`test-itprice-download-filename-code.js` 3/3, `test-itprice-file-format-reject.js` 6/6,
+`test-itprice-permtree-move.js` 6/6, `test-vanhanh-itprice-chitiet-csp.js` 1/1, `test-it-support.js`
+24/24, `test-approval-hub.js` 57/57) — không regression.
 
 ## v28.71 (2026-11): Vá 3 lỗi phát hiện qua phản hồi người dùng — Phê Duyệt Hub + email Phê Duyệt Giá
 

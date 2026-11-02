@@ -93,13 +93,44 @@ function isItPricePercentColumn(col) {
   const norm = stripVnDiacritics(String(col?.label || '')).toLowerCase();
   return IT_PRICE_PERCENT_LABEL_RE.test(norm) && !IT_PRICE_NON_PERCENT_LABEL_RE.test(norm);
 }
+// isItPriceCurrencyColumn()/isItPriceQuantityColumn() (11/2026, yêu cầu người dùng "cho xem thông tin
+// trên web các giá trị giống hệt khi nhập excel... cột %, đơn giá, số lượng phải chính xác theo định
+// dạng") — CÙNG kiểu nhận diện theo nhãn cột (không phân biệt hoa/thường/dấu) như isItPricePercentColumn()
+// ở trên, mở rộng thêm 2 nhóm cột trước đây hiển thị NGUYÊN VĂN chuỗi thô từ Excel (không có phân cách
+// nghìn) — ưu tiên kiểm percent TRƯỚC (loại trừ lẫn nhau) vì nhãn vd "% Chiết Khấu" có thể trùng từ khoá
+// với "chiết khấu" ở cả 2 nhóm nếu không cẩn thận.
+const IT_PRICE_CURRENCY_LABEL_RE = /don ?gia|thanh ?tien|gia ?ban|gia ?von|gia ?nhap|^gia\b/;
+const IT_PRICE_QUANTITY_LABEL_RE = /so ?luong|\bsl\b/;
+function isItPriceCurrencyColumn(col) {
+  if (isItPricePercentColumn(col)) return false;
+  const norm = stripVnDiacritics(String(col?.label || '')).toLowerCase();
+  return IT_PRICE_CURRENCY_LABEL_RE.test(norm);
+}
+function isItPriceQuantityColumn(col) {
+  if (isItPricePercentColumn(col) || isItPriceCurrencyColumn(col)) return false;
+  const norm = stripVnDiacritics(String(col?.label || '')).toLowerCase();
+  return IT_PRICE_QUANTITY_LABEL_RE.test(norm);
+}
 function formatItPriceCellValue(col, rawValue) {
   const raw = rawValue == null ? '' : String(rawValue);
-  if (!raw || !isItPricePercentColumn(col)) return raw;
-  const num = Number(raw);
-  if (!Number.isFinite(num)) return raw;
-  const pct = Math.abs(num) <= 1 ? num * 100 : num;
-  return `${pct.toFixed(2)}%`;
+  if (!raw) return raw;
+  if (isItPricePercentColumn(col)) {
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return raw;
+    const pct = Math.abs(num) <= 1 ? num * 100 : num;
+    return `${pct.toFixed(2)}%`;
+  }
+  if (isItPriceCurrencyColumn(col)) {
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return raw;
+    return `${num.toLocaleString('vi-VN')} đ`;
+  }
+  if (isItPriceQuantityColumn(col)) {
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return raw;
+    return num.toLocaleString('vi-VN');
+  }
+  return raw;
 }
 function itPriceCellHTML(it, col) {
   return escapeHtml(formatItPriceCellValue(col, it.values?.[col.key]));
@@ -967,6 +998,104 @@ function resolveApprovedFileUrlClient(p) {
   if (approvedFileId == null) return null;
   const f = (p.files || []).find(x => x.id === approvedFileId);
   return f ? f.fileUrl : null;
+}
+
+// ===== "Phiếu Phê Duyệt Giá Bán Buôn" (11/2026, yêu cầu người dùng: "khi phê duyệt xong để thực hiện
+// cần in ra phiếu phê duyệt có thông tin đầy đủ như khi nhập form và có cả thông tin các mã hàng phê
+// duyệt và chân ký phê duyệt để có thể in phiếu lưu bản cứng") — tái dùng ĐÚNG hạ tầng "Phiếu Phê Duyệt"
+// dùng chung đã có (buildApprovalSlipShellHTML()/buildApprovalSignatureColumnHTML()/APPROVAL_SLIP_CSS,
+// core.js), mirror cấu trúc buildOperationOrderApprovalSlipHTML() (module-vanhanh.js) — hàm/nút/quyền
+// gần giống nhất đã có trong hệ thống. CHỈ áp dụng cho Bán Buôn (đúng yêu cầu gốc), chưa mở cho Bán Lẻ.
+
+// canAccessItPriceWholesaleApprovalSlip: mirror ĐÚNG "everApprovedByUser" (lib/fileAuthz.js, đợt v28.68
+// "PA1" — người từng duyệt bất kỳ bước nào vẫn xem/tải được file đã duyệt vĩnh viễn) + người tạo + admin.
+function canAccessItPriceWholesaleApprovalSlip(user, p) {
+  if (!user || !p) return false;
+  if (user.perms?.admin) return true;
+  if (p.creator === user.username) return true;
+  return (p.history || []).some(h => h.action === 'APPROVED' && !h.invalidated && h.username === user.username);
+}
+
+function buildItPriceWholesaleApprovalSlipHTML(p) {
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, p.history)).join('');
+
+  const approvedFileId = resolveApprovedFileIdClient(p);
+  const approvedFile = (p.files || []).find(f => f.id === approvedFileId) || p.files?.[p.files.length - 1];
+  const columnLabels = approvedFile?.columnLabels?.length ? approvedFile.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+  const itemRows = (approvedFile?.items || []).map((it, idx) => `
+    <tr>
+      <td class="as-items-center">${idx + 1}</td>
+      ${columnLabels.map(col => {
+        const cls = (isItPriceCurrencyColumn(col) || isItPriceQuantityColumn(col) || isItPricePercentColumn(col)) ? ' class="as-items-right"' : '';
+        return `<td${cls}>${escapeHtml(formatItPriceCellValue(col, it.values?.[col.key]))}</td>`;
+      }).join('')}
+    </tr>`).join('');
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Mã đề xuất:</td><td>${escapeHtml(p.code)}</td></tr>
+      <tr><td class="as-label">Phòng ban đề xuất:</td><td>${escapeHtml(p.dept || '')}</td></tr>
+      <tr><td class="as-label">Mức áp dụng:</td><td>${escapeHtml(itPriceTierLabel(p.priceTier))}</td></tr>
+      <tr><td class="as-label">Đơn vị áp dụng giá bán buôn:</td><td>${p.wholesaleApplyUnit ? escapeHtml(p.wholesaleApplyUnit) : '—'}</td></tr>
+      <tr><td class="as-label">Siêu thị đề xuất:</td><td>${itPriceStoreScopeLabel(p.storeScope)}</td></tr>
+      <tr><td class="as-label">Ngành hàng áp dụng:</td><td>${p.nganhHang && p.nganhHang.length ? escapeHtml(itPriceNganhHangNames(p.nganhHang).join(', ')) : '—'}</td></tr>
+      <tr><td class="as-label">Lý do điều chỉnh:</td><td>${p.reason ? escapeHtml(p.reason) : '—'}</td></tr>
+      ${p.masterListName ? `<tr><td class="as-label">Mẫu Giá áp dụng:</td><td>${escapeHtml(p.masterListName)}</td></tr>` : ''}
+      <tr><td class="as-label">Ngày áp dụng / Hết hiệu lực:</td><td>${p.effectiveDate ? escapeHtml(p.effectiveDate) : '—'} → ${escapeHtml(itPriceExpiryLabel(p))}</td></tr>
+    </table>
+    <div class="as-section-title">Danh Sách Mặt Hàng Đã Phê Duyệt</div>
+    <table class="as-items-table">
+      <thead><tr><th>STT</th>${columnLabels.map(col => `<th>${escapeHtml(col.label)}</th>`).join('')}</tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: p.code,
+    title: 'Phiếu Phê Duyệt Giá Bán Buôn',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(p.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người đề xuất',
+    requesterName: p.creatorName,
+    requesterUsername: p.creator,
+    requesterTime: p.createdAt ? `Tạo lúc: ${escapeHtml(p.createdAt)}` : '',
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+function viewItPriceWholesaleApprovalSlip(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  if (p.priceType !== 'WHOLESALE') return alert('Phiếu Phê Duyệt hiện chỉ áp dụng cho đề xuất giá Bán Buôn.');
+  if (p.status !== 'APPROVED') return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đề xuất đã được phê duyệt hoàn tất.');
+  if (!canAccessItPriceWholesaleApprovalSlip(currentUser, p)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của đề xuất này (chỉ người tạo, người đã từng duyệt hoặc admin).');
+
+  document.getElementById('viewModalTitle').innerText = `🖨️ Phiếu Phê Duyệt Giá Bán Buôn (${p.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${p.dept} | Người đề xuất: ${p.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildItPriceWholesaleApprovalSlipHTML(p);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadItPriceWholesaleApprovalSlip(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  if (p.priceType !== 'WHOLESALE') return alert('Phiếu Phê Duyệt hiện chỉ áp dụng cho đề xuất giá Bán Buôn.');
+  if (p.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đề xuất đã được phê duyệt hoàn tất.');
+  if (!canAccessItPriceWholesaleApprovalSlip(currentUser, p)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của đề xuất này (chỉ người tạo, người đã từng duyệt hoặc admin).');
+
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Giá Bán Buôn - ${escapeHtml(p.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildItPriceWholesaleApprovalSlipHTML(p)}</body></html>`);
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyetGiaBanBuon_${p.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // Phạm vi Xem: admin/itPriceSupport (đội hỗ trợ giá, 10/2026 tách khỏi itManage) xem hết, người đề
@@ -1908,6 +2037,16 @@ function renderItPriceModalControls(p) {
         <p class="text-gray-400">Tệp bổ sung sẽ được thêm vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
         <button type="button" id="itPriceSupplementSendBtn" data-op="submitItPriceSupplementAction" data-arg0="${p.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
       </div>`;
+  }
+
+  // "Phiếu Phê Duyệt Giá Bán Buôn" (11/2026) — CHỈ Bán Buôn, chỉ sau khi đã APPROVED hoàn tất, cho
+  // người tạo/đã từng duyệt bất kỳ bước nào/admin (canAccessItPriceWholesaleApprovalSlip(), mirror ĐÚNG
+  // khuôn canAccessOperationOrderApprovalSlip() ở module-vanhanh.js).
+  if (p.priceType === 'WHOLESALE' && p.status === 'APPROVED' && canAccessItPriceWholesaleApprovalSlip(currentUser, p)) {
+    html += `<div class="mt-2 flex gap-2 flex-wrap">
+      <button type="button" data-op="viewItPriceWholesaleApprovalSlip" data-arg0="${p.id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">🖨️ Xem Phiếu Phê Duyệt</button>
+      <button type="button" data-op="downloadItPriceWholesaleApprovalSlip" data-arg0="${p.id}" class="bg-indigo-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-600">⬇️ Tải Phiếu Phê Duyệt</button>
+    </div>`;
   }
 
   if (currentUser.perms?.admin) {
