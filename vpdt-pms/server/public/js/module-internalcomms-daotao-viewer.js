@@ -134,13 +134,37 @@
       outer.appendChild(tabBar);
       outer.appendChild(sheetsWrap);
 
+      // excelNumFmtDecimalPlaces()/cellText() (11/2026, yêu cầu người dùng "giá bán buôn khi xem trên web
+      // thì định dạng phải giống hệt excel") — bộ xem Excel CHUNG này trước đây chỉ đọc cell.value, bỏ qua
+      // hẳn cell.numFmt (định dạng số của Excel, VD "0.00%"/"#,##0") nên cột % hiện số thô kiểu
+      // "0.25205479452054796" thay vì "25.21%" như Excel thật hiển thị. Nay đọc numFmt để quy đổi lại đúng
+      // 3 nhóm hay gặp nhất (%, số có phân cách nghìn, ngày tháng) — áp dụng cho MỌI module dùng chung bộ
+      // xem này (Tài Liệu, Vận Hành/Phê Duyệt Giá, Hợp Đồng...), không riêng 1 module nào.
+      const excelNumFmtDecimalPlaces = (fmt) => {
+        const m = /\.([0#]+)/.exec(fmt || '');
+        return m ? m[1].length : 0;
+      };
+      const isExcelDateNumFmt = (fmt) => /[dmy]/i.test(fmt || '') && !/[#0]/.test(fmt || '');
       const cellText = (cell) => {
         let v = cell.value;
+        const numFmt = cell.numFmt || '';
         if (v && typeof v === 'object') {
           if (Array.isArray(v.richText)) v = v.richText.map(t => t.text).join('');
           else if (v.result !== undefined) v = v.result;
           else if (v.text !== undefined) v = v.text;
-          else v = '';
+          else if (!(v instanceof Date)) v = '';
+        }
+        if (v instanceof Date && isExcelDateNumFmt(numFmt)) {
+          const dd = String(v.getDate()).padStart(2, '0');
+          const mm = String(v.getMonth() + 1).padStart(2, '0');
+          return `${dd}/${mm}/${v.getFullYear()}`;
+        }
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          if (/%/.test(numFmt)) return `${(v * 100).toFixed(excelNumFmtDecimalPlaces(numFmt))}%`;
+          if (/#,##0|0,000/.test(numFmt)) {
+            const decimals = excelNumFmtDecimalPlaces(numFmt);
+            return v.toLocaleString('vi-VN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+          }
         }
         return v == null ? '' : String(v);
       };

@@ -12926,17 +12926,30 @@ const APPROVAL_SLIP_CSS = `
         .approval-slip .as-comment-meta { margin-top: 4px; font-size: 11px; color: #666; text-align: right; }
         .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .approval-slip { padding: 0; } }
+        /* "as-landscape" (11/2026, yêu cầu người dùng "phiếu phê duyệt khi in thì responsive khớp 1 trang
+           chiều ngang") — BỔ SUNG THUẦN, chỉ áp dụng khi phiếu tự gắn thêm class "as-landscape" (hiện chỉ
+           Phiếu Phê Duyệt Giá Bán Buôn — xem buildItPriceWholesaleApprovalSlipHTML()) để không ảnh hưởng
+           các Phiếu Phê Duyệt khác (Xe, Hợp Đồng, VPP...) vẫn dùng mặc định .approval-slip ở trên, không
+           có class này thì không khớp selector nào bên dưới. Dùng CSS "named page" để chỉ đổi khổ in của
+           riêng phiếu này, không đụng @page mặc định của cả ứng dụng. */
+        .approval-slip.as-landscape { max-width: 100%; }
+        .approval-slip.as-landscape table.as-items-table { font-size: 10.5px; }
+        .approval-slip.as-landscape table.as-items-table th, .approval-slip.as-landscape table.as-items-table td { padding: 3px 4px; }
+        @media print {
+          .approval-slip.as-landscape { max-width: none; width: 100%; page: approval-slip-landscape; }
+        }
+        @page approval-slip-landscape { size: landscape; margin: 10mm; }
 `;
 function buildApprovalSlipShellHTML(opts) {
   const {
     formCode = '', title, approvedNote, bodyHTML,
     requesterRoleLabel = 'Người đề nghị', requesterName, requesterUsername, requesterTime,
-    signatureColumnsHTML, footerNote
+    signatureColumnsHTML, footerNote, extraClass = ''
   } = opts;
   const requesterJobTitle = requesterUsername ? getUserJobTitle(requesterUsername) : '';
 
   return `
-    <div class="approval-slip">
+    <div class="approval-slip${extraClass ? ' ' + escapeHtml(extraClass) : ''}">
       <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>HCRC WORKSPACE</div>
       <div class="as-content">
         <div class="as-header">

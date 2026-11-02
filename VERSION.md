@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.76 (2026-11): Phê Duyệt Giá Bán Buôn — 4 fix phiếu/định dạng hiển thị (theo ảnh người dùng gửi)
+
+Người dùng gửi kèm 2 ảnh chụp lỗi thực tế + yêu cầu *"phân tích chuyên sâu + đưa phương án + gửi ảnh
+demo tôi sẽ xác nhận thực hiện"* — đã demo trước/sau (Phiếu Phê Duyệt) rồi mới triển khai sau khi người
+dùng xác nhận cả 4 mục:
+
+- **(a) Modal xem file Excel CHUNG hiển thị đúng định dạng như Excel thật** — `renderExcelProtected()`
+  (`module-internalcomms-daotao-viewer.js`, dùng chung cho MỌI module có đính kèm Excel, không riêng Giá
+  Bán Buôn) trước đây chỉ đọc `cell.value`, bỏ qua hẳn `cell.numFmt` nên cột định dạng %/số phân cách
+  nghìn/ngày tháng hiện số thô (VD "0.25205479452054796" thay vì "25.21%" như ảnh người dùng gửi). Nay
+  đọc `cell.numFmt` để quy đổi lại đúng 3 nhóm: % (nhân 100 + số lẻ đúng theo numFmt), số có phân cách
+  nghìn (`#,##0`...), ngày tháng (`dd/mm/yyyy` kiểu VN) — áp dụng ngay cho mọi nơi dùng chung bộ xem này.
+- **(b) Làm tròn 2 số thập phân (web + bản in)** — `formatItPriceCellValue()` (`module-itsupport-price.js`):
+  cột tiền/số lượng nay ép `maximumFractionDigits: 2` (trước đây `toLocaleString` mặc định có thể ra tới
+  3 số lẻ); MỌI cột số khác chưa thuộc 3 nhóm %/tiền/số lượng (VD "Tỷ lệ %", "CP"...) nếu giá trị có dấu
+  chấm thì cũng làm tròn còn đúng 2 số — mã hàng/STT dạng số nguyên không có dấu chấm nên không bị đụng.
+  Bản in dùng chung đúng 1 hàm này nên tự động áp dụng theo. File Excel gốc (tải về) giữ nguyên hiện
+  trạng, chỉ đổi cách HIỂN THỊ trên web/bản in.
+- **(c) Phiếu Phê Duyệt in khổ ngang, vừa 1 trang chiều ngang** — thêm class `as-landscape` (CSS "named
+  page" `@page approval-slip-landscape { size: landscape; }`, gated theo class, bổ sung THUẦN vào
+  `APPROVAL_SLIP_CSS` dùng chung, `core.js`) — CHỈ gắn cho Phiếu Phê Duyệt Giá Bán Buôn
+  (`buildItPriceWholesaleApprovalSlipHTML()` truyền `extraClass: 'as-landscape'` qua
+  `buildApprovalSlipShellHTML()`), không đụng các Phiếu Phê Duyệt khác (Xe/Hợp Đồng/VPP...) vẫn dùng mặc
+  định khổ dọc như cũ (đã test riêng `buildCarApprovalSlipHTML()` để xác nhận không bị ảnh hưởng).
+- **(d) Hết dup 2 cột STT trên Phiếu Phê Duyệt** — gốc lỗi: phiếu luôn tự sinh 1 cột STT (`idx+1`), nhưng
+  nếu Mẫu Giá/file đã có sẵn cột tên "STT" thì cột đó cũng được đọc nguyên văn vào bảng → ra 2 cột STT
+  trùng y hệt (đúng ảnh người dùng gửi). Nay lọc bỏ mọi cột có nhãn chuẩn hoá (bỏ dấu/hoa-thường) = "stt"
+  khỏi bảng mặt hàng trước khi dựng phiếu. Đồng thời thêm cảnh báo (không chặn) ngay ở bước "Xem trước
+  nội dung tệp" khi upload — gợi ý người dùng tự dọn cột "STT" thừa khỏi Mẫu Giá/file gốc cho gọn.
+- Test: viết mới `test-itprice-wholesale-slip-fixes-nov2026.js` (17/17 pass, có dựng file `.xlsx` thật
+  qua `exceljs` để kiểm `renderExcelProtected()` đọc đúng numFmt) + chạy lại toàn bộ 8 test liên quan
+  Phê Duyệt Giá/Phiếu Phê Duyệt dùng chung (Xe/Hợp Đồng/Đơn Hàng/VPP/bước duyệt có ý kiến...) — không có
+  hồi quy.
 
 ## v28.75 (2026-11): Onboarding/Offboarding — bắt buộc gán Phụ Trách lúc Tạo + bỏ email gửi cả phòng ban
 

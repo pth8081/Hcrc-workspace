@@ -1851,6 +1851,25 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     bảng mặt hàng trong modal Chi Tiết đề xuất, và bảng mã hàng trong Phiếu
     Phê Duyệt ở mục ngay trên — **chỉ đổi cách HIỂN THỊ, không đụng tới dữ
     liệu đã lưu trong hệ thống/file gốc**.
+  - **4 cải tiến thêm cho Phiếu Phê Duyệt Bán Buôn (MỚI 11/2026)**: (1) mọi
+    cột số (kể cả cột chưa thuộc 3 nhóm %/Đơn Giá/Số Lượng ở trên, VD "Tỷ Lệ
+    %"/"CP"...) nay làm tròn còn ĐÚNG 2 số thập phân khi hiển thị trên web
+    lẫn bản in (file Excel gốc tải về vẫn giữ nguyên hiện trạng, không đổi);
+    (2) phiếu khi in tự chuyển khổ NGANG (landscape) để vừa 1 trang chiều
+    ngang với bảng nhiều cột, không ảnh hưởng tới khổ in của các Phiếu Phê
+    Duyệt khác (Xe/Hợp Đồng/VPP...) vẫn in khổ dọc như cũ; (3) hết lỗi hiện
+    trùng 2 cột "STT" (xảy ra khi Mẫu Giá/file bảng giá đã có sẵn 1 cột tên
+    "STT" — phiếu tự lọc bỏ cột STT đọc từ file, chỉ giữ cột STT tự đánh số);
+    (4) bước "Xem trước nội dung tệp" lúc tải file bảng giá lên nay tự hiện
+    cảnh báo (không chặn nộp) nếu phát hiện cột "STT" thừa, gợi ý dọn khỏi
+    Mẫu Giá/file gốc cho gọn.
+  - **Modal xem file Excel đính kèm (mọi module, không riêng Giá) hiển thị
+    đúng định dạng Excel (MỚI 11/2026)**: bấm "👁️ Xem" trên BẤT KỲ file Excel
+    đính kèm nào trong hệ thống (Giá, Tài Liệu, Hợp Đồng...) nay hiện đúng
+    định dạng gốc trong Excel — cột % hiện đúng dạng phần trăm (thay vì số
+    thô dài như `0.252...`), cột có định dạng phân cách nghìn hiện đúng dấu
+    chấm ngăn cách, cột ngày tháng hiện đúng `dd/mm/yyyy` — thay vì hiện
+    nguyên giá trị thô đọc được từ ô Excel như trước.
   - **"🏪 QT Giá Bán Buôn (Siêu Thị)" — người duyệt Phê Duyệt Giá Bán Buôn
     (10/2026, CÙNG CƠ CHẾ "🏬 Quy Trình Đặt Hàng Siêu Thị" ở mục 4.4 Vận Hành,
     xem đầy đủ cách khớp Chức danh/Người cụ thể/Siêu Thị Phụ Trách ở đó)**:
