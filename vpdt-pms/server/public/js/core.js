@@ -13330,6 +13330,48 @@ new MutationObserver((mutations) => {
     });
   }
 }).observe(document.body, { childList: true, subtree: true });
+// makeModalDraggable(panelId, handleSelector) — C1 (11/2026, yêu cầu QA "di dời tự do được bảng Thêm
+// Công Việc Gốc" — modal cố định giữa màn hình che mất bảng danh sách phía sau). Hệ thống trước giờ
+// KHÔNG có cơ chế kéo-thả nào — hàm MỚI dùng chung, nhưng ở đợt này CHỈ gọi cho đúng 1 modal
+// (#operationWorkItemFormModal, xem openOperationWorkItemFormModal() module-vanhanh.js), không áp dụng
+// sẵn cho modal khác. `panelId`: id của panel TRẮNG thật sự di chuyển được (không phải lớp overlay
+// `fixed inset-0` bọc ngoài — overlay vẫn đứng yên che nền, chỉ panel bên trong di chuyển bằng
+// transform). `handleSelector`: CSS selector của phần tử bên trong panel dùng làm "tay cầm" kéo (VD
+// thanh tiêu đề). Dịch chuyển bằng `el.style.transform` gán qua JS property (KHÔNG phải `style="..."`
+// trong chuỗi HTML — đây là ngoại lệ hợp lệ cho giá trị ĐỘNG LIÊN TỤC lúc kéo chuột, không sinh HTML
+// mới nên không vi phạm CSP style-src). Gọi lại hàm này mỗi lần modal mở ra sẽ tự RESET vị trí về 0,0
+// (xoá transform cũ) trước khi gắn lại listener — tránh lệch vị trí tồn đọng từ lần mở trước + tránh
+// gắn trùng nhiều listener nếu modal mở đi mở lại nhiều lần (dùng cờ `dataset.draggableBound`).
+function makeModalDraggable(panelId, handleSelector) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  panel.style.transform = '';
+  panel.dataset.dragX = '0';
+  panel.dataset.dragY = '0';
+  if (panel.dataset.draggableBound === '1') return;
+  panel.dataset.draggableBound = '1';
+  const handle = panel.querySelector(handleSelector);
+  if (!handle) return;
+  handle.classList.add('cursor-move');
+  let dragging = false;
+  let startMouseX = 0, startMouseY = 0, startX = 0, startY = 0;
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button, a, input, select, textarea')) return; // nút đóng/thao tác trong header vẫn bấm được bình thường
+    dragging = true;
+    startMouseX = e.clientX; startMouseY = e.clientY;
+    startX = Number(panel.dataset.dragX || 0); startY = Number(panel.dataset.dragY || 0);
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const nextX = startX + (e.clientX - startMouseX);
+    const nextY = startY + (e.clientY - startMouseY);
+    panel.dataset.dragX = String(nextX);
+    panel.dataset.dragY = String(nextY);
+    panel.style.transform = `translate(${nextX}px, ${nextY}px)`;
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+}
 function bindCspDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;
