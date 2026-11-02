@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.62 (2026-11): [Khẩn] Fix nút "Lưu Cấu Hình API Tồn Kho" vô hình (thiếu build CSS)
+
+Phát hiện khi chuẩn bị ảnh demo cho đề xuất gộp 2 tab "Cấu Hình API" (người dùng yêu cầu "kiểm tra rất
+kỹ, đảm bảo không ảnh hưởng module khác") — đo bằng `getComputedStyle()` qua Playwright thay vì chỉ nhìn
+ảnh demo, phát hiện nút submit "Lưu Cấu Hình API Tồn Kho" (panel mới thêm ở v28.61) có
+`background-color: transparent` + `color: white` → **vô hình hoàn toàn** trên nền sáng, dù vẫn tồn tại
+trong DOM đúng vị trí (bấm Enter trong form hoặc bấm đúng vào vùng đó vẫn hoạt động, chỉ là KHÔNG NHÌN
+THẤY được để bấm).
+
+- **Nguyên nhân**: `public/tailwind.css` (file CSS đã biên dịch sẵn, KHÔNG tự build lại khi server khởi
+  động — xem `npm run build:css`) chưa được chạy lại sau khi v28.61 thêm các class `bg-lime-*`/
+  `border-lime-*`/`text-lime-*`/`hover:bg-lime-800` mới vào `systemSection.html` — đúng lớp lỗi đã ghi
+  chú sẵn trong `tailwind.config.js` ("LỖI ĐÃ GẶP LẦN 2"), lần này do chính tôi bỏ sót bước
+  `npm run build:css` sau khi sửa HTML, không phải lỗi cấu hình `content` scan (file fragment đã nằm
+  trong danh sách quét từ trước).
+- **Fix**: chạy `npm run build:css` để biên dịch lại — xác nhận diff THUẦN CỘNG THÊM (không xoá/sửa bất
+  kỳ rule nào đã có, +523 byte, đúng các class lime mới), không đụng tới bất kỳ module nào khác.
+- **Kiểm tra sau fix**: `getComputedStyle()` xác nhận nút giờ có nền xanh lime thật + chữ trắng rõ ràng;
+  chạy lại TOÀN BỘ 7 bộ test CSP (`test-asset-version-csp`, `test-csp-deep-interaction`,
+  `test-csp-full-audit` — quét 42 điểm điều hướng không có vi phạm nào, `test-csp-nested-root-double-
+  dispatch`, `test-csp-submit-double-submit-lock`, `test-nghiepvu-csp`, `test-vanhanh-itprice-chitiet-
+  csp`) đều pass; chụp ảnh đối chứng Dashboard + panel "Cấu Hình API Đơn Hàng" (dsmart16, file CSS dùng
+  chung nhưng không đổi class) xác nhận không đổi gì — đúng yêu cầu "mất thời gian được nhưng đảm bảo
+  không ảnh hưởng module khác đang chạy".
+- **Bài học quy trình**: từ nay mỗi lần thêm class Tailwind MỚI vào bất kỳ file HTML/JS nào, BẮT BUỘC
+  chạy `npm run build:css` trước khi coi là xong việc, không chỉ dựa vào mắt nhìn ảnh demo/screenshot
+  (ảnh demo trước đó render đúng icon/layout/text nên dễ bị bỏ qua lỗi màu nền trong suốt nếu không đo
+  bằng công cụ).
 
 ## v28.61 (2026-11): Cấu Hình API Tồn Kho (BRGMART) qua giao diện web — không còn bắt buộc .env
 
