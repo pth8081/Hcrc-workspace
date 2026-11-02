@@ -60,6 +60,7 @@ const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
 const shelfStockRoutes = require('./routes/shelfStock');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
+const inventorySyncAdminRoutes = require('./routes/inventorySyncAdmin');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
@@ -227,6 +228,7 @@ app.use('/api/stores', storeCatalogImportRoutes);
 app.use('/api/shelf-stock', shelfStockRoutes);
 app.use('/api/operation', operationImportRoutes);
 app.use('/api/operation', operationOrderApiSyncRoutes);
+app.use('/api/inventory', inventorySyncAdminRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
 // /api/admin/external-api-keys: router tự áp requireAuth + kiểm admin bên trong (khớp routes/adminCatalog.js).
 app.use('/api/admin/external-api-keys', externalAuthAdminRoutes);

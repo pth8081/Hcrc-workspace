@@ -3030,6 +3030,17 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   BRGMART cấp, KHÔNG tự động đoán/khớp). Siêu thị chưa cấu hình ô này thì
   sub-tab "📊 Đối Chiếu" + picker "🔎 Chọn Từ Tồn Kho Hệ Thống" tự ẩn/báo lỗi
   rõ, các sub-tab khác của Kiểm Soát Hàng Hóa không bị ảnh hưởng.
+- **Cấu hình kết nối API BRGMART qua giao diện web (MỚI v28.61)**: Hệ Thống
+  → Quản Trị → "🧺 Cấu Hình API Tồn Kho" (tab con cạnh "🔌 Cấu Hình API Đơn
+  Hàng" — 2 tích hợp hoàn toàn khác nhau, đừng nhầm: Đơn Hàng ĐẨY dữ liệu RA
+  dsmart16, Tồn Kho LẤY dữ liệu VÀO từ BRGMART). Admin tự nhập Base URL + API
+  Key (API Key write-only, mã hoá khi lưu, không xem lại được), bấm "Lưu Cấu
+  Hình API Tồn Kho" rồi "🔄 Đồng Bộ Ngay" để chạy thử ngay không cần đợi chu
+  kỳ 20 phút. Trước đây tính năng này CHỈ cấu hình được qua file `.env` trên
+  server (`BRGMART_INVENTORY_API_BASE_URL`/`BRGMART_INVENTORY_API_KEY`) —
+  cách cũ vẫn còn tác dụng làm "đường lùi": nếu để TẮT ở màn này (hoặc chưa
+  từng cấu hình), hệ thống tự rơi về đọc `.env` như trước, không cần đổi gì
+  thêm cho các server đã triển khai theo cách cũ.
 - **An toàn dữ liệu**: server luôn tự lấy siêu thị (`dept`) từ tài khoản
   đăng nhập, KHÔNG tin bất kỳ mã siêu thị nào client gửi lên — nhân viên 1
   siêu thị không thể ghi nhận/khai báo/sửa quầy kệ hay ngưỡng tồn cho siêu

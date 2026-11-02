@@ -901,6 +901,23 @@ const DEFAULTS = {
     lastSyncStatus: null,
     lastSyncMessage: null
   },
+  // inventoryApiConfig (Kiểm Soát Hàng Hóa > Đối Chiếu Kệ & Tồn Kho, 11/2026 — theo yêu cầu người dùng
+  // "sao không cho cấu hình API tồn kho trên app, bắt buộc .env tôi không chủ động được") — cấu hình QUA
+  // UI cho API BRGMART (jobs/inventorySync.js/lib/inventoryApiClient.js), cùng khuôn mã hoá 2 chiều
+  // (apiKeyEnc, lib/emailCrypto.js) + lọc khỏi mọi response đọc như operationOrderApiConfig.headerValueEnc
+  // ở trên — xem sanitizeInventoryApiConfig()/prepareInventoryApiConfigForSave() ở routes/data.js. KHÁC
+  // operationOrderApiConfig ở chỗ đây là tích hợp CHIỀU LẤY VÀO (pull) — jobs/inventorySync.js vẫn giữ
+  // đường lùi đọc BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY từ .env nếu key này chưa được
+  // bật qua UI (enabled=false hoặc thiếu apiKeyEnc), để không phá các môi trường đã cấu hình theo cách
+  // cũ trước đợt này.
+  inventoryApiConfig: {
+    enabled: false,
+    baseUrl: '',
+    apiKeyEnc: null,
+    lastSyncAt: null,
+    lastSyncStatus: null,
+    lastSyncMessage: null
+  },
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

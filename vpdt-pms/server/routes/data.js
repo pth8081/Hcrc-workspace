@@ -117,6 +117,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // nên phải admin-only ghi, cùng lý do bảo mật với emailConfig (không cho user thường tự ghi thẳng
   // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
   'operationOrderApiConfig',
+  // inventoryApiConfig: cấu hình đồng bộ Tồn Kho Hệ Thống (Kiểm Soát Hàng Hóa) từ API BRGMART (Base URL
+  // + API Key) — chứa bí mật (apiKeyEnc, mã hoá bằng lib/emailCrypto.js), admin-only cùng lý do
+  // operationOrderApiConfig ở trên.
+  'inventoryApiConfig',
   // shelfThresholdDigestSchedule: chu kỳ gửi báo cáo tổng hợp Ngưỡng Tồn (Kiểm Soát Hàng Hóa) — không
   // chứa bí mật, nhưng vẫn admin-only vì đổi lịch gửi ảnh hưởng TOÀN BỘ siêu thị (không phải cấu hình
   // riêng của 1 cửa hàng trưởng) — cùng mức "cấu hình vận hành toàn hệ thống" với operationOrderApiConfig.
@@ -367,7 +371,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   // đây không để lại dòng nhật ký hệ thống nào nếu gọi thẳng API (bỏ qua giao diện).
   'itPriceWholesaleStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
-  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'shelfThresholdDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
+  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'inventoryApiConfig', 'shelfThresholdDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
   // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
   'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
@@ -551,6 +555,16 @@ function sanitizeOperationOrderApiConfig(config, isAdmin) {
   if (!config || typeof config !== 'object') return config;
   const { headerValueEnc, ...rest } = config;
   return { ...rest, hasHeaderValue: !!headerValueEnc };
+}
+
+// inventoryApiConfig.apiKeyEnc (API Key BRGMART, mã hoá bằng lib/emailCrypto.js) — cùng khuôn write-only
+// như operationOrderApiConfig.headerValueEnc ngay trên (chỉ trả hasApiKey, không bao giờ trả giá trị
+// thật kể cả cho admin).
+function sanitizeInventoryApiConfig(config, isAdmin) {
+  if (!isAdmin) return {};
+  if (!config || typeof config !== 'object') return config;
+  const { apiKeyEnc, ...rest } = config;
+  return { ...rest, hasApiKey: !!apiKeyEnc };
 }
 
 // isCurrentlyAdmin()/isCurrentlyAdminOrUniformManage(): chuyển sang lib/adminAuth.js (dùng chung với
@@ -1043,6 +1057,22 @@ async function prepareOperationOrderApiConfigForSave(payload) {
   }
   const prior = await getAppDataValue('operationOrderApiConfig');
   return { ...rest, headerValueEnc: prior?.headerValueEnc };
+}
+
+// apiKeyPlain: cùng quy ước write-only như headerValuePlain ở trên — có giá trị mới thì mã hoá lại, để
+// trống thì giữ nguyên apiKeyEnc đã lưu (không xoá mất cấu hình cũ chỉ vì admin sửa Base URL/enabled mà
+// không gõ lại API Key).
+async function prepareInventoryApiConfigForSave(payload) {
+  const { apiKeyPlain, apiKeyEnc: _ignoredFromClient, ...rest } = payload || {};
+  if (apiKeyPlain) {
+    try {
+      return { ...rest, apiKeyEnc: encryptSecret(apiKeyPlain) };
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu API Key: ${err.message}`);
+    }
+  }
+  const prior = await getAppDataValue('inventoryApiConfig');
+  return { ...rest, apiKeyEnc: prior?.apiKeyEnc };
 }
 
 // Bước 8d — checklistSubmissions: canViewChecklistSubmission() (lib/recordViewScope.js) có 3 nhánh —
@@ -1627,6 +1657,7 @@ router.get('/', async (req, res) => {
     if (data.permGroups) data.permGroups = sanitizePermGroupsForViewer(data.permGroups, !!req.freshUser?.perms?.admin);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     if (data.operationOrderApiConfig) data.operationOrderApiConfig = sanitizeOperationOrderApiConfig(data.operationOrderApiConfig, !!req.freshUser?.perms?.admin);
+    if (data.inventoryApiConfig) data.inventoryApiConfig = sanitizeInventoryApiConfig(data.inventoryApiConfig, !!req.freshUser?.perms?.admin);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     if (data.attendanceClockApiKeys) data.attendanceClockApiKeys = sanitizeAttendanceClockApiKeys(data.attendanceClockApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
@@ -2152,6 +2183,7 @@ router.get('/:key', async (req, res) => {
     if (key === 'permGroups') return res.json(sanitizePermGroupsForViewer(value, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
     if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value, !!req.freshUser?.perms?.admin));
+    if (key === 'inventoryApiConfig') return res.json(sanitizeInventoryApiConfig(value, !!req.freshUser?.perms?.admin));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     if (key === 'attendanceClockApiKeys') return res.json(sanitizeAttendanceClockApiKeys(value, !!req.freshUser?.perms?.admin));
     res.json(value);
@@ -2310,6 +2342,7 @@ router.post('/:key', async (req, res) => {
     }
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
+    if (key === 'inventoryApiConfig') value = await prepareInventoryApiConfigForSave(value);
     if (key === 'shelfThresholdDigestSchedule') assertShelfThresholdDigestScheduleSafeToSave(value);
     // Lọc lại đúng subset SENSITIVE_FIELDS hợp lệ — xem chú thích đầy đủ tại entry NON_ADMIN_GATED_KEYS
     // tương ứng ở trên (LỖI ĐÃ VÁ, rà soát bảo mật chuyên sâu lần 2, mức Cao).

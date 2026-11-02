@@ -127,7 +127,7 @@ async function main() {
     delete process.env.BRGMART_INVENTORY_API_KEY;
     delete require.cache[require.resolve('../jobs/inventorySync')];
     const { syncSystemInventory, isInventoryApiConfigured } = require('../jobs/inventorySync');
-    assert.strictEqual(isInventoryApiConfigured(), false);
+    assert.strictEqual(await isInventoryApiConfigured(), false);
     const result = await syncSystemInventory();
     assert.strictEqual(result.skipped, true);
   });

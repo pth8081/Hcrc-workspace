@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**28.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.61 (2026-11): Cấu Hình API Tồn Kho (BRGMART) qua giao diện web — không còn bắt buộc .env
+
+Theo phản hồi người dùng ("sao không cho cấu hình API tồn kho trên ứng dụng, bắt buộc phải vào file
+.env, tôi không chủ động được"): "Đối Chiếu Tồn Kho Hệ Thống" (Vận Hành → Kiểm Soát Hàng Hóa, API
+BRGMART) trước đây CHỈ cấu hình được qua 2 biến môi trường `BRGMART_INVENTORY_API_BASE_URL`/
+`BRGMART_INVENTORY_API_KEY` trong `.env` — không có màn admin nào, khác hẳn "Cấu Hình API" (dsmart16,
+Đơn Hàng) vốn đã cho admin tự nhập qua UI từ trước.
+
+- **Màn admin mới "🧺 Cấu Hình API Tồn Kho"** (Hệ Thống → Quản Trị, cạnh "🔌 Cấu Hình API Đơn Hàng" —
+  đổi tên tab cũ từ "Cấu Hình API" để tách biệt rõ 2 tích hợp): admin tự nhập Base URL + API Key, API
+  Key mã hoá 2 chiều khi lưu (write-only, không bao giờ trả ra kể cả cho admin — cùng khuôn Giá Trị
+  Header của panel dsmart16), có nút "🔄 Đồng Bộ Ngay" chạy thủ công ngay lập tức.
+- **`jobs/inventorySync.js`**: ưu tiên đọc cấu hình UI (AppData `inventoryApiConfig`) nếu đã Bật; tự
+  rơi về `.env` nếu chưa cấu hình qua UI — giữ nguyên tương thích ngược cho môi trường cũ.
+- **Chặn SSRF cho Base URL nguồn UI** (`lib/ssrfGuard.js`, mới — tách từ logic đã có ở
+  `jobs/operationOrderApiSync.js`, không sửa file đó): chặn mọi địa chỉ nội bộ/loopback/link-local, chỉ
+  cho http/https — admin bị chiếm tài khoản không thể lợi dụng đổi Base URL để dò quét/rò rỉ API Key
+  vào mạng nội bộ. Base URL đọc từ `.env` KHÔNG bị áp lớp này (người triển khai server gõ trực tiếp,
+  mức tin cậy khác).
+- Route mới `POST /api/inventory/sync-now` (admin-only, rate-limit) cho nút "Đồng Bộ Ngay".
+- Thêm entry Hướng Dẫn (`sysInvApi`, module-nghiepvu.js) + cập nhật entry `sysOpApi` theo tên mới.
+
+Test: 18 kịch bản mới (`test-inventory-api-config.js` — admin-gate/sanitize/write-only apiKeyPlain,
+ưu tiên nguồn UI hơn .env, SSRF guard chặn Base URL nội bộ, tự rơi về .env khi UI chưa bật) + cập nhật
+`test-inventory-recon.js` theo API async mới. Demo ảnh thật qua Chromium xác nhận form hoạt động đúng
+(`tests/demo-inventory-api-config.js`).
+
+**Vá thêm cùng đợt (người dùng báo "Kiểm Soát Hàng Hóa" không có trên Hướng Dẫn dù đã yêu cầu cập
+nhật")**: mục "📋 Kiểm Soát Hàng Hóa" (Vận Hành) đã được thêm vào `NGHIEP_VU_NAV` + viết đủ nội dung
+`NGHIEP_VU_DOCS` từ v28.41, nhưng quên nối vào `NV_KEY_ACCESS_FN` — `canViewNVItem()` fail-closed nên
+mục này ẨN với MỌI tài khoản (kể cả admin) từ lúc thêm tới giờ, không hề liên quan tới nội dung tài
+liệu (đã viết đủ, không phải thiếu). Đã nối `vanHanhShelf -> canViewShelfReportClient` (đúng điều kiện
+thật đang gác nút sidebar `btnVanHanhShelfNav`). Thêm 3 kịch bản test regression vào
+`test-nghiepvu.js` (168/168 pass, cùng 6/6 CSP + 9/9 click đã chạy lại không regression).
 
 ## v28.60 (2026-11): Form làm bài VSATTP — ô "Mô tả nội dung không phù hợp" cũng xuống dòng được
 

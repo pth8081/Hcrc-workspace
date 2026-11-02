@@ -186,7 +186,7 @@ router.delete('/records/:id', async (req, res) => {
 // tác (tránh người dùng bấm đi bấm lại làm dội lượt gọi vượt giới hạn tần suất của đối tác).
 router.get('/system-inventory', async (req, res) => {
   try {
-    if (!isInventoryApiConfigured()) {
+    if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
     }
     const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};

@@ -186,6 +186,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
   document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
   document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
+  document.getElementById('adminSubInvApi').classList.toggle('hidden', subTab !== 'INVAPI');
   document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
   document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
   document.getElementById('adminSubShelfDigest').classList.toggle('hidden', subTab !== 'SHELFDIGEST');
@@ -198,12 +199,14 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubInvApi').className = subTab === 'INVAPI' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubShelfDigest').className = subTab === 'SHELFDIGEST' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
+  if (subTab === 'INVAPI') loadInventoryApiConfigToForm();
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
   if (subTab === 'SHELFDIGEST') loadShelfThresholdDigestScheduleToForm();
@@ -300,7 +303,7 @@ async function saveOperationOrderApiConfig(e) {
   if (!saved) { DB.operationOrderApiConfig = prevConfig; return; }
   document.getElementById('opApiHeaderValuePlain').value = '';
   logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');
-  alert('✅ Đã lưu Cấu Hình API thành công!');
+  alert('✅ Đã lưu Cấu Hình API Đơn Hàng thành công!');
 }
 
 async function syncOperationOrdersNow() {
@@ -315,6 +318,71 @@ async function syncOperationOrdersNow() {
       statusEl.textContent = `✅ ${body.message || 'Đã đồng bộ xong.'}`;
     } else {
       statusEl.textContent = `⛔ ${body.error || body.message || 'Đồng bộ thất bại'}`;
+    }
+  } catch (err) {
+    statusEl.textContent = '⛔ Không thể kết nối tới máy chủ để đồng bộ: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---------- Cấu Hình API Tồn Kho — Đối Chiếu Kệ & Tồn Kho (BRGMART, jobs/inventorySync.js) ----------
+// DB.inventoryApiConfig đã có sẵn từ GET /api/data (server tự strip apiKeyEnc, xem
+// sanitizeInventoryApiConfig() ở routes/data.js) — cùng khuôn write-only như Cấu Hình API (dsmart16) ở
+// trên. 11/2026, theo yêu cầu người dùng: trước đây tính năng này CHỈ cấu hình được qua .env.
+function loadInventoryApiConfigToForm() {
+  const cfg = DB.inventoryApiConfig || {};
+  document.getElementById('invApiEnabled').value = cfg.enabled === true ? 'true' : 'false';
+  document.getElementById('invApiBaseUrl').value = cfg.baseUrl || '';
+  document.getElementById('invApiKeyPlain').value = '';
+
+  const keyStatusEl = document.getElementById('invApiKeyStatus');
+  keyStatusEl.textContent = cfg.hasApiKey
+    ? '✅ Đã cấu hình API Key (ẩn vì lý do bảo mật — để trống ô khi Sửa = giữ nguyên).'
+    : '⚠️ Chưa cấu hình API Key.';
+
+  const lastSyncEl = document.getElementById('invApiLastSyncStatus');
+  if (!cfg.lastSyncAt) {
+    lastSyncEl.textContent = 'Chưa từng chạy đồng bộ lần nào (qua cấu hình này).';
+  } else {
+    const statusLabel = cfg.lastSyncStatus === 'SUCCESS' ? '✅' : '⛔';
+    lastSyncEl.textContent = `${statusLabel} Lần đồng bộ gần nhất: ${new Date(cfg.lastSyncAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} — ${cfg.lastSyncMessage || ''}`;
+  }
+}
+
+async function saveInventoryApiConfig(e) {
+  e.preventDefault();
+  const prevConfig = { ...(DB.inventoryApiConfig || {}) };
+  DB.inventoryApiConfig = {
+    ...(DB.inventoryApiConfig || {}),
+    enabled: document.getElementById('invApiEnabled').value === 'true',
+    baseUrl: document.getElementById('invApiBaseUrl').value.trim(),
+    // "apiKeyPlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "apiKeyEnc" — không phải
+    // bản ghi lưu thật (xem prepareInventoryApiConfigForSave() ở routes/data.js). Để trống ô này = giữ
+    // nguyên giá trị đã lưu.
+    apiKeyPlain: document.getElementById('invApiKeyPlain').value
+  };
+  const saved = await syncStorage('inventoryApiConfig', { baseline: prevConfig });
+  if (!saved) { DB.inventoryApiConfig = prevConfig; return; }
+  document.getElementById('invApiKeyPlain').value = '';
+  logSystemAction('CONFIG', 'UPDATE_INVENTORY_API_CONFIG', 'Cập nhật cấu hình đồng bộ Tồn Kho Hệ Thống (BRGMART).', 'SUCCESS', 'INVENTORY_API_CONFIG');
+  alert('✅ Đã lưu Cấu Hình API Tồn Kho thành công!');
+}
+
+async function syncInventoryNow() {
+  const btn = document.getElementById('invApiSyncNowBtn');
+  const statusEl = document.getElementById('invApiLastSyncStatus');
+  btn.disabled = true;
+  statusEl.textContent = '⏳ Đang đồng bộ...';
+  try {
+    const res = await fetch('/api/inventory/sync-now', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.ok) {
+      statusEl.textContent = `✅ Đồng bộ thành công — ${body.rowCount ?? '—'} dòng, ${body.storeCount ?? '—'} siêu thị.`;
+    } else if (res.ok && body.skipped) {
+      statusEl.textContent = `⚠️ ${body.message || 'Chưa cấu hình, đồng bộ bị bỏ qua.'}`;
+    } else {
+      statusEl.textContent = `⛔ ${body.error || 'Đồng bộ thất bại'}`;
     }
   } catch (err) {
     statusEl.textContent = '⛔ Không thể kết nối tới máy chủ để đồng bộ: ' + err.message;

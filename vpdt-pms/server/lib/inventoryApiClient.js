@@ -4,9 +4,10 @@
 // KHÁC ở 2 điểm theo đúng tài liệu API v1.1 (10/2026) đối tác cung cấp:
 //   1. Phân trang dừng khi `rows.length < pageSize` (không có cờ hasMore như DSmart).
 //   2. Lỗi 429 phải tôn trọng header `Retry-After` (giây) — DSmart không có yêu cầu này.
-// baseUrl/apiKey LUÔN đọc từ biến môi trường BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY
-// (xem jobs/inventorySync.js) — KHÔNG BAO GIỜ nhận từ input người dùng/client (tránh SSRF, OWASP A10,
-// cùng lý do đã áp dụng cho dsmartApiClient.js).
+// baseUrl/apiKey do jobs/inventorySync.js::resolveInventoryApiCreds() tự giải quyết (ưu tiên cấu hình
+// admin qua UI "Cấu Hình API Tồn Kho" — mã hoá ở CSDL, xem routes/data.js — rồi mới tới .env làm đường
+// lùi, 11/2026) — KHÔNG BAO GIỜ nhận thẳng từ 1 REQUEST client bất kỳ (tránh SSRF, OWASP A10, cùng lý do
+// đã áp dụng cho dsmartApiClient.js); Base URL nguồn UI được kiểm SSRF (lib/ssrfGuard.js) trước khi gọi.
 const http = require('http');
 const https = require('https');
 

@@ -239,6 +239,24 @@ async function main() {
       check('canViewNVItem("muaHang") = true cho user có rebateViewReport (1 trong 5 quyền Mua Hàng)',
         canViewNVItem('muaHang') === true);
 
+      // ---------- 11b) LỖI ĐÃ VÁ (11/2026, người dùng báo "Kiểm Soát Hàng Hóa" không hiện trong Hướng
+      // Dẫn dù đã yêu cầu cập nhật): mục "vanHanhShelf" thêm vào NGHIEP_VU_NAV từ v28.41 (và đã có đủ
+      // nội dung NGHIEP_VU_DOCS) nhưng QUÊN nối vào NV_KEY_ACCESS_FN — cùng lớp lỗi "fail-closed ẩn mục"
+      // như mục 11, chỉ khác hướng (ẩn với TẤT CẢ thay vì lộ cho TẤT CẢ). Đã nối vanHanhShelf ->
+      // canViewShelfReportClient (core.js) — đúng điều kiện thật đang gác nút sidebar btnVanHanhShelfNav. ----------
+      const noShelfPermUser = { username: 'nv8', name: 'Nhân Viên 8', dept: 'Phòng Hành Chính', perms: {} };
+      currentUser = noShelfPermUser;
+      check('canViewNVItem("vanHanhShelf") = false cho user KHÔNG có bất kỳ quyền Kiểm Soát Hàng Hóa nào',
+        canViewNVItem('vanHanhShelf') === false);
+
+      const shelfRecordUser = { username: 'nv9', name: 'Nhân Viên 9', dept: 'Siêu Thị A', perms: { shelfRecordCreate: true } };
+      currentUser = shelfRecordUser;
+      check('LỖI ĐÃ VÁ: canViewNVItem("vanHanhShelf") = true cho user có shelfRecordCreate',
+        canViewNVItem('vanHanhShelf') === true);
+      const visibleForShelfUser = visibleNVGroups();
+      check('LỖI ĐÃ VÁ: visibleNVGroups() HIỆN mục "Kiểm Soát Hàng Hóa" trong nhóm Vận Hành cho user có quyền',
+        visibleForShelfUser.some(g => g.group === 'Vận Hành' && g.items.some(it => it.key === 'vanHanhShelf')));
+
       // ---------- 12) Cứng hoá fallback: key KHÔNG có trong NV_KEY_ACCESS_FN phải fail-CLOSED (false),
       // không fail-open (true) — lớp phòng thủ chung cho MỌI module mới sau này lỡ quên nối quyền, không
       // chỉ riêng "muaHang" ở mục 11. ----------
