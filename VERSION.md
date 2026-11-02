@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**28.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.70 (2026-11): Module Tài Liệu — hub "📣 Tài Liệu Phát Hành" (duyệt được, không cần gửi link)
+
+Theo yêu cầu người dùng: "có thể xem được các tài liệu phát hành của công ty hoặc phòng ban khác, hiện
+tại gửi link xem được nhưng bất tiện vì người dùng có thể mất link, cho mục này thêm vào module tài
+liệu". Hệ thống đã có sẵn cơ chế "🚀 Phát Hành" (per-version, 10/2026) + quyền `docViewPublished`/
+`docDownloadPublished` ("Xem/Tải tài liệu Đã Phát Hành, mọi phòng ban") — nhưng trước đây chỉ truy cập
+được ĐÚNG bản ghi nhận link "🔗" chia sẻ, không có cách nào DUYỆT cả danh sách.
+
+- `routes/data.js::loadDocsScoped()`: người có `docViewPublished` nay được tải THÊM toàn bộ tài liệu đã
+  `published` của MỌI phòng ban (tái dùng cache `getAllForCollectionCached()` đã ấm sẵn cho nhánh admin/
+  extraViewer, không cần cột SQL lọc riêng) — `filterDocsForUser()` (lớp chắn thứ 2) vẫn tự chốt đúng
+  phạm vi, không lộ gì thêm ngoài quyền đã cấp.
+- `public/fragments/docSection.html` + `module-tailieu.js::renderPublishedDocsHub()`: khối mới "📣 Tài
+  Liệu Phát Hành" ngay đầu màn Tài Liệu (mở sẵn), CHỈ hiện cho người có `docViewPublished`/admin — liệt
+  kê mã/tên/phòng ban/phiên bản/ngày phát hành của mọi tài liệu đã phát hành, có ô tìm kiếm, nút "👁️ Xem
+  Chi Tiết" tái dùng thẳng `viewDocDetails()` (mở modal Chi Tiết, highlight đúng dòng — cùng khuôn trải
+  nghiệm với link "🔗" chia sẻ cũ, không cần dựng UI mới).
+
+Test mới: `tests/test-docs-scope.js` bổ sung 2 kịch bản (người không có `docViewPublished` không thấy
+tài liệu phát hành phòng khác; người có quyền thấy ĐÚNG các bản ghi đã phát hành của mọi phòng ban,
+không thấy bản chưa phát hành — 11/11 pass sau khi cập nhật 3 kỳ vọng cũ theo 2 fixture mới) và
+`tests/test-published-docs-hub-client.js` (6/6 pass — ẩn/hiện khối theo quyền, lọc đúng theo từ khoá,
+nút Xem Chi Tiết mở đúng modal). Chạy lại `test-doc.js` (24/24), `test-doc-status-badges.js` (2/2),
+`test-doc-thumbnail.js` (5/5), `test-doc-upload-publish.js` (23/23), `test-doc-detail-copy-link.js` (toàn
+bộ pass), `test-csp-full-audit.js` (3/3, 42 điểm điều hướng không vi phạm CSP) — đều pass, không
+regression.
 
 ## v28.69 (2026-11): Nhịp Sống HCRC/Góc Chia Sẻ — mở khoá nút "Sửa" cho bài ĐÃ ĐĂNG CÔNG KHAI
 

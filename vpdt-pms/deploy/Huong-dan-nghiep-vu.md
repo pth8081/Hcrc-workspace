@@ -5787,6 +5787,21 @@ Link email phê duyệt DOC thông thường (gửi người duyệt khi có h�
 xem mục "Gửi email phê duyệt kèm link trực tiếp" ở trên) KHÔNG đổi gì — vẫn
 chỉ mở modal Chi Tiết như trước, không tự mở màn xem.
 
+**Tài Liệu — hub "📣 Tài Liệu Phát Hành" (11/2026, theo yêu cầu người dùng:
+"gửi link xem được nhưng bất tiện vì người dùng có thể mất link")**: trước
+đây người có quyền "Xem/Tải Tài Liệu Đã Phát Hành" (`docViewPublished`/
+`docDownloadPublished`, xem mục "Phát Hành" ở trên) CHỈ truy cập được ĐÚNG
+bản ghi nhận được link "🔗" chia sẻ trực tiếp — không có cách nào DUYỆT cả
+danh sách tài liệu đã phát hành của công ty/phòng ban khác. Nay màn Tài
+Liệu tự hiện thêm khối "📣 Tài Liệu Phát Hành" ngay đầu trang (chỉ người có
+`docViewPublished`/admin mới thấy) — liệt kê đủ mã/tên/phòng ban/phiên
+bản/ngày phát hành của MỌI tài liệu đã phát hành toàn công ty, có ô tìm
+kiếm theo mã/tên/phòng ban, bấm "👁️ Xem Chi Tiết" mở thẳng đúng modal Chi
+Tiết + highlight đúng phiên bản (cùng trải nghiệm với link chia sẻ cũ,
+không cần gửi/nhận link nữa). Quyền hạn Xem/Tải vẫn giữ nguyên như mục
+"Phát Hành" ở trên — khối này chỉ thêm 1 lối DUYỆT danh sách, không cấp
+thêm quyền gì.
+
 **Lọc theo Khối/Ban (10/2026)** — ngay phía trên 6 bảng "1 dòng = 1 phòng
 ban" ở trên, có 1 ô "🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban" DÙNG CHUNG
 cho cả 6 bảng cùng lúc (Tài Liệu/Văn Bản Trình/Hợp Đồng & Giấy Phép/Phòng

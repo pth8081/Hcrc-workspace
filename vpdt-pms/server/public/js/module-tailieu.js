@@ -296,9 +296,49 @@ function onDocUpdateTargetChange() {
   document.getElementById('docVer').value = Number.isFinite(prevNum) ? `v${(prevNum + 1).toFixed(1)}` : `v${(latest.versionNumber || 1) + 1}.0`;
 }
 
+// 📣 Tài Liệu Phát Hành (11/2026, theo yêu cầu người dùng: "có thể xem được các tài liệu phát hành của
+// công ty hoặc phòng ban khác, hiện tại gửi link xem được nhưng bất tiện vì người dùng có thể mất link")
+// — hub DUYỆT ĐƯỢC toàn bộ tài liệu đã phát hành (mọi phòng ban), CHỈ hiện cho người có docViewPublished
+// (hoặc admin — khớp đúng quyền "Xem tài liệu Đã Phát Hành (mọi phòng ban)" đã có sẵn, xem canViewDoc()
+// ở lib/recordViewScope.js). DB.docs đã được server tải thêm đúng các bản ghi published công ty cho
+// người có quyền này (loadDocsScoped(), routes/data.js) — client chỉ lọc published === true rồi hiện,
+// không tự ý mở rộng phạm vi (cùng nguyên tắc "client chỉ RENDER" như renderDocs() ngay dưới).
+function renderPublishedDocsHub() {
+  const wrap = document.getElementById('publishedDocsHubWrap');
+  if (!wrap) return;
+  const canSee = !!(currentUser?.perms?.admin || currentUser?.perms?.docViewPublished);
+  wrap.classList.toggle('hidden', !canSee);
+  if (!canSee) return;
+
+  const keyword = (document.getElementById('publishedDocsHubKeyword')?.value || '').toLowerCase().trim();
+  const published = (DB.docs || [])
+    .filter(d => d.published)
+    .filter(d => !keyword || matchesAnyKeyword([d.displayCode || d.code, d.title, d.dept], null, keyword))
+    .sort((a, b) => (b.id || 0) - (a.id || 0));
+
+  const tbody = document.getElementById('publishedDocsHubBody');
+  if (!tbody) return;
+  if (published.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">${keyword ? 'Không tìm thấy tài liệu phát hành phù hợp.' : 'Chưa có tài liệu nào được phát hành.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = published.map(d => `
+    <tr class="hover:bg-emerald-50 border-b">
+      <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(d.displayCode || d.code)}</td>
+      <td class="border p-2">${escapeHtml(d.title)}</td>
+      <td class="border p-2">${escapeHtml(d.dept)}</td>
+      <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(d.ver)}</td>
+      <td class="border p-2 text-xs text-gray-500">${escapeHtml(d.createdAt || '')}</td>
+      <td class="border p-2 text-center"><button type="button" data-op="viewDocDetails" data-arg0="${d.id}" data-arg1="${d.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem Chi Tiết</button></td>
+    </tr>
+  `).join('');
+}
+
 function renderDocs() {
   const tbody = document.getElementById('docTableBody');
   if (!tbody) return;
+
+  renderPublishedDocsHub();
 
   const keyword = (document.getElementById('filterKeyword')?.value || '').toLowerCase().trim();
   const deptFilter = document.getElementById('filterDept')?.value || '';

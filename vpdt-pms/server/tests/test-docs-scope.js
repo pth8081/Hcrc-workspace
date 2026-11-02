@@ -37,9 +37,13 @@ const APPROVER_D = { username: 'duyet_doc', name: 'Người Duyệt Phòng D', d
 const APPROVER_POSITION_E = { username: 'truongphong_e', name: 'Trưởng Phòng E', dept: 'Phòng E', jobTitle: 'Trưởng phòng E', perms: { canBeApprover: true }, active: true };
 const NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT = { username: 'truongphong_f', name: 'Trưởng Phòng F', dept: 'Phòng F', jobTitle: 'Trưởng phòng E', perms: { canBeApprover: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
+// Hub "📣 Tài Liệu Phát Hành" (11/2026) — docViewPublished (quyền ĐÃ CÓ SẴN từ đợt "6-module" 10/2026)
+// nay còn phải TẢI VỀ được các bản ghi published của MỌI phòng ban (không riêng gì canViewDoc() cho
+// phép xem đúng 1 bản ghi khi có link) — Phòng Y không có docs nào khác để không lẫn với nhánh dept.
+const PUBLISHED_VIEWER = { username: 'xem_phat_hanh', name: 'Người Xem Tài Liệu Phát Hành', dept: 'Phòng Y', perms: { docViewPublished: true }, active: true };
 const USERS = [
   REGULAR_A, BYSTANDER_B, EXTRA_VIEWER, MANAGER_OF_OTHER4, OTHER4_UPLOADER, APPROVER_D, ADMIN,
-  APPROVER_POSITION_E, NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT
+  APPROVER_POSITION_E, NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT, PUBLISHED_VIEWER
 ];
 
 const APP_DATA = {
@@ -67,7 +71,11 @@ function resetData() {
     { id: 6, dept: 'Phòng D', status: 'APPROVED', uploader: 'other5' },
     { id: 7, dept: 'Phòng D', status: 'PENDING', uploader: 'other6' },
     { id: 8, dept: 'Phòng Z', status: 'REJECTED', uploader: 'nva' },
-    { id: 9, dept: 'Phòng E', status: 'PENDING', uploader: 'other7' }
+    { id: 9, dept: 'Phòng E', status: 'PENDING', uploader: 'other7' },
+    // Hub "📣 Tài Liệu Phát Hành" (11/2026) — id10 ĐÃ phát hành (published:true), id11 CÙNG phòng ban
+    // nhưng CHƯA phát hành (control, published:false) để xác nhận không bị lẫn/rò rỉ thêm.
+    { id: 10, dept: 'Phòng B', status: 'APPROVED', uploader: 'other1', published: true },
+    { id: 11, dept: 'Phòng B', status: 'APPROVED', uploader: 'other1', published: false }
   ];
 }
 resetData();
@@ -164,7 +172,7 @@ async function main() {
       APP_DATA.deptViewScopeConfig.doc = { mode: 'DEPT', extraViewers: [], managerCanView: false };
       const res = await api('GET', '/api/data', undefined, BYSTANDER_B);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '2,3', 'dongnghiep_b (Phòng B) phải thấy CẢ id2 (APPROVED) VÀ id3 (PENDING), không thấy phòng khác');
+      assertEqual(ids.join(','), '2,3,10,11', 'dongnghiep_b (Phòng B) phải thấy CẢ id2/id3/id10/id11 (cùng Phòng B, mọi trạng thái), không thấy phòng khác');
       assert(byDeptCalls.includes('Phòng B'), 'mode DEPT phải tải theo dept của user ở nhánh tối ưu SQL');
     });
 
@@ -173,7 +181,7 @@ async function main() {
       APP_DATA.deptViewScopeConfig.doc = { mode: 'CREATOR_ONLY', extraViewers: ['xemhet'], managerCanView: false };
       const res = await api('GET', '/api/data', undefined, EXTRA_VIEWER);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9', 'xemhet (extraViewers) phải thấy đủ cả 9 tài liệu');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9,10,11', 'xemhet (extraViewers) phải thấy đủ cả 11 tài liệu');
       assert(fullLoadCallCount >= 1, 'extraViewers phải tải theo nhánh company-wide (whitelist dùng chung toàn công ty, không theo phòng ban)');
     });
 
@@ -211,7 +219,23 @@ async function main() {
       resetData(); resetDeptViewScopeConfig();
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9', 'admin phải thấy đủ cả 9 tài liệu');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9,10,11', 'admin phải thấy đủ cả 11 tài liệu');
+    });
+
+    await run.run('[Hub Tài Liệu Phát Hành] Người KHÔNG có docViewPublished KHÔNG thấy tài liệu đã phát hành của phòng ban khác', async () => {
+      resetData(); resetDeptViewScopeConfig(); fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '1,8', 'nva không có docViewPublished -> vẫn CHỈ thấy tài liệu tự tải lên, dù id10 (Phòng B) đã phát hành');
+      assertEqual(fullLoadCallCount, 0, 'không có docViewPublished thì KHÔNG được tải nhánh company-wide');
+    });
+
+    await run.run('[Hub Tài Liệu Phát Hành] Người có docViewPublished thấy TOÀN BỘ tài liệu ĐÃ PHÁT HÀNH của MỌI phòng ban, KHÔNG thấy tài liệu CHƯA phát hành', async () => {
+      resetData(); resetDeptViewScopeConfig(); fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, PUBLISHED_VIEWER);
+      const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '10', 'xem_phat_hanh (Phòng Y, không liên quan Phòng B) phải thấy ĐÚNG id10 (đã phát hành) — KHÔNG thấy id11 (cùng Phòng B nhưng CHƯA phát hành) hay bất kỳ hồ sơ nào khác (không phải uploader/cùng phòng/approver)');
+      assert(fullLoadCallCount >= 1, 'docViewPublished phải tải thêm nhánh company-wide (tái dùng getAllForCollectionCached()) để lọc published');
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterDocsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

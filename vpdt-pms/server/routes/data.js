@@ -1525,6 +1525,21 @@ async function loadDocsScoped(user, data) {
   }));
   const ownUploads = await getForCollectionByColumnCached('docs', 'Uploader', user?.username);
   for (const r of ownUploads) byId.set(r.id, r);
+  // Hub "📣 Tài Liệu Phát Hành" (11/2026, theo yêu cầu người dùng: "có thể xem được các tài liệu phát
+  // hành của công ty hoặc phòng ban khác, hiện tại chỉ gửi link xem được nhưng bất tiện vì người dùng có
+  // thể mất link, cho mục này thêm vào module tài liệu") — người có docViewPublished (permission ĐÃ CÓ
+  // SẴN từ đợt "6-module" 10/2026, canViewDoc() lib/recordViewScope.js đã luôn cho phép xem MỌI tài
+  // liệu đã published bất kể phòng ban, nhưng trước đây KHÔNG CÓ cách nào tìm ra các bản ghi đó qua đồng
+  // bộ dữ liệu thường — chỉ xem được đúng bản ghi được GỬI LINK trực tiếp, không duyệt được cả danh
+  // sách) — nay tải thêm TOÀN BỘ docs published công ty (tái dùng cache getAllForCollectionCached() đã
+  // ấm sẵn cho nhánh admin/extraViewer ở trên, rẻ hơn hẳn 1 cột lọc SQL riêng), rồi chỉ GIỮ LẠI bản
+  // published — filterDocsForUser() (lớp chắn thứ 2 ngay sau khi hàm này return) vẫn tự lọc lại đúng
+  // phạm vi thật (canViewDoc() nhánh docViewPublished), nên tải hơi thừa ở đây là AN TOÀN, không lộ gì
+  // thêm ngoài phạm vi quyền đã cấp.
+  if (user?.perms?.docViewPublished) {
+    const allDocs = await getAllForCollectionCached('docs');
+    for (const r of allDocs) { if (r.published) byId.set(r.id, r); }
+  }
   return [...byId.values()];
 }
 
