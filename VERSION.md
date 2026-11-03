@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.91 (2026-11): Vá hiển thị sai "Loại xe" ở danh sách Đăng Ký Xe sau khi Phòng Hành Chính gán xe khác loại đã đăng ký
+
+Người dùng báo kèm ảnh chụp: phiếu `HCRC-KSTTVCL-DKX-001` hiện "5 chỗ (30G-468.62)" trong bảng "Danh Sách
+Phiếu Đăng Ký Xe" — nhưng biển số 30G-468.62 thực ra là xe 7 chỗ (đúng loại xe Phòng Hành Chính đã gán
+thực tế, kiểm tra trong phiếu phê duyệt đầy đủ cũng thấy đúng "Xe 7 chỗ").
+
+**Nguyên nhân**: `carRegs.type` ("Loại xe đăng ký" — sở thích/nhu cầu người ĐĂNG KÝ chọn lúc tạo phiếu,
+`DB.carTypes`, VD "5 chỗ") và `carRegs.assignedVehicleType` ("Loại xe cụ thể" — xe THẬT công ty có, do
+Phòng Hành Chính CHỌN lúc xử lý duyệt, `DB.carVehicleTypes`, VD "Xe 7 chỗ" kèm biển số cố định) là 2
+trường HOÀN TOÀN ĐỘC LẬP — không phải lúc nào cũng có đúng loại xe trống để gán khớp yêu cầu ban đầu
+(chuyện bình thường). Dòng danh sách rút gọn (`renderCarRegs()` bảng "🚗 Đăng Ký Xe" + thẻ "Chuyến của
+tôi" tab "🧑‍✈️ Lái Xe", `module-dangkyxe.js`) trước đây LUÔN ghép `c.type` (yêu cầu ban đầu) với biển số
+THẬT đã gán — khi 2 loại xe khác nhau, dòng danh sách hiện sai lệch. Phiếu phê duyệt đầy đủ
+(`buildCarApprovalSlipHTML()`, `core.js`) đã tách 2 dòng riêng rõ ràng nên không bị nhầm — chỉ 2 chỗ rút
+gọn trên bị ghép sai.
+
+**Đã vá**: cả 2 chỗ ưu tiên hiện `c.assignedVehicleType` (loại xe THẬT đã gán) khi đã có, chỉ hiện lại
+`c.type` (yêu cầu ban đầu) khi phiếu CHƯA được xử lý/gán xe nào.
+
+**Test**: `tests/test-carreg-list-assigned-vehicle-type.js` (mới, 4 kịch bản — đúng kịch bản người dùng
+báo "5 chỗ" + biển số xe 7 chỗ, đối chứng không còn ghép sai, phiếu chưa xử lý vẫn hiện đúng loại xe đăng
+ký như cũ, tab "Lái Xe" cũng được vá). Chạy lại toàn bộ test Đăng Ký Xe hiện có — không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.90 (2026-11): Vá lỗi lưu "Mã Điểm API Tồn Kho" (storeExternalCodes) bị chặn "Key không hợp lệ"
 

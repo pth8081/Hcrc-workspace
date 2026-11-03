@@ -575,7 +575,7 @@ function renderCarDriverTab() {
           <div class="font-bold text-indigo-800 text-sm">${escapeHtml(c.code)} — ${escapeHtml(c.dept)}</div>
           <div class="text-xs text-gray-600">Người đặt xe: ${escapeHtml(c.creatorName || '')}</div>
           <div class="text-xs text-gray-600">${escapeHtml(c.destination)}</div>
-          <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
+          <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.assignedVehicleType || c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <button type="button" data-op="viewCarApprovalSlip" data-arg0="${c.id}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">👁️ Xem Phiếu</button>
@@ -1012,6 +1012,18 @@ function renderCarRegs() {
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
     const displayPlate = c.assignedPlate || c.plate || (c.assignedTaxiCompany ? `Taxi ${c.assignedTaxiCompany}` : '');
     const displayDriver = c.assignedDriver || c.driver || '';
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo "phiếu đặt 7 chỗ, biển xe 7 chỗ mà hiển thị 5 chỗ"): c.type là
+    // "Loại xe đăng ký" — nhu cầu/sở thích NGƯỜI ĐĂNG KÝ chọn lúc tạo phiếu (DB.carTypes, VD "5 chỗ"),
+    // KHÁC HẲN c.assignedVehicleType — "Loại xe cụ thể" (DB.carVehicleTypes, VD "Xe 7 chỗ") do Phòng
+    // Hành Chính CHỌN THỰC TẾ lúc xử lý duyệt, đi kèm displayPlate ở trên. Dòng danh sách cũ ghép
+    // c.type (yêu cầu ban đầu, có thể khác loại xe thật) với displayPlate (biển xe THẬT đã gán) — khi
+    // Phòng Hành Chính gán 1 loại xe KHÁC loại được yêu cầu (thường gặp — không phải lúc nào cũng có
+    // đúng loại xe trống), dòng danh sách hiện sai lệch (VD "5 chỗ" + biển số của xe 7 chỗ). Phiếu phê
+    // duyệt đầy đủ (buildCarApprovalSlipHTML(), core.js) đã tách rõ 2 dòng riêng "Loại xe đăng ký"/"Loại
+    // xe cụ thể" nên không bị nhầm — chỉ dòng danh sách rút gọn này ghép sai. Đã sửa: ưu tiên hiện ĐÚNG
+    // loại xe THẬT đã gán (assignedVehicleType) khi đã có; chỉ hiện lại c.type (yêu cầu ban đầu) khi
+    // chưa được xử lý/gán xe nào.
+    const displayType = c.assignedVehicleType || c.type;
     // canAccessSlip: hồ sơ đã qua APPROVED thì luôn xem/tải được phiếu, bất kể đã Kết Thúc Chuyến/Đánh
     // Giá xong hay chưa (IN_PROGRESS/AWAITING_EVALUATION/COMPLETED vẫn là "đã phê duyệt", chỉ thêm bước
     // sau đó — IN_PROGRESS là trạng thái trung gian mới, mục 2 yêu cầu nghiệp vụ 9/2026). Mục 4 (yêu
@@ -1026,7 +1038,7 @@ function renderCarRegs() {
         <td class="border p-2 font-mono font-bold text-indigo-800">${escapeHtml(c.code)}</td>
         <td class="border p-2">${escapeHtml(c.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(c.creatorName)}</span></td>
         <td class="border p-2">
-          <div class="font-bold">${escapeHtml(c.type)} ${displayPlate ? `(${escapeHtml(displayPlate)})` : '<span class="text-gray-400 font-normal">(Chưa xếp)</span>'}</div>
+          <div class="font-bold">${escapeHtml(displayType)} ${displayPlate ? `(${escapeHtml(displayPlate)})` : '<span class="text-gray-400 font-normal">(Chưa xếp)</span>'}</div>
           <div class="text-xs text-gray-500">Lái xe: ${displayDriver ? escapeHtml(displayDriver) : 'Chưa phân công'} | ${c.km} KM</div>
         </td>
         <td class="border p-2 text-xs">${escapeHtml(c.destination)}<br><span class="text-gray-400">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</span></td>
