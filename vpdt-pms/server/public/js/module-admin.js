@@ -464,14 +464,17 @@ let storeImportPreviewItems = []; // kết quả gần nhất từ /api/stores/p
 const STORE_TYPE_LABEL_VI_CLIENT = { ST: 'Siêu Thị', CH: 'Cửa Hàng', WH: 'Kho' };
 
 // 📤 Xuất Excel Danh Mục Siêu Thị (10/2026, theo yêu cầu người dùng — trước đây panel này CHỈ có "⬇️ Tải
-// Mẫu"/"📥 Nhập Excel", chưa từng xuất được danh sách hiện có) — 2 cột Tên + Loại, dùng chung route
-// generic POST /api/admin/export-xlsx (không cần route riêng, xem downloadXlsxFromServer() ở core.js).
+// Mẫu"/"📥 Nhập Excel", chưa từng xuất được danh sách hiện có) — 3 cột Tên + Loại + Mã Điểm (cột Mã Điểm
+// thêm 11/2026, cùng đợt đồng bộ mẫu Tải/Nhập ở dưới — khớp đúng cột "Mã Điểm API Tồn Kho" ở renderStoreList()),
+// dùng chung route generic POST /api/admin/export-xlsx (không cần route riêng, xem downloadXlsxFromServer() ở core.js).
 async function exportStoreCatalogExcel() {
   const types = DB.storeTypes || {};
-  const rows = (DB.stores || []).map(s => ({ name: s, type: STORE_TYPE_LABEL_VI_CLIENT[types[s]] || '' }));
+  const externalCodes = DB.storeExternalCodes || {};
+  const rows = (DB.stores || []).map(s => ({ name: s, type: STORE_TYPE_LABEL_VI_CLIENT[types[s]] || '', externalCode: externalCodes[s] || '' }));
   await downloadXlsxFromServer('DanhSachSieuThi.xlsx', 'Danh Sách Siêu Thị', [
     { key: 'name', header: 'Tên Siêu Thị' },
-    { key: 'type', header: 'Loại' }
+    { key: 'type', header: 'Loại' },
+    { key: 'externalCode', header: 'Mã Điểm API Tồn Kho' }
   ], rows);
 }
 
@@ -492,19 +495,25 @@ async function onStoreImportFileChange(event) {
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     storeImportPreviewItems = data.items;
     const types = DB.storeTypes || {};
+    const externalCodes = DB.storeExternalCodes || {};
     const newCount = data.items.filter(it => it.isNew).length;
     // typeChangeCount — dòng có cột "Loại" điền khác giá trị đang lưu (kể cả siêu thị ĐÃ CÓ sẵn, theo
     // yêu cầu người dùng "để có thể import luôn mục này" — không chỉ áp dụng cho siêu thị MỚI).
     const typeChangeCount = data.items.filter(it => it.type && types[it.name] !== it.type).length;
+    // externalCodeChangeCount (11/2026, theo yêu cầu người dùng "mẫu tải/nhập/xuất phải có thêm trường
+    // mã điểm") — cùng khuôn typeChangeCount ở trên, áp dụng cho cả siêu thị ĐÃ CÓ sẵn.
+    const externalCodeChangeCount = data.items.filter(it => it.externalCode && externalCodes[it.name] !== it.externalCode).length;
     statusEl.innerText = `✅ Đọc file "${data.fileName}": ${newCount}/${data.items.length} siêu thị MỚI` +
-      (typeChangeCount ? `, ${typeChangeCount} dòng sẽ cập nhật "Loại"` : '') + '.';
+      (typeChangeCount ? `, ${typeChangeCount} dòng sẽ cập nhật "Loại"` : '') +
+      (externalCodeChangeCount ? `, ${externalCodeChangeCount} dòng sẽ cập nhật "Mã Điểm"` : '') + '.';
     document.getElementById('storeImportPreviewBody').innerHTML = data.items.map(it => `<tr>
       <td class="p-1">${escapeHtml(it.name)}</td>
       <td class="p-1">${it.type ? escapeHtml(STORE_TYPE_LABEL_VI_CLIENT[it.type] || it.type) : '<span class="text-gray-400">—</span>'}</td>
+      <td class="p-1">${it.externalCode ? escapeHtml(it.externalCode) : '<span class="text-gray-400">—</span>'}</td>
       <td class="p-1">${it.isNew ? '<span class="text-emerald-600">✅ Mới</span>' : '<span class="text-gray-400">— Đã có</span>'}</td>
     </tr>`).join('');
     document.getElementById('storeImportPreviewWrap').classList.remove('hidden');
-    if (newCount > 0 || typeChangeCount > 0) document.getElementById('storeImportConfirmBtn').classList.remove('hidden');
+    if (newCount > 0 || typeChangeCount > 0 || externalCodeChangeCount > 0) document.getElementById('storeImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
@@ -514,23 +523,32 @@ async function onStoreImportFileChange(event) {
 async function confirmStoreImport() {
   const newNames = storeImportPreviewItems.filter(it => it.isNew).map(it => it.name);
   const typeChanges = storeImportPreviewItems.filter(it => it.type && (DB.storeTypes || {})[it.name] !== it.type);
-  if (!newNames.length && !typeChanges.length) return;
+  // externalCodeChanges (11/2026) — cùng khuôn typeChanges ở trên, áp dụng cho DB.storeExternalCodes.
+  const externalCodeChanges = storeImportPreviewItems.filter(it => it.externalCode && (DB.storeExternalCodes || {})[it.name] !== it.externalCode);
+  if (!newNames.length && !typeChanges.length && !externalCodeChanges.length) return;
   const prevStores = [...DB.stores];
   const prevTypes = { ...(DB.storeTypes || {}) };
+  const prevExternalCodes = { ...(DB.storeExternalCodes || {}) };
   if (newNames.length) DB.stores = [...DB.stores, ...newNames];
   if (typeChanges.length) {
     const nextTypes = { ...(DB.storeTypes || {}) };
     typeChanges.forEach(it => { nextTypes[it.name] = it.type; });
     DB.storeTypes = nextTypes;
   }
-  const baselineByKey = { stores: prevStores, storeTypes: prevTypes };
+  if (externalCodeChanges.length) {
+    const nextExternalCodes = { ...(DB.storeExternalCodes || {}) };
+    externalCodeChanges.forEach(it => { nextExternalCodes[it.name] = it.externalCode; });
+    DB.storeExternalCodes = nextExternalCodes;
+  }
+  const baselineByKey = { stores: prevStores, storeTypes: prevTypes, storeExternalCodes: prevExternalCodes };
   const syncKeys = [];
   if (newNames.length) syncKeys.push('stores');
   if (typeChanges.length) syncKeys.push('storeTypes');
+  if (externalCodeChanges.length) syncKeys.push('storeExternalCodes');
   const results = await Promise.all(syncKeys.map(k => syncStorage(k, { baseline: baselineByKey[k] })));
-  if (results.some(ok => !ok)) { DB.stores = prevStores; DB.storeTypes = prevTypes; return; }
-  logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới, cập nhật Loại cho ${typeChanges.length} dòng`, 'SUCCESS', String(newNames.length));
-  alert(`✅ Đã thêm ${newNames.length} siêu thị mới` + (typeChanges.length ? `, cập nhật "Loại" cho ${typeChanges.length} dòng` : '') + ' vào Danh Mục Siêu Thị.');
+  if (results.some(ok => !ok)) { DB.stores = prevStores; DB.storeTypes = prevTypes; DB.storeExternalCodes = prevExternalCodes; return; }
+  logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới, cập nhật Loại cho ${typeChanges.length} dòng, cập nhật Mã Điểm cho ${externalCodeChanges.length} dòng`, 'SUCCESS', String(newNames.length));
+  alert(`✅ Đã thêm ${newNames.length} siêu thị mới` + (typeChanges.length ? `, cập nhật "Loại" cho ${typeChanges.length} dòng` : '') + (externalCodeChanges.length ? `, cập nhật "Mã Điểm" cho ${externalCodeChanges.length} dòng` : '') + ' vào Danh Mục Siêu Thị.');
   storeImportPreviewItems = [];
   document.getElementById('storeImportFileInput').value = '';
   document.getElementById('storeImportStatus').innerText = '';

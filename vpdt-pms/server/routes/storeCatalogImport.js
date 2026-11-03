@@ -81,8 +81,10 @@ router.get('/import-template', async (req, res) => {
 
 // POST /api/stores/parse-import — đọc file đã điền, đối chiếu NGAY với Danh Mục Siêu Thị hiện có để trả
 // về xem trước (tên nào mới/tên nào đã trùng) — client tự merge phần "mới" vào DB.stores + áp "Loại" (nếu
-// file có cột đó, xem cột "type" mỗi item) vào DB.storeTypes rồi gọi syncStorage('stores'/'storeTypes')
-// như luồng Thêm thủ công đã có sẵn (saveStore()/setStoreType()), không ghi gì ở route này.
+// file có cột đó, xem cột "type" mỗi item) vào DB.storeTypes + áp "Mã Điểm" (11/2026, nếu file có cột đó,
+// xem cột "externalCode" mỗi item) vào DB.storeExternalCodes rồi gọi
+// syncStorage('stores'/'storeTypes'/'storeExternalCodes') như luồng Thêm thủ công đã có sẵn
+// (saveStore()/setStoreType()/setStoreExternalCode()), không ghi gì ở route này.
 router.post('/parse-import', uploadRateLimiter, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
@@ -104,7 +106,9 @@ router.post('/parse-import', uploadRateLimiter, (req, res) => {
       const parsedItems = await parseStoreFile(buffer, ext);
       const existingStores = (await getAppDataValue('stores')) || [];
       const existingSet = new Set(existingStores);
-      const items = parsedItems.map(it => ({ name: it.name, type: it.type, isNew: !existingSet.has(it.name) }));
+      const items = parsedItems.map(it => ({
+        name: it.name, type: it.type, externalCode: it.externalCode, isNew: !existingSet.has(it.name)
+      }));
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/stores/parse-import');

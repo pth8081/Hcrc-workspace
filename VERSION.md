@@ -1,9 +1,33 @@
 # Phiên bản hiện tại
 
-**28.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.92 (2026-11): Thêm cột "Mã Điểm" vào mẫu Tải/Nhập/Xuất Excel Danh Mục Siêu Thị
+
+Người dùng báo (kèm ảnh chụp panel "🏬 Quản Lý Danh Mục Siêu Thị"): sau khi thêm trường "Mã Điểm API Tồn
+Kho" (storeExternalCodes, v28.90) vào danh sách siêu thị, 3 nút "⬇️ Tải Mẫu"/"📥 Nhập Excel"/"📤 Xuất
+Excel" vẫn dùng mẫu CŨ chỉ có 2 cột Tên + Loại — không nhập/xuất hàng loạt được Mã Điểm.
+
+**Đã vá** — đồng bộ cả 3 nơi, thêm cột "Mã Điểm" cùng khuôn cột "Loại" đã có:
+- `lib/storeCatalogImport.js`: `buildStoreTemplateWorkbook()` thêm cột 3 "Mã Điểm API Tồn Kho"; dò cột
+  theo tiêu đề (`detectCols()`) + đọc cả 2 nhánh Excel (streaming) lẫn CSV đều lấy thêm field
+  `externalCode` (vẫn tương thích ngược — file cũ không có cột này đọc ra `null`, không lỗi).
+- `routes/storeCatalogImport.js` (`POST /api/stores/parse-import`): trả thêm `externalCode` trong từng
+  item xem trước.
+- `public/js/module-admin.js`: `onStoreImportFileChange()` hiện thêm cột Mã Điểm ở bảng xem trước + đếm
+  số dòng sẽ cập nhật; `confirmStoreImport()` áp Mã Điểm vào `DB.storeExternalCodes` cho CẢ siêu thị MỚI
+  lẫn ĐÃ CÓ SẴN (cùng cách đã làm cho "Loại"); `exportStoreCatalogExcel()` xuất thêm cột Mã Điểm.
+- `public/fragments/systemSection.html`: thêm cột "Mã Điểm" vào tiêu đề bảng xem trước nhập Excel.
+
+**Test**: `tests/test-store-catalog-excel.js` (cập nhật toàn bộ 9 kịch bản theo khuôn 3 cột mới) +
+`tests/test-audit-fixes-batch2-zipbomb.js` (cập nhật 1 assertion hình dạng item cũ). Chạy lại
+`test-store-external-codes-admin-gate.js` — không regression. CSP check sạch (không thêm inline
+handler nào).
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.91 (2026-11): Vá hiển thị sai "Loại xe" ở danh sách Đăng Ký Xe sau khi Phòng Hành Chính gán xe khác loại đã đăng ký
 

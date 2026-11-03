@@ -29,10 +29,14 @@ async function buildStoreTemplateWorkbook() {
   const sheet = wb.addWorksheet('Danh Sách Siêu Thị');
   sheet.columns = [
     { header: 'Tên Siêu Thị', key: 'name', width: 36 },
-    { header: 'Loại (Siêu Thị/Cửa Hàng/Kho — để trống nếu chưa phân loại)', key: 'type', width: 44 }
+    { header: 'Loại (Siêu Thị/Cửa Hàng/Kho — để trống nếu chưa phân loại)', key: 'type', width: 44 },
+    // "Mã Điểm" (11/2026, theo yêu cầu người dùng — mẫu tải/nhập/xuất phải có luôn trường này): mã điểm
+    // API Tồn Kho đối tác BRGMART cho siêu thị (DB.storeExternalCodes, xem setStoreExternalCode() ở
+    // module-admin.js) — để trống nếu chưa cấu hình, KHÔNG bắt buộc.
+    { header: 'Mã Điểm API Tồn Kho (để trống nếu chưa cấu hình)', key: 'externalCode', width: 40 }
   ];
   styleHeaderRow(sheet.getRow(1));
-  sheet.addRow({ name: 'Siêu thị Quận 1 (VD, xoá dòng này trước khi nộp)', type: 'Siêu Thị' });
+  sheet.addRow({ name: 'Siêu thị Quận 1 (VD, xoá dòng này trước khi nộp)', type: 'Siêu Thị', externalCode: '217' });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   // Data validation dạng danh sách thả xuống cho cột "Loại" — gợi ý đúng 3 giá trị hợp lệ, tránh gõ sai
   // chính tả (để trống vẫn hợp lệ = chưa phân loại, KHÔNG nằm trong danh sách validation vì Excel không
@@ -55,6 +59,7 @@ function normalizeHeader(s) {
 
 const STORE_NAME_HINTS = ['ten sieu thi', 'sieu thi', 'ten', 'store', 'store name'];
 const STORE_TYPE_HINTS = ['loai', 'phan loai', 'type'];
+const STORE_EXTERNAL_CODE_HINTS = ['ma diem', 'ma diem api ton kho', 'externalcode', 'external code', 'ma diem api'];
 
 // Đọc giá trị 1 ô cột "Loại" -> mã nội bộ ('ST'/'CH'/'WH') hoặc null (để trống/không nhận diện được =
 // coi như chưa phân loại, KHÔNG báo lỗi — cùng tinh thần "cảnh báo chứ không chặn" của hệ thống).
@@ -67,22 +72,34 @@ function normalizeStoreTypeCell(raw) {
   return null;
 }
 
-// Dò cột "Tên Siêu Thị"/"Loại" theo tiêu đề dòng đầu (không phân biệt hoa-thường/dấu) — không tìm thấy
-// cột tên (file không có header, hoặc người dùng tự sửa mẫu) thì coi cột 1 là tên siêu thị, KHÔNG có cột
-// Loại (khớp đúng hành vi CŨ trước khi có cột này — file 1-cột vẫn import được bình thường).
+// Dò cột "Tên Siêu Thị"/"Loại"/"Mã Điểm" theo tiêu đề dòng đầu (không phân biệt hoa-thường/dấu) — không
+// tìm thấy cột tên (file không có header, hoặc người dùng tự sửa mẫu) thì coi cột 1 là tên siêu thị,
+// KHÔNG có cột Loại/Mã Điểm (khớp đúng hành vi CŨ trước khi có 2 cột này — file 1-cột vẫn import được
+// bình thường).
 function detectCols(headerCells) {
-  let nameCol = null, typeCol = null;
+  let nameCol = null, typeCol = null, externalCodeCol = null;
   for (let idx = 0; idx < headerCells.length; idx++) {
     const h = normalizeHeader(headerCells[idx]);
     if (nameCol === null && h && STORE_NAME_HINTS.some(hint => h === hint)) nameCol = idx;
+    else if (externalCodeCol === null && h && STORE_EXTERNAL_CODE_HINTS.some(hint => h.startsWith(hint))) externalCodeCol = idx;
     else if (typeCol === null && h && STORE_TYPE_HINTS.some(hint => h.startsWith(hint))) typeCol = idx;
   }
-  return { nameCol, typeCol };
+  return { nameCol, typeCol, externalCodeCol };
+}
+
+// Đọc giá trị 1 ô cột "Mã Điểm" -> chuỗi đã cắt khoảng trắng, hoặc null (để trống = chưa cấu hình, KHÔNG
+// báo lỗi — cùng tinh thần "cảnh báo chứ không chặn" như normalizeStoreTypeCell() ở trên). Giới hạn độ
+// dài hợp lý (khớp field text input setStoreExternalCode() ở module-admin.js không giới hạn cứng, nhưng
+// 1 "Mã Điểm" thực tế luôn ngắn — chặn rác dài bất thường dán nhầm cả cột khác vào).
+function normalizeStoreExternalCodeCell(raw) {
+  const v = String(raw ?? '').trim();
+  if (!v) return null;
+  return v.slice(0, 50);
 }
 
 function rowsToStoreItems(rows) {
   if (!rows.length) throw new HttpError(400, 'File danh sách siêu thị trống, không có dữ liệu');
-  const { nameCol, typeCol } = detectCols(rows[0]);
+  const { nameCol, typeCol, externalCodeCol } = detectCols(rows[0]);
   const dataRows = nameCol !== null ? rows.slice(1) : rows;
   const col = nameCol !== null ? nameCol : 0;
 
@@ -92,7 +109,11 @@ function rowsToStoreItems(rows) {
     const name = String(cells[col] ?? '').trim();
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    items.push({ name, type: typeCol !== null ? normalizeStoreTypeCell(cells[typeCol]) : null });
+    items.push({
+      name,
+      type: typeCol !== null ? normalizeStoreTypeCell(cells[typeCol]) : null,
+      externalCode: externalCodeCol !== null ? normalizeStoreExternalCodeCell(cells[externalCodeCol]) : null
+    });
   }
   if (!items.length) throw new HttpError(400, 'Không đọc được tên siêu thị nào hợp lệ từ file');
   if (items.length > 500) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 siêu thị/lần)');
@@ -104,7 +125,7 @@ function rowsToStoreItems(rows) {
 // dò cột/bỏ trùng/bỏ trống giữ y hệt rowsToStoreItems() (vẫn dùng nguyên cho nhánh CSV bên dưới).
 async function parseStoreExcelBuffer(buffer) {
   let headerSeen = false;
-  let nameCol = 0, typeCol = null;
+  let nameCol = 0, typeCol = null, externalCodeCol = null;
   let sawAnyRow = false;
   let overLimit = false;
   const items = [];
@@ -114,7 +135,11 @@ async function parseStoreExcelBuffer(buffer) {
     const name = String(cells[nameCol] ?? '').trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    items.push({ name, type: typeCol !== null ? normalizeStoreTypeCell(cells[typeCol]) : null });
+    items.push({
+      name,
+      type: typeCol !== null ? normalizeStoreTypeCell(cells[typeCol]) : null,
+      externalCode: externalCodeCol !== null ? normalizeStoreExternalCodeCell(cells[externalCodeCol]) : null
+    });
   };
 
   await streamFirstSheetRows(buffer, (cells) => {
@@ -122,8 +147,8 @@ async function parseStoreExcelBuffer(buffer) {
       headerSeen = true;
       sawAnyRow = true;
       const detected = detectCols(cells);
-      if (detected.nameCol !== null) { nameCol = detected.nameCol; typeCol = detected.typeCol; return true; } // dòng đầu là tiêu đề -> bỏ qua
-      nameCol = 0; typeCol = null; // không dò được tiêu đề -> dòng đầu cũng là dữ liệu (cột 1 = tên siêu thị)
+      if (detected.nameCol !== null) { nameCol = detected.nameCol; typeCol = detected.typeCol; externalCodeCol = detected.externalCodeCol; return true; } // dòng đầu là tiêu đề -> bỏ qua
+      nameCol = 0; typeCol = null; externalCodeCol = null; // không dò được tiêu đề -> dòng đầu cũng là dữ liệu (cột 1 = tên siêu thị)
       take(cells);
     } else {
       take(cells);

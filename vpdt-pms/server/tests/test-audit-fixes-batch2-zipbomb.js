@@ -106,9 +106,13 @@ async function main() {
   await run('[storeCatalogImport] danh sách siêu thị đọc đúng, bỏ trùng', async () => {
     const buf = await buildXlsx([['Tên Siêu Thị'], ['Siêu Thị Q1'], ['Siêu Thị Q3'], ['Siêu Thị Q1']]);
     const items = await parseStoreFile(buf, '.xlsx');
-    // Từ v24.42: parseStoreFile() trả về mảng {name,type} (thêm cột Loại Siêu Thị/Cửa Hàng/Kho),
-    // không còn mảng string phẳng như trước — cập nhật assertion theo đúng khuôn mới.
-    assertEqual(JSON.stringify(items), JSON.stringify([{ name: 'Siêu Thị Q1', type: null }, { name: 'Siêu Thị Q3', type: null }]), 'store parsing changed');
+    // Từ v24.42: parseStoreFile() trả về mảng {name,type} (thêm cột Loại Siêu Thị/Cửa Hàng/Kho), không
+    // còn mảng string phẳng như trước. Từ v28.91: thêm field externalCode (cột "Mã Điểm" API Tồn Kho) —
+    // cập nhật assertion theo đúng khuôn mới.
+    assertEqual(JSON.stringify(items), JSON.stringify([
+      { name: 'Siêu Thị Q1', type: null, externalCode: null },
+      { name: 'Siêu Thị Q3', type: null, externalCode: null }
+    ]), 'store parsing changed');
   });
 
   await run('[trainingPlanImport] ô Tháng kiểu Date THẬT vẫn đọc ra "YYYY-MM" (giá trị ô không bị ép chuỗi sớm)', async () => {
