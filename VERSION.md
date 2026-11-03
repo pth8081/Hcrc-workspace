@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**28.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
-`28.0` theo đúng quy tắc.)
+`28.0` theo đúng quy tắc — MINOR lại vừa chạm `99` ở bản này, lần merge KẾ TIẾP phải cuộn sang `29.0`.)
+
+## v28.99 (2026-11): Phê Duyệt Giá — cột "Áp Giá" rõ nghĩa hơn + thêm lọc Hoàn thành/Chưa hoàn thành
+
+Người dùng yêu cầu (kèm ảnh chụp màn "Phê Duyệt Giá" — Mua Hàng): "Cột áp giá hiện trạng thái 'Hoàn
+thành (tên người thực hiện)' và 'Chưa hoàn thành'. Thêm lọc 'Chưa hoàn thành' và 'Hoàn thành' để filter
+dữ liệu kiểm tra chính xác hơn các yêu cầu chưa thực hiện hoặc thực hiện rồi" — áp dụng cho CẢ 3 màn:
+Phê Duyệt Giá Bán Lẻ (Mua Hàng), Phê Duyệt Giá Bán Buôn (Vận Hành), Hỗ Trợ IT (cả 2 sub-tab). Sau khi
+xem demo, người dùng phản hồi thêm: "ô áp giá này mà dài quá bạn cho nó xuống dòng cho gọn nhé" (badge
+kèm tên người dài kéo rộng cả cột/bảng).
+
+**Đã làm** (`module-itsupport-price.js`, dùng chung cho cả 3 màn qua `buildItPriceRowHtml()`):
+1. `itPriceAppliedBadge()` đổi chữ: ✅ "Hoàn thành (tên người)" / 🖐️ "Chưa hoàn thành — đang xử lý (tên)"
+   / ⏳ "Chưa hoàn thành" / "—" (hồ sơ chưa tới bước Phê Duyệt, áp giá chưa có ý nghĩa gì ở giai đoạn đó).
+2. `itPriceAppliedFilterMatches()` (mới) + dropdown "Lọc Theo Áp Giá" (Tất cả/Hoàn thành/Chưa hoàn
+   thành) — nối vào cả 3 bộ lọc (`itSupportSection.html`/`muaHangSection.html`/`vanHanhSection.html` +
+   3 hàm render tương ứng), nút "Xóa Tìm Kiếm" ở cả 3 nơi cũng xoá luôn bộ lọc mới.
+3. `app.css`: thêm class `.badge-wrap` (`white-space: normal`, `max-width: 230px`) ĐÈ RIÊNG
+   `white-space: nowrap` mặc định của `.badge-*` — chỉ áp dụng cho badge Áp Giá (có thể kèm tên dài),
+   KHÔNG đổi hành vi mọi badge trạng thái khác dùng chung toàn hệ thống.
+
+**Test**: `tests/test-itprice-applied-filter.js` (mới, 10 kịch bản) — đúng chữ badge theo 4 trạng thái,
+lọc "Hoàn thành"/"Chưa hoàn thành" trả đúng danh sách ở cả 3 màn (Mua Hàng/Vận Hành/Hỗ Trợ IT), nút Xóa
+Tìm Kiếm xoá đúng bộ lọc mới. Xác nhận bằng cách tạm `git stash` đúng 5 file đã sửa, thấy 3 kịch bản
+chữ badge fail + crash ngay khi chạm ô lọc (chưa tồn tại), rồi khôi phục lại pass đủ 10/10. Chạy lại
+`test-giai-doan-3-batch-c-badges.js`/`test-itprice-status-badge-step-total.js`/
+`test-it-price-approvals-scope.js`/`test-itprice-wholesale-approval-slip.js`/
+`test-itprice-wholesale-mixed-approval.js`/`test-vanhanh-itprice-chitiet-csp.js`/
+`test-itprice-margin-percent-display.js`/`test-itprice-mastertlist-channel-split.js` — không regression.
+CSP sạch. Demo ảnh trước/sau gửi người dùng xác nhận trước khi merge (`demo-itprice-applied-status-filter.js`).
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.98 (2026-11): F5 mất Cấu Hình API Tồn Kho / Mã Điểm API Tồn Kho — initDatabase() thiếu 2 dòng đọc lại
 

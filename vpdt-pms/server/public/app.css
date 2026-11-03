@@ -792,6 +792,13 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
 .badge-danger { background: var(--hcrc-danger-bg); color: var(--hcrc-danger-ink); }
 .badge-neutral { background: var(--hcrc-neutral-bg); color: var(--hcrc-neutral-ink); }
 
+/* .badge-wrap (11/2026, phản hồi người dùng: cột "Áp Giá" ở 3 màn Phê Duyệt Giá — Mua Hàng/Vận Hành/Hỗ
+   Trợ IT — kèm tên người thực hiện dài quá, muốn xuống dòng cho gọn thay vì kéo rộng cả cột) — ĐÈ riêng
+   `white-space: nowrap` của .badge-*  ở trên (đặt SAU, cùng độ ưu tiên selector nên thắng theo thứ tự
+   khai báo) CHỈ cho đúng những badge có thêm class này, KHÔNG đổi hành vi .badge-* dùng chung cho mọi
+   module khác trong hệ thống. Dùng ở itPriceAppliedBadge() (module-itsupport-price.js). */
+.badge-wrap { white-space: normal; max-width: 230px; text-align: left; line-height: 1.3; }
+
 .btn-primary, .btn-secondary, .btn-destructive-outline, .btn-ghost, .btn-more {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   border-radius: 9px; padding: 9px 16px; font-size: 13.5px; font-weight: 600;

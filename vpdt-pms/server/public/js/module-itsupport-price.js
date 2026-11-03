@@ -917,6 +917,7 @@ function onItPriceFilterChange() {
 }
 function resetItPriceFilters() {
   document.getElementById('filterStatusItPrice').value = '';
+  document.getElementById('filterAppliedItPrice').value = '';
   document.getElementById('filterFromDateItPrice').value = '';
   document.getElementById('filterToDateItPrice').value = '';
   document.getElementById('filterKeywordItPrice').value = '';
@@ -1179,13 +1180,29 @@ function itPriceStatusBadge(p) {
 
 function itPriceAppliedBadge(p) {
   if (p.status !== 'APPROVED') return '<span class="text-gray-400 text-xs">—</span>';
+  // badge-wrap (11/2026, phản hồi người dùng "ô áp giá dài quá, cho xuống dòng cho gọn") — ĐÈ riêng
+  // white-space:nowrap mặc định của .badge-* (xem app.css), chỉ áp dụng cho badge Áp Giá (có thể kèm
+  // tên người dài), không đụng tới mọi badge trạng thái khác dùng chung trong hệ thống.
   if (p.applied) {
-    return `<span class="badge-success">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`;
+    return `<span class="badge-success badge-wrap">✅ Hoàn thành${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`;
   }
   if (p.applyClaimedBy) {
-    return `<span class="badge-info">🖐️ Đang xử lý${p.applyClaimedByName ? ` (${escapeHtml(p.applyClaimedByName)})` : ''}</span>`;
+    return `<span class="badge-info badge-wrap">🖐️ Chưa hoàn thành — đang xử lý${p.applyClaimedByName ? ` (${escapeHtml(p.applyClaimedByName)})` : ''}</span>`;
   }
-  return `<span class="badge-warning">⏳ Chưa áp giá</span>`;
+  return `<span class="badge-warning badge-wrap">⏳ Chưa hoàn thành</span>`;
+}
+
+// itPriceAppliedFilterMatches(p, filterValue) — dùng CHUNG cho cả 3 màn hiện danh sách Phê Duyệt Giá
+// (Hỗ Trợ IT/Mua Hàng-Bán Lẻ/Vận Hành-Bán Buôn), mirror ĐÚNG khuôn itPriceAppliedBadge() ngay trên (cùng
+// nguồn applied/applyClaimedBy) — "DONE" khớp ĐÚNG đề xuất đã áp giá xong; "PENDING" khớp đề xuất đã
+// Phê Duyệt nhưng CHƯA áp giá xong (dù chưa ai nhận xử lý hay đang có người nhận xử lý) — theo đúng yêu
+// cầu người dùng "thêm lọc Chưa hoàn thành/Hoàn thành để kiểm tra chính xác hơn các yêu cầu chưa thực
+// hiện hoặc thực hiện rồi". Đề xuất chưa tới bước Phê Duyệt (status !== 'APPROVED') không khớp lọc nào
+// cả 2 giá trị (cùng logic "—" ở itPriceAppliedBadge() — áp giá chưa có ý nghĩa gì ở giai đoạn đó).
+function itPriceAppliedFilterMatches(p, filterValue) {
+  if (!filterValue) return true;
+  if (p.status !== 'APPROVED') return false;
+  return filterValue === 'DONE' ? !!p.applied : !p.applied;
 }
 
 // buildItPriceRowHtml(p) — 1 dòng <tr> dùng CHUNG cho cả 3 màn hiện danh sách Phê Duyệt Giá (Hỗ Trợ
@@ -1242,6 +1259,7 @@ function renderMhItPriceList() {
   const tbody = document.getElementById('mhItPriceTableBody');
   if (!tbody) return;
   const statusFilter = document.getElementById('filterStatusMhItPrice')?.value || '';
+  const appliedFilter = document.getElementById('filterAppliedMhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateMhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateMhItPrice')?.value || '';
   const keywordInputEl = document.getElementById('filterKeywordMhItPrice');
@@ -1256,6 +1274,7 @@ function renderMhItPriceList() {
     .filter(p => {
       if ((p.priceType || 'RETAIL') !== 'RETAIL' || !canViewItPriceApproval(currentUser, p)) return false;
       if (statusFilter && p.status !== statusFilter) return false;
+      if (!itPriceAppliedFilterMatches(p, appliedFilter)) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — gõ "Lý do" không tìm được): p.reason ("Lý Do Điều
@@ -1278,6 +1297,7 @@ function onMhItPriceFilterChange() {
 }
 function resetMhItPriceFilters() {
   document.getElementById('filterStatusMhItPrice').value = '';
+  document.getElementById('filterAppliedMhItPrice').value = '';
   document.getElementById('filterFromDateMhItPrice').value = '';
   document.getElementById('filterToDateMhItPrice').value = '';
   document.getElementById('filterKeywordMhItPrice').value = '';
@@ -1288,6 +1308,7 @@ function renderVanHanhItPriceList() {
   const tbody = document.getElementById('vanHanhItPriceTableBody');
   if (!tbody) return;
   const statusFilter = document.getElementById('filterStatusVanHanhItPrice')?.value || '';
+  const appliedFilter = document.getElementById('filterAppliedVanHanhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateVanHanhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateVanHanhItPrice')?.value || '';
   const keywordInputEl = document.getElementById('filterKeywordVanHanhItPrice');
@@ -1298,6 +1319,7 @@ function renderVanHanhItPriceList() {
     .filter(p => {
       if (p.priceType !== 'WHOLESALE' || !canViewItPriceApproval(currentUser, p)) return false;
       if (statusFilter && p.status !== statusFilter) return false;
+      if (!itPriceAppliedFilterMatches(p, appliedFilter)) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả p.reason + customData.
@@ -1317,6 +1339,7 @@ function onVanHanhItPriceFilterChange() {
 }
 function resetVanHanhItPriceFilters() {
   document.getElementById('filterStatusVanHanhItPrice').value = '';
+  document.getElementById('filterAppliedVanHanhItPrice').value = '';
   document.getElementById('filterFromDateVanHanhItPrice').value = '';
   document.getElementById('filterToDateVanHanhItPrice').value = '';
   document.getElementById('filterKeywordVanHanhItPrice').value = '';
@@ -1345,6 +1368,7 @@ function renderItPriceApprovals() {
   if (formBadge) formBadge.innerText = activeItPriceSubTab === 'WHOLESALE' ? '🏪 Tạo cho: Bán Buôn' : '🏷️ Tạo cho: Bán Lẻ';
 
   const statusFilter = document.getElementById('filterStatusItPrice')?.value || '';
+  const appliedFilter = document.getElementById('filterAppliedItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateItPrice')?.value || '';
   const keywordInputEl = document.getElementById('filterKeywordItPrice');
@@ -1367,6 +1391,7 @@ function renderItPriceApprovals() {
     if (!canViewItPriceApproval(currentUser, p)) return false;
     if ((p.priceType || 'RETAIL') !== activeItPriceSubTab) return false;
     if (statusFilter && p.status !== statusFilter) return false;
+    if (!itPriceAppliedFilterMatches(p, appliedFilter)) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
     // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm p.reason + customData.

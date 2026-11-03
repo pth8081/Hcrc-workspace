@@ -762,7 +762,7 @@
            itsupport-price.js). -->
       <details class="filter-box-details bg-gray-50 p-3 rounded border">
         <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</span></summary>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
             <select id="filterStatusVanHanhItPrice" data-op-change="onVanHanhItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
@@ -770,6 +770,14 @@
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
               <option value="REJECTED">Bị Từ Chối</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Áp Giá</label>
+            <select id="filterAppliedVanHanhItPrice" data-op-change="onVanHanhItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="DONE">✅ Hoàn thành</option>
+              <option value="PENDING">⏳ Chưa hoàn thành</option>
             </select>
           </div>
           <div>

@@ -30,7 +30,7 @@
            của người vào từ đó), KHÔNG còn "y hệt trước" như đợt tách đầu tiên nữa. -->
       <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
         <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</span></summary>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
             <select id="filterStatusItPrice" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
@@ -38,6 +38,14 @@
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
               <option value="REJECTED">Bị Từ Chối</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Áp Giá</label>
+            <select id="filterAppliedItPrice" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="DONE">✅ Hoàn thành</option>
+              <option value="PENDING">⏳ Chưa hoàn thành</option>
             </select>
           </div>
           <div>
