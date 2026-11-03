@@ -3912,10 +3912,13 @@ function openOperationEstimateModal(kind, id) {
     // NGAY (estimateStatus DRAFT -> APPROVED trực tiếp, xem submitOperationEstimate() ở lib/recordActions.js).
     // Đã lưu rồi (APPROVED) vẫn sửa/lưu lại được — Tổng/Ngân sách còn lại + trạng thái vòng đời hồ sơ
     // (operationRecordStageStatus()) LUÔN tính lại trực tiếp từ danh mục nên tự đúng ngay, không cần
-    // bước đồng bộ nào thêm. Công việc ở Thực hiện là 1 cây ĐỘC LẬP, không tự thêm/xoá theo hạng mục
-    // (quyết định thiết kế, xem chú thích đầy đủ ở routes/records.js ngay trước 2 route estimate/submit).
+    // bước đồng bộ nào thêm. Công việc ở Thực hiện VẪN LÀ 1 cây độc lập về bản chất (tự thêm/sửa/xoá tay
+    // như trước) — NHƯNG từ 11/2026, hạng mục nào VỪA thêm/sửa trong CHÍNH lần bấm Lưu này mà đã có Người
+    // Phụ Trách + chưa từng có Công Việc liên kết sẽ tự được "mồi" tạo sẵn 1 Công Việc Gốc/Con tương ứng
+    // (xem buildAutoWorkItemsFromEstimate(), lib/recordActions.js) — chỉ đúng 1 lần, sau đó độc lập hoàn
+    // toàn như cây Công việc vẫn luôn vậy.
     const resaveNote = o.estimateStatus === 'APPROVED'
-      ? `<p class="text-[11px] text-gray-500 italic mt-1">Sửa xong danh mục, các số Tổng/Còn lại và trạng thái hồ sơ tự cập nhật ngay — Công việc ở Thực hiện vẫn thêm/sửa/xoá riêng như bình thường.</p>` : '';
+      ? `<p class="text-[11px] text-gray-500 italic mt-1">Sửa xong danh mục, các số Tổng/Còn lại và trạng thái hồ sơ tự cập nhật ngay. Hạng mục vừa thêm/sửa có Người Phụ Trách sẽ tự có Công Việc tương ứng ở Thực hiện (nếu chưa có) — Công việc vẫn thêm/sửa/xoá riêng được như bình thường.</p>` : '';
     controls.innerHTML = `<div class="flex flex-col items-end gap-1"><button data-op="submitOperationEstimateForApproval" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700 text-xs">💾 Lưu Danh Mục Đầu Tư</button>${resaveNote}</div>`;
   } else if (o.estimateStatus === 'REJECTED' && canCreateOperationEstimateClient(currentUser, kind, o)) {
     // Nhánh này chỉ còn khả năng xảy ra với hồ sơ CŨ (trước Mục H) từng bị Từ chối — hồ sơ MỚI từ giờ

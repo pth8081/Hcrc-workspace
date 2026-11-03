@@ -692,12 +692,13 @@ function createDispatcher(state) {
         // sourceType tường minh (Overhaul quyền — canManageOperationRecord() không tự suy luận ngược từ
         // sourceRecord) — mirror ĐÚNG route thật.
         const sourceType = moduleKey === 'operationRepairs' ? 'OPERATION_REPAIR' : 'OPERATION_STORE_OPENING';
-        const updated = recordActions.submitOperationEstimate(freshUser, list[idx], body, sourceType, state.users);
+        const outInfo = {};
+        const updated = recordActions.submitOperationEstimate(freshUser, list[idx], body, sourceType, state.users, outInfo);
         list[idx] = updated;
         let autoCreatedWorkItems = [];
         if (updated.useConfirmStatus !== 'CONFIRMED') {
           const existingWorkItems = state.operationWorkItems.filter(w => w.sourceType === sourceType && w.sourceId === id);
-          autoCreatedWorkItems = recordActions.buildAutoWorkItemsFromEstimate(freshUser, updated, sourceType, updated.estimateItems || [], existingWorkItems);
+          autoCreatedWorkItems = recordActions.buildAutoWorkItemsFromEstimate(freshUser, updated, sourceType, updated.estimateItems || [], existingWorkItems, outInfo.touchedItemIds);
           for (const w of autoCreatedWorkItems) {
             w.sourceType = sourceType; w.sourceId = id;
             state.operationWorkItems.push(w);

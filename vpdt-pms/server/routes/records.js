@@ -3597,6 +3597,14 @@ router.post('/operationOrders/:id/cancel-receipt', async (req, res) => {
 // 1-1. Cây Công việc VẪN LÀ 1 cây độc lập về bản chất (KHÔNG đồng bộ 2 chiều liên tục) — chỉ thêm đúng 1
 // "cú hích" tạo ban đầu, không phải liên kết sống.
 //
+// 11/2026 — VÁ LẠI phạm vi rủi ro (1) sau rà soát chéo nhiều agent trước merge: bản ĐẦU TIÊN của đảo
+// ngược trên quét TOÀN BỘ estimateItems của hồ sơ mỗi lần lưu (dù chỉ lưu/sửa 1 phần), nên 1 hồ sơ CŨ đã
+// có sẵn nhiều danh mục lớn gán người TỪ TRƯỚC tính năng này (assignedToUsernames có từ lâu, không phải
+// field mới) vẫn bị quét trúng và tự sinh Công Việc cho TẤT CẢ — tái tạo đúng y nguyên rủi ro (1) đang cố
+// tránh. Đã xác nhận lại với người dùng (AskUserQuestion lần 2): CHỈ tạo cho đúng hạng mục vừa thêm/sửa
+// trong CHÍNH LẦN lưu đó (touchedItemIds, tính trong submitOperationEstimate() — xem chú thích ở đó) —
+// hạng mục khác trong CÙNG hồ sơ không bị đụng tới thì bỏ qua, dù đã có người phụ trách từ trước.
+//
 // Vận Hành > "Siêu Thị" > Giai đoạn Danh mục đầu tư — lưu/lưu lại bảng hạng mục (KHÔNG còn qua duyệt,
 // CÓ THỂ lưu lại nhiều lần kể cả sau khi đã APPROVED — xem lib/recordActions.js submitOperationEstimate()).
 // recordActions.submitOperationEstimate dùng CHUNG cho cả 2 collection.
@@ -3617,11 +3625,11 @@ router.post('/operationOrders/:id/cancel-receipt', async (req, res) => {
 // route tạo/sửa/xoá work item khác đều tự cập nhật lại DB.operationWorkItems phía client ngay sau khi gọi
 // API thành công, route NÀY cũng phải làm y hệt dù việc tạo xảy ra "ngầm" chứ không phải do người dùng
 // chủ động bấm nút tạo Công Việc).
-async function autoCreateOperationWorkItemsAfterEstimateSave(user, savedRecord, sourceType) {
+async function autoCreateOperationWorkItemsAfterEstimateSave(user, savedRecord, sourceType, touchedItemIds) {
   if (savedRecord.useConfirmStatus === 'CONFIRMED') return [];
   try {
     const existingWorkItems = await getWorkItemsBySource(sourceType, savedRecord.id);
-    const toCreate = recordActions.buildAutoWorkItemsFromEstimate(user, savedRecord, sourceType, savedRecord.estimateItems || [], existingWorkItems);
+    const toCreate = recordActions.buildAutoWorkItemsFromEstimate(user, savedRecord, sourceType, savedRecord.estimateItems || [], existingWorkItems, touchedItemIds);
     for (const w of toCreate) {
       w.sourceType = sourceType;
       w.sourceId = savedRecord.id;
@@ -3633,14 +3641,29 @@ async function autoCreateOperationWorkItemsAfterEstimateSave(user, savedRecord, 
     return [];
   }
 }
+// LỖI ĐÃ VÁ (rà soát chéo nhiều agent, 11/2026 — "race condition/TOCTOU giữa 2 lượt lưu Danh mục đầu tư
+// đồng thời cho ĐÚNG 1 hồ sơ có thể tạo trùng Công Việc Gốc/Con"): autoCreateOperationWorkItemsAfterEstimateSave()
+// TRƯỚC ĐÂY được gọi SAU KHI withLockedRecordForCollection() đã commit xong (khoá UPDLOCK/HOLDLOCK trên
+// dòng hồ sơ đã nhả) — đọc existingWorkItems + insertWorkItem() lúc đó KHÔNG còn được khoá bảo vệ nữa, 2
+// request lưu cùng lúc (double-click nút Lưu, hoặc client tự động gửi lại khi mất mạng) đều có thể cùng
+// đọc "chưa liên kết" trước khi bên nào insert xong -> tạo trùng. Fix: gọi NGAY TRONG callback mutatorFn
+// (vẫn đang giữ khoá dòng hồ sơ) — request thứ 2 (cùng id) bị chặn ở chính bước SELECT...WITH(UPDLOCK,
+// HOLDLOCK) của withLockedRecordForCollection() cho tới khi request thứ 1 COMMIT xong (tức đã insertWorkItem()
+// xong, vì đợi await bên trong callback trước khi return) -> request thứ 2 mới được đọc lại existingWorkItems
+// VÀ LUÔN thấy đúng trạng thái mới nhất, không còn tạo trùng. touchedItemIds thu hẹp phạm vi tạo — xem
+// chú thích submitOperationEstimate()/buildAutoWorkItemsFromEstimate().
 router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING', users));
-    const autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, result, 'OPERATION_STORE_OPENING');
-    res.json({ ok: true, item: result, autoCreatedWorkItems });
+    const outInfo = {};
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, async (item) => {
+      const saved = recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING', users, outInfo);
+      outInfo.autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, saved, 'OPERATION_STORE_OPENING', outInfo.touchedItemIds);
+      return saved;
+    });
+    res.json({ ok: true, item: result, autoCreatedWorkItems: outInfo.autoCreatedWorkItems || [] });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/submit`, err); }
 });
 router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
@@ -3648,9 +3671,13 @@ router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR', users));
-    const autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, result, 'OPERATION_REPAIR');
-    res.json({ ok: true, item: result, autoCreatedWorkItems });
+    const outInfo = {};
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, async (item) => {
+      const saved = recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR', users, outInfo);
+      outInfo.autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, saved, 'OPERATION_REPAIR', outInfo.touchedItemIds);
+      return saved;
+    });
+    res.json({ ok: true, item: result, autoCreatedWorkItems: outInfo.autoCreatedWorkItems || [] });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
 });
 

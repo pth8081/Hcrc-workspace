@@ -1017,7 +1017,7 @@ function sanitizeOperationEstimateAttachments(raw, existingAttachments, user) {
     });
 }
 
-function submitOperationEstimate(user, item, payload, sourceType, users) {
+function submitOperationEstimate(user, item, payload, sourceType, users, outInfo) {
   const isFullManager = canManageOperationRecord(user, item, sourceType);
   const existingItems = item.estimateItems || [];
   let ownerTopIds = null; // null = toàn quyền (không giới hạn); Set = CHỈ được đụng đúng các id này (+ con của chúng)
@@ -1033,6 +1033,10 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
   }
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
   const existingIds = new Set(existingItems.map(it => it.id).filter(Boolean));
+  // Bản chụp TRƯỚC khi genId() bắt đầu thêm id mới vào existingIds — dùng để biết 1 id có phải THẬT SỰ
+  // đã tồn tại trước lần lưu này hay không (existingIds bị genId() mutate dần thêm id mới trong lúc xử
+  // lý, không còn phản ánh đúng trạng thái "trước khi lưu" nữa) — xem khối tính touchedItemIds ở cuối hàm.
+  const existingIdsSnapshot = new Set(existingIds);
   // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "submitOperationEstimate() cho phép hijack hạng mục ngoài
   // phạm vi"): existingById cần có SỚM (trước khi quyết định có cho tái dùng 1 rawId hay không) để đối
   // chiếu phạm vi hạng mục đó TRƯỚC KHI sửa — xem khối kiểm tra ở vòng map prelim ngay dưới.
@@ -1180,6 +1184,42 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
     const children = resolved.filter((c) => c.parentId === it.id);
     if (children.length) it.amount = children.reduce((sum, c) => sum + c.amount, 0);
   });
+
+  // touchedItemIds — hạng mục nào THỰC SỰ được THÊM MỚI hoặc SỬA trong CHÍNH LẦN lưu này (không phải mọi
+  // hạng mục đang có mặt trong resolved — rất nhiều trong đó chỉ là người dùng lưu lại mà không đổi gì).
+  // DÙNG bởi autoCreateOperationWorkItemsAfterEstimateSave()/buildAutoWorkItemsFromEstimate() ở
+  // routes/records.js để thu hẹp đúng phạm vi tự tạo Công Việc — phát hiện qua rà soát chéo nhiều agent
+  // (11/2026): bản đầu tiên quét TOÀN BỘ danh mục lớn đã gán người trong hồ sơ (dù không liên quan lần
+  // lưu này) mỗi khi lưu BẤT KỲ phần nào của hồ sơ, tái tạo đúng rủi ro "công việc ma cho hồ sơ cũ" mà
+  // quyết định thiết kế gốc từng cảnh báo (assignedToUsernames có từ TRƯỚC tính năng này, hồ sơ cũ rất có
+  // thể đã có sẵn nhiều hạng mục gán người nhưng chưa từng tạo Công Việc). Đã xác nhận lại với người dùng
+  // qua AskUserQuestion: CHỈ tạo cho đúng hạng mục vừa sửa/thêm, không quét toàn bộ hồ sơ.
+  // Tính SAU roll-up (không phải ngay sau resolve) vì amount của danh mục lớn có con bị ghi đè = tổng con
+  // ngay trên — so sánh TRƯỚC roll-up sẽ luôn lệch với amount đã roll-up lưu từ lần trước (client gửi lên
+  // giá trị cũ/0 cho ô bị khoá), khiến MỌI danh mục lớn có con bị coi "đã sửa" dù không ai đụng tới.
+  const touchedItemIds = new Set();
+  for (const it of resolved) {
+    const prev = existingById.get(it.id);
+    if (!prev || !existingIdsSnapshot.has(it.id)) { touchedItemIds.add(it.id); continue; } // hạng mục mới thêm
+    const assignedChanged = it.parentId == null && (
+      JSON.stringify([...(prev.assignedToUsernames || [])].sort())
+      !== JSON.stringify([...(it.assignedToUsernames || [])].sort())
+    );
+    const changed = prev.content !== it.content
+      || (prev.description || '') !== (it.description || '')
+      || Number(prev.amount) !== Number(it.amount)
+      || (prev.note || '') !== (it.note || '')
+      || (prev.parentId ?? null) !== (it.parentId ?? null)
+      || assignedChanged;
+    if (changed) touchedItemIds.add(it.id);
+  }
+  // Con vừa sửa/thêm -> coi CHA (danh mục lớn chứa nó) cũng "đã chạm", vì con mới cần đúng 1 Công Việc
+  // Gốc để gắn vào (dù gốc đó mới tạo ở đây hay đã có từ trước) — KHÔNG lan ngược lên danh mục lớn khác
+  // không liên quan trong cùng hồ sơ.
+  for (const it of resolved) {
+    if (it.parentId != null && touchedItemIds.has(it.id)) touchedItemIds.add(it.parentId);
+  }
+  if (outInfo) outInfo.touchedItemIds = touchedItemIds;
 
   // Phạm vi phụ trách: hợp nhất lại — giữ NGUYÊN 100% các danh mục lớn NGOÀI phạm vi (+ con của chúng) từ
   // dữ liệu đã lưu trước đó (client không hề gửi lại các dòng này — xem renderOperationEstimateItemsTable()
@@ -1619,18 +1659,29 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // thì bỏ qua gốc, nhưng VẪN xét con mới thêm của nó (con mới chưa có estimateItemId tương ứng) — cho phép
 // "thêm 1 danh mục con mới vào 1 danh mục lớn đã có Công Việc Gốc từ trước" vẫn tự sinh đúng Công Việc Con
 // mới, không cần gốc cũng phải mới tạo trong CÙNG lần lưu này.
+// touchedItemIds (BẮT BUỘC, Set id các hạng mục THỰC SỰ vừa thêm/sửa trong CHÍNH LẦN lưu này — xem khối
+// tính ở cuối submitOperationEstimate()): CHỈ sinh Công Việc Gốc MỚI cho 1 danh mục lớn CHƯA từng liên kết
+// (!linkedEstimateItemIds.has(top.id)) nếu nó NẰM trong touchedItemIds — danh mục lớn khác trong CÙNG hồ
+// sơ đã có assignedToUsernames từ trước (hồ sơ cũ, trước tính năng này) nhưng KHÔNG được đụng tới trong
+// lần lưu này thì BỎ QUA, không tự nhiên sinh Công Việc "ma" (phát hiện qua rà soát chéo nhiều agent,
+// 11/2026 — xem chú thích đầy đủ ở submitOperationEstimate()). Danh mục lớn ĐÃ liên kết từ trước thì
+// KHÔNG bị ràng buộc này (hành vi giữ nguyên như cũ — vẫn cho thêm Công Việc Con mới dù lần lưu này không
+// đụng tới chính danh mục lớn, vì gốc đã tồn tại từ 1 lần lưu TRƯỚC đó đã qua đúng cổng kiểm này rồi).
 // CỐ Ý bỏ qua hoàn toàn nếu sourceRecord.useConfirmStatus === 'CONFIRMED' (route tự kiểm trước khi gọi) —
 // hồ sơ đã chốt đưa vào sử dụng thì không còn giai đoạn Thực hiện nào để tạo thêm việc mới nữa
 // (createOperationWorkItem() cũng chặn y hệt lúc tạo tay, xem chú thích ở đó).
-function buildAutoWorkItemsFromEstimate(user, sourceRecord, sourceType, validItems, existingWorkItems) {
+function buildAutoWorkItemsFromEstimate(user, sourceRecord, sourceType, validItems, existingWorkItems, touchedItemIds) {
   const linkedEstimateItemIds = new Set((existingWorkItems || []).map(w => w.estimateItemId).filter(Boolean));
+  const touched = touchedItemIds || new Set();
   const toCreate = [];
   let nextId = Date.now();
   const genId = () => nextId++;
   const topItems = (validItems || []).filter(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.length);
   for (const top of topItems) {
+    const alreadyLinked = linkedEstimateItemIds.has(top.id);
+    if (!alreadyLinked && !touched.has(top.id)) continue; // chưa liên kết & không phải hạng mục vừa sửa/thêm lần này -> bỏ qua
     let rootWorkItem = null;
-    if (!linkedEstimateItemIds.has(top.id)) {
+    if (!alreadyLinked) {
       rootWorkItem = {
         id: genId(), parentWorkItemId: null, periodId: null, periodName: null,
         title: top.content, description: top.description || '',

@@ -2769,8 +2769,27 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thực hiện ngay lúc lưu xong. Đã lưu rồi vẫn sửa lại được (thêm/sửa/xoá
     hạng mục) bất cứ lúc nào, không chỉ lần đầu.
   - Sau khi lưu xong Danh mục đầu tư: lập/theo dõi cây công việc thực hiện thực tế
-    (độc lập, không tự đồng bộ theo danh mục dự toán) → nghiệm thu khi toàn
-    bộ công việc đã xong (ngay hoặc sau N ngày) → báo cáo tổng kết.
+    → nghiệm thu khi toàn bộ công việc đã xong (ngay hoặc sau N ngày) → báo cáo
+    tổng kết.
+  - **Tự động tạo Công Việc từ Danh Mục Đầu Tư (11/2026)**: mỗi lần bấm "💾 Lưu
+    Danh Mục Đầu Tư", hạng mục (danh mục lớn/con) nào VỪA được thêm mới hoặc
+    sửa trong CHÍNH lần lưu đó, nếu danh mục lớn đã có "Người Phụ Trách" và
+    CHƯA từng có Công Việc liên kết, hệ thống tự tạo ngay 1 Công Việc Gốc (ở
+    Thực hiện) kế thừa đúng Người Phụ Trách đó — danh mục con (nếu có) của nó
+    cũng tự tạo Công Việc Con tương ứng. Người Phụ Trách được gán tự động
+    thành **Người Nghiệm Thu** luôn (không cần gán lại). Hạng mục KHÁC trong
+    CÙNG hồ sơ mà lần lưu này không đụng tới thì KHÔNG bị quét/tạo theo — chỉ
+    hồ sơ lưu/sửa thật từ mốc này mới có hành vi này, hồ sơ cũ không ai đụng
+    tới không tự nhiên sinh thêm việc. Sau khi tạo, Công Việc đó ĐỘC LẬP hoàn
+    toàn với Danh Mục Đầu Tư (sửa/xoá hạng mục sau đó KHÔNG đụng gì đến Công
+    Việc đã tạo) — người quản lý vẫn tự thêm/sửa/xoá Công Việc tay như trước
+    cho mọi trường hợp không map 1-1 giữa hạng mục ngân sách và đầu việc thật.
+  - **"🔁 Giao Lại" (đổi Người Thực Hiện)**: ở Thực hiện, cả người ĐANG được
+    gán thực hiện 1 công việc lẫn người toàn quyền quản lý hồ sơ đều giao lại
+    được công việc đó cho 1 nhân viên khác thực hiện (không cần họ có quyền gì
+    trong hệ thống — chỉ cần có trong danh sách người dùng). Giao lại CHỈ đổi
+    "Người Thực Hiện" — **Người Nghiệm Thu giữ nguyên**, không đổi theo. Không
+    giao lại được công việc đã "Đã nghiệm thu" xong.
   - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ**: mỗi công việc
     LÁ (không có việc con) có nút "🔄 Cập Nhật Tiến Độ" mirror ĐÚNG UX modal
     "Cập Nhật Tiến Độ" của module Công Việc công ty — khi đang "Đang thực
