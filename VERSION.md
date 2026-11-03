@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.95 (2026-11): Khung gợi ý tìm-kiếm-gõ-chọn tự co giãn theo chữ + tooltip "bắt buộc nhập" hiện TRÊN ô
+
+2 phản ánh người dùng (kèm ảnh chụp màn hình):
+1. Ô "Siêu Thị"/"Chức Danh"/"Phòng Ban" (form Người Dùng, Hệ Thống → Phân Quyền): khung gợi ý tìm-kiếm-
+   gõ-chọn (widget "sdd*") luôn rộng ĐÚNG BẰNG ô input — tên siêu thị dài bị cắt cụt "..." dù còn dư chỗ
+   trống trên màn hình. Riêng ô "Chức Danh" (#uJobTitle) còn chưa nâng cấp, vẫn là `<select>` gốc.
+2. Bong bóng cảnh báo mặc định của trình duyệt ("Please enter a valid value...") ở ô bắt buộc (VD "Thời
+   Gian Bắt Đầu Đi" khi Đăng Ký Xe) luôn hiện NGAY DƯỚI ô, đè lên nhãn/ô kế tiếp trong lưới form nhiều
+   cột, khó đọc.
+
+**Đã làm**:
+1. `sddPositionAndShow()` (core.js, dùng chung cho TOÀN BỘ ~20 điểm widget "sdd\*" trong hệ thống) giờ tự
+   đo (canvas, đúng font đang dùng) bề rộng chữ DÀI NHẤT đang hiển thị trong danh sách gợi ý, nới khung
+   gợi ý theo đó (trần 480px/viewport, tự lùi vào trong viewport nếu tràn phải) — KHÔNG đổi độ rộng
+   CHÍNH ô input (giữ nguyên bố cục lưới form), vì khung gợi ý là `position:fixed`, nổi riêng.
+2. Ô "Chức Danh" (`#uJobTitle`, form Người Dùng) nâng cấp từ `<select>` sang widget "sdd\*" — cùng khuôn
+   `#uDept`/`#uStore` đã làm trước đó (xem `populateUserJobTitleOptions()`, core.js).
+3. Thêm cơ chế tooltip "bắt buộc nhập/định dạng sai" TỰ VẼ, thay cho bong bóng mặc định của trình duyệt
+   — áp dụng CHUNG cho mọi `required`/ràng buộc định dạng (date, email...) ở TOÀN HỆ THỐNG: bắt sự kiện
+   `'invalid'` ở pha capture của `document`, `preventDefault()` chặn bong bóng mặc định, tự vẽ tooltip đỏ
+   NGAY TRÊN ô (đo `offsetHeight` thật để đặt đúng vị trí), tự ẩn khi người dùng gõ lại hoặc rời ô. Tự
+   cập nhật lại vị trí khi cuộn trang (KHÔNG ẩn khi cuộn — phát hiện khi viết test: `el.focus()` khiến
+   trình duyệt tự cuộn ô invalid vào khung nhìn, nếu xử lý cuộn bằng "ẩn" thì tooltip vừa hiện xong đã
+   biến mất ngay bởi chính cú cuộn đó).
+
+**Test**: `tests/test-sdd-width-jobtitle-invalid-tooltip.js` (mới, 8 kịch bản) — xác nhận #uJobTitle là
+`<input>` sdd\*, gõ tìm/bấm chọn hoạt động đúng, khung gợi ý rộng hơn ô input khi có tên dài + không tràn
+viewport, tooltip hiện đúng vị trí TRÊN ô + đúng nội dung `validationMessage` + tự ẩn khi gõ lại + không
+chặn nhầm submit hợp lệ. Chạy lại `test-sdd-keyboard-nav.js`/`test-sdd-prefilled-focus-fix.js`/
+`test-admin-users-permgroups.js`/`test-job-title-grade-default.js`/`test-collapse-car-meeting-minutes-
+forms.js`/`test-carreg-list-assigned-vehicle-type.js` — không regression. CSP sạch.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.94 (2026-11): Mã Điểm API Tồn Kho hỗ trợ NHIỀU mã cách nhau dấu phẩy (sáp nhập siêu thị)
 

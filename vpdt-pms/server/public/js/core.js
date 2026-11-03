@@ -12352,13 +12352,16 @@ function populateUserPosTypeOptions() {
 // cần render lại toàn bộ dropdown khác của trang. CHUYỂN từ module-admin-submissiongroups.js sang đây
 // (Hạ tầng: nạp module theo cụm, đợt 7) — populateDropdowns() gọi thẳng hàm này ở MỌI switchTab(),
 // không riêng gì tab Hệ Thống/Admin.
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài, cùng đợt uDept/uStore):
+// nâng cấp sang sddSetOptions() (ô tìm-kiếm-gõ-chọn) — "-- Chưa gán --" không còn là 1 <option>, input
+// để trống tự nhiên nghĩa là chưa gán (cùng khuôn populateUserDeptOptions() ngay trên).
 function populateUserJobTitleOptions(posType) {
   const uJobTitle = document.getElementById('uJobTitle');
   if (!uJobTitle) return;
   const current = uJobTitle.value;
   const options = getPosTypeJobTitles(posType);
-  uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-  if (options.includes(current)) uJobTitle.value = current;
+  sddSetOptions('uJobTitleDatalist', options);
+  uJobTitle.value = options.includes(current) ? current : '';
 }
 
 function populateInternalPostCategorySelects() {
@@ -14269,11 +14272,37 @@ function sddSetActiveIdx(dd, idx) {
   });
 }
 
+// sddMeasureTextWidth() — đo bề rộng 1 chuỗi theo ĐÚNG font đang dùng, bằng canvas ẩn (không cần gắn
+// vào DOM/không cần phần tử đang hiển thị) — dùng để tự co giãn khung gợi ý theo nội dung ở
+// sddPositionAndShow() ngay dưới, xem chú thích tại đó.
+let _sddMeasureCanvasCtx = null;
+function sddMeasureTextWidth(text, font) {
+  if (!_sddMeasureCanvasCtx) _sddMeasureCanvasCtx = document.createElement('canvas').getContext('2d');
+  _sddMeasureCanvasCtx.font = font;
+  return _sddMeasureCanvasCtx.measureText(text || '').width;
+}
+
 function sddPositionAndShow(dd, input) {
   const rect = input.getBoundingClientRect();
-  dd.style.left = Math.max(rect.left, 4) + 'px';
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "chỗ phân quyền siêu thị/chức danh/phòng ban cho theo
+  // kiểu dropdown tìm kiếm, độ rộng mở theo độ dài của ký tự"): khung gợi ý trước đây LUÔN rộng đúng
+  // bằng ô input đang gõ (`rect.width`) — các ô này nằm trong lưới form hẹp (nhiều cột), tên siêu thị/
+  // chức danh dài bị cắt cụt "..." dù còn dư chỗ trống bên phải trên màn hình. Giờ tự đo bề rộng chữ DÀI
+  // NHẤT đang hiển thị (canvas, cùng font với khung — getComputedStyle hoạt động bình thường dù khung
+  // đang display:none) rồi NỚI RỘNG khung gợi ý theo đó — KHÔNG đổi độ rộng chính ô input (giữ nguyên bố
+  // cục lưới), vì khung gợi ý là position:fixed, nổi riêng không chiếm chỗ layout. Có trần MAX_W (480px,
+  // hoặc hẹp hơn nếu màn hình nhỏ hơn) để không tràn ngang trên điện thoại; chữ vượt trần đó vẫn cắt "..."
+  // như cũ (class `truncate` ở sddRenderRows()). Tự lùi left vào trong viewport nếu khung rộng ra sẽ
+  // tràn khỏi mép phải màn hình.
+  const items = (dd._sddShown && dd._sddShown.length) ? dd._sddShown : (dd._sddItems || []);
+  const font = getComputedStyle(dd).font || '12px sans-serif';
+  const ROW_PADDING = 20; // .px-2 (8px mỗi bên) ở sddRenderRows() + chừa dư tránh sát mép
+  const longest = items.reduce((max, it) => Math.max(max, sddMeasureTextWidth(it.label, font)), 0);
+  const maxW = Math.max(160, Math.min(window.innerWidth - 16, 480));
+  const width = Math.max(rect.width, 160, Math.min(longest + ROW_PADDING, maxW));
+  dd.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - width - 4)) + 'px';
   dd.style.top = (rect.bottom + 2) + 'px';
-  dd.style.width = Math.max(rect.width, 160) + 'px';
+  dd.style.width = width + 'px';
   dd._sddActiveInput = input;
   dd.classList.remove('hidden');
 }
@@ -14402,6 +14431,72 @@ document.addEventListener('click', (ev) => {
     if (dd._sddActiveInput !== ev.target) dd.classList.add('hidden');
   });
 });
+
+// ==========================================
+// Thông báo "bắt buộc nhập/định dạng sai" hiện TRÊN ô thay vì bong bóng mặc định của trình duyệt (11/2026,
+// theo yêu cầu người dùng — phản ánh bằng ảnh chụp màn hình "Please enter a valid value..." ở ô Thời Gian
+// Bắt Đầu Đi/Dự Kiến Về của Đăng Ký Xe: bong bóng mặc định luôn hiện NGAY DƯỚI ô, trong lưới form nhiều
+// cột (3 cột) nó đè lên nhãn/ô ngay bên dưới, khó đọc). Trình duyệt tự gọi `checkValidity()` trước khi
+// bắn 'submit' của <form> (xem data-op-submit ở trên — handler đó CHỈ chạy khi mọi ô required/định dạng
+// đã hợp lệ, không đổi gì ở đây) — nếu CÓ ô không hợp lệ, trình duyệt bắn sự kiện 'invalid' (KHÔNG nổi
+// bọt/bubbles, phải bắt ở PHA CAPTURE của document mới nghe được dù đích là input/select/textarea bất kỳ
+// trong toàn hệ thống) cho MỌI ô không hợp lệ, rồi tự focus + hiện bong bóng cho ĐÚNG 1 ô ĐẦU TIÊN trong
+// số đó — `ev.preventDefault()` trên 'invalid' chặn HẲN hành vi mặc định đó (cả bong bóng lẫn tự focus)
+// mà KHÔNG ảnh hưởng gì tới việc form có submit được hay không (vẫn bị chặn submit như cũ, do CHÍNH ô đó
+// còn invalid — tách biệt khỏi việc có hiện UI mặc định hay không). Áp dụng CHUNG cho TOÀN HỆ THỐNG (mọi
+// form có `required`/kiểu dữ liệu ràng buộc như date/email/number...), không riêng Đăng Ký Xe — sửa 1 lần
+// ở đây khớp đúng khuôn "sửa chung tại core.js" đã dùng cho sdd*/applyDataStyles().
+let _invalidTooltipEl = null;
+let _invalidTooltipAnchorEl = null;
+function hideInvalidTooltip() {
+  if (_invalidTooltipEl) { _invalidTooltipEl.remove(); _invalidTooltipEl = null; }
+  _invalidTooltipAnchorEl = null;
+}
+function showInvalidTooltip(el) {
+  hideInvalidTooltip();
+  const msg = el.validationMessage;
+  if (!msg) return;
+  const tip = document.createElement('div');
+  tip.setAttribute('role', 'alert');
+  tip.className = 'fixed z-[9999] bg-red-600 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded shadow-lg max-w-xs';
+  tip.textContent = msg;
+  tip.style.visibility = 'hidden';
+  document.body.appendChild(tip);
+  _invalidTooltipEl = tip;
+  _invalidTooltipAnchorEl = el;
+  repositionInvalidTooltip();
+  tip.style.visibility = 'visible';
+}
+// repositionInvalidTooltip() — đặt lại toạ độ khung theo vị trí HIỆN TẠI của ô neo (gọi lại khi cuộn/
+// đổi cỡ màn hình, xem 2 listener scroll/resize ngay dưới). TÁCH riêng khỏi showInvalidTooltip() vì
+// el.focus() ở handler 'invalid' bên dưới có thể khiến trình duyệt TỰ CUỘN trang để đưa ô invalid vào
+// khung nhìn (hành vi mặc định khi focus() 1 phần tử đang nằm ngoài viewport) — sự cuộn đó bắn ra ĐÚNG
+// sự kiện 'scroll' mà khối này đang nghe, nếu xử lý bằng HIDE (như bản đầu) thì tooltip vừa hiện xong
+// đã bị ẩn ngay lập tức bởi chính cú cuộn do focus() gây ra, không bao giờ kịp hiện cho người dùng thấy.
+function repositionInvalidTooltip() {
+  const tip = _invalidTooltipEl, el = _invalidTooltipAnchorEl;
+  if (!tip || !el) return;
+  const rect = el.getBoundingClientRect();
+  const top = Math.max(4, rect.top - tip.offsetHeight - 6);
+  const left = Math.max(4, Math.min(rect.left, window.innerWidth - tip.offsetWidth - 4));
+  tip.style.top = top + 'px';
+  tip.style.left = left + 'px';
+}
+let _invalidPassHandledThisTick = false;
+document.addEventListener('invalid', (ev) => {
+  const el = ev.target;
+  if (!el || typeof el.validationMessage !== 'string') return;
+  ev.preventDefault();
+  if (_invalidPassHandledThisTick) return; // các ô invalid CÒN LẠI trong CÙNG 1 lượt submit — chỉ chặn bong bóng mặc định, không chồng thêm tooltip
+  _invalidPassHandledThisTick = true;
+  setTimeout(() => { _invalidPassHandledThisTick = false; }, 0); // mở lại cho LƯỢT submit/validate TIẾP THEO — mọi 'invalid' cùng 1 lượt bắn đồng bộ, xong hết mới tới setTimeout này
+  el.focus();
+  showInvalidTooltip(el);
+}, true);
+document.addEventListener('input', (ev) => { if (ev.target === _invalidTooltipAnchorEl) hideInvalidTooltip(); });
+document.addEventListener('focusout', (ev) => { if (ev.target === _invalidTooltipAnchorEl) hideInvalidTooltip(); });
+document.addEventListener('scroll', repositionInvalidTooltip, true);
+window.addEventListener('resize', repositionInvalidTooltip);
 
 // ==========================================
 // DROPDOWN CHỌN NHIỀU NGƯỜI (tìm kiếm + chip) — dùng chung cho "Quản Lý Nhóm Phê Duyệt Trình" (chọn

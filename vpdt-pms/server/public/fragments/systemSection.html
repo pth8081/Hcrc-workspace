@@ -1963,9 +1963,13 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Địa Điểm</label>
             <select id="uCustomLocation" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
+          <!-- uJobTitle (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài, cùng đợt
+               uDept/uStore) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateUserJobTitleOptions()
+               ở core.js. -->
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
-            <select id="uJobTitle" class="w-full border p-1.5 rounded text-xs"></select>
+            <input id="uJobTitle" data-sdd-list="uJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh (để trống nếu chưa gán)..." class="w-full border p-1.5 rounded text-xs">
+            <div id="uJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
           <div>
             <!-- Ngày Vào Làm Việc (Đào Tạo Tân Binh Đợt 6) — mốc DUY NHẤT để tính hạn Giai đoạn 1/2/3
