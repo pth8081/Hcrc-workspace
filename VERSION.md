@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**29.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.1 (2026-11): Đối Chiếu Tồn Kho (BRGMART) — chu kỳ đồng bộ ĐÃ CHUYỂN sang admin tự cấu hình qua UI
+
+Người dùng báo: đối tác BRGMART cho biết tần suất gọi API hiện tới mỗi 2
+phút/lần — quá dày, nghi là nguyên nhân gây lỗi — và yêu cầu bỏ hẳn cấu hình
+chu kỳ "cố định ở env/code", chỉ cấu hình được chu kỳ đồng bộ NGAY TRÊN màn
+Cấu Hình API Tồn Kho, giống hệt cách "Chu kỳ tự động (phút)" của Đồng Bộ Đơn
+Hàng dsmart16 đã có từ trước.
+
+**Đã làm** (mirror ĐÚNG khuôn `operationOrderApiConfig.syncIntervalMinutes`
+đã có sẵn cho dsmart16 — không phát minh cơ chế mới):
+- `defaults.js`: thêm `inventoryApiConfig.syncIntervalMinutes` (mặc định 20
+  — giữ nguyên giá trị cũ cho môi trường chưa từng đụng tới ô này).
+- `jobs/inventorySync.js`: `syncSystemInventory({force})` — `force=false`
+  (job nền) tự so `lastSyncAt` với `syncIntervalMinutes` đã cấu hình, bỏ qua
+  nếu chưa tới chu kỳ; `force=true` (nút "🔄 Đồng Bộ Ngay") luôn chạy ngay.
+  CHỈ áp dụng cho nguồn cấu hình UI — nguồn `.env` (đường lùi cũ) không có
+  khái niệm chu kỳ, vẫn chạy mỗi tick như trước (không phá môi trường cũ).
+- `server.js`: tick nền đổi từ "cố định mỗi 20 phút gọi thẳng" sang "tick
+  mỗi 5 phút, để `syncSystemInventory()` tự quyết định có cần gọi hay
+  không" — đúng cơ chế dsmart16 đã dùng, áp dụng thay đổi chu kỳ ngay không
+  cần khởi động lại server.
+- `routes/inventorySyncAdmin.js`: nút "🔄 Đồng Bộ Ngay" gọi với `force: true`
+  để luôn chạy ngay bất kể chu kỳ.
+- UI (`systemSection.html` + `module-hethong-tabs.js`): thêm ô "Chu kỳ tự
+  động (phút)" vào panel "🧺 Cấu Hình API Tồn Kho" (Hệ Thống → Quản Trị →
+  🔌 Cấu Hình API Đối Tác → tab con Tồn Kho — BRGMART), load/lưu cùng
+  `baseUrl`/`enabled`/API Key như các field khác của panel.
+- `tests/test-inventory-api-config.js`: thêm 3 kịch bản mới xác nhận đúng
+  cơ chế bỏ qua/chạy theo chu kỳ + `force=true` luôn bỏ qua kiểm tra chu kỳ
+  (revert-confirm: tạm `git stash` riêng `jobs/inventorySync.js` → 1 kịch
+  bản mới FAIL đúng như kỳ vọng → khôi phục → 21/21 pass). Chạy lại thêm
+  `tests/test-audit-hethong-cluster-server.js` (22/22, không regression khu
+  vực Cấu Hình API Đối Tác).
+- `deploy/Huong-dan-nghiep-vu.md`: cập nhật 2 chỗ nhắc "chu kỳ cố định 20
+  phút" thành "chu kỳ admin tự cấu hình (mặc định 20 phút)".
+
+**Không cần thao tác deploy gì thêm** ngoài copy code + `pm2 restart` — môi
+trường cũ chưa từng mở Cấu Hình API Tồn Kho qua UI (`enabled=false`, vẫn
+dùng `.env`) không bị ảnh hưởng gì (chu kỳ chỉ áp dụng cho nguồn UI).
 
 ## v29.0 (2026-11): Xác nhận lại — Phê Duyệt Giá Bán Buôn (Vận Hành) đã cho ĐÚNG người duyệt tải file khi còn CHƯA duyệt
 

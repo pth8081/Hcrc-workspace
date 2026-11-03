@@ -375,6 +375,7 @@ function loadInventoryApiConfigToForm() {
   const cfg = DB.inventoryApiConfig || {};
   document.getElementById('invApiEnabled').value = cfg.enabled === true ? 'true' : 'false';
   document.getElementById('invApiBaseUrl').value = cfg.baseUrl || '';
+  document.getElementById('invApiSyncIntervalMinutes').value = cfg.syncIntervalMinutes || 20;
   document.getElementById('invApiKeyPlain').value = '';
 
   const keyStatusEl = document.getElementById('invApiKeyStatus');
@@ -399,6 +400,7 @@ async function saveInventoryApiConfig(e) {
     ...(DB.inventoryApiConfig || {}),
     enabled: document.getElementById('invApiEnabled').value === 'true',
     baseUrl: document.getElementById('invApiBaseUrl').value.trim(),
+    syncIntervalMinutes: parseInt(document.getElementById('invApiSyncIntervalMinutes').value, 10) || 20,
     // "apiKeyPlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "apiKeyEnc" — không phải
     // bản ghi lưu thật (xem prepareInventoryApiConfigForSave() ở routes/data.js). Để trống ô này = giữ
     // nguyên giá trị đã lưu.

@@ -211,6 +211,83 @@ async function runJobTests() {
       delete require.cache[require.resolve('../jobs/inventorySync')];
     }
   }
+
+  // ---- Kịch bản 4-6 (MỚI, 11/2026, theo yêu cầu người dùng "api đối tác báo đồng bộ 2 phút 1 lần là
+  // quá nhiều, muốn control chu kỳ như đồng bộ đơn hàng dsmart"): inventoryApiConfig.syncIntervalMinutes
+  // ĐÃ THAY chu kỳ cố định 20 phút hardcode — job tick mỗi 5 phút (server.js) nhưng syncSystemInventory()
+  // tự quyết định có thực sự cần gọi hệ thống ngoài không, mirror ĐÚNG cơ chế
+  // operationOrderApiConfig.syncIntervalMinutes (jobs/operationOrderApiSync.js). ----
+  {
+    const bsvr = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows: [{ maDiem: '002', maHang: 'B', soLuongTon: 2 }] }));
+    });
+    try {
+      const port = bsvr.address().port;
+      const makeFakeStore = (lastSyncAt, syncIntervalMinutes) => ({
+        inventoryApiConfig: {
+          enabled: true, baseUrl: `http://127.0.0.1:${port}`, apiKeyEnc: encryptSecret('ui-key-interval'),
+          syncIntervalMinutes, lastSyncAt
+        }
+      });
+
+      // Kịch bản 4: lastSyncAt rất gần đây (1 phút trước), syncIntervalMinutes=20, force=false -> BỊ
+      // BỎ QUA (chưa tới chu kỳ), KHÔNG gọi hệ thống ngoài.
+      {
+        const fakeStore = makeFakeStore(new Date(Date.now() - 60 * 1000).toISOString(), 20);
+        stubModule('lib/appData', {
+          getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          setAppDataValue: async (key, value) => { fakeStore[key] = value; },
+          withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
+        });
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+        const { syncSystemInventory } = require('../jobs/inventorySync');
+        const result = await syncSystemInventory();
+        check('Chưa tới chu kỳ (1 phút trước, cấu hình 20 phút) + force=false -> bị bỏ qua, không gọi API', result.ok === true && result.skipped === true, result);
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+      }
+
+      // Kịch bản 5: lastSyncAt đã lâu (30 phút trước), syncIntervalMinutes=20, force=false -> ĐÃ QUA chu
+      // kỳ, KHÔNG bị bỏ qua ở bước kiểm tra chu kỳ (đi tiếp tới bước gọi mạng thật — dùng assert
+      // "result.skipped !== true" thay vì "result.ok === true" vì baseUrl test local 127.0.0.1 vẫn bị
+      // chính SSRF guard chặn ở bước SAU interval-check cho nguồn 'ui' — xem kịch bản 2 ở trên; không
+      // phải mục tiêu của test này, chỉ cần xác nhận KHÔNG bị bỏ qua vì "chưa tới chu kỳ").
+      {
+        const fakeStore = makeFakeStore(new Date(Date.now() - 30 * 60 * 1000).toISOString(), 20);
+        stubModule('lib/appData', {
+          getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          setAppDataValue: async (key, value) => { fakeStore[key] = value; },
+          withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
+        });
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+        const { syncSystemInventory } = require('../jobs/inventorySync');
+        const result = await syncSystemInventory();
+        check('Đã qua chu kỳ (30 phút trước, cấu hình 20 phút) + force=false -> KHÔNG bị bỏ qua vì "chưa tới chu kỳ"', result.skipped !== true, result);
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+      }
+
+      // Kịch bản 6: lastSyncAt rất gần đây (1 phút trước) NHƯNG force=true (nút "Đồng Bộ Ngay") -> BỎ
+      // QUA kiểm tra chu kỳ, chạy ngay (cùng lý do dùng "result.skipped !== true" như kịch bản 5).
+      {
+        const fakeStore = makeFakeStore(new Date(Date.now() - 60 * 1000).toISOString(), 20);
+        stubModule('lib/appData', {
+          getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          setAppDataValue: async (key, value) => { fakeStore[key] = value; },
+          withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
+        });
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+        const { syncSystemInventory } = require('../jobs/inventorySync');
+        const result = await syncSystemInventory({ force: true });
+        check('force=true (nút Đồng Bộ Ngay) -> bỏ qua kiểm tra chu kỳ, không bị "chưa tới chu kỳ" dù vừa đồng bộ 1 phút trước', result.skipped !== true, result);
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+      }
+    } finally {
+      bsvr.close();
+    }
+  }
 }
 
 async function main() {

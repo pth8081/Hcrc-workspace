@@ -1037,17 +1037,18 @@
          cấu hình được qua biến môi trường BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY
          (.env), không có màn admin nào. Nay admin tự nhập Base URL + API Key qua đây (mã hoá khi lưu,
          write-only giống Giá Trị Header ở panel dsmart16 trên) — vẫn giữ .env làm đường lùi nếu chưa bật
-         ở đây (xem resolveInventoryApiCreds(), jobs/inventorySync.js). KHÔNG có "Chu kỳ tự động"/"Tên
-         Trường Đối Chiếu" như panel dsmart16 vì đây là tích hợp LẤY VÀO (pull) toàn bộ 1 lần, không có
-         khái niệm đối chiếu từng bản ghi. -->
+         ở đây (xem resolveInventoryApiCreds(), jobs/inventorySync.js). "Chu kỳ tự động" (MỚI, 11/2026 —
+         theo yêu cầu người dùng "api đối tác báo đồng bộ 2 phút 1 lần là quá nhiều, muốn control như đồng
+         bộ đơn hàng dsmart") cùng khuôn "opApiSyncIntervalMinutes" ở panel dsmart16 trên — CHỈ áp dụng
+         khi Trạng thái = Bật (nguồn .env không cấu hình được chu kỳ, xem jobs/inventorySync.js). -->
     <div id="adminSubInvApi" class="hidden bg-lime-50 p-4 rounded border border-lime-300 space-y-4">
       <div>
         <h3 class="font-bold text-lime-900 text-sm flex items-center gap-1">🧺 Cấu Hình API Tồn Kho — Đối Chiếu Kệ &amp; Tồn Kho (BRGMART)</h3>
-        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG lấy "Tồn Kho Hệ Thống" từ API đối tác BRGMART về (chu kỳ cố định 20 phút/lần) phục vụ màn Đối Chiếu Kệ &amp; Tồn Kho (Vận Hành &gt; Kiểm Soát Hàng Hóa). API Key là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu). Nếu để TẮT, hệ thống tự rơi về đọc cấu hình cũ trong file .env trên server (nếu có).</p>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG lấy "Tồn Kho Hệ Thống" từ API đối tác BRGMART về (theo chu kỳ tự cấu hình bên dưới) phục vụ màn Đối Chiếu Kệ &amp; Tồn Kho (Vận Hành &gt; Kiểm Soát Hàng Hóa). API Key là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu). Nếu để TẮT, hệ thống tự rơi về đọc cấu hình cũ trong file .env trên server (nếu có).</p>
       </div>
 
       <form data-op-submit="saveInventoryApiConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Trạng thái</label>
             <select id="invApiEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
@@ -1058,6 +1059,10 @@
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Base URL</label>
             <input id="invApiBaseUrl" type="url" placeholder="https://api.brgmart.vn" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chu kỳ tự động (phút)</label>
+            <input id="invApiSyncIntervalMinutes" type="number" min="5" placeholder="20" class="w-full border p-1.5 rounded">
           </div>
         </div>
         <div>

@@ -3121,7 +3121,8 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       Nhân → "🔔 Thông Báo Email"** (xem mục ngay dưới) — mặc định hệ
       thống luôn gửi, ai không muốn nhận thì tự vào đó bỏ tick.
   - "📊 Đối Chiếu" (MỚI, 11/2026) — so khớp tồn kho hệ thống (API BRGMART,
-    đồng bộ nền mỗi 20 phút) với tổng số lượng ghi nhận HÔM NAY có Mã Hàng
+    đồng bộ nền theo chu kỳ admin tự cấu hình — mặc định 20 phút, xem mục
+    "Cấu hình kết nối API BRGMART" bên dưới) với tổng số lượng ghi nhận HÔM NAY có Mã Hàng
     (xem sub-tab Ghi Nhận — gõ tay/picker/camera tự khớp đều tính, chỉ cần
     ô "Mã Hàng" không rỗng), theo đúng mã hàng — hiện badge Khớp/Lệch (+/-)
     cho từng mã hàng + dòng "cập nhật lúc"
@@ -3141,13 +3142,19 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   tích hợp hoàn toàn khác nhau, đừng nhầm: Đơn Hàng ĐẨY dữ liệu RA dsmart16,
   Tồn Kho LẤY dữ liệu VÀO từ BRGMART, chỉ gộp chung 1 màn cho gọn sidebar).
   Admin tự nhập Base URL + API Key (API Key write-only, mã hoá khi lưu,
-  không xem lại được), bấm "Lưu Cấu Hình API Tồn Kho" rồi "🔄 Đồng Bộ Ngay"
-  để chạy thử ngay không cần đợi chu kỳ 20 phút. Trước đây tính năng này CHỈ
-  cấu hình được qua file `.env` trên server
-  (`BRGMART_INVENTORY_API_BASE_URL`/`BRGMART_INVENTORY_API_KEY`) — cách cũ
-  vẫn còn tác dụng làm "đường lùi": nếu để TẮT ở màn này (hoặc chưa từng cấu
-  hình), hệ thống tự rơi về đọc `.env` như trước, không cần đổi gì thêm cho
-  các server đã triển khai theo cách cũ.
+  không xem lại được) + "Chu kỳ tự động (phút)" (MỚI 11/2026 — ĐÃ THAY chu kỳ
+  cố định 20 phút hardcode trước đây, admin tự chỉnh ngay tại đây, cùng cách
+  với "Chu kỳ tự động" của Đơn Hàng dsmart16 ở tab con cạnh bên — theo yêu
+  cầu người dùng khi đối tác BRGMART báo tần suất gọi 2 phút/lần là quá
+  nhiều), bấm "Lưu Cấu Hình API Tồn Kho" rồi "🔄 Đồng Bộ Ngay" để chạy thử
+  ngay không cần đợi hết chu kỳ. Trước đây tính năng này CHỈ cấu hình được
+  qua file `.env` trên server (`BRGMART_INVENTORY_API_BASE_URL`/
+  `BRGMART_INVENTORY_API_KEY`) — cách cũ vẫn còn tác dụng làm "đường lùi" cho
+  Base URL/API Key: nếu để TẮT ở màn này (hoặc chưa từng cấu hình), hệ thống
+  tự rơi về đọc `.env` như trước, không cần đổi gì thêm cho các server đã
+  triển khai theo cách cũ. Riêng "Chu kỳ tự động" chỉ cấu hình được qua màn
+  này (nguồn `.env` không có khái niệm chu kỳ, luôn chạy theo tick nền cố
+  định của server nếu còn dùng nguồn đó).
 - **An toàn dữ liệu**: server luôn tự lấy siêu thị (`dept`) từ tài khoản
   đăng nhập, KHÔNG tin bất kỳ mã siêu thị nào client gửi lên — nhân viên 1
   siêu thị không thể ghi nhận/khai báo/sửa quầy kệ hay ngưỡng tồn cho siêu

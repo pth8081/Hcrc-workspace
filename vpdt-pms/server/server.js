@@ -542,11 +542,15 @@ async function start() {
       // jobs/shelfStockThresholdAlert.js.
       checkShelfStockThresholdAlerts();
       setInterval(checkShelfStockThresholdAlerts, 60 * 60 * 1000);
-      // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — chu kỳ 20 phút (trong khoảng
-      // 15-30 phút tài liệu khuyến nghị, khớp đúng độ trễ đồng bộ 15 phút của chính API nguồn). Tự vô
-      // hiệu hoá có log rõ ràng nếu thiếu BRGMART_INVENTORY_API_KEY — xem jobs/inventorySync.js.
+      // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — tick cố định mỗi 5 phút, nhưng
+      // syncSystemInventory() (force=false) tự quyết định có thực sự cần gọi hệ thống ngoài ở tick đó
+      // không (so lastSyncAt với inventoryApiConfig.syncIntervalMinutes admin đã cấu hình qua UI — ĐÃ
+      // CHUYỂN từ chu kỳ CỐ ĐỊNH 20 phút hardcode, 11/2026, theo yêu cầu người dùng "api đối tác báo đồng
+      // bộ 2 phút 1 lần là quá nhiều, muốn control như đồng bộ đơn hàng dsmart" — cùng khuôn dsmart16 ở
+      // dưới) — không đợi khởi động lại server để áp dụng thay đổi chu kỳ. Tự vô hiệu hoá có log rõ ràng
+      // nếu thiếu cấu hình (UI lẫn .env) — xem jobs/inventorySync.js.
       syncSystemInventory();
-      setInterval(syncSystemInventory, 20 * 60 * 1000);
+      setInterval(() => { syncSystemInventory(); }, 5 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

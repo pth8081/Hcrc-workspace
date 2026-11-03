@@ -925,10 +925,17 @@ const DEFAULTS = {
   // đường lùi đọc BRGMART_INVENTORY_API_BASE_URL/BRGMART_INVENTORY_API_KEY từ .env nếu key này chưa được
   // bật qua UI (enabled=false hoặc thiếu apiKeyEnc), để không phá các môi trường đã cấu hình theo cách
   // cũ trước đợt này.
+  // "syncIntervalMinutes" (MỚI, 11/2026 — theo yêu cầu người dùng "api đối tác báo đồng bộ 2 phút 1 lần
+  // là quá nhiều, muốn tự control chu kỳ như đồng bộ đơn hàng dsmart"): cùng khuôn
+  // operationOrderApiConfig.syncIntervalMinutes ở trên — job tự động (server.js) đọc field này để tự
+  // quyết định có cần gọi API đối tác ở mỗi tick hay chưa (xem syncSystemInventory(), jobs/inventorySync.js),
+  // KHÔNG còn chu kỳ cố định hardcode 20 phút như trước. Mặc định 20 (giữ nguyên giá trị cũ cho môi
+  // trường chưa từng đụng tới ô này).
   inventoryApiConfig: {
     enabled: false,
     baseUrl: '',
     apiKeyEnc: null,
+    syncIntervalMinutes: 20,
     lastSyncAt: null,
     lastSyncStatus: null,
     lastSyncMessage: null

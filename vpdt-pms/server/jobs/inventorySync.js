@@ -108,12 +108,37 @@ async function writeInventorySyncStatus(status, message) {
   }
 }
 
-async function syncSystemInventory() {
+// force=true (nút "🔄 Đồng Bộ Ngay") bỏ qua kiểm tra chu kỳ — chạy ngay bất kể lần đồng bộ trước cách đây
+// bao lâu. force=false (job tự động định kỳ, xem server.js) tự so sánh lastSyncAt với
+// inventoryApiConfig.syncIntervalMinutes (ĐÃ CHUYỂN từ chu kỳ CỐ ĐỊNH 20 phút hardcode sang admin TỰ CẤU
+// HÌNH qua UI, 11/2026 — theo yêu cầu người dùng "api đối tác báo đồng bộ 2 phút 1 lần là quá nhiều,
+// muốn control như đồng bộ đơn hàng dsmart") để KHÔNG gọi hệ thống ngoài dồn dập hơn chu kỳ admin đã
+// cấu hình — job nền chạy tick cố định mỗi 5 phút (đủ mịn cho mọi giá trị syncIntervalMinutes hợp lý),
+// hàm này tự quyết định có thực sự cần gọi ở tick đó không. CHỈ áp dụng cho nguồn 'ui' (cfg lưu
+// syncIntervalMinutes) — nguồn 'env' (đường lùi cũ) không có khái niệm chu kỳ cấu hình được, vẫn chạy
+// mỗi tick như trước (môi trường cũ chưa chuyển sang UI, không bị ảnh hưởng bởi thay đổi này).
+async function syncSystemInventory({ force = false } = {}) {
   const creds = await resolveInventoryApiCreds();
   if (!creds) {
     // Log 1 lần/chu kỳ là đủ rõ — không spam nếu admin cố ý chưa cấu hình (VD môi trường dev/staging).
     console.warn('⚠️  jobs/inventorySync: chưa cấu hình API Tồn Kho (qua UI lẫn .env) — Đối Chiếu Tồn Kho Hệ Thống tạm vô hiệu hoá.');
     return { skipped: true };
+  }
+  if (!force && creds.source === 'ui') {
+    try {
+      const cfg = await getAppDataValue('inventoryApiConfig');
+      if (cfg && cfg.lastSyncAt) {
+        const intervalMs = (Number(cfg.syncIntervalMinutes) || 20) * 60 * 1000;
+        const elapsedMs = Date.now() - new Date(cfg.lastSyncAt).getTime();
+        if (elapsedMs < intervalMs) {
+          return { ok: true, skipped: true, message: 'Chưa tới chu kỳ đồng bộ tiếp theo.' };
+        }
+      }
+    } catch (err) {
+      // Không đọc được cấu hình để kiểm tra chu kỳ (lỗi CSDL tạm thời) — vẫn tiếp tục đồng bộ như bình
+      // thường thay vì chặn hẳn job (cùng tinh thần "lỗi đọc config rơi về chạy tiếp" ở resolveInventoryApiCreds()).
+      console.error('⛔ jobs/inventorySync: không đọc được chu kỳ đồng bộ đã cấu hình, vẫn tiếp tục đồng bộ —', err.message);
+    }
   }
   lastSyncAttemptAt = new Date();
   try {
