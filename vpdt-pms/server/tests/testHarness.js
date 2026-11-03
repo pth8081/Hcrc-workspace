@@ -350,6 +350,12 @@ function createDispatcher(state) {
     const hasChildren = state.operationWorkItems.some(w => w.parentWorkItemId === item.id);
     return recordActions.editOperationWorkItem(u, item, body || {}, state.users, sourceRecord, hasChildren);
   };
+  // "🔁 Giao Lại" (MỚI, 11/2026) — mirror ĐÚNG route thật (routes/records.js POST
+  // /operationWorkItems/:id/reassign), xem lib/recordActions.js reassignOperationWorkItem().
+  actionHandlers['operationWorkItems:reassign'] = (u, item, body) => {
+    const sourceRecord = sourceRecordForWorkItem(item);
+    return recordActions.reassignOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
+  };
   // operationStoreOpenings/operationRepairs:update ĐÃ BỊ XOÁ khỏi đây cùng
   // editOperationStoreOpeningDraft()/editOperationRepairDraft() (lib/recordActions.js) — cơ chế "Sửa &
   // Gửi Lại Bổ Sung" không còn tồn tại cho 2 collection này (Mục H, 60c473b).
@@ -673,8 +679,10 @@ function createDispatcher(state) {
 
       // Vận Hành > Siêu Thị > Danh mục đầu tư — 2 segment action (estimate/submit), không khớp regex
       // generic 1-action bên dưới. Mirror ĐÚNG routes/records.js '/operationStoreOpenings|
-      // operationRepairs/:id/estimate/submit' — KHÔNG tự tạo/xoá công việc Thực hiện (quyết định thiết
-      // kế, xem chú thích đầy đủ ở routes/records.js ngay trước route này).
+      // operationRepairs/:id/estimate/submit' — 11/2026: SAU KHI lưu thành công, tự động tạo Công Việc
+      // Gốc/Con từ các hạng mục có Người Phụ Trách (xem buildAutoWorkItemsFromEstimate(),
+      // lib/recordActions.js + autoCreateOperationWorkItemsAfterEstimateSave(), routes/records.js — mirror
+      // ĐÚNG, KHÔNG viết lại logic riêng).
       if ((m = pathName.match(/^\/api\/records\/(operationStoreOpenings|operationRepairs)\/(\d+)\/estimate\/submit$/)) && method === 'POST') {
         const moduleKey = m[1];
         const id = Number(m[2]);
@@ -684,9 +692,21 @@ function createDispatcher(state) {
         // sourceType tường minh (Overhaul quyền — canManageOperationRecord() không tự suy luận ngược từ
         // sourceRecord) — mirror ĐÚNG route thật.
         const sourceType = moduleKey === 'operationRepairs' ? 'OPERATION_REPAIR' : 'OPERATION_STORE_OPENING';
-        const updated = recordActions.submitOperationEstimate(freshUser, list[idx], body, sourceType);
+        const updated = recordActions.submitOperationEstimate(freshUser, list[idx], body, sourceType, state.users);
         list[idx] = updated;
-        return { status: 200, body: { ok: true, item: updated } };
+        let autoCreatedWorkItems = [];
+        if (updated.useConfirmStatus !== 'CONFIRMED') {
+          const existingWorkItems = state.operationWorkItems.filter(w => w.sourceType === sourceType && w.sourceId === id);
+          autoCreatedWorkItems = recordActions.buildAutoWorkItemsFromEstimate(freshUser, updated, sourceType, updated.estimateItems || [], existingWorkItems);
+          for (const w of autoCreatedWorkItems) {
+            w.sourceType = sourceType; w.sourceId = id;
+            state.operationWorkItems.push(w);
+          }
+        }
+        // autoCreatedWorkItems trong response — mirror ĐÚNG route thật (routes/records.js), client
+        // (submitOperationEstimateForApproval(), module-vanhanh.js) tự đẩy vào DB.operationWorkItems ngay,
+        // không cần F5 mới thấy Công Việc vừa tự tạo.
+        return { status: 200, body: { ok: true, item: updated, autoCreatedWorkItems } };
       }
 
       // Vận Hành > Siêu Thị > Thực hiện — POST /api/records/operationWorkItems (tạo mới, không có id/

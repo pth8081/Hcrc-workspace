@@ -1589,6 +1589,91 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   };
 }
 
+// buildAutoWorkItemsFromEstimate() — TỰ ĐỘNG TẠO Công Việc (Thực hiện) từ Danh Mục Đầu Tư (MỚI, 11/2026,
+// theo yêu cầu người dùng: "người được gán trong danh mục đầu tư sẽ tự động tạo ở mục việc gốc và việc
+// con trong thực hiện (nếu trong danh mục đầu tư có công việc gốc và công việc con)... mặc định gán
+// người đó là nghiệm thu luôn"). Đây là ĐẢO NGƯỢC có chủ đích quyết định thiết kế trước (xem chú thích
+// đầy đủ ngay trước 2 route estimate/submit ở routes/records.js) — đã xác nhận với người dùng (qua
+// AskUserQuestion) cách xử lý đúng 2 rủi ro quyết định cũ từng nêu:
+//   (1) "công việc ma" cho hồ sơ CŨ: hàm này chỉ được gọi SAU MỖI LẦN LƯU/SỬA Danh mục đầu tư thành công
+//       (route gọi ngay sau submitOperationEstimate()) — hồ sơ cũ không ai đụng tới thì KHÔNG BAO GIỜ tự
+//       nhiên sinh việc; chỉ áp dụng "từ nay trở đi" đúng nghĩa đen (gắn liền với hành động lưu thật).
+//   (2) khác biệt mức độ chi tiết: CHỈ tạo tự động ĐÚNG 1 lần cho mỗi hạng mục (idempotent qua
+//       estimateItemId) — sau khi tạo, Công Việc đó ĐỘC LẬP hoàn toàn với Danh Mục Đầu Tư (sửa/xoá hạng
+//       mục sau đó KHÔNG đụng gì tới Công Việc đã tạo, admin tự tay chỉnh ở Thực Hiện nếu cần — đã xác
+//       nhận người dùng). Admin vẫn tự thêm/xoá Công Việc tay như trước cho các trường hợp không map 1-1.
+//
+// validItems = item.estimateItems VỪA ĐƯỢC submitOperationEstimate() ghi xong (đã resolve đầy đủ
+// assignedToUsernames/assignedToNames, parentId 2 cấp). existingWorkItems = TOÀN BỘ work item ĐÃ CÓ của
+// ĐÚNG hồ sơ này (route tự tải qua getWorkItemsBySource(sourceType, sourceId) TRƯỚC khi gọi hàm này) —
+// dùng để biết hạng mục nào ĐÃ có Công Việc liên kết (estimateItemId), tránh tạo trùng khi lưu lại nhiều
+// lần. Trả về MẢNG THUẦN (chưa insert DB) — route tự insertWorkItem() từng phần tử theo đúng thứ tự (Công
+// Việc Gốc PHẢI insert trước Công Việc Con tương ứng vì con cần parentWorkItemId = id thật của gốc).
+//
+// CHỈ danh mục LỚN (parentId rỗng) có assignedToUsernames[] mới sinh Công Việc Gốc — danh mục lớn KHÔNG
+// gán ai thì bỏ qua (không có người phụ trách thì không biết giao việc/nghiệm thu cho ai, admin tự thêm
+// tay nếu cần). Danh mục CON (nếu có) của 1 danh mục lớn ĐÃ sinh Công Việc Gốc (dù gốc đó vừa tạo lúc này
+// hay đã tồn tại từ lần lưu trước) sẽ sinh Công Việc Con tương ứng, KẾ THỪA cùng người phụ trách/nghiệm
+// thu như gốc (danh mục con không có assignedToUsernames riêng — xem chú thích submitOperationEstimate()).
+// Danh mục lớn có assignedToUsernames nhưng record ĐÃ sinh Công Việc Gốc từ trước (estimateItemId trùng)
+// thì bỏ qua gốc, nhưng VẪN xét con mới thêm của nó (con mới chưa có estimateItemId tương ứng) — cho phép
+// "thêm 1 danh mục con mới vào 1 danh mục lớn đã có Công Việc Gốc từ trước" vẫn tự sinh đúng Công Việc Con
+// mới, không cần gốc cũng phải mới tạo trong CÙNG lần lưu này.
+// CỐ Ý bỏ qua hoàn toàn nếu sourceRecord.useConfirmStatus === 'CONFIRMED' (route tự kiểm trước khi gọi) —
+// hồ sơ đã chốt đưa vào sử dụng thì không còn giai đoạn Thực hiện nào để tạo thêm việc mới nữa
+// (createOperationWorkItem() cũng chặn y hệt lúc tạo tay, xem chú thích ở đó).
+function buildAutoWorkItemsFromEstimate(user, sourceRecord, sourceType, validItems, existingWorkItems) {
+  const linkedEstimateItemIds = new Set((existingWorkItems || []).map(w => w.estimateItemId).filter(Boolean));
+  const toCreate = [];
+  let nextId = Date.now();
+  const genId = () => nextId++;
+  const topItems = (validItems || []).filter(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.length);
+  for (const top of topItems) {
+    let rootWorkItem = null;
+    if (!linkedEstimateItemIds.has(top.id)) {
+      rootWorkItem = {
+        id: genId(), parentWorkItemId: null, periodId: null, periodName: null,
+        title: top.content, description: top.description || '',
+        startDate: null, progressUpdateFrequencyDays: null, dependsOnWorkItemIds: [],
+        assignedTo: [...top.assignedToUsernames], assignedToName: [...(top.assignedToNames || [])],
+        acceptorUsername: top.assignedToUsernames[0], acceptorName: (top.assignedToNames || [])[0] || null,
+        deadline: '', acceptanceMode: 'IMMEDIATE', acceptanceDelayDays: null, completedAt: null,
+        status: 'CHUA_BAT_DAU', acceptedBy: null, acceptedByName: null, acceptanceNote: null,
+        history: [{ action: 'AUTO_CREATED_FROM_ESTIMATE', by: user.username, byName: user.name, time: nowVN() }],
+        createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+        sourceType, sourceCode: sourceRecord.code, customData: {},
+        contractValue: 0, contractAttachments: [],
+        estimateItemId: top.id
+      };
+      toCreate.push(rootWorkItem);
+    } else {
+      // Gốc đã có từ trước — tra lại trong existingWorkItems (không phải toCreate) để con mới có đúng
+      // parentWorkItemId thật đã tồn tại trong CSDL.
+      rootWorkItem = (existingWorkItems || []).find(w => w.estimateItemId === top.id) || null;
+    }
+    if (!rootWorkItem) continue; // không thể xảy ra (linkedEstimateItemIds suy ra đúng từ existingWorkItems) — phòng thủ
+    const children = (validItems || []).filter(c => c.parentId === top.id);
+    for (const child of children) {
+      if (linkedEstimateItemIds.has(child.id)) continue;
+      toCreate.push({
+        id: genId(), parentWorkItemId: rootWorkItem.id, periodId: rootWorkItem.periodId, periodName: rootWorkItem.periodName,
+        title: child.content, description: child.description || '',
+        startDate: null, progressUpdateFrequencyDays: null, dependsOnWorkItemIds: [],
+        assignedTo: [...top.assignedToUsernames], assignedToName: [...(top.assignedToNames || [])],
+        acceptorUsername: top.assignedToUsernames[0], acceptorName: (top.assignedToNames || [])[0] || null,
+        deadline: '', acceptanceMode: 'IMMEDIATE', acceptanceDelayDays: null, completedAt: null,
+        status: 'CHUA_BAT_DAU', acceptedBy: null, acceptedByName: null, acceptanceNote: null,
+        history: [{ action: 'AUTO_CREATED_FROM_ESTIMATE', by: user.username, byName: user.name, time: nowVN() }],
+        createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+        sourceType, sourceCode: sourceRecord.code, customData: {},
+        contractValue: 0, contractAttachments: [],
+        estimateItemId: child.id
+      });
+    }
+  }
+  return toCreate;
+}
+
 // children = TOÀN BỘ work item khác thuộc cùng hồ sơ (đã lọc parentWorkItemId === item.id ở route).
 // Chỉ công việc LÁ (không có con) mới cho cập nhật trực tiếp — công việc có con phải hoàn thành hết
 // con mới tự cập nhật (xem syncParentWorkItemStatus), đúng yêu cầu nghiệp vụ.
@@ -1835,6 +1920,38 @@ function updateOperationWorkItemContract(user, item, payload, sourceRecord) {
   item.contractAttachments = sanitizeOperationEstimateAttachments(payload?.contractAttachments, item.contractAttachments, user);
   item.history = item.history || [];
   item.history.push({ action: 'CONTRACT_UPDATED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// "🔁 Giao Lại" (MỚI, 11/2026, theo yêu cầu người dùng về tự động tạo Công Việc từ Danh Mục Đầu Tư —
+// "người được gán việc ở danh mục đầu tư và thực hiện có thể gán cho người khác thực hiện, nhân viên đó
+// sẽ là người chịu trách nhiệm cập nhật tiến độ") — route sub-endpoint RIÊNG (POST
+// /operationWorkItems/:id/reassign), KHÔNG gộp vào editOperationWorkItem() (đó CHỈ mở cho "toàn quyền
+// quản lý hồ sơ" và cho sửa CẢ title/deadline/acceptor/...; ở đây CHỦ ĐÍCH chỉ đổi ĐÚNG 1 field
+// assignedTo[]/assignedToName[], mirror cách tách route hẹp phạm vi như updateOperationWorkItemContract()
+// ở trên). Quyền: người phụ trách ĐANG được gán (isWorkItemAssignee — tự giao việc của mình cho người
+// khác) HOẶC toàn quyền quản lý hồ sơ (xác nhận người dùng qua AskUserQuestion trong phiên thêm tính
+// năng này — "cả người phụ trách đang được gán VÀ toàn quyền quản lý hồ sơ").
+// CỐ Ý KHÔNG đổi acceptorUsername/acceptorName — người phụ trách gốc (hoặc người đã gán lúc tạo) vẫn giữ
+// vai trò Nghiệm Thu sau khi giao việc cho nhân viên khác thực hiện, đúng yêu cầu "nhân viên là người
+// chịu trách nhiệm CẬP NHẬT TIẾN ĐỘ", không phải người nghiệm thu.
+// Hạn chế đã biết (nêu rõ, không âm thầm xử lý): sau khi người phụ trách giao việc cho A, NẾU A không
+// nằm trong assignedTo[] cũ (bị thay thế hoàn toàn, không cộng dồn) thì A có thể tiếp tục tự giao lại cho
+// người khác (vẫn là assignee hiện tại) — còn người phụ trách GỐC (đã bị thay ra khỏi assignedTo[]) muốn
+// đổi lại phải nhờ toàn quyền quản lý hồ sơ, không tự làm được nữa.
+function reassignOperationWorkItem(user, item, payload, users, sourceRecord) {
+  const isOwner = isWorkItemAssignee(item, user.username);
+  if (!canManageOperationRecord(user, sourceRecord, item.sourceType) && !isOwner) {
+    throw new HttpError(403, 'Bạn không có quyền giao lại công việc này');
+  }
+  if (item.status === 'DA_NGHIEM_THU') {
+    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể giao lại');
+  }
+  const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
+  if (!assignedTo.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 người thực hiện');
+  item.assignedTo = assignedTo; item.assignedToName = assignedToName;
+  item.history = item.history || [];
+  item.history.push({ action: 'REASSIGNED', by: user.username, byName: user.name, time: nowVN(), note: `Giao cho: ${assignedToName.join(', ')}` });
   return item;
 }
 
@@ -9319,5 +9436,7 @@ module.exports = {
   // "🔗 Liên kết" công việc (VHST-5) — export cho test + routes/records.js.
   resolveOperationWorkItemDependencyIds, assertNoOperationWorkItemDependencyCycle, setOperationWorkItemDependencies,
   // C2 (11/2026) — "Giá trị hợp đồng" + tệp đính kèm hợp đồng (operationWorkItems).
-  updateOperationWorkItemContract
+  updateOperationWorkItemContract,
+  // Tự động tạo Công Việc từ Danh Mục Đầu Tư + "🔁 Giao Lại" (MỚI, 11/2026).
+  buildAutoWorkItemsFromEstimate, reassignOperationWorkItem
 };

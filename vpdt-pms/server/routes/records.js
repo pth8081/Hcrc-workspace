@@ -3573,28 +3573,74 @@ router.post('/operationOrders/:id/cancel-receipt', async (req, res) => {
 
 // QUYẾT ĐỊNH THIẾT KẾ — quan hệ Danh mục đầu tư ↔ Công việc (yêu cầu người dùng: "danh mục đầu tư lập
 // xong có thể sửa để thêm bớt công việc, tự động cập nhật sang nghiệm thu", không nói rõ cơ chế cụ thể):
-// CÂN NHẮC rồi CHỦ ĐÍCH KHÔNG tự tạo/xoá công việc Thực hiện theo từng hạng mục Danh mục đầu tư (dù đã
-// thử — xem lịch sử commit — nhưng gây tác dụng phụ 2 chiều nguy hiểm: (1) hồ sơ CŨ đã có sẵn Danh mục
-// đầu tư trước tính năng này, chỉ cần sửa nhỏ (thêm 1 hạng mục) cũng bất ngờ sinh ra công việc "ma" cho
-// TOÀN BỘ hạng mục cũ; (2) "Danh mục đầu tư" (hạng mục ngân sách/chi phí) và "Công việc" (đầu việc thi
-// công thực tế, có cây cha/con) thường khác NHAU về mức độ chi tiết — 1 hạng mục ngân sách có thể ứng
-// với 0, 1, hay nhiều công việc, ép đúng 1-1 sẽ SAI với thực tế vận hành). Thay vào đó, "tự động cập
-// nhật" được hiểu là: MỌI thứ hiển thị suy ra từ Danh mục đầu tư (trạng thái vòng đời hiển thị ở
-// operationRecordStageStatus()/computeOperationRecordStageStatus(), "Ngân sách còn lại") đều tính TRỰC
-// TIẾP từ estimateItems/estimateStatus mỗi lần hiển thị — sửa danh mục xong là các số này tự đúng NGAY,
-// không cần bước đồng bộ thủ công nào. Công việc (Thực hiện) tiếp tục là 1 cây độc lập, tự thêm/xoá tay
-// như trước — không đổi.
+// TRƯỚC ĐÂY (giữ nguyên lịch sử ở đây, đã ĐẢO NGƯỢC MỘT PHẦN — xem đoạn "11/2026" ngay dưới): CÂN NHẮC
+// rồi CHỦ ĐÍCH KHÔNG tự tạo/xoá công việc Thực hiện theo từng hạng mục Danh mục đầu tư (dù đã thử — xem
+// lịch sử commit — nhưng gây tác dụng phụ 2 chiều nguy hiểm: (1) hồ sơ CŨ đã có sẵn Danh mục đầu tư trước
+// tính năng này, chỉ cần sửa nhỏ (thêm 1 hạng mục) cũng bất ngờ sinh ra công việc "ma" cho TOÀN BỘ hạng
+// mục cũ; (2) "Danh mục đầu tư" (hạng mục ngân sách/chi phí) và "Công việc" (đầu việc thi công thực tế,
+// có cây cha/con) thường khác NHAU về mức độ chi tiết — 1 hạng mục ngân sách có thể ứng với 0, 1, hay
+// nhiều công việc, ép đúng 1-1 sẽ SAI với thực tế vận hành). "Tự động cập nhật" được hiểu là: MỌI thứ
+// hiển thị suy ra từ Danh mục đầu tư (trạng thái vòng đời hiển thị ở operationRecordStageStatus()/
+// computeOperationRecordStageStatus(), "Ngân sách còn lại") đều tính TRỰC TIẾP từ estimateItems/
+// estimateStatus mỗi lần hiển thị — sửa danh mục xong là các số này tự đúng NGAY, không cần bước đồng bộ
+// thủ công nào. Công việc (Thực hiện) tiếp tục là 1 cây độc lập, tự thêm/xoá tay như trước.
+//
+// 11/2026 — ĐẢO NGƯỢC CÓ CHỦ ĐÍCH (yêu cầu người dùng mới, rõ ràng hơn: "người được gán trong danh mục
+// đầu tư sẽ tự động tạo ở mục việc gốc và việc con trong thực hiện... mặc định gán người đó là nghiệm
+// thu"): tự động tạo Công Việc Gốc/Con TỪ hạng mục Danh mục đầu tư (xem
+// recordActions.buildAutoWorkItemsFromEstimate() + autoCreateOperationWorkItemsAfterEstimateSave() ngay
+// dưới) — NHƯNG xử lý đúng 2 rủi ro quyết định cũ từng nêu (đã xác nhận người dùng qua AskUserQuestion):
+// (1) hồ sơ cũ KHÔNG bị ảnh hưởng — chỉ chạy SAU MỖI LẦN LƯU/SỬA thật (gắn liền hành động lưu, không phải
+// quét nền/migration); (2) KHÔNG ép 1-1 cứng — chỉ tạo tự động ĐÚNG 1 LẦN cho mỗi hạng mục (idempotent
+// qua estimateItemId), sau đó Công Việc đã tạo ĐỘC LẬP hoàn toàn với Danh mục đầu tư (sửa/xoá hạng mục
+// sau đó không đụng gì Công Việc đã tạo) — admin vẫn tự thêm/xoá tay như trước cho trường hợp không map
+// 1-1. Cây Công việc VẪN LÀ 1 cây độc lập về bản chất (KHÔNG đồng bộ 2 chiều liên tục) — chỉ thêm đúng 1
+// "cú hích" tạo ban đầu, không phải liên kết sống.
 //
 // Vận Hành > "Siêu Thị" > Giai đoạn Danh mục đầu tư — lưu/lưu lại bảng hạng mục (KHÔNG còn qua duyệt,
 // CÓ THỂ lưu lại nhiều lần kể cả sau khi đã APPROVED — xem lib/recordActions.js submitOperationEstimate()).
 // recordActions.submitOperationEstimate dùng CHUNG cho cả 2 collection.
+// autoCreateOperationWorkItemsAfterEstimateSave() — gọi NGAY SAU KHI submitOperationEstimate() lưu thành
+// công (MỚI, 11/2026 — xem chú thích đầy đủ tại buildAutoWorkItemsFromEstimate(), lib/recordActions.js,
+// cho lý do đảo ngược quyết định thiết kế cũ + 2 rủi ro đã được xử lý). CỐ Ý bỏ qua im lặng (không throw,
+// không chặn response lưu Danh mục đầu tư — đây là hệ quả PHỤ, lỗi ở bước này không được phép làm hỏng
+// thao tác lưu Danh mục đầu tư chính) nếu: hồ sơ đã useConfirmStatus==='CONFIRMED' (hết giai đoạn Thực
+// hiện) — khớp đúng điều kiện chặn của createOperationWorkItem() lúc tạo tay. Công Việc Gốc PHẢI insert
+// XONG (có id thật trong CSDL) trước khi insert Công Việc Con tương ứng — buildAutoWorkItemsFromEstimate()
+// đã trả về ĐÚNG THỨ TỰ (gốc trước, con sau) nên chỉ cần insert tuần tự theo mảng trả về, KHÔNG insert
+// song song (Promise.all) — con cần biết chắc gốc đã ghi xong trước khi query lại existingWorkItems ở
+// lượt lưu kế tiếp (không ảnh hưởng gì ở lượt NÀY vì con đã tự cầm sẵn rootWorkItem.id từ bộ nhớ, nhưng
+// giữ tuần tự cho an toàn/dễ debug nếu sau này đổi logic).
+// Trả về MẢNG các work item vừa tạo (rỗng nếu không tạo gì) — route gọi hàm này PHẢI đính kèm kết quả vào
+// response (field "autoCreatedWorkItems") để client tự merge vào DB.operationWorkItems ngay, KHÔNG đợi
+// F5/đăng nhập lại mới thấy (DB.operationWorkItems chỉ tải 1 LẦN lúc initDatabase() — xem core.js — mọi
+// route tạo/sửa/xoá work item khác đều tự cập nhật lại DB.operationWorkItems phía client ngay sau khi gọi
+// API thành công, route NÀY cũng phải làm y hệt dù việc tạo xảy ra "ngầm" chứ không phải do người dùng
+// chủ động bấm nút tạo Công Việc).
+async function autoCreateOperationWorkItemsAfterEstimateSave(user, savedRecord, sourceType) {
+  if (savedRecord.useConfirmStatus === 'CONFIRMED') return [];
+  try {
+    const existingWorkItems = await getWorkItemsBySource(sourceType, savedRecord.id);
+    const toCreate = recordActions.buildAutoWorkItemsFromEstimate(user, savedRecord, sourceType, savedRecord.estimateItems || [], existingWorkItems);
+    for (const w of toCreate) {
+      w.sourceType = sourceType;
+      w.sourceId = savedRecord.id;
+      await insertWorkItem(w);
+    }
+    return toCreate;
+  } catch (err) {
+    console.error(`⛔ autoCreateOperationWorkItemsAfterEstimateSave (${sourceType}/${savedRecord.id}):`, err.message);
+    return [];
+  }
+}
 router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING', users));
-    res.json({ ok: true, item: result });
+    const autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, result, 'OPERATION_STORE_OPENING');
+    res.json({ ok: true, item: result, autoCreatedWorkItems });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/submit`, err); }
 });
 router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
@@ -3603,7 +3649,8 @@ router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR', users));
-    res.json({ ok: true, item: result });
+    const autoCreatedWorkItems = await autoCreateOperationWorkItemsAfterEstimateSave(freshUser, result, 'OPERATION_REPAIR');
+    res.json({ ok: true, item: result, autoCreatedWorkItems });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
 });
 
@@ -3850,6 +3897,22 @@ router.post('/operationWorkItems/:id/contract', async (req, res) => {
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/contract`, err); }
+});
+
+// POST /api/records/operationWorkItems/:id/reassign — "🔁 Giao Lại" (MỚI, 11/2026 — route sub-endpoint
+// RIÊNG, mirror /contract: quyền mở cho CẢ người phụ trách đang được gán VÀ toàn quyền quản lý hồ sơ, xem
+// lib/recordActions.js reassignOperationWorkItem() cho lý do tách riêng khỏi /edit).
+router.post('/operationWorkItems/:id/reassign', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.reassignOperationWorkItem(freshUser, item, req.body || {}, users, sourceRecord);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/reassign`, err); }
 });
 
 router.post('/operationWorkItems/:id/accept', async (req, res) => {

@@ -3958,6 +3958,16 @@ async function submitOperationEstimateForApproval() {
   const arr = meta.list();
   const idx = arr.findIndex(x => x.id === id);
   if (idx !== -1) arr[idx] = result.item;
+  // Tự động tạo Công Việc từ Danh Mục Đầu Tư (MỚI, 11/2026) — server có thể đã âm thầm tạo thêm Công
+  // Việc Gốc/Con (xem buildAutoWorkItemsFromEstimate(), lib/recordActions.js) ngay trong lượt lưu này.
+  // DB.operationWorkItems chỉ tải 1 LẦN lúc initDatabase() (không tự fetch lại) — PHẢI tự đẩy thẳng các
+  // work item vừa tạo vào đây, nếu không người dùng mở Thực Hiện ngay sau khi Lưu sẽ thấy "Chưa có công
+  // việc nào" dù server đã tạo xong (chỉ đúng lại sau khi F5/đăng nhập lại — lỗi thật phát hiện khi làm
+  // demo tính năng này).
+  if (Array.isArray(result.autoCreatedWorkItems) && result.autoCreatedWorkItems.length) {
+    DB.operationWorkItems = DB.operationWorkItems || [];
+    DB.operationWorkItems.push(...result.autoCreatedWorkItems);
+  }
   // Mục H: không còn ai khác cần duyệt Danh mục đầu tư — bỏ notifyUsersByEmail('NOTIFY_APPROVAL_NEEDED').
   alert('✅ Đã lưu danh mục đầu tư!');
   renderOperationEstimateList();
@@ -4600,6 +4610,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     if (canEditWorkItems || isOwner) {
       actionHTML += ` <button type="button" data-op="openOperationWorkItemContractModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200" title="Giá trị đầu tư/hợp đồng + tệp đính kèm">💰</button>`;
     }
+    // "🔁 Giao Lại" (MỚI, 11/2026) — mở cho CẢ người phụ trách ĐANG được gán (isOwner) VÀ toàn quyền quản
+    // lý hồ sơ (canEditWorkItems), mirror ĐÚNG gate server reassignOperationWorkItem() — xem chú thích đầy
+    // đủ tại openOperationWorkItemReassignModal() ngay trên.
+    if ((canEditWorkItems || isOwner) && w.status !== 'DA_NGHIEM_THU') {
+      actionHTML += ` <button type="button" data-op="openOperationWorkItemReassignModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded font-bold hover:bg-rose-200" title="Giao lại cho người khác thực hiện">🔁 Giao Lại</button>`;
+    }
     actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
     // Đợt sửa lỗi (phản hồi người dùng, modal thu hẹp còn max-w-4xl): bọc actionHTML trong 1 hàng flex
     // wrap — trước đây các nút chỉ nối chuỗi trần (inline, mr-1) trong 1 <td>, dễ bị dồn cứng 1 hàng dài
@@ -4761,6 +4777,8 @@ async function submitOperationWorkItemContract() {
 // validate lại 400 nếu lọt): loại chính nó, loại công việc CÓ CON (không phải lá), loại công việc mà chọn
 // vào sẽ tạo vòng lặp phụ thuộc (item đang mở nằm trong chuỗi dependsOnWorkItemIds của ứng viên đó).
 let currentOwiDependencyItemId = null;
+// "🔁 Giao Lại" (MỚI, 11/2026) — id công việc đang mở modal Giao Lại, xem openOperationWorkItemReassignModal().
+let currentOwiReassignItemId = null;
 // Dò "chọn ứng viên X sẽ tạo vòng lặp" — mirror ĐÚNG thuật toán assertNoOperationWorkItemDependencyCycle()
 // (lib/recordActions.js): nếu từ X đi theo dependsOnWorkItemIds hiện có mà quay lại đúng itemId đang mở
 // thì X không hợp lệ (item đang mở đã (gián tiếp) phụ thuộc X từ trước — chọn X phụ thuộc ngược lại nữa
@@ -4821,6 +4839,40 @@ async function submitOperationWorkItemDependencies() {
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
   renderOperationAcceptanceList();
+}
+
+// "🔁 Giao Lại" (MỚI, 11/2026) — mở cho CẢ người phụ trách ĐANG được gán (isWorkItemAssignee) VÀ toàn
+// quyền quản lý hồ sơ (mirror ĐÚNG gate server reassignOperationWorkItem()) — xem chú thích đầy đủ tại
+// buttonHTML ở buildOperationWorkItemRow() (tìm "🔁 Giao Lại") + reassignOperationWorkItem()
+// (lib/recordActions.js). CHỈ đổi "Người Thực Hiện" — Nghiệm Thu giữ nguyên, không hiện/sửa được ở modal
+// này (đúng chủ đích thiết kế, không phải thiếu sót).
+function openOperationWorkItemReassignModal(id) {
+  const w = (DB.operationWorkItems || []).find(x => x.id === id);
+  if (!w) return;
+  currentOwiReassignItemId = id;
+  document.getElementById('owiReassignInfo').innerText = `Công việc: ${w.title}`;
+  const activeUsers = (DB.users || []).filter(u => u.active !== false);
+  renderPeopleMultiSelect('owiReassignAssignedToPicker', activeUsers, workItemAssignees(w), 'owi-reassign-assignee', {});
+  document.getElementById('operationWorkItemReassignModal').classList.remove('hidden');
+}
+function closeOperationWorkItemReassignModal() {
+  document.getElementById('operationWorkItemReassignModal').classList.add('hidden');
+  currentOwiReassignItemId = null;
+}
+async function submitOperationWorkItemReassign() {
+  const id = currentOwiReassignItemId;
+  if (!id) return;
+  const assignedTo = [...document.querySelectorAll('.owi-reassign-assignee:checked')].map(cb => cb.value);
+  if (!assignedTo.length) return alert('⛔ Vui lòng chọn ít nhất 1 người thực hiện');
+  let result;
+  try {
+    result = await callRecordAction('operationWorkItems', id, 'reassign', { assignedTo });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.operationWorkItems.findIndex(w => w.id === id);
+  if (idx !== -1) DB.operationWorkItems[idx] = result.item;
+  closeOperationWorkItemReassignModal();
+  renderOperationWorkItemModalBody();
+  renderOperationExecutionList();
 }
 
 // --- Form thêm/sửa công việc (gốc hoặc con) --- editItem (tuỳ chọn) = công việc đang sửa, xem
