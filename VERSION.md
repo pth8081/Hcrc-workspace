@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**28.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.84 (2026-11): Tồn Kho Hệ Thống — chuyển snapshot từ cache RAM sang dbo.AppData
+
+Người dùng hỏi đúng trọng tâm: "tồn kho đồng bộ từ đối tác (BRGMART) có lưu vào CSDL không? Nếu không
+thì có sợ bị treo hệ thống khi bấm đồng bộ không? Danh sách hàng tồn có luôn ghi đè đúng không?" — rà
+lại code xác nhận: trước đây KHÔNG lưu CSDL, chỉ giữ trong 1 `Map` ngay trong tiến trình Node
+(`jobs/inventorySync.js`). Khi kiểm tra tiếp cấu hình triển khai thật (`ecosystem.config.js`) phát hiện
+**lỗi thật đang tồn tại trên production**, nghiêm trọng hơn nghi vấn ban đầu: server chạy **PM2 cluster
+mode** (`instances:'max'`, nhiều tiến trình Node song song), nhưng job đồng bộ chỉ chạy ở ĐÚNG 1 tiến
+trình (tránh gọi API đối tác lặp N lần). Các tiến trình worker khác không bao giờ tự chạy job, nên
+cache RAM riêng của chúng luôn rỗng — người dùng bị PM2 định tuyến vào 1 trong các tiến trình đó sẽ
+LUÔN thấy "Chưa có dữ liệu tồn kho hệ thống" ở màn Đối Chiếu Kệ & Tồn Kho, dù đồng bộ vẫn chạy đúng.
+
+**Vá**: lưu snapshot qua `lib/appData.js` (`dbo.AppData`, khoá `systemInventorySnapshot`) — mỗi lần
+đồng bộ thành công **ghi đè hoàn toàn** (đúng bản chất "tồn kho tại thời điểm hiện tại", không giữ lịch
+sử, không tích luỹ dung lượng theo thời gian). Đọc qua cơ chế cache có sẵn (TTL vài giây + tự phát/nhận
+tín hiệu xoá cache giữa các tiến trình PM2 qua IPC) để mọi tiến trình thấy dữ liệu mới gần như ngay lập
+tức mà không cần round-trip CSDL ở mọi request. Lỗi mạng/server tạm thời giữ nguyên hành vi cũ: không
+ghi gì, snapshot cũ giữ nguyên để màn Đối Chiếu vẫn hiển thị số liệu gần nhất thay vì trống trơn.
+
+Verify: 166 kịch bản (15 file test Kiểm Soát Hàng Hóa/Tồn Kho liên quan, gồm 3 kịch bản mới mô phỏng
+đúng tình huống lỗi — "tiến trình khác" vẫn đọc được dữ liệu tiến trình kia ghi, ghi đè hoàn toàn không
+cộng dồn, lỗi không đụng snapshot cũ) — tất cả pass, không hồi quy. 1 agent kiểm toán độc lập xác nhận
+đúng/đủ, cơ chế lan truyền giữa các tiến trình PM2 hoạt động thật (không chỉ ghi chú suông trong code),
+không có rủi ro tích luỹ dung lượng, không hồi quy khả năng chịu lỗi.
+
+Không đổi `schema.sql` (dùng chung bảng `dbo.AppData` đã có), không thêm biến môi trường, không thêm
+dependency. Không cần thao tác thủ công nào khác ngoài copy code + `pm2 restart`.
 
 ## v28.83 (2026-11): Checklist — bỏ chặn cứng Bắt Buộc ở mẫu Tự Đánh Giá Hàng Ngày GĐST/CHT
 
