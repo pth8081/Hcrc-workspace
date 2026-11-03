@@ -5738,6 +5738,17 @@ async function initDatabase(loggingInUser, opts) {
     // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
     // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().
     DB.operationOrderApiConfig = data.operationOrderApiConfig || {};
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp "nhập Mã Điểm/Cấu Hình API Tồn Kho xong F5 mất hết"
+    // — ĐÚNG lớp lỗi lặp lại ≥6 lần đã liệt kê ở test-initdatabase-key-coverage.js, lần này rơi đúng 2 key
+    // storeExternalCodes/inventoryApiConfig): cả 2 key ĐÃ lưu đúng trên server (sanitizeInventoryApiConfig()/
+    // route storeExternalCodes hoạt động đúng, round-trip verify lúc Lưu cũng xác nhận đúng ngay lúc đó —
+    // xem v28.93) nhưng initDatabase() CHƯA từng có dòng đọc lại 2 field này, nên F5 xong DB.storeExternalCodes/
+    // DB.inventoryApiConfig luôn là `undefined` → mọi nơi đọc `DB.<key> || {}` ra object rỗng, y hệt chưa
+    // từng cấu hình gì — vòng xác nhận round-trip trước đó KHÔNG bắt được vì nó chỉ chạy NGAY SAU lúc Lưu
+    // (trước khi F5), không chạy lại lúc bootstrap trang. test-initdatabase-key-coverage.js (kiểm tĩnh,
+    // không cần Playwright/SQL) đã có sẵn nhưng chưa từng được chạy lại sau khi 2 tính năng này ra đời.
+    DB.storeExternalCodes = data.storeExternalCodes || {};
+    DB.inventoryApiConfig = data.inventoryApiConfig || {};
     DB.shelfThresholdDigestSchedule = data.shelfThresholdDigestSchedule || {};
     DB.operationOrders = data.operationOrders || [];
     DB.operationStoreOpenings = data.operationStoreOpenings || [];

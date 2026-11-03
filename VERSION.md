@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**28.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.98 (2026-11): F5 mất Cấu Hình API Tồn Kho / Mã Điểm API Tồn Kho — initDatabase() thiếu 2 dòng đọc lại
+
+Người dùng báo (kèm ảnh chụp màn hình): "tôi đã nhập key, url, đã ấn lưu nhưng F5 mất hết cấu hình, lỗi
+này đã từng xảy ra với danh mục" (Cấu Hình API Tồn Kho — BRGMART, Hệ Thống → Quản Trị → 🔌 Cấu Hình API
+Đối Tác → tab con "Tồn Kho"; "danh mục" ám chỉ Mã Điểm API Tồn Kho ở Danh Mục Siêu Thị, v28.93).
+
+**Gốc lỗi xác nhận THẬT (không chỉ suy luận)**: `tests/test-initdatabase-key-coverage.js` — bài test tĩnh
+đã có sẵn từ trước, đối chiếu MỌI key trong `defaults.js` với `initDatabase()` (core.js) — chạy lại phát
+hiện ĐÚNG 2 key `storeExternalCodes`/`inventoryApiConfig` bị THIẾU dòng đọc lại. Cả 2 đã lưu đúng trên
+server từ trước (route generic `POST`/`GET /api/data/:key` hoạt động đúng, vòng xác nhận "lưu thành công
+THẬT" lúc bấm Lưu — v28.93 — cũng xác nhận đúng NGAY lúc đó), nhưng `initDatabase()` — hàm DUY NHẤT đọc
+lại dữ liệu lúc F5/đăng nhập lại — chưa từng có dòng `DB.storeExternalCodes = data.storeExternalCodes`/
+`DB.inventoryApiConfig = data.inventoryApiConfig`, nên F5 xong 2 field này luôn `undefined` → mọi nơi đọc
+`DB.<key> || {}` ra rỗng, y hệt chưa từng cấu hình gì, dù dữ liệu thật vẫn nguyên trên server. Đây CHÍNH
+XÁC là lớp lỗi đã lặp lại ≥6 lần trong lịch sử repo (storeTypes, quickApplyConfigs, carVehicleTypes,
+workflowParticipatingPositions, contractApprovalGroups, laborContractTypes) — vòng xác nhận "lưu thành
+công THẬT" ở v28.93 không bắt được vì nó chỉ chạy NGAY SAU lúc Lưu (trước khi F5), không chạy lại lúc
+bootstrap trang.
+
+**Đã vá**: thêm đúng 2 dòng còn thiếu vào `initDatabase()` (core.js), ngay sau `DB.operationOrderApiConfig`.
+
+**Test**: `tests/test-initdatabase-key-coverage.js` (đã có sẵn, không cần viết mới) — chạy lại xác nhận
+đúng 2 key thiếu trước khi vá, hết thiếu sau khi vá. Bổ sung mới
+`tests/test-partner-api-config-f5-reload-persistence.js` — khác MỌI test partner-api-config trước đây
+(tiêm `DB`/gọi `finishLogin()` thẳng qua `page.evaluate()`, không bao giờ tải lại trang thật): dùng
+`page.route()` (network-level, sống sót qua `page.reload()`) mô phỏng server thật, Lưu Cấu Hình API Tồn
+Kho qua UI thật rồi gọi `page.reload()` THẬT, xác nhận panel hiện ĐÚNG giá trị vừa lưu sau F5 (không chỉ
+`DB.*` trong bộ nhớ đúng mà form render lại cũng đúng) — chặn hẳn Service Worker (`context({serviceWorkers:
+'block'})`, `public/sw.js`) vì SW tự `fetch()` lại mọi request `/api/*` TRONG tiến trình riêng của nó,
+không bị `page.route()` của trang bắt được, gây nhiễu kết quả test không liên quan gì tới lỗi thật đang
+kiểm. Xác nhận bằng cách tạm revert đúng 2 dòng vừa thêm, thấy `test-initdatabase-key-coverage.js` fail
+lại đúng 2 key đó, rồi khôi phục lại pass đủ. Chạy lại
+`test-partner-api-config-status-after-save.js`/`test-partner-api-config-false-success-detection.js`/
+`test-inventory-recon.js`/`test-inventory-api-config.js` — không regression. CSP sạch.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.97 (2026-11): Cảnh báo "bản ghi người dùng vừa bị thay đổi ở nơi khác" — đổi sang đối chiếu TỪNG FIELD
 
