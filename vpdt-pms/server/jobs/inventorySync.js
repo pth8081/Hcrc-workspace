@@ -1,9 +1,23 @@
 // jobs/inventorySync.js — Đồng bộ nền "Tồn Kho Hệ Thống" (API BRGMART, tài liệu v1.1 10/2026) cho Đối
 // Chiếu Kệ & Tồn Kho (Kiểm Soát Hàng Hóa, Vận Hành). API trả về TOÀN BỘ siêu thị trong 1 lần gọi (có
-// phân trang, xem lib/inventoryApiClient.js) — job này tự lấy hết, gom vào cache TRONG TIẾN TRÌNH NODE
-// (Map theo maDiem), KHÔNG lưu DB lâu dài (dữ liệu chỉ có giá trị tức thời, tự làm mới mỗi chu kỳ, không
-// cần giữ lịch sử). routes/shelfStock.js (GET /system-inventory) đọc cache này theo ĐÚNG maDiem đã tra
-// từ dept người gọi — cache này không tự nó biết gì về user/dept, chỉ là 1 bảng tra theo maDiem.
+// phân trang, xem lib/inventoryApiClient.js) — job này tự lấy hết, gom theo maDiem rồi LƯU VÀO
+// dbo.AppData (khoá "systemInventorySnapshot", qua lib/appData.js — KHÔNG còn giữ cache TRONG TIẾN
+// TRÌNH NODE như trước v28.84). routes/shelfStock.js (GET /system-inventory) đọc dữ liệu này theo ĐÚNG
+// maDiem đã tra từ dept người gọi — dữ liệu không tự nó biết gì về user/dept, chỉ là 1 bảng tra theo
+// maDiem.
+//
+// LÝ DO CHUYỂN TỪ CACHE RAM SANG CSDL (v28.84, người dùng phát hiện + yêu cầu): server chạy PM2 cluster
+// mode (ecosystem.config.js, instances:'max' — nhiều tiến trình Node song song, 1 tiến trình/lõi CPU),
+// nhưng job đồng bộ CHỈ chạy ở ĐÚNG 1 tiến trình (isSchedulerInstance, xem server.js — tránh gọi API đối
+// tác lặp N lần/chu kỳ). Khi cache còn nằm trong Map RAM của tiến trình đó, các tiến trình worker KHÁC
+// (KHÔNG BAO GIỜ tự chạy job) sẽ mãi mãi không có dữ liệu trong Map RIÊNG của chúng — người dùng bị PM2
+// định tuyến vào 1 trong các tiến trình đó sẽ LUÔN thấy "Chưa có dữ liệu tồn kho hệ thống" dù đồng bộ
+// vẫn chạy đúng ở tiến trình #0 — đây là LỖI THẬT đang tồn tại trên production (không phải lý thuyết),
+// chỉ không lộ rõ nếu người dùng tình cờ luôn được định tuyến vào đúng tiến trình #0. Lưu vào dbo.AppData
+// (cùng cơ chế đã dùng cho "inventoryApiConfig") để MỌI tiến trình đọc chung 1 nguồn + sống sót qua
+// restart/deploy. Giá trị LUÔN bị GHI ĐÈ HOÀN TOÀN mỗi lần đồng bộ thành công (setAppDataValue — không
+// phải đọc-sửa-ghi từng phần) — đúng bản chất "tồn kho tại thời điểm hiện tại", KHÔNG giữ lịch sử, KHÔNG
+// tích luỹ dung lượng theo thời gian (1 bản ghi AppData duy nhất, luôn bị thay thế toàn bộ).
 //
 // QUYẾT ĐỊNH THIẾT KẾ (chưa có đặc tả chính thức, nêu rõ để góp ý nếu cần đổi):
 // - Chu kỳ đồng bộ: 20 phút/lần (trong khoảng 15-30 phút tài liệu khuyến nghị — khớp đúng độ trễ đồng bộ
@@ -29,12 +43,14 @@
 //      lib/inventoryApiClient.js đã ghi chú từ đầu).
 // Mục (1) "enabled !== true" hoặc thiếu baseUrl/apiKeyEnc thì bỏ qua, rơi về mục (2) như cũ.
 const { fetchAllSystemInventory, InventoryApiAuthError } = require('../lib/inventoryApiClient');
-const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, getAppDataValueCached, setAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { assertSafeExternalUrl } = require('../lib/ssrfGuard');
 
-// Map<maDiem, { rows: Array, capNhatLuc: string|null, fetchedAt: Date }>
-const inventoryCacheByMaDiem = new Map();
+// Khoá AppData lưu snapshot tồn kho hệ thống — xem chú thích đầu file. Giá trị:
+// { byMaDiem: { [maDiem]: { rows: Array, capNhatLuc: string|null, fetchedAt: string (ISO) } }, fetchedAt: string (ISO) }
+const INVENTORY_SNAPSHOT_KEY = 'systemInventorySnapshot';
+
 let lastSyncAttemptAt = null;
 let lastSyncSuccessAt = null;
 let lastSyncError = null;
@@ -113,10 +129,16 @@ async function syncSystemInventory() {
       grouped.get(maDiem).push(row);
     }
     const fetchedAt = new Date();
+    const byMaDiem = {};
     for (const [maDiem, maDiemRows] of grouped) {
       const capNhatLuc = maDiemRows.reduce((latest, r) => (r.capNhatLuc && (!latest || r.capNhatLuc > latest)) ? r.capNhatLuc : latest, null);
-      inventoryCacheByMaDiem.set(maDiem, { rows: maDiemRows, capNhatLuc, fetchedAt });
+      byMaDiem[maDiem] = { rows: maDiemRows, capNhatLuc, fetchedAt: fetchedAt.toISOString() };
     }
+    // GHI ĐÈ HOÀN TOÀN — snapshot cũ (nếu có) bị thay thế trọn vẹn bởi lần đồng bộ mới này, đúng bản
+    // chất "tồn kho tại thời điểm hiện tại" (xem chú thích đầu file). Chỉ ghi khi CHẮC CHẮN có dữ liệu
+    // mới (đã qua khỏi mọi bước fetch/parse phía trên không lỗi) — lỗi ở bất kỳ bước nào trước đó nhảy
+    // thẳng xuống catch(), KHÔNG chạy tới dòng này, nên snapshot cũ trong CSDL giữ nguyên như cam kết.
+    await setAppDataValue(INVENTORY_SNAPSHOT_KEY, { byMaDiem, fetchedAt: fetchedAt.toISOString() });
     lastSyncSuccessAt = fetchedAt;
     lastSyncError = null;
     const message = `Đồng bộ thành công — ${rows.length} dòng, ${grouped.size} siêu thị, ${pagesFetched} trang.`;
@@ -135,18 +157,24 @@ async function syncSystemInventory() {
   }
 }
 
-// Đọc cache theo ĐÚNG maDiem — route gọi hàm này SAU KHI đã tự tra maDiem từ dept người gọi (KHÔNG bao
-// giờ nhận maDiem trực tiếp từ client, xem routes/shelfStock.js).
-function getSystemInventoryForMaDiem(maDiem) {
+// Đọc snapshot theo ĐÚNG maDiem — route gọi hàm này SAU KHI đã tự tra maDiem từ dept người gọi (KHÔNG
+// bao giờ nhận maDiem trực tiếp từ client, xem routes/shelfStock.js). Dùng getAppDataValueCached() (TTL
+// vài giây + tự phát/nhận tín hiệu xoá cache qua PM2 IPC khi có tiến trình khác ghi — xem lib/appData.js)
+// thay vì getAppDataValue() thường, để không phải round-trip CSDL ở MỌI request đọc màn Đối Chiếu trong
+// khi vẫn đảm bảo MỌI tiến trình PM2 cluster thấy dữ liệu MỚI gần như ngay lập tức sau mỗi lần đồng bộ.
+async function getSystemInventoryForMaDiem(maDiem) {
   if (!maDiem) return null;
-  return inventoryCacheByMaDiem.get(String(maDiem)) || null;
+  const snapshot = await getAppDataValueCached(INVENTORY_SNAPSHOT_KEY);
+  const entry = snapshot && snapshot.byMaDiem ? snapshot.byMaDiem[String(maDiem)] : null;
+  return entry || null;
 }
 
 async function getInventorySyncStatus() {
+  const snapshot = await getAppDataValue(INVENTORY_SNAPSHOT_KEY);
   return {
     configured: await isInventoryApiConfigured(),
     lastSyncAttemptAt, lastSyncSuccessAt, lastSyncError,
-    cachedStoreCount: inventoryCacheByMaDiem.size
+    cachedStoreCount: snapshot && snapshot.byMaDiem ? Object.keys(snapshot.byMaDiem).length : 0
   };
 }
 

@@ -186,9 +186,16 @@ async function runJobTests() {
     });
     try {
       const port = bsvr.address().port;
+      // v28.84: syncSystemInventory() giờ GHI snapshot thật qua setAppDataValue('systemInventorySnapshot', ...)
+      // và getSystemInventoryForMaDiem() ĐỌC LẠI qua getAppDataValueCached() cùng khoá — stub phải mô
+      // phỏng 1 "CSDL" thật sự lưu lại giá trị ghi vào (không chỉ no-op) để kịch bản đọc-sau-ghi dưới
+      // đây phản ánh đúng hành vi thật, cùng kỹ thuật tests/test-inventory-recon.js::makeFakeAppData().
+      const fakeStore = { inventoryApiConfig: { enabled: false, baseUrl: '', apiKeyEnc: null } };
       stubModule('lib/appData', {
-        getAppDataValue: async (key) => key === 'inventoryApiConfig' ? { enabled: false, baseUrl: '', apiKeyEnc: null } : null,
-        withLockedAppDataValue: async (key, fn) => fn({ enabled: false, baseUrl: '', apiKeyEnc: null })
+        getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
+        getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
+        setAppDataValue: async (key, value) => { fakeStore[key] = value; },
+        withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
       });
       process.env.BRGMART_INVENTORY_API_KEY = 'env-key';
       process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
@@ -196,7 +203,7 @@ async function runJobTests() {
       const { syncSystemInventory, getSystemInventoryForMaDiem } = require('../jobs/inventorySync');
       const result = await syncSystemInventory();
       check('UI enabled=false -> rơi về .env, đồng bộ thành công bình thường', result.ok === true, result);
-      check('Dữ liệu lấy đúng từ server .env (maDiem 002)', !!getSystemInventoryForMaDiem('002'), getSystemInventoryForMaDiem('002'));
+      check('Dữ liệu lấy đúng từ server .env (maDiem 002)', !!(await getSystemInventoryForMaDiem('002')), await getSystemInventoryForMaDiem('002'));
     } finally {
       bsvr.close();
       delete process.env.BRGMART_INVENTORY_API_KEY;

@@ -181,9 +181,10 @@ router.delete('/records/:id', async (req, res) => {
 // ===================== ĐỐI CHIẾU KỆ & TỒN KHO: đọc tồn kho hệ thống ĐÚNG siêu thị người gọi =====================
 // Server TỰ tra maDiem theo req.freshUser.dept (qua DB.storeExternalCodes, admin cấu hình tay ở màn
 // "🏬 Quản Lý Danh Mục Siêu Thị") — route này KHÔNG BAO GIỜ nhận maDiem/mã siêu thị từ query/body
-// client, chặn store-spoofing cùng nguyên tắc mọi route Kiểm Soát Hàng Hóa khác. Dữ liệu đọc từ cache
-// trong tiến trình (jobs/inventorySync.js, tự đồng bộ nền mỗi 20 phút) — route này KHÔNG tự gọi API đối
-// tác (tránh người dùng bấm đi bấm lại làm dội lượt gọi vượt giới hạn tần suất của đối tác).
+// client, chặn store-spoofing cùng nguyên tắc mọi route Kiểm Soát Hàng Hóa khác. Dữ liệu đọc từ snapshot
+// lưu ở dbo.AppData (jobs/inventorySync.js, tự đồng bộ nền mỗi 20 phút, v28.84 CHUYỂN TỪ CACHE RAM SANG
+// CSDL để mọi tiến trình PM2 cluster đọc chung 1 nguồn) — route này KHÔNG tự gọi API đối tác (tránh
+// người dùng bấm đi bấm lại làm dội lượt gọi vượt giới hạn tần suất của đối tác).
 router.get('/system-inventory', async (req, res) => {
   try {
     if (!(await isInventoryApiConfigured())) {
@@ -194,7 +195,7 @@ router.get('/system-inventory', async (req, res) => {
     if (!maDiem) {
       return res.status(404).json({ error: `Siêu thị "${req.freshUser.dept || ''}" chưa cấu hình Mã Điểm API Tồn Kho — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
     }
-    const cached = getSystemInventoryForMaDiem(maDiem);
+    const cached = await getSystemInventoryForMaDiem(maDiem);
     if (!cached) {
       return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
     }
