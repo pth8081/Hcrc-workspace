@@ -594,7 +594,7 @@ function downloadDocFile(id) {
   const doc = DB.docs.find(d => d.id === id);
   if (!doc) return;
   const a = document.createElement('a');
-  a.href = attachmentDownloadUrl(doc.fileUrl, doc.fileData, doc.fileName || doc.code);
+  a.href = attachmentDownloadUrl(doc.fileUrl, doc.fileData, doc.fileName || doc.code, doc.displayCode || doc.code);
   a.download = doc.fileName || doc.code;
   document.body.appendChild(a);
   a.click();
@@ -1249,7 +1249,7 @@ function downloadLicenseFile(id) {
   const item = DB.licenses.find(l => l.id === id);
   if (!item) return;
   const a = document.createElement('a');
-  a.href = attachmentDownloadUrl(item.fileUrl, item.fileData, item.fileName || item.code);
+  a.href = attachmentDownloadUrl(item.fileUrl, item.fileData, item.fileName || item.code, item.displayCode || item.code);
   a.download = item.fileName || item.code;
   document.body.appendChild(a);
   a.click();
@@ -1264,6 +1264,7 @@ function viewLicenseFile(id) {
     title: `📜 ${item.licenseType} (${item.displayCode || item.code})`,
     sub: `Công ty: ${item.companyName} | Địa điểm: ${item.locationName} | Số GP: ${item.licenseNumber}`,
     footerInfo: `Ngày cấp: ${item.issueDate} | Ngày hết hạn: ${item.expiryDate} | Cơ quan cấp: ${item.issuingAuthority}`,
+    docCode: item.displayCode || item.code,
     fileSrc: item.fileUrl, fileType: item.fileType, fileName: item.fileName
   });
 }
@@ -1888,6 +1889,16 @@ const PROTECTED_VIEW_WATERMARK_COMPANY = 'Hệ thống văn phòng số Công ty
 // xám nhạt không chói mắt nhưng vẫn đủ rõ để nhận diện, không chặn thao tác/không chọn được text.
 const PROTECTED_VIEW_WATERMARK_STYLE = 'position:absolute;left:10px;bottom:6px;font-size:13px;font-weight:600;color:rgba(110,110,110,0.55);white-space:nowrap;pointer-events:none;user-select:none;z-index:5;';
 
+// Nối mã tài liệu/hồ sơ vào dòng watermark (11/2026, yêu cầu người dùng: "ở chỗ chân thêm mã của tài
+// liệu... hiển thị thêm mã tài liệu nối tiếp dòng Hệ thống văn phòng số Công ty HCRC") — dùng CHUNG cho
+// cả 2 nơi vẽ watermark (Khung Xem Bảo Vệ ở đây, VÀ watermark đóng dấu vào file PDF thật khi tải, xem
+// routes/download.js) để đảm bảo luôn khớp định dạng. docCode rỗng/undefined -> giữ NGUYÊN chỉ tên hệ
+// thống như trước (module không có khái niệm "mã hồ sơ" rõ ràng, VD tệp Đào Tạo/trình chiếu Báo Cáo Định
+// Kỳ/Đề Nghị Thanh Toán không có field `code` — xem danh sách nơi gọi openFileProtectedView()).
+function buildProtectedViewWatermarkText(docCode) {
+  return docCode ? `${PROTECTED_VIEW_WATERMARK_COMPANY} - ${docCode}` : PROTECTED_VIEW_WATERMARK_COMPANY;
+}
+
 // Trả về URL TẢI THẬT cho 1 tệp đính kèm — khác fileUrl thô dùng để XEM (openFileProtectedView/mammoth/
 // exceljs vẫn fetch thẳng /uploads/... như cũ, không qua đây, để giữ tốc độ xem không tốn thêm xử lý
 // server). Mọi lượt TẢI (nút "⬇️ Tải"/action-dropdown "download") phải qua route dùng chung này —
@@ -1895,9 +1906,12 @@ const PROTECTED_VIEW_WATERMARK_STYLE = 'position:absolute;left:10px;bottom:6px;f
 // routes/download.js). Bản ghi CŨ còn base64 nhúng sẵn (fileData, không có fileUrl trên server) không
 // có đường đi qua server nên vẫn tải thẳng như trước — không có watermark (giới hạn đã biết với số ít
 // bản ghi cũ còn sót lại từ trước khi chuyển sang lưu file vật lý).
-function attachmentDownloadUrl(fileUrl, fileData, fileName) {
+// docCode (tuỳ chọn, 11/2026): nối thêm vào watermark đóng dấu trong file PDF thật khi tải — xem
+// buildProtectedViewWatermarkText()/routes/download.js (?code=, server tự lọc ký tự an toàn).
+function attachmentDownloadUrl(fileUrl, fileData, fileName, docCode) {
   if (fileUrl && fileUrl.startsWith('/uploads/')) {
-    return `/api/files/download?fileUrl=${encodeURIComponent(fileUrl)}&name=${encodeURIComponent(fileName || '')}`;
+    const codeParam = docCode ? `&code=${encodeURIComponent(docCode)}` : '';
+    return `/api/files/download?fileUrl=${encodeURIComponent(fileUrl)}&name=${encodeURIComponent(fileName || '')}${codeParam}`;
   }
   return fileUrl || fileData;
 }
@@ -1908,7 +1922,7 @@ function attachmentDownloadUrl(fileUrl, fileData, fileName) {
 // gốc (qua <object>/<iframe>) bị Chrome/Edge chặn khi nằm trong modal có lớp nền mờ ("PDF bị che bởi
 // phần tử khác"), và không thể ẩn thanh công cụ In/Tải có sẵn của plugin bằng JavaScript của trang.
 // Trả về null nếu không có tệp (để nơi gọi tự hiển thị nội dung tóm tắt thay thế).
-function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
+function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel, watermarkText) {
   if (!fileSrc) return null;
   const kind = getFileKind(fileType, fileName);
 
@@ -1918,7 +1932,7 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
     return `
       <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" data-no-ctxmenu>
         <img src="${escapeHtml(fileSrc)}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" data-no-ctxmenu />
-        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(watermarkText || PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
       </div>
     `;
   }
@@ -1943,7 +1957,7 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
 // module-internalcomms-daotao.js): { initialViewedPages, onPageViewed } chuyển thẳng cho
 // renderPdfProtected() (tham số thứ 4, xem chú thích ở đó) — MỌI caller khác không truyền field này nên
 // hành vi giữ NGUYÊN VẸN như trước (undefined).
-function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, fileName, noFileFallbackHTML, pdfProgress }) {
+function openFileProtectedView({ title, sub, footerInfo, docCode, fileSrc, fileType, fileName, noFileFallbackHTML, pdfProgress }) {
   document.getElementById('viewModalTitle').innerText = title;
   document.getElementById('viewModalSub').innerText = sub || '';
   document.getElementById('viewModalFooterInfo').innerText = footerInfo || '';
@@ -1952,13 +1966,14 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
 
   const container = document.getElementById('viewModalContent');
   const kind = fileSrc ? getFileKind(fileType, fileName) : null;
+  const watermarkText = buildProtectedViewWatermarkText(docCode);
 
   if (kind === 'pdf') {
     container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-200 rounded protected-view-container" data-no-ctxmenu></div>`;
     const pdfContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (window.renderPdfProtected) {
-      window.renderPdfProtected(pdfContainer, fileSrc, PROTECTED_VIEW_WATERMARK_COMPANY, pdfProgress);
+      window.renderPdfProtected(pdfContainer, fileSrc, watermarkText, pdfProgress);
     } else {
       pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
     }
@@ -1999,7 +2014,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
     return;
   }
 
-  const viewerHTML = fileSrc ? buildProtectedViewerHTML(fileSrc, fileType, fileName, title) : null;
+  const viewerHTML = fileSrc ? buildProtectedViewerHTML(fileSrc, fileType, fileName, title, watermarkText) : null;
   container.innerHTML = viewerHTML || noFileFallbackHTML || `
     <div class="w-full h-[60vh] bg-white p-6 rounded shadow border flex items-center justify-center text-gray-400 italic protected-view-container" data-no-ctxmenu>
       Không có tệp đính kèm để xem trước.
@@ -2014,15 +2029,17 @@ function viewDoc(docId) {
   if (!doc) return;
   // fileUrl: file lưu trên server (mới). fileData: fallback cho bản ghi cũ còn base64 nhúng sẵn trong DB.
   const fileSrc = doc.fileUrl || doc.fileData;
+  const docCode = doc.displayCode || doc.code;
 
   openFileProtectedView({
     title: `📄 ${doc.title} (${doc.code})`,
     sub: `Phòng ban: ${doc.dept} | Phân loại: ${doc.cat} | Phiên bản: ${doc.ver} | Người trình: ${doc.uploaderName || doc.uploader}`,
     footerInfo: `Trích lục: ${doc.summary || 'Không có mô tả'}`,
+    docCode,
     fileSrc, fileType: doc.fileType, fileName: doc.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" data-no-ctxmenu>
-        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(buildProtectedViewWatermarkText(docCode))}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>

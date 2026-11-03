@@ -6636,6 +6636,19 @@ giờ chạm tới). Ngưỡng này dư cho thao tác tải thật kể cả nú
 nếu ai đó vượt quá sẽ nhận thông báo "Bạn đang tải tệp quá nhiều, vui lòng thử
 lại sau ít phút" — không cần cấu hình gì thêm.
 
+**Mã hồ sơ trong watermark (11/2026)** — dòng chân watermark "Hệ thống văn
+phòng số Công ty HCRC" (hiện ở góc dưới-trái mỗi trang khi xem qua Khung Xem
+Bảo Vệ, VÀ đóng dấu vào chính file PDF khi bấm "Tải") nay nối thêm mã hồ sơ
+ngay sau, VD "Hệ thống văn phòng số Công ty HCRC - HCRC-HD-2026-00042", ở
+mọi module có mã hồ sơ rõ ràng: Tài Liệu, Giấy Phép, Hợp Đồng, Hợp Đồng Lao
+Động, Văn Bản Trình, Phê Duyệt Giá (Bán Lẻ/Bán Buôn), Văn Phòng, Vận Hành
+(Đơn Hàng/Mở Mới/Sửa Chữa, kể cả tệp đính kèm Danh Mục Đầu Tư). Một số module
+tệp đính kèm không gắn với 1 mã hồ sơ cụ thể (Đào Tạo, trình chiếu Báo Cáo
+Định Kỳ, Checklist, Đề Nghị Thanh Toán khi không mượn mã từ hồ sơ nguồn, Gia
+Hạn Dịch Vụ CNTT, Nhịp Sống HCRC...) vẫn giữ nguyên watermark chỉ tên hệ
+thống như trước — không cần cấu hình gì thêm, mã hồ sơ được lấy tự động từ
+chính hồ sơ đang xem/tải.
+
 ### 7.5. Thùng Rác
 
 **🗑️ Thùng Rác** — **chỉ admin** vào được (kiểm tra lại ở server, không chỉ

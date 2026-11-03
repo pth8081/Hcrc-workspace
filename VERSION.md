@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**28.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.86 (2026-11): Khung Xem Bảo Vệ + Tải file — nối mã hồ sơ vào dòng chân "Hệ thống văn phòng số Công ty HCRC"
+
+Người dùng gửi ảnh chụp 1 hợp đồng đang xem, yêu cầu: "ở chỗ chân thêm mã của tài liệu, các module có tài
+liệu đề sẽ hiển thị thêm mã tài liệu nối tiếp dòng Hệ thống văn phòng số Công ty HCRC". Đã gửi demo trước
+(ảnh trước/sau bằng đúng hàm thật, chưa sửa code) để xác nhận định dạng `"... Công ty HCRC - <mã>"`, phạm
+vi (mọi module có mã hồ sơ rõ ràng), và việc áp dụng luôn cho cả file PDF TẢI VỀ — người dùng xác nhận cả
+3 điểm trước khi triển khai thật.
+
+**Thay đổi**:
+- `public/js/module-tailieu.js`: thêm `buildProtectedViewWatermarkText(docCode)` (hàm dùng chung) — nối
+  `" - <mã>"` vào watermark khi có `docCode`, giữ nguyên hành vi cũ khi không có. `openFileProtectedView()`
+  nhận thêm tham số `docCode` tuỳ chọn, tính watermark 1 lần rồi dùng cho CẢ nhánh PDF
+  (`renderPdfProtected()`) lẫn nhánh ảnh (`buildProtectedViewerHTML()`). `attachmentDownloadUrl()` nhận
+  thêm tham số `docCode` tuỳ chọn, đính `&code=` vào URL `/api/files/download` khi có.
+- `routes/download.js`: thêm `resolveDownloadWatermarkText(rawCode)` — đọc query `?code=`, lọc allowlist
+  ký tự mã hồ sơ thật (chữ/số/gạch ngang/gạch dưới/chấm, tối đa 60 ký tự, mã lạ/rỗng thì bỏ qua an toàn),
+  nối vào watermark đóng dấu trong file PDF thật khi tải — đồng bộ với Khung Xem Bảo Vệ.
+- Đã nối `docCode` ở MỌI nơi gọi `openFileProtectedView()`/`attachmentDownloadUrl()` có mã hồ sơ rõ ràng
+  xác định được: Tài Liệu (`doc.displayCode||doc.code`), Giấy Phép (`item.displayCode||item.code`), Hợp
+  Đồng, Hợp Đồng Lao Động, Văn Bản Trình (kể cả Chuyển Tiếp Xin Ý Kiến), Phê Duyệt Giá (Bán Lẻ/Bán Buôn),
+  Văn Phòng (`officeReqs`), Vận Hành (`operationOrders`/`operationStoreOpenings`/`operationRepairs`, kể cả
+  tệp đính kèm Danh Mục Đầu Tư qua `currentEstimateKind`/`currentEstimateRecordId`) — mỗi file dùng ĐÚNG
+  mã hồ sơ module đó đã dùng sẵn ở nơi khác (không tự đặt ra khuôn mã mới).
+- CỐ Ý KHÔNG áp dụng (không có mã hồ sơ rõ ràng để nối, giữ nguyên hành vi cũ — chỉ tên hệ thống):
+  Đào Tạo (`trainingDocuments`), trình chiếu Báo Cáo Định Kỳ, Checklist, Đề Nghị Thanh Toán (trừ khi có
+  `sourceCode` mượn từ hồ sơ nguồn), Gia Hạn Dịch Vụ CNTT, Nhịp Sống HCRC, lịch sử sự kiện Hồ Sơ Nhân Sự —
+  đều là tệp đính kèm không gắn với 1 mã hồ sơ cụ thể trong hệ thống.
+
+**Test**: `tests/test-protected-view-doccode-footer.js` (mới, 11 kịch bản) — 7 kịch bản server
+(`resolveDownloadWatermarkText()`: mã hợp lệ, rỗng, undefined, có khoảng trắng, ký tự lạ/thử chèn script,
+dấu chấm/gạch dưới, quá dài) + 4 kịch bản browser thật (`attachmentDownloadUrl()` có/không `&code=`,
+`openFileProtectedView()` truyền đúng/không truyền `docCode` vào watermark thật qua spy
+`renderPdfProtected()`). Chạy lại toàn bộ test liên quan tới các module đã sửa (itPrice, Tài Liệu, Hợp
+Đồng, Văn Bản Trình, Vận Hành, Văn Phòng/VPP, Thanh Toán, Checklist, Giấy Phép...) — không có regression
+(2 FAIL phát hiện trong lúc chạy đã xác nhận là lỗi CŨ, có sẵn trước khi sửa, không liên quan).
+
+**Không có thay đổi deploy nào khác** (không đổi `schema.sql`/`.env.example`/`package.json` dependencies)
+— chỉ cần copy code như quy trình chuẩn.
 
 ## v28.85 (2026-11): Phê Duyệt Giá — vá nút "Tải file gốc" bị mất sau khi đã duyệt (CẢ Bán Lẻ & Bán Buôn)
 

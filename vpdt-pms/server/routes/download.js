@@ -54,6 +54,21 @@ function getFontBytes() {
   return embeddedFontBytes;
 }
 
+// Nối mã tài liệu/hồ sơ vào watermark khi tải (11/2026, yêu cầu người dùng: "ở chỗ chân thêm mã của tài
+// liệu") — mirror ĐÚNG định dạng buildProtectedViewWatermarkText() phía client (Khung Xem Bảo Vệ,
+// module-tailieu.js). rawCode là query param do CLIENT truyền (không xác thực qua DB ở đây, chỉ là
+// watermark hiển thị, không phải dữ liệu nghiệp vụ) — lọc allowlist ký tự mã hồ sơ thật (chữ/số/gạch
+// ngang/gạch dưới/chấm, không khoảng trắng) + giới hạn độ dài, PHÒNG THỦ 2 lớp: (1) tránh watermark bị
+// kéo dài bất thường/tràn trang nếu ai đó tự ghép URL tay, (2) DejaVuSans tuy đã hỗ trợ Unicode nhưng
+// không cần vẽ ký tự tuỳ ý vào đây — mã hồ sơ thật trong hệ thống luôn khớp allowlist này (chữ/số/gạch
+// ngang, xem module-tailieu.js các hàm sinh mã). Tách hàm riêng để test được trực tiếp (không cần dựng
+// cả route Express + DB).
+function resolveDownloadWatermarkText(rawCode) {
+  const code = String(rawCode || '').slice(0, 60);
+  const safeCode = /^[A-Za-z0-9\-_.]+$/.test(code) ? code : '';
+  return safeCode ? `${WATERMARK_TEXT} - ${safeCode}` : WATERMARK_TEXT;
+}
+
 // LƯU Ý BẢO TRÌ: toàn bộ thân handler được bọc try/catch (xem downloadHandler() bên dưới) — lưới an
 // toàn cho ĐÚNG lớp lỗi đã thực sự xảy ra ở route này trước đây: 1 hàm canView* import từ
 // lib/recordViewScope.js (hoặc gián tiếp qua lib/fileAuthz.js) bị BỎ SÓT khỏi khối module.exports của
@@ -106,8 +121,10 @@ async function downloadHandler(req, res) {
     pdfDoc.registerFontkit(fontkit);
     const font = await pdfDoc.embedFont(getFontBytes(), { subset: true });
 
+    const watermarkText = resolveDownloadWatermarkText(req.query.code);
+
     for (const page of pdfDoc.getPages()) {
-      page.drawText(WATERMARK_TEXT, {
+      page.drawText(watermarkText, {
         x: 24,
         y: 14,
         size: 13,
@@ -126,5 +143,10 @@ async function downloadHandler(req, res) {
     return res.sendFile(filePath);
   }
 }
+
+// Gắn thêm hàm thuần (không phải route) lên chính router — Express Router vốn là 1 function, gắn thêm
+// property không đụng gì tới cách app.use(downloadRoutes) mount route như cũ. Chỉ để test
+// (tests/test-download-watermark-code.js) gọi được trực tiếp mà không cần dựng cả Express app + DB.
+router.resolveDownloadWatermarkText = resolveDownloadWatermarkText;
 
 module.exports = router;

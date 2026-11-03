@@ -1441,6 +1441,7 @@ function viewOfficeSignedFile(officeId) {
     title: `📎 Tài Liệu Ký — ${o.title} (${o.code})`,
     sub: `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`,
     footerInfo: 'Bản đã ký chính thức, dùng để đối chiếu khi thanh toán.',
+    docCode: o.code,
     fileSrc: o.signedFileUrl, fileType: o.signedFileType, fileName: o.signedFileName
   });
 }
@@ -1456,6 +1457,7 @@ function viewOfficeExtraFile(officeId, idx) {
     title: `📎 ${ef.fileName || o.title} (${o.code})`,
     sub: `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`,
     footerInfo: `Tệp đính kèm đề xuất: ${o.title}`,
+    docCode: o.code,
     fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
   });
 }

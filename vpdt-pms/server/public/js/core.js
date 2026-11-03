@@ -15074,6 +15074,7 @@ function viewForwardReplyFile(moduleKey, itemId, nodeId) {
     title: `📎 File ý kiến — ${escapeHtml(node.forwardedToName || node.forwardedTo)}`,
     sub: `${FORWARD_NOUN[moduleKey]}: ${item.title} (${item.code})`,
     footerInfo: 'Tệp đính kèm theo nhánh chuyển tiếp xin ý kiến',
+    docCode: item.code,
     fileSrc: node.reply.fileUrl
   });
 }

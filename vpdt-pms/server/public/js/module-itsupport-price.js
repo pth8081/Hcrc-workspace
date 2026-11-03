@@ -1621,6 +1621,7 @@ function viewItPriceMainFile(itemId, fileId, evt) {
     title: `📎 ${f.fileName || p.code} (${p.code})`,
     sub: `Phòng ban: ${p.dept} | Người đề xuất: ${p.creatorName}`,
     footerInfo: `Tệp Bảng Giá — Đề xuất duyệt giá: ${p.code}`,
+    docCode: p.code,
     fileSrc: f.fileUrl, fileName: f.fileName
   });
 }
@@ -1637,6 +1638,7 @@ function viewItPriceExtraFile(itemId, idx) {
     title: `📎 ${ef.fileName || p.code} (${p.code})`,
     sub: `Phòng ban: ${p.dept} | Người đề xuất: ${p.creatorName}`,
     footerInfo: `Tài liệu bổ sung liên quan — Đề xuất duyệt giá: ${p.code}`,
+    docCode: p.code,
     fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
   });
 }
@@ -1754,7 +1756,7 @@ function renderItPriceModal() {
     // tiêu đề <summary> phía trên.
     const downloadFileNameWithCode = `${p.code} - ${f.fileName}`;
     const downloadLinkHTML = canDownloadThisFile
-      ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, downloadFileNameWithCode)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
+      ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, downloadFileNameWithCode, p.code)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
       : ' · <span class="text-gray-400 italic">Chỉ file đã phê duyệt mới tải được</span>';
     // "Đánh dấu cột trước khi tải" (mục 4 kế hoạch) — CHỈ ở đúng file đã duyệt (route mới cũng tự chặn
     // lại y hệt điều kiện này ở server, xem routes/priceFile.js::POST /:id/download-marked).
@@ -1810,7 +1812,7 @@ function renderItPriceModal() {
         <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
         <div class="flex gap-1 shrink-0">
           <button type="button" data-op="viewItPriceExtraFile" data-arg0="${p.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
-          <a href="${attachmentDownloadUrl(ef.fileUrl, null, efDisplayName)}" download="${escapeHtml(efDisplayName)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>
+          <a href="${attachmentDownloadUrl(ef.fileUrl, null, efDisplayName, p.code)}" download="${escapeHtml(efDisplayName)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>
         </div>
       </div>
     `;

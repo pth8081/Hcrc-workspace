@@ -551,7 +551,7 @@ function openOfficeProcessModal(officeId) {
         <div class="flex gap-1 shrink-0">
           <button type="button" data-op="viewOfficeExtraFile" data-arg0="${o.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
-            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${o.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${o.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${o.code}-${idx + 1}`, o.code)}" download="${escapeHtml(ef.fileName || `${o.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
         </div>
       </div>

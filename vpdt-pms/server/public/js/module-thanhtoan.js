@@ -1133,7 +1133,10 @@ function viewPaymentConfirmFile(prId, index) {
     title = `📎 Tệp Đề Nghị Thanh Toán Đã Phê Duyệt — ${it?.description || ''} (${pr.title})`;
   }
   if (!fileUrl) return;
-  openFileProtectedView({ title, sub: `Phòng ban: ${pr.dept}`, fileSrc: fileUrl, fileType, fileName });
+  // paymentRequests KHÔNG có field `code` riêng (chỉ có id) — sourceCode (nếu có) là mã mượn từ hồ sơ
+  // nguồn (hợp đồng/đề xuất văn phòng...) lúc tạo, chỉ nối vào watermark khi THỰC SỰ có (không dựng mã
+  // giả kiểu "#<id>").
+  openFileProtectedView({ title, sub: `Phòng ban: ${pr.dept}`, docCode: pr.sourceCode, fileSrc: fileUrl, fileType, fileName });
 }
 
 // Xem 1 tệp trong "Hồ Sơ Đề Nghị Thanh Toán" (multi-file, đính kèm NGAY LÚC TẠO/GỬI — xem
@@ -1142,7 +1145,7 @@ function viewPaymentConfirmFile(prId, index) {
 function viewPaymentRequestFile(prId, fileUrl, fileName, fileType) {
   const pr = DB.paymentRequests.find(x => x.id === prId);
   if (!pr || !fileUrl) return;
-  openFileProtectedView({ title: `📎 Hồ Sơ Đề Nghị Thanh Toán — ${escapeHtml(fileName || '')} (${escapeHtml(pr.title)})`, sub: `Phòng ban: ${pr.dept}`, fileSrc: fileUrl, fileType, fileName });
+  openFileProtectedView({ title: `📎 Hồ Sơ Đề Nghị Thanh Toán — ${escapeHtml(fileName || '')} (${escapeHtml(pr.title)})`, sub: `Phòng ban: ${pr.dept}`, docCode: pr.sourceCode, fileSrc: fileUrl, fileType, fileName });
 }
 
 // Xem đầy đủ TOÀN BỘ thông tin đã nhập của hồ sơ hợp đồng (khác với viewContract() ở dưới, vốn chỉ
@@ -1257,10 +1260,11 @@ function viewContract(contractId) {
     title: `📄 ${c.title} (${c.code})`,
     sub: `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`,
     footerInfo: `Trích lược: ${c.content || 'Không có mô tả'}`,
+    docCode: c.code,
     fileSrc, fileType: c.fileType, fileName: c.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" data-no-ctxmenu>
-        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(buildProtectedViewWatermarkText(c.code))}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>
@@ -1285,6 +1289,7 @@ function viewContractSignedFile(contractId) {
     title: `📎 Tài Liệu Ký — ${c.title} (${c.code})`,
     sub: `Phòng ban: ${c.dept} | Đối tác: ${c.partner}`,
     footerInfo: 'Bản đã ký chính thức, dùng để đối chiếu khi thanh toán.',
+    docCode: c.code,
     fileSrc: c.signedFileUrl, fileType: c.signedFileType, fileName: c.signedFileName
   });
 }

@@ -639,12 +639,12 @@ function downloadAllSubmissionFiles(subId) {
   const files = [];
   if (sub.fileUrl || sub.fileData) {
     const name = sub.fileName || sub.code;
-    files.push({ url: attachmentDownloadUrl(sub.fileUrl, sub.fileData, name), name });
+    files.push({ url: attachmentDownloadUrl(sub.fileUrl, sub.fileData, name, sub.code), name });
   }
   (sub.extraFiles || []).forEach((ef, idx) => {
     if (ef.fileUrl) {
       const name = ef.fileName || `${sub.code}-${idx + 1}`;
-      files.push({ url: attachmentDownloadUrl(ef.fileUrl, null, name), name });
+      files.push({ url: attachmentDownloadUrl(ef.fileUrl, null, name, sub.code), name });
     }
   });
 
@@ -699,7 +699,7 @@ function openProcessSubmissionModal(subId) {
         <div class="flex gap-1">
           <button type="button" data-op="viewSubmissionAttachment" data-arg0="${sub.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
-            ? `<a href="${attachmentDownloadUrl(sub.fileUrl, sub.fileData, sub.fileName || sub.code)}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            ? `<a href="${attachmentDownloadUrl(sub.fileUrl, sub.fileData, sub.fileName || sub.code, sub.code)}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
         </div>
       </div>
@@ -713,7 +713,7 @@ function openProcessSubmissionModal(subId) {
         <div class="flex gap-1 shrink-0">
           <button type="button" data-op="viewSubmissionExtraFile" data-arg0="${sub.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
-            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${sub.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${sub.code}-${idx + 1}`, sub.code)}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
         </div>
       </div>
@@ -940,6 +940,7 @@ function viewFileProposalAttachment(subId) {
     title: `📎 ${p.fileName} (Đề xuất thay thế — ${sub.code})`,
     sub: `Đề xuất bởi: ${p.proposedByName}`,
     footerInfo: `Đề xuất thay thế tờ trình: ${sub.title}`,
+    docCode: sub.code,
     fileSrc: p.fileUrl, fileType: p.fileType, fileName: p.fileName
   });
 }
@@ -1327,6 +1328,7 @@ function viewSubmissionAttachment(subId) {
     title: `📎 ${sub.fileName || sub.title} (${sub.code})`,
     sub: `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`,
     footerInfo: `Văn bản trình: ${sub.title}`,
+    docCode: sub.code,
     fileSrc, fileType: sub.fileType, fileName: sub.fileName
   });
 }
@@ -1343,6 +1345,7 @@ function viewSubmissionExtraFile(subId, idx) {
     title: `📎 ${ef.fileName || sub.title} (${sub.code})`,
     sub: `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`,
     footerInfo: `Tài liệu bổ sung theo tờ trình: ${sub.title}`,
+    docCode: sub.code,
     fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
   });
 }

@@ -311,7 +311,7 @@ const HRC_PROBATION_RATE_EDIT_ID = 'hrcEditProbationSalaryRate';
 
 function buildHrContractDetailHTML(c) {
   const fileRow = c.fileUrl
-    ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
+    ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName, c.code)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
     : '<span class="text-gray-400">Chưa có tệp</span>';
 
   // Mới nhất lên đầu (9/2026, theo yêu cầu người dùng) — dùng parseVNDateTime() (core.js) vì createdAt
@@ -324,7 +324,7 @@ function buildHrContractDetailHTML(c) {
           <div class="font-semibold">${escapeHtml(a.amendmentType)}${a.applyDate ? ` — áp dụng ${escapeHtml(a.applyDate)}` : ''} — hiệu lực ${escapeHtml(a.effectiveDate)}</div>
           ${a.oldValue || a.newValue ? `<div class="text-gray-600">${escapeHtml(a.oldValue || '')} → ${escapeHtml(a.newValue || '')}</div>` : ''}
           ${a.note ? `<div class="text-gray-500 italic">${escapeHtml(a.note)}</div>` : ''}
-          ${a.fileUrl ? `<div><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(a.fileName || 'Quyết định')}</a></div>` : ''}
+          ${a.fileUrl ? `<div><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName, c.code)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(a.fileName || 'Quyết định')}</a></div>` : ''}
           <div class="text-gray-400 text-[10px]">${escapeHtml(a.createdByName || a.createdBy)} — ${escapeHtml(a.createdAt)}</div>
         </div>
       `).join('')

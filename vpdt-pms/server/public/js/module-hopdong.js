@@ -1312,7 +1312,7 @@ function runContractAction(id, action) {
       const c = DB.contracts.find(x => x.id === id);
       if (!c) return;
       const a = document.createElement('a');
-      a.href = attachmentDownloadUrl(c.fileUrl, c.fileData, c.fileName || c.code);
+      a.href = attachmentDownloadUrl(c.fileUrl, c.fileData, c.fileName || c.code, c.code);
       a.download = c.fileName || c.code;
       document.body.appendChild(a);
       a.click();

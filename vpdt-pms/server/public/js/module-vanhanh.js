@@ -3087,15 +3087,15 @@ function buildOperationDetailsHTML(kind, o) {
       <div><b>Ngân Sách Phê Duyệt (Danh Mục Đầu Tư):</b> ${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div>
       <div><b>Người phụ trách:</b> ${escapeHtml(o.personInChargeName || o.personInCharge || 'N/A')}</div>
       <div class="col-span-2"><b>Mô tả hiện trạng &amp; lý do:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.description || '')}</p></div>
-      ${o.fileUrl ? `<div class="col-span-2 flex items-center gap-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a><a href="${attachmentDownloadUrl(o.fileUrl, null, o.fileName)}" download="${escapeHtml(o.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>` : ''}
-      ${vrExtraAttachments.length ? `<div class="col-span-2 space-y-1">${vrExtraAttachments.map((a, i) => `<div class="flex items-center gap-2"><a href="#" data-op="viewVrAttachment" data-arg0="${o.id}" data-arg1="${i + 1}" class="text-blue-600 underline">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>`).join('')}</div>` : ''}
+      ${o.fileUrl ? `<div class="col-span-2 flex items-center gap-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a><a href="${attachmentDownloadUrl(o.fileUrl, null, o.fileName, o.code)}" download="${escapeHtml(o.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>` : ''}
+      ${vrExtraAttachments.length ? `<div class="col-span-2 space-y-1">${vrExtraAttachments.map((a, i) => `<div class="flex items-center gap-2"><a href="#" data-op="viewVrAttachment" data-arg0="${o.id}" data-arg1="${i + 1}" class="text-blue-600 underline">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName, o.code)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 underline">⬇️ Tải</a></div>`).join('')}</div>` : ''}
     </div>`;
 }
 function viewVrAttachment(id, attIdx) {
   const o = DB.operationRepairs.find(x => x.id === id);
   const a = o && o.attachments && o.attachments[attIdx];
   if (!a) return;
-  openFileProtectedView({ title: a.fileName || 'Tệp đính kèm', fileSrc: a.fileUrl, fileType: a.fileType, fileName: a.fileName });
+  openFileProtectedView({ title: `${a.fileName || 'Tệp đính kèm'}${o.code ? ` (${o.code})` : ''}`, docCode: o.code, fileSrc: a.fileUrl, fileType: a.fileType, fileName: a.fileName });
 }
 
 // --- "🖨️ Xem/Tải Phiếu Phê Duyệt" (Đặt Hàng NCC — Siêu Thị + HO, 1 collection chung operationOrders,
@@ -3242,6 +3242,7 @@ function viewOperationAttachment(kind, id) {
     title: `📎 Tệp Đính Kèm — ${meta.titleField(o)} (${o.code})`,
     sub: `${meta.subLabel} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`,
     footerInfo: '',
+    docCode: o.code,
     fileSrc: o.fileUrl, fileType: o.fileType, fileName: o.fileName
   });
 }
@@ -3309,9 +3310,13 @@ function viewOperationEstimateAttachment(idx, attIdx) {
   const it = operationEstimateItems[idx];
   const att = it && it.attachments && it.attachments[attIdx];
   if (!att) return;
+  // Mã hồ sơ CHA (currentEstimateKind/currentEstimateRecordId — set bởi openOperationEstimateModal()
+  // đang mở modal này) — dòng danh mục lớn/nhỏ (operationEstimateItems[idx]) tự nó không có mã riêng.
+  const parentRecord = (OPERATION_KIND_META[currentEstimateKind] || {}).list?.().find(x => x.id === currentEstimateRecordId);
   openFileProtectedView({
     title: `📎 Tệp Đính Kèm — ${it.content}`,
     sub: '', footerInfo: '',
+    docCode: parentRecord?.code,
     fileSrc: att.fileUrl, fileType: att.fileType, fileName: att.fileName
   });
 }
@@ -3796,7 +3801,7 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
   const attachmentsListHTML = (it.attachments || []).map((a, aIdx) => `
       <div class="flex items-center gap-1">
         <a href="#" data-op="viewOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-blue-600 underline truncate max-w-[100px]" title="${escapeHtml(a.fileName || '')}">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a>
-        <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 font-bold" title="Tải tệp">⬇️</a>
+        <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName, (OPERATION_KIND_META[currentEstimateKind] || {}).list?.().find(x => x.id === currentEstimateRecordId)?.code)}" download="${escapeHtml(a.fileName || '')}" class="text-emerald-700 font-bold" title="Tải tệp">⬇️</a>
         ${canEditAttachments ? `<button type="button" data-op="removeOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-red-500 font-bold" title="Xoá tệp">✕</button>` : ''}
       </div>`).join('');
   const attachCell = depth !== 0
