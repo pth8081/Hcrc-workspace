@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**29.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.2 (2026-11): Vận Hành — tự động tạo Công Việc từ Danh Mục Đầu Tư + "🔁 Giao Lại" người thực hiện
+
+Theo yêu cầu người dùng: "người được gán trong danh mục đầu tư sẽ tự động
+tạo ở mục việc gốc và việc con trong thực hiện... mặc định gán người đó là
+nghiệm thu luôn", và có thể "giao lại cho nhân viên khác thực hiện". Đây là
+đảo ngược có chủ đích 1 quyết định thiết kế trước (từng CHỦ ĐÍCH không tự
+tạo/xoá Công Việc theo Danh mục đầu tư, do lo ngại "công việc ma" cho hồ sơ
+cũ + lệch mức độ chi tiết giữa hạng mục ngân sách và đầu việc thật) — lần
+này xử lý đúng cả 2 rủi ro đó (xác nhận qua AskUserQuestion).
+
+**Đã làm:**
+- `lib/recordActions.js`: `buildAutoWorkItemsFromEstimate()` — sinh Công
+  Việc Gốc/Con từ hạng mục Danh Mục Đầu Tư đã có Người Phụ Trách và chưa
+  từng liên kết (idempotent qua field `estimateItemId` mới, gắn trên
+  `operationWorkItems`); `reassignOperationWorkItem()` — đổi Người Thực
+  Hiện, GIỮ NGUYÊN Người Nghiệm Thu, mở cho cả người đang được gán và toàn
+  quyền quản lý hồ sơ, chặn khi đã "Đã nghiệm thu".
+- `routes/records.js`: 2 route `estimate/submit` (operationStoreOpenings/
+  operationRepairs) gọi tự tạo NGAY SAU khi lưu Danh mục đầu tư thành công;
+  route mới `POST /operationWorkItems/:id/reassign`.
+- `public/js/module-vanhanh.js` + `index.html`: nút "🔁 Giao Lại" ở Thực
+  Hiện + modal chọn người mới.
+- **Vá 2 lỗi phát hiện qua rà soát chéo nhiều agent TRƯỚC khi merge** (đúng
+  "quy tắc sống còn" đã ghi ở CLAUDE.md): (1) thu hẹp phạm vi tự tạo — CHỈ
+  áp dụng cho đúng hạng mục vừa thêm/sửa trong CHÍNH lần lưu đó
+  (`touchedItemIds`, tính trong `submitOperationEstimate()`), không quét lại
+  toàn bộ hồ sơ (bản đầu có thể tái tạo "công việc ma" cho hồ sơ cũ đã gán
+  người từ trước); (2) race condition — gộp bước tự tạo Công Việc vào CÙNG
+  transaction/khoá bản ghi với bước lưu Danh mục đầu tư (chạy trong callback
+  `withLockedRecordForCollection`), chặn tạo trùng khi 2 lượt lưu xảy ra
+  đồng thời cho cùng 1 hồ sơ.
+- Test: `tests/test-operation-estimate-auto-workitems.js` (15 kịch bản,
+  gồm 4 kịch bản mới xác nhận đúng phạm vi thu hẹp),
+  `tests/crosscheck-operation-estimate-auto-workitems.js` (9 kịch bản
+  Playwright thao tác thực tế, đa vai trò/đa quyền). Demo Playwright 5 ảnh
+  xác nhận luồng thật trước khi merge.
+- Docs: `deploy/Huong-dan-nghiep-vu.md` + hướng dẫn trong app
+  (`module-nghiepvu.js`, mục "Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị").
+
+**Không cần làm gì thêm ngoài copy code + `pm2 restart`** — không đổi
+`schema.sql`, không thêm biến `.env` mới, không thêm dependency npm mới.
 
 ## v29.1 (2026-11): Đối Chiếu Tồn Kho (BRGMART) — chu kỳ đồng bộ ĐÃ CHUYỂN sang admin tự cấu hình qua UI
 
