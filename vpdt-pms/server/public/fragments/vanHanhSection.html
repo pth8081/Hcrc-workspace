@@ -825,6 +825,12 @@
          Dụng. CHƯA có Đối Chiếu Tồn Kho/Ngưỡng Tồn & Email/quét mã vạch camera (chờ xác nhận nguồn tồn
          kho + mẫu API thật, xem Claude Doc "Kiểm Soát Hàng Hóa — Mô tả nghiệp vụ"). -->
     <div id="vanHanhShelfWrap" class="hidden space-y-4">
+      <!-- Header cố định "Siêu Thị: ..." (11/2026, theo yêu cầu người dùng) — xác nhận NGAY, không cần
+           chọn lại, đúng siêu thị (currentUser.dept) mà mọi ghi nhận/thao tác trong Kiểm Soát Hàng Hóa
+           đang áp dụng — xem setVanHanhSubTab() ở module-vanhanh.js (nhánh subTab === 'SHELF'). -->
+      <div class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-sm font-bold text-cyan-800 flex items-center gap-1.5">
+        📍 Siêu Thị: <span id="vanHanhShelfStoreHeaderName"></span>
+      </div>
       <div class="flex gap-2 flex-wrap border-b pb-2">
         <button data-op="setVanHanhShelfSubTab" data-tab="RECORD" id="btnVhShelfSubRecord" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📷 Ghi Nhận</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="LOCATIONS" id="btnVhShelfSubLocations" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Quầy Kệ</button>

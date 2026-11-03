@@ -181,6 +181,17 @@ function setVanHanhSubTab(subTab) {
   } else if (subTab === 'ITPRICE') {
     enterVanHanhItPriceForm();
   } else if (subTab === 'SHELF') {
+    // Header "📍 Siêu Thị: ..." (11/2026, theo yêu cầu người dùng) — xác nhận NGAY lúc mở module, không
+    // cần chọn lại. DB.stores.includes(currentUser.dept) mirror ĐÚNG cách module-admin-userstaging.js
+    // suy luận posType STORE từ dept — dept không nằm trong danh mục siêu thị (VD quản lý vùng ở HO có
+    // quyền shelfReportView xem nhiều siêu thị) thì nói rõ đang xem nhiều siêu thị, không in nhầm tên 1
+    // phòng ban HO như thể đó là 1 siêu thị.
+    const vhShelfStoreLabel = document.getElementById('vanHanhShelfStoreHeaderName');
+    if (vhShelfStoreLabel) {
+      vhShelfStoreLabel.textContent = (DB.stores || []).includes(currentUser.dept)
+        ? currentUser.dept
+        : `${currentUser.dept} (xem nhiều siêu thị theo quyền báo cáo)`;
+    }
     setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
   }
 }

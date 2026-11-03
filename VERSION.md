@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**29.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.3 (2026-11): Kiểm Soát Hàng Hóa — header cố định "📍 Siêu Thị: ..." ngay khi mở module
+
+Người dùng yêu cầu: vào module Kiểm Soát Hàng Hóa phải biết chắc chắn ngay
+đang thao tác cho đúng siêu thị nào, hiển thị cố định ở header, không cần
+chọn lại gì. Trước đây thông tin này chỉ có ở dòng nhỏ "Tên (phòng ban)"
+trong sidebar (xa màn hình, dễ bỏ sót) — bản thân 5 sub-tab của Kiểm Soát
+Hàng Hóa (Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu) chưa từng hiện
+tên siêu thị ở đâu cả.
+
+**Đã làm:**
+- `public/fragments/vanHanhSection.html`: thêm 1 dòng header cố định
+  "📍 Siêu Thị: {tên}" ngay phía trên 5 nút sub-tab của `vanHanhShelfWrap`.
+- `public/js/module-vanhanh.js` (`setVanHanhSubTab()`, nhánh `SHELF`): đổ
+  đúng `currentUser.dept` vào header mỗi lần mở module. Người xem báo cáo
+  nhiều siêu thị (`shelfReportView.all`/`.depts`, VD quản lý vùng ở HO) thì
+  hiện rõ "{dept} (xem nhiều siêu thị theo quyền báo cáo)" thay vì in nhầm
+  tên phòng ban HO như thể đó là 1 siêu thị cụ thể (đối chiếu qua
+  `DB.stores.includes(dept)`, mirror đúng cách suy luận `posType` đã dùng ở
+  `module-admin-userstaging.js`).
+- Test Playwright thật (login → mở Vận Hành → Kiểm Soát Hàng Hóa → đọc đúng
+  header) cho cả 2 trường hợp: nhân viên 1 siêu thị + người xem nhiều siêu
+  thị — cả 2 pass, không phát sinh console error/pageerror. Chạy lại 4 bộ
+  test liên quan module Kiểm Soát Hàng Hóa hiện có (69 kịch bản, không tính
+  1 lỗi thời gian có sẵn từ trước không liên quan — job nhắc ngưỡng tồn
+  nhạy theo giờ hệ thống).
 
 ## v29.2 (2026-11): Vận Hành — tự động tạo Công Việc từ Danh Mục Đầu Tư + "🔁 Giao Lại" người thực hiện
 
