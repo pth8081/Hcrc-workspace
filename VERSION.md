@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**28.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.94 (2026-11): Mã Điểm API Tồn Kho hỗ trợ NHIỀU mã cách nhau dấu phẩy (sáp nhập siêu thị)
+
+Người dùng hỏi trước khi làm: "Tôi gộp 2 chi nhánh vào thành 1 và tôi nhập mã điểm cách nhau dấu phẩy
+thì tồn kho lấy gộp đúng không?" — kiểm tra code thì thấy TRƯỚC v28.94 chưa hỗ trợ: `storeExternalCodes`
+luôn được dùng như 1 mã duy nhất, nhập "217,305" sẽ tra thẳng chuỗi đó như 1 mã (không khớp gì trong
+snapshot) và trả lỗi "không có dữ liệu" — đã báo rõ hạn chế này với người dùng trước khi họ thử, rồi làm
+theo lựa chọn người dùng xác nhận: **gộp bằng cách liệt kê riêng từng dòng (rows nối lại), KHÔNG cộng dồn
+số lượng của các dòng cùng SKU** (tránh đoán sai cấu trúc cột số lượng của đối tác mà cộng nhầm).
+
+**Đã làm**:
+1. `jobs/inventorySync.js`: `getSystemInventoryForMaDiem(maDiemRaw)` tách `maDiemRaw` theo dấu phẩy
+   (dọn khoảng trắng/mã rỗng/mã trùng), tra từng mã trong snapshot, nếu có ≥2 mã khớp thì nối
+   (`flatMap`) toàn bộ `rows` của các mã đó lại, lấy `capNhatLuc`/`fetchedAt` là mốc MỚI NHẤT trong số các
+   mã đã gộp. Thiếu dữ liệu snapshot ở 1 trong các mã (VD vừa đổi mã, chưa kịp đồng bộ lại) không chặn
+   hẳn — vẫn trả được phần mã nào ĐÃ có; chỉ trả `null` (404 như cũ) khi KHÔNG mã nào có dữ liệu. 1 mã
+   như cũ thì hành vi giữ nguyên y hệt trước (backward-compatible).
+2. `public/js/module-admin.js` (Danh Mục Siêu Thị): ô nhập Mã Điểm (`setStoreExternalCode()`) tự dọn
+   chuỗi nhập tay theo dấu phẩy (trim + bỏ rỗng/trùng) trước khi lưu; cập nhật placeholder/title hướng
+   dẫn cú pháp nhiều mã ("217,305").
+3. `lib/storeCatalogImport.js` (Nhập Excel Danh Mục Siêu Thị): `normalizeStoreExternalCodeCell()` áp
+   dùng cùng khuôn dọn dấu phẩy khi đọc cột Mã Điểm từ file Excel, tăng trần ký tự từ 50 lên 100 để chứa
+   được nhiều mã trong 1 ô.
+
+**Test**: thêm 5 kịch bản mới vào `tests/test-inventory-recon.js` (1 mã như cũ không đổi hành vi; 2 mã
+gộp đúng — xác nhận SKU trùng ở 2 mã vẫn giữ 2 dòng riêng không cộng dồn, `capNhatLuc` lấy mốc mới nhất;
+1 mã thiếu dữ liệu vẫn trả phần còn lại; cả 2 mã đều thiếu dữ liệu trả `null`; chuỗi nhập có khoảng
+trắng/mã rỗng/mã trùng được dọn đúng) — xác nhận bằng cách tạm revert đúng phần logic mới
+(`git checkout`/`git apply` lại patch), chạy lại thấy đúng 3/5 kịch bản fail khi thiếu logic gộp, rồi
+khôi phục lại pass đủ 19/19. Chạy lại toàn bộ test liên quan khác (`test-store-catalog-excel.js`,
+`test-store-external-codes-admin-gate.js`, `test-inventory-api-config.js`, `test-shelf-mavach-match.js`,
+`test-shelf-mobile-and-offline-inventory.js`, `test-audit-fixes-batch2-zipbomb.js`) — không regression.
+CSP sạch (kiểm diff 3 file đã sửa, không có inline handler/style/eval mới).
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.93 (2026-11): Nút Lưu tường minh + xác nhận lưu THẬT (round-trip) cho Mã Điểm/Cấu Hình API Tồn Kho/Đơn Hàng
 

@@ -325,6 +325,141 @@ async function main() {
     }
   });
 
+  console.log('\n== jobs/inventorySync.js — getSystemInventoryForMaDiem() gộp NHIỀU Mã Điểm cách nhau dấu phẩy (11/2026, sáp nhập siêu thị) ==');
+
+  await test('1 mã (như cũ, không đổi hành vi): vẫn trả đúng entry gốc, không bọc thêm gì', async () => {
+    const server = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows: [{ maDiem: '004', maHang: 'A', soLuongTon: 7, capNhatLuc: '2026-10-30T14:15:00.000Z' }] }));
+    });
+    const store = {};
+    try {
+      const port = server.address().port;
+      process.env.BRGMART_INVENTORY_API_KEY = 'test-key';
+      process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
+      const { syncSystemInventory, getSystemInventoryForMaDiem, cleanup } = requireFreshInventorySync(store);
+      try {
+        await syncSystemInventory();
+        const result = await getSystemInventoryForMaDiem('004');
+        assert.strictEqual(result.rows.length, 1);
+        assert.strictEqual(result.rows[0].maHang, 'A');
+      } finally { cleanup(); }
+    } finally {
+      server.close();
+      delete process.env.BRGMART_INVENTORY_API_KEY;
+      delete process.env.BRGMART_INVENTORY_API_BASE_URL;
+    }
+  });
+
+  await test('2 mã cách nhau dấu phẩy ("217,305") -> GỘP LIỆT KÊ RIÊNG từng dòng (rows nối lại), KHÔNG cộng dồn số lượng cùng SKU', async () => {
+    const server = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        rows: [
+          { maDiem: '217', maHang: 'SKU1', tenHang: 'San pham 1', soLuongTon: 10, capNhatLuc: '2026-11-01T08:00:00.000Z' },
+          { maDiem: '217', maHang: 'SKU2', tenHang: 'San pham 2', soLuongTon: 5, capNhatLuc: '2026-11-01T08:00:00.000Z' },
+          { maDiem: '305', maHang: 'SKU1', tenHang: 'San pham 1', soLuongTon: 3, capNhatLuc: '2026-11-02T09:00:00.000Z' }
+        ]
+      }));
+    });
+    const store = {};
+    try {
+      const port = server.address().port;
+      process.env.BRGMART_INVENTORY_API_KEY = 'test-key';
+      process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
+      const { syncSystemInventory, getSystemInventoryForMaDiem, cleanup } = requireFreshInventorySync(store);
+      try {
+        await syncSystemInventory();
+        const merged = await getSystemInventoryForMaDiem('217,305');
+        assert.strictEqual(merged.rows.length, 3, 'phải LIỆT KÊ RIÊNG đủ 3 dòng (2 từ 217 + 1 từ 305), KHÔNG gộp SKU1 của 2 mã thành 1 dòng cộng dồn');
+        const sku1Rows = merged.rows.filter(r => r.maHang === 'SKU1');
+        assert.strictEqual(sku1Rows.length, 2, 'SKU1 xuất hiện ở cả 217 và 305 -> phải còn 2 dòng riêng, không cộng (10+3=13) thành 1 dòng');
+        assert.deepStrictEqual(sku1Rows.map(r => r.soLuongTon).sort((a, b) => a - b), [3, 10], 'số lượng mỗi dòng phải giữ nguyên như dữ liệu gốc của từng mã, không bị cộng dồn');
+        // capNhatLuc/fetchedAt của entry gộp phải lấy mốc MỚI NHẤT trong số các mã đã gộp.
+        assert.strictEqual(merged.capNhatLuc, '2026-11-02T09:00:00.000Z', 'capNhatLuc gộp phải lấy mốc mới nhất (305, 09:00) chứ không phải 217 (08:00)');
+      } finally { cleanup(); }
+    } finally {
+      server.close();
+      delete process.env.BRGMART_INVENTORY_API_KEY;
+      delete process.env.BRGMART_INVENTORY_API_BASE_URL;
+    }
+  });
+
+  await test('1 trong 2 mã CHƯA có dữ liệu snapshot (VD vừa đổi mã, chưa kịp đồng bộ lại) -> vẫn trả dữ liệu của mã CÒN LẠI, không trả null/throw', async () => {
+    const server = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows: [{ maDiem: '217', maHang: 'SKU1', soLuongTon: 10, capNhatLuc: '2026-11-01T08:00:00.000Z' }] }));
+    });
+    const store = {};
+    try {
+      const port = server.address().port;
+      process.env.BRGMART_INVENTORY_API_KEY = 'test-key';
+      process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
+      const { syncSystemInventory, getSystemInventoryForMaDiem, cleanup } = requireFreshInventorySync(store);
+      try {
+        await syncSystemInventory();
+        const merged = await getSystemInventoryForMaDiem('217,999-chua-dong-bo');
+        assert.ok(merged, 'phải có dữ liệu (lấy từ mã 217 đang có), không được trả null chỉ vì 1 mã khác thiếu dữ liệu');
+        assert.strictEqual(merged.rows.length, 1);
+        assert.strictEqual(merged.rows[0].maHang, 'SKU1');
+      } finally { cleanup(); }
+    } finally {
+      server.close();
+      delete process.env.BRGMART_INVENTORY_API_KEY;
+      delete process.env.BRGMART_INVENTORY_API_BASE_URL;
+    }
+  });
+
+  await test('KHÔNG mã nào trong danh sách có dữ liệu -> trả null (404 như cũ), không throw', async () => {
+    const server = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows: [{ maDiem: '004', maHang: 'A', soLuongTon: 1 }] }));
+    });
+    const store = {};
+    try {
+      const port = server.address().port;
+      process.env.BRGMART_INVENTORY_API_KEY = 'test-key';
+      process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
+      const { syncSystemInventory, getSystemInventoryForMaDiem, cleanup } = requireFreshInventorySync(store);
+      try {
+        await syncSystemInventory();
+        assert.strictEqual(await getSystemInventoryForMaDiem('888,999'), null, 'cả 2 mã đều không tồn tại -> phải null, không throw');
+      } finally { cleanup(); }
+    } finally {
+      server.close();
+      delete process.env.BRGMART_INVENTORY_API_KEY;
+      delete process.env.BRGMART_INVENTORY_API_BASE_URL;
+    }
+  });
+
+  await test('Khoảng trắng + mã rỗng + mã TRÙNG trong chuỗi đầu vào ("217, ,217,305") -> tự dọn, không gộp lặp SKU1 của 217 thành 2 lần', async () => {
+    const server = await startServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        rows: [
+          { maDiem: '217', maHang: 'SKU1', soLuongTon: 10 },
+          { maDiem: '305', maHang: 'SKU2', soLuongTon: 4 }
+        ]
+      }));
+    });
+    const store = {};
+    try {
+      const port = server.address().port;
+      process.env.BRGMART_INVENTORY_API_KEY = 'test-key';
+      process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;
+      const { syncSystemInventory, getSystemInventoryForMaDiem, cleanup } = requireFreshInventorySync(store);
+      try {
+        await syncSystemInventory();
+        const merged = await getSystemInventoryForMaDiem('217, ,217,305');
+        assert.strictEqual(merged.rows.length, 2, 'mã "217" trùng lặp trong chuỗi đầu vào không được làm dòng của 217 xuất hiện 2 lần');
+      } finally { cleanup(); }
+    } finally {
+      server.close();
+      delete process.env.BRGMART_INVENTORY_API_KEY;
+      delete process.env.BRGMART_INVENTORY_API_BASE_URL;
+    }
+  });
+
   console.log('\n== lib/createValidation.js — shelfRecords.maHang (bổ sung) ==');
 
   await test('maHang optional: không gửi -> record.maHang = "" (không lỗi, ghi nhận tay/camera vẫn hoạt động y cũ)', async () => {

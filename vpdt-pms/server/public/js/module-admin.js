@@ -379,8 +379,8 @@ function renderStoreList() {
         <option value="CH" ${types[s] === 'CH' ? 'selected' : ''}>Cửa Hàng</option>
         <option value="WH" ${types[s] === 'WH' ? 'selected' : ''}>Kho</option>
       </select>
-      <input type="text" value="${escapeHtml(externalCodes[s] || '')}" placeholder="Mã Điểm API Tồn Kho"
-        class="border rounded text-[11px] p-0.5 w-28" title="Mã Điểm (API Tồn Kho đối tác) — dùng cho Đối Chiếu Kệ &amp; Tồn Kho ở Kiểm Soát Hàng Hóa. Gõ xong bấm nút 💾 Lưu bên cạnh (KHÔNG tự lưu khi rời ô, theo đúng yêu cầu người dùng — xem saveStoreExternalCodeFromInput()).">
+      <input type="text" value="${escapeHtml(externalCodes[s] || '')}" placeholder="Mã Điểm (nhiều mã: 217,305)"
+        class="border rounded text-[11px] p-0.5 w-28" title="Mã Điểm (API Tồn Kho đối tác) — dùng cho Đối Chiếu Kệ &amp; Tồn Kho ở Kiểm Soát Hàng Hóa. Sáp nhập 2 siêu thị cũ về chung 1 Mã Điểm thì gõ nhiều mã cách nhau dấu phẩy (VD &quot;217,305&quot;) — hệ thống tự gộp tồn kho của cả 2 mã. Gõ xong bấm nút 💾 Lưu bên cạnh (KHÔNG tự lưu khi rời ô, theo đúng yêu cầu người dùng — xem saveStoreExternalCodeFromInput()).">
       <button type="button" data-op="saveStoreExternalCodeFromInput" data-arg-el="0" data-arg1="'${escapeHtml(s)}'" class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold hover:bg-emerald-700 whitespace-nowrap" title="Lưu Mã Điểm cho đúng dòng này">💾 Lưu</button>
       <button data-op="renameStore" data-arg0="'${escapeHtml(s)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStore" data-arg0="'${escapeHtml(s)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
@@ -423,10 +423,15 @@ async function saveStoreExternalCodeFromInput(inputEl, name) {
 // tay (không tự động đoán/khớp) — cùng khuôn setStoreType() ở trên, storeExternalCodes là 1 catalog map
 // RIÊNG { [tên]: '<maDiem>' }. Gọi từ saveStoreExternalCodeFromInput() (nút Lưu tường minh, xem chú
 // thích đầy đủ ở đó) — KHÔNG còn gắn thẳng vào data-op-change của input nữa.
+//
+// HỖ TRỢ NHIỀU MÃ ĐIỂM cách nhau dấu phẩy (11/2026, theo yêu cầu người dùng — sáp nhập 2 siêu thị cũ về
+// chung 1 Mã Điểm tra cứu, xem getSystemInventoryForMaDiem() ở jobs/inventorySync.js — phía đọc tự tách
+// + gộp tồn kho của từng mã). Tự dọn khoảng trắng dư + mã rỗng/trùng NGAY ở đây (VD "217,  305 , 217" ->
+// "217,305") để giá trị lưu trong CSDL luôn gọn, không phụ thuộc client gõ sạch hay không.
 async function setStoreExternalCode(name, maDiem) {
   const prev = { ...(DB.storeExternalCodes || {}) };
   const next = { ...(DB.storeExternalCodes || {}) };
-  const trimmed = String(maDiem || '').trim();
+  const trimmed = [...new Set(String(maDiem || '').split(',').map(s => s.trim()).filter(Boolean))].join(',');
   if (trimmed) next[name] = trimmed; else delete next[name];
   DB.storeExternalCodes = next;
   const saved = await syncStorage('storeExternalCodes', { baseline: prev });

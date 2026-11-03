@@ -91,10 +91,15 @@ function detectCols(headerCells) {
 // báo lỗi — cùng tinh thần "cảnh báo chứ không chặn" như normalizeStoreTypeCell() ở trên). Giới hạn độ
 // dài hợp lý (khớp field text input setStoreExternalCode() ở module-admin.js không giới hạn cứng, nhưng
 // 1 "Mã Điểm" thực tế luôn ngắn — chặn rác dài bất thường dán nhầm cả cột khác vào).
+// Hỗ trợ NHIỀU Mã Điểm cách nhau dấu phẩy trong CÙNG 1 ô (11/2026, theo yêu cầu người dùng — sáp nhập 2
+// siêu thị cũ về chung 1 Mã Điểm, xem getSystemInventoryForMaDiem() ở jobs/inventorySync.js và
+// setStoreExternalCode() ở module-admin.js, 2 nơi khác cùng tách/gộp theo dấu phẩy) — dọn khoảng trắng
+// dư + mã rỗng/trùng ngay lúc đọc Excel, cùng khuôn chuẩn hoá đã áp dụng cho ô nhập tay trên web.
 function normalizeStoreExternalCodeCell(raw) {
   const v = String(raw ?? '').trim();
   if (!v) return null;
-  return v.slice(0, 50);
+  const joined = [...new Set(v.split(',').map(s => s.trim()).filter(Boolean))].join(',');
+  return joined ? joined.slice(0, 100) : null;
 }
 
 function rowsToStoreItems(rows) {

@@ -166,11 +166,28 @@ async function syncSystemInventory() {
 // vài giây + tự phát/nhận tín hiệu xoá cache qua PM2 IPC khi có tiến trình khác ghi — xem lib/appData.js)
 // thay vì getAppDataValue() thường, để không phải round-trip CSDL ở MỌI request đọc màn Đối Chiếu trong
 // khi vẫn đảm bảo MỌI tiến trình PM2 cluster thấy dữ liệu MỚI gần như ngay lập tức sau mỗi lần đồng bộ.
-async function getSystemInventoryForMaDiem(maDiem) {
-  if (!maDiem) return null;
+//
+// NHIỀU Mã Điểm cách nhau dấu phẩy (11/2026, theo yêu cầu người dùng — "tôi gộp 2 chi nhánh vào thành 1
+// và tôi nhập mã điểm cách nhau dấu phẩy thì tồn kho lấy gộp đúng không?", đúng tình huống sáp nhập 2
+// siêu thị cũ về chung 1 Mã Điểm API tra cứu): `storeExternalCodes[dept]` có thể là "217" (1 mã, như cũ)
+// hoặc "217,305" (nhiều mã, admin tự gõ ở Danh Mục Siêu Thị) — tách theo dấu phẩy, bỏ khoảng trắng/rỗng/
+// trùng, gộp TOÀN BỘ "rows" của từng mã lại (LIỆT KÊ RIÊNG từng dòng, KHÔNG cộng dồn số lượng cùng SKU —
+// xác nhận của người dùng, tránh đoán sai cấu trúc cột số lượng của đối tác mà cộng nhầm). Thiếu dữ liệu
+// snapshot cho 1 trong các mã (VD vừa đổi mã, chưa kịp đồng bộ lại) không chặn hẳn — vẫn gộp được phần
+// mã nào ĐÃ có, chỉ trả null (404 như cũ) khi KHÔNG mã nào có dữ liệu.
+async function getSystemInventoryForMaDiem(maDiemRaw) {
+  if (!maDiemRaw) return null;
   const snapshot = await getAppDataValueCached(INVENTORY_SNAPSHOT_KEY);
-  const entry = snapshot && snapshot.byMaDiem ? snapshot.byMaDiem[String(maDiem)] : null;
-  return entry || null;
+  if (!snapshot || !snapshot.byMaDiem) return null;
+  const codes = [...new Set(String(maDiemRaw).split(',').map(s => s.trim()).filter(Boolean))];
+  if (!codes.length) return null;
+  const entries = codes.map(c => snapshot.byMaDiem[c]).filter(Boolean);
+  if (!entries.length) return null;
+  if (entries.length === 1) return entries[0];
+  const rows = entries.flatMap(e => e.rows || []);
+  const capNhatLuc = entries.reduce((latest, e) => (e.capNhatLuc && (!latest || e.capNhatLuc > latest)) ? e.capNhatLuc : latest, null);
+  const fetchedAt = entries.reduce((latest, e) => (e.fetchedAt && (!latest || e.fetchedAt > latest)) ? e.fetchedAt : latest, null);
+  return { rows, capNhatLuc, fetchedAt };
 }
 
 async function getInventorySyncStatus() {
