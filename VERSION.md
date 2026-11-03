@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**28.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
-`28.0` theo đúng quy tắc — MINOR lại vừa chạm `99` ở bản này, lần merge KẾ TIẾP phải cuộn sang `29.0`.)
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
+`29.0` theo đúng quy tắc.)
+
+## v29.0 (2026-11): Xác nhận lại — Phê Duyệt Giá Bán Buôn (Vận Hành) đã cho ĐÚNG người duyệt tải file khi còn CHƯA duyệt
+
+Người dùng yêu cầu kiểm tra lại (kèm ảnh chụp modal "Phê Duyệt Giá Bán Lẻ" hiện "Chỉ file đã phê duyệt
+mới tải được"): "tôi có yêu cầu file giá phải được download cả ở trạng thái chưa duyệt và trạng thái đã
+duyệt để người phê duyệt có thể xem được. bạn kiểm tra lại xem đã làm đúng chưa?" — áp dụng cho cả Phê
+Duyệt Giá Bán Lẻ (Mua Hàng) lẫn Bán Buôn (Vận Hành).
+
+**Kết quả kiểm tra (bằng test thật, không chỉ đọc code)**: tính năng này **đã đúng từ trước, không cần
+sửa gì** — `canDownloadPendingFile`/`itPriceAppliedBadge` (`module-itsupport-price.js`) đã cho phép
+ĐÚNG người duyệt bước hiện tại tải file MỚI NHẤT dù hồ sơ còn PENDING (ảnh chụp người dùng gửi là do
+chính người XEM lúc đó không phải người duyệt bước hiện tại — đúng thiết kế "người gửi phê duyệt thì vẫn
+chỉ xem là được", không phải lỗi). Bán Lẻ đã có `tests/test-itprice-download-filename-code.js` xác nhận
+từ trước; Bán Buôn CHƯA có test tương đương cho đúng kịch bản PENDING (cơ chế xác định người duyệt khác
+hẳn — `itPriceWholesaleStoreMixedApprovalRules` thay vì `itPriceDeptWorkflows`), nên không thể suy luận
+từ kết quả Bán Lẻ mà phải kiểm riêng.
+
+**Đã làm**: thêm `tests/test-itprice-wholesale-pending-download.js` (mới, 4 kịch bản) — xác nhận: (1)
+người đề xuất (không phải người duyệt) mở modal hồ sơ PENDING KHÔNG thấy link tải, đúng hiện ghi chú
+chặn; (2) GĐST siêu thị KHÁC (không khớp `storeScope.stores`) cũng KHÔNG thấy; (3) đúng GĐST siêu thị đã
+chọn — người duyệt bước hiện tại — THẤY link "⬇️ Tải file gốc" dù hồ sơ còn PENDING, tên file tải về
+cộng đúng mã phiếu như Bán Lẻ; (4) sau khi duyệt xong (APPROVED), link vẫn còn cho CẢ người vừa duyệt lẫn
+người đề xuất xem lại. Cả 4/4 kịch bản pass ngay lần đầu (không cần revert-confirm vì không có code sản
+phẩm nào bị sửa — đây là test XÁC NHẬN hành vi đã đúng, không phải vá lỗi). Chạy lại
+`tests/test-itprice-download-filename-code.js` (Bán Lẻ, 3/3) để đối chiếu song song — không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency,
+không đổi hành vi sản phẩm (chỉ thêm test xác nhận).
 
 ## v28.99 (2026-11): Phê Duyệt Giá — cột "Áp Giá" rõ nghĩa hơn + thêm lọc Hoàn thành/Chưa hoàn thành
 
