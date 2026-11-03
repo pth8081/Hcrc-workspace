@@ -11799,19 +11799,54 @@ function canAccessHrPayrollModule(user) {
 // core.js luôn nạp sẵn cho MỌI trang (khác các module-*.js chỉ nạp lười theo tab đang mở, xem
 // MODULE_LOAD_GROUPS) — chuông phải hiển thị đúng số chưa đọc dù người dùng đang ở bất kỳ tab nào,
 // không riêng lúc mở tab Lương.
+// positionNotifDropdown() — đặt toạ độ khung TRỰC TIẾP theo viewport (position:fixed, xem index.html),
+// KHÔNG còn "absolute" lồng trong #userHeader. LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng kèm ảnh chụp
+// cả desktop lẫn mobile): bản "absolute bottom-full" cũ đặt khung bên trong chính sidebar đang
+// overflow-y:auto (desktop lẫn mobile) — ở mobile, #userHeader còn thêm "transform: translateX()" khi
+// trượt vào/ra (app.css, @media max-width:767px), transform đó tự tạo 1 stacking-context MỚI cho toàn
+// bộ sidebar khiến z-index của khung thông báo bên trong không còn đáng tin cậy chồng lên nội dung
+// NGOÀI #userHeader (và dễ xô lệch/kẹt khi đang chạy transition trượt) — khớp đúng lớp lỗi "khung nổi tự
+// dựng bị kẹt/lệch bởi overflow/transform của khối cha" mà widget "sdd*" đã gặp và vá bằng CÙNG kỹ thuật
+// này (xem chú thích tại sddPositionAndShow()). Rộng theo ĐÚNG bề ngang sidebar hiện có (đo qua
+// #userHeader, trừ padding 2 bên) để vẫn giữ cảm giác "nổi trong sidebar" như thiết kế cũ; không đo được
+// (hiếm, DOM lạ) thì lùi về trần hợp lý theo viewport.
+function positionNotifDropdown() {
+  const panel = document.getElementById('notifDropdownPanel');
+  const btn = document.getElementById('btnNotifBell');
+  if (!panel || !btn) return;
+  const btnRect = btn.getBoundingClientRect();
+  const aside = document.getElementById('userHeader');
+  const asideRect = aside ? aside.getBoundingClientRect() : null;
+  const width = asideRect ? Math.max(200, asideRect.width - 24) : Math.min(288, window.innerWidth - 16);
+  const left = asideRect ? asideRect.left + 12 : Math.max(4, btnRect.left);
+  panel.style.width = Math.max(160, Math.min(width, window.innerWidth - left - 8)) + 'px';
+  panel.style.left = Math.max(4, left) + 'px';
+  panel.style.bottom = Math.max(4, window.innerHeight - btnRect.top + 4) + 'px';
+}
 async function toggleNotifDropdown(e) {
   e.stopPropagation();
   const panel = document.getElementById('notifDropdownPanel');
   if (!panel) return;
   const willOpen = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
-  if (willOpen) await loadAndRenderNotifDropdown();
+  if (willOpen) {
+    positionNotifDropdown();
+    await loadAndRenderNotifDropdown();
+  }
 }
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('notifDropdownPanel');
   const btn = document.getElementById('btnNotifBell');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+document.addEventListener('scroll', () => {
+  const panel = document.getElementById('notifDropdownPanel');
+  if (panel && !panel.classList.contains('hidden')) positionNotifDropdown();
+}, true);
+window.addEventListener('resize', () => {
+  const panel = document.getElementById('notifDropdownPanel');
+  if (panel && !panel.classList.contains('hidden')) positionNotifDropdown();
 });
 
 function updateNotifBadge(unreadCount) {

@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.96 (2026-11): Khung "🔔 Thông báo" sidebar bị tràn/lẫn với nhãn sidebar (cả desktop lẫn mobile)
+
+Người dùng báo (kèm ảnh chụp màn hình): mở khung "🔔 Thông báo" ở sidebar, nội dung bị đè/lẫn với nhãn
+nav phía trên ("Hành Chính"/"Tổng Hợp") và khối liên hệ phía dưới ("Đào Phan Anh (Quản trị)"), đọc không
+rõ — yêu cầu sửa cho cả desktop lẫn mobile.
+
+**Gốc lỗi xác nhận qua đo đạc THẬT (Playwright `getBoundingClientRect()`)**: `#notifDropdownPanel` trước
+đây `position:absolute` (lồng trong `#userHeader` — sidebar rộng 256px, `overflow-y:auto`) với bề rộng
+cố định `w-72` (288px) + lề trái 12px → mép PHẢI của khung = 300px, **vượt quá bề ngang sidebar tới
+44px**. Thêm nữa, `#userHeader` ở mobile (<768px) có `transform: translateX()` khi trượt vào/ra — tự tạo
+1 stacking-context MỚI cho toàn bộ sidebar, khiến z-index bên trong không còn đáng tin cậy ở ranh giới
+ngoài sidebar, nhất là lúc đang chạy transition trượt.
+
+**Đã làm**: `#notifDropdownPanel` đổi hẳn sang `position:fixed` + toạ độ do `positionNotifDropdown()`
+(core.js, mới) tự tính theo `getBoundingClientRect()` của `#btnNotifBell`/`#userHeader` mỗi lần mở — bề
+rộng khớp đúng bề ngang sidebar hiện có (không còn số cố định `w-72` gây tràn), tự định vị lại khi cuộn
+trang. CÙNG kỹ thuật widget tìm-kiếm-gõ-chọn "sdd\*" đã dùng để tránh đúng lớp lỗi "khung nổi tự dựng bị
+kẹt/lệch bởi overflow/transform của khối cha" (xem v28.95 ngay dưới, cùng gốc kỹ thuật).
+
+**Test**: `tests/test-notif-dropdown-positioning.js` (mới, 6 kịch bản) — xác nhận `position:fixed`, khung
+nằm gọn trong bề ngang sidebar
+(không tràn phải), tự định vị lại khi cuộn, và quan trọng nhất: bấm chuông NGAY LÚC sidebar mobile đang
+giữa 0.2s transition trượt vào (kịch bản xấu nhất) vẫn hiện khung đúng vị trí/kích thước. Xác nhận bằng
+cách tạm revert code (`git checkout`/`git apply` lại patch), thấy đúng 4/6 kịch bản fail khi thiếu bản
+vá, rồi khôi phục lại pass đủ 6/6. Chạy lại `test-notif-badge-polling.js`/`test-notif-click-navigate.js`
+— không regression. CSP sạch.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.95 (2026-11): Khung gợi ý tìm-kiếm-gõ-chọn tự co giãn theo chữ + tooltip "bắt buộc nhập" hiện TRÊN ô
 

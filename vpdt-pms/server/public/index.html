@@ -409,7 +409,12 @@
           <span class="relative">🔔<span id="notifUnreadBadge" class="hidden absolute -top-1.5 -right-2 bg-red-600 text-white text-[9px] rounded-full px-1 leading-tight">0</span></span>
           <span class="flex-1 text-left">Thông báo</span>
         </button>
-        <div id="notifDropdownPanel" class="hidden absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto bg-white text-slate-800 rounded shadow-lg border z-50 sidebar-label"></div>
+        <!-- position:fixed + toạ độ JS tự tính (positionNotifDropdown(), core.js) — KHÔNG còn absolute
+             bọc trong #userHeader (overflow-y-auto + transform mobile). Cùng kỹ thuật widget "sdd*" đã
+             dùng (xem chú thích tại sddPositionAndShow()) — tránh đúng lớp lỗi khung nổi bị kẹt/lệch bởi
+             overflow/transform của khối cha (11/2026, theo yêu cầu người dùng kèm ảnh chụp: khung thông
+             báo bị đè/lẫn với nhãn sidebar phía trên+dưới, cả desktop lẫn mobile). -->
+        <div id="notifDropdownPanel" class="hidden fixed max-h-80 overflow-y-auto bg-white text-slate-800 rounded shadow-lg border z-50 sidebar-label"></div>
       </div>
       <div class="cursor-pointer group" data-op="openProfileModal" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
         <span id="userInfo" class="font-bold text-white block text-xs group-hover:underline sidebar-label"></span>
