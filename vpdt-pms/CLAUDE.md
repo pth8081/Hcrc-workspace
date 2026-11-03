@@ -1,5 +1,30 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## QUY TẮC SỐNG CÒN (11/2026, hệ thống ĐANG CHẠY THẬT trong production): test thật kỹ trước khi merge, chấp nhận tốn thời gian
+
+Người dùng xác nhận rõ ràng, gọi đây là "quy tắc sống còn từ bây giờ": hệ
+thống **đang chạy thật** (production, có người dùng thật thao tác hằng
+ngày) — KHÔNG còn là môi trường thử nghiệm. Với MỌI tính năng/thay đổi từ
+nay, đặc biệt tính năng lớn/đụng nhiều module (ví dụ: tự động tạo Công Việc
+từ Danh Mục Đầu Tư, 11/2026):
+
+- **Test thật kỹ** trước khi merge vào main — không chỉ chạy 1 bộ test tự
+  viết rồi coi là xong. Thà tốn thêm thời gian còn hơn đẩy lỗi lên hệ thống
+  thật đang được dùng.
+- **Cho NHIỀU agent test CHÉO** (song song, độc lập, mỗi agent tự góc nhìn
+  khác nhau — VD 1 agent kiểm logic server/quyền hạn/edge-case, 1 agent lái
+  Playwright thao tác THỰC TẾ như người dùng thật bấm nút, 1 agent rà soát
+  bảo mật/thử phá quyền) — không chỉ 1 agent tự kiểm tra 1 lần rồi kết luận.
+  Agent phụ vẫn PHẢI tuân thủ mục "KHÔNG BAO GIỜ được tự git push/merge"
+  ngay dưới đây — chỉ audit + test + báo cáo, Claude chính tổng hợp rồi mới
+  quyết định merge.
+- **Thao tác thực tế** (không chỉ test logic thuần) — dùng Playwright lái
+  trình duyệt thật, thao tác đúng như người dùng thật sẽ làm (bấm nút, mở
+  modal, gõ liệu...), không chỉ gọi thẳng hàm nội bộ.
+- Chấp nhận việc này **mất thời gian hơn** — đổi lại là CHẮC CHẮN trước khi
+  đưa vào hệ thống thật, không đánh đổi tốc độ lấy rủi ro cho người dùng
+  thật đang thao tác hằng ngày trên hệ thống.
+
 ## Giao việc cho agent phụ (sub-agent): KHÔNG BAO GIỜ được tự `git push`/merge/tạo PR
 
 Phát hiện thực tế (11/2026, đợt rà soát sâu v28.76 — người dùng yêu cầu "nhiều
