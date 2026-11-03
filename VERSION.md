@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**28.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.87 (2026-11): Vá badge "bước X/Y" sai tổng số bước ở Phê Duyệt Giá khi có "Nhóm Phê Duyệt Cuối"
+
+Người dùng gửi ảnh chụp hồ sơ `HCRC-MHF-ITPG-BL-005` (Phê Duyệt Giá Bán Lẻ): khối "QUY TRÌNH PHÊ DUYỆT"
+chi tiết hiện ĐÚNG 2 bước (Bước 1: Phê duyệt + Bước 2: Giám đốc CUNB — lớp "Nhóm Phê Duyệt Cuối" cộng
+thêm trên hồ sơ), nhưng dòng trạng thái tổng kết ở trên lại báo sai "⏳ BƯỚC 0/1" (phải là 0/2).
+
+**Nguyên nhân**: `itPriceStatusBadge()` (`public/js/module-itsupport-price.js`) tính tổng số bước bằng
+cách tra LẠI base workflow thô qua `DB.workflows.find(wfConfig.workflowId)` — bỏ mất lớp phê duyệt thêm
+(`extraApprovalLayers`, đông cứng trên chính hồ sơ lúc tạo) mà `resolveItPriceWorkflowConfigForItemClient()`
+đã cộng sẵn vào `wfConfig.steps` một dòng trước đó. Khối chi tiết bên dưới dùng đúng nguồn `wfConfig` nên
+vẫn hiện đủ — chỉ dòng tổng kết 1 dòng này đọc sai nguồn.
+
+**Đã sửa**: dùng thẳng `wfConfig.steps` (đã đúng, gồm cả lớp phê duyệt thêm) thay vì tra lại
+`DB.workflows` — mirror đúng cách mọi badge "bước X/Y" khác trong hệ thống đã làm.
+
+**Đã rà soát toàn bộ các quy trình khác** (10 nơi gọi `workflowStepProgressText(` trong hệ thống): Tài
+Liệu, Đăng Ký Xe, Văn Phòng, VPP, Vận Hành-Đơn Hàng đều đọc đúng `wfConfig` đã gồm lớp phê duyệt thêm —
+không bị lỗi tương tự. Thanh Toán không hiện badge "bước X/Y" nên không có mặt lỗi. Hợp Đồng/Văn Bản
+Trình dùng cơ chế khác (đông cứng toàn bộ `effectiveSteps`/`effectiveApprovers` lúc tạo, không có khái
+niệm lớp phê duyệt thêm) nên cũng không bị — **lỗi này chỉ xảy ra duy nhất ở Phê Duyệt Giá (itPrice)**.
+
+**Test**: `tests/test-itprice-status-badge-step-total.js` (mới, 4 kịch bản qua browser thật, gọi đúng hàm
+`itPriceStatusBadge()` production) — hồ sơ PENDING bước 1 có lớp phê duyệt thêm (phải "0/2", không phải
+"0/1"), đối chứng không có lớp thêm (vẫn "0/1" như cũ, không đổi hành vi phổ biến), đã qua bước 1 đang chờ
+bước 2 (phải "1/2"), APPROVED đủ cả 2 bước (phải "2/2"). Revert riêng file fix rồi chạy lại test để xác
+nhận đúng tái hiện lỗi người dùng báo trước khi khôi phục bản vá. Chạy lại toàn bộ test itPrice hiện có —
+không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.86 (2026-11): Khung Xem Bảo Vệ + Tải file — nối mã hồ sơ vào dòng chân "Hệ thống văn phòng số Công ty HCRC"
 

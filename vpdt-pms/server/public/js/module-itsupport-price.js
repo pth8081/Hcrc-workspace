@@ -1151,10 +1151,19 @@ function canViewItPriceApproval(user, p) {
 
 function itPriceStatusBadge(p) {
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
-  // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
-  // getWorkflowStepProgress()/workflowStepProgressText() (core.js).
-  const stepRatioText = workflowStepProgressText(wf, p.currentStep, p.status);
+  // LỖI ĐÃ VÁ (11/2026, người dùng phát hiện "BƯỚC 0/1" dù hồ sơ có 2 bước duyệt): trước đây tính tổng số
+  // bước bằng cách tra LẠI base workflow thô qua DB.workflows.find(wfConfig.workflowId) — bỏ qua MẤT lớp
+  // "Nhóm Phê Duyệt Cuối" (extraApprovalLayers, đông cứng trên CHÍNH hồ sơ lúc tạo) mà
+  // resolveItPriceWorkflowConfigForItemClient() ở trên đã CỘNG SẴN vào wfConfig.steps — nên hồ sơ có lớp
+  // phê duyệt thêm (VD "Giám đốc CUNB") luôn bị đếm THIẾU 1 bước ở đúng dòng tổng kết này, dù khối "QUY
+  // TRÌNH PHÊ DUYỆT" chi tiết ngay bên dưới (buildWorkflowStepsStatusHTML()) vẫn hiện ĐỦ đúng số bước
+  // (2 renderer độc lập, chỉ cái tổng kết 1 dòng này đọc sai nguồn). Dùng THẲNG wfConfig.steps (đã đúng,
+  // không cần tra lại DB.workflows) — mirror ĐÚNG cách mọi badge "bước X/Y" khác trong hệ thống đã làm
+  // (Tài liệu/Đăng ký xe/Văn phòng/VPP/Vận Hành-Đơn hàng, xem workflowStepProgressText() ở các module đó)
+  // — itPrice là CHỖ DUY NHẤT lệch khỏi khuôn chung này, đã rà soát lại toàn bộ các quy trình khác (Hợp
+  // Đồng/Văn Bản Trình dùng cơ chế effectiveSteps riêng, Thanh Toán không hiện badge "bước X/Y") không có
+  // chỗ nào khác bị cùng lỗi.
+  const stepRatioText = workflowStepProgressText(wfConfig, p.currentStep, p.status);
   if (p.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
   if (p.status === 'APPROVED') {
     if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 IT yêu cầu bổ sung</span>`;
