@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.85 (2026-11): Phê Duyệt Giá — vá nút "Tải file gốc" bị mất sau khi đã duyệt (CẢ Bán Lẻ & Bán Buôn)
+
+Người dùng gửi ảnh chụp "Phê Duyệt Giá Bán Buôn" bị chặn tải file, hỏi có đúng yêu cầu cũ ("tải được file ở
+các bước phê duyệt VÀ các bước đã phê duyệt") không — kèm yêu cầu kiểm tra lại luôn cả Bán Lẻ cho chắc.
+
+**Rà soát xác nhận**: server (`lib/fileAuthz.js`) đã có ĐÚNG 2 ngoại lệ tải file cho CẢ RETAIL/WHOLESALE
+(logic dùng chung, không phân biệt loại giá) — (1) approver bước hiện tại tải được file mới nhất dù hồ sơ
+còn PENDING, VÀ (2) ai đã TỪNG ký duyệt bất kỳ bước nào của hồ sơ đó giữ quyền tải file mới nhất VĨNH VIỄN,
+kể cả sau khi hồ sơ qua bước tiếp theo hoặc đã duyệt xong. Viết 1 kịch bản Node thuần gọi trực tiếp
+`authorizeFileAccess()`/`resolveWorkflowStepApprovers()` thật (không suy luận) xác nhận server ĐÃ đúng cho
+WHOLESALE giống RETAIL.
+
+**Phát hiện lỗi thật — CHỈ ở phía CLIENT**: `renderItPriceModal()` (`public/js/module-itsupport-price.js`)
+chưa mirror ngoại lệ (2) — nút "⬇️ Tải file gốc" chỉ hiện cho (a) file đã CHÍNH THỨC duyệt xong hoặc (b)
+approver ĐÚNG bước hiện tại khi hồ sơ còn PENDING. Khi hồ sơ qua bước kế tiếp, approver bước trước mất hẳn
+nút tải dù server vẫn cho phép — đúng những gì ảnh chụp thể hiện. Bug này dùng chung code cho CẢ 2 loại
+giá (không phải riêng Bán Buôn).
+
+**Fix**: thêm biến `everApprovedByUser` (mirror đúng điều kiện `everApprovedByUser` ở `lib/fileAuthz.js`) —
+kiểm `p.history` có dòng `APPROVED` của chính người đang xem, không bị `invalidated`. Nút tải hiện khi file
+là file mới nhất VÀ (đang là approver bước hiện tại HOẶC đã từng duyệt bất kỳ bước nào).
+
+**Test**: `tests/test-itprice-download-after-approve-ui.js` (mới, dùng Playwright + backend mock thật qua
+`lib/workflowEngine.js::applyWorkflowAction`) — dựng quy trình 2 bước cho CẢ RETAIL và WHOLESALE, cho
+approver bước 1 bấm Duyệt thật, xác nhận: approver bước 1 (đã duyệt, không còn là approver bước hiện tại)
+VẪN thấy nút tải; approver bước 2 (chưa duyệt) cũng thấy nút tải; người gửi đề xuất (chưa từng duyệt)
+KHÔNG thấy nút tải. Đã xác nhận test bắt được lỗi (revert code sửa → 2/8 FAIL đúng chỗ, phục hồi code → 8/8
+PASS). Chạy lại toàn bộ 18 file `tests/test-itprice-*.js` hiện có — không có regression.
+
+**Không có thay đổi deploy nào khác** (không đổi `schema.sql`/`.env.example`/`package.json` dependencies) —
+chỉ cần copy code (`public/js/module-itsupport-price.js`) + không cần restart PM2 riêng cho client JS
+(file tĩnh, cache trình duyệt tự làm mới theo query version), nhưng vẫn khuyến nghị `pm2 restart` theo quy
+trình chuẩn.
 
 ## v28.84 (2026-11): Tồn Kho Hệ Thống — chuyển snapshot từ cache RAM sang dbo.AppData
 

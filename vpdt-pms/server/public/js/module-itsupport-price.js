@@ -1724,6 +1724,14 @@ function renderItPriceModal() {
   const currentStepApproversForDownload = resolveEffectiveStepApprovers(wfConfigForDownload, p.currentStep);
   const canDownloadPendingFile = currentItPriceModalContext === 'APPROVAL' && p.status === 'PENDING'
     && canApproveStep(currentUser, currentStepApproversForDownload, p.history, p.currentStep);
+  // LỖI ĐÃ VÁ (11/2026, người dùng phát hiện qua ảnh chụp "Phê Duyệt Giá Bán Buôn" bị chặn tải dù đã
+  // từng duyệt — kiểm tra lại cho CẢ bán lẻ): server (lib/fileAuthz.js) đã có ngoại lệ "ai đã TỪNG ký
+  // duyệt (action APPROVED, không bị invalidated) ở BẤT KỲ bước nào của chính hồ sơ này thì giữ quyền
+  // tải file MỚI NHẤT vĩnh viễn", nhưng client ở đây CHƯA mirror ngoại lệ này — nên nút tải vẫn ẩn sau
+  // khi hồ sơ qua bước tiếp theo (dù server thực ra đã cho phép). Thêm điều kiện này để UI khớp đúng
+  // quyền thật của server, KHÔNG phân biệt priceType (RETAIL/WHOLESALE dùng chung logic này).
+  const everApprovedByUser = (p.history || []).some(h =>
+    h.action === 'APPROVED' && !h.invalidated && h.username === currentUser.username);
   document.getElementById('itPriceModalFiles').innerHTML = files.map((f, idx) => {
     const isLatest = idx === files.length - 1;
     const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
@@ -1739,7 +1747,7 @@ function renderItPriceModal() {
     // "👁️ Xem" (10/2026) — hiện cho MỌI file (không chỉ file đã duyệt), mở Khung Xem Bảo Vệ xem trực
     // tiếp file .xlsx gốc — KHÁC hẳn downloadLinkHTML (chỉ TẢI mới giới hạn, XEM thì không).
     const viewLinkHTML = ` · <button type="button" data-op="viewItPriceMainFile" data-arg0="${p.id}" data-arg1="${f.id}" data-arg-event="2" class="text-blue-600 hover:underline font-semibold">👁️ Xem</button>`;
-    const canDownloadThisFile = isApprovedFile || (isLatest && canDownloadPendingFile);
+    const canDownloadThisFile = isApprovedFile || (isLatest && (canDownloadPendingFile || everApprovedByUser));
     // Tên file TẢI VỀ cộng thêm "mã phiếu" đằng trước (11/2026, yêu cầu người dùng "team IT đối chiếu lại
     // sau này biết file này cập nhật từ mã phiếu nào") — chỉ đổi TÊN FILE lúc tải (tham số `name` của
     // attachmentDownloadUrl()/routes/download.js), KHÔNG đụng tới f.fileName gốc lưu trong DB/hiển thị ở
