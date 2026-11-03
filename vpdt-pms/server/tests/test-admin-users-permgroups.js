@@ -802,7 +802,14 @@ async function scenario(name, fn) {
       r.clientVersionSynced, JSON.stringify(r));
   });
 
-  await scenario('(j) 409 do CHÍNH bản ghi đang sửa bị đổi ở nơi khác (conflict thật) -> KHÔNG tự ý ghi đè, báo đúng nguyên nhân', async () => {
+  // LỖI ĐÃ VÁ (11/2026, người dùng yêu cầu "chỉ nên báo xung đột khi 2 admin cùng sửa TRÙNG đúng 1 phần
+  // phân quyền, còn không thì cho lưu thoải mái" — xem mergeUserRecordFieldLevel()/USER_CONFLICT_FIELD_VN_LABELS,
+  // core.js): retryUsersSaveAfterConflict() đổi từ đối chiếu NGUYÊN 1 bản ghi sang đối chiếu TỪNG FIELD —
+  // kịch bản (j) này TRƯỚC ĐÂY cố ý đổi field "name" (KHÁC field "phone" admin A đang sửa) để mô phỏng
+  // "conflict thật", nhưng với thiết kế MỚI, 2 field KHÁC NHAU không còn là xung đột (tự gộp được) — đổi
+  // fixture sang đụng ĐÚNG field "phone" (field admin A đang sửa) để tiếp tục kiểm đúng mục tiêu ban đầu
+  // của kịch bản này: xung đột THẬT (cùng field, khác giá trị) vẫn phải chặn, không tự ý ghi đè.
+  await scenario('(j) 409 do ĐÚNG field admin đang sửa bị đổi ở nơi khác (conflict thật) -> KHÔNG tự ý ghi đè, báo đúng nguyên nhân', async () => {
     const r = await page.evaluate(async () => {
       let serverUsers = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
@@ -830,8 +837,9 @@ async function scenario(name, fn) {
       DB.users = JSON.parse(JSON.stringify(serverUsers));
       DB._versions.users = String(serverVersion);
 
-      // Người khác đổi ĐÚNG bản ghi Client A sắp sửa (conflict thật).
-      serverUsers = serverUsers.map(u => u.id === 8003 ? { ...u, name: 'Đã Bị Đổi Tên Ở Nơi Khác' } : u);
+      // Người khác đổi ĐÚNG field "phone" mà Client A sắp sửa, sang giá trị KHÁC (conflict thật ở field
+      // level — xem chú thích tại tên kịch bản).
+      serverUsers = serverUsers.map(u => u.id === 8003 ? { ...u, phone: '091-DA-BI-DOI-O-NOI-KHAC' } : u);
       serverVersion++;
 
       editUser(8003);
@@ -848,11 +856,11 @@ async function scenario(name, fn) {
       DB.users = DB.users.filter(u => u.id !== 8003); // dọn lại
       return result;
     });
-    record('(j) báo đúng 1 alert "conflict thật" (nêu rõ khả năng cao là hoạt động khác, không phải lỗi hệ thống chung chung)',
-      r.alerts.length === 1 && r.alerts[0].includes('⚠️') && r.alerts[0].includes('vừa bị thay đổi ở nơi khác'),
+    record('(j) báo đúng 1 alert "conflict thật" (nêu rõ đúng tên người + tên field xung đột, không phải lỗi hệ thống chung chung)',
+      r.alerts.length === 1 && r.alerts[0].includes('⚠️') && r.alerts[0].includes('nv.editor.409b') && r.alerts[0].includes('Số điện thoại'),
       JSON.stringify(r));
-    record('(j) KHÔNG tự ý ghi đè lên server — tên/số điện thoại trên server vẫn giữ nguyên của người khác vừa đổi',
-      r.serverName === 'Đã Bị Đổi Tên Ở Nơi Khác' && r.serverPhone === '091', JSON.stringify(r));
+    record('(j) KHÔNG tự ý ghi đè lên server — số điện thoại trên server vẫn giữ nguyên của người khác vừa đổi, tên KHÔNG bị đụng (field không liên quan)',
+      r.serverPhone === '091-DA-BI-DOI-O-NOI-KHAC' && r.serverName === 'Người Được Sửa 2', JSON.stringify(r));
   });
 
   // ==========================================================================

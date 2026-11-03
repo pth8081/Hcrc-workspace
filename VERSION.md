@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**28.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.97 (2026-11): Cảnh báo "bản ghi người dùng vừa bị thay đổi ở nơi khác" — đổi sang đối chiếu TỪNG FIELD
+
+Người dùng báo (kèm ảnh chụp màn hình) cảnh báo "⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi
+ở nơi khác... vui lòng tải lại trang" hiện ra quá dễ dàng, yêu cầu: "chỉ nên thông báo/check trùng khi 2
+admin sử dụng cùng 1 thao tác trùng phân quyền, còn không thì cho lưu thoải mái".
+
+**Gốc lỗi**: `retryUsersSaveAfterConflict()` (core.js) trước đây so sánh NGUYÊN 1 bản ghi user (trừ 4
+field nền hệ thống tự quản — sessionVersion/failedLoginAttempts/lockedUntil/mustChangePassword). Admin A
+sửa 1 field bất kỳ (VD số điện thoại) — nếu BẤT KỲ field KHÁC nào của ĐÚNG người đó thay đổi ở server
+(admin B sửa field không liên quan, HOẶC chính người dùng tự đăng ký thiết bị WebAuthn mới/tự đổi mật
+khẩu) đều bị coi là "conflict thật" — chặn lưu + bắt tải lại trang, MẤT nội dung admin A vừa gõ dù hoàn
+toàn không đụng field nào trùng với nguồn thay đổi kia.
+
+**Đã làm**: `mergeUserRecordFieldLevel()` (core.js, mới) đối chiếu TỪNG FIELD của bản ghi user — field
+admin không đụng tới luôn tự lấy giá trị mới nhất từ server (merge im lặng, không còn chặn); CHỈ báo xung
+đột thật khi ĐÚNG field admin vừa sửa bị đổi sang giá trị KHÁC ở nơi khác. Field `perms` (object quyền
+hạn) còn được lùi thêm 1 cấp — 2 admin bật/tắt 2 QUYỀN CON khác nhau trên CÙNG 1 người cũng tự gộp được,
+không báo nhầm; chỉ chặn khi ĐÚNG 1 quyền con bị đổi khác giá trị ở cả 2 phía. Khi có xung đột thật,
+thông báo giờ nêu RÕ tên người dùng + tên field/quyền con xung đột (`describeUserConflictFields()`) thay
+vì câu chung chung như trước — admin biết ngay cần kiểm tra gì trước khi tải lại trang.
+
+**Test**: `tests/test-users-field-level-conflict-merge.js` (mới, 6 kịch bản) — xác nhận field khác nhau
+tự gộp, quyền con khác nhau tự gộp, xung đột THẬT ở field/quyền con vẫn chặn đúng + báo đúng tên người/
+field, field nền (mustChangePassword/sessionVersion) không bao giờ gây xung đột giả. Xác nhận bằng cách
+tạm revert code, thấy đúng 5/6 kịch bản fail khi thiếu bản vá (1 kịch bản đã đúng từ trước nhờ cơ chế lọc
+field nền cũ), rồi khôi phục lại pass đủ 6/6. Cập nhật 1 kịch bản cũ trong `test-admin-users-permgroups.js`
+(kịch bản "(j)") đổi từ "2 field khác nhau = conflict" (thiết kế CŨ) sang "cùng 1 field = conflict" (thiết
+kế MỚI) — đúng ý định ban đầu của kịch bản là kiểm xung đột THẬT, chỉ đổi field fixture cho khớp thiết kế
+mới. Chạy lại `test-syncstorage-nested-map-conflict-retry.js`/`test-users-session-version-strip.js`/toàn
+bộ `test-admin-users-permgroups.js` (127/127) — không regression. CSP sạch.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.96 (2026-11): Khung "🔔 Thông báo" sidebar bị tràn/lẫn với nhãn sidebar (cả desktop lẫn mobile)
 

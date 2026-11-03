@@ -7080,6 +7080,74 @@ function stripUserBackgroundFields(user) {
   USER_BACKGROUND_ONLY_FIELDS.forEach(f => { delete copy[f]; });
   return copy;
 }
+// mergeUserRecordFieldLevel() — LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp "Đúng bản ghi người dùng
+// bạn đang sửa vừa bị thay đổi ở nơi khác... vui lòng tải lại trang" — yêu cầu rõ: "chỉ nên báo xung đột
+// khi 2 admin cùng sửa TRÙNG đúng 1 phần phân quyền, còn không thì cho lưu thoải mái"). Bản TRƯỚC đây
+// (xem khối chú thích dài phía trên USER_BACKGROUND_ONLY_FIELDS) CHỦ Ý so sánh NGUYÊN 1 bản ghi user
+// (trừ 3-4 field nền hệ thống tự quản) — bất kỳ field NÀO khác đổi (kể cả field admin không hề đụng tới,
+// VD `webauthnCredentials` do chính người dùng tự đăng ký thiết bị mới, hoặc 1 admin khác sửa field hoàn
+// toàn không liên quan như SĐT) đều bị coi là "conflict thật", chặn lưu + bắt tải lại trang — ĐÚNG hiện
+// tượng người dùng phản ánh. Đổi sang đối chiếu TỪNG FIELD (lùi thêm 1 cấp cho field dạng object-phẳng
+// như "perms", để 2 admin bật/tắt 2 QUYỀN KHÁC NHAU trên CÙNG 1 người cũng không bị coi là xung đột):
+//   - Field admin KHÔNG đụng (desired === base) -> luôn lấy giá trị MỚI NHẤT từ server (merge im lặng,
+//     dù server có đổi field đó hay không) — không còn chặn vì lý do "có cái gì đó khác đổi".
+//   - Field admin CÓ đụng nhưng KHÔNG ai khác đổi (fresh === base) -> giữ nguyên ý định admin.
+//   - Field admin CÓ đụng VÀ người khác CŨNG đổi field ĐÓ, cùng giá trị -> không sao, trùng ý.
+//   - Field admin CÓ đụng VÀ người khác CŨNG đổi ĐÚNG field đó thành giá trị KHÁC -> xung đột THẬT (báo
+//     "conflicts"), lúc đó mới chặn lưu + yêu cầu tải lại — đúng tinh thần "chỉ chặn khi trùng thao tác".
+function mergeUserRecordFieldLevel(base, desired, fresh) {
+  const b = base || {}, d = desired || {}, fr = fresh || {};
+  const fields = new Set([...Object.keys(b), ...Object.keys(d), ...Object.keys(fr)]);
+  USER_BACKGROUND_ONLY_FIELDS.forEach(f => fields.delete(f)); // luôn lấy từ fresh (vòng merged={...fr} bên dưới), không coi là field cần đối chiếu
+  const merged = { ...fr };
+  const conflicts = [];
+  const isPlainObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  fields.forEach((f) => {
+    const bv = b[f], dv = d[f], frv = fr[f];
+    const adminTouched = !deepEqualJson(dv, bv);
+    if (!adminTouched) { merged[f] = frv; return; } // admin không sửa field này -> luôn theo bản mới nhất
+    const othersTouched = !deepEqualJson(frv, bv);
+    if (!othersTouched || deepEqualJson(dv, frv)) { merged[f] = dv; return; } // chỉ mình admin sửa, hoặc trùng ý
+    // Cả 2 cùng sửa field này, khác giá trị -> field dạng object phẳng (VD "perms") thì lùi 1 cấp trước
+    // khi kết luận xung đột, tránh báo nhầm khi 2 admin đụng 2 QUYỀN CON khác nhau trong cùng field.
+    if (isPlainObj(bv) && isPlainObj(dv) && isPlainObj(frv)) {
+      const subKeys = new Set([...Object.keys(bv), ...Object.keys(dv), ...Object.keys(frv)]);
+      const subMerged = { ...frv };
+      const subConflictKeys = [];
+      subKeys.forEach((sk) => {
+        const sb = bv[sk], sd = dv[sk], sfr = frv[sk];
+        const sAdminTouched = !deepEqualJson(sd, sb);
+        if (!sAdminTouched) { subMerged[sk] = sfr; return; }
+        const sOthersTouched = !deepEqualJson(sfr, sb);
+        if (!sOthersTouched || deepEqualJson(sd, sfr)) { subMerged[sk] = sd; return; }
+        subConflictKeys.push(sk);
+      });
+      if (!subConflictKeys.length) { merged[f] = subMerged; return; }
+      conflicts.push(...subConflictKeys.map(sk => `${f}.${sk}`));
+      return;
+    }
+    conflicts.push(f);
+  });
+  return { merged, conflicts };
+}
+// Nhãn tiếng Việt NGẮN GỌN cho thông báo xung đột (describeUserConflictFields() ngay dưới) — KHÔNG dùng
+// PERM_KEY_VN_LABELS (module-admin-permgroups.js, nạp lười theo nhóm module) để tránh phụ thuộc thứ tự
+// nạp module với core.js (luôn nạp sẵn ngay từ đầu) — chỉ cần đủ RÕ cho admin nhận ra đúng vùng xung đột,
+// không cần đầy đủ như Ma Trận Phân Quyền; quyền con không có trong map vẫn hiện nguyên tên khoá kỹ
+// thuật (còn hơn không có gì).
+const USER_CONFLICT_FIELD_VN_LABELS = {
+  dept: 'Phòng Ban/Siêu Thị', jobTitle: 'Chức Danh', posType: 'Vị Trí Làm Việc', email: 'Email',
+  phone: 'Số điện thoại', name: 'Họ và Tên', username: 'Tên đăng nhập', active: 'Trạng thái Khoá/Mở',
+  perms: 'Phân quyền', groupIds: 'Nhóm Phân Quyền', permOverrides: 'Quyền tuỳ chỉnh riêng',
+  secondaryPositions: 'Vị Trí Kiêm Nhiệm', startDate: 'Ngày Vào Làm Việc'
+};
+function describeUserConflictFields(fields) {
+  return (fields || []).map((f) => {
+    const [top, sub] = f.split('.');
+    const label = USER_CONFLICT_FIELD_VN_LABELS[top] || top;
+    return sub ? `${label} ("${sub}")` : label;
+  }).join(', ');
+}
 async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
   const baseline = usersBaseline || [];
   const desired = desiredUsers || [];
@@ -7118,20 +7186,19 @@ async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
     }
   }
 
-  // Sửa: đối chiếu cả bản ghi (TRỪ 3 field nền) — xem chú thích đầu hàm.
+  // Sửa: đối chiếu TỪNG FIELD (mergeUserRecordFieldLevel(), xem chú thích đầy đủ tại hàm đó) — chỉ chặn
+  // thật khi ĐÚNG field admin vừa sửa bị người khác đổi khác giá trị, mọi field KHÔNG LIÊN QUAN (kể cả
+  // field hệ thống tự quản VÀ field nghiệp vụ admin không đụng tới) tự merge, không còn chặn oan.
   const mergedUsersById = new Map();
   for (const id of modifiedIds) {
     const base = baseById.get(id);
     const des = desiredById.get(id);
     const fresh = freshById.get(id);
     if (!fresh) return { retried: false, genuineConflict: true }; // bị ai đó xoá mất giữa chừng
-    if (!deepEqualJson(stripUserBackgroundFields(fresh), stripUserBackgroundFields(base))) {
-      return { retried: false, genuineConflict: true };
-    }
-    // Giữ NGUYÊN ý định đầy đủ của admin (des), chỉ cập nhật lại đúng 3 field nền theo giá trị MỚI NHẤT
-    // từ server — không lấy từ `base` (đã cũ, có thể vô tình hạ sessionVersion vừa tăng do đăng nhập).
-    const merged = { ...des };
-    USER_BACKGROUND_ONLY_FIELDS.forEach(f => { merged[f] = fresh[f]; });
+    const { merged, conflicts } = mergeUserRecordFieldLevel(base, des, fresh);
+    // conflictUsername/conflictFields: để syncStorageOnce() báo lỗi CỤ THỂ (đúng người/đúng field) thay
+    // vì chung chung "bản ghi vừa bị thay đổi" — xem chú thích tại mergeUserRecordFieldLevel().
+    if (conflicts.length) return { retried: false, genuineConflict: true, conflictUsername: fresh.username || des.username, conflictFields: conflicts };
     mergedUsersById.set(id, merged);
   }
 
@@ -7353,8 +7420,13 @@ async function syncStorageOnce(key, silent, baseline, retryOpts) {
         }
         if (retryResult.genuineConflict) {
           if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — xung đột thật ở đúng phần mình vừa đổi:`, body.error); return false; }
+          // conflictFields/conflictUsername (xem mergeUserRecordFieldLevel()) — chỉ "users" có, cho thông
+          // báo CỤ THỂ đúng người/đúng trường thay vì chung chung "bản ghi vừa đổi" (giờ chỉ CÒN báo khi
+          // ĐÚNG trường admin vừa sửa bị người khác đổi khác giá trị — mọi trường khác tự merge im lặng).
           alert(key === 'users'
-            ? '⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác (1 admin khác, hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng nhập) — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.'
+            ? (retryResult.conflictFields
+                ? `⚠️ Trường [${describeUserConflictFields(retryResult.conflictFields)}] của người dùng "${retryResult.conflictUsername || ''}" vừa bị 1 admin khác (hoặc chính người đó) đổi sang giá trị KHÁC với thay đổi bạn vừa gõ — vui lòng tải lại trang để xem giá trị mới nhất rồi quyết định sửa lại cho đúng.`
+                : '⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.')
             : `⚠️ Đúng bản ghi bạn đang sửa trong "${key}" vừa bị thay đổi/xoá ở nơi khác — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.`);
           return false;
         }
