@@ -117,7 +117,11 @@ async function syncSystemInventory() {
   }
   lastSyncAttemptAt = new Date();
   try {
-    if (creds.source === 'ui') await assertSafeExternalUrl(creds.baseUrl);
+    // allowPrivateRanges: true (11/2026, người dùng xác nhận Base URL BRGMART thật là domain NỘI BỘ
+    // công ty, máy chủ VPDT + API đối tác cùng mạng nội bộ/VPN — mô hình triển khai on-premise bình
+    // thường) — vẫn giữ chặn loopback/link-local/metadata cloud (xem lib/ssrfGuard.js), chỉ nới phần
+    // RFC1918/CGNAT/ULA cho ĐÚNG nguồn 'ui' (admin tự xác nhận qua Cấu Hình API Tồn Kho).
+    if (creds.source === 'ui') await assertSafeExternalUrl(creds.baseUrl, { allowPrivateRanges: true });
 
     const { rows, pagesFetched } = await fetchAllSystemInventory({ baseUrl: creds.baseUrl, apiKey: creds.apiKey, pageSize: 1000 });
 

@@ -39,9 +39,10 @@ const SYNC_FETCH_TIMEOUT_MS = 15000;
 // nội dung response. Vá theo hướng chặn IP nội bộ/loopback/link-local (kể cả sau khi DNS resolve, chống
 // domain trỏ về IP nội bộ) + ép http(s) only + timeout (trước đây không giới hạn, 1 endpoint treo vô hạn
 // sẽ chặn job đồng bộ mãi).
-function isPrivateOrReservedIp(ip) {
+// Loopback/link-local — LUÔN chặn (xem lib/ssrfGuard.js, bản sao độc lập cùng lý do "2 bản độc lập" ghi
+// ở đầu file đó — sửa 1 bên PHẢI soát lại bên kia).
+function isLoopbackOrLinkLocalIp(ip) {
   if (!ip) return true;
-  // IPv4-mapped IPv6 (::ffff:a.b.c.d) — kiểm tra theo phần IPv4 nhúng bên trong.
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
   if (mapped) ip = mapped[1];
   if (ip.includes('.')) {
@@ -49,23 +50,51 @@ function isPrivateOrReservedIp(ip) {
     if (parts.length !== 4 || parts.some(n => Number.isNaN(n) || n < 0 || n > 255)) return true;
     const [a, b] = parts;
     if (a === 127) return true; // loopback
-    if (a === 10) return true; // private
-    if (a === 172 && b >= 16 && b <= 31) return true; // private
-    if (a === 192 && b === 168) return true; // private
     if (a === 169 && b === 254) return true; // link-local (bao gồm 169.254.169.254 metadata cloud)
     if (a === 0) return true; // "this network"
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
     return false;
   }
   const lower = ip.toLowerCase();
   if (lower === '::1') return true; // loopback
   if (lower === '::') return true;
   if (/^fe80:/i.test(lower)) return true; // link-local
+  return false;
+}
+
+// RFC1918/CGNAT/ULA (mạng nội bộ/VPN thông thường) — mặc định chặn, admin có thể xác nhận cho qua qua
+// allowPrivateRanges (xem assertSafeExternalUrl() bên dưới).
+function isPrivateRfc1918Ip(ip) {
+  if (!ip) return false;
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) ip = mapped[1];
+  if (ip.includes('.')) {
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => Number.isNaN(n) || n < 0 || n > 255)) return false;
+    const [a, b] = parts;
+    if (a === 10) return true; // private
+    if (a === 172 && b >= 16 && b <= 31) return true; // private
+    if (a === 192 && b === 168) return true; // private
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    return false;
+  }
+  const lower = ip.toLowerCase();
   if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return true; // unique local (fc00::/7)
   return false;
 }
 
-async function assertSafeExternalUrl(urlString) {
+function isPrivateOrReservedIp(ip) {
+  return isLoopbackOrLinkLocalIp(ip) || isPrivateRfc1918Ip(ip);
+}
+
+// LỖI ĐÃ VÁ (11/2026, người dùng báo log production lặp lại mỗi 20 phút chặn NHẦM Base URL dsmart16/
+// BRGMART THẬT — xác nhận đây là domain NỘI BỘ công ty, máy chủ + API đối tác cùng mạng nội bộ/VPN, mô
+// hình triển khai on-premise bình thường): trước đây chặn TUYỆT ĐỐI mọi IP riêng tư kể cả khi admin đã
+// xác nhận đó là đích hợp lệ qua chính màn Cấu Hình API. Thêm `opts.allowPrivateRanges` — CHỈ cho qua
+// RFC1918/CGNAT/ULA (mạng nội bộ thông thường), vẫn LUÔN chặn loopback/link-local/metadata cloud (không
+// có lý do hợp lệ nào để Base URL đối tác trỏ về đó, dù admin có xác nhận hay không) — xem chú thích đầy
+// đủ tại lib/ssrfGuard.js (bản sao độc lập, cùng lớp lỗi/cùng hướng vá).
+async function assertSafeExternalUrl(urlString, opts) {
+  const allowPrivateRanges = !!(opts && opts.allowPrivateRanges);
   let parsed;
   try {
     parsed = new URL(urlString);
@@ -85,7 +114,13 @@ async function assertSafeExternalUrl(urlString) {
   } catch (e) {
     throw new Error(`Không phân giải được tên miền Base URL: ${e.message}`);
   }
-  if (!addresses.length || addresses.some(a => isPrivateOrReservedIp(a.address))) {
+  if (!addresses.length) {
+    throw new Error('Base URL trỏ tới địa chỉ IP nội bộ/dành riêng — không được phép đồng bộ tới đích này');
+  }
+  if (addresses.some(a => isLoopbackOrLinkLocalIp(a.address))) {
+    throw new Error('Base URL trỏ tới địa chỉ loopback/link-local (kể cả endpoint metadata cloud) — không bao giờ được phép dùng làm đích đồng bộ');
+  }
+  if (!allowPrivateRanges && addresses.some(a => isPrivateRfc1918Ip(a.address))) {
     throw new Error('Base URL trỏ tới địa chỉ IP nội bộ/dành riêng — không được phép đồng bộ tới đích này');
   }
 }
@@ -137,7 +172,7 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
     return { ok: false, message: 'Thiếu Base URL trong Cấu Hình API — vui lòng cấu hình trước khi đồng bộ' };
   }
   try {
-    await assertSafeExternalUrl(config.baseUrl);
+    await assertSafeExternalUrl(config.baseUrl, { allowPrivateRanges: true }); // admin tự cấu hình qua UI — xem chú thích tại assertSafeExternalUrl()
   } catch (err) {
     return { ok: false, message: err.message };
   }
@@ -268,7 +303,7 @@ async function runSyncBatch(pool, config, matchingKey, headerValue) {
       // tới 1 IP nội bộ mà không qua lại kiểm tra nào — vá bằng cách kiểm tra lại NGAY TRƯỚC MỖI request
       // (không chỉ 1 lần đầu batch), thu hẹp cửa sổ rebinding xuống còn đúng khoảng giữa 1 lượt kiểm tra
       // và 1 fetch() ngay sau nó cho từng đơn hàng, thay vì cả batch (có thể hàng chục đơn, vài phút).
-      await assertSafeExternalUrl(config.baseUrl);
+      await assertSafeExternalUrl(config.baseUrl, { allowPrivateRanges: true }); // admin tự cấu hình qua UI — xem chú thích tại assertSafeExternalUrl()
 
       const headers = { 'Content-Type': 'application/json' };
       if (config.headerName && headerValue) headers[config.headerName] = headerValue;

@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**28.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.89 (2026-11): Vá 2 lỗi Cấu Hình API Đối Tác (Tồn Kho BRGMART + Đơn Hàng dsmart16)
+
+**1) Badge "Chưa cấu hình API Key/header" hiện sai ngay sau khi Lưu thành công** — người dùng báo "Cấu
+hình rồi, đang chạy đồng bộ mà vẫn hiện thông tin chưa cấu hình api key, thông báo làm cho admin hiểu
+sai". Nguyên nhân: sau khi lưu, trình duyệt gán nhầm `DB.inventoryApiConfig`/`DB.operationOrderApiConfig`
+bằng đúng dữ liệu vừa GỬI LÊN (có field tạm `apiKeyPlain`/`headerValuePlain`) thay vì dữ liệu server trả
+về (có field `hasApiKey`/`hasHeaderValue`, server chỉ tính khi ĐỌC) — badge đọc nhầm field undefined nên
+hiện sai "Chưa cấu hình" dù server đã lưu đúng thật (dữ liệu KHÔNG hề mất, chỉ hiển thị sai). Đã sửa
+`saveInventoryApiConfig()`/`saveOperationOrderApiConfig()` (`module-hethong-tabs.js`): tự tính lại đúng
+hasApiKey/hasHeaderValue + xoá field thô + render lại form ngay sau khi lưu, không cần F5.
+
+**2) SSRF guard chặn nhầm Base URL nội bộ do admin tự xác nhận** — log production PM2 thật cho thấy job
+đồng bộ Tồn Kho Hệ Thống lặp lại lỗi mỗi 20 phút: "Base URL trỏ tới địa chỉ IP nội bộ/dành riêng — không
+được phép đồng bộ tới đích này" cho Base URL BRGMART thật `api.hcrc.vn` — xác nhận đây là domain nội bộ
+công ty (máy chủ VPDT + API đối tác cùng mạng nội bộ/VPN, mô hình triển khai on-premise bình thường, SQL
+Server của chính hệ thống cũng ở dải nội bộ 172.16.x.x). Lớp chặn SSRF (`lib/ssrfGuard.js`,
+`jobs/operationOrderApiSync.js`) trước đây chặn TUYỆT ĐỐI mọi IP riêng tư (RFC1918/CGNAT/ULA) dù admin đã
+tự xác nhận Base URL đó qua chính màn Cấu Hình API — khiến tính năng không dùng được với bất kỳ API đối
+tác nội bộ nào. Đã thêm `opts.allowPrivateRanges` cho `assertSafeExternalUrl()` (cả 2 bản, dùng cho cả
+Tồn Kho lẫn Đơn Hàng dsmart16) — CHỈ nới RFC1918/CGNAT/ULA cho nguồn Base URL do admin tự xác nhận qua UI,
+**vẫn LUÔN LUÔN chặn loopback/link-local (kể cả endpoint metadata cloud 169.254.169.254)** — không có lý
+do hợp lệ nào để Base URL đối tác trỏ về đó dù admin có xác nhận hay không.
+
+**Test**: `tests/test-partner-api-config-status-after-save.js` (mới, 11 kịch bản, tái hiện đúng lỗi #1 —
+revert fail đúng y mô tả người dùng báo) + `tests/test-ssrf-guard-allow-private-ranges.js` (mới, 10 kịch
+bản — IP nội bộ qua được khi admin xác nhận, vẫn chặn khi không xác nhận, loopback/metadata cloud luôn
+chặn). Chạy lại toàn bộ test SSRF/Cấu Hình API Tồn Kho/Đơn Hàng hiện có — không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.88 (2026-11): Vá 3 lỗi Báo Cáo Checklist (Thường + VSATTP) — lọc khoảng ngày sai + cột ID khoa học
 

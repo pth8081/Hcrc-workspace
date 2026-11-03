@@ -303,6 +303,7 @@ async function saveOperationOrderApiConfig(e) {
   e.preventDefault();
   const prevConfig = { ...(DB.operationOrderApiConfig || {}) };
   const matchingKey = document.getElementById('opApiMatchingKey').value.trim() || 'poNumber';
+  const headerValuePlain = document.getElementById('opApiHeaderValuePlain').value;
   DB.operationOrderApiConfig = {
     ...(DB.operationOrderApiConfig || {}),
     enabled: document.getElementById('opApiEnabled').value === 'true',
@@ -312,12 +313,17 @@ async function saveOperationOrderApiConfig(e) {
     // "headerValuePlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "headerValueEnc" —
     // không phải bản ghi lưu thật (xem prepareOperationOrderApiConfigForSave() ở routes/data.js). Để
     // trống ô này = giữ nguyên giá trị đã lưu, khớp đúng quy ước "write-only" như mật khẩu SMTP.
-    headerValuePlain: document.getElementById('opApiHeaderValuePlain').value,
+    headerValuePlain,
     matchingKey
   };
   const saved = await syncStorage('operationOrderApiConfig', { baseline: prevConfig });
   if (!saved) { DB.operationOrderApiConfig = prevConfig; return; }
-  document.getElementById('opApiHeaderValuePlain').value = '';
+  // LỖI ĐÃ VÁ (11/2026, cùng lớp lỗi với saveInventoryApiConfig() ở trên — xem chú thích đầy đủ tại đó):
+  // DB.operationOrderApiConfig sau khi lưu đang giữ "headerValuePlain" thô (không phải "hasHeaderValue"
+  // server tính riêng) — tự vá lại rồi render lại form ngay, không cần F5 mới thấy đúng trạng thái.
+  delete DB.operationOrderApiConfig.headerValuePlain;
+  DB.operationOrderApiConfig.hasHeaderValue = !!headerValuePlain || !!prevConfig.hasHeaderValue;
+  loadOperationOrderApiConfigToForm();
   logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');
   alert('✅ Đã lưu Cấu Hình API Đơn Hàng thành công!');
 }
@@ -369,6 +375,7 @@ function loadInventoryApiConfigToForm() {
 async function saveInventoryApiConfig(e) {
   e.preventDefault();
   const prevConfig = { ...(DB.inventoryApiConfig || {}) };
+  const apiKeyPlain = document.getElementById('invApiKeyPlain').value;
   DB.inventoryApiConfig = {
     ...(DB.inventoryApiConfig || {}),
     enabled: document.getElementById('invApiEnabled').value === 'true',
@@ -376,11 +383,22 @@ async function saveInventoryApiConfig(e) {
     // "apiKeyPlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "apiKeyEnc" — không phải
     // bản ghi lưu thật (xem prepareInventoryApiConfigForSave() ở routes/data.js). Để trống ô này = giữ
     // nguyên giá trị đã lưu.
-    apiKeyPlain: document.getElementById('invApiKeyPlain').value
+    apiKeyPlain
   };
   const saved = await syncStorage('inventoryApiConfig', { baseline: prevConfig });
   if (!saved) { DB.inventoryApiConfig = prevConfig; return; }
-  document.getElementById('invApiKeyPlain').value = '';
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "lưu rồi nhưng vẫn hiện Chưa cấu hình API Key, làm admin hiểu
+  // sai"): syncStorageOnce() (core.js) sau khi lưu thành công GÁN LẠI DB[key] = payload VỪA GỬI LÊN (né
+  // race với nhịp poll — xem chú thích đầy đủ tại đó) — payload đó có "apiKeyPlain" (chuỗi thô) chứ
+  // KHÔNG có "hasApiKey" (field server CHỈ tính khi ĐỌC qua sanitizeInventoryApiConfig(), không nằm
+  // trong payload gửi lên) — nếu không tự vá lại ở đây, badge trạng thái vẫn đọc cfg.hasApiKey ===
+  // undefined -> luôn hiện SAI "Chưa cấu hình API Key" ngay sau khi lưu ĐÚNG, dù server đã lưu thành
+  // công thật. Tự tính lại đúng "hasApiKey" (đã gõ key mới HOẶC đã có key từ trước giữ nguyên) + xoá
+  // "apiKeyPlain" thô khỏi bộ nhớ trình duyệt (không cần giữ lại sau khi đã lưu xong), rồi render lại
+  // form ngay — không cần F5 trang mới thấy đúng trạng thái.
+  delete DB.inventoryApiConfig.apiKeyPlain;
+  DB.inventoryApiConfig.hasApiKey = !!apiKeyPlain || !!prevConfig.hasApiKey;
+  loadInventoryApiConfigToForm();
   logSystemAction('CONFIG', 'UPDATE_INVENTORY_API_CONFIG', 'Cập nhật cấu hình đồng bộ Tồn Kho Hệ Thống (BRGMART).', 'SUCCESS', 'INVENTORY_API_CONFIG');
   alert('✅ Đã lưu Cấu Hình API Tồn Kho thành công!');
 }
