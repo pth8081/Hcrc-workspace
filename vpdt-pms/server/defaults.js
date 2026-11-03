@@ -39,6 +39,19 @@ const DEFAULTS = {
   // tên siêu thị (rename hiếm xảy ra — nếu có, admin gán lại loại, không mất dữ liệu Dashboard đã tính).
   storeTypes: {},
 
+  // storeExternalCodes (bổ sung sau Phase 1 MVP Kiểm Soát Hàng Hóa, 11/2026) — map "Mã Điểm" API Tồn Kho
+  // BRGMART cho từng tên trong DB.stores { [tênSiêuThị]: '<maDiem>' }, admin gán tay ngay tại màn Quản Lý
+  // Danh Mục > Danh Mục Siêu Thị (setStoreExternalCode(), module-admin.js — cùng khuôn storeTypes ở trên),
+  // ghi qua route chung POST /api/data/storeExternalCodes (admin-only, xem ADMIN_ONLY_KEYS ở
+  // routes/data.js). routes/shelfStock.js (GET /system-inventory) đọc map này để tự tra ĐÚNG maDiem theo
+  // dept người đăng nhập trước khi lấy dữ liệu từ systemInventorySnapshot (jobs/inventorySync.js).
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo lưu bị chặn "Key không hợp lệ: storeExternalCodes"): key này đã
+  // được khai báo đầy đủ ở mọi nơi khác (UI, route đọc, ADMIN_ONLY_KEYS) nhưng BỊ THIẾU SÓT ở đây —
+  // VALID_KEYS (routes/data.js) chỉ xây từ Object.keys(DEFAULTS) nên thiếu dòng này khiến route lưu
+  // chung luôn từ chối key này dù hợp lệ, và seedDefaults() cũng không tạo nổi giá trị mặc định lúc
+  // khởi động (chỉ seed key có mặt trong DEFAULTS).
+  storeExternalCodes: {},
+
   // Danh mục "Các Loại Giấy Phép" (module Giấy Phép, Hành Chính) — nguồn gợi ý cho ô "Tên giấy phép /
   // Loại giấy phép" (widget sdd), tự học thêm khi ai đó gõ loại mới (xem uploadLicense() ở index.html),
   // admin quản lý/dọn ở màn Quản Lý Danh Mục (saveLicenseType()/deleteLicenseType()).

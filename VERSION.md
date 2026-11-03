@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**28.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.90 (2026-11): Vá lỗi lưu "Mã Điểm API Tồn Kho" (storeExternalCodes) bị chặn "Key không hợp lệ"
+
+Người dùng báo kèm ảnh chụp: ở màn Quản Lý Danh Mục > Danh Mục Siêu Thị, gõ "Mã Điểm" (mã siêu thị dùng
+để tra tồn kho đúng siêu thị người dùng đăng nhập, phục vụ tính năng Cấu Hình API Tồn Kho BRGMART) rồi
+Lưu thì báo lỗi `Lỗi lưu dữ liệu 'storeExternalCodes' lên máy chủ: Key không hợp lệ: storeExternalCodes`.
+
+**Nguyên nhân**: key `storeExternalCodes` đã được khai báo đầy đủ ở client
+(`setStoreExternalCode()`, `module-admin.js`), ở route đọc (`routes/shelfStock.js`, `GET
+/system-inventory` — tra cứu Mã Điểm theo phòng ban người đăng nhập) và ở danh sách cho phép ghi
+`ADMIN_ONLY_KEYS` (`routes/data.js`) — nhưng **thiếu sót trong `defaults.js`**, nguồn duy nhất dựng
+`VALID_KEYS` (`routes/data.js`: `new Set(Object.keys(DEFAULTS))`). Route lưu chung
+`POST /api/data/:key` vì vậy luôn từ chối key này dù hợp lệ ở mọi nơi khác, và `seedDefaults()` cũng
+không tạo được giá trị mặc định lúc khởi động (chỉ seed key có mặt trong `DEFAULTS`).
+
+**Đã vá**: thêm `storeExternalCodes: {}` vào `defaults.js`.
+
+**Test**: `tests/test-store-external-codes-admin-gate.js` (mới, 4 kịch bản — admin lưu được, non-admin
+bị chặn 403 dữ liệu không đổi, mọi người đăng nhập đọc được nguyên vẹn, key chị em `storeTypes` không bị
+ảnh hưởng). Đã revert tạm `defaults.js` để xác nhận test tái hiện ĐÚNG lỗi 400 "Key không hợp lệ" người
+dùng báo (3/4 kịch bản fail đúng y mô tả), sau đó khôi phục bản vá và chạy lại toàn bộ pass. Đã chạy lại
+`test-admin-store-type-ui.js`, `test-store-catalog-excel.js`, `test-seed-defaults-fresh-install.js` —
+không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
+`seedDefaults()` sẽ tự tạo dòng `storeExternalCodes` rỗng trong `dbo.AppData` ngay lần khởi động kế
+tiếp (không ảnh hưởng dữ liệu khác).
 
 ## v28.89 (2026-11): Vá 2 lỗi Cấu Hình API Đối Tác (Tồn Kho BRGMART + Đơn Hàng dsmart16)
 
