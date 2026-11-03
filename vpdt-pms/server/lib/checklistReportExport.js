@@ -187,8 +187,12 @@ function addQaCombinedDetailSheet(wb, sheetName, template, submissionsByStore) {
         const ans = answersByQ.get(q.id);
         const result = questionResultLabel(q, ans);
         if (result === null) return; // chưa trả lời -> không đưa vào sheet gộp (không phải câu hỏi thật)
+        // LỖI ĐÃ VÁ (11/2026, người dùng báo cột "ID Lượt Nộp" hiện dạng "1.79367E+12"): sub.id là
+        // Date.now() (số 13 chữ số) — ghi thẳng dạng SỐ vào ExcelJS khiến Excel tự chuyển hiển thị sang
+        // ký hiệu khoa học (cột General, số dài). Đây là mã định danh để lọc/pivot lại, không phải số
+        // dùng để tính toán — ép thành chuỗi (giống mọi cột khác qua guard()) để Excel hiện ĐẦY ĐỦ chữ số.
         const row = sheet.addRow([
-          sub.id, guard(sub.submittedAt), guard(sub.submittedByName), guard(sub.storeCode), guard(q.text),
+          guard(String(sub.id)), guard(sub.submittedAt), guard(sub.submittedByName), guard(sub.storeCode), guard(q.text),
           result, result === 'Không đạt' ? guard(ans?.note || '') : '',
           result === 'Không đạt' ? guard(ans?.deadline || '') : ''
         ]);

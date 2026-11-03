@@ -539,6 +539,23 @@ function parseSubmittedAtDate(submittedAt) {
   return new Date(y, m - 1, d);
 }
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo lọc "từ ngày X đến ngày X" không ra dữ liệu dù siêu thị đã nộp đúng
+// ngày đó): cả 2 route bên dưới từng parse fromDate/toDate bằng thẳng `new Date(req.body.fromDate)` —
+// chuỗi "YYYY-MM-DD" KHÔNG giờ/zone LUÔN được parse theo UTC (đặc tả ECMA-262), trong khi parseSubmittedAtDate()
+// ở trên dựng Date theo GIỜ ĐỊA PHƯƠNG máy chủ. Trên máy chủ VN (UTC+7), 00:00 UTC = 07:00 SÁNG VN-local
+// CÙNG NGÀY — nên fromDate/toDate bị neo trễ 7 tiếng so với mốc nửa đêm VN-local mà submittedDate đang
+// dùng, khiến MỌI bài nộp trong ĐÚNG ngày đang lọc bị loại nhầm (submittedDate nửa đêm VN-local luôn "sớm
+// hơn" fromDate đã bị đẩy sang 07:00 sáng cùng ngày). Mirror ĐÚNG parseISODateOnly() (lib/recordActions.js,
+// đã áp dụng quy tắc này cho các luồng khác — xem chú thích đầy đủ tại đó) — viết bản RIÊNG ở đây (mirror,
+// không export dùng chung) theo đúng quy ước "2 bản độc lập" đã dùng cho parseSubmittedAtDate() ở trên.
+function parseFilterDateLocal(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Body: { templateId, storeCodes: string[] | null (null/rỗng = TẤT CẢ siêu thị có bài trong phạm vi
 // lọc), fromDate, toDate (yyyy-mm-dd, tuỳ chọn) } — CHỈ tính bài đã NỘP (status SUBMITTED), mirror đúng
 // bộ lọc tab "📊 Báo Cáo" hiện có (applyChecklistReportFilter() ở module-checklist.js), thêm khả năng
@@ -561,8 +578,8 @@ router.post('/export-report', requireReportView, async (req, res) => {
 
     const rawStoreCodes = Array.isArray(req.body?.storeCodes) ? req.body.storeCodes.map(s => String(s).trim()).filter(Boolean) : [];
     const storeFilter = rawStoreCodes.length ? new Set(rawStoreCodes) : null; // null = không lọc siêu thị (tất cả)
-    const fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
-    const toDate = req.body?.toDate ? new Date(req.body.toDate) : null;
+    const fromDate = req.body?.fromDate ? parseFilterDateLocal(req.body.fromDate) : null;
+    const toDate = req.body?.toDate ? parseFilterDateLocal(req.body.toDate) : null;
 
     const allSubmissions = await getAllForCollection('checklistSubmissions');
     const matched = allSubmissions.filter(s => {
@@ -617,8 +634,8 @@ router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
   try {
     const rawStoreCodes = Array.isArray(req.body?.storeCodes) ? req.body.storeCodes.map(s => String(s).trim()).filter(Boolean) : [];
     const storeFilter = rawStoreCodes.length ? new Set(rawStoreCodes) : null;
-    const fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
-    const toDate = req.body?.toDate ? new Date(req.body.toDate) : null;
+    const fromDate = req.body?.fromDate ? parseFilterDateLocal(req.body.fromDate) : null;
+    const toDate = req.body?.toDate ? parseFilterDateLocal(req.body.toDate) : null;
 
     const [templates, allSubmissions, storeTypes, allStores] = await Promise.all([
       getAllForCollection('checklistTemplates'),

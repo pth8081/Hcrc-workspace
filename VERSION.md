@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**28.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.88 (2026-11): Vá 3 lỗi Báo Cáo Checklist (Thường + VSATTP) — lọc khoảng ngày sai + cột ID khoa học
+
+Người dùng báo: lọc "Xuất Theo Mẫu Gốc" từ ngày 3/11 đến 3/11 báo "Không có bài đã nộp nào khớp bộ lọc"
+dù siêu thị ĐÃ nộp đúng ngày đó, trong khi 2/11-3/11 lại ra kết quả đúng; đồng thời cột "ID Lượt Nộp" khi
+xuất Excel hiện ký hiệu khoa học "1.79367E+12". Rà soát thêm theo yêu cầu người dùng cho thấy Checklist
+ATVSTP (VSATTP) dùng CHUNG đúng cơ chế lọc ngày bị lỗi, và phát hiện thêm 1 lỗi nặng hơn ở chính tab
+"📊 Báo Cáo" (bảng dữ liệu chính).
+
+**Nguyên nhân #1 (routes/checklist.js, cả 2 route `/export-report` lẫn `/vsattp-dashboard/export`)**:
+fromDate/toDate parse bằng thẳng `new Date(req.body.fromDate)` — chuỗi "YYYY-MM-DD" không giờ/zone LUÔN
+parse theo UTC (đặc tả ECMA-262), trong khi ngày nộp (`parseSubmittedAtDate()`) dựng theo GIỜ ĐỊA PHƯƠNG
+máy chủ. Trên máy chủ chạy giờ VN (UTC+7), fromDate bị neo trễ 7 tiếng so với mốc nửa đêm VN-local ngày
+nộp đang dùng → MỌI bài nộp ĐÚNG ngày đang lọc bị loại nhầm. Đã vá: thêm `parseFilterDateLocal()` (parse
+theo giờ địa phương, mirror `parseISODateOnly()` ở `lib/recordActions.js`, cùng lớp lỗi đã vá cho
+`approvalOverdue.js` — xem VERSION.md mục "TB approvalOverdue.js so sánh UTC-midnight thay vì VN-local").
+
+**Nguyên nhân #2 (public/js/module-checklist.js, `applyChecklistReportFilter()` — nặng hơn #1)**: hàm lọc
+bảng dữ liệu chính của tab "📊 Báo Cáo" tự lấy `submittedAt.split(' ')[0]` (token ĐẦU là GIỜ, không phải
+ngày — submittedAt lưu dạng "HH:MM:SS D/M/YYYY") rồi cố parse như ngày → luôn ra Invalid Date → so sánh
+luôn `false` → **MỌI bài nộp bị loại ngay khi đặt bất kỳ bộ lọc ngày nào**, không chỉ riêng ngày đang lọc.
+Đã vá: dùng đúng `parseChecklistSubmittedAtDate()` (hàm đã đúng, trước đây CỐ Ý không dùng vì nghĩ ngoài
+phạm vi) + `parseChecklistFilterDateLocal()` (bản client của `parseFilterDateLocal()`). Cùng lỗi UTC ở
+nguyên nhân #1 còn có mặt ở `getChecklistStoreSelfQaRowsForPeriod()` (khối "Đạt Chung Theo Siêu Thị") và
+`getChecklistVsattpFilteredSubmissions()` (Dashboard VSATTP) — cả 2 đã vá cùng đợt.
+
+**Nguyên nhân #3 (lib/checklistReportExport.js, sheet "Dữ Liệu Chi Tiết (Gộp)")**: `sub.id` (Date.now(),
+số 13 chữ số) ghi thẳng dạng SỐ vào ô Excel → Excel tự hiện ký hiệu khoa học. Đã vá: ép thành chuỗi
+(`guard(String(sub.id))`, giống mọi cột khác), Excel hiện đầy đủ chữ số.
+
+**Test**: `tests/test-checklist-report-date-filter-vn-tz.js` (mới, 5 kịch bản, ép
+`process.env.TZ='Asia/Ho_Chi_Minh'` để tái hiện đúng lệch múi giờ máy chủ VN — mirror kỹ thuật
+`test-vppregistrations-deadline-utc.js`) — lọc cùng ngày phải ra kết quả đúng (tái hiện đúng lỗi người
+dùng báo khi chưa vá), lọc khoảng ngày rộng hơn vẫn đúng như cũ (không hồi quy), lọc ngày THỰC SỰ không
+khớp vẫn đúng 400 (không vá quá tay thành "luôn chấp nhận"), cột ID phải là chuỗi đầy đủ chữ số, và
+VSATTP Dashboard export cùng kịch bản cùng ngày. Revert riêng 3 file fix rồi chạy lại test xác nhận đúng
+tái hiện lỗi (3/5 kịch bản FAIL khớp đúng mô tả lỗi người dùng báo) trước khi khôi phục bản vá. Chạy lại
+toàn bộ test Checklist hiện có — không regression.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.87 (2026-11): Vá badge "bước X/Y" sai tổng số bước ở Phê Duyệt Giá khi có "Nhóm Phê Duyệt Cuối"
 

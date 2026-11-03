@@ -704,11 +704,23 @@ function computeChecklistStoreOverallPassClient(submissions) {
   });
   return result.sort((a, b) => a.storeCode.localeCompare(b.storeCode));
 }
+// Parse "YYYY-MM-DD" (giá trị <input type="date"> checklistReportFromDate/ToDate gửi lên) thành Date ở
+// NỬA ĐÊM GIỜ ĐỊA PHƯƠNG — mirror ĐÚNG parseFilterDateLocal() (routes/checklist.js, server) — KHÔNG dùng
+// thẳng new Date("YYYY-MM-DD") (LUÔN parse theo UTC theo đặc tả ECMA-262, lệch múi giờ máy chủ VN +7 so
+// với parseChecklistSubmittedAtDate() bên dưới — hậu quả: lọc "từ ngày X đến ngày X" loại nhầm TOÀN BỘ
+// bài nộp của chính ngày X, xem chú thích đầy đủ tại parseISODateOnly() ở lib/recordActions.js).
+function parseChecklistFilterDateLocal(str) {
+  if (!str) return null;
+  const m = String(str).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
 // Lấy mọi bài nộp STORE_SELF/QA (khác DEDUCTION — Dashboard VSATTP tính riêng) trong đúng khoảng ngày
 // fromDate/toDate — CỐ Ý bỏ qua bộ lọc "Mẫu Checklist" phía trên (mục đích gộp NHIỀU mẫu của 1 siêu thị)
 // — mirror khuôn getChecklistVsattpFilteredSubmissions() bên dưới, dùng parseChecklistSubmittedAtDate()
-// (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới đang lấy nhầm token giờ làm ngày — bug có từ
-// trước, không thuộc phạm vi tính năng này, xem chú thích đầy đủ tại parseChecklistSubmittedAtDate()).
+// (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới TỪNG lấy nhầm token giờ làm ngày — ĐÃ VÁ,
+// xem chú thích đầy đủ tại parseChecklistSubmittedAtDate()).
 function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate) {
   const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
   let rows = (DB.checklistSubmissions || []).filter(s => {
@@ -716,8 +728,8 @@ function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate) {
     const t = templatesById.get(s.templateId);
     return t && t.templateType === 'STORE_SELF' && t.templateKind !== 'DEDUCTION';
   });
-  const from = fromDate ? new Date(fromDate) : null;
-  const to = toDate ? new Date(toDate) : null;
+  const from = fromDate ? parseChecklistFilterDateLocal(fromDate) : null;
+  const to = toDate ? parseChecklistFilterDateLocal(toDate) : null;
   if (from || to) {
     rows = rows.filter(s => {
       const d = parseChecklistSubmittedAtDate(s.submittedAt);
@@ -801,8 +813,23 @@ function applyChecklistReportFilter() {
   const toDate = document.getElementById('checklistReportToDate').value;
   let rows = (DB.checklistSubmissions || []).filter(s => s.status === 'SUBMITTED');
   if (templateId) rows = rows.filter(s => s.templateId === Number(templateId));
-  if (fromDate) rows = rows.filter(s => !s.submittedAt || new Date(s.submittedAt.split(' ')[0].split('/').reverse().join('-')) >= new Date(fromDate));
-  if (toDate) rows = rows.filter(s => !s.submittedAt || new Date(s.submittedAt.split(' ')[0].split('/').reverse().join('-')) <= new Date(toDate));
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo lọc ngày không ra dữ liệu dù siêu thị đã nộp đúng ngày đó): bản cũ
+  // lấy `submittedAt.split(' ')[0]` (submittedAt lưu dạng "HH:MM:SS D/M/YYYY" — token ĐẦU là GIỜ, không
+  // phải ngày) rồi cố parse "HH:MM:SS" như "YYYY-MM-DD" -> luôn ra Invalid Date -> so sánh luôn false ->
+  // MỌI bài nộp bị loại bất cứ khi nào có đặt bộ lọc ngày. Dùng đúng parseChecklistSubmittedAtDate() (lấy
+  // đúng token ngày) + parseChecklistFilterDateLocal() (parse fromDate/toDate theo giờ địa phương, tránh
+  // lệch múi giờ UTC — xem chú thích đầy đủ tại 2 hàm đó).
+  const from = fromDate ? parseChecklistFilterDateLocal(fromDate) : null;
+  const to = toDate ? parseChecklistFilterDateLocal(toDate) : null;
+  if (from || to) {
+    rows = rows.filter(s => {
+      const d = parseChecklistSubmittedAtDate(s.submittedAt);
+      if (!d) return true;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }
   checklistReportFilteredRows = rows;
 
   // Top xếp hạng + Coverage (10/2026) — CHỈ áp dụng cho mẫu QA (mẫu DEDUCTION có Dashboard VSATTP riêng,
@@ -873,10 +900,9 @@ function exportChecklistReportExcel() {
 // (không hardcode riêng tên "VSATTP" — xác nhận người dùng 10/2026).
 // parseSubmittedAtDate() — mirror ĐÚNG parseSubmittedAtDate() ở routes/checklist.js: submittedAt lưu
 // dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) — NGÀY Ở TOKEN THỨ 2 (index 1
-// sau split(' '), không phải token đầu/index 0 — token đầu là GIỜ). Cố ý viết hàm RIÊNG ở đây thay vì tái
-// dùng logic ngày-tháng của applyChecklistReportFilter() phía trên (file này) vì hàm đó đang lấy nhầm
-// token đầu (giờ) làm ngày — bug đã có từ trước, KHÔNG thuộc phạm vi sửa của tính năng này, không đụng
-// vào để tránh tác dụng phụ ngoài ý muốn.
+// sau split(' '), không phải token đầu/index 0 — token đầu là GIỜ. applyChecklistReportFilter() phía trên
+// (file này) ĐÃ VÁ (11/2026) để dùng chung đúng hàm này thay vì tự lấy nhầm token đầu (giờ) làm ngày như
+// trước — không còn 2 bản logic lệch nhau nữa.
 function parseChecklistSubmittedAtDate(submittedAt) {
   const datePart = String(submittedAt || '').trim().split(' ')[1];
   if (!datePart) return null;
@@ -887,8 +913,8 @@ function parseChecklistSubmittedAtDate(submittedAt) {
 function getChecklistVsattpFilteredSubmissions(fromDate, toDate, storeCodes) {
   const deductionTemplateIds = new Set((DB.checklistTemplates || []).filter(t => t.templateKind === 'DEDUCTION').map(t => t.id));
   let rows = (DB.checklistSubmissions || []).filter(s => s.status === 'SUBMITTED' && deductionTemplateIds.has(s.templateId));
-  const from = fromDate ? new Date(fromDate) : null;
-  const to = toDate ? new Date(toDate) : null;
+  const from = fromDate ? parseChecklistFilterDateLocal(fromDate) : null;
+  const to = toDate ? parseChecklistFilterDateLocal(toDate) : null;
   if (from || to) {
     rows = rows.filter(s => {
       const d = parseChecklistSubmittedAtDate(s.submittedAt);
