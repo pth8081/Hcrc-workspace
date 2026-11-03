@@ -324,8 +324,27 @@ async function saveOperationOrderApiConfig(e) {
   delete DB.operationOrderApiConfig.headerValuePlain;
   DB.operationOrderApiConfig.hasHeaderValue = !!headerValuePlain || !!prevConfig.hasHeaderValue;
   loadOperationOrderApiConfigToForm();
+
+  // Round-trip verification (11/2026, cùng lớp lỗi với saveInventoryApiConfig() ở trên — xem chú thích
+  // đầy đủ tại đó): syncStorage() trả `true` chỉ chứng minh HTTP 200, không tự nó chứng minh dữ liệu đã
+  // THỰC SỰ nằm trong CSDL. Đọc lại thật từ server trước khi báo thành công.
+  const justSaved = { enabled: DB.operationOrderApiConfig.enabled, baseUrl: DB.operationOrderApiConfig.baseUrl, hasHeaderValue: DB.operationOrderApiConfig.hasHeaderValue };
+  let verified = false;
+  try {
+    const res = await fetch('/api/data/operationOrderApiConfig');
+    if (res.ok) {
+      const fresh = await res.json().catch(() => null);
+      verified = !!fresh && fresh.enabled === justSaved.enabled && fresh.baseUrl === justSaved.baseUrl && fresh.hasHeaderValue === justSaved.hasHeaderValue;
+    }
+  } catch (err) {
+    console.error('Không đọc lại được operationOrderApiConfig để xác nhận:', err);
+  }
+  if (!verified) {
+    alert('⛔ CẢNH BÁO: Server báo đã lưu Cấu Hình API Đơn Hàng nhưng đọc lại KHÔNG khớp giá trị vừa nhập — dữ liệu có thể KHÔNG được lưu thật trên máy chủ. Vui lòng tải lại trang và kiểm tra lại, báo ngay cho IT/Claude nếu lặp lại (kèm ảnh chụp F12 > Network > request "operationOrderApiConfig" nếu có thể).');
+    return;
+  }
   logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');
-  alert('✅ Đã lưu Cấu Hình API Đơn Hàng thành công!');
+  alert('✅ Đã lưu Cấu Hình API Đơn Hàng thành công! (đã xác nhận lại từ máy chủ)');
 }
 
 async function syncOperationOrdersNow() {
@@ -399,8 +418,32 @@ async function saveInventoryApiConfig(e) {
   delete DB.inventoryApiConfig.apiKeyPlain;
   DB.inventoryApiConfig.hasApiKey = !!apiKeyPlain || !!prevConfig.hasApiKey;
   loadInventoryApiConfigToForm();
+
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp "up code mới xong lại mất hết cấu hình" — nhiều lần
+  // quay lại thấy "Tắt (rơi về .env nếu có)" + Base URL/API Key trống dù đã cấu hình trước đó): syncStorage()
+  // trả `true` chỉ chứng minh server trả HTTP 200, KHÔNG tự nó chứng minh dữ liệu đã THỰC SỰ nằm trong
+  // CSDL (nghi vấn "lưu thành công giả" — cùng lớp lỗi đã vá cho storeExternalCodes, xem
+  // setStoreExternalCode() ở module-admin.js). Đọc lại THẬT từ server (GET /api/data/inventoryApiConfig,
+  // bỏ qua mọi cache DB phía trình duyệt) ngay sau khi lưu để xác nhận enabled/baseUrl/hasApiKey đã đúng
+  // khớp những gì vừa gửi lên — nếu KHÔNG khớp, báo lỗi RÕ RÀNG ngay lúc này thay vì để admin phát hiện
+  // ra sau cả tuần khi đồng bộ im lặng không chạy/F5 mất cấu hình.
+  const justSaved = { enabled: DB.inventoryApiConfig.enabled, baseUrl: DB.inventoryApiConfig.baseUrl, hasApiKey: DB.inventoryApiConfig.hasApiKey };
+  let verified = false;
+  try {
+    const res = await fetch('/api/data/inventoryApiConfig');
+    if (res.ok) {
+      const fresh = await res.json().catch(() => null);
+      verified = !!fresh && fresh.enabled === justSaved.enabled && fresh.baseUrl === justSaved.baseUrl && fresh.hasApiKey === justSaved.hasApiKey;
+    }
+  } catch (err) {
+    console.error('Không đọc lại được inventoryApiConfig để xác nhận:', err);
+  }
+  if (!verified) {
+    alert('⛔ CẢNH BÁO: Server báo đã lưu Cấu Hình API Tồn Kho nhưng đọc lại KHÔNG khớp giá trị vừa nhập — dữ liệu có thể KHÔNG được lưu thật trên máy chủ. Vui lòng tải lại trang và kiểm tra lại, báo ngay cho IT/Claude nếu lặp lại (kèm ảnh chụp F12 > Network > request "inventoryApiConfig" nếu có thể).');
+    return;
+  }
   logSystemAction('CONFIG', 'UPDATE_INVENTORY_API_CONFIG', 'Cập nhật cấu hình đồng bộ Tồn Kho Hệ Thống (BRGMART).', 'SUCCESS', 'INVENTORY_API_CONFIG');
-  alert('✅ Đã lưu Cấu Hình API Tồn Kho thành công!');
+  alert('✅ Đã lưu Cấu Hình API Tồn Kho thành công! (đã xác nhận lại từ máy chủ)');
 }
 
 async function syncInventoryNow() {

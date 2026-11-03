@@ -380,8 +380,8 @@ function renderStoreList() {
         <option value="WH" ${types[s] === 'WH' ? 'selected' : ''}>Kho</option>
       </select>
       <input type="text" value="${escapeHtml(externalCodes[s] || '')}" placeholder="Mã Điểm API Tồn Kho"
-        data-op-change="setStoreExternalCode" data-arg0="'${escapeHtml(s)}'" data-arg-value="1"
-        class="border rounded text-[11px] p-0.5 w-32" title="Mã Điểm (API Tồn Kho đối tác) — dùng cho Đối Chiếu Kệ &amp; Tồn Kho ở Kiểm Soát Hàng Hóa">
+        class="border rounded text-[11px] p-0.5 w-28" title="Mã Điểm (API Tồn Kho đối tác) — dùng cho Đối Chiếu Kệ &amp; Tồn Kho ở Kiểm Soát Hàng Hóa. Gõ xong bấm nút 💾 Lưu bên cạnh (KHÔNG tự lưu khi rời ô, theo đúng yêu cầu người dùng — xem saveStoreExternalCodeFromInput()).">
+      <button type="button" data-op="saveStoreExternalCodeFromInput" data-arg-el="0" data-arg1="'${escapeHtml(s)}'" class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold hover:bg-emerald-700 whitespace-nowrap" title="Lưu Mã Điểm cho đúng dòng này">💾 Lưu</button>
       <button data-op="renameStore" data-arg0="'${escapeHtml(s)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStore" data-arg0="'${escapeHtml(s)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
@@ -402,11 +402,27 @@ async function setStoreType(name, type) {
   logSystemAction('USER_MGM', 'SET_STORE_TYPE', `Phân loại siêu thị [${name}] → [${type || 'Chưa phân loại'}]`, 'SUCCESS', name);
 }
 
+// saveStoreExternalCodeFromInput() — nút "💾 Lưu" riêng từng dòng (11/2026, theo yêu cầu TRỰC TIẾP của
+// người dùng sau khi báo "nhập mã điểm xong refresh lại mất hết dữ liệu" — trước đây field này tự lưu
+// NGAY khi rời ô (data-op-change="setStoreExternalCode" trên chính input, không có nút riêng), người
+// dùng không có cách nào BIẾT CHẮC lượt lưu đã thành công thật sự trước khi rời màn hình/tải lại trang.
+// Đổi hẳn sang nút Lưu tường minh — bấm xong mới gửi lên server, và setStoreExternalCode() bên dưới giờ
+// ĐỌC LẠI NGAY từ server sau khi lưu (round-trip thật, không chỉ tin optimistic update ở DB phía trình
+// duyệt) để xác nhận đúng giá trị đã thực sự nằm trong CSDL trước khi báo "Đã lưu" — nếu đọc lại KHÔNG
+// khớp giá trị vừa gửi (dấu hiệu lưu "thành công giả" — HTTP 200 nhưng dữ liệu không thực sự persist,
+// nghi vấn người dùng từng nêu ở inventoryApiConfig trước đó), báo lỗi RÕ RÀNG thay vì im lặng coi là
+// xong như luồng auto-save cũ.
+async function saveStoreExternalCodeFromInput(inputEl, name) {
+  if (!inputEl) return;
+  await setStoreExternalCode(name, inputEl.value);
+}
+
 // setStoreExternalCode() — gán "Mã Điểm" (API Tồn Kho đối tác BRGMART, tài liệu v1.1 10/2026) cho 1 tên
 // trong Danh Mục Siêu Thị, dùng cho Đối Chiếu Kệ & Tồn Kho (Kiểm Soát Hàng Hóa) — server tự tra map này
 // theo dept người đăng nhập (routes/shelfStock.js), KHÔNG BAO GIỜ nhận mã này từ client. Admin tự nhập
 // tay (không tự động đoán/khớp) — cùng khuôn setStoreType() ở trên, storeExternalCodes là 1 catalog map
-// RIÊNG { [tên]: '<maDiem>' }.
+// RIÊNG { [tên]: '<maDiem>' }. Gọi từ saveStoreExternalCodeFromInput() (nút Lưu tường minh, xem chú
+// thích đầy đủ ở đó) — KHÔNG còn gắn thẳng vào data-op-change của input nữa.
 async function setStoreExternalCode(name, maDiem) {
   const prev = { ...(DB.storeExternalCodes || {}) };
   const next = { ...(DB.storeExternalCodes || {}) };
@@ -415,7 +431,29 @@ async function setStoreExternalCode(name, maDiem) {
   DB.storeExternalCodes = next;
   const saved = await syncStorage('storeExternalCodes', { baseline: prev });
   if (!saved) { DB.storeExternalCodes = prev; renderStoreList(); return; }
+
+  // Xác nhận THẬT bằng cách đọc lại trực tiếp từ server (bỏ qua mọi cache DB phía trình duyệt) — syncStorage()
+  // trả `true` chỉ có nghĩa "server trả HTTP 200", KHÔNG tự nó chứng minh dữ liệu đã thực sự nằm trong CSDL
+  // (xem chú thích saveStoreExternalCodeFromInput() ở trên). GET /api/data/storeExternalCodes luôn đọc
+  // thẳng CSDL (routes/data.js, không có tầng cache riêng cho key này).
+  let verified = false;
+  try {
+    const res = await fetch('/api/data/storeExternalCodes');
+    if (res.ok) {
+      const fresh = await res.json().catch(() => null);
+      verified = !!fresh && fresh[name] === (trimmed || undefined);
+      if (res.ok) DB.storeExternalCodes = fresh || {};
+    }
+  } catch (e) {
+    console.error('Không đọc lại được storeExternalCodes để xác nhận:', e);
+  }
+  renderStoreList();
+  if (!verified) {
+    alert(`⛔ CẢNH BÁO: Server báo đã lưu Mã Điểm [${name}] nhưng đọc lại KHÔNG khớp giá trị vừa nhập — dữ liệu có thể KHÔNG được lưu thật trên máy chủ. Vui lòng thử lại, và báo ngay cho IT/Claude nếu lặp lại (kèm ảnh chụp F12 > Network > request "storeExternalCodes" nếu có thể).`);
+    return;
+  }
   logSystemAction('USER_MGM', 'SET_STORE_EXTERNAL_CODE', `Cấu hình Mã Điểm API Tồn Kho [${name}] → [${trimmed || '(xoá)'}]`, 'SUCCESS', name);
+  alert(`✅ Đã lưu Mã Điểm cho [${name}]${trimmed ? `: ${trimmed}` : ' (đã xoá)'} — đã xác nhận lại từ máy chủ.`);
 }
 
 // Sửa (rename, CÓ CASCADE) 1 giá trị trong danh mục "stores"/"jobTitles"/"storeJobTitles" — gọi route

@@ -69,13 +69,42 @@ async function main() {
   // {version: ...} (xem routes/data.js, không có "item"/"hasApiKey"/"hasHeaderValue") — cố ý KHÁC
   // demo-inventory-api-config.js cũ (mock sai, lẫn "item.hasApiKey: true" không có thật) để test này
   // THỰC SỰ bắt được lỗi thay vì vô tình che giấu nó.
+  //
+  // "Lưu CSDL giả" (11/2026, theo bản vá round-trip verification — saveInventoryApiConfig()/
+  // saveOperationOrderApiConfig() giờ gọi GET /api/data/<key> ngay sau POST để xác nhận THẬT đã lưu
+  // đúng, bỏ qua mọi cache) — PHẢI mock cả GET trả về ĐÚNG trạng thái vừa POST (sanitizeInventoryApiConfig()/
+  // sanitizeOperationOrderApiConfig() thật, routes/data.js: field hasApiKey/hasHeaderValue thay apiKeyEnc,
+  // không có field *Plain thô) để các kịch bản "thành công thật" trong file này tiếp tục đi qua đúng
+  // đường "✅ Đã lưu" như trước — nếu không mock GET, mọi lượt lưu đều rơi vào nhánh "⛔ CẢNH BÁO" mới
+  // (round-trip không khớp vì GET không được mock, không phải vì code sai) và che mất ý nghĩa thật của
+  // test này (badge đúng/sai SAU KHI lưu thành công thật).
+  const fakeServerState = {
+    inventoryApiConfig: { enabled: true, baseUrl: 'https://api.brgmart.vn', hasApiKey: true },
+    operationOrderApiConfig: { enabled: true, baseUrl: 'https://dsmart16.example.com/api/orders', hasHeaderValue: true }
+  };
   await page.route('**/api/**', async (route) => {
     const req = route.request();
     if (req.url().includes('/api/data/inventoryApiConfig') && req.method() === 'POST') {
+      const body = JSON.parse(req.postData() || '{}');
+      fakeServerState.inventoryApiConfig = {
+        enabled: body.enabled, baseUrl: body.baseUrl,
+        hasApiKey: !!body.apiKeyPlain || fakeServerState.inventoryApiConfig.hasApiKey
+      };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: 'v-fake' }) });
     }
+    if (req.url().includes('/api/data/inventoryApiConfig') && req.method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fakeServerState.inventoryApiConfig) });
+    }
     if (req.url().includes('/api/data/operationOrderApiConfig') && req.method() === 'POST') {
+      const body = JSON.parse(req.postData() || '{}');
+      fakeServerState.operationOrderApiConfig = {
+        enabled: body.enabled, baseUrl: body.baseUrl,
+        hasHeaderValue: !!body.headerValuePlain || fakeServerState.operationOrderApiConfig.hasHeaderValue
+      };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: 'v-fake' }) });
+    }
+    if (req.url().includes('/api/data/operationOrderApiConfig') && req.method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fakeServerState.operationOrderApiConfig) });
     }
     return route.continue();
   });

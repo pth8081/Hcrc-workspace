@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.93 (2026-11): Nút Lưu tường minh + xác nhận lưu THẬT (round-trip) cho Mã Điểm/Cấu Hình API Tồn Kho/Đơn Hàng
+
+Người dùng báo 2 lần liên tiếp, 2 màn khác nhau: "Nhập mã điểm api xong refresh lại mất hết" (Danh Mục
+Siêu Thị) và "up code mới xong lại mất hết cấu hình" (Cấu Hình API Tồn Kho) — cả 2 đều có chung nghi vấn:
+giao diện báo lưu thành công (HTTP 200, không có lỗi hiện ra) nhưng dữ liệu không còn sau khi tải lại
+trang/deploy. Người dùng cũng nhắc lại yêu cầu trước đó (có nút Lưu tường minh) chưa được đáp ứng đầy đủ.
+
+**Đã làm** (áp dụng đúng 3 chỗ gặp đúng lớp rủi ro này — Mã Điểm API Tồn Kho + Cấu Hình API Tồn Kho +
+Cấu Hình API Đơn Hàng dsmart16):
+1. **Mã Điểm API Tồn Kho** (Danh Mục Siêu Thị): bỏ hẳn auto-save-khi-rời-ô, thay bằng nút "💾 Lưu" tường
+   minh riêng từng dòng (`saveStoreExternalCodeFromInput()`, `module-admin.js`).
+2. **Xác nhận lưu THẬT (round-trip verification)** — cả 3 hàm lưu (`setStoreExternalCode()`,
+   `saveInventoryApiConfig()`, `saveOperationOrderApiConfig()`) giờ KHÔNG còn tin HTTP 200 của POST là
+   đủ — ngay sau khi lưu, tự gọi `GET /api/data/<key>` (đọc thẳng CSDL, bỏ qua mọi cache) để xác nhận
+   giá trị vừa gửi đã THỰC SỰ nằm trong CSDL. Nếu đọc lại KHÔNG khớp, báo "⛔ CẢNH BÁO" rõ ràng (kèm
+   hướng dẫn chụp màn hình F12 > Network) thay vì im lặng báo "✅ Đã lưu" như trước — nếu có hiện tượng
+   "lưu thành công giả" (server trả 200 nhưng không thực sự ghi được/một tiến trình PM2 khác đọc nhầm
+   cache cũ), người dùng sẽ biết NGAY lúc đó thay vì phát hiện ra sau cả tuần.
+
+**Về câu hỏi ".env có gây tự xoá cấu hình không?"**: đã rà lại toàn bộ code đọc/ghi `inventoryApiConfig`
+(`jobs/inventorySync.js`, `routes/data.js`) — `.env` (`BRGMART_INVENTORY_API_BASE_URL`/`_API_KEY`) CHỈ
+được đọc làm phương án dự phòng khi cấu hình UI đang TẮT (`enabled !== true`), KHÔNG có bất kỳ đoạn code
+nào ghi/xoá/reset cấu hình UI dựa trên sự hiện diện của `.env` — 2 nguồn hoàn toàn độc lập, không bao giờ
+ghi đè lẫn nhau. Vì vậy giả thuyết ".env khiến web tự xoá cấu hình" không khớp với code hiện tại; xoá
+`.env` một mình sẽ KHÔNG giải quyết được hiện tượng "mất cấu hình" đã báo — xem phần trao đổi kèm theo.
+
+**Test**: `tests/test-store-external-code-save-button-verify.js` (mới) +
+`tests/test-partner-api-config-false-success-detection.js` (mới) — cả 2 kiểm ĐÚNG nhánh phát hiện "lưu
+thành công giả" (POST 200 nhưng đọc lại không khớp → cảnh báo, không báo "Đã lưu"). Cập nhật
+`tests/test-partner-api-config-status-after-save.js` (mock thêm GET để tiếp tục kiểm đúng đường thành
+công thật). Chạy lại toàn bộ test Danh Mục Siêu Thị/Cấu Hình API liên quan — không regression. CSP sạch.
+
+**Không cần thao tác deploy gì thêm** ngoài copy code — không đổi schema/biến môi trường/dependency.
 
 ## v28.92 (2026-11): Thêm cột "Mã Điểm" vào mẫu Tải/Nhập/Xuất Excel Danh Mục Siêu Thị
 
