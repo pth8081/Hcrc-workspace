@@ -50,6 +50,7 @@ process.env.COOKIE_SECURE = 'false'; // test chạy qua http thuần (127.0.0.1)
 const http = require('http');
 const path = require('path');
 const assert = require('assert');
+const jwt = require('jsonwebtoken'); // chỉ dùng để tự ký 1 token SẮP hết hạn cho kịch bản lastLoginAt-trượt-hạn bên dưới
 const { authenticator } = require('otplib');
 
 function stubModule(relPath, exportsObj) {
@@ -183,7 +184,11 @@ function newDevice() {
       try { payload = await res.json(); } catch (e) { payload = null; }
       return { status: res.status, body: payload };
     },
-    hasCookie() { return !!cookie; }
+    hasCookie() { return !!cookie; },
+    // Gắn thẳng 1 token tự ký (test lastLoginAt-trượt-hạn bên dưới cần ký tay 1 token SẮP hết hạn, mô
+    // phỏng request sát ngưỡng trượt hạn TOKEN_RENEW_THRESHOLD_MS — signToken() thật luôn ký đủ 8h,
+    // không có cách nào ép hết hạn sớm qua luồng /login bình thường).
+    setRawCookie(token) { cookie = `vpdt_token=${token}`; }
   };
 }
 
@@ -373,6 +378,41 @@ async function main() {
       assert.strictEqual(logoutRes.status, 200);
       const probeAfter = await probe(device);
       assert.strictEqual(probeAfter.status, 401, 'Sau khi đăng xuất, chính phiên vừa đăng xuất cũng phải mất hiệu lực (sessionVersion tự tăng, cơ chế đã có từ trước)');
+    });
+
+    await run('LỖI ĐÃ VÁ (11/2026, "vào máy tính lúc điện thoại đang có phiên thì bị đá âm thầm, không hỏi xác nhận như hướng ngược lại"): phiên sống NHIỀU NGÀY nhờ trượt hạn vẫn phải được coi là "có thể còn sống" sau khi trượt hạn ít nhất 1 lần', async () => {
+      reseed();
+      const deviceA = newDevice();
+      await login(deviceA, NV_A);
+      assert.strictEqual((await probe(deviceA)).status, 200);
+
+      // Giả lập phiên A đã sống NHIỀU NGÀY (lastLoginAt rất xa, vượt TOKEN_TTL_MS) dù vẫn còn hiệu lực
+      // thật — đúng kịch bản người dùng mở điện thoại liên tục nhiều ngày không đăng xuất, lastLoginAt
+      // CŨ chỉ phản ánh lần đăng nhập GỐC, chưa từng được làm mới.
+      const STALE_MS = 20 * 60 * 60 * 1000; // 20h trước — vượt xa TOKEN_TTL_MS (8h)
+      APP_DATA.users = APP_DATA.users.map(u => u.username === NV_A.username
+        ? { ...u, lastLoginAt: new Date(Date.now() - STALE_MS).toISOString() }
+        : u);
+      const svNow = APP_DATA.users.find(u => u.username === NV_A.username).sessionVersion || 0;
+
+      // Ký tay 1 token SẮP hết hạn (còn 30 phút, trong ngưỡng TOKEN_RENEW_THRESHOLD_MS=1h) để ép
+      // requireAuth() chạy đúng nhánh trượt hạn ngay ở lượt probe kế tiếp (signToken() thật luôn ký đủ
+      // 8h, không có cách nào ép hết hạn sớm qua luồng /login bình thường).
+      const nearExpiryToken = jwt.sign({ sub: NV_A.username, admin: false, sv: svNow }, process.env.JWT_SECRET, { expiresIn: '30m' });
+      deviceA.setRawCookie(nearExpiryToken);
+
+      const probeDuringRenewal = await probe(deviceA);
+      assert.strictEqual(probeDuringRenewal.status, 200, 'Token còn hạn (30 phút) -> request vẫn phải thành công (chỉ TRƯỢT HẠN, không phải hết hạn thật)');
+
+      const afterRenewal = APP_DATA.users.find(u => u.username === NV_A.username);
+      const renewedAgeMs = Date.now() - new Date(afterRenewal.lastLoginAt).getTime();
+      assert.ok(renewedAgeMs < 5000, `lastLoginAt phải được CẬP NHẬT LẠI ngay lúc trượt hạn (chênh lệch đo được: ${renewedAgeMs}ms, phải <5000ms) — không còn đóng băng ở lần đăng nhập gốc`);
+
+      // Thiết bị B đăng nhập cùng tài khoản -> PHẢI hỏi xác nhận (lastLoginAt vừa được làm mới ở bước
+      // trượt hạn trên, không còn bị hiểu nhầm là "chắc đã hết hạn từ lâu" nên bỏ qua xác nhận).
+      const deviceB = newDevice();
+      const loginB = await login(deviceB, NV_A);
+      assert.strictEqual(loginB.body.confirmKickRequired, true, 'Phiên A vừa trượt hạn (lastLoginAt mới) -> B đăng nhập PHẢI hỏi xác nhận, không được đá âm thầm');
     });
   } finally {
     server.close();

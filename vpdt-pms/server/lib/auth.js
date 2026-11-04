@@ -4,7 +4,7 @@
 // request từ client, khiến GET/POST /api/data không có xác thực gì. Module này là gốc để vá lỗ đó.
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getAppDataValueCached } = require('./appData');
+const { getAppDataValueCached, withLockedAppDataValue } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "cứ bị văng hết phiên nhiều lần" khi dùng trên điện thoại): hạn 1h
@@ -167,6 +167,23 @@ async function requireAuth(req, res, next) {
     // bị văng"). payload.exp tính bằng giây (chuẩn JWT), quy đổi ra mili giây để so sánh với Date.now().
     if (payload.exp && (payload.exp * 1000 - Date.now()) < TOKEN_RENEW_THRESHOLD_MS) {
       setAuthCookie(res, signToken(freshUser));
+      // LỖI ĐÃ VÁ (11/2026, người dùng báo "vào máy tính lúc điện thoại đang có phiên thì bị đá âm
+      // thầm, không hỏi xác nhận như hướng ngược lại"): routes/auth.js shouldConfirmKick() quyết định
+      // có hỏi xác nhận trước khi đá hay không dựa vào lastLoginAt — nhưng field đó trước đây CHỈ được
+      // set lúc CẤP PHIÊN MỚI (đăng nhập thật), không hề được cập nhật ở đây mỗi lần trượt hạn. Hậu quả:
+      // 1 phiên sống NHIỀU NGÀY liên tục nhờ đúng cơ chế trượt hạn này (NV dùng điện thoại vài ngày
+      // không đăng xuất) có lastLoginAt ĐÓNG BĂNG tại lần đăng nhập gốc, nhanh chóng vượt quá
+      // TOKEN_TTL_MS (8h) dù phiên đó RÕ RÀNG vẫn còn sống — khiến shouldConfirmKick() hiểu NHẦM "chắc
+      // đã hết hạn từ lâu, không cần hỏi" và bỏ qua bước xác nhận y hệt hành vi CŨ (đá ngay không báo
+      // trước). Cập nhật lastLoginAt NGAY ở đây (mỗi lần trượt hạn, không chỉ lúc đăng nhập gốc) để phản
+      // ánh đúng "phiên này vẫn đang sống tính tới thời điểm nào" — fire-and-forget (không chặn request
+      // hiện tại, dữ liệu này không ảnh hưởng gì tới việc xử lý response đang trả về).
+      withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === freshUser.username);
+        if (idx !== -1) list[idx] = { ...list[idx], lastLoginAt: new Date().toISOString() };
+        return list;
+      }).catch(err => console.error('requireAuth: không cập nhật được lastLoginAt lúc trượt hạn:', err.message));
     }
 
     next();

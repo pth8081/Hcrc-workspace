@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**29.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.12 (2026-11): Fix tiếp bug đăng xuất liên tục — lastLoginAt đóng băng khi phiên sống lâu nhờ trượt hạn
+
+Người dùng xác nhận ĐÃ deploy v29.9 (bước hỏi xác nhận trước khi đá phiên) lên server thật
+nhưng vẫn gặp đúng hiện tượng cũ ở 1 chiều: "vào máy tính lúc điện thoại đang có phiên active
+thì bị đá âm thầm ngay sau khi đăng nhập, không hỏi xác nhận" — trong khi chiều ngược lại
+(đăng nhập mobile lúc desktop đang hoạt động) vẫn đúng hỏi xác nhận bình thường. Gửi kèm ảnh
+chứng minh ("Vừa vào đá văng luôn").
+
+**Nguyên nhân gốc (lỗ hổng thật trong bản vá v29.9, không phải lỗi deploy)**:
+`shouldConfirmKick()` (routes/auth.js) chỉ hỏi xác nhận khi `lastLoginAt` còn trong vòng
+`TOKEN_TTL_MS` (8h) — nhưng field đó trước đây CHỈ được set lúc CẤP PHIÊN MỚI (đăng nhập thật
+qua mật khẩu/TOTP/vân tay), không hề được cập nhật mỗi khi token tự "trượt hạn theo hoạt động"
+(`requireAuth()`, `lib/auth.js`, cơ chế giữ phiên sống xuyên suốt nhiều ngày nếu còn hoạt động
+liên tục — đúng ý người dùng yêu cầu ban đầu "liên tục ở trong phiên thì không bao giờ tự
+timeout"). Hậu quả: 1 phiên điện thoại mở/dùng liên tục NHIỀU NGÀY (rất phổ biến — không ai
+đăng xuất điện thoại mỗi ngày) có `lastLoginAt` đóng băng tại lần đăng nhập GỐC, nhanh chóng
+vượt quá 8h dù phiên đó rõ ràng vẫn còn sống — khiến `shouldConfirmKick()` hiểu NHẦM "chắc đã
+hết hạn từ lâu, không cần hỏi", bỏ qua bước xác nhận và đá âm thầm y hệt hành vi CŨ trước
+v29.9, đúng 1 chiều (chiều có phiên "già" theo mốc đăng nhập gốc dù vẫn đang sống).
+
+**Đã làm:**
+- `lib/auth.js`: `requireAuth()` giờ CẬP NHẬT LẠI `lastLoginAt` ngay mỗi lần trượt hạn (nhánh
+  cấp token mới khi còn dưới `TOKEN_RENEW_THRESHOLD_MS`), không chỉ lúc cấp phiên gốc — ghi
+  fire-and-forget (không chặn request đang xử lý). Nhờ vậy 1 phiên càng dùng liên tục càng
+  được coi là "chắc chắn còn sống" đúng bản chất, không còn phụ thuộc vào mốc đăng nhập gốc đã
+  quá xa.
+- `tests/test-auth-single-session.js`: thêm kịch bản ký tay 1 token sắp hết hạn (ép
+  `requireAuth()` chạy đúng nhánh trượt hạn), xác nhận `lastLoginAt` được làm mới + thiết bị
+  khác đăng nhập sau đó PHẢI hỏi xác nhận đúng như kỳ vọng. Đã xác nhận: revert riêng fix này
+  làm kịch bản mới FAIL đúng như lỗi người dùng báo — chứng minh bài test bắt được lỗi thật.
+  9/9 scenario pass; các test auth khác không có regression.
+
+**Deploy-impact:** chỉ đổi code server (`lib/auth.js`) — copy code + `pm2 restart` là đủ,
+không cần migrate DB/env mới.
 
 ## v29.11 (2026-11): Fix nút "💾 Lưu" Mã Điểm (Danh Mục Siêu Thị) tự xoá mã vừa nhập
 
