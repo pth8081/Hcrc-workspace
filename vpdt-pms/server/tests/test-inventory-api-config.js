@@ -186,16 +186,29 @@ async function runJobTests() {
     });
     try {
       const port = bsvr.address().port;
-      // v28.84: syncSystemInventory() giờ GHI snapshot thật qua setAppDataValue('systemInventorySnapshot', ...)
-      // và getSystemInventoryForMaDiem() ĐỌC LẠI qua getAppDataValueCached() cùng khoá — stub phải mô
-      // phỏng 1 "CSDL" thật sự lưu lại giá trị ghi vào (không chỉ no-op) để kịch bản đọc-sau-ghi dưới
-      // đây phản ánh đúng hành vi thật, cùng kỹ thuật tests/test-inventory-recon.js::makeFakeAppData().
-      const fakeStore = { inventoryApiConfig: { enabled: false, baseUrl: '', apiKeyEnc: null } };
+      // v28.84: syncSystemInventory() giờ GHI snapshot thật, và getSystemInventoryForMaDiem() ĐỌC LẠI —
+      // stub phải mô phỏng 1 "CSDL" thật sự lưu lại giá trị ghi vào (không chỉ no-op) để kịch bản
+      // đọc-sau-ghi dưới đây phản ánh đúng hành vi thật. v29.19: snapshot tách sang
+      // lib/inventorySnapshotStore.js (bảng riêng) — stub CẢ 2 module, cùng kỹ thuật
+      // tests/test-inventory-recon.js::makeFakeAppData()/makeFakeInventorySnapshotStore().
+      const fakeStore = { inventoryApiConfig: { enabled: false, baseUrl: '', apiKeyEnc: null }, systemInventorySnapshot: null };
       stubModule('lib/appData', {
         getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
         getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
         setAppDataValue: async (key, value) => { fakeStore[key] = value; },
         withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
+      });
+      stubModule('lib/inventorySnapshotStore', {
+        getSnapshotForMaDiem: async (maDiem) => (fakeStore.systemInventorySnapshot?.byMaDiem?.[maDiem] || null),
+        getSnapshotMapForMaDiems: async (codes) => {
+          const out = {};
+          const byMaDiem = fakeStore.systemInventorySnapshot?.byMaDiem || {};
+          for (const c of codes) { if (byMaDiem[c]) out[c] = byMaDiem[c]; }
+          return out;
+        },
+        replaceSnapshot: async (byMaDiem, fetchedAt) => { fakeStore.systemInventorySnapshot = { byMaDiem, fetchedAt: fetchedAt.toISOString() }; },
+        getSnapshotStats: async () => ({ storeCount: Object.keys(fakeStore.systemInventorySnapshot?.byMaDiem || {}).length, lastFetchedAt: fakeStore.systemInventorySnapshot?.fetchedAt || null }),
+        migrateLegacyInventorySnapshot: async () => {}
       });
       process.env.BRGMART_INVENTORY_API_KEY = 'env-key';
       process.env.BRGMART_INVENTORY_API_BASE_URL = `http://127.0.0.1:${port}`;

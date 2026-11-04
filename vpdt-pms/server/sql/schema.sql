@@ -1503,5 +1503,32 @@ BEGIN
 END
 GO
 
+/* SystemInventorySnapshots (11/2026, sự cố production — xem VERSION.md v29.17/v29.19 + CLAUDE.md) —
+   tách khỏi dbo.AppData (khoá "systemInventorySnapshot" cũ), mỗi dòng = 1 MÃ ĐIỂM (không phải 1 dòng
+   JSON KHỔNG LỒ gộp hết ~650 nghìn dòng tồn kho của TẤT CẢ siêu thị như thiết kế cũ). Lý do: (1) MỌI
+   request GET /api/data (routes/data.js) trước đây phải tải NGUYÊN blob khổng lồ đó cùng bảng AppData
+   dùng chung — gây nghẽn ASYNC_NETWORK_IO hàng loạt phiên SQL Server, kéo theo requireAuth() (đọc "users"
+   CÙNG bảng) timeout dây chuyền dù không liên quan gì tồn kho; (2) MỖI lần Đồng Bộ phải ghi đè NGUYÊN 1
+   dòng khổng lồ đó, khoá đúng dòng trong lúc ghi — ai đang mở Đối Chiếu đúng siêu thị khác vẫn bị ảnh
+   hưởng vì chung 1 dòng AppData. Payload giữ NGUYÊN VẸN cấu trúc JSON đối tác trả về cho ĐÚNG 1 Mã Điểm
+   (không chuẩn hoá thành cột riêng — đối tác có thể thêm/đổi field bất kỳ lúc nào, giữ nguyên tránh rớt
+   dữ liệu client đang dùng). jobs/inventorySync.js::syncSystemInventory() ghi qua
+   lib/inventorySnapshotStore.js::replaceSnapshot() — MỖI Mã Điểm là 1 UPDATE/INSERT ĐỘC LẬP (khác hẳn
+   trước đây ghi đè 1 dòng), nên đồng bộ xong 1 điểm không còn khoá/ảnh hưởng các điểm khác đang được
+   đọc. Đối Chiếu đọc qua getSnapshotMapForMaDiems() — SQL lọc đúng WHERE MaDiem IN (...) thay vì tải hết
+   rồi lọc bằng JS như thiết kế cũ. Dữ liệu CŨ (nếu còn trong AppData lúc nâng cấp) tự di trú 1 lần qua
+   migrateLegacyInventorySnapshot() (seedDefaults.js, idempotent, mirror ĐÚNG khuôn
+   migrateLegacySystemLogs()/migrateLegacyTasks()) — KHÔNG cần đồng bộ lại, không mất dữ liệu. */
+IF OBJECT_ID('dbo.SystemInventorySnapshots', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SystemInventorySnapshots (
+        MaDiem      NVARCHAR(50)   NOT NULL CONSTRAINT PK_SystemInventorySnapshots PRIMARY KEY,
+        FetchedAt   DATETIME2(3)   NOT NULL,
+        CapNhatLuc  NVARCHAR(100)  NULL,
+        Payload     NVARCHAR(MAX)  NOT NULL
+    );
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

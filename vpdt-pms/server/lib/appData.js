@@ -73,22 +73,18 @@ async function getAppDataValueCached(key) {
 // đồng thời trong TTL — nơi gọi (routes/data.js) PHẢI shallow-clone `data` trước khi gán đè bất kỳ
 // property nào lên nó (vd `data.users = stripPasswords(...)`), tuyệt đối không sửa trực tiếp object trả
 // về ở đây hay các mảng bên trong nó, nếu không request khác đang đọc cùng cache sẽ thấy dữ liệu sai.
-// ⛔ SỰ CỐ PRODUCTION (11/2026): 'systemInventorySnapshot' (jobs/inventorySync.js) phình to tới
-// ~650 nghìn dòng tồn kho sau khi đối tác BRGMART sửa lỗi maDiem — SELECT * nguyên bảng AppData ở
-// hàm này (chạy ở MỌI request GET /api/data, tức MỌI lượt tải trang/polling của MỌI người dùng)
-// phải kéo nguyên blob JSON khổng lồ này xuống mỗi lần, gây nghẽn ASYNC_NETWORK_IO hàng loạt phiên
-// SQL Server đồng thời, kéo theo requireAuth() (đọc cache "users" cùng tiến trình) timeout dây
-// chuyền. Khoá này KHÔNG cần có trong payload chung — client không đọc DB.systemInventorySnapshot,
-// màn Đối Chiếu đọc riêng qua getAppDataValueCached(INVENTORY_SNAPSHOT_KEY) (1 khoá, không qua đây).
-// Loại trừ ngay ở SQL để không tốn băng thông/CPU parse JSON cho khoá này ở đường tải chung.
-const HEAVY_KEYS_EXCLUDED_FROM_BULK_READ = ['systemInventorySnapshot'];
-
+// LỊCH SỬ (11/2026): khoá 'systemInventorySnapshot' (jobs/inventorySync.js) từng phình to tới ~650
+// nghìn dòng tồn kho sau khi đối tác BRGMART sửa lỗi maDiem — SELECT * nguyên bảng AppData ở hàm này
+// (chạy ở MỌI request GET /api/data) phải kéo nguyên blob JSON khổng lồ đó xuống mỗi lần, gây nghẽn
+// ASYNC_NETWORK_IO hàng loạt phiên SQL Server, kéo theo requireAuth() timeout dây chuyền (v29.17 vá
+// tạm bằng cách loại trừ khoá này khỏi câu SELECT). v29.19 tách HẲN khoá này sang bảng riêng
+// (dbo.SystemInventorySnapshots, mỗi Mã Điểm 1 dòng — xem lib/inventorySnapshotStore.js) nên khoá
+// không còn tồn tại trong dbo.AppData nữa — loại trừ thủ công ở đây không còn cần thiết, trở lại
+// SELECT * như thiết kế gốc của hàm (đọc chung TOÀN BỘ AppData, không đặc cách theo tên khoá cụ thể).
 async function getAllAppDataWithVersionsCached() {
   if (allDataCache && allDataCache.expiresAt > Date.now()) return allDataCache;
   const pool = await getPool();
-  const result = await pool.request().query(
-    `SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData WHERE DataKey NOT IN ('${HEAVY_KEYS_EXCLUDED_FROM_BULK_READ.join("','")}')`
-  );
+  const result = await pool.request().query('SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData');
   const data = {};
   const versions = {};
   for (const row of result.recordset) {
@@ -176,11 +172,7 @@ async function setAppDataValueIfVersionMatches(key, value, expectedVersion) {
 // trình theo phòng ban/loại, danh sách user...) cho routes/workflow.js, không phải nơi ghi dữ liệu.
 async function getAllAppData() {
   const pool = await getPool();
-  // Loại trừ các khoá nặng cùng lý do đã nêu ở getAllAppDataWithVersionsCached() phía trên — hàm
-  // này không dùng tới systemInventorySnapshot (ngữ cảnh workflow), không có lý do tải nó.
-  const result = await pool.request().query(
-    `SELECT DataKey, DataValue FROM dbo.AppData WHERE DataKey NOT IN ('${HEAVY_KEYS_EXCLUDED_FROM_BULK_READ.join("','")}')`
-  );
+  const result = await pool.request().query('SELECT DataKey, DataValue FROM dbo.AppData');
   const data = {};
   for (const row of result.recordset) {
     try { data[row.DataKey] = JSON.parse(row.DataValue); } catch (e) { data[row.DataKey] = null; }

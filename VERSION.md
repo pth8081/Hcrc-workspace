@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**29.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.19 (2026-11): Tách snapshot tồn kho khỏi `dbo.AppData` sang bảng riêng (xử lý TẬN GỐC sự cố v29.17)
+
+Người dùng hỏi sau khi vá tạm sự cố `requireAuth()` timeout (v29.17): "vụ lỗi authen kia bạn xử lý triệt
+để chưa? có nên tách bảng tồn kho riêng không?". v29.17 chỉ loại khoá `systemInventorySnapshot` khỏi
+vòng ĐỌC chung (`GET /api/data`) — dữ liệu VẪN còn nằm 1 dòng JSON khổng lồ duy nhất trong `dbo.AppData`,
+nghĩa là mỗi lần Đồng Bộ vẫn phải ghi đè nguyên dòng đó (khoá đúng dòng trong lúc ghi — ai đang mở Đối
+Chiếu siêu thị khác cùng lúc vẫn bị chờ), và dữ liệu tiếp tục phình to không giới hạn theo số siêu thị
+kết nối thêm. Người dùng xác nhận làm tiếp, dặn "theo quy tắc cẩn thận".
+
+**Đã cân nhắc riêng việc tách bảng `users` (xác thực)**: hỏi lại người dùng trước khi đụng tới — rủi ro
+cao nhất hệ thống (lỗi = mất đăng nhập toàn bộ), trong khi nguyên nhân gốc của sự cố vừa qua là do tồn
+kho, không phải `users`. Người dùng xác nhận **KHÔNG cần tách `users`** — giữ nguyên.
+
+**Thiết kế mới:** bảng riêng `dbo.SystemInventorySnapshots` (`sql/schema.sql`) — **mỗi Mã Điểm 1 dòng**
+(không còn 1 dòng JSON gộp hết ~650 nghìn dòng của MỌI siêu thị như thiết kế cũ). Module mới
+`lib/inventorySnapshotStore.js` thay cho việc đọc/ghi qua `lib/appData.js`:
+- `replaceSnapshot(byMaDiem, fetchedAt)` — mỗi Mã Điểm là 1 `MERGE` ĐỘC LẬP trong 1 transaction (xoá các
+  mã không còn + upsert từng mã) — đồng bộ xong 1 điểm KHÔNG còn khoá/ảnh hưởng điểm khác đang được Đối
+  Chiếu đọc cùng lúc (khác hẳn trước đây khoá nguyên 1 dòng gộp hết).
+- `getSnapshotMapForMaDiems(codes)` — lọc THẲNG ở SQL (`WHERE MaDiem IN (...)`), không còn tải hết rồi
+  lọc bằng JS như thiết kế cũ — có cache ngắn hạn theo TỪNG Mã Điểm (mirror TTL + cơ chế IPC PM2 cluster
+  của `lib/appData.js`/`lib/taskStore.js`).
+- `migrateLegacyInventorySnapshot()` — **tự động di trú dữ liệu CŨ 1 LẦN DUY NHẤT lúc khởi động** (wired
+  vào `seedDefaults.js`, idempotent, mirror đúng khuôn `migrateLegacySystemLogs()`/`migrateLegacyTasks()`
+  đã có sẵn): đọc dòng `AppData.systemInventorySnapshot` CŨ (nếu còn), tách theo Mã Điểm, ghi vào bảng
+  mới, rồi xoá dòng AppData cũ. **Trả lời câu hỏi "có tự merge không hay phải đồng bộ lại": dữ liệu ĐÃ
+  đồng bộ trước đó được chuyển NGUYÊN VẸN tự động, KHÔNG cần bấm "Đồng Bộ Ngay" lại, không mất dữ liệu.**
+
+`jobs/inventorySync.js` + `lib/appData.js`: wire lại 3 điểm đọc/ghi (`syncSystemInventory()`,
+`getSystemInventoryForMaDiem()`, `getInventorySyncStatus()`) sang module mới, **giữ nguyên 100% hành vi
+bên ngoài** (merge nhiều Mã Điểm cách nhau dấu phẩy, giữ snapshot cũ khi lỗi mạng, ghi đè hoàn toàn mỗi
+lần đồng bộ thành công...) — chỉ đổi nơi lưu trữ. `lib/appData.js`: bỏ exclusion tạm thời của v29.17
+(`WHERE DataKey NOT IN (...)`) — không còn cần thiết vì khoá không còn tồn tại trong `AppData` nữa, trở
+lại `SELECT *` nguyên bản.
+
+**Test:** `tests/test-inventory-recon.js` (20/20) + `tests/test-inventory-api-config.js` (23/23) — cập
+nhật kỹ thuật mock-module (require.cache injection, không phải SQL thật) sang stub thêm
+`lib/inventorySnapshotStore.js` bên cạnh `lib/appData.js`, **giữ TOÀN BỘ assertion cũ nguyên vẹn** (fake
+module đọc/ghi qua đúng hình dạng `store.systemInventorySnapshot.byMaDiem` như trước). Phát hiện +
+vá thêm `tests/test-seed-defaults-fresh-install.js` (dbMock riêng chưa biết câu SQL mới của bảng —
+đã thêm no-op stub cho `migrateLegacyInventorySnapshot`, 3/3 PASS). Chạy thêm ~10 file test liên quan
+(partner-api-config, SSRF guard, store-external-codes...) — không regression.
+
+**Deploy (có bước ngoài copy code):**
+1. Chạy lại `sql/schema.sql` — thêm bảng mới `dbo.SystemInventorySnapshots` (script tự bọc
+   `IF OBJECT_ID(...) IS NULL`, an toàn chạy lại nhiều lần).
+2. Copy code (`lib/inventorySnapshotStore.js` mới, `jobs/inventorySync.js`, `lib/appData.js`,
+   `seedDefaults.js`) + `pm2 restart`.
+3. **Không cần làm gì thêm** — snapshot tồn kho hiện có tự di trú sang bảng mới ngay lúc khởi động (log
+   `↳ Đã di chuyển snapshot tồn kho cũ (N Mã Điểm) sang bảng SystemInventorySnapshots.`), không cần đồng
+   bộ lại, không mất dữ liệu.
 
 ## v29.18 (2026-11): Thêm cột "Giá Trị Hợp Đồng" vào bảng QLDA > Thực Hiện
 

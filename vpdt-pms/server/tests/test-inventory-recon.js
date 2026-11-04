@@ -39,19 +39,52 @@ function makeFakeAppData(store) {
     }
   };
 }
+
+// v29.19: snapshot tồn kho tách khỏi lib/appData.js sang lib/inventorySnapshotStore.js (bảng riêng,
+// mỗi Mã Điểm 1 dòng — xem chú thích đầy đủ tại file đó + CREATE TABLE ở sql/schema.sql). Fake này đọc/
+// ghi THẲNG vào `store.systemInventorySnapshot.byMaDiem` — Y HỆT hình dạng "CSDL" cũ makeFakeAppData() ở
+// trên từng mô phỏng — để TOÀN BỘ assertion hiện có trong file test này (store.systemInventorySnapshot...)
+// tiếp tục đúng nguyên vẹn, không phải viết lại, dù code thật bên dưới đã đổi sang module/bảng khác.
+function makeFakeInventorySnapshotStore(store) {
+  const clone = (v) => (v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)));
+  return {
+    async getSnapshotForMaDiem(maDiem) {
+      const snap = store.systemInventorySnapshot;
+      return snap && snap.byMaDiem && snap.byMaDiem[maDiem] ? clone(snap.byMaDiem[maDiem]) : null;
+    },
+    async getSnapshotMapForMaDiems(maDiems) {
+      const snap = store.systemInventorySnapshot;
+      const out = {};
+      if (snap && snap.byMaDiem) { for (const c of maDiems) { if (snap.byMaDiem[c]) out[c] = clone(snap.byMaDiem[c]); } }
+      return out;
+    },
+    async replaceSnapshot(byMaDiem, fetchedAt) {
+      store.systemInventorySnapshot = { byMaDiem: clone(byMaDiem), fetchedAt: fetchedAt.toISOString() };
+    },
+    async getSnapshotStats() {
+      const snap = store.systemInventorySnapshot;
+      return { storeCount: snap && snap.byMaDiem ? Object.keys(snap.byMaDiem).length : 0, lastFetchedAt: snap ? snap.fetchedAt : null };
+    },
+    async migrateLegacyInventorySnapshot() { /* no-op — sandbox test không mô phỏng lượt di trú */ }
+  };
+}
+
 // requireFreshInventorySync(store) — nạp lại jobs/inventorySync.js "sạch" (reset mọi biến module-level:
-// lastSyncAttemptAt/lastSyncSuccessAt/lastSyncError), NHƯNG trỏ require('../lib/appData') bên trong nó
-// sang fakeStore CHUNG truyền vào — mô phỏng đúng 1 tiến trình PM2 MỚI (biến RAM module-level reset),
-// cùng đọc/ghi 1 "CSDL" chung (store object y hệt instance trước, nếu truyền lại CÙNG store).
+// lastSyncAttemptAt/lastSyncSuccessAt/lastSyncError), NHƯNG trỏ require('../lib/appData') +
+// require('../lib/inventorySnapshotStore') bên trong nó sang fakeStore CHUNG truyền vào — mô phỏng đúng
+// 1 tiến trình PM2 MỚI (biến RAM module-level reset), cùng đọc/ghi 1 "CSDL" chung (store object y hệt
+// instance trước, nếu truyền lại CÙNG store).
 function requireFreshInventorySync(store) {
   const appDataPath = require.resolve('../lib/appData');
+  const snapshotStorePath = require.resolve('../lib/inventorySnapshotStore');
   const jobPath = require.resolve('../jobs/inventorySync');
   require.cache[appDataPath] = { id: appDataPath, filename: appDataPath, loaded: true, exports: makeFakeAppData(store) };
+  require.cache[snapshotStorePath] = { id: snapshotStorePath, filename: snapshotStorePath, loaded: true, exports: makeFakeInventorySnapshotStore(store) };
   delete require.cache[jobPath];
   const mod = require('../jobs/inventorySync');
   return {
     ...mod,
-    cleanup: () => { delete require.cache[appDataPath]; delete require.cache[jobPath]; }
+    cleanup: () => { delete require.cache[appDataPath]; delete require.cache[snapshotStorePath]; delete require.cache[jobPath]; }
   };
 }
 

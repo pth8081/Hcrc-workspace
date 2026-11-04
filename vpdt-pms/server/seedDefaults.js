@@ -7,6 +7,7 @@ const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
+const { migrateLegacyInventorySnapshot } = require('./lib/inventorySnapshotStore');
 const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
@@ -57,6 +58,7 @@ async function seedDefaults() {
   await flagKnownDefaultPasswords();
   await migrateLegacySystemLogs();
   await migrateLegacyTasks();
+  await migrateLegacyInventorySnapshot();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   // migrateApprovedOperationOrdersToAwaitingReceipt() — TẮT (xem chú thích đầy đủ tại định nghĩa hàm):

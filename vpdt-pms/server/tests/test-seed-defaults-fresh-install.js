@@ -90,7 +90,8 @@ function makeFreshInstall() {
 
   const noopMigrations = {
     migrateLegacySystemLogs: async () => {},
-    migrateLegacyTasks: async () => {}
+    migrateLegacyTasks: async () => {},
+    migrateLegacyInventorySnapshot: async () => {}
   };
 
   return { appDataStore, dbMock, appDataMock, recordStoreMock, noopMigrations };
@@ -108,6 +109,7 @@ function requireFreshSeedDefaults(mocks) {
     stub('../lib/recordStore', mocks.recordStoreMock),
     stub('../lib/systemLogStore', { migrateLegacySystemLogs: mocks.noopMigrations.migrateLegacySystemLogs }),
     stub('../lib/taskStore', { migrateLegacyTasks: mocks.noopMigrations.migrateLegacyTasks }),
+    stub('../lib/inventorySnapshotStore', { migrateLegacyInventorySnapshot: mocks.noopMigrations.migrateLegacyInventorySnapshot }),
     stub('../lib/operationWorkItemStore', { assertSourceIdColumnIsBigInt: async () => {} })
   ];
   const seedDefaultsPath = require.resolve('../seedDefaults');
