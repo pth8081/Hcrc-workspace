@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**29.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.6 (2026-11): Hộp Thư Duyệt Tổng Hợp — đổi nhãn cột "Trích Yếu" → "Mô Tả"
+
+Người dùng phản hồi: cột "Trích Yếu" trong bảng ✅ Phê Duyệt chỉ đúng nghĩa
+cho Văn Bản Trình (vốn có khái niệm "trích yếu" của văn bản hành chính) —
+~15-20 loại hồ sơ khác được gộp vào cùng bảng (Hợp đồng, Thanh toán, Đồng
+Phục, Nghỉ Phép, Đổi Ca...) không có khái niệm này, nên nhãn cột gây hiểu
+lầm. Đổi sang "Mô Tả" — trung lập, đúng với nội dung cột đang hiển thị
+(tiêu đề/tóm tắt ngắn tuỳ loại hồ sơ, không đổi dữ liệu/logic gì).
+
+**Đã làm:**
+- `public/index.html`: đổi nhãn cột bảng + nhãn ô tìm kiếm ("Tìm Theo Mã /
+  Trích Yếu" → "Tìm Theo Mã / Mô Tả").
+- `public/js/module-nghiepvu.js`: đồng bộ 2 dòng hướng dẫn thao tác (tab
+  📘 Hướng Dẫn) theo đúng nhãn mới.
+- Chỉ đổi text hiển thị, không đổi `id` DOM/cấu trúc dữ liệu — chạy lại
+  `tests/test-approval-hub.js` (57/57 pass) xác nhận không có test nào phụ
+  thuộc nhãn cũ bị ảnh hưởng.
+
+**Không cần làm gì thêm ngoài copy code + `pm2 restart`.**
 
 ## v29.5 (2026-11): Đối Chiếu Tồn Kho — tự đồng bộ ngay khi mở tab, không chờ tick nền
 
