@@ -7,6 +7,15 @@
 // công (routes/auth.js: POST /login nhánh không cần 2FA, POST /verify-totp-login, POST
 // /webauthn/login-verify).
 //
+// CẬP NHẬT (11/2026, phản hồi người dùng "login xong bị đăng xuất ngay, lặp vài lần trong 1 phút" khi
+// có ≥2 thiết bị/tab cùng mở 1 tài khoản): đá phiên cũ KHÔNG còn làm NGAY không báo trước nữa — xem
+// shouldConfirmKick()/POST /confirm-kick-session (routes/auth.js). Khi lượt đăng nhập trước đó (lastLoginAt)
+// đủ gần (còn trong TOKEN_TTL_MS, token cũ CÓ THỂ còn sống), 1 trong 3 nhánh cấp phiên trả
+// confirmKickRequired:true thay vì cấp phiên ngay — phải gọi thêm POST /confirm-kick-session (chỉ cần
+// username) mới thật sự đá. Người dùng xác nhận rõ: VẪN phải đá THẬT (không cho phiên cũ dùng tiếp token
+// cũ dù trình duyệt có tự lưu/điền lại), chỉ thêm bước hỏi xác nhận trước khi đá, không làm yếu đi phần
+// "đá thật".
+//
 // KHÁC test-admin-totp.js/test-admin-webauthn-reset.js: 2 file đó stub HẲN lib/auth (signToken/
 // requireAuth giả lập, không đụng JWT/cookie thật) — bài test NÀY cố ý giữ lib/auth.js THẬT (chỉ đặt
 // JWT_SECRET giả cho đủ điều kiện chạy) vì chính cơ chế ký/kiểm token + so sánh sessionVersion đó mới là
@@ -16,17 +25,22 @@
 // khi TOTP setup/gỡ).
 //
 // Bao phủ:
-//   1. Đăng nhập thường (không TOTP): lượt đăng nhập THỨ 2 (thiết bị khác) phải đá phiên THỨ NHẤT ngay ở
-//      request kế tiếp của phiên đó (401), phiên MỚI vẫn dùng bình thường.
-//   2. Cùng 1 tài khoản đăng nhập LẦN LƯỢT 3 thiết bị -> chỉ thiết bị CUỐI CÙNG còn hiệu lực.
+//   1. Đăng nhập thường (không TOTP): lượt đăng nhập THỨ 2 (thiết bị khác) trả confirmKickRequired (KHÔNG
+//      đá ngay) — phiên THỨ NHẤT vẫn còn sống cho tới khi gọi /confirm-kick-session; sau khi xác nhận,
+//      phiên 1 mới thật sự bị đá (401), phiên MỚI dùng bình thường.
+//   2. Cùng 1 tài khoản đăng nhập LẦN LƯỢT 3 thiết bị (mỗi lượt đều xác nhận) -> chỉ thiết bị CUỐI CÙNG
+//      còn hiệu lực.
 //   3. Tài khoản KHÁC đăng nhập không ảnh hưởng gì tới phiên đang mở của tài khoản này (đá đúng người,
-//      không đá nhầm người khác).
-//   4. Admin bật TOTP: bước 1 (mật khẩu đúng, CHƯA qua bước 2) KHÔNG được đá phiên đang mở ở thiết bị
-//      khác — chỉ khi bước 2 (verify-totp-login) hoàn tất thật, phiên MỚI mới thật sự được cấp và lúc đó
-//      mới đá phiên cũ. Tránh tình huống gõ đúng mật khẩu rồi bỏ dở/gõ sai mã TOTP làm mất oan phiên đang
-//      dùng ở máy khác.
-//   5. Đăng xuất (POST /logout, cơ chế sessionVersion đã có từ trước) vẫn hoạt động bình thường, không bị
-//      đợt sửa này ảnh hưởng.
+//      không đá nhầm người khác) — và vì nv_b chưa từng đăng nhập (không có lastLoginAt), lượt này KHÔNG
+//      cần xác nhận gì cả.
+//   4. Admin bật TOTP: bước 1 (mật khẩu đúng, CHƯA qua bước 2) KHÔNG được đá/hỏi xác nhận phiên đang mở ở
+//      thiết bị khác — chỉ khi bước 2 (verify-totp-login) hoàn tất thật (và đã xác nhận nếu được hỏi),
+//      phiên MỚI mới thật sự được cấp và lúc đó mới đá phiên cũ.
+//   5. Đăng xuất (POST /logout) vẫn hoạt động bình thường; ĐỒNG THỜI xoá lastLoginAt — đăng nhập lại ngay
+//      sau khi đăng xuất tự nguyện KHÔNG bị hỏi xác nhận (không còn phiên nào khác để lo đá nhầm).
+//   6. Huỷ xác nhận (không gọi /confirm-kick-session) -> phiên cũ vẫn sống nguyên, KHÔNG có phiên mới nào
+//      được cấp cho thiết bị vừa đăng nhập.
+//   7. Phiếu xác nhận đã dùng không dùng lại được lần 2 (gọi /confirm-kick-session 2 lần liên tiếp).
 //
 // Chạy: node server/tests/test-auth-single-session.js
 'use strict';
@@ -179,6 +193,18 @@ async function login(device, user, password) {
 async function probe(device) {
   return device.call('GET', '/api/_probe');
 }
+async function confirmKick(device, username) {
+  return device.call('POST', '/api/auth/confirm-kick-session', { username });
+}
+// Đăng nhập xong, TỰ ĐỘNG xác nhận ngay nếu server hỏi (confirmKickRequired) — dùng cho các bước test
+// KHÔNG chủ đích kiểm tra riêng hành vi "chưa xác nhận", chỉ cần tới được trạng thái "đã có phiên thật".
+async function loginAndConfirm(device, user, password) {
+  const res = await login(device, user, password);
+  if (res.status === 200 && res.body && res.body.confirmKickRequired) {
+    return confirmKick(device, res.body.username);
+  }
+  return res;
+}
 
 // Mật khẩu giả lập "123456" cho mọi user (không hash thật — verifyPassword thật của lib/auth cần bcrypt,
 // nên seed field `pass` bằng hash bcrypt THẬT qua chính hashPassword() thật, không giả lập chuỗi tay).
@@ -198,20 +224,30 @@ async function main() {
   }
 
   try {
-    await run('Đăng nhập lần 2 (thiết bị B) đá phiên lần 1 (thiết bị A) — A bị 401 ở request kế tiếp, B vẫn dùng được', async () => {
+    await run('Đăng nhập lần đầu KHÔNG bị hỏi xác nhận (chưa có lastLoginAt) — lượt 2 (thiết bị B) hỏi xác nhận, PHẢI xác nhận mới thật sự đá phiên 1', async () => {
       reseed();
       const deviceA = newDevice(), deviceB = newDevice();
       const loginA = await login(deviceA, NV_A);
       assert.strictEqual(loginA.status, 200);
+      assert.ok(!loginA.body.confirmKickRequired, 'Lượt đăng nhập ĐẦU TIÊN (chưa có lastLoginAt) không được hỏi xác nhận');
       assert.ok(deviceA.hasCookie(), 'Phải nhận được cookie phiên sau khi đăng nhập thành công');
       const probeA1 = await probe(deviceA);
       assert.strictEqual(probeA1.status, 200, 'Phiên A còn sống trước khi B đăng nhập');
 
-      const loginB = await login(deviceB, NV_A); // CÙNG tài khoản nv_a, thiết bị KHÁC
+      const loginB = await login(deviceB, NV_A); // CÙNG tài khoản nv_a, thiết bị KHÁC — lastLoginAt của A vừa mới set, còn rất gần
       assert.strictEqual(loginB.status, 200);
+      assert.strictEqual(loginB.body.confirmKickRequired, true, 'Phiên A có thể còn sống (lastLoginAt gần) -> phải hỏi xác nhận trước khi đá, KHÔNG đá ngay');
+      assert.ok(!deviceB.hasCookie(), 'CHƯA cấp cookie phiên nào khi mới chỉ confirmKickRequired, chưa xác nhận');
+
+      const probeAStillAlive = await probe(deviceA);
+      assert.strictEqual(probeAStillAlive.status, 200, 'Phiên A PHẢI VẪN CÒN SỐNG khi B mới nhận confirmKickRequired, chưa xác nhận — đây chính là khác biệt so với hành vi cũ (đá ngay không báo trước)');
+
+      const confirmB = await confirmKick(deviceB, loginB.body.username);
+      assert.strictEqual(confirmB.status, 200, 'Xác nhận xong phải cấp phiên thật');
+      assert.ok(deviceB.hasCookie(), 'Phải nhận được cookie phiên sau khi xác nhận');
 
       const probeA2 = await probe(deviceA);
-      assert.strictEqual(probeA2.status, 401, 'Phiên A phải bị đá NGAY sau khi B đăng nhập thành công (cùng tài khoản)');
+      assert.strictEqual(probeA2.status, 401, 'Phiên A phải bị đá THẬT ngay sau khi B xác nhận xong (không cho dùng tiếp token cũ)');
       assert.match(probeA2.body.error, /Mật khẩu\/PIN vừa được thay đổi|đăng nhập lại/, 'Lỗi trả về phải đúng nhánh sv-mismatch của requireAuth()');
 
       const probeB = await probe(deviceB);
@@ -219,15 +255,54 @@ async function main() {
       assert.strictEqual(probeB.body.username, NV_A.username);
     });
 
-    await run('3 thiết bị đăng nhập lần lượt -> chỉ thiết bị THỨ 3 (cuối cùng) còn sống, 2 thiết bị trước đều bị đá', async () => {
+    await run('3 thiết bị đăng nhập lần lượt (mỗi lượt sau đều xác nhận) -> chỉ thiết bị THỨ 3 (cuối cùng) còn sống, 2 thiết bị trước đều bị đá', async () => {
       reseed();
       const d1 = newDevice(), d2 = newDevice(), d3 = newDevice();
-      await login(d1, NV_A);
-      await login(d2, NV_A);
-      await login(d3, NV_A);
+      await loginAndConfirm(d1, NV_A);
+      await loginAndConfirm(d2, NV_A);
+      await loginAndConfirm(d3, NV_A);
       assert.strictEqual((await probe(d1)).status, 401, 'Thiết bị 1 phải bị đá');
       assert.strictEqual((await probe(d2)).status, 401, 'Thiết bị 2 phải bị đá (kể cả khi đã bị đá TIẾP bởi thiết bị 3, không chỉ thiết bị 1 mới đá được)');
       assert.strictEqual((await probe(d3)).status, 200, 'Chỉ thiết bị 3 (mới nhất) còn sống');
+    });
+
+    await run('Huỷ xác nhận (không gọi /confirm-kick-session) -> phiên cũ vẫn sống nguyên, thiết bị mới KHÔNG có phiên nào', async () => {
+      reseed();
+      const deviceA = newDevice(), deviceB = newDevice();
+      await login(deviceA, NV_A);
+      const loginB = await login(deviceB, NV_A);
+      assert.strictEqual(loginB.body.confirmKickRequired, true);
+      // KHÔNG gọi confirmKick — mô phỏng người dùng bấm "Huỷ" ở hộp thoại xác nhận.
+      const probeA = await probe(deviceA);
+      assert.strictEqual(probeA.status, 200, 'Huỷ xác nhận -> phiên A phải vẫn còn sống nguyên, không bị đá oan');
+      const probeB = await probe(deviceB);
+      assert.strictEqual(probeB.status, 401, 'Thiết bị B chưa từng được cấp cookie phiên (chỉ nhận confirmKickRequired) -> không có phiên gì để dùng');
+    });
+
+    await run('Phiếu xác nhận đã dùng không dùng lại được lần 2 (chống gọi lại /confirm-kick-session)', async () => {
+      reseed();
+      const deviceA = newDevice(), deviceB = newDevice();
+      await login(deviceA, NV_A);
+      const loginB = await login(deviceB, NV_A);
+      assert.strictEqual(loginB.body.confirmKickRequired, true);
+      const confirm1 = await confirmKick(deviceB, loginB.body.username);
+      assert.strictEqual(confirm1.status, 200);
+      const confirm2 = await confirmKick(deviceB, loginB.body.username);
+      assert.strictEqual(confirm2.status, 401, 'Phiếu xác nhận chỉ dùng được 1 lần (consumeToken xoá ngay khi đọc)');
+    });
+
+    await run('Đăng xuất xoá lastLoginAt -> đăng nhập lại ngay sau đó KHÔNG bị hỏi xác nhận', async () => {
+      reseed();
+      const device = newDevice();
+      await login(device, NV_A);
+      const logoutRes = await device.call('POST', '/api/auth/logout');
+      assert.strictEqual(logoutRes.status, 200);
+
+      const device2 = newDevice();
+      const reLogin = await login(device2, NV_A);
+      assert.strictEqual(reLogin.status, 200);
+      assert.ok(!reLogin.body.confirmKickRequired, 'Đăng nhập lại sau khi đã ĐĂNG XUẤT tự nguyện không còn phiên nào để lo đá nhầm -> không cần hỏi xác nhận');
+      assert.ok(device2.hasCookie());
     });
 
     await run('Tài khoản KHÁC đăng nhập KHÔNG đá phiên của tài khoản này — chỉ đá đúng người vừa đăng nhập lại', async () => {
@@ -268,16 +343,25 @@ async function main() {
       const probeBoot = await probe(bootDevice);
       assert.strictEqual(probeBoot.status, 200, 'Phiên đang mở (bootDevice) KHÔNG được đá chỉ vì có người gõ đúng mật khẩu ở bước 1 tại thiết bị khác — phải đợi bước 2 hoàn tất thật');
 
-      // Hoàn tất bước 2 THẬT -> bây giờ mới thật sự cấp phiên mới -> mới đá phiên cũ.
+      // Hoàn tất bước 2 THẬT -> bootDevice đăng nhập gần đây (lastLoginAt) nên bước này phải hỏi xác
+      // nhận trước (KHÔNG cấp cookie ngay) — xác nhận xong mới thật sự cấp phiên mới -> mới đá phiên cũ.
       const code = authenticator.generate(totpSecret);
       const step2 = await deviceB.call('POST', '/api/auth/verify-totp-login', { username: ADMIN_TOTP.username, code });
       assert.strictEqual(step2.status, 200);
-      assert.ok(deviceB.hasCookie(), 'Bước 2 thành công phải cấp cookie phiên thật');
+      assert.strictEqual(step2.body.confirmKickRequired, true, 'bootDevice vừa đăng nhập gần đây -> bước 2 TOTP cũng phải hỏi xác nhận trước khi đá, không đá ngay');
+      assert.ok(!deviceB.hasCookie(), 'CHƯA cấp cookie phiên nào khi mới chỉ confirmKickRequired, chưa xác nhận');
+
+      const probeBootStillAlive = await probe(bootDevice);
+      assert.strictEqual(probeBootStillAlive.status, 200, 'Phiên bootDevice phải vẫn còn sống khi B mới nhận confirmKickRequired ở bước 2, chưa xác nhận');
+
+      const confirmStep2 = await confirmKick(deviceB, step2.body.username);
+      assert.strictEqual(confirmStep2.status, 200);
+      assert.ok(deviceB.hasCookie(), 'Xác nhận xong bước 2 TOTP phải cấp cookie phiên thật');
 
       const probeBootAfter = await probe(bootDevice);
-      assert.strictEqual(probeBootAfter.status, 401, 'Sau khi bước 2 hoàn tất thật ở thiết bị B, phiên cũ (bootDevice) phải bị đá');
+      assert.strictEqual(probeBootAfter.status, 401, 'Sau khi xác nhận xong ở thiết bị B, phiên cũ (bootDevice) phải bị đá thật');
       const probeB = await probe(deviceB);
-      assert.strictEqual(probeB.status, 200, 'Phiên mới (thiết bị B, vừa hoàn tất bước 2) phải dùng được');
+      assert.strictEqual(probeB.status, 200, 'Phiên mới (thiết bị B, vừa hoàn tất bước 2 + xác nhận) phải dùng được');
     });
 
     await run('Đăng xuất (POST /logout) vẫn hoạt động bình thường, không bị đợt sửa sessionVersion-khi-đăng-nhập ảnh hưởng', async () => {

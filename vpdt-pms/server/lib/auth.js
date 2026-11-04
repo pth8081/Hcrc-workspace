@@ -214,6 +214,7 @@ function blockIfMustChangePassword(req, res, next) {
 
 module.exports = {
   COOKIE_NAME,
+  TOKEN_TTL_MS,
   isBcryptHash,
   hashPassword,
   verifyPassword,

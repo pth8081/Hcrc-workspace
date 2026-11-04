@@ -10061,7 +10061,13 @@ async function loginWithBiometric() {
       resetBiometricLoginWidget();
       return alert(body.error || 'Không thể đăng nhập bằng vân tay.');
     }
-    const user = await verifyRes.json();
+    let user = await verifyRes.json();
+
+    if (user.confirmKickRequired) {
+      const confirmed = await resolveConfirmKickIfNeeded(user);
+      if (!confirmed) { resetBiometricLoginWidget(); return; }
+      user = confirmed;
+    }
 
     // Xác nhận cookie phiên thực sự được lưu — cùng lý do/cùng cách kiểm tra với login() (mật khẩu)
     // bên dưới, xem chú thích đầy đủ ở đó.
@@ -10104,6 +10110,37 @@ let loginInFlight = false;
 // bước đó); login() (được form submit gọi lại khi bấm nút lần 2) tự rẽ nhánh sang submitTotpLoginStep()
 // thay vì gửi lại mật khẩu, vì cùng 1 nút/form được dùng chung cho cả 2 bước.
 let pendingTotpLoginUsername = null;
+
+// LỖI ĐÃ VÁ (11/2026, nhiều người dùng báo "login xong bị đăng xuất ngay, lặp vài lần trong 1 phút"):
+// server (routes/auth.js, xem shouldConfirmKick()) giờ KHÔNG còn đá ngầm phiên khác đang có thể còn
+// sống — trả confirmKickRequired:true + username thay vì cấp phiên ngay. Hàm này hỏi xác nhận bằng
+// confirm() (hộp thoại CHẶN, cần người dùng bấm tay thật — autofill/đăng nhập tự động của trình duyệt
+// không tự bấm hộ được, đúng yêu cầu người dùng "vẫn phải đăng xuất thật phiên kia, không để lọt qua
+// được bằng token cũ") rồi gọi /confirm-kick-session (CHỈ cần username, không cần gửi lại mật khẩu/mã
+// TOTP/vân tay — đã xác thực đúng ở nhánh gốc rồi) để thật sự cấp phiên + đá phiên cũ. Dùng chung cho cả
+// 3 luồng đăng nhập (mật khẩu, TOTP bước 2, vân tay) — xem 3 nơi gọi login()/submitTotpLoginStep()/
+// loginWithBiometric(). Trả về user THẬT (đã có cookie) nếu xác nhận xong, null nếu huỷ/lỗi.
+async function resolveConfirmKickIfNeeded(loginResult) {
+  if (!loginResult || !loginResult.confirmKickRequired) return loginResult;
+  const ok = confirm('⚠️ Tài khoản này có thể đang đăng nhập ở nơi khác (thiết bị/tab khác).\nTiếp tục đăng nhập ở đây sẽ ĐĂNG XUẤT phiên đó ngay.\n\nBạn có muốn tiếp tục?');
+  if (!ok) return null;
+  try {
+    const res = await fetch('/api/auth/confirm-kick-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: loginResult.username })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error || 'Không thể hoàn tất đăng nhập, vui lòng thử lại.');
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+    return null;
+  }
+}
 
 async function login() {
   if (loginInFlight) return;
@@ -10149,6 +10186,11 @@ async function login() {
   } catch (e) {
     resetLoginWidgets();
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  if (user.confirmKickRequired) {
+    user = await resolveConfirmKickIfNeeded(user);
+    if (!user) { resetLoginWidgets(); return; }
   }
 
   // Admin đã bật TOTP -> mật khẩu đúng nhưng CHƯA đăng nhập xong (KHÔNG có cookie phiên nào được cấp ở
@@ -10253,6 +10295,16 @@ async function submitTotpLoginStep() {
     loginInFlight = false;
     if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  if (user.confirmKickRequired) {
+    const confirmed = await resolveConfirmKickIfNeeded(user);
+    if (!confirmed) {
+      loginInFlight = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+      return;
+    }
+    user = confirmed;
   }
 
   pendingTotpLoginUsername = null;
