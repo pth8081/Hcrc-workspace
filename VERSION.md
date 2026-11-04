@@ -1,9 +1,91 @@
 # Phiên bản hiện tại
 
-**29.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.10 (2026-11): Phòng Họp — đổi định dạng cột "Thời Gian Sử Dụng"
+
+Người dùng gửi ảnh so sánh: màn "Quản Lý & Đặt Lịch Phòng Họp" đang hiện cột "Thời Gian Sử
+Dụng" dạng ISO thô kèm mũi tên (`2026-11-05T14:00 ➔ 2026-11-05T16:00`), muốn đổi sang dạng
+dễ đọc như ảnh mẫu: dòng 1 là ngày (`05/11/2026`), dòng 2 là khoảng giờ (`14:00 – 16:00`). Đã
+gửi demo ảnh chụp, người dùng xác nhận, merge vào main.
+
+**Đã làm:**
+- `public/js/module-phonghop.js`: thêm `formatMeetingUsageTime(startTime, endTime)` — tách
+  `YYYY-MM-DDTHH:MM` (từ input `type="datetime-local"`, không qua `new Date()` để không phụ
+  thuộc múi giờ trình duyệt) thành `DD/MM/YYYY<br>HH:MM – HH:MM`; dữ liệu lạ/không đúng
+  chuẩn thì fallback về định dạng cũ. Áp dụng cho đúng cột "Thời Gian Sử Dụng" ở bảng
+  `renderMeetings()`.
+- Test regression liên quan (`test-meeting-dept-workflow.js`, `test-meeting-edit-ui.js`,
+  `test-meeting-report.js`, `test-meeting-busy-slots-route.js`, `test-selfapprove-leave-
+  shiftswap-meeting.js`) đều pass, không có module nào khác bị ảnh hưởng.
+
+**Deploy-impact:** chỉ đổi code client (`public/js/module-phonghop.js`) — copy code +
+`pm2 restart` là đủ, không cần migrate DB/env mới.
+
+## v29.9 (2026-11): Fix bug đăng xuất liên tục — hỏi xác nhận trước khi đá phiên đăng nhập khác
+
+Nhiều người dùng phàn nàn: "login xong bị đăng xuất ngay, lặp vài lần trong 1 phút". Nguyên
+nhân gốc: tính năng "1 tài khoản chỉ 1 kết nối tại 1 thời điểm" (v… 10/2026, đá phiên cũ ngay
+khi có lượt đăng nhập mới) đang chạy ĐÚNG như thiết kế, nhưng gây khó chịu cho người dùng mở
+tài khoản ở ≥2 thiết bị/tab cùng lúc (máy tính + điện thoại, hoặc quên 1 tab cũ) — mỗi lần 1
+bên đăng nhập lại sẽ đá bên kia ngay không báo trước. Người dùng xác nhận: vẫn giữ nguyên tắc
+"đăng nhập mới phải đá thật phiên cũ" (không nới lỏng vì lo trình duyệt tự lưu/điền lại mật
+khẩu), chỉ thêm bước hỏi xác nhận trước khi đá. Đã gửi demo 4 ảnh minh hoạ luồng
+Huỷ/Xác nhận, người dùng xác nhận, merge vào main.
+
+**Đã làm:**
+- `lib/auth.js`: export thêm `TOKEN_TTL_MS` (trước đó chỉ dùng nội bộ) để `routes/auth.js`
+  tính được "phiên trước có thể còn sống hay không".
+- `routes/auth.js`: thêm `shouldConfirmKick(user)` (chỉ hỏi xác nhận khi `lastLoginAt` còn
+  trong vòng `TOKEN_TTL_MS`, tức token cũ CÓ THỂ còn hiệu lực — tránh hỏi vô ích ở lượt đăng
+  nhập bình thường) + `grantSessionAfterLogin()` (gộp logic cấp phiên dùng chung). Cả 3 nhánh
+  cấp phiên thật (`POST /login` không TOTP, `POST /verify-totp-login`, `POST
+  /webauthn/login-verify`) đều áp dụng: nếu cần xác nhận, lưu 1 phiếu chờ ngắn hạn (TTL 2
+  phút, tận dụng `lib/ephemeralStore.js` có sẵn) rồi trả `confirmKickRequired: true` thay vì
+  cấp phiên ngay. Thêm `POST /confirm-kick-session` (chỉ cần username, không cần gửi lại mật
+  khẩu/mã TOTP/vân tay) để hoàn tất cấp phiên + đá phiên cũ THẬT sau khi xác nhận.
+  `POST /logout` xoá `lastLoginAt` về `null` — đăng nhập lại ngay sau khi đăng xuất tự nguyện
+  không bị hỏi xác nhận.
+- `public/js/core.js`: thêm `resolveConfirmKickIfNeeded()` dùng `confirm()` (hộp thoại CHẶN,
+  cần người dùng bấm tay thật — autofill không tự bấm hộ được) — áp dụng ở cả 3 luồng đăng
+  nhập client (`login()`, `submitTotpLoginStep()`, `loginWithBiometric()`).
+- `tests/test-auth-single-session.js`: viết lại theo luồng 2 bước mới + bổ sung 3 kịch bản
+  (huỷ xác nhận giữ nguyên phiên cũ, phiếu xác nhận chỉ dùng 1 lần, đăng xuất xoá
+  `lastLoginAt`) — 8/8 pass. Các test auth khác (`test-auth-login.js`,
+  `test-admin-webauthn-reset.js`, `test-login-lockout-admin-reset.js`,
+  `test-users-session-version-strip.js`...) không có regression.
+
+**Deploy-impact:** chỉ đổi code (server + client) — copy code + `pm2 restart` là đủ, không
+cần migrate DB/env mới (`lastLoginAt` là field mới trên bản ghi user, tự thêm khi có lượt
+đăng nhập kế tiếp, không cần script migrate).
+
+## v29.8 (2026-11): Fix nút "Tải file gốc" bị khoá nhầm theo context modal ở Phê Duyệt Giá
+
+Người dùng báo bug qua ảnh chụp: hồ sơ Phê Duyệt Giá Bán Lẻ (HCRC-MHTPTS-ITPG-BL-013) có
+chọn "người duyệt cuối" (Nhóm Phê Duyệt Cuối) — người duyệt bước cuối không thấy nút tải file
+gốc ở bước phê duyệt. Điều tra: không tái hiện được chính xác tình huống gốc (dữ liệu/quyền
+đều đúng, nhiều khả năng do cache client cũ ở trình duyệt người dùng), nhưng phát hiện VÀ VÁ 1
+lỗi thật liên quan: nút tải file bị khoá nhầm theo `currentItPriceModalContext === 'APPROVAL'`
+— điều kiện này chỉ nên áp dụng cho nút Duyệt/Từ chối, không áp dụng cho việc TẢI FILE (server,
+`lib/fileAuthz.js`, chưa bao giờ kiểm tra "context modal" khi cho phép tải). Đã gửi demo ảnh
+tái hiện đúng hồ sơ gốc, người dùng xác nhận, merge vào main.
+
+**Đã làm:**
+- `public/js/module-itsupport-price.js`: bỏ điều kiện `currentItPriceModalContext ===
+  'APPROVAL'` khỏi `canDownloadPendingFile` — chỉ còn giữ `status === 'PENDING'` +
+  `canApproveStep(...)` (khớp đúng logic server).
+- `tests/test-itprice-download-context-independent.js` (mới): 4 kịch bản — người duyệt bước
+  cuối thấy nút tải dù mở từ tab Hỗ Trợ IT (context `SUPPORT`); vẫn thấy nút tải + nút
+  Duyệt/Từ chối khi mở từ tab Mua Hàng (context `APPROVAL`, không có regression); người ngoài
+  không liên quan không thấy nút tải; người đã duyệt bước trước vẫn thấy nút tải ở bước sau
+  (ngoại lệ "đã từng duyệt") dù context `SUPPORT`. Cả 4 pass; 31 test itPrice hiện có không có
+  regression.
+
+**Deploy-impact:** chỉ đổi code client (`public/js/module-itsupport-price.js`) — copy code +
+`pm2 restart` là đủ.
 
 ## v29.7 (2026-11): Hộp Thư Duyệt Tổng Hợp — hiện thông tin người gửi/trình
 

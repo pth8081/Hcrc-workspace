@@ -52,18 +52,32 @@ chạy PM2 **cluster mode** (nhiều tiến trình Node tận dụng hết CPU m
 ứng dụng thiết kế stateless giữa các request nên chạy nhiều tiến trình song
 song an toàn.
 
-**1 tài khoản = 1 phiên đăng nhập (10/2026)**: mỗi lần đăng nhập thành công
-(đăng nhập thường, hoặc hoàn tất bước xác thực 2 lớp/vân tay-Face ID) server
-tăng thêm 1 số đếm phiên (`sessionVersion`) lưu kèm tài khoản đó và ký số này
-vào token JWT vừa cấp. Mọi token cũ (phiên đăng nhập trước đó, trên máy/trình
-duyệt khác) mang số đếm cũ hơn sẽ bị server từ chối ở request tiếp theo (đẩy về
-màn đăng nhập) — nói cách khác, đăng nhập lần MỚI NHẤT sẽ tự động "đá" các
-phiên đăng nhập CŨ HƠN của cùng tài khoản đó, không giới hạn số thiết bị đăng
-nhập CÙNG LÚC theo kiểu chặn cứng mà theo kiểu "chỉ phiên gần nhất còn hiệu
-lực". Riêng bước 1 của xác thực 2 lớp (gõ đúng mật khẩu nhưng CHƯA hoàn tất
-mã OTP) không tính là "đăng nhập thành công" nên KHÔNG đá phiên khác — tránh
-tình huống ai đó gõ đúng mật khẩu ở máy khác rồi bỏ dở (quên/sai OTP) lại vô
-tình đăng xuất phiên đang dùng thật.
+**1 tài khoản = 1 phiên đăng nhập (10/2026, cập nhật 11/2026 thêm bước xác
+nhận)**: mỗi lần đăng nhập thành công (đăng nhập thường, hoặc hoàn tất bước
+xác thực 2 lớp/vân tay-Face ID) server tăng thêm 1 số đếm phiên
+(`sessionVersion`) lưu kèm tài khoản đó và ký số này vào token JWT vừa cấp.
+Mọi token cũ (phiên đăng nhập trước đó, trên máy/trình duyệt khác) mang số
+đếm cũ hơn sẽ bị server từ chối ở request tiếp theo (đẩy về màn đăng nhập) —
+nói cách khác, đăng nhập lần MỚI NHẤT sẽ tự động "đá" các phiên đăng nhập CŨ
+HƠN của cùng tài khoản đó, không giới hạn số thiết bị đăng nhập CÙNG LÚC theo
+kiểu chặn cứng mà theo kiểu "chỉ phiên gần nhất còn hiệu lực". Riêng bước 1
+của xác thực 2 lớp (gõ đúng mật khẩu nhưng CHƯA hoàn tất mã OTP) không tính
+là "đăng nhập thành công" nên KHÔNG đá phiên khác — tránh tình huống ai đó gõ
+đúng mật khẩu ở máy khác rồi bỏ dở (quên/sai OTP) lại vô tình đăng xuất phiên
+đang dùng thật.
+
+**LỖI ĐÃ VÁ (11/2026, nhiều người dùng báo "login xong bị đăng xuất ngay, lặp
+vài lần trong 1 phút")**: trước đây việc "đá" phiên cũ xảy ra NGAY, không báo
+trước — người dùng mở tài khoản ở ≥2 thiết bị/tab cùng lúc (máy tính + điện
+thoại, hoặc quên 1 tab cũ) sẽ bị đá qua lại liên tục mỗi khi đăng nhập lại ở
+1 bên. Từ nay, nếu lượt đăng nhập trước đó CÒN ĐỦ GẦN (token cũ CÓ THỂ còn
+hiệu lực), hệ thống hiện hộp thoại hỏi xác nhận trước: "⚠️ Tài khoản này có
+thể đang đăng nhập ở nơi khác... Tiếp tục đăng nhập ở đây sẽ ĐĂNG XUẤT phiên
+đó ngay. Bạn có muốn tiếp tục?" — bấm "Huỷ" thì KHÔNG đăng nhập, phiên cũ vẫn
+nguyên; bấm "Tiếp tục" thì phiên cũ vẫn bị đá THẬT như trước (không có cách
+nào lách qua bước xác nhận để giữ cả 2 phiên cùng sống). Lượt đăng nhập bình
+thường (không có phiên nào khác đủ gần để lo) không bị hỏi gì cả, kể cả sau
+khi vừa đăng xuất chủ động.
 
 ```
 [Nhân viên / Quản lý / Admin — trình duyệt]
