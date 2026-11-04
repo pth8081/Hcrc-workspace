@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.25 (2026-11): Vận Hành > Đơn Hàng — bỏ hẳn các trạng thái Nhập/Hủy Hàng khỏi Danh Sách + Báo Cáo
+
+Luồng "Nhập Hàng"/"Hủy Nhập" (AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED) đã tắt hẳn từ đợt v28.x
+("Đặt Hàng NCC: dừng hẳn ở APPROVED") — duyệt xong bước cuối giờ dừng thẳng ở APPROVED, không còn cách
+nào tạo mới 3 trạng thái này qua UI. 2 tab "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO" (dùng chung
+code) vẫn hiện nguyên các thẻ dashboard/bộ lọc cho 3 trạng thái đã chết này (luôn ~0), gây rối mắt.
+Người dùng xem demo (ảnh mockup + ảnh thật) rồi xác nhận làm cả 2 phần "Danh Sách" và "Báo Cáo":
+
+- **Tab Danh Sách** (`renderOperationList()`, cả Siêu Thị/HO): dashboard 5 thẻ → 4 thẻ (Tổng Số/Đang
+  Chờ Duyệt/**Đã Phê Duyệt** [mới]/Bị Từ Chối). Dropdown lọc Trạng Thái: 8 lựa chọn → 5 (bỏ Chờ Nhập
+  Hàng/Đã Nhập Hàng/Đã Hủy Nhập/"Đã Phê Duyệt (hồ sơ cũ)"). "Đã Phê Duyệt" đếm theo
+  `OP_ORDER_APPROVED_FAMILY` (gồm cả 3 trạng thái cũ AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED của hồ
+  sơ TRƯỚC khi tắt luồng, không chỉ literal APPROVED) — bấm thẻ lọc đúng khớp số đã hiện (giá trị lọc
+  tổng hợp `APPROVED_FAMILY`, có nhánh khớp riêng trong logic lọc).
+- **Tab Báo Cáo** (`renderOperationOrderReport()`): rút gọn SÂU hơn theo yêu cầu "bỏ hết đi, chỉ để lại
+  trạng thái..." — bỏ hẳn 2 ô tổng giá trị (Đã Phê Duyệt/Đã Nhập Hàng), 2 biểu đồ "Theo Tháng", và bảng
+  "📍 Số Đơn Theo Từng Siêu Thị". Cả 3 khối (Tổng Chuỗi/Siêu Thị/HO) giờ chỉ còn đúng 4 thẻ trạng thái
+  (Tổng Số Đơn/Đã Phê Duyệt/Chưa Phê Duyệt/Bị Từ Chối) — dọn theo đó các hàm chỉ còn 1 nơi dùng
+  (`buildOpOrderStatBarHTML()`, `groupOperationOrdersByMonth()` — xoá hẳn) và field thừa trong
+  `computeOperationOrderReportStats()`.
+
+**Thay đổi:** `public/js/module-vanhanh.js` (dashCards + filter logic + report rút gọn) ·
+`public/fragments/vanHanhSection.html` (dropdown trạng thái + xoá container báo cáo thừa) ·
+`tests/test-operation-order-report.js` (viết lại theo đúng UI mới, 14/14 pass).
+
+**Deploy-impact:** chỉ copy code + `pm2 restart`, không đổi `schema.sql`/`.env`/`package.json`
+dependencies.
 
 ## v29.24 (2026-11): "👥 Người Nhận Tự Thêm" — admin theo dõi + gỡ, tự động dọn dẹp khi đổi tên/xoá tài khoản
 

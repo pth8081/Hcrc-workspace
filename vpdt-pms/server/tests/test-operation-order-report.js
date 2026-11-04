@@ -14,12 +14,12 @@
 //   3. Sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" + 2 nút "📥 Nhập Hàng"/"🚫 Hủy Nhập" — TẠM VÔ HIỆU HOÁ, ép
 //      ẩn khỏi UI bất kể quyền operationOrderReceiptManage (chỉ ẩn lối vào, hàm/route xử lý vẫn còn —
 //      unit-test đầy đủ ở tests/test-operation-order-receiving.js). File này chỉ còn xác nhận sub-tab
-//      không mở được + Báo Cáo vẫn hiển thị đúng dữ liệu LỊCH SỬ (mô phỏng bằng cách gán thẳng DB) cho
-//      các hồ sơ CŨ từng ở AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED.
-//   4. Báo cáo (luôn gộp CẢ Siêu Thị lẫn HO — "Tổng Chuỗi"): đếm đúng Tổng/Đã phê duyệt/Chưa phê
-//      duyệt/Bị từ chối/Chờ nhập hàng/Đã nhập hàng/Đã hủy nhập + tổng giá trị đã duyệt/đã nhập hàng +
-//      nhóm đúng theo tháng (approvedAt/receivedAt) — vẫn đúng cho dữ liệu LỊCH SỬ dù không còn đường
-//      tạo mới các trạng thái Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy Nhập qua UI.
+//      không mở được + Báo Cáo vẫn đếm đúng dữ liệu LỊCH SỬ (mô phỏng bằng cách gán thẳng DB) cho
+//      các hồ sơ CŨ từng ở AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED (đều rơi vào "Đã Phê Duyệt").
+//   4. Báo cáo (11/2026, RÚT GỌN theo yêu cầu "bỏ hết đi, chỉ để lại trạng thái..." — không còn số
+//      tiền/biểu đồ theo tháng/bảng theo siêu thị): CẢ 3 khối thẻ (Tổng Chuỗi/Siêu Thị/HO) đều chỉ còn
+//      đúng 4 thẻ Tổng Số Đơn/Đã Phê Duyệt/Chưa Phê Duyệt/Bị Từ Chối — đếm đúng, kể cả dữ liệu LỊCH SỬ
+//      (AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED đều phải tính vào "Đã Phê Duyệt").
 //   5. Lọc "Siêu Thị (Nơi Nhận)" thu hẹp đúng cả Danh Sách lẫn Báo Cáo.
 //
 // Chạy: node server/tests/test-operation-order-report.js
@@ -231,21 +231,8 @@ async function main() {
       assertEqual(e.status, 'AWAITING_RECEIPT', 'Giả lập đơn CŨ còn kẹt ở Chờ Nhập Hàng (dữ liệu lịch sử, không còn đường tạo mới qua UI)');
     });
 
-    // ===== 4) Báo Cáo — đếm đúng + nhóm đúng theo tháng =====
-    // Patch approvedAt/receivedAt để có ĐỦ 3 mốc tháng khác nhau kiểm nhóm "theo thời gian" (không ảnh
-    // hưởng gì tới các assertion trạng thái ở trên, chỉ đổi 1 field ngày tháng thuần dữ liệu).
-    await run.run('Chuẩn bị mốc thời gian khác tháng cho A/E (đã duyệt) để kiểm nhóm theo tháng', async () => {
-      await page.evaluate(({ idA, idE }) => {
-        const a = DB.operationOrders.find(o => o.id === idA);
-        a.approvedAt = '2026-07-15T09:00:00.000Z';
-        a.receivedAt = '2026-07-20T09:00:00.000Z';
-        const e = DB.operationOrders.find(o => o.id === idE);
-        e.approvedAt = '2026-08-10T09:00:00.000Z';
-      }, { idA, idE });
-      assert(true);
-    });
-
-    await run.run('Báo Cáo: đếm đúng Tổng/Đã phê duyệt/Chưa phê duyệt/Bị từ chối/Chờ nhập hàng/Đã nhập hàng/Đã hủy nhập', async () => {
+    // ===== 4) Báo Cáo — đếm đúng theo trạng thái (đã bỏ hẳn phần nhóm theo tháng/giá trị) =====
+    await run.run('Báo Cáo: đếm đúng Tổng/Đã phê duyệt/Chưa phê duyệt/Bị từ chối (đã bỏ hẳn Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy Nhập)', async () => {
       const dom = await page.evaluate(() => {
         document.getElementById('opReportFromDateOperationOrder').value = '';
         document.getElementById('opReportToDateOperationOrder').value = '';
@@ -254,53 +241,39 @@ async function main() {
         return document.getElementById('opOrderReportSummaryCards').innerText;
       });
       // 5 đơn: A=RECEIVED, B=RECEIPT_CANCELLED, C=PENDING, D=REJECTED, E=AWAITING_RECEIPT.
-      // Đã Phê Duyệt = A+B+E = 3. Chưa Phê Duyệt = C = 1. Bị Từ Chối = D = 1. Chờ Nhập Hàng = E = 1.
-      // Đã Nhập Hàng = A = 1. Đã Hủy Nhập = B = 1. Tổng = 5.
+      // Đã Phê Duyệt (OP_ORDER_APPROVED_FAMILY) = A+B+E = 3. Chưa Phê Duyệt = C = 1. Bị Từ Chối = D = 1.
+      // Tổng = 5. KHÔNG còn thẻ Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy Nhập.
       assertIncludes(dom, 'Tổng Số Đơn');
       assert(/Tổng Số Đơn\s*\n?\s*5/.test(dom), `Tổng số đơn phải là 5, thực tế:\n${dom}`);
       assert(/Đã Phê Duyệt\s*\n?\s*3/.test(dom), `Đã phê duyệt phải là 3, thực tế:\n${dom}`);
       assert(/Chưa Phê Duyệt\s*\n?\s*1/.test(dom), `Chưa phê duyệt phải là 1, thực tế:\n${dom}`);
       assert(/Bị Từ Chối\s*\n?\s*1/.test(dom), `Bị từ chối phải là 1, thực tế:\n${dom}`);
-      assert(/Chờ Nhập Hàng\s*\n?\s*1/.test(dom), `Chờ nhập hàng phải là 1, thực tế:\n${dom}`);
-      assert(/Đã Nhập Hàng\s*\n?\s*1/.test(dom), `Đã nhập hàng phải là 1, thực tế:\n${dom}`);
-      assert(/Đã Hủy Nhập\s*\n?\s*1/.test(dom), `Đã hủy nhập phải là 1, thực tế:\n${dom}`);
+      assert(!dom.includes('Chờ Nhập Hàng'), `Không được còn thẻ "Chờ Nhập Hàng" nữa, thực tế:\n${dom}`);
+      assert(!dom.includes('Đã Nhập Hàng'), `Không được còn thẻ "Đã Nhập Hàng" nữa, thực tế:\n${dom}`);
+      assert(!dom.includes('Đã Hủy Nhập'), `Không được còn thẻ "Đã Hủy Nhập" nữa, thực tế:\n${dom}`);
     });
 
-    await run.run('Báo Cáo: tổng giá trị đã phê duyệt = A+B+E (3.700.000), đã nhập hàng = A (1.000.000)', async () => {
-      const dom = await page.evaluate(() => document.getElementById('opOrderReportValueTotals').innerText);
-      assertIncludes(dom, '3.700.000', `Tổng giá trị đã phê duyệt phải là 3.700.000 VNĐ (1tr+2tr+700k), thực tế:\n${dom}`);
-      assertIncludes(dom, '1.000.000', `Tổng giá trị đã nhập hàng phải là 1.000.000 VNĐ (chỉ đơn A), thực tế:\n${dom}`);
+    await run.run('Báo Cáo: không còn render khối Tổng Giá Trị/biểu đồ Theo Tháng/bảng Theo Siêu Thị (DOM đã bị xoá khỏi fragment)', async () => {
+      const ids = await page.evaluate(() => ({
+        valueTotals: document.getElementById('opOrderReportValueTotals'),
+        approvedByMonth: document.getElementById('opOrderReportApprovedByMonth'),
+        receivedByMonth: document.getElementById('opOrderReportReceivedByMonth'),
+        byStoreTableBody: document.getElementById('opOrderReportByStoreTableBody')
+      }));
+      assert(ids.valueTotals === null, 'Div #opOrderReportValueTotals phải đã bị xoá khỏi fragment');
+      assert(ids.approvedByMonth === null, 'Div #opOrderReportApprovedByMonth phải đã bị xoá khỏi fragment');
+      assert(ids.receivedByMonth === null, 'Div #opOrderReportReceivedByMonth phải đã bị xoá khỏi fragment');
+      assert(ids.byStoreTableBody === null, 'Bảng #opOrderReportByStoreTableBody phải đã bị xoá khỏi fragment');
     });
 
-    await run.run('Báo Cáo: nhóm "Giá trị đã phê duyệt theo tháng" tách đúng 3 tháng khác nhau (7/2026, 8/2026, tháng hiện tại)', async () => {
-      // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): đơn B KHÔNG patch approvedAt (giữ nguyên mốc "hôm nay" lúc
-      // duyệt ở kịch bản trước) nên nhãn "Tháng X/YYYY" của B luôn là THÁNG CHẠY TEST THẬT, không phải
-      // hằng số "Tháng 9/2026" — trước đây gán cứng "hôm nay = tháng 9/2026" nên test tự đỏ bất kỳ lúc
-      // nào chạy khác tháng 9 (VD chạy vào tháng 10 như bây giờ). Tính nhãn tháng hiện tại NGAY TRONG
-      // page.evaluate() (cùng Date/timezone mà renderOperationOrderReport() dùng để nhóm thật) thay vì
-      // hardcode — logic thật (nhóm theo tháng) không đổi, chỉ sửa cách bài test tự biết "hôm nay" là
-      // tháng nào.
-      const { dom, currentMonthLabel } = await page.evaluate(() => {
-        const now = new Date();
-        return {
-          dom: document.getElementById('opOrderReportApprovedByMonth').innerText,
-          currentMonthLabel: `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`
-        };
-      });
-      assertIncludes(dom, 'Tháng 7/2026', `Phải có nhóm Tháng 7/2026 (đơn A), thực tế:\n${dom}`);
-      assertIncludes(dom, 'Tháng 8/2026', `Phải có nhóm Tháng 8/2026 (đơn E), thực tế:\n${dom}`);
-      assertIncludes(dom, currentMonthLabel, `Phải có nhóm ${currentMonthLabel} (đơn B, duyệt lúc chạy test = hôm nay), thực tế:\n${dom}`);
-    });
-    await run.run('Báo Cáo: nhóm "Giá trị đã nhập hàng theo tháng" chỉ có 1 tháng (7/2026, đơn A)', async () => {
-      const { dom, currentMonthLabel } = await page.evaluate(() => {
-        const now = new Date();
-        return {
-          dom: document.getElementById('opOrderReportReceivedByMonth').innerText,
-          currentMonthLabel: `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`
-        };
-      });
-      assertIncludes(dom, 'Tháng 7/2026', `Phải có nhóm Tháng 7/2026, thực tế:\n${dom}`);
-      assert(!dom.includes('Tháng 8/2026') && !dom.includes(currentMonthLabel), `Không được có tháng khác (chỉ A là RECEIVED), thực tế:\n${dom}`);
+    await run.run('Báo Cáo: khối "Siêu Thị" và "HO" cũng chỉ còn đúng 4 thẻ trạng thái (Tổng Chuỗi toàn bộ 5 đơn đều ở HO)', async () => {
+      const dom = await page.evaluate(() => ({
+        store: document.getElementById('opOrderReportStoreSummaryCards').innerText,
+        ho: document.getElementById('opOrderReportHOSummaryCards').innerText
+      }));
+      assert(/Tổng Số Đơn\s*\n?\s*0/.test(dom.store), `Khối Siêu Thị phải là 0 đơn (toàn bộ 5 đơn test này đều tạo ở HO), thực tế:\n${dom.store}`);
+      assert(/Tổng Số Đơn\s*\n?\s*5/.test(dom.ho), `Khối HO phải là 5 đơn, thực tế:\n${dom.ho}`);
+      assert(/Đã Phê Duyệt\s*\n?\s*3/.test(dom.ho), `Khối HO - Đã phê duyệt phải là 3, thực tế:\n${dom.ho}`);
     });
 
     // ===== 5) Lọc "Siêu Thị (Nơi Nhận)" — thu hẹp đúng cả Danh Sách lẫn Báo Cáo =====
@@ -315,15 +288,15 @@ async function main() {
       // Reset lại filter để không ảnh hưởng kịch bản sau.
       await page.evaluate(() => { document.getElementById('filterLocationOperationOrder').value = ''; onOperationOrderFilterChange(); });
     });
-    await run.run('Lọc Báo Cáo theo "Siêu thị Quận 7" -> chỉ còn B (RECEIPT_CANCELLED) + D (REJECTED), Tổng Số Đơn = 2', async () => {
+    await run.run('Lọc Báo Cáo theo "Siêu thị Quận 7" -> chỉ còn B (RECEIPT_CANCELLED, tính vào Đã Phê Duyệt) + D (REJECTED), Tổng Số Đơn = 2', async () => {
       const dom = await page.evaluate(() => {
         document.getElementById('opReportFilterLocation').value = 'Siêu thị Quận 7';
         onOperationOrderReportFilterChange();
         return document.getElementById('opOrderReportSummaryCards').innerText;
       });
       assert(/Tổng Số Đơn\s*\n?\s*2/.test(dom), `Tổng số đơn (lọc Quận 7) phải là 2, thực tế:\n${dom}`);
+      assert(/Đã Phê Duyệt\s*\n?\s*1/.test(dom), `Đã phê duyệt (lọc Quận 7) phải là 1 (đơn B, RECEIPT_CANCELLED vẫn tính vào family đã duyệt), thực tế:\n${dom}`);
       assert(/Bị Từ Chối\s*\n?\s*1/.test(dom), `Bị từ chối (lọc Quận 7) phải là 1 (đơn D), thực tế:\n${dom}`);
-      assert(/Đã Hủy Nhập\s*\n?\s*1/.test(dom), `Đã hủy nhập (lọc Quận 7) phải là 1 (đơn B), thực tế:\n${dom}`);
       // Reset lại filter.
       await page.evaluate(() => { document.getElementById('opReportFilterLocation').value = ''; onOperationOrderReportFilterChange(); });
     });

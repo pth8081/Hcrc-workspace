@@ -128,12 +128,9 @@
             <select id="filterStatusOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
-              <option value="AWAITING_RECEIPT">Chờ Nhập Hàng</option>
-              <option value="RECEIVED">Đã Nhập Hàng</option>
-              <option value="RECEIPT_CANCELLED">Đã Hủy Nhập</option>
+              <option value="APPROVED_FAMILY">Đã Phê Duyệt</option>
               <option value="REJECTED">Bị Từ Chối</option>
               <option value="DRAFT">Cần Bổ Sung</option>
-              <option value="APPROVED">Đã Phê Duyệt (hồ sơ cũ)</option>
             </select>
           </div>
           <!-- Lọc "Siêu Thị" (Nơi Nhận) — đợt "Báo Cáo + Nhập Hàng": receivingLocationName là free-text
@@ -184,11 +181,12 @@
 
       <!-- "Tổng Chuỗi" (đợt "Tách Đơn Hàng Siêu Thị/HO") — TOÀN BỘ đơn hàng bất kể orderLocationType,
            khớp đúng số liệu màn hình cũ trước đợt tách (KHÔNG đổi ý nghĩa các thẻ này). 2 khối MỚI ngay
-           dưới (Siêu Thị/HO) là 2 lát cắt CON của đúng cùng 1 tập dữ liệu đã lọc theo ngày/nơi nhận. -->
+           dưới (Siêu Thị/HO) là 2 lát cắt CON của đúng cùng 1 tập dữ liệu đã lọc theo ngày/nơi nhận.
+           RÚT GỌN (11/2026, "bỏ hết đi, chỉ để lại trạng thái...") — chỉ còn đúng 3 khối thẻ trạng thái
+           (Tổng Chuỗi/Siêu Thị/HO), đã bỏ số tiền/biểu đồ theo tháng/bảng theo siêu thị. -->
       <div class="space-y-2">
         <h3 class="font-bold text-gray-800 text-sm">🔗 Tổng Chuỗi (Toàn Bộ Đơn Hàng)</h3>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="opOrderReportSummaryCards"></div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="opOrderReportValueTotals"></div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -199,36 +197,6 @@
         <div class="space-y-2">
           <h3 class="font-bold text-gray-800 text-sm">🏢 Đặt Hàng Tại HO</h3>
           <div class="grid grid-cols-2 gap-2" id="opOrderReportHOSummaryCards"></div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="bg-white p-3 rounded border space-y-2">
-          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Phê Duyệt Theo Tháng (Tổng Chuỗi)</h4>
-          <div id="opOrderReportApprovedByMonth" class="space-y-2"></div>
-        </div>
-        <div class="bg-white p-3 rounded border space-y-2">
-          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Nhập Hàng Theo Tháng (Tổng Chuỗi)</h4>
-          <div id="opOrderReportReceivedByMonth" class="space-y-2"></div>
-        </div>
-      </div>
-
-      <!-- Số đơn theo từng siêu thị (receivingLocationName) + dòng "Tổng Chuỗi" — đợt "Tách Đơn Hàng
-           Siêu Thị/HO", mục 2 yêu cầu người dùng. -->
-      <div class="space-y-2">
-        <h3 class="font-bold text-gray-800 text-sm">📍 Số Đơn Theo Từng Siêu Thị (Nơi Nhận)</h3>
-        <div class="overflow-x-auto">
-          <table class="w-full border-collapse border text-xs bg-white">
-            <thead>
-              <tr class="bg-gray-100 text-left text-gray-700">
-                <th class="border p-2">Siêu Thị (Nơi Nhận)</th>
-                <th class="border p-2 text-center">Tổng Số Đơn</th>
-                <th class="border p-2 text-center">Đã Nhận Hàng</th>
-                <th class="border p-2 text-right">Tổng Giá Trị</th>
-              </tr>
-            </thead>
-            <tbody id="opOrderReportByStoreTableBody"></tbody>
-          </table>
         </div>
       </div>
     </div>

@@ -2948,11 +2948,13 @@ function renderOperationList(kind) {
   ] : [
     { key: '', label: 'Tổng Số', count: scoped.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scoped.filter(o => o.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
-    // AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED — 3 trạng thái MỚI (đợt "Báo Cáo + Nhập Hàng"), thêm
-    // vào ngay sau APPROVED (giữ lại nhánh APPROVED làm lưới an toàn cho hồ sơ chưa kịp di trú, xem chú
-    // thích operationStatusBadge() — dashboard card riêng cho nó không cần thiết vì thực tế luôn ~0).
-    { key: 'AWAITING_RECEIPT', label: 'Chờ Nhập Hàng', count: scoped.filter(o => o.status === 'AWAITING_RECEIPT').length, colorClass: 'border-l-indigo-500' },
-    { key: 'RECEIVED', label: 'Đã Nhập Hàng', count: scoped.filter(o => o.status === 'RECEIVED').length, colorClass: 'border-l-emerald-500' },
+    // "Đã Phê Duyệt" (11/2026, thay cho 2 thẻ Chờ Nhập Hàng/Đã Nhập Hàng — luồng Nhập/Hủy Hàng đã TẮT HẲN
+    // từ đợt "Đặt Hàng NCC: dừng hẳn ở APPROVED" nên 2 thẻ đó LUÔN ~0, không còn ý nghĩa gì, người dùng
+    // yêu cầu bỏ đi + thêm thẻ này). Đếm theo OP_ORDER_APPROVED_FAMILY (định nghĩa SẴN CÓ ở
+    // computeOperationOrderReportStats() bên dưới, dùng chung cho cả 2 nơi) — KHÔNG chỉ đếm literal
+    // status==='APPROVED' vì hồ sơ CŨ (tạo trước khi tắt luồng Nhập Hàng) có thể vẫn đang ở
+    // AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED, cả 3 đều ĐÃ qua duyệt, không được bỏ sót khỏi đếm này.
+    { key: 'APPROVED_FAMILY', label: 'Đã Phê Duyệt', count: scoped.filter(o => OP_ORDER_APPROVED_FAMILY.has(o.status)).length, colorClass: 'border-l-green-500' },
     { key: 'REJECTED', label: 'Bị Từ Chối', count: scoped.filter(o => o.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
   ];
   const dashEl = document.getElementById(meta.dashboardCards);
@@ -2961,6 +2963,11 @@ function renderOperationList(kind) {
   const list = scoped.filter(o => {
     if (statusFilter) {
       if (isStoreOrRepair) { if (stageOf(o) !== statusFilter) return false; }
+      // APPROVED_FAMILY (11/2026) — giá trị lọc TỔNG HỢP khớp thẻ dashboard "Đã Phê Duyệt" ở trên (cả
+      // literal 'APPROVED' lẫn 3 trạng thái cũ AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED của hồ sơ
+      // trước khi tắt luồng Nhập Hàng) — KHÔNG so khớp literal như các giá trị khác, phải đối chiếu cả
+      // tập OP_ORDER_APPROVED_FAMILY để đúng với số đếm đã hiện trên thẻ.
+      else if (statusFilter === 'APPROVED_FAMILY') { if (!OP_ORDER_APPROVED_FAMILY.has(o.status)) return false; }
       else if (o.status !== statusFilter) return false;
     }
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
@@ -5606,67 +5613,30 @@ function renderOperationOrderReceiptApprovalTab() {
 function onOperationOrderReceiptFilterChange() { renderOperationOrderReceiptApprovalTab(); }
 
 // ==========================================
-// VẬN HÀNH > ĐƠN HÀNG > "📊 Báo Cáo" (đợt "Báo Cáo + Nhập Hàng") — sub-tab MỚI bên trong chính màn Đơn
-// Hàng (setOperationOrderSubTab() ở đầu file), KHÔNG gộp vào module "Báo Cáo" top-level riêng (đúng yêu
-// cầu người dùng). Kiểu dáng MIRROR đúng khối "Báo Cáo Quản Trị" (module-baocaoquantri.js
-// computeApprovalStats()/buildStatBarHTML() — bộ lọc khoảng ngày + thẻ tổng hợp + thanh tỷ lệ ngang thay
-// biểu đồ thư viện ngoài) — KHÔNG gọi thẳng buildStatBarHTML() ở file đó vì cụm module nạp lười
-// "vanhanh" (MODULE_LOAD_GROUPS, core.js) KHÔNG khai deps tới cụm "baocaoquantri-preview" (nơi định
-// nghĩa hàm đó) — mở tab Vận Hành trước khi ai từng mở Báo Cáo Quản Trị sẽ ReferenceError. Viết lại 1
-// bản THANH TỶ LỆ NGANG cục bộ (buildOpOrderStatBarHTML() ngay dưới đây) thay vì đổi deps của cả cụm chỉ
-// vì 1 hàm vẽ thanh — cùng tinh thần chủ động trùng lặp nhỏ đã áp dụng cho canApproveStep()/
-// normalizeApproversList() (core.js) so với bản server lib/workflowEngine.js.
+// VẬN HÀNH > ĐƠN HÀNG > "📊 Báo Cáo" — sub-tab bên trong chính màn Đơn Hàng (setOperationOrderSubTab()
+// ở đầu file), KHÔNG gộp vào module "Báo Cáo" top-level riêng (đúng yêu cầu người dùng). RÚT GỌN
+// (11/2026, người dùng yêu cầu 2 lượt liên tiếp "bỏ hết đi, chỉ để lại trạng thái tổng/chờ phê duyệt/đã
+// phê duyệt/bị từ chối thôi") — chỉ còn 3 khối thẻ trạng thái (Tổng Chuỗi/Siêu Thị/HO), KHÔNG còn số
+// tiền/biểu đồ theo tháng/bảng theo siêu thị như bản trước.
 // ==========================================
-function buildOpOrderStatBarHTML(label, value, max, colorClass) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return `
-    <div>
-      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
-      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" data-style="width:${pct}%"></div></div>
-    </div>
-  `;
-}
-// Nhóm theo "Tháng YYYY" từ 1 field ISO (approvedAt/receivedAt) — trả mảng đã sắp xếp theo thời gian
-// tăng dần [{ key: '2026-08', label: 'Tháng 8/2026', count, total }]. Bỏ qua bản ghi thiếu field mốc
-// thời gian tương ứng (hồ sơ chưa tới trạng thái đó thì vốn không thuộc nhóm đang tính).
-function groupOperationOrdersByMonth(items, dateField) {
-  const buckets = {};
-  items.forEach(o => {
-    const raw = o[dateField];
-    if (!raw) return;
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return;
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (!buckets[key]) buckets[key] = { key, label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`, count: 0, total: 0 };
-    buckets[key].count++;
-    buckets[key].total += o.amount || 0;
-  });
-  return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
-}
 function onOperationOrderReportFilterChange() { renderOperationOrderReport(); }
 
-// Tính bộ số liệu tóm tắt (đếm theo trạng thái + tổng giá trị) cho 1 tập đơn hàng ĐÃ LỌC sẵn — tách
-// thành hàm riêng (đợt "Tách Đơn Hàng Siêu Thị/HO", mục 2 yêu cầu người dùng: cần TÁI SỬ DỤNG đúng 1
-// logic này cho 3 lát cắt khác nhau — Tổng Chuỗi/Siêu Thị/HO — thay vì lặp lại 3 lần).
+// Tính bộ số liệu tóm tắt (đếm theo trạng thái) cho 1 tập đơn hàng ĐÃ LỌC sẵn — tách thành hàm riêng
+// (đợt "Tách Đơn Hàng Siêu Thị/HO", mục 2 yêu cầu người dùng: cần TÁI SỬ DỤNG đúng 1 logic này cho 3 lát
+// cắt khác nhau — Tổng Chuỗi/Siêu Thị/HO — thay vì lặp lại 3 lần).
 // "Đã phê duyệt" = đã qua xong bước duyệt (bất kể giai đoạn nhập hàng sau đó ra sao) — AWAITING_RECEIPT/
-// RECEIVED/RECEIPT_CANCELLED đều tính, vì cả 3 đều ĐÃ được duyệt; APPROVED giữ lại cho hồ sơ hiếm chưa
-// kịp di trú (xem operationStatusBadge()). "Chưa phê duyệt" = còn trong vòng xử lý (PENDING/DRAFT) —
-// KHÔNG gộp REJECTED vào đây (bị từ chối là 1 kết quả đã CHỐT, không phải "chưa xong"), đếm riêng ở thẻ
-// Bị Từ Chối để không lẫn 2 khái niệm.
+// RECEIVED/RECEIPT_CANCELLED đều tính, vì cả 3 đều ĐÃ được duyệt (hồ sơ CŨ từ trước khi tắt luồng Nhập
+// Hàng — xem "Đặt Hàng NCC: dừng hẳn ở APPROVED"); APPROVED là trạng thái DUY NHẤT mọi đơn MỚI duyệt
+// xong dừng lại từ nay. "Chưa phê duyệt" = còn trong vòng xử lý (PENDING/DRAFT) — KHÔNG gộp REJECTED
+// vào đây (bị từ chối là 1 kết quả đã CHỐT, không phải "chưa xong"), đếm riêng ở thẻ Bị Từ Chối để
+// không lẫn 2 khái niệm. Dùng chung OP_ORDER_APPROVED_FAMILY này cho CẢ thẻ dashboard "Đã Phê Duyệt" ở
+// renderOperationList() lẫn báo cáo ở đây — 1 nguồn sự thật duy nhất, không định nghĩa lại 2 nơi.
 const OP_ORDER_APPROVED_FAMILY = new Set(['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED']);
 function computeOperationOrderReportStats(list) {
   const approvedOrders = list.filter(o => OP_ORDER_APPROVED_FAMILY.has(o.status));
   const notYetApprovedOrders = list.filter(o => o.status === 'PENDING' || o.status === 'DRAFT');
   const rejectedOrders = list.filter(o => o.status === 'REJECTED');
-  const awaitingReceiptOrders = list.filter(o => o.status === 'AWAITING_RECEIPT');
-  const receivedOrders = list.filter(o => o.status === 'RECEIVED');
-  const cancelledReceiptOrders = list.filter(o => o.status === 'RECEIPT_CANCELLED');
-  return {
-    total: list.length, approvedOrders, notYetApprovedOrders, rejectedOrders,
-    awaitingReceiptOrders, receivedOrders, cancelledReceiptOrders,
-    approvedValueTotal: approvedOrders.reduce((sum, o) => sum + (o.amount || 0), 0),
-    receivedValueTotal: receivedOrders.reduce((sum, o) => sum + (o.amount || 0), 0)
-  };
+  return { total: list.length, approvedOrders, notYetApprovedOrders, rejectedOrders };
 }
 function buildOpOrderSummaryCardsHTML(stats, extraCards) {
   const cards = [
@@ -5715,96 +5685,21 @@ function renderOperationOrderReport() {
   // "Tổng Chuỗi" — TOÀN BỘ đơn hàng đã lọc (Siêu Thị + HO gộp lại), giữ đúng ý nghĩa/id các thẻ cũ trước
   // đợt tách (không đổi hành vi màn hình trước đây, chỉ thêm 2 khối con Siêu Thị/HO bên dưới).
   const chainStats = computeOperationOrderReportStats(filtered);
-  summaryEl.innerHTML = buildOpOrderSummaryCardsHTML(chainStats, [
-    { label: 'Chờ Nhập Hàng', value: chainStats.awaitingReceiptOrders.length, colorClass: 'text-indigo-700' },
-    { label: 'Đã Nhập Hàng', value: chainStats.receivedOrders.length, colorClass: 'text-emerald-700' },
-    { label: 'Đã Hủy Nhập', value: chainStats.cancelledReceiptOrders.length, colorClass: 'text-slate-600' }
-  ]);
-  const valueTotalsEl = document.getElementById('opOrderReportValueTotals');
-  if (valueTotalsEl) {
-    valueTotalsEl.innerHTML = `
-      <div class="bg-white p-3 rounded border text-xs">
-        <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Phê Duyệt</div>
-        <div class="text-xl font-bold text-green-700">${chainStats.approvedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
-      </div>
-      <div class="bg-white p-3 rounded border text-xs">
-        <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Nhập Hàng</div>
-        <div class="text-xl font-bold text-emerald-700">${chainStats.receivedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
-      </div>
-    `;
-  }
+  // ĐÃ BỎ TOÀN BỘ (11/2026, theo yêu cầu người dùng 2 lượt liên tiếp — "bỏ hết đi, chỉ để lại trạng thái
+  // tổng/chờ phê duyệt/đã phê duyệt/bị từ chối thôi"): 3 thẻ Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy Nhập, 2 ô
+  // Tổng Giá Trị Đơn Đã Phê Duyệt/Đã Nhập Hàng, 2 biểu đồ "Theo Tháng", bảng "📍 Số Đơn Theo Từng Siêu
+  // Thị" — TẤT CẢ đều xoay quanh luồng Nhập/Hủy Hàng đã TẮT HẲN từ đợt "Đặt Hàng NCC: dừng hẳn ở
+  // APPROVED" (không còn thao tác nào tạo RECEIVED/AWAITING_RECEIPT/RECEIPT_CANCELLED mới nữa) hoặc hiện
+  // số tiền không còn người dùng cần xem ở màn báo cáo rút gọn này. Chỉ còn ĐÚNG 3 khối thẻ trạng thái
+  // (Tổng Chuỗi/Siêu Thị/HO), mỗi khối 4 thẻ: Tổng Số Đơn/Đã Phê Duyệt/Chưa Phê Duyệt/Bị Từ Chối.
+  summaryEl.innerHTML = buildOpOrderSummaryCardsHTML(chainStats, []);
 
-  // 2 khối MỚI (đợt "Tách Đơn Hàng Siêu Thị/HO", mục 2): báo cáo riêng cho từng loại nơi đặt hàng, cùng
-  // bộ thẻ rút gọn (bỏ 3 thẻ Chờ Nhập/Đã Nhập/Đã Hủy Nhập cho gọn, thêm 1 thẻ Tổng Giá Trị Đã Duyệt).
   const storeStats = computeOperationOrderReportStats(storeOrders);
   const hoStats = computeOperationOrderReportStats(hoOrders);
   const storeSummaryEl = document.getElementById('opOrderReportStoreSummaryCards');
-  if (storeSummaryEl) storeSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(storeStats, [
-    { label: 'Tổng Giá Trị Đã Duyệt', value: storeStats.approvedValueTotal, colorClass: 'text-emerald-700' }
-  ]);
+  if (storeSummaryEl) storeSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(storeStats, []);
   const hoSummaryEl = document.getElementById('opOrderReportHOSummaryCards');
-  if (hoSummaryEl) hoSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(hoStats, [
-    { label: 'Tổng Giá Trị Đã Duyệt', value: hoStats.approvedValueTotal, colorClass: 'text-emerald-700' }
-  ]);
-
-  // "Theo thời gian" — nhóm theo tháng, approvedAt cho nhóm Đã Duyệt / receivedAt cho nhóm Đã Nhập Hàng
-  // (2 mốc thời gian riêng, KHÔNG dùng chung createdAt — xem chú thích ở lib/workflowEngine.js/
-  // lib/recordActions.js nơi gán 2 field này). Hồ sơ cũ di trú qua migrateApprovedOperationOrdersToAwaitingReceipt()
-  // (seedDefaults.js) vẫn có approvedAt (lấy lại từ lịch sử hoặc thời điểm di trú) nên vẫn lên đúng biểu đồ.
-  // Luôn TỔNG CHUỖI (chainStats, không tách Siêu Thị/HO riêng) — giữ đúng 2 biểu đồ cũ, tránh nhân đôi UI.
-  const approvedByMonth = groupOperationOrdersByMonth(chainStats.approvedOrders, 'approvedAt');
-  const receivedByMonth = groupOperationOrdersByMonth(chainStats.receivedOrders, 'receivedAt');
-  const approvedMaxTotal = Math.max(1, ...approvedByMonth.map(b => b.total));
-  const receivedMaxTotal = Math.max(1, ...receivedByMonth.map(b => b.total));
-
-  const approvedByMonthEl = document.getElementById('opOrderReportApprovedByMonth');
-  if (approvedByMonthEl) {
-    approvedByMonthEl.innerHTML = approvedByMonth.length
-      ? approvedByMonth.map(b => buildOpOrderStatBarHTML(`${b.label} (${b.count} đơn)`, b.total, approvedMaxTotal, 'bg-green-500')).join('')
-      : `<div class="text-gray-400 italic text-xs">Không có đơn hàng đã phê duyệt trong khoảng lọc hiện tại.</div>`;
-  }
-  const receivedByMonthEl = document.getElementById('opOrderReportReceivedByMonth');
-  if (receivedByMonthEl) {
-    receivedByMonthEl.innerHTML = receivedByMonth.length
-      ? receivedByMonth.map(b => buildOpOrderStatBarHTML(`${b.label} (${b.count} đơn)`, b.total, receivedMaxTotal, 'bg-emerald-500')).join('')
-      : `<div class="text-gray-400 italic text-xs">Không có đơn hàng đã nhập hàng trong khoảng lọc hiện tại.</div>`;
-  }
-
-  // "📍 Số Đơn Theo Từng Siêu Thị (Nơi Nhận)" + dòng "TỔNG CHUỖI" (đợt "Tách Đơn Hàng Siêu Thị/HO", mục
-  // 2): nhóm TOÀN BỘ đơn đã lọc (cả Siêu Thị lẫn HO — 1 đơn HO vẫn có thể mang receivingLocationName
-  // riêng, vd kho tổng) theo receivingLocationName, đếm tổng số đơn + số đơn ĐÃ NHẬN HÀNG (RECEIVED) +
-  // tổng giá trị mỗi nơi nhận — dòng cuối cộng dồn "Tổng Chuỗi" (toàn bộ, không phân biệt nơi nhận).
-  const byStoreTbody = document.getElementById('opOrderReportByStoreTableBody');
-  if (byStoreTbody) {
-    const byStore = {};
-    filtered.forEach(o => {
-      const name = (o.receivingLocationName || '').trim() || '(Chưa xác định nơi nhận)';
-      if (!byStore[name]) byStore[name] = { name, total: 0, received: 0, value: 0 };
-      byStore[name].total++;
-      if (o.status === 'RECEIVED') byStore[name].received++;
-      byStore[name].value += o.amount || 0;
-    });
-    const rows = Object.values(byStore).sort((a, b) => b.total - a.total);
-    const rowsHTML = rows.map(r => `
-      <tr class="hover:bg-gray-50 border-b">
-        <td class="border p-2">${escapeHtml(r.name)}</td>
-        <td class="border p-2 text-center font-bold">${r.total.toLocaleString('vi-VN')}</td>
-        <td class="border p-2 text-center font-bold text-emerald-700">${r.received.toLocaleString('vi-VN')}</td>
-        <td class="border p-2 text-right">${r.value.toLocaleString('vi-VN')} VNĐ</td>
-      </tr>
-    `).join('');
-    const totalRow = `
-      <tr class="bg-cyan-50 font-bold border-t-2 border-cyan-300">
-        <td class="border p-2">🔗 TỔNG CHUỖI</td>
-        <td class="border p-2 text-center">${filtered.length.toLocaleString('vi-VN')}</td>
-        <td class="border p-2 text-center text-emerald-700">${chainStats.receivedOrders.length.toLocaleString('vi-VN')}</td>
-        <td class="border p-2 text-right">${rows.reduce((sum, r) => sum + r.value, 0).toLocaleString('vi-VN')} VNĐ</td>
-      </tr>
-    `;
-    byStoreTbody.innerHTML = (rows.length
-      ? rowsHTML
-      : `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Không có đơn hàng nào trong khoảng lọc hiện tại.</td></tr>`) + totalRow;
-  }
+  if (hoSummaryEl) hoSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(hoStats, []);
 }
 
 // ==========================================

@@ -2665,8 +2665,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     (hàm/route xử lý vẫn còn nguyên, có thể bật lại khi người dùng yêu cầu) —
     KHÔNG áp dụng cho dữ liệu/thao tác MỚI tạo từ 10/2026 trở đi, CHỈ còn
     đúng với dữ liệu lịch sử (đơn hàng đã ở Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy
-    Nhập từ trước đợt tắt) — các badge/báo cáo liên quan vẫn hiển thị đúng
-    cho dữ liệu cũ này, chỉ không còn đường tạo mới.
+    Nhập từ trước đợt tắt). **Cập nhật 11/2026**: do luồng này đã tắt hẳn,
+    không còn đường tạo mới, các thẻ dashboard/bộ lọc/biểu đồ "Chờ Nhập
+    Hàng"/"Đã Nhập Hàng"/"Đã Hủy Nhập" (cả ở Danh Sách lẫn Báo Cáo của 2 tab
+    Đặt Hàng Tại Siêu Thị/HO) đã **bỏ hẳn** khỏi UI (luôn ~0, gây rối mắt).
+    Dữ liệu lịch sử dạng này **không mất** — vẫn được đếm đầy đủ, chỉ gộp
+    chung vào thẻ **"✅ Đã Phê Duyệt"** (đã qua đủ các bước duyệt nội bộ, bất
+    kể đang kẹt ở bước nào của luồng nhập hàng cũ) thay vì có thẻ riêng.
+    Báo Cáo cũng bỏ luôn 2 ô tổng giá trị, 2 biểu đồ theo tháng, và bảng
+    "Số Đơn Theo Từng Siêu Thị" — chỉ còn đúng 4 thẻ trạng thái (Tổng Số
+    Đơn/Đã Phê Duyệt/Chưa Phê Duyệt/Bị Từ Chối) cho cả 3 khối Tổng Chuỗi/
+    Siêu Thị/HO.
   - **Duyệt Nhập Hàng/Hủy Đơn — sub-tab riêng + quyền riêng, tách khỏi luồng
     duyệt nội bộ**: 2 nút "✅ Xác nhận nhập hàng"/"❌ Hủy đơn" (áp dụng khi đơn
     đã ở trạng thái **Chờ Nhập Hàng** — tức đã qua đủ các bước duyệt nội bộ
