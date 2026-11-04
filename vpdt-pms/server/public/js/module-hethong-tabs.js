@@ -206,7 +206,7 @@ function setAdminSubTab(subTab) {
   if (subTab === 'PARTNERAPI') setPartnerApiSubTab(activePartnerApiSubTab);
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
-  if (subTab === 'SHELFDIGEST') { loadShelfThresholdDigestScheduleToForm(); loadShelfReconDigestScheduleToForm(); }
+  if (subTab === 'SHELFDIGEST') { loadShelfThresholdDigestScheduleToForm(); loadShelfReconDigestScheduleToForm(); loadShelfReconRecipientsOverview(); }
 }
 
 // "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 tab cấp 1 có tab con riêng —
@@ -306,6 +306,98 @@ async function saveShelfReconDigestSchedule(e) {
   if (!saved) { DB.shelfReconDigestSchedule = prevConfig; return; }
   logSystemAction('CONFIG', 'UPDATE_SHELF_RECON_DIGEST_SCHEDULE', 'Cập nhật lịch gửi báo cáo Đối Chiếu.', 'SUCCESS', 'SHELF_RECON_DIGEST_SCHEDULE');
   alert('✅ Đã lưu Lịch Gửi thành công!');
+}
+
+// ---------- "👥 Người Nhận Tự Thêm" — admin xem/gỡ TOÀN HỆ THỐNG (11/2026) ----------
+// Gộp CẢ 2 nguồn "tự thêm thêm" người nhận email Kiểm Soát Hàng Hóa (Đối Chiếu + Ngưỡng Tồn) — xem chú
+// thích đầy đủ tại GET /recon-recipients-overview (routes/shelfStock.js). shelfReconOverviewRows giữ
+// NGUYÊN mảng gốc server trả về (chưa lọc) — renderShelfReconRecipientsOverview() tự lọc lại theo bộ
+// lọc hiện tại mỗi lần gọi, KHÔNG gọi lại API (đổi bộ lọc không cần round-trip mạng).
+let shelfReconOverviewRows = [];
+async function loadShelfReconRecipientsOverview() {
+  const tbody = document.getElementById('reconOverviewTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Đang tải...</td></tr>';
+  try {
+    const res = await fetch('/api/shelf-stock/recon-recipients-overview');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    shelfReconOverviewRows = Array.isArray(body.rows) ? body.rows : [];
+    const deptSelect = document.getElementById('reconOverviewDeptFilter');
+    if (deptSelect) {
+      const current = deptSelect.value;
+      const depts = [...new Set(shelfReconOverviewRows.map(r => r.dept))].sort((a, b) => a.localeCompare(b, 'vi'));
+      deptSelect.innerHTML = '<option value="">Tất cả siêu thị</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      deptSelect.value = depts.includes(current) ? current : '';
+    }
+    renderShelfReconRecipientsOverview();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-600 font-bold">⛔ Không tải được: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+const RECON_OVERVIEW_STATUS_BADGE = {
+  OK: '<span class="badge-success">✓ Hợp Lệ</span>',
+  INACTIVE: '<span class="badge-danger">⚠️ Tài Khoản Đã Khoá/Nghỉ Việc</span>',
+  TRANSFERRED: '<span class="badge-warning">🔁 Đã Chuyển Siêu Thị Khác</span>',
+  MISSING: '<span class="badge-neutral">❌ Tài Khoản Không Tồn Tại</span>'
+};
+function renderShelfReconRecipientsOverview() {
+  const tbody = document.getElementById('reconOverviewTableBody');
+  const statsEl = document.getElementById('reconOverviewStats');
+  if (!tbody || !statsEl) return;
+
+  const deptFilter = document.getElementById('reconOverviewDeptFilter')?.value || '';
+  const sourceFilter = document.getElementById('reconOverviewSourceFilter')?.value || '';
+  const search = (document.getElementById('reconOverviewSearch')?.value || '').trim().toLowerCase();
+  const onlyAttention = !!document.getElementById('reconOverviewOnlyAttention')?.checked;
+
+  const needsAttentionCount = shelfReconOverviewRows.filter(r => r.status !== 'OK').length;
+  const deptsConfigured = new Set(shelfReconOverviewRows.map(r => r.dept)).size;
+  const deptsTotal = (DB.depts || []).length;
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="stat-card-icon">👥</div><div class="stat-card-num">${shelfReconOverviewRows.length}</div><div class="stat-card-label">Tổng người đã tự thêm</div></div>
+    <div class="stat-card"><div class="stat-card-icon">🏬</div><div class="stat-card-num">${deptsConfigured}/${deptsTotal}</div><div class="stat-card-label">Siêu thị có cấu hình</div></div>
+    <div class="stat-card"><div class="stat-card-icon warning">⚠️</div><div class="stat-card-num warning">${needsAttentionCount}</div><div class="stat-card-label">Cần chú ý (khoá/chuyển/mất tài khoản)</div></div>
+  `;
+
+  const filtered = shelfReconOverviewRows.filter(r => {
+    if (deptFilter && r.dept !== deptFilter) return false;
+    if (sourceFilter && r.source !== sourceFilter) return false;
+    if (onlyAttention && r.status === 'OK') return false;
+    if (search && !(`${r.name} ${r.username}`.toLowerCase().includes(search))) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Không có ai khớp bộ lọc hiện tại.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(r => `
+    <tr class="border-b ${r.status !== 'OK' ? 'bg-red-50' : ''}">
+      <td class="p-2 font-semibold">${escapeHtml(r.dept)}</td>
+      <td class="p-2">${escapeHtml(r.name)} <span class="text-gray-400">(${escapeHtml(r.username)})</span></td>
+      <td class="p-2"><span class="badge-info">${escapeHtml(r.sourceLabel)}</span></td>
+      <td class="p-2">${RECON_OVERVIEW_STATUS_BADGE[r.status] || escapeHtml(r.status)}${r.currentDept && r.status === 'TRANSFERRED' ? ` <span class="text-gray-500">(nay: ${escapeHtml(r.currentDept)})</span>` : ''}</td>
+      <td class="p-2 text-right"><button type="button" class="btn-destructive-outline" data-op="removeShelfReconOverviewRecipient" data-arg0="${cspArgLiteral(r.source)}" data-arg1="${cspArgLiteral(r.dept)}" data-arg2="${cspArgLiteral(r.username)}" data-arg3="${r.thresholdId != null ? r.thresholdId : "''"}">🗑️ Gỡ</button></td>
+    </tr>
+  `).join('');
+}
+
+async function removeShelfReconOverviewRecipient(source, dept, username, thresholdId) {
+  if (!confirm(`Gỡ "${username}" khỏi danh sách nhận email này?`)) return;
+  try {
+    const res = await fetch('/api/shelf-stock/recon-recipients-overview', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, dept, username, thresholdId: thresholdId || null })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    loadShelfReconRecipientsOverview();
+  } catch (err) {
+    alert(`⛔ Lỗi gỡ người nhận: ${err.message}`);
+  }
 }
 
 // ---------- Cấu Hình API — đồng bộ Đơn Hàng (Vận Hành) ra dsmart16 (jobs/operationOrderApiSync.js) ----------

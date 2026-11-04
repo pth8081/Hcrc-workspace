@@ -29,6 +29,7 @@ const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
 const { parseVNDateTime } = require('../lib/recordActions');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -289,6 +290,104 @@ router.put('/recon-recipients', async (req, res) => {
     res.json({ extraRecipientUsernames: updated[req.freshUser.dept] || [] });
   } catch (err) {
     sendCatchError(res, err, 'PUT /api/shelf-stock/recon-recipients');
+  }
+});
+
+// ===================== ADMIN: màn "👥 Người Nhận Tự Thêm" — xem + gỡ TOÀN HỆ THỐNG (11/2026, người dùng
+// phát hiện khi xem demo Đối Chiếu: "mỗi siêu thị tự thêm này thì sau này admin control của gì, muốn gỡ
+// họ ra của gì nhỉ?") =====================
+// GET /recon-recipients-overview — gộp CẢ 2 nguồn "tự thêm thêm" (Tầng 4 người nhận email Kiểm Soát
+// Hàng Hóa): shelfReconExtraRecipients (Đối Chiếu, map {dept:[username]}) + shelfStockThresholds[].
+// extraRecipientUsernames (Ngưỡng Tồn, mảng phẳng TỪNG dòng ngưỡng) — CHỈ admin xem được (khác 2 route
+// recon-recipients ở trên vốn dept-scoped cho Cửa hàng trưởng tự xem/sửa ĐÚNG siêu thị mình). Mỗi dòng
+// trả kèm `status` tính SỐNG (live, không lưu trong DB) từ trạng thái users HIỆN TẠI — KHÔNG dùng
+// cascade tự động cho 2 trường hợp "khoá" (chưa chắc vĩnh viễn, có thể mở lại) và "chuyển siêu thị"
+// (nghiệp vụ bình thường) vì 2 trường hợp đó KHÁC "đổi tên/xoá" (đã có cascade tự động riêng, xem
+// cascadeUsernameChangesToShelfReconExtraRecipients() ở lib/catalogRename.js) — ở đây chỉ PHÁT HIỆN +
+// để admin TỰ QUYẾT ĐỊNH có gỡ hay không.
+router.get('/recon-recipients-overview', async (req, res) => {
+  try {
+    if (!req.freshUser.perms?.admin) {
+      return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới xem được màn này' });
+    }
+    const [reconMap, thresholds, allUsers] = await Promise.all([
+      getAppDataValue('shelfReconExtraRecipients'),
+      getAllForCollection('shelfStockThresholds'),
+      getAppDataValue('users')
+    ]);
+    const usersByUsername = new Map((allUsers || []).map(u => [u.username, u]));
+    const computeStatus = (username, dept) => {
+      const u = usersByUsername.get(username);
+      if (!u) return { status: 'MISSING', currentDept: null };
+      if (u.active === false) return { status: 'INACTIVE', currentDept: u.dept || null };
+      if (u.dept !== dept) return { status: 'TRANSFERRED', currentDept: u.dept || null };
+      return { status: 'OK', currentDept: u.dept || null };
+    };
+    const rows = [];
+    for (const [dept, usernames] of Object.entries(reconMap || {})) {
+      for (const username of (Array.isArray(usernames) ? usernames : [])) {
+        const u = usersByUsername.get(username);
+        const { status, currentDept } = computeStatus(username, dept);
+        rows.push({ source: 'RECON', sourceLabel: '📊 Đối Chiếu', dept, username, name: u?.name || username, status, currentDept, thresholdId: null });
+      }
+    }
+    for (const item of (thresholds || [])) {
+      const usernames = Array.isArray(item.extraRecipientUsernames) ? item.extraRecipientUsernames : [];
+      if (!usernames.length) continue;
+      const label = `🔔 Ngưỡng Tồn — ${item.maHang || item.maVach || item.category || `#${item.id}`}`;
+      for (const username of usernames) {
+        const u = usersByUsername.get(username);
+        const { status, currentDept } = computeStatus(username, item.dept);
+        rows.push({ source: 'THRESHOLD', sourceLabel: label, dept: item.dept, username, name: u?.name || username, status, currentDept, thresholdId: item.id });
+      }
+    }
+    res.json({ rows });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/shelf-stock/recon-recipients-overview');
+  }
+});
+// DELETE /recon-recipients-overview — gỡ ĐÚNG 1 người khỏi ĐÚNG 1 nguồn, admin-only. CỐ Ý KHÔNG tái
+// dùng PUT /recon-recipients (dept-scoped) hay PATCH /thresholds/:id (applyShelfStockThresholdEdit) ở
+// trên cho hành động này — cả 2 route đó re-validate TOÀN BỘ danh sách còn lại (chặn nếu CÒN username
+// khác đã khoá/sai siêu thị), nên nếu 1 dòng có SẴN từ 2 người lệch tình trạng, gỡ người A có thể bị
+// chặn NHẦM chỉ vì người B còn lại trong mảng đang khoá/sai siêu thị — đúng ngược lại mục đích màn này
+// (dọn dẹp dữ liệu CŨ không hợp lệ). Gỡ bớt 1 phần tử khỏi mảng KHÔNG BAO GIỜ khiến dữ liệu kém hợp lệ
+// hơn nên không cần re-validate gì thêm.
+router.delete('/recon-recipients-overview', async (req, res) => {
+  try {
+    if (!req.freshUser.perms?.admin) {
+      return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới gỡ được ở màn này' });
+    }
+    const { source, dept, username, thresholdId } = req.body || {};
+    const un = String(username || '').trim();
+    if (!un) throw new HttpError(400, 'Thiếu username cần gỡ');
+    if (source === 'RECON') {
+      const d = String(dept || '').trim();
+      if (!d) throw new HttpError(400, 'Thiếu siêu thị cần gỡ');
+      await withLockedAppDataValue('shelfReconExtraRecipients', (map) => {
+        const current = map && typeof map === 'object' ? map : {};
+        if (!Array.isArray(current[d]) || !current[d].includes(un)) return current;
+        return { ...current, [d]: current[d].filter(x => x !== un) };
+      });
+    } else if (source === 'THRESHOLD') {
+      const id = Number(thresholdId);
+      if (!Number.isFinite(id)) throw new HttpError(400, 'thresholdId không hợp lệ');
+      await withLockedRecordForCollection('shelfStockThresholds', id, (item) => {
+        if (!Array.isArray(item.extraRecipientUsernames) || !item.extraRecipientUsernames.includes(un)) return item;
+        return { ...item, extraRecipientUsernames: item.extraRecipientUsernames.filter(x => x !== un) };
+      });
+    } else {
+      throw new HttpError(400, 'source không hợp lệ (phải là RECON hoặc THRESHOLD)');
+    }
+    insertSystemLog({
+      username: req.freshUser?.username, fullName: req.freshUser?.name || req.freshUser?.username, ipAddress: req.ip,
+      module: 'SHELF_RECON', actionType: 'REMOVE_SHELF_DIGEST_RECIPIENT', targetObject: `${source}:${dept || thresholdId}`,
+      description: `Gỡ người nhận email "${un}" khỏi ${source === 'RECON' ? `Đối Chiếu (siêu thị "${dept}")` : `Ngưỡng Tồn (dòng #${thresholdId})`}`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (gỡ người nhận email Kiểm Soát Hàng Hóa):', e.message));
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/shelf-stock/recon-recipients-overview');
   }
 });
 

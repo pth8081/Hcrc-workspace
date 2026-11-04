@@ -943,6 +943,56 @@ function createDispatcher(state) {
         state.shelfReconExtraRecipients = { ...(state.shelfReconExtraRecipients || {}), [freshUser.dept]: wanted };
         return { status: 200, body: { extraRecipientUsernames: wanted } };
       }
+      // GET/DELETE /api/shelf-stock/recon-recipients-overview (11/2026, "👥 Người Nhận Tự Thêm") — mirror
+      // ĐÚNG routes/shelfStock.js thật: gộp shelfReconExtraRecipients (map {dept:[username]}) +
+      // shelfStockThresholds[].extraRecipientUsernames (đã seed generic qua createMockState), tính status
+      // SỐNG theo state.users hiện tại. admin-only cả 2 route.
+      if (pathName === '/api/shelf-stock/recon-recipients-overview' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới xem được màn này' } };
+        const usersByUsername = new Map(state.users.map(u => [u.username, u]));
+        const computeStatus = (un, dept) => {
+          const u = usersByUsername.get(un);
+          if (!u) return { status: 'MISSING', currentDept: null };
+          if (u.active === false) return { status: 'INACTIVE', currentDept: u.dept || null };
+          if (u.dept !== dept) return { status: 'TRANSFERRED', currentDept: u.dept || null };
+          return { status: 'OK', currentDept: u.dept || null };
+        };
+        const rows = [];
+        for (const [dept, usernames] of Object.entries(state.shelfReconExtraRecipients || {})) {
+          for (const un of (Array.isArray(usernames) ? usernames : [])) {
+            const u = usersByUsername.get(un);
+            const { status, currentDept } = computeStatus(un, dept);
+            rows.push({ source: 'RECON', sourceLabel: '📊 Đối Chiếu', dept, username: un, name: u?.name || un, status, currentDept, thresholdId: null });
+          }
+        }
+        for (const item of (state.shelfStockThresholds || [])) {
+          const usernames = Array.isArray(item.extraRecipientUsernames) ? item.extraRecipientUsernames : [];
+          if (!usernames.length) continue;
+          const label = `🔔 Ngưỡng Tồn — ${item.maHang || item.maVach || item.category || `#${item.id}`}`;
+          for (const un of usernames) {
+            const u = usersByUsername.get(un);
+            const { status, currentDept } = computeStatus(un, item.dept);
+            rows.push({ source: 'THRESHOLD', sourceLabel: label, dept: item.dept, username: un, name: u?.name || un, status, currentDept, thresholdId: item.id });
+          }
+        }
+        return { status: 200, body: { rows } };
+      }
+      if (pathName === '/api/shelf-stock/recon-recipients-overview' && method === 'DELETE') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới gỡ được ở màn này' } };
+        const { source, dept, username: un, thresholdId } = body || {};
+        if (source === 'RECON') {
+          const list = (state.shelfReconExtraRecipients || {})[dept];
+          if (Array.isArray(list)) state.shelfReconExtraRecipients[dept] = list.filter(x => x !== un);
+        } else if (source === 'THRESHOLD') {
+          const item = (state.shelfStockThresholds || []).find(t => t.id === Number(thresholdId));
+          if (item && Array.isArray(item.extraRecipientUsernames)) item.extraRecipientUsernames = item.extraRecipientUsernames.filter(x => x !== un);
+        } else {
+          return { status: 400, body: { error: 'source không hợp lệ' } };
+        }
+        return { status: 200, body: { ok: true } };
+      }
 
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
     } catch (err) {

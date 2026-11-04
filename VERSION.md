@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**29.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.24 (2026-11): "👥 Người Nhận Tự Thêm" — admin theo dõi + gỡ, tự động dọn dẹp khi đổi tên/xoá tài khoản
+
+Người dùng phản hồi ngay sau khi xem demo tính năng Đối Chiếu (v29.23): "việc mỗi siêu thị tự thêm này
+thì sau này admin control của gì, muốn gỡ họ ra của gì nhỉ? Các lại phải tính đến đấy" — phát hiện 2
+danh sách "tự thêm thêm" người nhận email Kiểm Soát Hàng Hóa (Đối Chiếu MỚI + Ngưỡng Tồn đã có từ
+trước) hoàn toàn chưa có cơ chế admin kiểm soát tập trung lẫn cơ chế dọn dẹp khi tài khoản biến động.
+Gửi demo ảnh phương án, người dùng xác nhận làm cả 2 việc + merge thẳng không cần demo lại.
+
+**2 lớp bảo vệ:**
+1. **Màn admin "👥 Người Nhận Tự Thêm"** (Hệ Thống → Quản Trị → "📊 Báo Cáo Đối Chiếu"): gộp CHUNG 1
+   bảng cả 2 nguồn (Đối Chiếu + Ngưỡng Tồn), admin xem được TOÀN HỆ THỐNG không cần đăng nhập thay cửa
+   hàng trưởng. Mỗi dòng tự tính trạng thái SỐNG theo `DB.users` hiện tại: ✓ Hợp Lệ / ⚠️ Đã Khoá-Nghỉ
+   Việc / 🔁 Đã Chuyển Siêu Thị Khác / ❌ Không Tồn Tại. Lọc theo siêu thị/nguồn/tên, tick "chỉ hiện cần
+   chú ý", bấm "🗑️ Gỡ" để xoá ngay 1 người khỏi ĐÚNG danh sách.
+2. **Tự động cascade khi đổi tên/xoá tài khoản**: `cascadeUsernameChangesToShelfReconExtraRecipients()`+
+   `cascadeUsernameChangesToShelfThresholdExtraRecipients()` (lib/catalogRename.js) — cùng lớp với hàng
+   chục cascade username khác đã có trong file, nhưng 2 danh sách này trước giờ bị sót (Ngưỡng Tồn có từ
+   trước, Đối Chiếu vừa thêm ở v29.23). Khoá tài khoản/chuyển siêu thị KHÔNG tự động gỡ (không chắc vĩnh
+   viễn) — chỉ PHÁT HIỆN ở màn admin để admin chủ động quyết định.
+
+**Thay đổi:**
+- `lib/catalogRename.js`: 2 hàm cascade mới (export + wire vào `routes/data.js` ngay sau
+  `cascadeUsernameChangesToOperationEstimateAssignees()`, chạy mỗi lần lưu `users` thành công).
+- `routes/shelfStock.js`: `GET`/`DELETE /recon-recipients-overview` (admin-only) — GET tính trạng thái
+  sống + gộp 2 nguồn; DELETE gỡ ĐÚNG 1 người, CỐ Ý không tái dùng route PUT/PATCH sẵn có (2 route đó
+  re-validate TOÀN BỘ danh sách còn lại, dễ chặn nhầm khi dọn dẹp dữ liệu cũ đã có người không hợp lệ
+  khác trong cùng mảng) — kèm ghi System Log server-side.
+- `public/fragments/systemSection.html` + `public/js/module-hethong-tabs.js`: UI bảng + bộ lọc + nút Gỡ
+  trong cùng màn "📊 Báo Cáo Đối Chiếu" (dùng class thiết kế dùng chung `.badge-*`/`.btn-*`/`.stat-card`).
+
+**Test:** `tests/test-shelf-digest-recipients-username-cascade.js` (7/7, thuần không cần SQL Server) +
+`tests/test-shelf-recipients-overview-ui-real-click.js` (4/4, Playwright thật — hiện đúng badge trạng
+thái theo class thay vì so chuỗi diacritic tránh lệch chuẩn hoá Unicode, lọc "cần chú ý", gỡ đúng người
+không đụng người khác). Chạy lại 9 bộ test liên quan (digest/threshold/deptviewscope/estimate cascade) —
+không regression. CSP grep sạch.
 
 ## v29.23 (2026-11): "📊 Đối Chiếu" — thêm lịch gửi email báo cáo Lệch (tách riêng khỏi Ngưỡng Tồn)
 

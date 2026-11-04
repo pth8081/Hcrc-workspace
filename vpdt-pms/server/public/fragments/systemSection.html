@@ -1249,6 +1249,54 @@
       </form>
 
       <p id="srDigestLastSentStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
+
+      <!-- "👥 Người Nhận Tự Thêm" (11/2026, người dùng phát hiện khi xem demo Đối Chiếu: "mỗi siêu thị tự
+           thêm này thì sau này admin control của gì, muốn gỡ họ ra của gì nhỉ?") — gộp CẢ 2 nguồn "tự
+           thêm thêm" (Đối Chiếu + Ngưỡng Tồn) vào 1 bảng admin xem/gỡ TOÀN HỆ THỐNG, không cần đăng nhập
+           thay cửa hàng trưởng. Đây là lớp phòng vệ THỨ 2 (chủ động, cho trường hợp KHOÁ/CHUYỂN SIÊU
+           THỊ) — lớp THỨ 1 (tự động) là cascadeUsernameChangesToShelfReconExtraRecipients()/
+           cascadeUsernameChangesToShelfThresholdExtraRecipients() (lib/catalogRename.js, chạy khi đổi
+           tên/xoá tài khoản). loadShelfReconRecipientsOverview()/renderShelfReconRecipientsOverview()
+           (module-hethong-tabs.js). -->
+      <div class="pt-2 border-t border-teal-200">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">👥 Người Nhận Tự Thêm — Toàn Hệ Thống</h3>
+            <p class="text-[11px] text-gray-500 italic mt-1">Theo dõi + gỡ người mà Cửa hàng trưởng/Tổ trưởng từng tự thêm vào danh sách nhận email "📊 Đối Chiếu"/"🔔 Ngưỡng Tồn" của ĐÚNG siêu thị mình — không cần đăng nhập thay họ.</p>
+          </div>
+          <button type="button" data-op="loadShelfReconRecipientsOverview" class="btn-secondary text-xs">↺ Làm Mới</button>
+        </div>
+
+        <div id="reconOverviewStats" class="grid grid-cols-2 md:grid-cols-4 gap-2 my-3"></div>
+
+        <div class="flex items-center gap-2 flex-wrap mb-2 bg-white p-2 rounded border text-xs">
+          <select id="reconOverviewDeptFilter" data-op-change="renderShelfReconRecipientsOverview" class="border rounded px-2 py-1"><option value="">Tất cả siêu thị</option></select>
+          <select id="reconOverviewSourceFilter" data-op-change="renderShelfReconRecipientsOverview" class="border rounded px-2 py-1">
+            <option value="">Tất cả báo cáo</option>
+            <option value="RECON">📊 Đối Chiếu</option>
+            <option value="THRESHOLD">🔔 Ngưỡng Tồn</option>
+          </select>
+          <input id="reconOverviewSearch" type="text" data-op-input="renderShelfReconRecipientsOverview" placeholder="🔎 Tìm theo tên/tài khoản..." class="border rounded px-2 py-1 flex-1 min-w-[160px]">
+          <label class="flex items-center gap-1.5 font-semibold text-amber-700 ml-auto">
+            <input id="reconOverviewOnlyAttention" type="checkbox" data-op-change="renderShelfReconRecipientsOverview"> Chỉ hiện cần chú ý (⚠️)
+          </label>
+        </div>
+
+        <div class="bg-white border rounded overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 border-b">
+              <tr>
+                <th class="text-left p-2">Siêu Thị</th>
+                <th class="text-left p-2">Người Được Tự Thêm</th>
+                <th class="text-left p-2">Nguồn</th>
+                <th class="text-left p-2">Tình Trạng</th>
+                <th class="text-right p-2">Hành Động</th>
+              </tr>
+            </thead>
+            <tbody id="reconOverviewTableBody"><tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Đang tải...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

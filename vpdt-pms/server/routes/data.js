@@ -42,7 +42,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig, isForwardThreadParticipant
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads, cascadeUsernameChangesToOperationEstimateAssignees } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads, cascadeUsernameChangesToOperationEstimateAssignees, cascadeUsernameChangesToShelfReconExtraRecipients, cascadeUsernameChangesToShelfThresholdExtraRecipients } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2517,6 +2517,12 @@ router.post('/:key', async (req, res) => {
       // danh mục lớn") — LỖI ĐÃ VÁ, re-audit lần 10, mức TB — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToOperationEstimateAssignees() (lib/catalogRename.js).
       await cascadeUsernameChangesToOperationEstimateAssignees(renamed, deletedUsernames);
+      // shelfReconExtraRecipients (map {dept: [username,...]}) + shelfStockThresholds[].extraRecipientUsernames
+      // (Tầng 4 "tự thêm thêm" người nhận email Kiểm Soát Hàng Hóa) — LỖI ĐÃ VÁ, 11/2026, người dùng
+      // phát hiện khi xem demo "📊 Báo Cáo Đối Chiếu" — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToShelfReconExtraRecipients() (lib/catalogRename.js).
+      await cascadeUsernameChangesToShelfReconExtraRecipients(renamed, deletedUsernames);
+      await cascadeUsernameChangesToShelfThresholdExtraRecipients(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

@@ -1570,6 +1570,62 @@ async function cascadeUsernameChangesToOperationEstimateAssignees(renamed, delet
   }
 }
 
+// LỖI ĐÃ VÁ (11/2026, người dùng phát hiện khi xem demo tính năng "📊 Báo Cáo Đối Chiếu" — "việc mỗi
+// siêu thị tự thêm này thì sau này admin control của gì, muốn gỡ họ ra của gì nhỉ?"): 2 danh sách "tự
+// thêm thêm" (Tầng 4 người nhận email Kiểm Soát Hàng Hóa) sau đây CHƯA TỪNG được cascade khi đổi tên/
+// xoá tài khoản, cùng lớp lỗi với deptViewScopeConfig.extraViewers đã vá ở
+// cascadeUsernameChangesToDeptViewScopeExtraViewers() ngay trên — đổi tên đăng nhập -> người đó mất
+// luôn khỏi danh sách (email gửi tới username CŨ không còn tồn tại); xoá vĩnh viễn rồi cấp lại đúng
+// username cho nhân viên MỚI -> nhân viên đó thừa kế nhầm việc nhận email của siêu thị đó:
+// - shelfReconExtraRecipients (map {dept: [username,...]}, AppData key riêng — routes/shelfStock.js
+//   GET/PUT /recon-recipients, jobs/shelfStockReconDigestAlert.js).
+// - shelfStockThresholds[].extraRecipientUsernames (mảng phẳng trên TỪNG dòng ngưỡng tồn, collection
+//   record thường qua renameFieldValueInCollection() — KHÔNG có mảng tên hiển thị song hành cần giữ
+//   riêng, tên hiển thị tra client-side qua DB.users lúc render, xem module-vanhanh.js).
+// Đây CHỈ là 1 trong 2 lớp bảo vệ theo phương án đã xác nhận với người dùng — lớp còn lại là màn admin
+// "👥 Người Nhận Tự Thêm" (routes/shelfStock.js GET /recon-recipients-overview) cho chủ động gỡ SỚM cả
+// trường hợp tài khoản bị KHOÁ (không xoá) hoặc CHUYỂN SANG SIÊU THỊ KHÁC — 2 trường hợp không phải
+// "đổi tên/xoá" nên nằm NGOÀI phạm vi cascade tự động ở đây, được PHÁT HIỆN SỐNG (live, đọc trạng thái
+// DB.users hiện tại) ở route overview đó thay vì cố cascade tự động (tài khoản khoá có thể mở lại,
+// chuyển siêu thị là nghiệp vụ bình thường — không phải tín hiệu "xoá vĩnh viễn" nên không tự gỡ ngầm).
+async function cascadeUsernameChangesToShelfReconExtraRecipients(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  await withLockedAppDataValue('shelfReconExtraRecipients', (map) => {
+    if (!map || typeof map !== 'object') return map;
+    let changed = false;
+    const next = {};
+    for (const [dept, raw] of Object.entries(map)) {
+      if (!Array.isArray(raw)) { next[dept] = raw; continue; }
+      let usernames = raw;
+      for (const { oldValue, newValue } of renamed || []) {
+        usernames = renameApproversUsernamesArray(usernames, oldValue, newValue, null);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        usernames = renameApproversUsernamesArray(usernames, null, null, deletedUsername);
+      }
+      if (usernames === raw) { next[dept] = raw; continue; }
+      changed = true;
+      next[dept] = usernames;
+    }
+    return changed ? next : map;
+  });
+}
+async function cascadeUsernameChangesToShelfThresholdExtraRecipients(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  await renameFieldValueInCollection('shelfStockThresholds', (item) => {
+    if (!Array.isArray(item.extraRecipientUsernames) || !item.extraRecipientUsernames.length) return item;
+    let usernames = item.extraRecipientUsernames;
+    for (const { oldValue, newValue } of renamed || []) {
+      usernames = renameApproversUsernamesArray(usernames, oldValue, newValue, null);
+    }
+    for (const deletedUsername of deletedUsernames || []) {
+      usernames = renameApproversUsernamesArray(usernames, null, null, deletedUsername);
+    }
+    if (usernames === item.extraRecipientUsernames) return item;
+    return { ...item, extraRecipientUsernames: usernames };
+  });
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1583,5 +1639,6 @@ module.exports = {
   cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
   cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees,
   cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads,
-  cascadeUsernameChangesToOperationEstimateAssignees
+  cascadeUsernameChangesToOperationEstimateAssignees,
+  cascadeUsernameChangesToShelfReconExtraRecipients, cascadeUsernameChangesToShelfThresholdExtraRecipients
 };

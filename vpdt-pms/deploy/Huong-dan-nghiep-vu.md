@@ -3206,6 +3206,32 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       có quyền "🗄️ Quản Lý Danh Mục Quầy Kệ" (Cửa hàng trưởng/Tổ trưởng).
       Dùng CHUNG công tắc tắt nhận email ở Hồ Sơ Cá Nhân → "🔔 Thông Báo
       Email" như Ngưỡng Tồn.
+  - **"👥 Người Nhận Tự Thêm" — admin theo dõi + gỡ TOÀN HỆ THỐNG (MỚI,
+    11/2026, người dùng phát hiện khi xem demo Đối Chiếu: "mỗi siêu thị tự
+    thêm này thì sau này admin control của gì, muốn gỡ họ ra của gì
+    nhỉ?")**: Hệ Thống → ⚙️ Quản Trị → "📊 Báo Cáo Đối Chiếu" (cùng màn lịch
+    gửi ở trên), cuộn xuống khối "👥 Người Nhận Tự Thêm — Toàn Hệ Thống" —
+    gộp CHUNG 1 bảng cả người tự thêm của Đối Chiếu (ô "✉️ Người Nhận Email
+    Báo Cáo Lệch") lẫn Ngưỡng Tồn (cột "Người Nhận Thêm" khi tạo/sửa từng
+    ngưỡng), admin xem được TẤT CẢ siêu thị, không cần đăng nhập thay cửa
+    hàng trưởng. Mỗi dòng tự hiện tình trạng SỐNG theo tài khoản hiện tại:
+    "✓ Hợp Lệ" (còn hoạt động, đúng siêu thị), "⚠️ Tài Khoản Đã Khoá/Nghỉ
+    Việc" (tài khoản bị khoá — vẫn đang âm thầm nhận email), "🔁 Đã Chuyển
+    Siêu Thị Khác" (còn hoạt động nhưng đã đổi sang siêu thị khác), "❌ Tài
+    Khoản Không Tồn Tại" (trường hợp hiếm, dữ liệu cũ trước khi có cơ chế
+    tự dọn dẹp bên dưới). Lọc theo siêu thị/nguồn báo cáo/tên-tài khoản,
+    hoặc tick "Chỉ hiện cần chú ý (⚠️)" để chỉ xem các dòng không hợp lệ.
+    Bấm "🗑️ Gỡ" ở từng dòng để gỡ ngay người đó khỏi ĐÚNG danh sách tương
+    ứng (không ảnh hưởng người khác cùng siêu thị/cùng dòng ngưỡng).
+  - **Tự động dọn dẹp khi đổi tên/xoá tài khoản (lớp bảo vệ nền, MỚI,
+    11/2026)**: đi kèm màn trên — khi admin đổi tên đăng nhập hoặc xoá vĩnh
+    viễn 1 tài khoản (Nhân Sự → Phân Quyền → Danh Sách Người Dùng), hệ
+    thống TỰ ĐỘNG cập nhật/gỡ đúng người đó khỏi cả 2 danh sách "tự thêm"
+    trên (đổi tên giữ nguyên trong danh sách với tên mới; xoá vĩnh viễn thì
+    gỡ hẳn) — không cần admin tự vào màn "👥 Người Nhận Tự Thêm" dọn tay
+    cho 2 trường hợp này. Khoá tài khoản (không xoá) và chuyển siêu thị
+    KHÔNG tự động gỡ (2 việc này không chắc là vĩnh viễn/có thể là nghiệp
+    vụ bình thường) — admin chủ động xem + gỡ ở màn trên nếu cần.
 - **Cấu hình "Mã Điểm" (bắt buộc để dùng Đối Chiếu, MỚI 11/2026)**: Hệ
   Thống → Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị —
   admin tự nhập tay ô "Mã Điểm API Tồn Kho" cho từng siêu thị (mã do bên
