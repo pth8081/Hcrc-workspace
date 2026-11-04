@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**29.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.22 (2026-11): Sửa KHÔNG tải được tệp ở modal "💰 Giá Trị Hợp Đồng" (Công Việc Vận Hành)
+
+Người dùng báo lỗi (kèm ảnh chụp thật): ở modal "💰 Giá trị hợp đồng" (mở từ nút 💰 trên dòng Công Việc,
+Vận Hành), bấm "📤 Tải Tệp Lên" chọn file xong KHÔNG có phản hồi gì — không tải được tệp lên, không báo
+lỗi, không hiện chip tên file.
+
+**Nguyên nhân:** `<input type="file" ... data-op-change="onOwiContractFileChange">` ở
+`public/index.html` thiếu `data-arg-el="0"` — mọi input file khác dùng cơ chế CSP-delegation này đều có
+thuộc tính này để `cspCollectArgs()` (core.js) biết truyền chính DOM element vào tham số đầu
+(`onEditVrFileAttachmentChange` làm mẫu). Thiếu nó, `cspCollectArgs()` không tìm thấy `data-arg*` nào
+nên gọi `onOwiContractFileChange()` với 0 tham số — `inputEl` bên trong hàm luôn là `undefined`,
+`inputEl.files` ném `TypeError` ngay dòng đầu tiên. Đây là lỗi hoàn toàn âm thầm (không alert, không lỗi
+console hiện cho người dùng thấy) — đúng như triệu chứng "bấm xong không thấy gì" người dùng báo.
+
+**Thay đổi:** thêm `data-arg-el="0"` vào đúng 1 input đó (`public/index.html`). Không đổi gì khác.
+
+**Đã xác minh đúng nguyên nhân + đúng bản vá** bằng cách tạm bỏ `data-arg-el="0"` rồi chạy lại test mới
+(`tests/test-owi-contract-file-upload-fix.js`, Playwright thật — `setInputFiles()` + click thật, không
+gọi thẳng hàm JS): xác nhận lỗi tái hiện đúng y triệu chứng (`TypeError: Cannot read properties of
+undefined (reading 'files')`), khôi phục bản vá thì 4/4 test pass. Chạy thêm 2 bộ test liên quan tới
+modal/Công Việc Vận Hành (`test-operation-workitem-contract-c2.js` 21/21,
+`test-operation-vhst-uibugfix.js` 18/18) — không regression.
+
+**Lưu ý kèm theo (chưa sửa, chỉ phát hiện trong lúc rà soát)**: 4 input file khác trong hệ thống
+(`hrContractSection.html`: `hrContractImportFile`, `hrContractCreateImportFile`;
+`hrLifecycleSection.html`: `hrpOnbCreateImportFile`; `vanHanhSection.html`: `voFile` dùng cho
+`handleOperationOrderPdfUpload`) cũng thiếu `data-arg-el`/`data-arg-event` dù hàm xử lý có vẻ cần tham
+số `event`/`element` — CHƯA xác minh có cùng lỗi hay không (có thể đang nhận tham số qua cách khác), cần
+kiểm tra riêng ở đợt sau nếu người dùng xác nhận các luồng đó cũng gặp vấn đề tương tự.
 
 ## v29.21 (2026-11): Đối Chiếu Tồn Kho chỉ xử lý mã ĐÃ SCAN lên kệ hôm nay (hiệu năng)
 
