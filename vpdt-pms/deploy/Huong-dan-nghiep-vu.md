@@ -118,6 +118,10 @@ quyền "Người duyệt" (`canBeApprover`) ở bất kỳ module nào. Cơ ch�
 trình bày chi tiết ở mục 3.4 — mục này chỉ nêu **vai trò**: đây là nơi làm việc
 chính của "người duyệt", còn mục 3 là cách admin *cấu hình* ai được vào vai đó.
 
+**Người gửi/trình** (v29.7): mỗi dòng trong bảng hiện thêm 1 dòng nhỏ "Gửi:
+\<tên\>" ngay dưới mã hồ sơ (cột "Mã") — cho biết ai đã tạo/gửi hồ sơ đó, giúp
+người duyệt có đủ thông tin mà không cần mở vào từng hồ sơ mới biết.
+
 ### 2.3. Hồ Sơ Cá Nhân & Bảo Mật Thiết Bị (2FA)
 
 Bấm avatar/tên ở góc màn hình mở **"⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin"** —

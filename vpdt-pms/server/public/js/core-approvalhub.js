@@ -63,6 +63,23 @@ function resolveTypeLabel(typeLabel, rec) {
   return typeof typeLabel === 'function' ? typeLabel(rec) : typeLabel;
 }
 
+// Tra tên người gửi/trình để hiện ở Hub (11/2026, yêu cầu người dùng — "hiện thêm thông tin người gửi/
+// trình để có thông tin rõ ràng hơn"). Tên field người tạo KHÔNG đồng nhất giữa các module (xem
+// creatorField/creatorNameField ở lib/createValidation.js — creator/creatorName, uploader/uploaderName,
+// author/authorName, createdBy/createdByName, requestedBy/requestedByName...) nên cần đúng 2 tham số
+// usernameField/nameField cho TỪNG lời gọi, không đoán 1 tên field chung cho mọi loại. Ưu tiên đọc
+// nameField đã lưu sẵn trên bản ghi (khỏi tốn 1 lượt tra DB.users); module nào KHÔNG lưu tên riêng (VD
+// Hợp đồng — creatorNameField: null, xem chú thích tại createValidation.js) thì tra DB.users theo
+// username, fallback về chính username nếu tài khoản đã bị xoá.
+function resolveApprovalHubSubmitter(rec, usernameField, nameField) {
+  if (!rec) return '';
+  if (nameField && rec[nameField]) return rec[nameField];
+  const username = usernameField ? rec[usernameField] : '';
+  if (!username) return '';
+  const u = (DB.users || []).find(x => x.username === username);
+  return (u && u.name) || username;
+}
+
 function getMyPendingApprovals(user) {
   if (!user) return [];
   const items = [];
@@ -86,6 +103,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: cfg.type, typeLabel: resolveTypeLabel(cfg.typeLabel, rec),
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
+        submitter: cfg.submitterOf ? cfg.submitterOf(rec) : '',
         stepLabel: buildStepLabelForHub(wfConfig, step),
         createdAt: rec.createdAt,
         statusBadge: cfg.statusBadgeOf ? cfg.statusBadgeOf(rec) : approvalHubPendingBadge(),
@@ -97,6 +115,7 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.docs, doc => resolveDocWorkflowConfigForItemClient(doc), {
     type: 'doc', typeLabel: '📂 Tài liệu',
     codeOf: r => r.displayCode || r.code, titleOf: r => r.title,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'uploader', 'uploaderName'),
     actionsOf: r => [
       { label: '✅ Duyệt', fn: 'runDocAction', args: [r.id, 'approve'], primary: true },
       { label: '❌ Từ chối', fn: 'runDocAction', args: [r.id, 'reject'] }
@@ -106,12 +125,14 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.submissions, sub => resolveSubmissionWorkflow(sub), {
     type: 'submission', typeLabel: '📜 Văn bản trình',
     codeOf: r => r.code, titleOf: r => r.title,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openProcessSubmissionModal', args: [r.id], primary: true }]
   });
 
   addDeptWorkflowItems(DB.carRegs, c => resolveCarWorkflowConfigForItemClient(c), {
     type: 'car', typeLabel: '🚗 Đăng ký xe',
     codeOf: r => r.code, titleOf: r => r.destination,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openCarProcessModal', args: [r.id], primary: true }]
   });
 
@@ -122,6 +143,7 @@ function getMyPendingApprovals(user) {
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
     addDeptWorkflowItems(subTypeReqs, o => resolveOfficeWorkflowConfigForItemClient(o), {
       type, typeLabel, codeOf: r => r.code, titleOf: r => r.title,
+      submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
       actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOfficeProcessModal', args: [r.id], primary: true }]
     });
   });
@@ -129,12 +151,14 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.vppRegistrations, r => resolveVppWorkflowConfigForItemClient(r), {
     type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm',
     codeOf: r => r.code, titleOf: r => r.periodName || r.code,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openVppRegModal', args: [r.id], primary: true }]
   });
 
   addDeptWorkflowItems(DB.itPriceApprovals, p => resolveItPriceWorkflowConfigForItemClient(p), {
     type: 'itPrice', typeLabel: p => p.priceType === 'WHOLESALE' ? '🏷️ Hỗ Trợ IT - Duyệt giá Bán Buôn' : '🏷️ Hỗ Trợ IT - Duyệt giá Bán Lẻ',
     codeOf: r => r.code, titleOf: r => r.productName,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
     // Duyệt giá LUÔN cần mở bảng chi tiết (bảng giá/file đính kèm) trước khi quyết định — không thể duyệt
     // "mù" ngay tại danh sách như Tài liệu/Hợp đồng. Mở thẳng modal chi tiết (đã có sẵn nút Duyệt/Từ chối/
@@ -163,6 +187,7 @@ function getMyPendingApprovals(user) {
     c => resolveContractApprovalWorkflow(c),
     {
       type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title,
+      submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', null),
       actionsOf: r => [
         { label: '✅ Duyệt', fn: 'approveContractAction', args: [r.id], primary: true },
         { label: '❌ Từ chối', fn: 'rejectContractAction', args: [r.id] }
@@ -176,6 +201,7 @@ function getMyPendingApprovals(user) {
     c => resolveContractManageWorkflow(c),
     {
       type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title,
+      submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', null),
       actionsOf: r => [
         { label: '✅ Duyệt', fn: 'approveContractSignedFileAction', args: [r.id], primary: true },
         { label: '❌ Từ chối', fn: 'rejectContractSignedFileAction', args: [r.id] }
@@ -192,6 +218,7 @@ function getMyPendingApprovals(user) {
   (DB.meetings || []).filter(m => m.status === 'PENDING' && canDecideMeetingClient(user, m)).forEach(m => {
     items.push({
       type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
+      submitter: resolveApprovalHubSubmitter(m, 'creator', 'creatorName'),
       stepLabel: '', createdAt: m.createdAt,
       statusBadge: approvalHubPendingBadge(),
       actions: [{ label: '✅ Duyệt', fn: 'approveMeeting', args: [m.id], primary: true }]
@@ -202,6 +229,7 @@ function getMyPendingApprovals(user) {
     (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === 'PENDING').forEach(p => {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
+        submitter: resolveApprovalHubSubmitter(p, 'author', 'authorName'),
         stepLabel: '', createdAt: p.createdAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
@@ -239,6 +267,7 @@ function getMyPendingApprovals(user) {
     (DB.licenses || []).filter(l => l.status === 'PENDING').forEach(l => {
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
+        submitter: resolveApprovalHubSubmitter(l, 'creator', 'creatorName'),
         stepLabel: '', createdAt: l.createdAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
@@ -259,6 +288,7 @@ function getMyPendingApprovals(user) {
     pr => resolvePaymentApprovalWorkflow(pr),
     {
       type: 'payment', typeLabel: '💰 Thanh toán', codeOf: r => r.sourceCode || String(r.id), titleOf: r => r.title,
+      submitterOf: r => resolveApprovalHubSubmitter(r, 'createdBy', 'createdByName'),
       actionsOf: r => [{ label: '✅ Xác nhận', fn: 'approvePaymentRequestAction', args: [r.id], primary: true }]
     }
   );
@@ -266,6 +296,7 @@ function getMyPendingApprovals(user) {
     (DB.paymentRequests || []).filter(pr => pr.status === 'NEED_INFO').forEach(pr => {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
+        submitter: resolveApprovalHubSubmitter(pr, 'createdBy', 'createdByName'),
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
         statusBadge: approvalHubNeedInfoBadge(),
         actions: [{ label: '✏️ Sửa & Gửi Lại', fn: 'openEditPaymentRequest', args: [pr.id], primary: true }]
@@ -283,6 +314,7 @@ function getMyPendingApprovals(user) {
         type: 'itPriceEmergencyReject',
         typeLabel: `🚨 Hỗ Trợ IT - Từ chối khẩn (${p.priceType === 'WHOLESALE' ? 'Bán Buôn' : 'Bán Lẻ'})`,
         code: p.code, title: p.productName, dept: p.dept, stepLabel: '',
+        submitter: resolveApprovalHubSubmitter(p, 'emergencyRejectRequestedBy', 'emergencyRejectRequestedByName'),
         createdAt: p.emergencyRejectRequestedAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
@@ -308,6 +340,7 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
     type: 'operationOrder', typeLabel: o => o.orderLocationType === 'HO' ? '📦 Vận Hành - Đặt Hàng Tại HO' : '📦 Vận Hành - Đặt Hàng Tại Siêu Thị',
     codeOf: r => r.code, titleOf: r => r.title,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   }, undefined, o => operationOrderStoreApproverFilterFor(o));
   // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — KHÔNG còn hiện ở Hub nữa (11/2026, người dùng
@@ -342,6 +375,7 @@ function getMyPendingApprovals(user) {
       (DB.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL' && p.creator !== user.username).forEach(p => {
         items.push({
           type: 'uniformPeriod', typeLabel: '👔 Đồng Phục - Kỳ Cấp Phát', code: p.code || String(p.id), title: p.name, dept: p.dept,
+          submitter: resolveApprovalHubSubmitter(p, 'creator', 'creatorName'),
           stepLabel: '', createdAt: p.createdAt,
           statusBadge: approvalHubPendingBadge(),
           actions: [
@@ -353,6 +387,7 @@ function getMyPendingApprovals(user) {
       (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL' && t.requestedBy !== user.username).forEach(t => {
         items.push({
           type: 'uniformTransfer', typeLabel: '👔 Đồng Phục - Điều Chuyển Kho', code: String(t.id), title: `${t.sourceDept} → ${t.targetDept}: ${t.itemName}`, dept: t.sourceDept,
+          submitter: resolveApprovalHubSubmitter(t, 'requestedBy', 'requestedByName'),
           stepLabel: '', createdAt: t.requestedAt,
           statusBadge: approvalHubPendingBadge(),
           actions: [
@@ -374,6 +409,7 @@ function getMyPendingApprovals(user) {
       (DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode).forEach(r => {
         items.push({
           type: 'leaveRequest', typeLabel: '🏖️ Nghỉ Phép', code: r.employeeCode, title: `${r.employeeCode}: ${HAC_LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType} (${r.fromDate} → ${r.toDate})`, dept: r.dept,
+          submitter: resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
           stepLabel: '', createdAt: r.createdAt,
           statusBadge: approvalHubPendingBadge(),
           actions: [
@@ -401,6 +437,7 @@ function getMyPendingApprovals(user) {
       }).forEach(s => {
         items.push({
           type: 'shiftSwapRequest', typeLabel: '🔄 Đổi Ca', code: s.requesterEmployeeCode, title: `${s.requesterEmployeeCode} ↔ ${s.targetEmployeeCode}`, dept: s.dept,
+          submitter: resolveApprovalHubSubmitter(s, 'creator', 'creatorName'),
           stepLabel: '', createdAt: s.createdAt,
           statusBadge: approvalHubPendingBadge(),
           actions: [
@@ -447,6 +484,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'taskPending', typeLabel: t.pendingExtension ? '✅ Công Việc - Gia Hạn' : '✅ Công Việc - Huỷ',
         code: t.sourceCode || String(t.id), title: t.title, dept: t.dept,
+        submitter: (t.pendingExtension || t.pendingCancellation)?.requestedByName || '',
         stepLabel: '', createdAt: (t.pendingExtension || t.pendingCancellation)?.requestedAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [{ label: '✍️ Xử lý / Duyệt', fn: t.pendingExtension ? 'openExtensionApproveModal' : 'openCancelApproveModal', args: [t.id], primary: true }]
@@ -643,6 +681,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: cfg.type, typeLabel: resolveTypeLabel(cfg.typeLabel, rec),
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
+        submitter: cfg.submitterOf ? cfg.submitterOf(rec) : '',
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
         statusBadge,
@@ -654,25 +693,27 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     });
   }
 
-  addProcessedItems(DB.docs, { type: 'doc', typeLabel: '📂 Tài liệu', codeOf: r => r.displayCode || r.code, titleOf: r => r.title });
-  addProcessedItems(DB.submissions, { type: 'submission', typeLabel: '📜 Văn bản trình', codeOf: r => r.code, titleOf: r => r.title });
-  addProcessedItems(DB.carRegs, { type: 'car', typeLabel: '🚗 Đăng ký xe', codeOf: r => r.code, titleOf: r => r.destination });
+  addProcessedItems(DB.docs, { type: 'doc', typeLabel: '📂 Tài liệu', codeOf: r => r.displayCode || r.code, titleOf: r => r.title, submitterOf: r => resolveApprovalHubSubmitter(r, 'uploader', 'uploaderName') });
+  addProcessedItems(DB.submissions, { type: 'submission', typeLabel: '📜 Văn bản trình', codeOf: r => r.code, titleOf: r => r.title, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName') });
+  addProcessedItems(DB.carRegs, { type: 'car', typeLabel: '🚗 Đăng ký xe', codeOf: r => r.code, titleOf: r => r.destination, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName') });
 
   [
     { subType: 'MUA_BAN', type: 'officeBuy', typeLabel: '🛒 Mua Bán' },
     { subType: 'SUA_CHUA', type: 'officeFix', typeLabel: '🔧 Sửa Chữa' }
   ].forEach(({ subType, type, typeLabel }) => {
-    addProcessedItems((DB.officeReqs || []).filter(o => o.subType === subType), { type, typeLabel, codeOf: r => r.code, titleOf: r => r.title });
+    addProcessedItems((DB.officeReqs || []).filter(o => o.subType === subType), { type, typeLabel, codeOf: r => r.code, titleOf: r => r.title, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName') });
   });
 
-  addProcessedItems(DB.vppRegistrations, { type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
+  addProcessedItems(DB.vppRegistrations, { type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName') });
   addProcessedItems(DB.itPriceApprovals, {
     type: 'itPrice', typeLabel: r => r.priceType === 'WHOLESALE' ? '🏷️ Hỗ Trợ IT - Duyệt giá Bán Buôn' : '🏷️ Hỗ Trợ IT - Duyệt giá Bán Lẻ',
-    codeOf: r => r.code, titleOf: r => r.productName
+    codeOf: r => r.code, titleOf: r => r.productName,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName')
   });
   addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
   addProcessedItems(DB.operationOrders, {
     type: 'operationOrders', typeLabel: r => r.orderLocationType === 'HO' ? '📦 Vận Hành - Đặt Hàng Tại HO' : '📦 Vận Hành - Đặt Hàng Tại Siêu Thị', codeOf: r => r.code, titleOf: r => r.title,
+    submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', 'creatorName'),
     // Xem chú thích matchStatuses ở định nghĩa addProcessedItems() phía trên — REJECTED không cần override
     // (hồ sơ bị từ chối luôn dừng hẳn ở đó, không có giai đoạn tiếp theo nào khác).
     matchStatuses: status === 'APPROVED' ? ['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED'] : null
@@ -682,12 +723,12 @@ function getMyProcessedApprovals(user, status, sinceMs) {
 
   addProcessedItems(
     (DB.contracts || []).filter(c => !c.isAddendum),
-    { type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title },
+    { type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', null) },
     { status: 'approvalStatus' }
   );
   addProcessedItems(
     (DB.contracts || []).filter(c => !c.isAddendum),
-    { type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title },
+    { type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title, submitterOf: r => resolveApprovalHubSubmitter(r, 'creator', null) },
     { status: 'signedFileStatus', history: 'signedFileHistory' }
   );
 
@@ -699,6 +740,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     (DB.meetings || []).filter(m => m.status === 'APPROVED' && m.approvedBy === user.username && inWindow(m.approvedAt)).forEach(m => {
       items.push({
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
+        submitter: resolveApprovalHubSubmitter(m, 'creator', 'creatorName'),
         stepLabel: '✅ Bạn đã duyệt', createdAt: m.approvedAt,
         statusBadge,
         actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['meeting'], primary: true }]
@@ -712,6 +754,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === status && p[actorField] === user.username && inWindow(p[dateField])).forEach(p => {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
+        submitter: resolveApprovalHubSubmitter(p, 'author', 'authorName'),
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: p[dateField],
         statusBadge,
         actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['internalShare'], primary: true }]
@@ -730,6 +773,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       if (!inWindow(lastMine.time)) return;
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
+        submitter: resolveApprovalHubSubmitter(l, 'creator', 'creatorName'),
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: lastMine.time,
         statusBadge,
         actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['license'], primary: true }]
@@ -741,6 +785,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     (DB.paymentRequests || []).filter(pr => (pr.status === 'APPROVED' || pr.status === 'PAID') && pr.approvedBy === user.username && inWindow(pr.approvedAt)).forEach(pr => {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title, dept: pr.dept,
+        submitter: resolveApprovalHubSubmitter(pr, 'createdBy', 'createdByName'),
         stepLabel: '✅ Bạn đã duyệt', createdAt: pr.approvedAt,
         statusBadge,
         actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['payment'], primary: true }]
@@ -949,7 +994,7 @@ function renderApprovalHub() {
   document.getElementById('approvalHubTableBody').innerHTML = filtered.map(it => `
     <tr class="hover:bg-gray-50 transition border-b">
       <td class="p-2 whitespace-nowrap">${escapeHtml(it.typeLabel)}</td>
-      <td class="p-2 font-mono font-bold text-blue-700">${escapeHtml(it.code || '')}</td>
+      <td class="p-2 font-mono font-bold text-blue-700">${escapeHtml(it.code || '')}${it.submitter ? `<div class="font-sans font-normal text-[11px] text-gray-500 normal-case whitespace-normal">Gửi: ${escapeHtml(it.submitter)}</div>` : ''}</td>
       <td class="p-2 font-semibold text-gray-800">${escapeHtml(it.title || '')}</td>
       <td class="p-2 text-gray-600">${escapeHtml(it.dept || '')}</td>
       <td class="p-2 text-xs text-gray-600">${escapeHtml(it.stepLabel || '')}</td>

@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**29.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.7 (2026-11): Hộp Thư Duyệt Tổng Hợp — hiện thông tin người gửi/trình
+
+Người dùng yêu cầu: "trong hub phê duyệt bạn hiện thêm thông tin người gửi/trình để có
+thông tin rõ ràng hơn được không?" + yêu cầu xem demo trước khi làm thật, kèm yêu cầu
+responsive cho cả desktop/tablet/mobile. Đã gửi demo ảnh chụp 3 cỡ màn hình, người dùng xác
+nhận, merge vào main.
+
+**Đã làm:**
+- `public/js/core-approvalhub.js`: thêm `resolveApprovalHubSubmitter(rec, usernameField,
+  nameField)` — ưu tiên đọc tên đã lưu sẵn trên bản ghi (VD `creatorName`/`uploaderName`/
+  `createdByName`...), module nào không có field tên riêng (Hợp đồng — `creatorNameField:
+  null`) thì tự tra `DB.users` theo username, fallback về chính username nếu tài khoản đã
+  bị xoá.
+- Nối `submitter` vào TOÀN BỘ ~20 loại hồ sơ của `getMyPendingApprovals()` lẫn
+  `getMyProcessedApprovals()` (Tài liệu/Văn bản trình/Đăng ký xe/Mua Bán/Sửa Chữa/VPP/
+  Hỗ Trợ IT-Duyệt giá/Hợp đồng x2/Vận Hành-Đặt hàng/Thanh toán/Phòng họp/Góc chia sẻ/
+  Giấy phép/Đồng Phục x2/Nghỉ Phép/Đổi Ca/Công Việc-Gia Hạn-Huỷ) — đúng field theo từng
+  module (tên field người tạo KHÔNG đồng nhất giữa các module, xem `creatorField`/
+  `creatorNameField` ở `lib/createValidation.js`). 2 loại đã có sẵn tên người gửi NGAY
+  trong tiêu đề (Đào Tạo-huỷ, Bình luận nhạy cảm) được giữ nguyên, không thêm trùng lặp.
+- **Hiển thị**: 1 dòng nhỏ `Gửi: <tên>` ngay dưới mã hồ sơ ở cột "Mã" (KHÔNG thêm cột
+  mới) — quyết định sau khi cân nhắc: bảng đã khá rộng (8 cột, ~1280-1450px), thêm cột
+  mới sẽ làm cuộn ngang nhiều hơn trên tablet/mobile (hệ thống chưa có layout dạng card
+  cho mobile, mọi bảng đều responsive kiểu cuộn ngang) — dòng phụ trong ô có sẵn không
+  đổi độ rộng bảng, tự động hoạt động tốt trên cả desktop/tablet/mobile.
+- Test: sửa 1 assertion cũ trong `tests/test-approval-hub.js` (so khớp đúng text node mã
+  hồ sơ thay vì toàn bộ nội dung ô "Mã", vì ô này giờ có thêm dòng phụ) — 57/57 pass.
+  Chạy lại thêm `test-approval-polling.js`/`test-audit-round2-vbt-hd-gp-tt-tl.js`/
+  `test-giai-doan-3-batch-c-badges.js`/`test-meeting-approval-hub-self-decide.js` (đều
+  dùng chung `getMyPendingApprovals()`/`getMyProcessedApprovals()`) — không regression.
+- Demo Playwright mới `tests/demo-approval-hub-submitter.js` — chụp 3 kích thước màn hình
+  (desktop 1440px/tablet 834px/mobile 390px) minh hoạ đủ 3 nhánh của
+  `resolveApprovalHubSubmitter()`.
+
+**Không cần làm gì thêm ngoài copy code + `pm2 restart`.**
 
 ## v29.6 (2026-11): Hộp Thư Duyệt Tổng Hợp — đổi nhãn cột "Trích Yếu" → "Mô Tả"
 
