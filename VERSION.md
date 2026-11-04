@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**29.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.16 (2026-11): Fix nút "💰 Giá trị đầu tư/hợp đồng" không phản hồi ở QLDA > Thực Hiện
+
+Người dùng báo (kèm ảnh khoanh đỏ): nút "💰" ở mỗi dòng công việc trong Thực Hiện "không thao tác được
+bất kỳ cái gì" — đúng y hệt lớp lỗi đã vá ở "🗑️ Xoá"/"🔁 Giao Lại" (v29.14) và "✏️ Sửa Đề Xuất" (v29.15):
+`openOperationWorkItemContractModal()` dùng `data-id` nhưng chưa khai ở registry `OP_CLICK_ACTIONS`
+(module-vanhanh.js) nên rơi vào fallback chỉ đọc `data-arg0`/`argN` → gọi với `id=undefined` → thoát
+ngay, không mở gì cả. Modal `operationWorkItemContractModal` cũng chưa đăng ký ở
+`forEach(bindOperationDelegation(...))` (lớp lỗi thứ 2, như các modal trước).
+
+Nhân dịp này đã rà soát lại TOÀN BỘ các nút `data-op` dùng `data-id` trong `module-vanhanh.js` đối chiếu
+với registry `OP_CLICK_ACTIONS` và danh sách modal đã đăng ký delegation — xác nhận đây là điểm thiếu
+sót DUY NHẤT còn lại, không còn nút nào khác trong module Vận Hành mắc cùng lỗi này.
+
+Xác nhận với người dùng: nút "💰" đúng là nơi gộp 2 giá trị + tệp đính kèm nhiều file theo đúng yêu cầu
+trước đó (C2) — "Giá Trị Đầu Tư" tự động lấy từ Tổng Danh Mục Đầu Tư đã duyệt (read-only), "Giá Trị Hợp
+Đồng" nhập tay, và tệp đính kèm hỗ trợ tải nhiều file cùng lúc (tối đa 10) — không phải 2 cột riêng
+trong bảng để tiết kiệm diện tích, chỉ là trước đó không bấm được do bug này.
+
+**Test:** mở rộng `tests/test-operation-vhst-uibugfix.js` (Playwright thật) thêm kịch bản bấm "💰" →
+kiểm "Giá Trị Đầu Tư" tự điền đúng → gõ "Giá Trị Hợp Đồng" → bấm "💾 Lưu" → lưu đúng + modal tự đóng. Đã
+xác nhận: revert riêng `module-vanhanh.js` làm kịch bản FAIL đúng như lỗi người dùng báo (modal không mở
+được), áp lại fix thì PASS 17/17. Nhân tiện vá thêm 1 gap ở `tests/testHarness.js` (thiếu mock cho action
+`operationWorkItems:contract`). Chạy lại ~6 file test khác liên quan, không regression.
+
+**Deploy:** chỉ đổi code client (`public/js/module-vanhanh.js`) — copy code + `pm2 restart` là đủ.
 
 ## v29.15 (2026-11): Fix nút "Lưu Thay Đổi"/"Hủy Bỏ" không phản hồi ở "Sửa Đề Xuất Sửa Chữa" + thiếu tên Siêu Thị ở Danh Mục Đầu Tư
 

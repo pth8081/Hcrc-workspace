@@ -424,6 +424,38 @@ async function main() {
       assert(check.assignedTo.includes(REASSIGN_TARGET.username), `Phải lưu đúng người phụ trách mới sau khi bấm "💾 Giao Lại" THẬT (nếu không có trong danh sách: nút vẫn "chết", bug CSP-delegation TÁI PHÁT) — thực tế assignedTo: ${JSON.stringify(check.assignedTo)}`);
       assert(check.modalHidden, 'Modal "Giao Lại" phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Giao Lại" vẫn "chết")');
     });
+
+    // ===================== 5) LỖI ĐÃ VÁ (11/2026): "💰 Giá trị đầu tư/hợp đồng" — không mở gì cả =====================
+    // Người dùng báo (kèm ảnh chụp khoanh đỏ nút "💰"): "ấn nút này đang không khả dụng, ko thao tác được
+    // bất kỳ cái gì". Root cause GIỐNG HỆT "Xoá"/"Giao Lại" (v29.14): openOperationWorkItemContractModal()
+    // dùng data-id nhưng chưa khai ở OP_CLICK_ACTIONS -> fallback cspDispatchOp() chỉ đọc data-arg0/argN,
+    // gọi với id=undefined -> "if (!w) return;" thoát ngay, không mở gì cả. Modal operationWorkItemContractModal
+    // cũng CHƯA đăng ký ở forEach(bindOperationDelegation) (lớp lỗi thứ 2, như editOperationRepairModal).
+    await run.run('Giá Trị Hợp Đồng (DOM thật, bấm THẬT): bấm "💰" -> modal PHẢI mở đúng (hiện Giá Trị Đầu Tư tự động theo Danh Mục Đầu Tư) -> gõ Giá Trị Hợp Đồng + bấm "💾 Lưu" -> PHẢI lưu đúng + modal PHẢI tự đóng (trước fix: không mở gì cả)', async () => {
+      await page.click(`button[data-op="openOperationWorkItemContractModal"][data-id="${rootWorkItemId}"]`);
+      await page.waitForTimeout(100);
+      const modalOpened = await page.evaluate(() => !document.getElementById('operationWorkItemContractModal').classList.contains('hidden'));
+      assert(modalOpened, 'Modal "💰 Giá trị đầu tư/hợp đồng" phải mở ra khi bấm nút "💰" (nếu không mở: id=undefined, bug tái phát)');
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-contract-modal-open.png') });
+
+      const investmentText = await page.evaluate(() => document.getElementById('owiContractInvestmentValue').innerText);
+      assert(investmentText && investmentText !== '0', `"Giá Trị Đầu Tư" phải tự lấy từ Tổng Danh Mục Đầu Tư của hồ sơ (khác 0 vì hồ sơ test đã có hạng mục) — thực tế: "${investmentText}"`);
+
+      await page.fill('#owiContractValue', '850000000');
+      await page.click('button[data-op="submitOperationWorkItemContract"]');
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-contract-after-save.png'), fullPage: true });
+
+      const check = await page.evaluate((rid) => {
+        const item = DB.operationWorkItems.find(w => w.id === rid);
+        return {
+          contractValue: item.contractValue,
+          modalHidden: document.getElementById('operationWorkItemContractModal').classList.contains('hidden')
+        };
+      }, rootWorkItemId);
+      assertEqual(check.contractValue, 850000000, 'Giá Trị Hợp Đồng phải được lưu đúng sau khi bấm "💾 Lưu" THẬT (nếu vẫn 0/cũ: nút vẫn "chết", bug CSP-delegation TÁI PHÁT)');
+      assert(check.modalHidden, 'Modal phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Lưu" vẫn "chết")');
+    });
   } finally {
     await browser.close();
     server.close();

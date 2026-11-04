@@ -356,6 +356,14 @@ function createDispatcher(state) {
     const sourceRecord = sourceRecordForWorkItem(item);
     return recordActions.reassignOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
   };
+  // "💰 Giá trị đầu tư/hợp đồng" (C2) — mirror ĐÚNG route thật (routes/records.js POST
+  // /operationWorkItems/:id/contract), xem lib/recordActions.js updateOperationWorkItemContract(). Thiếu
+  // handler này (cùng lớp gap với operationRepairs:update ở trên) khiến test-operation-vhst-uibugfix.js/
+  // test-operation-repair-edit-modal-and-title.js không thể viết kịch bản bấm nút thật cho "💰" trước đây.
+  actionHandlers['operationWorkItems:contract'] = (u, item, body) => {
+    const sourceRecord = sourceRecordForWorkItem(item);
+    return recordActions.updateOperationWorkItemContract(u, item, body || {}, sourceRecord);
+  };
   // operationStoreOpenings/operationRepairs:update (cơ chế "Sửa & Gửi Lại Bổ Sung" CŨ, editOperationStoreOpeningDraft()/
   // editOperationRepairDraft()) ĐÃ BỊ XOÁ khỏi đây — không còn tồn tại cho 2 collection này (Mục H, 60c473b).
   // LỖI ĐÃ VÁ (11/2026, người dùng báo "ấn nút lưu... ko khả dụng": root cause THẬT là CSP-delegation,

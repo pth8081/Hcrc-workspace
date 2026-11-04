@@ -6157,6 +6157,11 @@ const OP_CLICK_ACTIONS = {
   // qua el.dataset.id (mirror các entry khác), là đủ sửa dứt điểm.
   deleteOperationWorkItemClient: el => deleteOperationWorkItemClient(Number(el.dataset.id)),
   openOperationWorkItemReassignModal: el => openOperationWorkItemReassignModal(Number(el.dataset.id)),
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo nút "💰 Giá trị đầu tư/hợp đồng" "không thao tác được bất kỳ cái
+  // gì"): ĐÚNG lớp lỗi y hệt deleteOperationWorkItemClient/openOperationWorkItemReassignModal ngay trên —
+  // openOperationWorkItemContractModal() cũng dùng data-id nhưng CHƯA TỪNG được khai ở registry này, rơi
+  // vào fallback chỉ đọc data-arg0/argN -> id=undefined -> "if (!w) return;" thoát ngay, không mở gì cả.
+  openOperationWorkItemContractModal: el => openOperationWorkItemContractModal(Number(el.dataset.id)),
   updateOperationWorkItemProgressAction: el => updateOperationWorkItemProgressAction(Number(el.dataset.id), el.dataset.status),
   // Correction 3 — modal "🔄 Cập Nhật Tiến Độ" (mirror #taskProgressModal), xem operationWorkItemProgressModal.
   openOperationWorkItemProgressModal: el => openOperationWorkItemProgressModal(Number(el.dataset.id)),
@@ -6433,5 +6438,9 @@ function bindOperationDelegation(rootId) {
 // operationWorkItemReassignModal ở trên, bị bỏ sót khỏi mảng này — nút mở modal (openEditOperationRepairModal,
 // nằm TRONG operationProcessModal đã bind) vẫn chạy bình thường, nhưng "💾 Lưu Thay Đổi"/"✕ Hủy Bỏ"/chọn
 // tệp đính kèm BÊN TRONG modal này hoàn toàn không phản hồi khi bấm thật.
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal'].forEach(bindOperationDelegation);
+// LỖI ĐÃ VÁ (11/2026, người dùng báo nút "💰 Giá trị đầu tư/hợp đồng" "không thao tác được bất kỳ cái
+// gì"): 'operationWorkItemContractModal' (C2, Giá Trị Đầu Tư tự động theo Danh Mục Đầu Tư + Giá Trị Hợp
+// Đồng + tệp đính kèm nhiều file) CŨNG là 1 <div> độc lập cấp cao, bị bỏ sót khỏi mảng này — cùng lớp lỗi
+// editOperationRepairModal/operationWorkItemReassignModal ở trên.
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal', 'operationWorkItemContractModal'].forEach(bindOperationDelegation);
 
