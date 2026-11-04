@@ -422,9 +422,26 @@ function isShelfRecordCreatedToday(createdAt) {
 // mọi shelfRecords tạo HÔM NAY có ĐÚNG maHang đó — CÙNG công thức "tổng hôm nay" đã dùng cho Ngưỡng Tồn
 // (jobs/shelfStockThresholdAlert.js), để nhất quán trong toàn tính năng. Mã hàng hệ thống nào không có
 // ghi nhận hôm nay -> trên kệ = 0 (Lệch), không ẩn dòng (người quản lý cần thấy rõ SKU nào CHƯA kiểm).
-function renderShelfReconciliationTable(rows, capNhatLuc, isOffline) {
+// setShelfReconHeader() — "đang đối chiếu với Mã Điểm nào" (11/2026, theo yêu cầu người dùng: "đối chiếu
+// sai tôi không biết được"). maDiem LUÔN lấy từ response server (routes/shelfStock.js tự tra theo
+// req.freshUser.dept, KHÔNG tin client) — hiện rõ để người dùng tự so lại đúng giá trị này với cột "Mã
+// Điểm" ở Hệ Thống → Quản Trị → Quản Lý Danh Mục → Danh Mục Siêu Thị nếu nghi ngờ cấu hình API Tồn Kho
+// trỏ nhầm siêu thị khác.
+function setShelfReconHeader(maDiem, isError, errorMessage) {
+  const headerEl = document.getElementById('shelfReconHeader');
+  if (!headerEl) return;
+  if (isError) {
+    headerEl.className = 'bg-red-50 border border-red-200 rounded px-3 py-2 text-xs font-bold text-red-700';
+    headerEl.textContent = errorMessage || `⚠️ Siêu Thị: ${currentUser.dept} — chưa cấu hình Mã Điểm API Tồn Kho, không đối chiếu được (xem cột "Mã Điểm" ở Danh Mục Siêu Thị).`;
+    return;
+  }
+  headerEl.className = 'bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800';
+  headerEl.textContent = `📍 Đang đối chiếu Siêu Thị: ${currentUser.dept} — Mã Điểm: ${maDiem || '(không rõ)'}`;
+}
+function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem) {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
+  setShelfReconHeader(maDiem, false);
   const todayByMaHang = {};
   (DB.shelfRecords || []).forEach(r => {
     if (!r.maHang || !isShelfRecordCreatedToday(r.lastScannedAt || r.createdAt)) return;
@@ -462,20 +479,25 @@ async function loadShelfReconciliation() {
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
+      // isError=true ở đây BAO GỒM cả lỗi 404 "chưa cấu hình Mã Điểm" — chính kịch bản người dùng nhắc
+      // ("đối chiếu sai tôi không biết được"): phải nói rõ NGAY ở header đang thiếu cấu hình cho ĐÚNG
+      // siêu thị nào, không chỉ im lặng hiện dòng lỗi nhỏ trong bảng.
+      setShelfReconHeader(null, true);
       tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
       return;
     }
     const rows = Array.isArray(body.rows) ? body.rows : [];
-    renderShelfReconciliationTable(rows, body.capNhatLuc, false);
-    cacheShelfSystemInventoryOffline(rows, body.capNhatLuc);
+    renderShelfReconciliationTable(rows, body.capNhatLuc, false, body.maDiem);
+    cacheShelfSystemInventoryOffline(rows, body.capNhatLuc, body.maDiem);
   } catch (err) {
     // fetch() throw = LỖI MẠNG THẬT (không phải response lỗi 503/404 ở trên, đã xử lý riêng) — cùng cách
     // phân biệt err instanceof TypeError đã dùng ở trySyncPendingShelfRecords(). Lỗi nghiệp vụ (chưa cấu
     // hình Mã Điểm...) KHÔNG rơi vào đây, luôn hiện đúng thông báo server trả về ở nhánh !res.ok trên.
     const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
     if (cached) {
-      renderShelfReconciliationTable(cached.rows, cached.capNhatLuc, true);
+      renderShelfReconciliationTable(cached.rows, cached.capNhatLuc, true, cached.maDiem);
     } else {
+      setShelfReconHeader(null, true, `⚠️ Siêu Thị: ${currentUser.dept} — không thể kết nối tới máy chủ để đối chiếu.`);
       tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
     }
   }
@@ -1150,8 +1172,8 @@ async function cacheShelfLocationsOffline() {
 // loadShelfSystemInventoryForRecordPicker()/loadShelfReconciliation()) — dùng khi mất mạng sau đó, xem
 // getShelfSystemInventoryOfflineFallback(). Chỉ lưu đúng dept hiện tại (ensureShelfOfflineReady() tự xoá
 // khi đổi dept), KHÔNG lẫn dữ liệu siêu thị khác.
-async function cacheShelfSystemInventoryOffline(rows, capNhatLuc) {
-  const entry = { key: 'cache', rows, capNhatLuc, cachedAt: new Date().toISOString() };
+async function cacheShelfSystemInventoryOffline(rows, capNhatLuc, maDiem) {
+  const entry = { key: 'cache', rows, capNhatLuc, maDiem, cachedAt: new Date().toISOString() };
   try {
     const db = await openShelfOfflineDb();
     await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.put(entry));

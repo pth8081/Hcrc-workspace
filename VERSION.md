@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**29.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.4 (2026-11): Kiểm Soát Hàng Hóa — header "📊 Đối Chiếu" hiện rõ đang đối chiếu Siêu Thị/Mã Điểm nào
+
+Người dùng yêu cầu thêm (sau header "📍 Siêu Thị" chung ở v29.3): riêng
+sub-tab "📊 Đối Chiếu" phải hiện rõ ĐANG đối chiếu dữ liệu đối tác (BRGMART)
+theo đúng Siêu Thị + Mã Điểm nào — "đối chiếu sai tôi không biết được", và
+phải đối chiếu đúng mã đã cấu hình ở Danh Mục Siêu Thị.
+
+**Đã làm:**
+- `routes/shelfStock.js` (GET `/api/shelf-stock/system-inventory`): trả
+  thêm field `maDiem` trong response (server tự tra theo `req.freshUser.dept`
+  — KHÔNG tin client, giữ nguyên nguyên tắc chống store-spoofing đã có của
+  route này).
+- `public/fragments/vanHanhSection.html`: thêm header `#shelfReconHeader`
+  phía trên bảng Đối Chiếu.
+- `public/js/module-vanhanh.js`: `setShelfReconHeader()` hiện
+  "📍 Đang đối chiếu Siêu Thị: ... — Mã Điểm: ..." (xanh) khi tải thành
+  công; chuyển đỏ + nêu rõ tên siêu thị khi lỗi (chưa cấu hình Mã Điểm,
+  mất kết nối máy chủ...) — không chỉ im lặng hiện dòng lỗi nhỏ trong
+  bảng như trước. `cacheShelfSystemInventoryOffline()` lưu thêm `maDiem`
+  để chế độ offline vẫn hiện đúng header khi dùng lại dữ liệu cache.
+- Test Playwright thật cho cả 2 trường hợp (có/chưa cấu hình Mã Điểm) +
+  chạy lại toàn bộ 14 file `test-shelf-*.js` hiện có (133 kịch bản, không
+  tính 1 lỗi thời gian có sẵn từ trước không liên quan).
+- Docs: `deploy/Huong-dan-nghiep-vu.md`.
+
+**Không cần làm gì thêm ngoài copy code + `pm2 restart`.**
 
 ## v29.3 (2026-11): Kiểm Soát Hàng Hóa — header cố định "📍 Siêu Thị: ..." ngay khi mở module
 

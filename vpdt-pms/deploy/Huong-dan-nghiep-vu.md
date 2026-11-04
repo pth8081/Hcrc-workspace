@@ -3149,6 +3149,13 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     quyền vào tab. Nếu siêu thị chưa cấu hình "Mã Điểm" hoặc hệ thống chưa
     cấu hình kết nối API, màn này báo lỗi rõ ràng thay vì hiện trống/lỗi vỡ
     giao diện.
+  - **Header "📍 Đang đối chiếu Siêu Thị: ... — Mã Điểm: ..." (MỚI, 11/2026)**:
+    ngay phía trên bảng Đối Chiếu, luôn hiện rõ ĐANG lấy dữ liệu đối tác
+    theo đúng Siêu Thị + Mã Điểm nào (server tự tra theo tài khoản đăng
+    nhập, không tin client) — nghi ngờ dữ liệu đối chiếu sai thì so lại
+    ngay giá trị Mã Điểm ở đây với cột "Mã Điểm" cấu hình ở Danh Mục Siêu
+    Thị (mục ngay dưới). Siêu thị chưa cấu hình Mã Điểm thì header chuyển
+    đỏ, nêu rõ tên siêu thị đang thiếu cấu hình.
 - **Cấu hình "Mã Điểm" (bắt buộc để dùng Đối Chiếu, MỚI 11/2026)**: Hệ
   Thống → Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị —
   admin tự nhập tay ô "Mã Điểm API Tồn Kho" cho từng siêu thị (mã do bên

@@ -868,7 +868,9 @@ function createDispatcher(state) {
       // được kiểm riêng ở routes test khác — ở đây chỉ cần dữ liệu để test cột "Tồn Kho Hệ Thống" (Hạn Sử Dụng).
       if (pathName === '/api/shelf-stock/system-inventory' && method === 'GET') {
         if (!state.__mockSystemInventoryRows) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác' } };
-        return { status: 200, body: { rows: state.__mockSystemInventoryRows, capNhatLuc: new Date().toISOString() } };
+        // maDiem (11/2026) — mirror ĐÚNG field mới routes/shelfStock.js trả thêm (xem chú thích ở đó);
+        // test tự seed state.__mockSystemInventoryMaDiem khi cần kiểm riêng header "Đang đối chiếu...".
+        return { status: 200, body: { rows: state.__mockSystemInventoryRows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null } };
       }
 
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };

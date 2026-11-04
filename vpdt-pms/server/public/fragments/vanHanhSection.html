@@ -1095,6 +1095,12 @@
       <!-- Sub-tab 5: Đối Chiếu Kệ & Tồn Kho (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1,
            11/2026) — CHỈ XEM, mở cho mọi người có quyền vào tab Kiểm Soát Hàng Hóa. -->
       <div id="vanHanhShelfReconWrap" class="hidden space-y-4">
+        <!-- Header "đang đối chiếu với Mã Điểm nào" (11/2026, theo yêu cầu người dùng: đối chiếu sai Mã
+             Điểm thì không ai biết được) — maDiem do SERVER tự trả về kèm response /system-inventory
+             (routes/shelfStock.js, tra từ DB.storeExternalCodes theo ĐÚNG dept người gọi, không tin
+             client) — đối chiếu lại đúng giá trị này với cột "Mã Điểm" ở Hệ Thống → Quản Trị → Quản Lý
+             Danh Mục → Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai. Xem setShelfReconHeader()/module-vanhanh.js. -->
+        <div id="shelfReconHeader" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800"></div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
             <thead class="bg-gray-100">

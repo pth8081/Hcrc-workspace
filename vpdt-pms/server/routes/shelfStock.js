@@ -199,7 +199,11 @@ router.get('/system-inventory', async (req, res) => {
     if (!cached) {
       return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
     }
-    res.json({ rows: cached.rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt });
+    // maDiem trả kèm (11/2026, theo yêu cầu người dùng: "đối chiếu sai tôi không biết được") — để client
+    // hiện rõ ĐANG đối chiếu với Mã Điểm nào ngay trên màn Đối Chiếu, người dùng tự so lại với cột "Mã
+    // Điểm" ở Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai — maDiem ở đây LUÔN server tự tra theo
+    // req.freshUser.dept (dòng 194 ở trên), không phải giá trị client gửi lên, nên hiện ra an toàn.
+    res.json({ rows: cached.rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
   }
