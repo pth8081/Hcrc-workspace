@@ -1,9 +1,60 @@
 # Phiên bản hiện tại
 
-**29.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.17 (2026-11): [KHẨN — sự cố production] Fix nghẽn hệ thống do `systemInventorySnapshot` phình to kéo theo `requireAuth()` timeout hàng loạt
+
+**Sự cố thật đang xảy ra (production, hws.hcrc.vn):** sau khi đối tác BRGMART
+sửa lỗi `maDiem` (bản 10.67, xem phần đồng bộ tồn kho ở các bản trước) và
+người dùng đồng bộ lại, khoá `systemInventorySnapshot` trong `dbo.AppData`
+(jobs/inventorySync.js) phình từ gần rỗng lên ~650 nghìn dòng tồn kho JSON.
+Người dùng báo PM2 log dồn dập lỗi `requireAuth(): operation timed out`,
+ứng dụng không dùng được. Chẩn đoán qua câu lệnh SQL kiểm tra phiên đang chạy
+(`sys.dm_exec_requests`): ~45 phiên đồng thời, TOÀN BỘ `wait_type =
+ASYNC_NETWORK_IO` (không phải khoá/block — `blocking_session_id = 0` hết),
+tất cả đang chạy `SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData`.
+
+**Nguyên nhân gốc:** `getAllAppDataWithVersionsCached()` (lib/appData.js) —
+hàm phục vụ `GET /api/data`, tức chạy ở **MỌI lượt tải trang/polling của MỌI
+người dùng đang đăng nhập** — luôn `SELECT *` nguyên bảng `AppData`, kéo theo
+luôn khoá `systemInventorySnapshot` khổng lồ dù client **không hề đọc**
+`DB.systemInventorySnapshot` ở đâu cả (màn Đối Chiếu đọc riêng đúng 1 khoá
+này qua `getAppDataValueCached(INVENTORY_SNAPSHOT_KEY)`, không qua đường
+này). Hàng chục request đồng thời cùng phải truyền tải + JSON.parse blob
+nhiều MB này mỗi lượt → nghẽn mạng/CPU tiến trình Node → kéo theo mọi route
+khác (kể cả `requireAuth()` đọc cache "users" cùng tiến trình) bị timeout dây
+chuyền. Đúng lớp lỗi đã từng gặp với `systemLogs`/`Tasks`/`OperationWorkItems`
+trước đây (xem `CLAUDE.md`) — khác là lần này xử lý bằng cách loại khoá khỏi
+vòng đọc chung (nhanh, không đổi schema) thay vì tách hẳn sang bảng riêng.
+
+**Fix:** `getAllAppDataWithVersionsCached()` + `getAllAppData()`
+(lib/appData.js) thêm `WHERE DataKey NOT IN (...)` loại trừ
+`systemInventorySnapshot` khỏi câu SELECT — dữ liệu VẪN nằm trong `AppData`
+như cũ (không di chuyển, không mất), chỉ không còn bị kéo theo ở 2 đường đọc
+dùng chung này nữa. Màn Đối Chiếu tồn kho (đọc riêng theo đúng 1 khoá) hoạt
+động y như cũ, không ảnh hưởng gì. Đã xác nhận không nơi nào ở client
+(`public/js/`, `public/index.html`) hay `routes/data.js` tham chiếu
+`data.systemInventorySnapshot` lấy từ `GET /api/data` — an toàn 100% khi bỏ.
+
+**Test:** `node -c lib/appData.js` xác nhận cú pháp hợp lệ; grep xác nhận
+không có nơi nào phụ thuộc khoá này qua đường đọc chung. Thay đổi KHÔNG đụng
+tới route/hàm ghi dữ liệu (`setAppDataValue`) — chỉ bớt 1 khoá ở 2 hàm đọc
+toàn bảng, rủi ro thấp, tác dụng ngay khi restart.
+
+**Deploy (KHẨN — làm ngay):** chỉ đổi code server (`lib/appData.js`) — copy
+code + `pm2 restart` là đủ, KHÔNG cần đổi `schema.sql`/`.env`/`package.json`
+dependencies. Sau khi deploy, nên theo dõi lại PM2 log vài phút để xác nhận
+hết lỗi `requireAuth() timeout`.
+
+**Việc cần làm tiếp (không khẩn, làm sau khi hệ thống ổn định lại):** khoá
+`systemInventorySnapshot` giờ đã lớn cố định (~650 nghìn dòng) và chỉ còn
+được ghi đè MỖI LẦN đồng bộ qua `setAppDataValue()` (ghi đè toàn bộ) — nên
+xem xét tách hẳn sang bảng riêng (như `systemLogs`/`Tasks` đã làm trước đây)
+nếu việc ĐỒNG BỘ (ghi, không phải đọc) cũng bắt đầu gây nghẽn, hoặc nếu dữ
+liệu còn tiếp tục tăng theo số siêu thị kết nối thêm.
 
 ## v29.16 (2026-11): Fix nút "💰 Giá trị đầu tư/hợp đồng" không phản hồi ở QLDA > Thực Hiện
 
