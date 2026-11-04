@@ -887,7 +887,26 @@ function createDispatcher(state) {
         if (!state.__mockSystemInventoryRows) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác' } };
         // maDiem (11/2026) — mirror ĐÚNG field mới routes/shelfStock.js trả thêm (xem chú thích ở đó);
         // test tự seed state.__mockSystemInventoryMaDiem khi cần kiểm riêng header "Đang đối chiếu...".
-        return { status: 200, body: { rows: state.__mockSystemInventoryRows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null } };
+        let rows = state.__mockSystemInventoryRows;
+        let totalSystemSkuCount, scannedTodayCount;
+        // scope=recon (11/2026) — mirror ĐÚNG logic lọc server thật (chỉ trả mã đã scan HÔM NAY của ĐÚNG
+        // siêu thị mình, xem routes/shelfStock.js) để demo/test Đối Chiếu thấy đúng hành vi mới.
+        if (new URL(url, 'http://x').searchParams.get('scope') === 'recon') {
+          const freshUser = state.users.find(u => u.username === username);
+          totalSystemSkuCount = rows.length;
+          const now = new Date();
+          const scannedMaHangToday = new Set();
+          for (const r of (state.shelfRecords || [])) {
+            if (!r || r.dept !== freshUser.dept || !r.maHang) continue;
+            const d = new Date(r.lastScannedAt || r.createdAt);
+            if (!isNaN(d.getTime()) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+              scannedMaHangToday.add(String(r.maHang));
+            }
+          }
+          scannedTodayCount = scannedMaHangToday.size;
+          rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+        }
+        return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount } };
       }
 
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };

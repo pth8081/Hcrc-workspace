@@ -1,9 +1,55 @@
 # Phiên bản hiện tại
 
-**29.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.21 (2026-11): Đối Chiếu Tồn Kho chỉ xử lý mã ĐÃ SCAN lên kệ hôm nay (hiệu năng)
+
+Người dùng phản hồi (kèm ảnh chụp màn "📊 Đối Chiếu" của 1 siêu thị): màn này trả về/vẽ **toàn bộ** tồn
+kho hệ thống của siêu thị (có thể vài chục nghìn mã/siêu thị), trong khi phần lớn chưa được scan lên kệ
+hôm nay nên luôn hiện "Khớp 0-0" vô nghĩa — lo ngại nếu nhiều siêu thị cùng bấm lúc tải cao điểm có thể
+treo ứng dụng. Yêu cầu: Đối Chiếu chỉ cần xử lý mã ĐÃ scan lên kệ, bỏ qua phần còn lại; kiểm tra luôn
+Ngưỡng Tồn có cùng vấn đề không.
+
+**Phân tích:**
+- `GET /api/shelf-stock/system-inventory` (dùng CHUNG cho 3 nơi: picker "🔎 Chọn Từ Tồn Kho Hệ Thống" ở
+  Ghi Nhận, màn "⏰ Hạn Sử Dụng", và màn "📊 Đối Chiếu") trước đây LUÔN trả nguyên mảng tồn kho hệ thống
+  đầy đủ — không lọc gì. Đối Chiếu lại `renderShelfReconciliationTable()` vẽ hết số dòng đó vào 1
+  `innerHTML` — đúng điểm nghẽn hiệu năng người dùng lo ngại, đặc biệt khi nhiều siêu thị cùng mở lúc cao
+  điểm (payload JSON lớn + dựng DOM lớn đồng thời).
+- **Ngưỡng Tồn (📊) đã đúng từ trước, KHÔNG cần sửa gì** — `computeShelfThresholdTodayTotals()` chỉ lặp
+  qua `DB.shelfStockThresholds` (danh sách nhỏ do admin tự cấu hình các mã cần theo dõi), không hề chạm
+  tới tồn kho hệ thống đầy đủ.
+- Phát hiện kèm (chưa người dùng báo, lộ ra trong lúc sửa): `todayByMaHang` của Đối Chiếu tính tổng
+  "Trên Kệ Hôm Nay" **thiếu lọc theo `dept`** — nếu 2 siêu thị cùng scan 1 mã hàng trong ngày, số hiện ra
+  sẽ cộng dồn nhầm cả 2 siêu thị (Ngưỡng Tồn đã lọc đúng từ trước, Đối Chiếu thì chưa) — vá cùng lúc.
+
+**Thay đổi:**
+- `routes/shelfStock.js`: `GET /system-inventory` nhận thêm query `?scope=recon` (CHỈ Đối Chiếu gửi) —
+  khi có, server tự tính tập mã hàng (`maHang`) đã có ghi nhận scan **hôm nay** (giờ VN, qua
+  `parseVNDateTime` có sẵn) của **đúng siêu thị** người gọi (`req.freshUser.dept`, không đọc từ
+  query/body client), rồi lọc `rows` chỉ còn các mã đó trước khi trả về — kèm `totalSystemSkuCount`/
+  `scannedTodayCount` để client hiện rõ "đã bỏ qua bao nhiêu". 2 nơi gọi còn lại (picker + Hạn Sử Dụng)
+  KHÔNG gửi `scope` nên vẫn nhận nguyên mảng đầy đủ như cũ — không đổi hành vi.
+- `module-vanhanh.js`:
+  - `loadShelfReconciliation()` gọi `?scope=recon`, hiện đúng số dòng đã lọc + note minh bạch
+    ("Chỉ đối chiếu X/Y mã hàng hệ thống — đúng các mã ĐÃ SCAN lên kệ hôm nay").
+  - `renderShelfReconciliationTable()`: thêm lọc `r.dept === currentUser.dept` vào `todayByMaHang` (vá
+    kèm lỗi cộng dồn chéo siêu thị nêu trên).
+  - Cache offline (mất mạng) tách riêng slot `'recon'` (IndexedDB) khỏi slot `'cache'` dùng chung bởi
+    picker/Hạn Sử Dụng — nếu không tách, lúc mất mạng 2 nơi đó sẽ vô tình đọc nhầm mảng ĐÃ LỌC nhỏ của
+    Đối Chiếu thay vì mảng đầy đủ chúng cần.
+
+**Test:** `tests/test-inventory-recon.js` (20/20, có cập nhật guard regex không chặn nhầm query mới) +
+`tests/test-shelf-mobile-and-offline-inventory.js` (8/8, sửa 1 test seed sai cache key sau khi tách
+slot offline) + 10 file test `test-shelf-*`/`demo-shelf-*` khác liên quan — không regression. Mirror
+logic lọc `scope=recon` vào mock backend `tests/testHarness.js` để demo/test phản ánh đúng hành vi mới.
+Demo ảnh thật (6 mã tồn kho hệ thống, chỉ 2 mã đã scan hiện ra) đã gửi người dùng xác nhận.
+
+**Deploy:** chỉ đổi code (`routes/shelfStock.js`, `public/js/module-vanhanh.js`) — copy code +
+`pm2 restart` là đủ, không đổi schema/biến môi trường.
 
 ## v29.20 (2026-11): Sửa lỗi "Giá Trị Đầu Tư" hiện SAI (tổng cả hồ sơ) + đổi thiết kế cột bảng/modal "💰"
 

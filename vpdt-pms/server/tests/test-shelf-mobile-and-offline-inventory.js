@@ -109,6 +109,9 @@ async function main() {
     });
 
     await run.run('loadShelfReconciliation(): fetch() throw TypeError -> render bảng từ cache + note có tiền tố 🔌 Offline', async () => {
+      // 11/2026: Đối Chiếu giờ dùng cache offline RIÊNG (cacheKey='recon', KHÔNG lẫn với cache 'cache'
+      // của picker đã seed ở test trên) — xem shelfOfflineReconCache ở module-vanhanh.js.
+      await page.evaluate(async ({ rows, cap }) => { await cacheShelfSystemInventoryOffline(rows, cap, null, 'recon'); }, { rows: SAMPLE_ROWS, cap: CAP_NHAT });
       await page.evaluate(() => setVanHanhShelfSubTab('RECON'));
       await page.evaluate(() => {
         window.__origFetch = window.fetch;

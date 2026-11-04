@@ -27,6 +27,7 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
+const { parseVNDateTime } = require('../lib/recordActions');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -208,11 +209,36 @@ router.get('/system-inventory', async (req, res) => {
     if (!cached) {
       return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
     }
+    let rows = cached.rows;
+    let totalSystemSkuCount, scannedTodayCount;
+    // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ, còn
+    // không thì bỏ qua... siêu thị ấn cùng một lúc có thể gây treo ứng dụng") — CHỈ màn "📊 Đối Chiếu" gửi
+    // query này. Tồn kho hệ thống có thể lên tới hàng chục nghìn mã/siêu thị trong khi 1 siêu thị thường
+    // chỉ ghi nhận vài chục/vài trăm mã mỗi ngày -> trả nguyên mảng (như trước đây) vừa tải/render cực
+    // nặng phía client vừa vô nghĩa (các mã chưa scan luôn hiện "Khớp 0-0", không giúp gì cho đối chiếu
+    // thật). 2 nơi gọi còn lại (picker "🔎 Chọn Từ Tồn Kho Hệ Thống" ở Ghi Nhận, và màn Hạn Sử Dụng) vẫn
+    // PHẢI nhận nguyên mảng đầy đủ — không truyền scope nên không bị lọc.
+    if (req.query.scope === 'recon') {
+      totalSystemSkuCount = rows.length;
+      const allShelfRecords = await getAllForCollection('shelfRecords');
+      const now = new Date();
+      const scannedMaHangToday = new Set();
+      for (const r of allShelfRecords) {
+        if (!r || r.dept !== req.freshUser.dept || !r.maHang) continue;
+        const scannedAt = parseVNDateTime(r.lastScannedAt || r.createdAt);
+        if (!scannedAt) continue;
+        if (scannedAt.getFullYear() === now.getFullYear() && scannedAt.getMonth() === now.getMonth() && scannedAt.getDate() === now.getDate()) {
+          scannedMaHangToday.add(String(r.maHang));
+        }
+      }
+      scannedTodayCount = scannedMaHangToday.size;
+      rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+    }
     // maDiem trả kèm (11/2026, theo yêu cầu người dùng: "đối chiếu sai tôi không biết được") — để client
     // hiện rõ ĐANG đối chiếu với Mã Điểm nào ngay trên màn Đối Chiếu, người dùng tự so lại với cột "Mã
     // Điểm" ở Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai — maDiem ở đây LUÔN server tự tra theo
     // req.freshUser.dept (dòng 194 ở trên), không phải giá trị client gửi lên, nên hiện ra an toàn.
-    res.json({ rows: cached.rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem });
+    res.json({ rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem, totalSystemSkuCount, scannedTodayCount });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
   }
