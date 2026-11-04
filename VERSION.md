@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**29.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.5 (2026-11): Đối Chiếu Tồn Kho — tự đồng bộ ngay khi mở tab, không chờ tick nền
+
+Người dùng phản hồi: "không tự động mà phải ấn á... dữ liệu đối tác phải
+tự cập nhật mới hơn, không chờ job nền" — trước đây màn Đối Chiếu chỉ ĐỌC
+snapshot đã đồng bộ sẵn (job nền tick mỗi 5 phút mới "để ý" ra là đã tới
+chu kỳ cấu hình, VD 20 phút), nên dữ liệu có thể cảm giác "cũ" dù đã lâu
+chưa ai mở tab này.
+
+**Đã làm:**
+- `jobs/inventorySync.js`: tách bước kiểm tra chu kỳ thành 1 giao dịch
+  khoá thật (`withLockedAppDataValue`, UPDLOCK/HOLDLOCK — cùng khuôn chống
+  race đã dùng cho tính năng Danh Mục Đầu Tư v29.2) — "giành chỗ" bằng
+  cách cập nhật `lastSyncAt` NGAY khi xác định đã tới chu kỳ, TRƯỚC KHI
+  thật sự gọi API đối tác (vốn chậm, không giữ trong giao dịch khoá) — để
+  nhiều người cùng mở Đối Chiếu đúng lúc tới chu kỳ cũng chỉ có ĐÚNG 1
+  lượt gọi thật ra đối tác, tránh "dội" đúng vấn đề đối tác từng báo (gọi
+  2 phút/lần là quá dày).
+- `routes/shelfStock.js` (GET `/api/shelf-stock/system-inventory`): tự gọi
+  `syncSystemInventory({force:false})` TRƯỚC khi đọc snapshot — hàm này tự
+  quyết định có thật sự cần gọi đối tác không (y hệt tick nền vẫn làm),
+  nên KHÔNG tăng tổng số lần gọi đối tác so với trước, chỉ đổi THỜI ĐIỂM
+  kiểm tra từ "chờ tick nền" sang "ngay khi có người mở Đối Chiếu".
+- Test: thêm "Kịch bản 7" (`test-inventory-api-config.js`) xác nhận bước
+  "giành chỗ" chạy trước khi biết kết quả gọi mạng; thêm 1 regression guard
+  (`test-inventory-recon.js`) đảm bảo route luôn gọi `syncSystemInventory`
+  trước khi đọc snapshot. Chạy lại toàn bộ test liên quan Kiểm Soát Hàng
+  Hóa/Đối Chiếu — 23/23 + 20/20 + các bộ test khác đều pass.
+- Docs: `deploy/Huong-dan-nghiep-vu.md`.
+
+**Không cần làm gì thêm ngoài copy code + `pm2 restart`.**
 
 ## v29.4 (2026-11): Kiểm Soát Hàng Hóa — header "📊 Đối Chiếu" hiện rõ đang đối chiếu Siêu Thị/Mã Điểm nào
 

@@ -26,7 +26,7 @@ const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { getSystemInventoryForMaDiem, isInventoryApiConfigured } = require('../jobs/inventorySync');
+const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -183,13 +183,22 @@ router.delete('/records/:id', async (req, res) => {
 // "🏬 Quản Lý Danh Mục Siêu Thị") — route này KHÔNG BAO GIỜ nhận maDiem/mã siêu thị từ query/body
 // client, chặn store-spoofing cùng nguyên tắc mọi route Kiểm Soát Hàng Hóa khác. Dữ liệu đọc từ snapshot
 // lưu ở dbo.AppData (jobs/inventorySync.js, tự đồng bộ nền mỗi 20 phút, v28.84 CHUYỂN TỪ CACHE RAM SANG
-// CSDL để mọi tiến trình PM2 cluster đọc chung 1 nguồn) — route này KHÔNG tự gọi API đối tác (tránh
-// người dùng bấm đi bấm lại làm dội lượt gọi vượt giới hạn tần suất của đối tác).
+// CSDL để mọi tiến trình PM2 cluster đọc chung 1 nguồn).
+// 11/2026 (theo yêu cầu người dùng: "vào Đối Chiếu phải tự có dữ liệu mới, không chờ job nền, không phải
+// bấm Đồng Bộ Ngay"): route này giờ TỰ gọi syncSystemInventory({force:false}) TRƯỚC khi đọc snapshot —
+// hàm đó tự quyết định có thật sự gọi API đối tác hay không (so sánh lastSyncAt với syncIntervalMinutes
+// admin đã cấu hình, y hệt tick nền vẫn làm), nên KHÔNG làm tăng tổng số lần gọi đối tác so với trước —
+// chỉ đổi THỜI ĐIỂM kiểm tra "đã tới chu kỳ chưa" từ "chờ tick nền mỗi 5 phút" sang "ngay khi có người mở
+// Đối Chiếu", nên dữ liệu không còn cảm giác "chờ job" dù tổng tải lên đối tác không đổi. Đã khoá chống
+// nhiều request cùng lúc đều tự gọi đối tác (xem chú thích "giành chỗ" ở syncSystemInventory()). Lỗi đồng
+// bộ ở bước này (mạng/đối tác lỗi) KHÔNG được chặn hẳn việc xem Đối Chiếu — syncSystemInventory() tự nuốt
+// lỗi, trả về snapshot CŨ vẫn còn trong CSDL (đã có từ trước) thay vì làm hỏng cả yêu cầu xem màn hình.
 router.get('/system-inventory', async (req, res) => {
   try {
     if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
     }
+    await syncSystemInventory({ force: false });
     const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
     const maDiem = storeExternalCodes[req.freshUser.dept];
     if (!maDiem) {

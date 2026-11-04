@@ -3149,6 +3149,17 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     quyền vào tab. Nếu siêu thị chưa cấu hình "Mã Điểm" hoặc hệ thống chưa
     cấu hình kết nối API, màn này báo lỗi rõ ràng thay vì hiện trống/lỗi vỡ
     giao diện.
+  - **Tự động cập nhật ngay khi mở tab, không chờ đủ chu kỳ (MỚI, 11/2026,
+    theo yêu cầu người dùng "phải tự động, không phải bấm mới ra")**: mỗi
+    lần mở "📊 Đối Chiếu", hệ thống TỰ kiểm tra "đã tới chu kỳ đồng bộ
+    (mặc định 20 phút) kể từ lần gần nhất chưa" — nếu ĐÃ tới, tự đồng bộ
+    ngay lúc đó (không cần bấm "🔄 Đồng Bộ Ngay" ở màn admin, và không phải
+    đợi tick nền tiếp theo mới "để ý" ra là đã tới chu kỳ); nếu CHƯA tới thì
+    vẫn hiện số liệu đã đồng bộ gần nhất như trước, không gọi thêm ra đối
+    tác (tổng số lần gọi API đối tác không đổi so với trước, chỉ đổi THỜI
+    ĐIỂM kiểm tra — từ "chờ tick nền" sang "ngay khi có người xem"). Nhiều
+    người cùng mở Đối Chiếu đúng lúc vừa tới chu kỳ cũng chỉ có ĐÚNG 1 lượt
+    gọi thật ra đối tác (có khoá chống trùng), không bị dội thêm.
   - **Header "📍 Đang đối chiếu Siêu Thị: ... — Mã Điểm: ..." (MỚI, 11/2026)**:
     ngay phía trên bảng Đối Chiếu, luôn hiện rõ ĐANG lấy dữ liệu đối tác
     theo đúng Siêu Thị + Mã Điểm nào (server tự tra theo tài khoản đăng

@@ -497,6 +497,18 @@ async function main() {
     assert.ok(handlerSrc.includes('req.freshUser.dept'), 'route phải tự tra theo req.freshUser.dept');
   });
 
+  await test('11/2026 (theo yêu cầu người dùng "Đối Chiếu phải tự cập nhật, không chờ job nền"): route PHẢI tự gọi syncSystemInventory({force:false}) TRƯỚC khi đọc snapshot cũ — regression guard, không được âm thầm xoá lại thành chỉ-đọc', async () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'shelfStock.js'), 'utf8');
+    const start = src.indexOf("router.get('/system-inventory'");
+    const end = src.indexOf('\n});', start);
+    const handlerSrc = src.slice(start, end);
+    const syncIdx = handlerSrc.indexOf('syncSystemInventory(');
+    const readIdx = handlerSrc.indexOf('getSystemInventoryForMaDiem(');
+    assert.ok(syncIdx !== -1, 'route phải gọi syncSystemInventory({force:false}) để tự cập nhật dữ liệu khi đã tới chu kỳ, không chờ tick nền');
+    assert.ok(/syncSystemInventory\(\s*\{\s*force:\s*false\s*\}\s*\)/.test(handlerSrc), 'phải gọi với force:false (không ép đồng bộ ngay bất kể chu kỳ — đó là việc của nút admin "Đồng Bộ Ngay")');
+    assert.ok(syncIdx < readIdx, 'phải gọi syncSystemInventory() TRƯỚC khi đọc snapshot, để người mở Đối Chiếu thấy dữ liệu MỚI ngay nếu đã tới chu kỳ, không phải đợi lần tải sau');
+  });
+
   console.log(`\n==== ${passed}/${passed + failed} scenario(s) passed ====`);
   process.exitCode = failed ? 1 : 0;
 }

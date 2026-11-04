@@ -125,19 +125,35 @@ async function syncSystemInventory({ force = false } = {}) {
     return { skipped: true };
   }
   if (!force && creds.source === 'ui') {
+    // 11/2026 (theo yêu cầu người dùng: "Đối Chiếu phải tự cập nhật mới hơn, không chờ job nền") —
+    // routes/shelfStock.js GET /system-inventory giờ TỰ gọi syncSystemInventory({force:false}) mỗi lần có
+    // người mở tab Đối Chiếu, để không phải đợi tick nền 5 phút mới "để ý" là đã tới chu kỳ. Hệ quả: hàm
+    // này có thể bị NHIỀU request (nhiều người dùng, nhiều tiến trình PM2 cluster) gọi GẦN NHƯ ĐỒNG THỜI
+    // đúng lúc vừa tới chu kỳ — nếu chỉ ĐỌC lastSyncAt rồi mới quyết định gọi (như code cũ), tất cả đều
+    // thấy "đã tới chu kỳ" và đều tự gọi thật ra đối tác cùng lúc, tái tạo đúng vấn đề "gọi dồn dập" mà
+    // toàn bộ cơ chế chu kỳ này sinh ra để tránh. Fix: "giành chỗ" bằng 1 giao dịch khoá thật
+    // (withLockedAppDataValue, UPDLOCK/HOLDLOCK — cùng khuôn chống race đã dùng cho
+    // buildAutoWorkItemsFromEstimate()/estimate-submit) — cập nhật NGAY lastSyncAt TRƯỚC KHI thật sự gọi
+    // API đối tác (vốn chậm, không giữ trong giao dịch khoá này) để request đến SAU thấy lastSyncAt đã
+    // mới, tự bỏ qua, chỉ ĐÚNG 1 request thắng được quyền sync.
+    let shouldSync = false;
     try {
-      const cfg = await getAppDataValue('inventoryApiConfig');
-      if (cfg && cfg.lastSyncAt) {
+      await withLockedAppDataValue('inventoryApiConfig', (cfg) => {
+        if (!cfg || cfg.enabled !== true) return cfg; // phòng thủ — không nên vào nhánh này nếu !== 'ui'
         const intervalMs = (Number(cfg.syncIntervalMinutes) || 20) * 60 * 1000;
-        const elapsedMs = Date.now() - new Date(cfg.lastSyncAt).getTime();
-        if (elapsedMs < intervalMs) {
-          return { ok: true, skipped: true, message: 'Chưa tới chu kỳ đồng bộ tiếp theo.' };
-        }
-      }
+        const elapsedMs = cfg.lastSyncAt ? Date.now() - new Date(cfg.lastSyncAt).getTime() : Infinity;
+        if (elapsedMs < intervalMs) return cfg; // chưa tới chu kỳ — không đổi gì, shouldSync giữ false
+        shouldSync = true;
+        return { ...cfg, lastSyncAt: new Date().toISOString() };
+      });
     } catch (err) {
-      // Không đọc được cấu hình để kiểm tra chu kỳ (lỗi CSDL tạm thời) — vẫn tiếp tục đồng bộ như bình
-      // thường thay vì chặn hẳn job (cùng tinh thần "lỗi đọc config rơi về chạy tiếp" ở resolveInventoryApiCreds()).
-      console.error('⛔ jobs/inventorySync: không đọc được chu kỳ đồng bộ đã cấu hình, vẫn tiếp tục đồng bộ —', err.message);
+      // Không đọc/khoá được cấu hình (lỗi CSDL tạm thời) — vẫn tiếp tục đồng bộ như bình thường thay vì
+      // chặn hẳn job (cùng tinh thần "lỗi đọc config rơi về chạy tiếp" ở resolveInventoryApiCreds()).
+      console.error('⛔ jobs/inventorySync: không khoá được cấu hình để kiểm tra chu kỳ, vẫn tiếp tục đồng bộ —', err.message);
+      shouldSync = true;
+    }
+    if (!shouldSync) {
+      return { ok: true, skipped: true, message: 'Chưa tới chu kỳ đồng bộ tiếp theo.' };
     }
   }
   lastSyncAttemptAt = new Date();

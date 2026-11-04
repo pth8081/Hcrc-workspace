@@ -284,6 +284,32 @@ async function runJobTests() {
         check('force=true (nút Đồng Bộ Ngay) -> bỏ qua kiểm tra chu kỳ, không bị "chưa tới chu kỳ" dù vừa đồng bộ 1 phút trước', result.skipped !== true, result);
         delete require.cache[require.resolve('../jobs/inventorySync')];
       }
+
+      // Kịch bản 7 (MỚI, 11/2026, theo yêu cầu người dùng: routes/shelfStock.js GET /system-inventory giờ
+      // tự gọi syncSystemInventory({force:false}) mỗi lần có người mở tab Đối Chiếu — xem chú thích "giành
+      // chỗ" ở syncSystemInventory()): "chỗ" (lastSyncAt) phải được CẬP NHẬT NGAY khi xác định đã tới chu
+      // kỳ, TRƯỚC KHI thật sự gọi API đối tác — để 1 request đến NGAY SAU (cùng lúc nhiều người mở Đối
+      // Chiếu) đọc lại thấy lastSyncAt đã mới, tự bỏ qua, tránh 2 lượt cùng gọi thật ra đối tác. Dùng ĐÚNG
+      // nhánh "đã qua chu kỳ" (30 phút trước, cấu hình 20 phút) của kịch bản 5 — ở đó bước gọi mạng SAU
+      // cùng bị SSRF guard chặn (baseUrl 127.0.0.1) nên sync CUỐI CÙNG thất bại (result.ok === false), vẫn
+      // đủ để xác nhận bước "giành chỗ" đã chạy TRƯỚC khi biết kết quả gọi mạng thành/bại.
+      {
+        const lastSyncAtBefore = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        const fakeStore = makeFakeStore(lastSyncAtBefore, 20);
+        stubModule('lib/appData', {
+          getAppDataValue: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          getAppDataValueCached: async (key) => (key in fakeStore ? fakeStore[key] : null),
+          setAppDataValue: async (key, value) => { fakeStore[key] = value; },
+          withLockedAppDataValue: async (key, fn) => { fakeStore[key] = await fn(fakeStore[key]); return fakeStore[key]; }
+        });
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+        const { syncSystemInventory } = require('../jobs/inventorySync');
+        const result = await syncSystemInventory({ force: false });
+        check('Đã qua chu kỳ: sync cuối cùng thất bại (SSRF chặn localhost) như kịch bản 5, dùng để xác nhận claim đã chạy trước', result.ok === false, result);
+        const claimedAt = fakeStore.inventoryApiConfig.lastSyncAt;
+        check('"Giành chỗ": lastSyncAt ĐÃ cập nhật thành thời điểm MỚI (không còn là giá trị 30 phút trước) dù sync sau đó thất bại', claimedAt !== lastSyncAtBefore && (Date.now() - new Date(claimedAt).getTime()) < 10000, { lastSyncAtBefore, claimedAt });
+        delete require.cache[require.resolve('../jobs/inventorySync')];
+      }
     } finally {
       bsvr.close();
     }
