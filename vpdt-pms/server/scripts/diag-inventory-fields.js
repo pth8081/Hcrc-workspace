@@ -16,7 +16,7 @@ async function main() {
   }
   console.log(`Nguồn cấu hình: ${creds.source} — Base URL: ${creds.baseUrl}`);
 
-  const url = `${creds.baseUrl.replace(/\/$/, '')}/api/v1/reports/ton-kho/run?page=1&pageSize=3`;
+  const url = `${creds.baseUrl.replace(/\/$/, '')}/api/v1/reports/ton-kho/run?page=1&pageSize=1000`;
   const res = await fetch(url, { headers: { 'X-API-Key': creds.apiKey } });
   const text = await res.text();
   console.log(`HTTP ${res.status}`);
@@ -25,8 +25,28 @@ async function main() {
     console.log('Body không phải JSON hợp lệ:', text.slice(0, 2000));
     process.exit(1);
   }
-  console.log('--- Toàn bộ JSON của dòng đầu tiên (xem đúng tên field) ---');
-  console.log(JSON.stringify((data && data.rows && data.rows[0]) || data, null, 2));
+  const rows = (data && Array.isArray(data.rows)) ? data.rows : [];
+  console.log(`Tổng số dòng lấy được ở trang 1: ${rows.length}`);
+
+  const withMaDiem = rows.filter(r => r && r.maDiem);
+  console.log(`Số dòng có maDiem KHÁC null/rỗng: ${withMaDiem.length} / ${rows.length}`);
+  if (withMaDiem.length) {
+    console.log('--- Mẫu 1 dòng CÓ maDiem ---');
+    console.log(JSON.stringify(withMaDiem[0], null, 2));
+  }
+
+  const maKhoSet = new Map(); // maKho (trimmed) -> tenSieuThi mẫu
+  for (const r of rows) {
+    const mk = r && r.maKho ? String(r.maKho).trim() : '';
+    if (mk && !maKhoSet.has(mk)) maKhoSet.set(mk, r.tenSieuThi);
+  }
+  console.log(`Số maKho khác nhau trong trang này: ${maKhoSet.size}`);
+  console.log('--- Danh sách maKho + tenSieuThi (tối đa 30 dòng đầu) ---');
+  let i = 0;
+  for (const [mk, ten] of maKhoSet) {
+    console.log(`maKho="${mk}"  tenSieuThi="${ten}"`);
+    if (++i >= 30) break;
+  }
   process.exit(0);
 }
 
