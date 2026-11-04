@@ -1756,9 +1756,18 @@ function renderItPriceModal() {
   // (hồ sơ còn PENDING, đang ở tab Phê Duyệt) được tải file MỚI NHẤT (file họ sắp quyết định) dù chưa
   // chính thức "đã duyệt" — mirror ĐÚNG điều kiện canApprove ở renderItPriceModalControls() (cùng file)
   // và phép kiểm server thật (lib/fileAuthz.js, canApproveStep()/resolveWorkflowStepApprovers()).
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo ảnh "chờ duyệt bước cuối (Nhóm Phê Duyệt Cuối) không hiện nút
+  // Tải"): trước đây còn bắt buộc `currentItPriceModalContext === 'APPROVAL'` (chỉ mở từ đúng 2 tab
+  // Phê Duyệt Giá mới hiện nút Tải) — ĐÚNG với nút Duyệt/Từ chối (quyết định nghiệp vụ, chỉ làm được ở
+  // 2 tab đó theo yêu cầu người dùng), nhưng SAI khi áp dụng luôn cho việc TẢI FILE: server
+  // (lib/fileAuthz.js, nhánh mode:'download') hoàn toàn KHÔNG kiểm tra "đang mở từ tab/context nào" —
+  // chỉ cần đúng người duyệt bước hiện tại (canApproveStep()) + hồ sơ còn PENDING là cho tải, bất kể
+  // modal mở từ đâu (Hỗ Trợ IT xem hỗ trợ, Hub Phê Duyệt, tìm theo mã...). Bỏ điều kiện context ở đây để
+  // khớp ĐÚNG quyền thật của server — không đổi gì cho nhóm nút Duyệt/Từ chối (vẫn gác ở isApprovalContext
+  // riêng, xem renderItPriceModalControls()).
   const wfConfigForDownload = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApproversForDownload = resolveEffectiveStepApprovers(wfConfigForDownload, p.currentStep);
-  const canDownloadPendingFile = currentItPriceModalContext === 'APPROVAL' && p.status === 'PENDING'
+  const canDownloadPendingFile = p.status === 'PENDING'
     && canApproveStep(currentUser, currentStepApproversForDownload, p.history, p.currentStep);
   // LỖI ĐÃ VÁ (11/2026, người dùng phát hiện qua ảnh chụp "Phê Duyệt Giá Bán Buôn" bị chặn tải dù đã
   // từng duyệt — kiểm tra lại cho CẢ bán lẻ): server (lib/fileAuthz.js) đã có ngoại lệ "ai đã TỪNG ký
