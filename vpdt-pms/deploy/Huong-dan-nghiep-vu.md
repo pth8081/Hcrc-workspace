@@ -3185,6 +3185,27 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     ngay giá trị Mã Điểm ở đây với cột "Mã Điểm" cấu hình ở Danh Mục Siêu
     Thị (mục ngay dưới). Siêu thị chưa cấu hình Mã Điểm thì header chuyển
     đỏ, nêu rõ tên siêu thị đang thiếu cấu hình.
+  - **"📊 Báo Cáo Đối Chiếu" — đặt lịch gửi email, thêm 1 kênh nhận thông tin
+    ngoài xem trên app (MỚI, 11/2026, theo yêu cầu người dùng)**: cùng
+    khuôn email tổng hợp của "🔔 Ngưỡng Tồn" ở trên nhưng **lịch gửi TÁCH
+    RIÊNG hoàn toàn**, không lẫn vào lịch Ngưỡng Tồn:
+    - **Nội dung email CHỈ gồm các mã hàng "Lệch"** (badge Khớp/Lệch khác
+      0) — không liệt kê mã hàng đang khớp đúng, tránh email dài không cần
+      thiết. Đính kèm file Excel liệt kê chi tiết các dòng Lệch đó, kèm 1
+      dòng chú thích phạm vi số liệu (giống Ngưỡng Tồn).
+    - **Lịch gửi riêng**: Hệ Thống → ⚙️ Quản Trị → "📊 Báo Cáo Đối Chiếu" —
+      admin chọn **Hàng ngày / Hàng tuần / Hàng tháng** + giờ gửi, hoàn
+      toàn độc lập với "⏰ Lịch Báo Cáo Ngưỡng Tồn" (2 form riêng, 2 lịch
+      riêng). Cùng cơ chế tự "bắt kịp" nếu server restart lỡ đúng giờ gửi
+      và tự thử lại khi SMTP lỗi như Ngưỡng Tồn.
+    - **Người nhận — cùng khuôn "4 tầng" như Ngưỡng Tồn** (Cửa hàng
+      trưởng/Tổ trưởng theo "🗄️ Quản Lý Danh Mục Quầy Kệ" + Quản lý vùng/
+      Toàn hệ thống theo "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" + tự thêm
+      thêm người của ĐÚNG siêu thị mình) — ô "✉️ Người Nhận Email Báo Cáo
+      Lệch" tự thêm nằm ngay trong màn "📊 Đối Chiếu", chỉ hiện cho người
+      có quyền "🗄️ Quản Lý Danh Mục Quầy Kệ" (Cửa hàng trưởng/Tổ trưởng).
+      Dùng CHUNG công tắc tắt nhận email ở Hồ Sơ Cá Nhân → "🔔 Thông Báo
+      Email" như Ngưỡng Tồn.
 - **Cấu hình "Mã Điểm" (bắt buộc để dùng Đối Chiếu, MỚI 11/2026)**: Hệ
   Thống → Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị —
   admin tự nhập tay ô "Mã Điểm API Tồn Kho" cho từng siêu thị (mã do bên

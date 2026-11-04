@@ -625,6 +625,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/shelfReconDigestSchedule (📊 Báo Cáo Đối Chiếu, 11/2026) — mirror ĐÚNG gate
+      // ADMIN_ONLY_KEYS + assertShelfReconDigestScheduleSafeToSave() ở routes/data.js, cùng khuôn nhánh
+      // shelfThresholdDigestSchedule ở trên (2 lịch gửi TÁCH RIÊNG).
+      if (pathName === '/api/data/shelfReconDigestSchedule' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.shelfReconDigestSchedule = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/data/priceZones — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (priceZones chỉ
       // Admin mới ghi được, xem chú thích tại đó) — cùng lý do KHÔNG mô phỏng toàn bộ generic
       // POST /api/data/:key như 2 nhánh uniformCatalog/hrTaskTemplates ở trên.
@@ -907,6 +918,30 @@ function createDispatcher(state) {
           rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
         }
         return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount } };
+      }
+      // GET/PUT /api/shelf-stock/recon-recipients (11/2026) — mirror ĐƠN GIẢN HOÁ routes/shelfStock.js
+      // thật: map state.shelfReconExtraRecipients {dept: [username,...]}, CHỈ đọc/sửa ĐÚNG key = dept
+      // người gọi — đủ để test UI picker ở màn "📊 Đối Chiếu" (gate quyền thật/validate username đã có
+      // test riêng dạng regex nguồn ở tests/test-shelf-recon-digest.js, không lặp lại ở đây).
+      if (pathName === '/api/shelf-stock/recon-recipients' && method === 'GET') {
+        const { canManageShelfStock } = require('../lib/shelfStockEdit');
+        const freshUser = state.users.find(u => u.username === username);
+        if (!canManageShelfStock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu' } };
+        const map = state.shelfReconExtraRecipients || {};
+        return { status: 200, body: { extraRecipientUsernames: Array.isArray(map[freshUser.dept]) ? map[freshUser.dept] : [] } };
+      }
+      if (pathName === '/api/shelf-stock/recon-recipients' && method === 'PUT') {
+        const { canManageShelfStock } = require('../lib/shelfStockEdit');
+        const freshUser = state.users.find(u => u.username === username);
+        if (!canManageShelfStock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu' } };
+        const wanted = Array.isArray(body.extraRecipientUsernames) ? [...new Set(body.extraRecipientUsernames.map(u => String(u || '').trim()).filter(Boolean))] : [];
+        const invalid = wanted.find(un => {
+          const u = state.users.find(x => x.username === un);
+          return !u || u.active === false || u.dept !== freshUser.dept;
+        });
+        if (invalid) return { status: 400, body: { error: `Người nhận "${invalid}" không hợp lệ` } };
+        state.shelfReconExtraRecipients = { ...(state.shelfReconExtraRecipients || {}), [freshUser.dept]: wanted };
+        return { status: 200, body: { extraRecipientUsernames: wanted } };
       }
 
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };

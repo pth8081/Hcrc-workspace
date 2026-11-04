@@ -270,6 +270,7 @@ function setVanHanhShelfSubTab(tab) {
     renderShelfStockThresholdsList();
   } else if (tab === 'RECON') {
     loadShelfReconciliation();
+    renderShelfReconExtraRecipientsSection();
   }
 }
 
@@ -523,6 +524,42 @@ async function loadShelfReconciliation() {
       setShelfReconHeader(null, true, `⚠️ Siêu Thị: ${currentUser.dept} — không thể kết nối tới máy chủ để đối chiếu.`);
       tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
     }
+  }
+}
+// ===== "✉️ Người Nhận Email Báo Cáo Lệch" (11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt
+// lịch gửi email") — picker dept-scoped, CHỈ hiện cho người có quyền quản lý Quầy Kệ/Ngưỡng Tồn
+// (canManageShelfLocationsClient()) — quyết định ai nhận email là thao tác quản lý. Server (routes/
+// shelfStock.js GET/PUT /recon-recipients) re-validate lại toàn bộ, không tin riêng lọc phía client.
+async function renderShelfReconExtraRecipientsSection() {
+  const wrap = document.getElementById('shelfReconRecipientsWrap');
+  if (!wrap) return;
+  if (!canManageShelfLocationsClient(currentUser)) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  try {
+    const res = await fetch('/api/shelf-stock/recon-recipients');
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) { wrap.classList.add('hidden'); return; }
+    const body = await res.json();
+    const candidates = (DB.users || []).filter(u => u && u.dept === currentUser.dept && u.active !== false);
+    renderPeopleMultiSelect('shelfReconRecipientsPicker', candidates, body.extraRecipientUsernames || [], 'shelfReconRecipientCheckbox', {});
+  } catch (err) {
+    wrap.classList.add('hidden');
+  }
+}
+async function saveShelfReconExtraRecipients() {
+  const extraRecipientUsernames = [...document.querySelectorAll('input.shelfReconRecipientCheckbox:checked')].map(cb => cb.value);
+  try {
+    const res = await fetch('/api/shelf-stock/recon-recipients', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extraRecipientUsernames })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không lưu được người nhận'}`);
+    logSystemAction('UPDATE', 'UPDATE_SHELF_RECON_RECIPIENTS', `Cập nhật người nhận email Đối Chiếu (${extraRecipientUsernames.length} người).`, 'SUCCESS', 'SHELF_RECON');
+    alert('✅ Đã lưu người nhận thành công!');
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ để lưu người nhận');
   }
 }
 // previewShelfRecordQuantityIncrease(payload) — CHỈ dùng để CẢNH BÁO TRƯỚC khi gửi (11/2026, theo yêu

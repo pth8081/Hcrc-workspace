@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**29.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.23 (2026-11): "📊 Đối Chiếu" — thêm lịch gửi email báo cáo Lệch (tách riêng khỏi Ngưỡng Tồn)
+
+Người dùng yêu cầu thêm (sau v29.21 vá hiệu năng Đối Chiếu): "đối chiếu cũng sẽ đặt lịch gửi email được
+nhé để mình setup email gửi cho có thêm đường nữa nhận thông tin thay vì xem trên app". Xác nhận qua 3
+câu hỏi: (1) lịch gửi TÁCH RIÊNG khỏi Ngưỡng Tồn, (2) nội dung email CHỈ gồm mã hàng "Lệch", (3) cấu
+hình người nhận theo đúng khuôn "4 tầng" đã có của Ngưỡng Tồn.
+
+**Thay đổi:**
+- `jobs/shelfStockReconDigestAlert.js` (mới): job hourly-tick kiểm tra lịch gửi + gửi email, mirror kiến
+  trúc `shelfStockThresholdAlert.js` (self-healing nếu server restart lỡ giờ, tự thử lại khi SMTP lỗi,
+  dedup theo `lastSentPeriodKey`). Người nhận tính theo 3 tầng tự động (Tier1 Cửa hàng trưởng/Tổ
+  trưởng, Tier2 Quản lý vùng, Tier3 Toàn hệ thống) + tầng "tự thêm" per-siêu-thị, gộp/khử trùng theo
+  email viết thường. Nội dung CHỈ các dòng "Lệch" (badge Khớp/Lệch ≠ 0).
+- `lib/shelfReconDigestExcel.js` (mới): dựng file Excel đính kèm (ExcelJS), có dòng chú thích phạm vi
+  số liệu.
+- `defaults.js`: thêm `shelfReconDigestSchedule` (lịch gửi, admin cấu hình) + `shelfReconExtraRecipients`
+  (map siêu thị → danh sách username tự thêm, do Cửa hàng trưởng tự chọn).
+- `lib/createValidation.js`: `assertShelfReconDigestScheduleSafeToSave()` validate cấu trúc lịch gửi
+  (tái dùng chung logic với `assertShelfThresholdDigestScheduleSafeToSave()` qua 1 hàm gốc).
+- `routes/data.js`: `shelfReconDigestSchedule` vào `ADMIN_ONLY_KEYS` (chỉ admin sửa lịch gửi) +
+  `shelfReconExtraRecipients` vào `SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE` (chặn khỏi route
+  generic + luôn strip khỏi bulk `GET /api/data`, tránh lộ danh sách người nhận mọi siêu thị cho tất cả
+  tài khoản — có route riêng dept-scoped thay thế, xem dưới).
+- `routes/shelfStock.js`: `GET`/`PUT /recon-recipients` (dept-scoped, gác quyền "🗄️ Quản Lý Danh Mục
+  Quầy Kệ", ghi qua `withLockedAppDataValue` merge-safe, không ghi đè nguyên map mọi siêu thị).
+- `server.js`: wire job mới vào tick hàng giờ + chạy 1 lần lúc boot.
+- `public/fragments/systemSection.html` + `module-hethong-tabs.js`: form "📊 Báo Cáo Đối Chiếu" trong
+  Hệ Thống → Quản Trị, lịch gửi riêng hẳn với form "⏰ Lịch Báo Cáo Ngưỡng Tồn" cạnh bên.
+- `public/fragments/vanHanhSection.html` + `module-vanhanh.js`: khối "✉️ Người Nhận Email Báo Cáo Lệch"
+  (picker tìm-chọn người, `renderPeopleMultiSelect()`) ngay trong màn "📊 Đối Chiếu", chỉ hiện cho Cửa
+  hàng trưởng/Tổ trưởng (quyền "🗄️ Quản Lý Danh Mục Quầy Kệ").
+
+**Test:** `tests/test-shelf-recon-digest.js` (22/22, validate cấu trúc + gate quyền + chặn route
+generic), `tests/test-shelf-recon-digest-ui-real-click.js` (4/4, Playwright thật — picker người nhận
+ẩn/hiện đúng theo quyền, lưu thật qua PUT, giữ đúng lựa chọn khi chuyển tab, 2 lịch gửi độc lập không
+lẫn vào nhau). Chạy lại toàn bộ 13 bộ test liên quan Kiểm Soát Hàng Hóa + 2 bộ test cấu trúc dữ liệu
+chung (`test-initdatabase-key-coverage.js`, `test-catalogrename-positiontypes-systemlog.js`,
+`test-audit-hethong-cluster-server.js`) — không regression. CSP grep sạch trên toàn bộ file mới/sửa.
 
 ## v29.22 (2026-11): Sửa KHÔNG tải được tệp ở modal "💰 Giá Trị Hợp Đồng" (Công Việc Vận Hành)
 

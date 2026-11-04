@@ -206,7 +206,7 @@ function setAdminSubTab(subTab) {
   if (subTab === 'PARTNERAPI') setPartnerApiSubTab(activePartnerApiSubTab);
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
-  if (subTab === 'SHELFDIGEST') loadShelfThresholdDigestScheduleToForm();
+  if (subTab === 'SHELFDIGEST') { loadShelfThresholdDigestScheduleToForm(); loadShelfReconDigestScheduleToForm(); }
 }
 
 // "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 tab cấp 1 có tab con riêng —
@@ -266,6 +266,45 @@ async function saveShelfThresholdDigestSchedule(e) {
   const saved = await syncStorage('shelfThresholdDigestSchedule', { baseline: prevConfig });
   if (!saved) { DB.shelfThresholdDigestSchedule = prevConfig; return; }
   logSystemAction('CONFIG', 'UPDATE_SHELF_THRESHOLD_DIGEST_SCHEDULE', 'Cập nhật lịch gửi báo cáo tổng hợp Ngưỡng Tồn.', 'SUCCESS', 'SHELF_THRESHOLD_DIGEST_SCHEDULE');
+  alert('✅ Đã lưu Lịch Gửi thành công!');
+}
+
+// ---------- Lịch Gửi Báo Cáo Đối Chiếu (Kiểm Soát Hàng Hóa, 11/2026) ----------
+// DB.shelfReconDigestSchedule — CÙNG khuôn DB.shelfThresholdDigestSchedule ở trên (field/hành vi giống
+// y hệt, chỉ khác id DOM srDigest*/key AppData riêng) — xem chú thích đầy đủ ở loadShelfThresholdDigestScheduleToForm().
+function showShelfReconDigestFrequencyFields() {
+  const freq = document.getElementById('srDigestFrequency').value;
+  document.getElementById('srDigestDayOfWeekWrap').classList.toggle('hidden', freq !== 'WEEKLY');
+  document.getElementById('srDigestDayOfMonthWrap').classList.toggle('hidden', freq !== 'MONTHLY');
+}
+
+function loadShelfReconDigestScheduleToForm() {
+  const cfg = DB.shelfReconDigestSchedule || {};
+  document.getElementById('srDigestFrequency').value = cfg.frequency || 'WEEKLY';
+  document.getElementById('srDigestDayOfWeek').value = (cfg.dayOfWeek ?? 1);
+  document.getElementById('srDigestDayOfMonth').value = cfg.dayOfMonth || 1;
+  document.getElementById('srDigestHour').value = (cfg.hour ?? 20);
+  showShelfReconDigestFrequencyFields();
+
+  const statusEl = document.getElementById('srDigestLastSentStatus');
+  statusEl.textContent = cfg.lastSentPeriodKey
+    ? `✅ Lần gửi gần nhất thuộc kỳ: ${cfg.lastSentPeriodKey}`
+    : '⚠️ Chưa từng gửi báo cáo Đối Chiếu lần nào.';
+}
+
+async function saveShelfReconDigestSchedule(e) {
+  e.preventDefault();
+  const prevConfig = { ...(DB.shelfReconDigestSchedule || {}) };
+  DB.shelfReconDigestSchedule = {
+    ...(DB.shelfReconDigestSchedule || {}),
+    frequency: document.getElementById('srDigestFrequency').value,
+    hour: parseInt(document.getElementById('srDigestHour').value, 10) || 0,
+    dayOfWeek: parseInt(document.getElementById('srDigestDayOfWeek').value, 10) || 0,
+    dayOfMonth: Math.min(28, Math.max(1, parseInt(document.getElementById('srDigestDayOfMonth').value, 10) || 1))
+  };
+  const saved = await syncStorage('shelfReconDigestSchedule', { baseline: prevConfig });
+  if (!saved) { DB.shelfReconDigestSchedule = prevConfig; return; }
+  logSystemAction('CONFIG', 'UPDATE_SHELF_RECON_DIGEST_SCHEDULE', 'Cập nhật lịch gửi báo cáo Đối Chiếu.', 'SUCCESS', 'SHELF_RECON_DIGEST_SCHEDULE');
   alert('✅ Đã lưu Lịch Gửi thành công!');
 }
 

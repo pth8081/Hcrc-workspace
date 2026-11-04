@@ -38,6 +38,10 @@ const INTENTIONALLY_EXEMPT = new Set([
   'workflowParticipatingDeptGroupsMigrated', // cờ nội bộ 1-lần cho seedDefaults.js, không có UI client
   'deptCodeMap', // đọc/ghi thẳng phía server (routes/employeeProfile.js ensureDeptCode()), merge thẳng
                  // vào response GET /by-code dưới tên "deptCode" — không qua DB.* blob client.
+  'shelfReconExtraRecipients', // CỐ Ý luôn strip về {} trong GET /api/data chung (routes/data.js, "data.
+                 // shelfReconExtraRecipients = {}") — map người nhận email Đối Chiếu của MỌI siêu thị
+                 // không được lộ qua payload chung; mỗi siêu thị đọc ĐÚNG danh sách của mình qua route
+                 // riêng dept-scoped GET /api/shelf-stock/recon-recipients (routes/shelfStock.js).
 ]);
 
 // LỖI ĐÃ VÁ (11/2026, người dùng báo lại đúng lớp lỗi "F5 mất dữ liệu" cho employmentTypes/workSchedules

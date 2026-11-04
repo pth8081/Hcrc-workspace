@@ -1116,6 +1116,19 @@
           </table>
         </div>
         <p id="shelfReconNote" class="text-gray-400 text-[11px]"></p>
+
+        <!-- "✉️ Người Nhận Email Báo Cáo Lệch" (11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt
+             lịch gửi email được") — CHỈ hiện cho người có quyền quản lý Quầy Kệ/Ngưỡng Tồn (canManageShelfLocationsClient(),
+             xem renderShelfReconExtraRecipientsSection()/module-vanhanh.js) — quyết định ai nhận email là
+             thao tác quản lý, không mở cho mọi nhân viên có shelfRecordCreate. Lịch gửi (tần suất/giờ) do
+             ADMIN cấu hình riêng ở Hệ Thống → Quản Trị → "📊 Báo Cáo Đối Chiếu" — ở đây CHỈ chọn người
+             nhận THÊM của ĐÚNG siêu thị mình (3 tầng quyền còn lại tự động, không cấu hình ở đây). -->
+        <div id="shelfReconRecipientsWrap" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+          <h4 class="font-bold text-cyan-900 text-xs">✉️ Người Nhận Email Báo Cáo Lệch (ngoài cửa hàng trưởng/quản lý vùng đã tự động nhận)</h4>
+          <p class="text-[11px] text-gray-500 italic">Chọn thêm đồng nghiệp ĐÚNG siêu thị bạn để cùng nhận email báo cáo các mã lệch theo lịch admin đã cấu hình (Hệ Thống → Quản Trị).</p>
+          <div id="shelfReconRecipientsPicker" class="border rounded p-2 bg-white"></div>
+          <button type="button" data-op="saveShelfReconExtraRecipients" class="bg-cyan-700 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-cyan-800">Lưu Người Nhận</button>
+        </div>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem

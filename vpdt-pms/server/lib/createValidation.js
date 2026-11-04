@@ -738,9 +738,13 @@ function assertLaborContractTypesSafeToSave(value, oldValue, hrProcesses, laborC
 // dạng khiến jobs/shelfStockThresholdAlert.js::shouldSendDigestNow() crash mỗi giờ. Chỉ validate field
 // admin thực sự sửa qua form (frequency/hour/dayOfWeek/dayOfMonth) — "lastSentPeriodKey" là bookkeeping
 // nội bộ của job, không phải input, nên bỏ qua không validate (string hoặc null đều hợp lệ).
-function assertShelfThresholdDigestScheduleSafeToSave(value) {
+// assertDigestScheduleSafeToSave(value, label) — lõi dùng chung cho CẢ 2 cấu hình lịch gửi báo cáo
+// định kỳ của Kiểm Soát Hàng Hóa (Ngưỡng Tồn + Đối Chiếu, 11/2026 — xem assertShelfReconDigestScheduleSafeToSave
+// ngay dưới) — cùng 1 hình dạng {frequency,hour,dayOfWeek,dayOfMonth,lastSentPeriodKey}, chỉ khác tên
+// hiển thị trong thông báo lỗi.
+function assertDigestScheduleSafeToSave(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new CreateError(400, 'Cấu hình lịch gửi báo cáo Ngưỡng Tồn không hợp lệ');
+    throw new CreateError(400, `Cấu hình lịch gửi báo cáo ${label} không hợp lệ`);
   }
   const { frequency, hour, dayOfWeek, dayOfMonth } = value;
   if (!['DAILY', 'WEEKLY', 'MONTHLY'].includes(frequency)) {
@@ -756,6 +760,12 @@ function assertShelfThresholdDigestScheduleSafeToSave(value) {
     throw new CreateError(400, 'Ngày trong tháng không hợp lệ (phải từ 1 đến 28)');
   }
 }
+function assertShelfThresholdDigestScheduleSafeToSave(value) { assertDigestScheduleSafeToSave(value, 'Ngưỡng Tồn'); }
+// assertShelfReconDigestScheduleSafeToSave() — cấu hình lịch gửi báo cáo tổng hợp "📊 Đối Chiếu" (Kiểm
+// Soát Hàng Hóa, 11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt lịch gửi email") — TÁCH RIÊNG
+// khỏi shelfThresholdDigestSchedule (lưu key AppData riêng, lastSentPeriodKey riêng) vì người dùng xác
+// nhận muốn tần suất độc lập cho 2 báo cáo. Xem jobs/shelfStockReconDigestAlert.js.
+function assertShelfReconDigestScheduleSafeToSave(value) { assertDigestScheduleSafeToSave(value, 'Đối Chiếu'); }
 
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
@@ -5718,6 +5728,9 @@ module.exports = {
   // Export cho routes/data.js POST /api/data/:key — chặn ghi cấu hình chu kỳ gửi báo cáo Ngưỡng Tồn sai
   // hình dạng (Kiểm Soát Hàng Hóa, thiết kế lại 11/2026).
   assertShelfThresholdDigestScheduleSafeToSave,
+  // Export cho routes/data.js POST /api/data/:key — chặn ghi cấu hình chu kỳ gửi báo cáo Đối Chiếu sai
+  // hình dạng (Kiểm Soát Hàng Hóa, 11/2026).
+  assertShelfReconDigestScheduleSafeToSave,
   // Export cho routes/data.js POST /api/data/:key — chặn ghi đè 1 danh mục mảng chuỗi phẳng đang có dữ
   // liệu xuống còn rỗng hoàn toàn (11/2026, nguyên nhân thật gây mất dữ liệu employmentTypes/workSchedules).
   assertSimpleArrayCatalogNotBlindlyEmptied,

@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
 const { getAllWorkItemsCached, cascadeUsernameChangesToWorkItemAssignment } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave, assertSimpleArrayCatalogNotBlindlyEmptied, assertShelfThresholdDigestScheduleSafeToSave } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave, assertSimpleArrayCatalogNotBlindlyEmptied, assertShelfThresholdDigestScheduleSafeToSave, assertShelfReconDigestScheduleSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -55,8 +55,15 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 // là kiểm soát MONG MANH: nếu sau này ai đó vô tình thêm 1 stub cho 1 trong 4 key này vào defaults.js
 // (VD tiện ích di trú/tính năng mới dùng lại tên) thì route debug này sẽ ÂM THẦM trả/ghi NGUYÊN VĂN
 // không lọc gì — chặn TƯỜNG MINH ở đây (không phụ thuộc VALID_KEYS) để không còn phụ thuộc "tình cờ".
+// shelfReconExtraRecipients (Kiểm Soát Hàng Hóa > "📊 Đối Chiếu", 11/2026): map {dept: [username,...]}
+// — route generic này (cả GET debug lẫn POST) KHÔNG có khái niệm "chỉ sửa/đọc đúng key = dept của
+// người gọi", nên nếu để lọt qua đây 1 request hợp lệ (dù chỉ 1 siêu thị) có thể GHI ĐÈ NGUYÊN map,
+// xoá mất người nhận đã cấu hình của MỌI siêu thị khác. Phải luôn đi qua GET/PUT
+// /api/shelf-stock/recon-recipients (routes/shelfStock.js, dùng withLockedAppDataValue CHỈ sửa đúng 1
+// khoá = dept người gọi) — chặn TƯỜNG MINH ở đây cùng khuôn 5 key HR phía trên.
 const SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE = new Set([
-  'employeeProfiles', 'laborContracts', 'payslips', 'attendanceRecords', 'payrollPeriods'
+  'employeeProfiles', 'laborContracts', 'payslips', 'attendanceRecords', 'payrollPeriods',
+  'shelfReconExtraRecipients'
 ]);
 
 // Các collection chỉ Quản Trị Viên mới được GHI — đều là màn hình "Quản trị" trong admin panel
@@ -125,6 +132,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // chứa bí mật, nhưng vẫn admin-only vì đổi lịch gửi ảnh hưởng TOÀN BỘ siêu thị (không phải cấu hình
   // riêng của 1 cửa hàng trưởng) — cùng mức "cấu hình vận hành toàn hệ thống" với operationOrderApiConfig.
   'shelfThresholdDigestSchedule',
+  // shelfReconDigestSchedule: cùng lý do bảo mật với shelfThresholdDigestSchedule ngay trên — lịch gửi
+  // báo cáo tổng hợp "📊 Đối Chiếu" (11/2026), TÁCH RIÊNG key/lastSentPeriodKey nhưng cùng mức admin-only.
+  'shelfReconDigestSchedule',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractApprovalLevels', 'contractManageDeptWorkflows',
   // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách
   // quy trình Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): cùng khuôn submissionTypeDeptWorkflows
@@ -371,7 +381,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   // đây không để lại dòng nhật ký hệ thống nào nếu gọi thẳng API (bỏ qua giao diện).
   'itPriceWholesaleStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
-  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'inventoryApiConfig', 'shelfThresholdDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
+  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'inventoryApiConfig', 'shelfThresholdDigestSchedule', 'shelfReconDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
   // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
   'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
@@ -1675,6 +1685,10 @@ router.get('/', async (req, res) => {
     if (data.inventoryApiConfig) data.inventoryApiConfig = sanitizeInventoryApiConfig(data.inventoryApiConfig, !!req.freshUser?.perms?.admin);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     if (data.attendanceClockApiKeys) data.attendanceClockApiKeys = sanitizeAttendanceClockApiKeys(data.attendanceClockApiKeys, !!req.freshUser?.perms?.admin);
+    // shelfReconExtraRecipients: KHÔNG lộ map đầy đủ (người nhận email Đối Chiếu của MỌI siêu thị) qua
+    // payload chung — mỗi siêu thị chỉ cần/được xem ĐÚNG danh sách của mình, qua
+    // GET /api/shelf-stock/recon-recipients (routes/shelfStock.js, dept-scoped) thay vì ở đây.
+    if (data.shelfReconExtraRecipients) data.shelfReconExtraRecipients = {};
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -2359,6 +2373,7 @@ router.post('/:key', async (req, res) => {
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
     if (key === 'inventoryApiConfig') value = await prepareInventoryApiConfigForSave(value);
     if (key === 'shelfThresholdDigestSchedule') assertShelfThresholdDigestScheduleSafeToSave(value);
+    if (key === 'shelfReconDigestSchedule') assertShelfReconDigestScheduleSafeToSave(value);
     // Lọc lại đúng subset SENSITIVE_FIELDS hợp lệ — xem chú thích đầy đủ tại entry NON_ADMIN_GATED_KEYS
     // tương ứng ở trên (LỖI ĐÃ VÁ, rà soát bảo mật chuyên sâu lần 2, mức Cao).
     if (key === 'hrProfileManagerVisibleFields') value = sanitizeManagerVisibleFields(value);

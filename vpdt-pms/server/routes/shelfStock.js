@@ -244,6 +244,54 @@ router.get('/system-inventory', async (req, res) => {
   }
 });
 
+// ===================== ĐỐI CHIẾU: người nhận email báo cáo lệch (dept-scoped) =====================
+// shelfReconExtraRecipients (11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt lịch gửi email") —
+// map {dept: [username,...]} lưu qua AppData, nhưng CHỈ ĐƯỢC sửa ĐÚNG 1 khoá = dept của người gọi (dùng
+// withLockedAppDataValue đọc/ghi nguyên map trong 1 transaction khoá hàng — KHÔNG đi qua route generic
+// POST /api/data/:key vì route đó ghi đè NGUYÊN map, có thể xoá mất cấu hình của MỌI siêu thị khác nếu 1
+// siêu thị lưu không đồng thời biết hết các siêu thị khác — xem SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE
+// ở routes/data.js). Cùng mức quyền canManageShelfStock() (shelfLocationManage/admin) như Quầy Kệ/Ngưỡng
+// Tồn — quyết định người nhận email là thao tác quản lý, không mở cho mọi nhân viên có shelfRecordCreate.
+router.get('/recon-recipients', async (req, res) => {
+  try {
+    if (!canManageShelfStock(req.freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu (cần quyền quản lý Quầy Kệ)' });
+    }
+    const map = await getAppDataValue('shelfReconExtraRecipients') || {};
+    res.json({ extraRecipientUsernames: Array.isArray(map[req.freshUser.dept]) ? map[req.freshUser.dept] : [] });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/shelf-stock/recon-recipients');
+  }
+});
+router.put('/recon-recipients', async (req, res) => {
+  try {
+    if (!canManageShelfStock(req.freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu (cần quyền quản lý Quầy Kệ)' });
+    }
+    // Chỉ chấp nhận username của user ACTIVE đang thuộc ĐÚNG siêu thị người gọi (server tự tra qua
+    // dbo.AppData key "users", KHÔNG tin dept client gửi kèm) — cùng khuôn Tầng 4 "tự thêm thêm" đã áp
+    // dụng ở shelfStockThresholds (lib/createValidation.js).
+    const rawUsernames = Array.isArray(req.body.extraRecipientUsernames) ? req.body.extraRecipientUsernames : [];
+    const wantedUsernames = [...new Set(rawUsernames.map(u => String(u || '').trim()).filter(Boolean))];
+    const allUsers = (await getAppDataValue('users')) || [];
+    const invalidUsername = wantedUsernames.find(un => {
+      const u = allUsers.find(x => x.username === un);
+      return !u || u.active === false || u.dept !== req.freshUser.dept;
+    });
+    if (invalidUsername) {
+      return res.status(400).json({ error: `Người nhận "${invalidUsername}" không hợp lệ (phải là nhân viên đang hoạt động của đúng siêu thị bạn)` });
+    }
+    const updated = await withLockedAppDataValue('shelfReconExtraRecipients', (current) => {
+      const next = { ...(current || {}) };
+      next[req.freshUser.dept] = wantedUsernames;
+      return next;
+    });
+    res.json({ extraRecipientUsernames: updated[req.freshUser.dept] || [] });
+  } catch (err) {
+    sendCatchError(res, err, 'PUT /api/shelf-stock/recon-recipients');
+  }
+});
+
 // ===================== QUẦY KỆ: tải mẫu Excel + đọc file đã điền để XEM TRƯỚC =====================
 router.get('/locations/import-template', async (req, res) => {
   if (!canManageShelfLocations(req.freshUser)) {

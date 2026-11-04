@@ -959,6 +959,25 @@ const DEFAULTS = {
     dayOfMonth: 1,
     lastSentPeriodKey: null // chống gửi trùng trong CÙNG 1 kỳ dù hourly tick chạy nhiều lần/server restart
   },
+  // shelfReconDigestSchedule (Kiểm Soát Hàng Hóa > "📊 Đối Chiếu", 11/2026, theo yêu cầu người dùng
+  // "đối chiếu cũng sẽ đặt lịch gửi email được") — CÙNG HÌNH DẠNG shelfThresholdDigestSchedule ở trên
+  // nhưng TÁCH RIÊNG key (lastSentPeriodKey độc lập) vì người dùng xác nhận muốn tần suất riêng cho 2
+  // báo cáo. Xem jobs/shelfStockReconDigestAlert.js::shouldSendDigestNow() (tái dùng NGUYÊN hàm của
+  // shelfStockThresholdAlert.js, không copy lại logic).
+  shelfReconDigestSchedule: {
+    frequency: 'WEEKLY',
+    hour: 20,
+    dayOfWeek: 1,
+    dayOfMonth: 1,
+    lastSentPeriodKey: null
+  },
+  // shelfReconExtraRecipients (Kiểm Soát Hàng Hóa > "📊 Đối Chiếu", 11/2026) — map {dept: [username,...]},
+  // người nhận THÊM (ngoài 3 tầng quyền tự động shelfLocationManage/shelfReportView.depts/.all, tính
+  // ĐỘNG lúc gửi — xem jobs/shelfStockReconDigestAlert.js) do CHÍNH cửa hàng trưởng siêu thị đó tự chọn
+  // qua picker ở màn Đối Chiếu (PUT /api/shelf-stock/recon-recipients, routes/shelfStock.js — CHỈ sửa
+  // ĐÚNG key = dept của người gọi qua withLockedAppDataValue, không đi qua route generic POST
+  // /api/data/:key để tránh 1 siêu thị ghi đè nhầm toàn bộ map của siêu thị khác).
+  shelfReconExtraRecipients: {},
   // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — ĐÃ BỎ HẲN phê duyệt (chủ ứng dụng xác nhận: không có bước
   // duyệt nào ở Vận Hành > Siêu Thị, kể cả Dự toán, để trưởng phòng tự lập/lưu) — 2 map cấu hình
   // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows đã xoá khỏi đây.

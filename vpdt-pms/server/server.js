@@ -87,6 +87,7 @@ const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
+const { checkShelfStockReconDigestAlerts } = require('./jobs/shelfStockReconDigestAlert');
 const { syncSystemInventory } = require('./jobs/inventorySync');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
@@ -542,6 +543,13 @@ async function start() {
       // jobs/shelfStockThresholdAlert.js.
       checkShelfStockThresholdAlerts();
       setInterval(checkShelfStockThresholdAlerts, 60 * 60 * 1000);
+      // "📊 Báo Cáo Đối Chiếu" (Kiểm Soát Hàng Hóa, 11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ
+      // đặt lịch gửi email") — CÙNG mô hình tick mỗi giờ + gọi ngay lúc khởi động như Ngưỡng Tồn ngay
+      // trên (tự "bắt kịp" đúng kỳ dù tick trễ/server restart, xem shouldSendDigestNow() tái dùng từ
+      // jobs/shelfStockThresholdAlert.js), nhưng lịch gửi RIÊNG (DB.shelfReconDigestSchedule, độc lập
+      // lastSentPeriodKey) — xem jobs/shelfStockReconDigestAlert.js.
+      checkShelfStockReconDigestAlerts();
+      setInterval(checkShelfStockReconDigestAlerts, 60 * 60 * 1000);
       // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — tick cố định mỗi 5 phút, nhưng
       // syncSystemInventory() (force=false) tự quyết định có thực sự cần gọi hệ thống ngoài ở tick đó
       // không (so lastSyncAt với inventoryApiConfig.syncIntervalMinutes admin đã cấu hình qua UI — ĐÃ

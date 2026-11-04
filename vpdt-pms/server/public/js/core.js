@@ -5750,6 +5750,7 @@ async function initDatabase(loggingInUser, opts) {
     DB.storeExternalCodes = data.storeExternalCodes || {};
     DB.inventoryApiConfig = data.inventoryApiConfig || {};
     DB.shelfThresholdDigestSchedule = data.shelfThresholdDigestSchedule || {};
+    DB.shelfReconDigestSchedule = data.shelfReconDigestSchedule || {};
     DB.operationOrders = data.operationOrders || [];
     DB.operationStoreOpenings = data.operationStoreOpenings || [];
     DB.operationRepairs = data.operationRepairs || [];

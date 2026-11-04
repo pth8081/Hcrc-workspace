@@ -1203,6 +1203,52 @@
       </form>
 
       <p id="stDigestLastSentStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
+
+      <!-- Lịch Báo Cáo Đối Chiếu (11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt lịch gửi
+           email") — TÁCH RIÊNG lịch/lastSentPeriodKey khỏi khối Ngưỡng Tồn ngay trên (người dùng xác
+           nhận muốn tần suất độc lập cho 2 báo cáo), nhưng cùng khuôn UI 3 lựa chọn Hàng ngày/Hàng tuần/
+           Hàng tháng — showShelfReconDigestFrequencyFields() (module-hethong-tabs.js) riêng, không dùng
+           chung id với khối trên. -->
+      <div class="pt-2 border-t border-teal-200">
+        <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">⏰ Lịch Gửi Báo Cáo Đối Chiếu — Kiểm Soát Hàng Hóa</h3>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình chu kỳ gửi báo cáo CÁC MÃ HÀNG LỆCH (đã scan lên kệ hôm nay nhưng khác Tồn Kho Hệ Thống) tới cửa hàng trưởng/quản lý vùng/người được cấp xem toàn hệ thống + người mỗi siêu thị tự thêm (xem picker ở màn "📊 Đối Chiếu"). Độc lập hoàn toàn với lịch Ngưỡng Tồn ở trên.</p>
+      </div>
+      <form data-op-submit="saveShelfReconDigestSchedule" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chu Kỳ Gửi</label>
+            <select id="srDigestFrequency" data-op-change="showShelfReconDigestFrequencyFields" class="w-full border p-1.5 rounded bg-white font-bold">
+              <option value="DAILY">Hàng ngày</option>
+              <option value="WEEKLY">Hàng tuần</option>
+              <option value="MONTHLY">Hàng tháng</option>
+            </select>
+          </div>
+          <div id="srDigestDayOfWeekWrap">
+            <label class="block font-semibold text-gray-600 mb-1">Thứ Gửi (hàng tuần)</label>
+            <select id="srDigestDayOfWeek" class="w-full border p-1.5 rounded bg-white">
+              <option value="1">Thứ 2</option>
+              <option value="2">Thứ 3</option>
+              <option value="3">Thứ 4</option>
+              <option value="4">Thứ 5</option>
+              <option value="5">Thứ 6</option>
+              <option value="6">Thứ 7</option>
+              <option value="0">Chủ Nhật</option>
+            </select>
+          </div>
+          <div id="srDigestDayOfMonthWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Trong Tháng (hàng tháng)</label>
+            <input id="srDigestDayOfMonth" type="number" min="1" max="28" class="w-full border p-1.5 rounded">
+            <p class="text-[10px] text-gray-500 mt-0.5">Tối đa 28 để tránh lỗi ở tháng thiếu ngày (VD tháng 2).</p>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Giờ Gửi (0-23)</label>
+            <input id="srDigestHour" type="number" min="0" max="23" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <button type="submit" class="bg-teal-700 text-white px-4 py-1.5 rounded font-bold hover:bg-teal-800">Lưu Lịch Gửi</button>
+      </form>
+
+      <p id="srDigestLastSentStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
