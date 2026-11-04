@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**29.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.18 (2026-11): Thêm cột "Giá Trị Hợp Đồng" vào bảng QLDA > Thực Hiện
+
+Người dùng hỏi sau khi xác nhận nút "💰" đã hoạt động đúng (v29.16): "Tôi muốn giá trị thể hiện ra
+ngoài được không?". Đưa 3 phương án qua `AskUserQuestion`, người dùng chọn **"Thêm 1 cột nhỏ hiện số
+tiền"** — giữ nguyên nút "💰" (vẫn là nơi sửa/xem Giá Trị Đầu Tư tự động + Giá Trị Hợp Đồng + tệp đính
+kèm nhiều file), chỉ thêm 1 cột **chỉ đọc** hiển thị số tiền Giá Trị Hợp Đồng (`w.contractValue`) ngay
+trong bảng, không cần mở modal mới thấy.
+
+**Thay đổi:** `module-vanhanh.js` — `renderOperationWorkItemModalBody()` thêm `<th>` "Giá Trị Hợp Đồng"
+vào header bảng (chế độ EXECUTION, giữa "Trạng Thái" và "Thao Tác"); `buildOperationWorkItemRow()` thêm
+`contractValueCell` dùng lại `formatMoneyDisplay()` sẵn có (cùng khuôn với cột xuất Excel C2), hiện "—"
+khi chưa nhập. Colspan fallback (khi chưa có công việc nào) đổi từ 5 thành 6 cho khớp cột mới.
+
+**Test:** mở rộng `tests/test-operation-vhst-uibugfix.js` thêm kịch bản (6) — sau khi lưu 850.000.000 ở
+modal "💰", đọc trực tiếp DOM ô thứ 5 của dòng tương ứng, xác nhận hiện đúng số tiền (18/18 PASS). Chạy
+lại 11 file test khác liên quan tới bảng/dòng công việc Vận Hành (contract-c2, vhst-audit4-fixes,
+vhst-refix2, quickview, deadline-status, dependencies, progress-frequency, multilevel-cascade,
+delete-c3, delete-toctou, email-d2) — không regression. Tự kiểm tra CSP (`onclick=`/`style="`/...) trên
+phần diff — sạch, không có.
+
+**Deploy:** chỉ đổi code client (`public/js/module-vanhanh.js`) — copy code + `pm2 restart` là đủ.
 
 ## v29.17 (2026-11): [KHẨN — sự cố production] Fix nghẽn hệ thống do `systemInventorySnapshot` phình to kéo theo `requireAuth()` timeout hàng loạt
 

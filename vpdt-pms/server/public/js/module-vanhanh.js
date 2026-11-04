@@ -4413,12 +4413,16 @@ function renderOperationWorkItemModalBody() {
   const head = document.getElementById('operationWorkItemTableHead');
   // Mục D: thêm cột "Dự Kiến Nghiệm Thu" ở chế độ ACCEPTANCE (giữa Trạng Thái và Người Nghiệm Thu) —
   // colspan fallback đổi 5 -> 6 cho nhánh này.
+  // Yêu cầu người dùng (11/2026, sau khi vá nút "💰"): thêm 1 cột nhỏ hiện SỐ TIỀN Giá Trị Hợp Đồng
+  // ngay trong bảng (không cần mở modal mới thấy) — nút "💰" GIỮ NGUYÊN không đổi (vẫn là nơi
+  // sửa/xem Giá Trị Đầu Tư + tệp đính kèm), cột này CHỈ hiển thị thêm, xem contractValueCell ở
+  // buildOperationWorkItemRow(). Colspan fallback đổi 5 -> 6 cho nhánh EXECUTION theo cột mới.
   head.innerHTML = mode === 'EXECUTION'
-    ? `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Hạn</th><th class="border p-2">Trạng Thái</th><th class="border p-2 text-center">Thao Tác</th></tr>`
+    ? `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Hạn</th><th class="border p-2">Trạng Thái</th><th class="border p-2 text-right">Giá Trị Hợp Đồng</th><th class="border p-2 text-center">Thao Tác</th></tr>`
     : `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Trạng Thái</th><th class="border p-2">Dự Kiến Nghiệm Thu</th><th class="border p-2">Người Nghiệm Thu</th><th class="border p-2 text-center">Xác Nhận Nghiệm Thu</th></tr>`;
 
   const body = document.getElementById('operationWorkItemTableBody');
-  const colspan = mode === 'EXECUTION' ? 5 : 6;
+  const colspan = 6;
   const rows = buildOperationWorkItemRows(items, null, 0, mode, canManageExecution, canManageAcceptance, canEditWorkItems);
   body.innerHTML = rows || `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Chưa có công việc nào.</td></tr>`;
 }
@@ -4568,6 +4572,10 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   if (mode === 'EXECUTION') {
     const deadlineCell = `<td class="border p-2">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>`;
     const statusCell = `<td class="border p-2">${operationWorkItemStatusBadge(w.status)}</td>`;
+    // Yêu cầu người dùng (11/2026): hiện số tiền Giá Trị Hợp Đồng (w.contractValue, nhập qua modal "💰")
+    // ngay trong bảng — chỉ hiển thị, không sửa được ở đây (vẫn phải bấm "💰" để sửa, giữ đúng chỗ gộp
+    // 3 thông tin đã chốt ở C2: Giá Trị Đầu Tư link tự động + Giá Trị Hợp Đồng + tệp đính kèm).
+    const contractValueCell = `<td class="border p-2 text-right font-mono">${w.contractValue ? escapeHtml(formatMoneyDisplay(w.contractValue)) : '<span class="text-gray-300">—</span>'}</td>`;
     // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
     // trách (assignedTo[], Mục E) được tự cập nhật tiến độ VIỆC CỦA MÌNH — không được thêm/xoá cây (vẫn
     // chỉ canManageExecution), khớp lib/recordActions.js updateOperationWorkItemProgress().
@@ -4664,7 +4672,7 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // wrap — trước đây các nút chỉ nối chuỗi trần (inline, mr-1) trong 1 <td>, dễ bị dồn cứng 1 hàng dài
     // tràn ngang (khó thấy hết nút, đặc biệt "🔗 Liên kết" — nút thứ 3/5) khi cột "Thao Tác" hẹp lại. flex
     // flex-wrap cho phép các nút tự xuống hàng gọn gàng thay vì bị cắt/phải cuộn ngang mới thấy hết.
-    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
+    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}${contractValueCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
   }
 
   // ACCEPTANCE mode

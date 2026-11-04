@@ -456,6 +456,22 @@ async function main() {
       assertEqual(check.contractValue, 850000000, 'Giá Trị Hợp Đồng phải được lưu đúng sau khi bấm "💾 Lưu" THẬT (nếu vẫn 0/cũ: nút vẫn "chết", bug CSP-delegation TÁI PHÁT)');
       assert(check.modalHidden, 'Modal phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Lưu" vẫn "chết")');
     });
+
+    // ===================== 6) Yêu cầu người dùng (11/2026): hiện số tiền Giá Trị Hợp Đồng NGAY trong bảng =====================
+    // Người dùng hỏi "muốn giá trị thể hiện ra ngoài được không?" sau khi xác nhận nút "💰" đã hoạt động —
+    // chọn phương án "Thêm 1 cột nhỏ hiện số tiền" (không gộp lại 2 cột riêng như yêu cầu gốc, giữ modal "💰"
+    // cho việc sửa/xem Giá Trị Đầu Tư + tệp đính kèm). Kiểm tra NGAY SAU kịch bản (5) ở trên — bảng đã tự
+    // render lại qua renderOperationWorkItemModalBody() sau khi lưu, không cần thao tác thêm.
+    await run.run('Cột "Giá Trị Hợp Đồng" (DOM thật): sau khi lưu 850.000.000 ở modal "💰", bảng Thực Hiện PHẢI hiện đúng số tiền này ở dòng tương ứng, không cần mở modal lại', async () => {
+      const cellText = await page.evaluate((rid) => {
+        const btn = document.querySelector(`button[data-op="openOperationWorkItemContractModal"][data-id="${rid}"]`);
+        const row = btn && btn.closest('tr');
+        if (!row) return null;
+        const cells = row.querySelectorAll('td');
+        return cells[4] ? cells[4].textContent.trim() : null; // 0=Tên,1=Người PT,2=Hạn,3=Trạng Thái,4=Giá Trị Hợp Đồng
+      }, rootWorkItemId);
+      assert(cellText && cellText.includes('850'), `Cột "Giá Trị Hợp Đồng" ở bảng phải hiện số tiền đã lưu (850.000.000) — thực tế: "${cellText}"`);
+    });
   } finally {
     await browser.close();
     server.close();
