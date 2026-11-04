@@ -35,17 +35,27 @@ async function main() {
     console.log(JSON.stringify(withMaDiem[0], null, 2));
   }
 
-  const maKhoSet = new Map(); // maKho (trimmed) -> tenSieuThi mẫu
+  // Gom theo maKho + giữ lại vài dòng SẢN PHẨM mẫu (tên hàng, mã vạch, tồn kho) cho mỗi kho — để người
+  // đứng THẬT ở 1 siêu thị cụ thể tự đối chiếu bằng mắt (tên hàng/mã vạch nhìn thấy trên kệ) với đúng
+  // mã kho nào, vì tenSieuThi đối tác trả về đang rỗng ("chưa khai tên"), không thể suy ra tên tự động.
+  const byMaKho = new Map(); // maKho -> { count, samples: [{tenHang, maVach, soLuongTon}] }
   for (const r of rows) {
     const mk = r && r.maKho ? String(r.maKho).trim() : '';
-    if (mk && !maKhoSet.has(mk)) maKhoSet.set(mk, r.tenSieuThi);
+    if (!mk) continue;
+    if (!byMaKho.has(mk)) byMaKho.set(mk, { count: 0, samples: [] });
+    const entry = byMaKho.get(mk);
+    entry.count++;
+    if (entry.samples.length < 5) {
+      entry.samples.push({ tenHang: r.tenHang, maVach: r.maVach, soLuongTon: r.soLuongTon });
+    }
   }
-  console.log(`Số maKho khác nhau trong trang này: ${maKhoSet.size}`);
-  console.log('--- Danh sách maKho + tenSieuThi (tối đa 30 dòng đầu) ---');
-  let i = 0;
-  for (const [mk, ten] of maKhoSet) {
-    console.log(`maKho="${mk}"  tenSieuThi="${ten}"`);
-    if (++i >= 30) break;
+  console.log(`Số maKho khác nhau trong trang này: ${byMaKho.size}`);
+  console.log('--- Mẫu sản phẩm theo từng maKho (so sánh với hàng THẬT trên kệ để xác định đúng kho) ---');
+  for (const [mk, entry] of byMaKho) {
+    console.log(`\nmaKho="${mk}"  (tổng ${entry.count} dòng trong mẫu này)`);
+    for (const s of entry.samples) {
+      console.log(`   - ${s.tenHang}  | mã vạch: ${s.maVach}  | tồn: ${s.soLuongTon}`);
+    }
   }
   process.exit(0);
 }
