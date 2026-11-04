@@ -5,24 +5,32 @@
 //    Cột 1: Giá trị LINK với chi phí đầu tư. Cột 2+3: Để người phụ trách điền Giá trị triển khai Hợp
 //    đồng và đính kèm nhiều file. Các file excel (mẫu, nhập, xuất) cũng có các trường thông tin trên."
 //
-// Phương án đã chốt với người dùng (Option A — "auto-total"):
-//   - "Giá trị đầu tư": KHÔNG lưu trên operationWorkItems — LUÔN đọc TỰ ĐỘNG từ
-//     sourceRecord.estimateTotalAmount (tổng ngân sách DMĐT đã duyệt của CẢ HỒ SƠ, field đã có sẵn từ
-//     trước — xem submitOperationEstimate(), lib/recordActions.js) — read-only, không có input nào.
+// Phương án BAN ĐẦU đã chốt với người dùng (Option A — "auto-total"), rồi ĐỔI THIẾT KẾ (11/2026, phản
+// hồi người dùng sau khi xem demo thật v29.18 — phát hiện "Giá Trị Đầu Tư" trong modal hiện SAI, lấy
+// estimateTotalAmount = TỔNG CẢ HỒ SƠ, giống nhau ở MỌI công việc thay vì đúng Chi Phí của riêng công
+// việc đó — xem VERSION.md v29.20):
+//   - "Giá trị đầu tư": KHÔNG lưu trên operationWorkItems — ĐỌC TỰ ĐỘNG từ ĐÚNG hạng mục Danh Mục Đầu
+//     Tư mà công việc này được sinh ra (sourceRecord.estimateItems, tra theo w.estimateItemId — field đã
+//     có sẵn từ buildAutoWorkItemsFromEstimate(), lib/recordActions.js), KHÔNG còn đọc estimateTotalAmount
+//     (tổng cả hồ sơ) nữa. Field này CHUYỂN RA 1 CỘT RIÊNG trong bảng Thực Hiện
+//     (investmentValueCell, buildOperationWorkItemRow() — module-vanhanh.js), KHÔNG còn hiện trong modal
+//     "💰" nữa. Công việc tạo tay (không qua Danh Mục Đầu Tư, estimateItemId rỗng) hiện "—".
 //   - "Giá trị hợp đồng" (contractValue, Number) + "Tệp đính kèm" (contractAttachments[]) — 2 field MỚI
 //     trên operationWorkItems, điền bởi "toàn quyền quản lý hồ sơ" HOẶC đúng người phụ trách
 //     (isWorkItemAssignee) qua route riêng POST /operationWorkItems/:id/contract
 //     (updateOperationWorkItemContract(), lib/recordActions.js) — KHÔNG chặn theo status (khác
-//     editOperationWorkItem(), vì giá trị hợp đồng thật thường chỉ xác định được SAU khi nghiệm thu).
+//     editOperationWorkItem(), vì giá trị hợp đồng thật thường chỉ xác định được SAU khi nghiệm thu). 2
+//     field này là TOÀN BỘ nội dung modal "💰" nay, không còn field tự động nào khác.
 //
 // Phần 1 (pure logic) — updateOperationWorkItemContract(): quyền hạn (toàn quyền/phụ trách/người
 // ngoài), validate contractValue, sanitize contractAttachments (cap 10, giữ metadata cũ khi re-save).
 // createOperationWorkItem(): contractValue mặc định 0 + tuỳ chọn gửi sẵn lúc tạo.
 // lib/operationImport.js: WORKITEM_COLUMNS có contractValue + parseOperationWorkItemImportXlsx() đọc
-// đúng cột, mặc định 0 nếu thiếu/không hợp lệ.
-// Phần 2 (Playwright) — nút "💰" gate đúng theo canEditWorkItems/isOwner, modal hiện đúng Giá Trị Đầu
-// Tư (read-only, LUÔN bằng estimateTotalAmount) + Giá Trị Hợp Đồng/tệp đính kèm hiện có, submit gọi
-// đúng action, exportOperationWorkItems() có đủ cột mới với giá trị đúng.
+// đúng cột, mặc định 0 nếu thiếu/không hợp lệ. KHÔNG đổi bởi đợt sửa UX này (chỉ đụng client hiển thị).
+// Phần 2 (Playwright) — nút "💰" gate đúng theo canEditWorkItems/isOwner, modal CHỈ còn Giá Trị Hợp
+// Đồng/tệp đính kèm hiện có (KHÔNG còn field Giá Trị Đầu Tư), cột investmentValueCell trong bảng hiện
+// ĐÚNG Chi Phí theo estimateItemId (không phải tổng cả hồ sơ), submit gọi đúng action,
+// exportOperationWorkItems() có đủ cột mới với giá trị đúng theo TỪNG dòng.
 //
 // Chạy: node server/tests/test-operation-workitem-contract-c2.js
 'use strict';
@@ -214,25 +222,40 @@ async function runUiTests() {
   record('C2 (a): người ngoài (không toàn quyền, không phụ trách) -> KHÔNG có nút 💰', gateOut.asOutsider === false, JSON.stringify(gateOut));
   record('C2 (a): toàn quyền quản lý hồ sơ -> CÓ nút 💰 (dù không phải phụ trách)', gateOut.asManager === true, JSON.stringify(gateOut));
 
-  // ===== (b) modal hiện đúng Giá Trị Đầu Tư (read-only, = estimateTotalAmount) + Giá Trị Hợp Đồng hiện có =====
+  // ===== (b) modal CHỈ còn Giá Trị Hợp Đồng hiện có + tệp đính kèm — KHÔNG còn field Giá Trị Đầu Tư =====
   const modalOut = await page.evaluate(() => {
     currentUser = { username: 'qlvh', perms: { operationRecordManageAll: true } };
     currentWorkItemModalKind = 'operationRepairs';
     currentWorkItemModalRecordId = 100;
-    DB.operationRepairs = [{ id: 100, code: 'HCRC-VH-SCST-100', title: 'Sửa kho A', estimateTotalAmount: 80000000 }];
-    DB.operationWorkItems = [{ id: 10, title: 'Việc B', contractValue: 12000000, contractAttachments: [{ fileUrl: '/uploads/hd.pdf', fileName: 'hop_dong.pdf' }] }];
+    DB.operationRepairs = [{ id: 100, code: 'HCRC-VH-SCST-100', title: 'Sửa kho A', estimateTotalAmount: 80000000, estimateItems: [{ id: 5001, content: 'Hạng mục A', amount: 30000000 }] }];
+    DB.operationWorkItems = [{ id: 10, title: 'Việc B', estimateItemId: 5001, contractValue: 12000000, contractAttachments: [{ fileUrl: '/uploads/hd.pdf', fileName: 'hop_dong.pdf' }] }];
     openOperationWorkItemContractModal(10);
     return {
-      investmentText: document.getElementById('owiContractInvestmentValue').innerText,
+      titleText: document.getElementById('owiContractTitle').innerText,
+      investmentElGone: document.getElementById('owiContractInvestmentValue') === null,
       contractValueInput: document.getElementById('owiContractValue').value,
       chipHtml: document.getElementById('owiContractFileChip').innerHTML,
       modalVisible: !document.getElementById('operationWorkItemContractModal').classList.contains('hidden')
     };
   });
   record('C2 (b): modal hiện ra', modalOut.modalVisible === true, JSON.stringify(modalOut));
-  record('C2 (b): Giá Trị Đầu Tư hiện ĐÚNG estimateTotalAmount (80,000,000) — read-only', modalOut.investmentText.includes('80.000.000') || modalOut.investmentText.includes('80,000,000'), JSON.stringify(modalOut));
+  record('C2 (b): tiêu đề modal KHÔNG còn nhắc "đầu tư" (đã đổi thành "Giá trị hợp đồng")', !modalOut.titleText.includes('đầu tư'), JSON.stringify(modalOut));
+  record('C2 (b): field "Giá Trị Đầu Tư" (owiContractInvestmentValue) ĐÃ BỊ BỎ khỏi modal — chuyển ra cột riêng trong bảng', modalOut.investmentElGone === true, JSON.stringify(modalOut));
   record('C2 (b): Giá Trị Hợp Đồng hiện có (12,000,000) được prefill vào ô nhập', modalOut.contractValueInput.includes('12.000.000') || modalOut.contractValueInput.includes('12,000,000'), JSON.stringify(modalOut));
   record('C2 (b): tệp đính kèm hiện có hiển thị trong chip', modalOut.chipHtml.includes('hop_dong.pdf'), JSON.stringify(modalOut));
+
+  // ===== (b2) MỚI (v29.20): cột "Giá Trị Đầu Tư" trong bảng hiện ĐÚNG Chi Phí của RIÊNG công việc đó
+  // (qua estimateItemId), KHÔNG phải tổng cả hồ sơ — và hiện "—" cho công việc tạo tay (không liên kết).
+  const investCellOut = await page.evaluate(() => {
+    const sourceRecord = { estimateItems: [{ id: 5001, content: 'Hạng mục A', amount: 30000000 }, { id: 5002, content: 'Hạng mục B', amount: 99000000 }] };
+    const linked = { id: 20, title: 'Việc liên kết', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: 5001 };
+    const unlinked = { id: 21, title: 'Việc tạo tay', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: null };
+    const rowLinked = buildOperationWorkItemRow(linked, 0, false, 'EXECUTION', true, false, true, [], sourceRecord);
+    const rowUnlinked = buildOperationWorkItemRow(unlinked, 0, false, 'EXECUTION', true, false, true, [], sourceRecord);
+    return { rowLinked, rowUnlinked };
+  });
+  record('C2 (b2): công việc liên kết hạng mục 5001 (30.000.000) -> cột hiện ĐÚNG số này, KHÔNG phải tổng 2 hạng mục', investCellOut.rowLinked.includes('30.000.000') && !investCellOut.rowLinked.includes('129.000.000'), investCellOut.rowLinked);
+  record('C2 (b2): công việc tạo tay (estimateItemId null) -> cột hiện "—", không suy luận/đoán số liệu', investCellOut.rowUnlinked.includes('—'), investCellOut.rowUnlinked);
 
   // ===== (c) submit gọi ĐÚNG action 'contract' với payload đúng =====
   const submitOut = await page.evaluate(async () => {
@@ -253,9 +276,18 @@ async function runUiTests() {
   record('C2 (c): DB.operationWorkItems cập nhật lại đúng kết quả server trả về', submitOut.updatedInDb === 20000000, JSON.stringify(submitOut));
 
   // ===== (d) exportOperationWorkItems() có đủ cột Giá Trị Đầu Tư/Giá Trị Hợp Đồng/Tệp Đính Kèm HĐ =====
+  // v29.20: investmentValue giờ tính ĐÚNG THEO TỪNG DÒNG (estimateItemId), KHÔNG còn estimateTotalAmount
+  // (tổng cả hồ sơ) lặp lại ở mọi dòng — 2 công việc trong fixture liên kết 2 hạng mục KHÁC NHAU để xác
+  // nhận không bị nhầm/trộn giá trị giữa các dòng.
   const exportOut = await page.evaluate(async () => {
-    DB.operationRepairs = [{ id: 100, code: 'HCRC-VH-SCST-100', title: 'Sửa kho A', estimateTotalAmount: 80000000 }];
-    DB.operationWorkItems = [{ id: 11, title: 'Việc C', assignedToName: [], contractValue: 5000000, contractAttachments: [{ fileUrl: '/x.pdf', fileName: 'x.pdf' }], parentWorkItemId: null, sourceType: 'OPERATION_REPAIR', sourceId: 100 }];
+    DB.operationRepairs = [{
+      id: 100, code: 'HCRC-VH-SCST-100', title: 'Sửa kho A', estimateTotalAmount: 80000000,
+      estimateItems: [{ id: 7001, content: 'Hạng mục X', amount: 5000000 }, { id: 7002, content: 'Hạng mục Y', amount: 75000000 }]
+    }];
+    DB.operationWorkItems = [
+      { id: 11, title: 'Việc C', assignedToName: [], estimateItemId: 7001, contractValue: 5000000, contractAttachments: [{ fileUrl: '/x.pdf', fileName: 'x.pdf' }], parentWorkItemId: null, sourceType: 'OPERATION_REPAIR', sourceId: 100 },
+      { id: 12, title: 'Việc D (tạo tay)', assignedToName: [], estimateItemId: null, contractValue: 0, contractAttachments: [], parentWorkItemId: null, sourceType: 'OPERATION_REPAIR', sourceId: 100 }
+    ];
     currentWorkItemModalKind = 'operationRepairs'; currentWorkItemModalRecordId = 100;
     let captured = null;
     downloadXlsxFromServer = async (fileName, sheetName, columns, rows) => { captured = { columns, rows }; };
@@ -267,9 +299,11 @@ async function runUiTests() {
   record('C2 (d): export có cột "Giá Trị Hợp Đồng (VNĐ)"', exportHeaders.some(h => h.includes('Giá Trị Hợp Đồng')), JSON.stringify(exportHeaders));
   record('C2 (d): export có cột "Tệp Đính Kèm HĐ"', exportHeaders.some(h => h.includes('Tệp Đính Kèm')), JSON.stringify(exportHeaders));
   const row0 = (exportOut?.rows || [])[0] || {};
-  record('C2 (d): dòng xuất có investmentValue = 80000000 (đúng estimateTotalAmount)', row0.investmentValue === 80000000, JSON.stringify(row0));
+  const row1 = (exportOut?.rows || [])[1] || {};
+  record('C2 (d): dòng "Việc C" (estimateItemId=7001) có investmentValue = 5000000, KHÔNG phải tổng 80.000.000', row0.investmentValue === 5000000, JSON.stringify(row0));
   record('C2 (d): dòng xuất có contractValue = 5000000 (đúng w.contractValue)', row0.contractValue === 5000000, JSON.stringify(row0));
   record('C2 (d): dòng xuất liệt kê đúng tên tệp đính kèm hợp đồng', row0.contractAttachments === 'x.pdf', JSON.stringify(row0));
+  record('C2 (d): dòng "Việc D" tạo tay (estimateItemId=null) có investmentValue = 0 (không suy luận)', row1.investmentValue === 0, JSON.stringify(row1));
 
   record('C2: không có lỗi JS chưa bắt (pageerror) nào phát sinh trong toàn bộ bài test', pageErrors.length === 0, pageErrors.join('; '));
 

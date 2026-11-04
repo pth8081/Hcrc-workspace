@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**29.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.20 (2026-11): Sửa lỗi "Giá Trị Đầu Tư" hiện SAI (tổng cả hồ sơ) + đổi thiết kế cột bảng/modal "💰"
+
+Người dùng phát hiện qua demo thật (ảnh chụp): field "💵 Giá Trị Đầu Tư" trong modal "💰" hiện
+**3.202.633.715** (= TỔNG CẢ hồ sơ Danh Mục Đầu Tư) cho MỌI công việc, kể cả công việc "Cải tạo sửa
+chữa" lẽ ra chỉ đúng **355.364.446** (Chi Phí riêng hạng mục đó) — bug có từ thiết kế gốc (Option A,
+"auto-total") cố ý đơn giản hoá vì lúc đó operationWorkItems chưa liên kết trực tiếp 1 hạng mục cụ thể
+nào. Thực tế mỗi công việc tự sinh từ Danh Mục Đầu Tư ĐÃ có sẵn `estimateItemId` trỏ đúng hạng mục
+nguồn (từ tính năng Tự Động Tạo Công Việc, task #258) — đủ để sửa đúng.
+
+**Quyết định cuối (xác nhận với người dùng qua demo)**: thay vì chỉ sửa link rồi giữ nguyên chỗ hiện thị
+cũ, chuyển hẳn field "Giá Trị Đầu Tư" ra khỏi modal "💰", sang 1 **cột riêng trong bảng Thực Hiện**
+(`#operationWorkItemTableBody`) — luôn nhìn thấy ngay, không cần mở modal. Modal "💰" nay **CHỈ còn 2
+việc**: "Giá Trị Hợp Đồng" (nhập tay) + tải nhiều tệp đính kèm.
+
+**Thay đổi (`module-vanhanh.js` + `public/index.html`):**
+- Cột trong bảng (trước đây "Giá Trị Hợp Đồng", v29.18) đổi tên thành **"Giá Trị Đầu Tư"** + đổi nguồn dữ
+  liệu: tra `sourceRecord.estimateItems` theo `w.estimateItemId` (ĐÚNG hạng mục nguồn), không còn
+  `sourceRecord.estimateTotalAmount`. Công việc tạo tay (không qua Danh Mục Đầu Tư) hiện "—".
+- Modal `operationWorkItemContractModal`: bỏ hẳn khối "💵 Giá Trị Đầu Tư" (read-only) — chỉ còn "📝 Giá
+  Trị Hợp Đồng" (input) + "📎 Tệp Đính Kèm". Tiêu đề đổi từ "💰 Giá trị đầu tư/hợp đồng: ..." thành "💰
+  Giá trị hợp đồng: ...".
+- `exportOperationWorkItems()` (Xuất Excel): cùng lỗi, cùng sửa — cột "Giá Trị Đầu Tư (VNĐ)" nay tính
+  ĐÚNG THEO TỪNG DÒNG (không còn lặp lại 1 số tổng ở mọi dòng).
+
+**Test:** mở rộng `tests/test-operation-workitem-contract-c2.js` (21/21 UI scenario, có thêm kịch bản
+xác nhận 2 công việc liên kết 2 hạng mục KHÁC NHAU hiện ĐÚNG 2 số khác nhau, không bị trộn/không phải
+tổng) + `tests/test-operation-vhst-uibugfix.js` (18/18, xác nhận công việc tạo tay hiện "—" đúng, không
+còn vô tình hiện lại Giá Trị Hợp Đồng cũ). Chạy lại 14 file test khác liên quan tới bảng/dòng công việc
+Vận Hành — không regression. Demo ảnh trước/sau đã gửi người dùng xác nhận.
+
+**Deploy:** chỉ đổi code client (`public/js/module-vanhanh.js`, `public/index.html`) — copy code +
+`pm2 restart` là đủ.
 
 ## v29.19 (2026-11): Tách snapshot tồn kho khỏi `dbo.AppData` sang bảng riêng (xử lý TẬN GỐC sự cố v29.17)
 

@@ -1224,10 +1224,11 @@
     </div>
   </div>
 
-  <!-- Modal "💰 Giá trị đầu tư/hợp đồng" (C2, 11/2026, yêu cầu QA module Vận Hành) — "Giá Trị Đầu Tư"
-       LUÔN read-only (link tự động tới estimateTotalAmount của hồ sơ, Option A đã chốt với người
-       dùng), "Giá Trị Hợp Đồng" + tệp đính kèm nhập tay bởi người phụ trách/toàn quyền hồ sơ, mirror
-       khuôn #editOperationRepairModal (A3) cho phần tải nhiều tệp. -->
+  <!-- Modal "💰 Giá trị hợp đồng" (C2, 11/2026, yêu cầu QA module Vận Hành — ĐỔI THIẾT KẾ 11/2026 theo
+       phản hồi người dùng: "Giá Trị Đầu Tư" (tự động theo Chi Phí Danh Mục Đầu Tư) chuyển hẳn ra cột
+       riêng ngoài bảng #operationWorkItemTableBody, xem buildOperationWorkItemRow() — modal này CHỈ
+       còn đúng 2 việc: "Giá Trị Hợp Đồng" nhập tay + tệp đính kèm, nhập bởi người phụ trách/toàn quyền
+       hồ sơ, mirror khuôn #editOperationRepairModal (A3) cho phần tải nhiều tệp. -->
   <div id="operationWorkItemContractModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
@@ -1236,10 +1237,6 @@
       </div>
       <div class="p-4 space-y-3">
         <input type="hidden" id="owiContractId">
-        <div>
-          <label class="text-xs font-bold text-gray-600">💵 Giá Trị Đầu Tư (VNĐ) — tự động theo Danh Mục Đầu Tư đã duyệt</label>
-          <div id="owiContractInvestmentValue" class="bg-gray-100 border rounded px-2 py-1.5 text-sm font-bold text-gray-700">0</div>
-        </div>
         <div>
           <label class="text-xs font-bold text-gray-600">📝 Giá Trị Hợp Đồng (VNĐ)</label>
           <input type="text" id="owiContractValue" inputmode="numeric" class="border rounded px-2 py-1.5 text-sm w-full money-input" placeholder="0">

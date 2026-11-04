@@ -4413,17 +4413,19 @@ function renderOperationWorkItemModalBody() {
   const head = document.getElementById('operationWorkItemTableHead');
   // Mục D: thêm cột "Dự Kiến Nghiệm Thu" ở chế độ ACCEPTANCE (giữa Trạng Thái và Người Nghiệm Thu) —
   // colspan fallback đổi 5 -> 6 cho nhánh này.
-  // Yêu cầu người dùng (11/2026, sau khi vá nút "💰"): thêm 1 cột nhỏ hiện SỐ TIỀN Giá Trị Hợp Đồng
-  // ngay trong bảng (không cần mở modal mới thấy) — nút "💰" GIỮ NGUYÊN không đổi (vẫn là nơi
-  // sửa/xem Giá Trị Đầu Tư + tệp đính kèm), cột này CHỈ hiển thị thêm, xem contractValueCell ở
-  // buildOperationWorkItemRow(). Colspan fallback đổi 5 -> 6 cho nhánh EXECUTION theo cột mới.
+  // Yêu cầu người dùng (11/2026): thêm 1 cột nhỏ hiện SỐ TIỀN ngay trong bảng (không cần mở modal mới
+  // thấy). ĐỔI THIẾT KẾ (11/2026, phản hồi sau demo v29.18): cột này đổi thành "Giá Trị Đầu Tư" — Chi
+  // Phí TỰ ĐỘNG lấy từ ĐÚNG hạng mục Danh Mục Đầu Tư sinh ra công việc này (qua estimateItemId, xem
+  // investmentValueCell ở buildOperationWorkItemRow()) — KHÔNG còn hiện Giá Trị Hợp Đồng (nhập tay) ở
+  // đây nữa, giá trị đó CHỈ còn xem/sửa trong modal "💰" (đã bỏ field Giá Trị Đầu Tư khỏi modal, xem
+  // openOperationWorkItemContractModal()). Colspan fallback đổi 5 -> 6 cho nhánh EXECUTION theo cột mới.
   head.innerHTML = mode === 'EXECUTION'
-    ? `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Hạn</th><th class="border p-2">Trạng Thái</th><th class="border p-2 text-right">Giá Trị Hợp Đồng</th><th class="border p-2 text-center">Thao Tác</th></tr>`
+    ? `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Hạn</th><th class="border p-2">Trạng Thái</th><th class="border p-2 text-right">Giá Trị Đầu Tư</th><th class="border p-2 text-center">Thao Tác</th></tr>`
     : `<tr class="bg-gray-100 text-left text-gray-700"><th class="border p-2">Tên Công Việc</th><th class="border p-2">Người Phụ Trách</th><th class="border p-2">Trạng Thái</th><th class="border p-2">Dự Kiến Nghiệm Thu</th><th class="border p-2">Người Nghiệm Thu</th><th class="border p-2 text-center">Xác Nhận Nghiệm Thu</th></tr>`;
 
   const body = document.getElementById('operationWorkItemTableBody');
   const colspan = 6;
-  const rows = buildOperationWorkItemRows(items, null, 0, mode, canManageExecution, canManageAcceptance, canEditWorkItems);
+  const rows = buildOperationWorkItemRows(items, null, 0, mode, canManageExecution, canManageAcceptance, canEditWorkItems, sourceRecord);
   body.innerHTML = rows || `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Chưa có công việc nào.</td></tr>`;
 }
 
@@ -4446,7 +4448,7 @@ async function confirmOperationUseAction(kind, id) {
   renderOperationWorkItemModalBody();
   alert('✅ Đã xác nhận đưa vào sử dụng!');
 }
-function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecution, canManageAcceptance, canEditWorkItems) {
+function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecution, canManageAcceptance, canEditWorkItems, sourceRecord) {
   // LỖI ĐÃ VÁ (10/2026, cùng đợt): localeCompare trên chuỗi "hh:mm:ss dd/mm/yyyy" so GIỜ trước NGÀY, sai
   // thứ tự — parse đúng bằng parseVNDateTime() (mirror sortByCreatedAtDesc() ở core.js, đổi dấu vì đây
   // là thứ tự TĂNG DẦN/cũ trước, không phải mới nhất lên đầu).
@@ -4461,8 +4463,8 @@ function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecu
     // items (VHST-5) — truyền thêm toàn bộ danh sách công việc cùng hồ sơ để buildOperationWorkItemRow()
     // tự tra tên/trạng thái các công việc trong w.dependsOnWorkItemIds[] (hiện "🔗 Phụ thuộc: ..." + chặn
     // nút "🔄 Cập Nhật Tiến Độ" khi còn công việc liên kết chưa nghiệm thu xong).
-    html += buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items);
-    html += buildOperationWorkItemRows(items, w.id, depth + 1, mode, canManageExecution, canManageAcceptance, canEditWorkItems);
+    html += buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items, sourceRecord);
+    html += buildOperationWorkItemRows(items, w.id, depth + 1, mode, canManageExecution, canManageAcceptance, canEditWorkItems, sourceRecord);
   });
   return html;
 }
@@ -4543,7 +4545,7 @@ function operationWorkItemDeadlineBadge(w) {
   return OPERATION_WORK_ITEM_DEADLINE_STATUS_BADGE[st] || '';
 }
 
-function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items) {
+function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items, sourceRecord) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
   const periodLabel = (depth === 0 && w.periodName) ? `<div class="text-[10px] text-indigo-500">📅 ${escapeHtml(w.periodName)}</div>` : '';
   // VHST-4: badge "quá hạn cập nhật tiến độ" — dựng ở nameCell (dùng CHUNG cả EXECUTION lẫn ACCEPTANCE
@@ -4575,7 +4577,13 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // Yêu cầu người dùng (11/2026): hiện số tiền Giá Trị Hợp Đồng (w.contractValue, nhập qua modal "💰")
     // ngay trong bảng — chỉ hiển thị, không sửa được ở đây (vẫn phải bấm "💰" để sửa, giữ đúng chỗ gộp
     // 3 thông tin đã chốt ở C2: Giá Trị Đầu Tư link tự động + Giá Trị Hợp Đồng + tệp đính kèm).
-    const contractValueCell = `<td class="border p-2 text-right font-mono">${w.contractValue ? escapeHtml(formatMoneyDisplay(w.contractValue)) : '<span class="text-gray-300">—</span>'}</td>`;
+    // ĐỔI THIẾT KẾ (11/2026, phản hồi người dùng sau khi thấy demo): cột này hiện "Giá Trị Đầu Tư" TỰ
+    // ĐỘNG (Chi Phí của ĐÚNG hạng mục Danh Mục Đầu Tư mà công việc này sinh ra, tra qua w.estimateItemId)
+    // — KHÔNG còn hiện w.contractValue (giá trị hợp đồng nhập tay, nay CHỈ còn xem/sửa trong modal "💰").
+    // Công việc tạo TAY (không qua Danh Mục Đầu Tư, estimateItemId rỗng) không có gì để tự động lấy —
+    // hiện "—", không suy luận/đoán số liệu.
+    const linkedEstimateItem = w.estimateItemId != null ? (sourceRecord?.estimateItems || []).find(it => it.id === w.estimateItemId) : null;
+    const investmentValueCell = `<td class="border p-2 text-right font-mono">${linkedEstimateItem ? escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0)) : '<span class="text-gray-300">—</span>'}</td>`;
     // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
     // trách (assignedTo[], Mục E) được tự cập nhật tiến độ VIỆC CỦA MÌNH — không được thêm/xoá cây (vẫn
     // chỉ canManageExecution), khớp lib/recordActions.js updateOperationWorkItemProgress().
@@ -4654,12 +4662,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // mirror ĐÚNG bảng lịch sử của Task (xem openOperationWorkItemHistoryModal() ngay dưới) — hiện ở MỌI
     // dòng (cả có/không con, cả 2 mode) vì ai mở được cây công việc này đều đã có quyền xem hồ sơ.
     // C2 (11/2026, yêu cầu QA "Giá trị đầu tư/Giá trị hợp đồng/Tệp đính kèm") — nút mở modal riêng
-    // (openOperationWorkItemContractModal()) thay vì chèn thẳng 3 cột vào bảng (bảng đã khá chật với
-    // nameCell/assigneeCell/deadlineCell/statusCell/actionCell hiện có — modal giữ bảng gọn, vẫn đủ 3
-    // thông tin). Gate HIỆN nút: canEditWorkItems (toàn quyền) HOẶC đúng người phụ trách (isOwner) — mirror
-    // ĐÚNG quyền server updateOperationWorkItemContract().
+    // (openOperationWorkItemContractModal()). ĐỔI THIẾT KẾ (11/2026, phản hồi sau demo v29.18): "Giá
+    // Trị Đầu Tư" chuyển ra cột riêng trong bảng (investmentValueCell, tự động), modal này giờ CHỈ còn
+    // "Giá Trị Hợp Đồng" nhập tay + tệp đính kèm. Gate HIỆN nút: canEditWorkItems (toàn quyền) HOẶC
+    // đúng người phụ trách (isOwner) — mirror ĐÚNG quyền server updateOperationWorkItemContract().
     if (canEditWorkItems || isOwner) {
-      actionHTML += ` <button type="button" data-op="openOperationWorkItemContractModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200" title="Giá trị đầu tư/hợp đồng + tệp đính kèm">💰</button>`;
+      actionHTML += ` <button type="button" data-op="openOperationWorkItemContractModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200" title="Giá trị hợp đồng + tệp đính kèm">💰</button>`;
     }
     // "🔁 Giao Lại" (MỚI, 11/2026) — mở cho CẢ người phụ trách ĐANG được gán (isOwner) VÀ toàn quyền quản
     // lý hồ sơ (canEditWorkItems), mirror ĐÚNG gate server reassignOperationWorkItem() — xem chú thích đầy
@@ -4672,7 +4680,7 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // wrap — trước đây các nút chỉ nối chuỗi trần (inline, mr-1) trong 1 <td>, dễ bị dồn cứng 1 hàng dài
     // tràn ngang (khó thấy hết nút, đặc biệt "🔗 Liên kết" — nút thứ 3/5) khi cột "Thao Tác" hẹp lại. flex
     // flex-wrap cho phép các nút tự xuống hàng gọn gàng thay vì bị cắt/phải cuộn ngang mới thấy hết.
-    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}${contractValueCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
+    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}${investmentValueCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
   }
 
   // ACCEPTANCE mode
@@ -4746,17 +4754,19 @@ function closeOperationWorkItemHistoryModal() {
 
 // C2 (11/2026, yêu cầu QA "Giá trị đầu tư/Giá trị hợp đồng/Tệp đính kèm") — modal riêng, mirror ĐÚNG
 // khuôn openEditOperationRepairModal()/onEditVrFileAttachmentChange() (A3) cho phần tải nhiều tệp.
-// "Giá trị đầu tư" LUÔN hiển thị READ-ONLY (sourceRecord.estimateTotalAmount, Option A đã chốt với
-// người dùng — KHÔNG có input nào cho field này, không gửi lên server).
+// ĐỔI THIẾT KẾ (11/2026, phản hồi người dùng sau demo v29.18): field "Giá Trị Đầu Tư" (read-only, tự
+// động) từng nằm ở ĐÂY đã BỊ BỎ — lý do: nó lấy sourceRecord.estimateTotalAmount (TỔNG CẢ hồ sơ, giống
+// nhau ở mọi công việc) thay vì Chi Phí ĐÚNG của riêng công việc đó, SAI theo đúng nghĩa (người dùng
+// phát hiện qua demo thật). Giá trị này giờ hiện ĐÚNG (link qua estimateItemId) ở 1 cột riêng trong
+// bảng #operationWorkItemTableBody (xem investmentValueCell ở buildOperationWorkItemRow()) — modal
+// này giờ CHỈ còn "Giá Trị Hợp Đồng" (nhập tay) + tệp đính kèm, không có field tự động nào nữa.
 let owiContractPendingAttachments = [];
 let owiContractAttachmentUploading = false;
 function openOperationWorkItemContractModal(id) {
   const w = (DB.operationWorkItems || []).find(x => x.id === id);
   if (!w) return;
-  const sourceRecord = operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId);
   document.getElementById('owiContractId').value = id;
-  document.getElementById('owiContractTitle').innerText = `💰 Giá trị đầu tư/hợp đồng: ${w.title}`;
-  document.getElementById('owiContractInvestmentValue').innerText = formatMoneyDisplay(sourceRecord?.estimateTotalAmount || 0) || '0';
+  document.getElementById('owiContractTitle').innerText = `💰 Giá trị hợp đồng: ${w.title}`;
   document.getElementById('owiContractValue').value = w.contractValue ? formatMoneyDisplay(w.contractValue) : '';
   owiContractPendingAttachments = (w.contractAttachments || []).slice();
   renderOwiContractAttachmentChips();
@@ -5171,10 +5181,12 @@ async function exportOperationWorkItems() {
     { header: 'Tên Công Việc', key: 'title', width: 30 }, { header: 'Mô Tả', key: 'description', width: 26 },
     { header: 'Người Phụ Trách', key: 'assignedTo', width: 26 }, { header: 'Người Nghiệm Thu', key: 'acceptor', width: 22 },
     { header: 'Hạn Hoàn Thành', key: 'deadline', width: 16 }, { header: 'Trạng Thái', key: 'status', width: 20 },
-    // C2 (11/2026) — "Giá Trị Đầu Tư" TỰ ĐỘNG/LINK (sourceRecord.estimateTotalAmount, Option A đã chốt
-    // với người dùng — tổng ngân sách DMĐT đã duyệt của CẢ HỒ SƠ, giống nhau ở mọi dòng, KHÔNG tính
-    // riêng theo từng công việc vì operationWorkItems không liên kết trực tiếp tới 1 hạng mục DMĐT cụ
-    // thể nào). "Giá Trị Hợp Đồng" nhập tay/import, người phụ trách tự điền qua updateOperationWorkItemContract().
+    // ĐỔI THIẾT KẾ (11/2026, phản hồi người dùng sau demo v29.18): "Giá Trị Đầu Tư" trước đây lấy
+    // sourceRecord.estimateTotalAmount (tổng CẢ hồ sơ, giống nhau ở mọi dòng — SAI, người dùng phát
+    // hiện) — nay tính ĐÚNG theo từng công việc, tra Chi Phí của hạng mục Danh Mục Đầu Tư sinh ra công
+    // việc đó qua w.estimateItemId (mirror ĐÚNG investmentValueCell ở buildOperationWorkItemRow()).
+    // Công việc tạo tay (không qua Danh Mục Đầu Tư) -> 0 (không có hạng mục nguồn để tra). "Giá Trị Hợp
+    // Đồng" nhập tay/import, người phụ trách tự điền qua updateOperationWorkItemContract().
     { header: 'Giá Trị Đầu Tư (VNĐ)', key: 'investmentValue', width: 20 },
     { header: 'Giá Trị Hợp Đồng (VNĐ)', key: 'contractValue', width: 20 },
     { header: 'Tệp Đính Kèm HĐ', key: 'contractAttachments', width: 30 },
@@ -5182,13 +5194,14 @@ async function exportOperationWorkItems() {
   ];
   const byId = new Map(items.map(w => [w.id, w]));
   const sourceRecord = operationWorkItemSourceRecord(currentWorkItemModalKind, currentWorkItemModalRecordId);
-  const investmentValue = sourceRecord?.estimateTotalAmount || 0;
+  const estimateItemsById = new Map((sourceRecord?.estimateItems || []).map(it => [it.id, it]));
   const rows = items.map(w => ({
     title: w.title, description: w.description || '',
     assignedTo: (Array.isArray(w.assignedToName) ? w.assignedToName : (w.assignedToName ? [w.assignedToName] : [])).join(', '),
     acceptor: w.acceptorName || '', deadline: w.deadline || '',
     status: OPERATION_WORK_ITEM_STATUS_LABELS[w.status] || w.status || '',
-    investmentValue, contractValue: w.contractValue || 0,
+    investmentValue: (w.estimateItemId != null ? estimateItemsById.get(w.estimateItemId)?.amount : 0) || 0,
+    contractValue: w.contractValue || 0,
     contractAttachments: (w.contractAttachments || []).map(a => a.fileName).join(', '),
     parentTitle: w.parentWorkItemId != null ? (byId.get(w.parentWorkItemId)?.title || '') : ''
   }));

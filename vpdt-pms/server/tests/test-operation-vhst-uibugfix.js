@@ -431,15 +431,15 @@ async function main() {
     // dùng data-id nhưng chưa khai ở OP_CLICK_ACTIONS -> fallback cspDispatchOp() chỉ đọc data-arg0/argN,
     // gọi với id=undefined -> "if (!w) return;" thoát ngay, không mở gì cả. Modal operationWorkItemContractModal
     // cũng CHƯA đăng ký ở forEach(bindOperationDelegation) (lớp lỗi thứ 2, như editOperationRepairModal).
-    await run.run('Giá Trị Hợp Đồng (DOM thật, bấm THẬT): bấm "💰" -> modal PHẢI mở đúng (hiện Giá Trị Đầu Tư tự động theo Danh Mục Đầu Tư) -> gõ Giá Trị Hợp Đồng + bấm "💾 Lưu" -> PHẢI lưu đúng + modal PHẢI tự đóng (trước fix: không mở gì cả)', async () => {
+    await run.run('Giá Trị Hợp Đồng (DOM thật, bấm THẬT): bấm "💰" -> modal PHẢI mở đúng (ĐỔI THIẾT KẾ v29.20: modal CHỈ còn Giá Trị Hợp Đồng + tệp đính kèm, "Giá Trị Đầu Tư" đã chuyển ra cột riêng trong bảng) -> gõ Giá Trị Hợp Đồng + bấm "💾 Lưu" -> PHẢI lưu đúng + modal PHẢI tự đóng (trước fix: không mở gì cả)', async () => {
       await page.click(`button[data-op="openOperationWorkItemContractModal"][data-id="${rootWorkItemId}"]`);
       await page.waitForTimeout(100);
       const modalOpened = await page.evaluate(() => !document.getElementById('operationWorkItemContractModal').classList.contains('hidden'));
-      assert(modalOpened, 'Modal "💰 Giá trị đầu tư/hợp đồng" phải mở ra khi bấm nút "💰" (nếu không mở: id=undefined, bug tái phát)');
+      assert(modalOpened, 'Modal "💰 Giá trị hợp đồng" phải mở ra khi bấm nút "💰" (nếu không mở: id=undefined, bug tái phát)');
       await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-contract-modal-open.png') });
 
-      const investmentText = await page.evaluate(() => document.getElementById('owiContractInvestmentValue').innerText);
-      assert(investmentText && investmentText !== '0', `"Giá Trị Đầu Tư" phải tự lấy từ Tổng Danh Mục Đầu Tư của hồ sơ (khác 0 vì hồ sơ test đã có hạng mục) — thực tế: "${investmentText}"`);
+      const investmentElGone = await page.evaluate(() => document.getElementById('owiContractInvestmentValue') === null);
+      assert(investmentElGone, 'Field "Giá Trị Đầu Tư" (owiContractInvestmentValue) phải ĐÃ BỊ BỎ khỏi modal (v29.20 — chuyển ra cột riêng trong bảng)');
 
       await page.fill('#owiContractValue', '850000000');
       await page.click('button[data-op="submitOperationWorkItemContract"]');
@@ -457,20 +457,24 @@ async function main() {
       assert(check.modalHidden, 'Modal phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Lưu" vẫn "chết")');
     });
 
-    // ===================== 6) Yêu cầu người dùng (11/2026): hiện số tiền Giá Trị Hợp Đồng NGAY trong bảng =====================
-    // Người dùng hỏi "muốn giá trị thể hiện ra ngoài được không?" sau khi xác nhận nút "💰" đã hoạt động —
-    // chọn phương án "Thêm 1 cột nhỏ hiện số tiền" (không gộp lại 2 cột riêng như yêu cầu gốc, giữ modal "💰"
-    // cho việc sửa/xem Giá Trị Đầu Tư + tệp đính kèm). Kiểm tra NGAY SAU kịch bản (5) ở trên — bảng đã tự
-    // render lại qua renderOperationWorkItemModalBody() sau khi lưu, không cần thao tác thêm.
-    await run.run('Cột "Giá Trị Hợp Đồng" (DOM thật): sau khi lưu 850.000.000 ở modal "💰", bảng Thực Hiện PHẢI hiện đúng số tiền này ở dòng tương ứng, không cần mở modal lại', async () => {
+    // ===================== 6) Cột "Giá Trị Đầu Tư" trong bảng (ĐỔI THIẾT KẾ v29.20) =====================
+    // v29.18: thêm 1 cột nhỏ hiện Giá Trị Hợp Đồng (contractValue, nhập tay) ngay trong bảng. v29.20
+    // (phản hồi người dùng sau demo — "Giá Trị Đầu Tư" trong modal hiện SAI, lấy tổng cả hồ sơ thay vì
+    // đúng hạng mục): đổi hẳn cột này thành "Giá Trị Đầu Tư" TỰ ĐỘNG (link qua estimateItemId), Giá Trị
+    // Hợp Đồng (nhập tay) nay CHỈ còn xem/sửa trong modal "💰", không còn hiện trong bảng nữa.
+    // rootWorkItemId trong file test này được TẠO TAY (nút "➕ Thêm Công Việc Gốc", KHÔNG qua Danh Mục
+    // Đầu Tư/buildAutoWorkItemsFromEstimate()) nên estimateItemId = null -> cột PHẢI hiện "—", kể cả sau
+    // khi vừa lưu 850.000.000 Giá Trị Hợp Đồng ở kịch bản (5) ngay trên — xác nhận ĐÚNG cột đang hiện
+    // Giá Trị Đầu Tư (không liên kết -> "—"), KHÔNG phải vô tình vẫn hiện Giá Trị Hợp Đồng cũ.
+    await run.run('Cột "Giá Trị Đầu Tư" (DOM thật): công việc TẠO TAY (không qua Danh Mục Đầu Tư) -> PHẢI hiện "—", KHÔNG hiện 850.000.000 vừa lưu ở Giá Trị Hợp Đồng (xác nhận cột đã đổi đúng, không còn là Giá Trị Hợp Đồng)', async () => {
       const cellText = await page.evaluate((rid) => {
         const btn = document.querySelector(`button[data-op="openOperationWorkItemContractModal"][data-id="${rid}"]`);
         const row = btn && btn.closest('tr');
         if (!row) return null;
         const cells = row.querySelectorAll('td');
-        return cells[4] ? cells[4].textContent.trim() : null; // 0=Tên,1=Người PT,2=Hạn,3=Trạng Thái,4=Giá Trị Hợp Đồng
+        return cells[4] ? cells[4].textContent.trim() : null; // 0=Tên,1=Người PT,2=Hạn,3=Trạng Thái,4=Giá Trị Đầu Tư
       }, rootWorkItemId);
-      assert(cellText && cellText.includes('850'), `Cột "Giá Trị Hợp Đồng" ở bảng phải hiện số tiền đã lưu (850.000.000) — thực tế: "${cellText}"`);
+      assert(cellText === '—', `Cột "Giá Trị Đầu Tư" phải hiện "—" cho công việc tạo tay (không liên kết Danh Mục Đầu Tư) — thực tế: "${cellText}" (nếu hiện "850.000.000": cột VẪN đang hiện Giá Trị Hợp Đồng cũ, chưa đổi đúng)`);
     });
   } finally {
     await browser.close();
