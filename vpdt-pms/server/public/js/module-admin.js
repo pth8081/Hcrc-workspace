@@ -412,7 +412,17 @@ async function setStoreType(name, type) {
 // khớp giá trị vừa gửi (dấu hiệu lưu "thành công giả" — HTTP 200 nhưng dữ liệu không thực sự persist,
 // nghi vấn người dùng từng nêu ở inventoryApiConfig trước đó), báo lỗi RÕ RÀNG thay vì im lặng coi là
 // xong như luồng auto-save cũ.
-async function saveStoreExternalCodeFromInput(inputEl, name) {
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "lưu mã xong ấn OK thì mất luôn mã" kèm ảnh chụp alert xác nhận
+// "(đã xoá)" ngay lúc lưu): `data-arg-el="0"` (xem cspReadArgSlot() ở core.js) luôn trả về CHÍNH phần tử
+// đang mang `data-op` — tức là cái NÚT 💾 Lưu vừa bấm, KHÔNG PHẢI ô input kề bên như code cũ lầm tưởng
+// (quy ước data-arg-el chỉ đúng khi gắn trực tiếp LÊN input/checkbox đang đổi giá trị — VD data-op-change
+// trên chính checkbox — chứ không phải 1 nút RIÊNG đứng cạnh input). `btnEl.value` (nút <button> không
+// có thuộc tính value) luôn đọc ra chuỗi rỗng "" -> setStoreExternalCode() nhận "" -> XOÁ mã vừa nhập ngay
+// trong chính lượt lưu đó, dù người dùng rõ ràng đã gõ mã. Vá bằng cách tự đọc đúng input kề trước nút
+// (`btnEl.previousElementSibling`, đúng thứ tự dựng HTML ở renderStoreList() trên — input luôn đứng ngay
+// trước nút Lưu) thay vì tin `data-arg-el="0"` trỏ nhầm.
+async function saveStoreExternalCodeFromInput(btnEl, name) {
+  const inputEl = btnEl && btnEl.previousElementSibling;
   if (!inputEl) return;
   await setStoreExternalCode(name, inputEl.value);
 }

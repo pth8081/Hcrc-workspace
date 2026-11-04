@@ -11,6 +11,15 @@
 // đúng giá trị đã THỰC SỰ nằm trong CSDL, thay vì chỉ tin HTTP 200 của POST là đủ — nếu đọc lại không
 // khớp, báo lỗi RÕ RÀNG thay vì im lặng coi là đã lưu xong.
 //
+// LỖI THỨ 2 ĐÃ VÁ (11/2026, người dùng báo "lưu mã xong ấn OK thì mất luôn mã" kèm alert "(đã xoá)" ngay
+// lúc lưu): bài test này TỪNG gọi thẳng saveStoreExternalCodeFromInput(input, name) — truyền chính phần
+// tử <input> làm tham số đầu, nên "tự nhiên đúng" dù code thật dùng data-arg-el="0" lấy nhầm phần tử NÚT
+// (không phải input) khi bấm qua CSP dispatcher thật (xem cspReadArgSlot() ở core.js — data-arg-el chỉ
+// đúng khi gắn LÊN chính input, không đúng cho 1 nút riêng đứng cạnh). Gọi tắt qua hàm như vậy che mất
+// hoàn toàn lỗi wiring DOM thật — đúng loại lỗi CLAUDE.md yêu cầu phải bắt bằng thao tác THẬT (bấm nút
+// thật qua page.click(), không gọi thẳng hàm JS tách rời). Viết lại: gõ giá trị vào đúng ô input thật rồi
+// BẤM THẬT nút "💾 Lưu" (qua CSP delegation thật, giống người dùng), không còn gọi hàm trực tiếp.
+//
 // Chạy: node server/tests/test-store-external-code-save-button-verify.js
 'use strict';
 const { startStaticServer, createMockState, launchPage, createRunner, assertEqual, assertIncludes } = require('./testHarness');
@@ -64,7 +73,11 @@ async function main() {
         };
         const input = document.querySelector('#storeList input[type="text"]');
         input.value = '217';
-        await saveStoreExternalCodeFromInput(input, 'Siêu Thị A');
+        // BẤM THẬT nút "💾 Lưu" (click thật, qua đúng CSP delegation ở bindCspDelegation() — KHÔNG gọi
+        // thẳng saveStoreExternalCodeFromInput() để không bỏ sót lỗi wiring data-arg-el/DOM thật).
+        const btn = document.querySelector('#storeList button[data-op="saveStoreExternalCodeFromInput"]');
+        btn.click();
+        await new Promise(r => setTimeout(r, 150));
         return { alerts: window.__alerts.slice() };
       });
       assertEqual(result.alerts.length, 1, 'Phải có đúng 1 cảnh báo');
@@ -88,7 +101,9 @@ async function main() {
         };
         const input = document.querySelector('#storeList input[type="text"]');
         input.value = '217';
-        await saveStoreExternalCodeFromInput(input, 'Siêu Thị A');
+        const btn = document.querySelector('#storeList button[data-op="saveStoreExternalCodeFromInput"]');
+        btn.click();
+        await new Promise(r => setTimeout(r, 150));
         return { alerts: window.__alerts.slice(), storeExternalCodes: DB.storeExternalCodes };
       });
       assertEqual(result.alerts.length, 1, 'Phải có đúng 1 thông báo');

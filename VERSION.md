@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**29.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.11 (2026-11): Fix nút "💾 Lưu" Mã Điểm (Danh Mục Siêu Thị) tự xoá mã vừa nhập
+
+Người dùng báo kèm 3 ảnh: lưu Mã Điểm xong alert hiện đúng "(đã xoá)" (chứ không phải mã vừa
+gõ), bấm OK thì ô input rỗng trở lại, và màn Đối Chiếu Tồn Kho vẫn báo "chưa cấu hình Mã Điểm"
+cho đúng siêu thị đó dù vừa lưu. Nguyên nhân gốc: `saveStoreExternalCodeFromInput(inputEl,
+name)` — nút "💾 Lưu" dùng `data-arg-el="0"` để lấy ô input kề bên, nhưng quy ước
+`data-arg-el` (xem `cspReadArgSlot()`, `core.js`) chỉ trả về **chính phần tử đang mang
+`data-op`**, tức là CHÍNH CÁI NÚT vừa bấm — không phải input. `btnEl.value` (nút `<button>`
+không có thuộc tính `value`) luôn đọc ra chuỗi rỗng, nên MỌI lượt lưu đều lưu giá trị "" dù
+người dùng đã gõ mã thật, tự xoá luôn mã ngay trong lượt lưu đó.
+
+**Đã làm:**
+- `public/js/module-admin.js`: `saveStoreExternalCodeFromInput()` giờ tự đọc đúng ô input kề
+  trước nút (`btnEl.previousElementSibling`, đúng thứ tự dựng HTML ở `renderStoreList()`) thay
+  vì tin nhầm `data-arg-el="0"` trỏ tới input.
+- `tests/test-store-external-code-save-button-verify.js`: bài test cũ gọi THẲNG
+  `saveStoreExternalCodeFromInput(input, name)` (truyền chính input làm tham số, không qua
+  CSP dispatcher thật) nên che mất hoàn toàn lỗi wiring DOM này — viết lại để BẤM THẬT nút
+  "💾 Lưu" (qua `bindCspDelegation()` thật, giống người dùng), đúng yêu cầu CLAUDE.md "test
+  bằng thao tác thật, không chỉ gọi thẳng hàm tách rời". Đã xác nhận: revert riêng fix ở
+  `module-admin.js` (giữ nguyên bài test mới) làm 2/3 kịch bản FAIL đúng như lỗi người dùng báo
+  — chứng minh bài test mới bắt được lỗi thật. Rà soát toàn hệ thống mọi điểm `data-op=` kết
+  hợp `data-arg-el=` khác — không còn chỗ nào dùng sai kiểu này (các chỗ khác dùng `data-arg-el`
+  để lấy CHÍNH nút bấm làm điểm neo `.closest()`, không phải đọc `.value`, nên không bị ảnh
+  hưởng). 3/3 test file này pass + 4 file test liên quan khác (partner-api-config F5/false-
+  success, store-external-codes-admin-gate, store-catalog-excel) không có regression.
+
+**Deploy-impact:** chỉ đổi code client (`public/js/module-admin.js`) — copy code +
+`pm2 restart` là đủ, không cần migrate DB/env mới. Admin nào từng lưu Mã Điểm trước bản vá này
+nên vào lại Danh Mục Siêu Thị kiểm tra/nhập lại cho đúng (dữ liệu cũ có thể đã bị lưu rỗng do
+lỗi này).
 
 ## v29.10 (2026-11): Phòng Họp — đổi định dạng cột "Thời Gian Sử Dụng"
 
