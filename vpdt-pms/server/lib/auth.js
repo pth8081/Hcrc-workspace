@@ -4,7 +4,7 @@
 // request từ client, khiến GET/POST /api/data không có xác thực gì. Module này là gốc để vá lỗ đó.
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getAppDataValueCached, withLockedAppDataValue } = require('./appData');
+const { getAppDataValue, getAppDataValueCached, withLockedAppDataValue } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "cứ bị văng hết phiên nhiều lần" khi dùng trên điện thoại): hạn 1h
@@ -152,13 +152,37 @@ async function requireAuth(req, res, next) {
     // Mật khẩu/PIN đã đổi (bởi admin hoặc chính người dùng ở phiên/thiết bị khác) kể từ lúc token này
     // được ký -> sessionVersion trong DB đã tăng, không còn khớp "sv" đã ký cứng trong token -> buộc
     // đăng nhập lại thay vì tiếp tục tin 1 token biết chắc đã lỗi thời (xem signToken() ở trên).
+    let effectiveUsers = users;
+    let effectiveFreshUser = freshUser;
     if ((payload.sv || 0) !== (freshUser.sessionVersion || 0)) {
-      return res.status(401).json({ error: 'Mật khẩu/PIN vừa được thay đổi — vui lòng đăng nhập lại' });
+      // LỖI ĐÃ VÁ (11/2026, người dùng báo "vừa đăng nhập xong bị đăng xuất ngay" dù chỉ dùng ĐÚNG 1
+      // thiết bị): PM2 cluster mode chạy nhiều tiến trình Node KHÔNG sticky session (xem chú thích
+      // getAppDataValueCached() ở lib/appData.js) — mỗi tiến trình giữ 1 bản cache "users" RIÊNG, chỉ
+      // đồng bộ qua tin nhắn IPC phát đi NGAY lúc có ghi (không đợi hết TTL), nhưng việc phát tin đó vẫn
+      // cần vài mili-giây để tới các tiến trình còn lại. Request /verify-totp-login vừa CẤP PHIÊN MỚI
+      // (tăng sessionVersion) ở 1 tiến trình, rồi client GỌI NGAY /api/auth/me để xác nhận — nếu request
+      // đó rơi vào 1 tiến trình KHÁC chưa kịp nhận tin nhắn xoá cache, request đó vẫn đọc bản
+      // sessionVersion CŨ từ cache, thấy lệch với "sv" (đã là bản MỚI) trong token vừa cấp -> hiểu
+      // NHẦM thành "phiên đã bị đổi mật khẩu/đá bởi nơi khác", đăng xuất oan ngay sau khi vừa đăng nhập
+      // thành công — dù không hề có thiết bị/phiên nào khác liên quan. Trước khi kết luận 401 thật, đọc
+      // lại THẲNG TỪ CSDL (bỏ qua cache) đúng 1 lần để loại trừ khả năng cache tiến trình này đang trễ —
+      // chỉ tốn thêm 1 lượt đọc DB cho đúng NHÁNH HIẾM này (lệch sessionVersion), không ảnh hưởng gì tới
+      // đường đi bình thường (khớp ngay từ cache, không vào nhánh này).
+      const freshFromDb = await getAppDataValue('users');
+      const freshUserFromDb = (freshFromDb || []).find(u => u.username === payload.sub);
+      if (!freshUserFromDb || (payload.sv || 0) !== (freshUserFromDb.sessionVersion || 0)) {
+        return res.status(401).json({ error: 'Mật khẩu/PIN vừa được thay đổi — vui lòng đăng nhập lại' });
+      }
+      // Khớp khi đọc thẳng CSDL -> đúng là cache tiến trình này đang trễ (không phải đá thật) -> dùng
+      // bản dữ liệu MỚI ĐỌC ĐƯỢC cho phần còn lại của request này (freshUser/allUsers bên dưới), không
+      // tiếp tục dùng bản cache cũ nữa.
+      effectiveUsers = freshFromDb;
+      effectiveFreshUser = freshUserFromDb;
     }
 
-    req.user = { username: freshUser.username, admin: !!freshUser.perms?.admin };
-    req.freshUser = freshUser;
-    req.allUsers = users || [];
+    req.user = { username: effectiveFreshUser.username, admin: !!effectiveFreshUser.perms?.admin };
+    req.freshUser = effectiveFreshUser;
+    req.allUsers = effectiveUsers || [];
 
     // Trượt hạn theo hoạt động: token JWT tuyệt đối hết hạn sau 1h (TOKEN_TTL, xác minh ở verifyToken()
     // phía trên) — nhưng nếu người dùng còn đang thao tác (còn request nào đó tới trước khi hết hạn),
@@ -166,7 +190,10 @@ async function requireAuth(req, res, next) {
     // hết hạn thật khi không có request nào trong suốt 1h liên tục (đúng ý "đang hoạt động thì không
     // bị văng"). payload.exp tính bằng giây (chuẩn JWT), quy đổi ra mili giây để so sánh với Date.now().
     if (payload.exp && (payload.exp * 1000 - Date.now()) < TOKEN_RENEW_THRESHOLD_MS) {
-      setAuthCookie(res, signToken(freshUser));
+      // Dùng effectiveFreshUser (không phải freshUser) — ở nhánh vừa tự đọc lại CSDL thật phía trên vì
+      // lệch sessionVersion do cache trễ, freshUser (bản cache cũ) vẫn mang sessionVersion SAI, ký lại
+      // token bằng nó sẽ tái tạo NGUYÊN lỗi vừa tự vá ở request kế tiếp.
+      setAuthCookie(res, signToken(effectiveFreshUser));
       // LỖI ĐÃ VÁ (11/2026, người dùng báo "vào máy tính lúc điện thoại đang có phiên thì bị đá âm
       // thầm, không hỏi xác nhận như hướng ngược lại"): routes/auth.js shouldConfirmKick() quyết định
       // có hỏi xác nhận trước khi đá hay không dựa vào lastLoginAt — nhưng field đó trước đây CHỈ được
@@ -180,7 +207,7 @@ async function requireAuth(req, res, next) {
       // hiện tại, dữ liệu này không ảnh hưởng gì tới việc xử lý response đang trả về).
       withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
-        const idx = list.findIndex(u => u.username === freshUser.username);
+        const idx = list.findIndex(u => u.username === effectiveFreshUser.username);
         if (idx !== -1) list[idx] = { ...list[idx], lastLoginAt: new Date().toISOString() };
         return list;
       }).catch(err => console.error('requireAuth: không cập nhật được lastLoginAt lúc trượt hạn:', err.message));

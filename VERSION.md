@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**29.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.13 (2026-11): Fix 2 bug đăng nhập TOTP — mã bị từ chối do độ trễ + "login xong logout ngay"
+
+Người dùng báo 2 hiện tượng khi đăng nhập TOTP (admin): (1) "xác thực mã có vẻ chậm, chạy sang mã
+khác lại báo sai mã" — gõ đúng mã nhưng vẫn bị từ chối; (2) "vào mã khác login và logout ngay" —
+đăng nhập thành công rồi bị đăng xuất gần như ngay lập tức, xác nhận KHÔNG có thiết bị/tab nào
+khác đang mở cùng lúc (loại trừ hẳn cơ chế xác nhận-đá-phiên ở v29.9/v29.12).
+
+**Bug 1 — mã TOTP đúng vẫn bị từ chối do độ trễ:**
+- Nguyên nhân: cấu hình MẶC ĐỊNH của thư viện `otplib` là `window: 0` — KHÔNG có dung sai thời
+  gian nào cả, chỉ chấp nhận ĐÚNG khung 30 giây tại thời điểm server xử lý xong request. Độ trễ
+  mạng/CSDL bình thường rơi đúng lúc giao giữa 2 khung 30s là đủ để bị từ chối dù mã hoàn toàn
+  đúng lúc người dùng gõ.
+- `lib/totp.js`: đặt `authenticator.options = { window: 1 }` — nới dung sai thêm ±1 bước (tổng
+  ~90 giây hợp lệ), đúng mức dung sai tiêu chuẩn ngành (Google/AWS/GitHub TOTP), vẫn bắt buộc
+  đúng bí mật TOTP, không làm yếu bảo mật.
+
+**Bug 2 — đăng nhập xong bị đăng xuất gần như ngay lập tức (dù chỉ 1 thiết bị):**
+- Nguyên nhân: production chạy PM2 **cluster mode** nhiều tiến trình Node, KHÔNG sticky session —
+  mỗi tiến trình giữ 1 bản cache "users" RIÊNG (`lib/appData.js`), chỉ đồng bộ qua tin nhắn IPC
+  phát đi NGAY lúc có ghi nhưng vẫn cần vài mili-giây để lan tới các tiến trình còn lại. Luồng
+  đăng nhập TOTP vừa CẤP PHIÊN MỚI (tăng sessionVersion) ở 1 tiến trình, rồi client gọi NGAY
+  `GET /api/auth/me` để xác nhận — nếu request đó rơi vào 1 tiến trình KHÁC chưa kịp nhận tin xoá
+  cache, tiến trình đó vẫn đọc sessionVersion CŨ, thấy lệch với token vừa cấp (đã MỚI) -> hiểu
+  NHẦM "phiên đã bị đổi mật khẩu/đá bởi nơi khác", đăng xuất OAN dù không hề có thiết bị/phiên nào
+  khác liên quan. Lỗ hổng race condition này đã có sẵn trong kiến trúc cache nhiều tiến trình từ
+  trước, nhưng đợt thêm bước xác nhận-trước-khi-đá (v29.9, tách 1 lượt ghi thành nhiều lượt ghi
+  tuần tự) làm cửa sổ race này dễ lộ ra hơn.
+- `lib/auth.js`: `requireAuth()` không kết luận 401 ngay khi lệch sessionVersion nữa — tự đọc lại
+  THẲNG TỪ CSDL (bỏ qua cache) đúng 1 lần để loại trừ khả năng cache tiến trình này đang trễ,
+  trước khi thật sự từ chối. Chỉ tốn thêm 1 lượt đọc DB cho đúng nhánh HIẾM này (lệch
+  sessionVersion); lệch THẬT (đổi mật khẩu/đá bởi nơi khác thật) vẫn bị từ chối đúng như cũ.
+
+**Test:** `tests/test-auth-requireauth-cache-race.js` (mới) — 3 kịch bản: cache trễ (không được
+401 oan) + lệch thật (vẫn phải 401 đúng) + đường thường (không có race). Đã xác nhận: revert riêng
+fix này làm kịch bản 1 FAIL đúng như lỗi người dùng báo. Các test auth khác không có regression
+(4 test TOTP fail từ trước không liên quan, do stub email thiếu `resolveGraphOption`, không phải
+lỗi logic TOTP).
+
+**Deploy-impact:** chỉ đổi code server (`lib/totp.js`, `lib/auth.js`) — copy code + `pm2 restart`
+là đủ, không cần migrate DB/env mới.
 
 ## v29.12 (2026-11): Fix tiếp bug đăng xuất liên tục — lastLoginAt đóng băng khi phiên sống lâu nhờ trượt hạn
 

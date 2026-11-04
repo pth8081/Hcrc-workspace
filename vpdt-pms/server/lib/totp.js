@@ -27,6 +27,17 @@ const { setToken, peekToken, consumeToken, deleteToken } = require('./ephemeralS
 
 const ISSUER = 'HCRC Workspace';
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "xác thực mã có vẻ chậm, chạy sang mã khác lại báo sai mã"): cấu
+// hình MẶC ĐỊNH của otplib là `window: 0` — KHÔNG có dung sai thời gian nào cả, chỉ chấp nhận ĐÚNG khung
+// 30 giây hiện tại tại thời điểm server xử lý xong request. Chỉ cần độ trễ mạng/round-trip (đọc
+// users/pendingTotpLogin từ CSDL trước khi tới bước kiểm mã, xem verifyCode() bên dưới) rơi đúng lúc
+// giao giữa 2 khung 30s là bị từ chối NGAY CẢ KHI mã người dùng gõ hoàn toàn đúng lúc họ nhìn thấy trên
+// app Authenticator — không phải lỗi gõ sai. `window: 1` nới dung sai thêm ±1 bước (tổng ~90 giây hợp
+// lệ) — vẫn bắt buộc đúng bí mật TOTP, chỉ bớt khắt khe với độ trễ thực tế (mạng chậm, CSDL phản hồi
+// chậm, lệch đồng hồ nhẹ giữa điện thoại và server), đúng mức dung sai tiêu chuẩn ngành (Google/AWS/
+// GitHub TOTP đều cho phép tương đương ±1 hoặc ±2 bước).
+authenticator.options = { window: 1 };
+
 const PENDING_LOGIN_TTL_MS = 5 * 60 * 1000;
 const PENDING_SETUP_TTL_MS = 10 * 60 * 1000; // dài hơn login: cần thời gian mở app, quét QR, gõ mã
 
