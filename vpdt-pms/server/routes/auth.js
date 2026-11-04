@@ -4,7 +4,8 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, getAppDataValueWithVersion, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, findUserByUsernameCI } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, TOKEN_TTL_MS, findUserByUsernameCI } = require('../lib/auth');
+const { setToken: setEphemeralToken, consumeToken: consumeEphemeralToken } = require('../lib/ephemeralStore');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
@@ -34,6 +35,60 @@ function logAuthFailure(req, { username, fullName, actionType, description }) {
     username: username || 'unknown', fullName: fullName || username || 'unknown', ipAddress: req.ip,
     module: 'AUTH', actionType, targetObject: username || '', description, status: 'FAILURE'
   }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (đăng nhập thất bại):', e.message));
+}
+
+// LỖI ĐÃ VÁ (11/2026, nhiều người dùng báo "login xong bị đăng xuất ngay, lặp vài lần trong 1 phút"):
+// cơ chế "1 tài khoản chỉ 1 kết nối" (10/2026, xem bump sessionVersion ở 3 nhánh cấp phiên bên dưới) đá
+// phiên cũ NGAY, KHÔNG BÁO TRƯỚC, bất cứ khi nào tài khoản đăng nhập thêm ở 1 nơi khác — đúng chủ đích
+// ban đầu, nhưng với người dùng thật có tài khoản mở sẵn ở ≥2 nơi cùng lúc (máy tính + điện thoại, hoặc
+// quên 1 tab cũ), mỗi lần đăng nhập lại ở 1 bên sẽ đá bên kia -> bên đó phát hiện 401 ở request kế tiếp
+// (bất kỳ request nào, không chỉ polling định kỳ) -> tự đăng xuất + hiện alert "hết phiên" -> người dùng
+// hiểu lầm là bug/timeout, đăng nhập lại ở đó -> đá NGƯỢC LẠI bên vừa đăng nhập trước -> lặp lại nhiều
+// lần trong thời gian ngắn nếu người dùng cứ qua lại 2 nơi. Xác nhận với người dùng (11/2026): VẪN giữ
+// nguyên tắc "đăng nhập mới phải đá thật phiên cũ, không cho phiên cũ dùng tiếp token cũ" (không làm yếu
+// đi vì lo autofill/lưu mật khẩu tự động của trình duyệt), nhưng THÊM 1 bước XÁC NHẬN rõ ràng trước khi
+// đá, để không còn "bất ngờ" nữa — chỉ hỏi khi THẬT SỰ có khả năng còn 1 phiên khác đang sống (xem
+// shouldConfirmKick() ngay dưới), không hỏi vô ích ở lượt đăng nhập bình thường (đăng nhập lần đầu, hoặc
+// sau khi phiên trước chắc chắn đã tự hết hạn từ lâu).
+//
+// Cơ chế: tại 3 nhánh cấp phiên thật (POST /login nhánh không TOTP, POST /verify-totp-login,
+// POST /webauthn/login-verify) — nếu shouldConfirmKick() đúng, KHÔNG cấp phiên ngay, chỉ lưu 1 "phiếu chờ
+// xác nhận" ngắn hạn (lib/ephemeralStore.js, TTL 2 phút — đủ cho người dùng đọc+bấm xác nhận ngay, không
+// cần giữ lâu) rồi trả confirmKickRequired:true cho client hiện hộp thoại xác nhận. Client bấm "Tiếp tục"
+// -> gọi POST /confirm-kick-session (CHỈ cần username, KHÔNG cần gửi lại mật khẩu/mã TOTP/vân tay — đã
+// xác thực đúng ở nhánh gốc rồi, vân tay/CAPTCHA còn không thể "gửi lại" được do đã bị dùng 1 lần) -> mới
+// thật sự tăng sessionVersion + cấp token/cookie, đá phiên cũ lúc này (KHÔNG PHẢI SỚM HƠN). Bấm "Huỷ"
+// (không gọi /confirm-kick-session) -> phiếu chờ tự hết hạn sau 2 phút, không có gì bị đá, phiên cũ vẫn
+// sống bình thường.
+const KICK_CONFIRM_TTL_MS = 2 * 60 * 1000;
+function kickConfirmKey(username) { return `kickConfirm:login:${username}`; }
+
+// Chỉ true khi phiên trước CÓ THỂ còn thật sự sống (đăng nhập lần trước đủ gần, trong vòng TOKEN_TTL_MS
+// kể từ lúc đó — quá khung này thì token cũ chắc chắn đã tự hết hạn tuyệt đối dù không ai đá, hỏi xác
+// nhận lúc đó chỉ gây phiền vô ích). lastLoginAt được set ở MỌI lượt CẤP PHIÊN thật (grantSessionAfterLogin
+// bên dưới) và xoá về null khi đăng xuất tự nguyện (POST /logout — không còn phiên nào để lo đá nhầm).
+function shouldConfirmKick(user) {
+  if (!user || !user.lastLoginAt) return false;
+  const last = new Date(user.lastLoginAt).getTime();
+  return Number.isFinite(last) && (Date.now() - last) < TOKEN_TTL_MS;
+}
+
+// Bước CẤP PHIÊN THẬT dùng chung cho cả lượt đăng nhập thẳng (không cần xác nhận) lẫn lượt đã qua xác
+// nhận ở POST /confirm-kick-session — gộp lại 1 chỗ để không lặp code tăng sessionVersion+lastLoginAt ở
+// 4 nơi gọi (3 nhánh đăng nhập + endpoint xác nhận).
+async function grantSessionAfterLogin(canonicalUsername) {
+  let sessionUser = null;
+  await withLockedAppDataValue('users', (collection) => {
+    const list = Array.isArray(collection) ? collection : [];
+    const idx = list.findIndex(u => u.username === canonicalUsername);
+    if (idx !== -1) {
+      list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1;
+      list[idx].lastLoginAt = new Date().toISOString();
+      sessionUser = { ...list[idx] };
+    }
+    return list;
+  });
+  return sessionUser;
 }
 
 // Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
@@ -216,17 +271,14 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // duyệt khác) sẽ có sv CŨ, lập tức bị requireAuth() từ chối (401 "Mật khẩu/PIN vừa được thay đổi...")
     // ngay ở request kế tiếp của họ — không cần đợi hết hạn JWT (tối đa 8h, có thể lâu hơn do trượt hạn
     // theo hoạt động).
-    let sessionUser = user;
-    await withLockedAppDataValue('users', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(u => u.username === canonicalUsername);
-      if (idx !== -1) {
-        list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1;
-        sessionUser = { ...list[idx] };
-      }
-      return list;
-    });
+    // Có thể còn 1 phiên khác đang sống thật -> hỏi xác nhận trước khi đá (xem shouldConfirmKick() ở
+    // trên) thay vì đá ngay không báo trước.
+    if (shouldConfirmKick(user)) {
+      await setEphemeralToken(kickConfirmKey(canonicalUsername), true, KICK_CONFIRM_TTL_MS);
+      return res.json({ confirmKickRequired: true, username: canonicalUsername });
+    }
 
+    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
     const token = signToken(sessionUser);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
@@ -313,22 +365,59 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
         updatedUser.totpBackupCodeHashes = hashes;
       }
       resetLoginAttempts(updatedUser);
-      // Phiên THẬT được cấp ngay sau đây (đã qua đủ 2/2 bước) -> tăng sessionVersion, đá mọi phiên cũ ở
-      // thiết bị khác — cùng lý do/cơ chế đã áp dụng cho nhánh đăng nhập không cần TOTP ở POST /login (xem
-      // chú thích đầy đủ ở đó, mục "1 tài khoản chỉ 1 kết nối tại 1 thời điểm", 10/2026).
-      updatedUser.sessionVersion = (updatedUser.sessionVersion || 0) + 1;
       list[idx] = updatedUser;
       return list;
     });
 
-    const token = signToken(updatedUser);
+    // Phiên THẬT được cấp ngay sau đây (đã qua đủ 2/2 bước) — cùng lý do/cơ chế đã áp dụng cho nhánh
+    // đăng nhập không cần TOTP ở POST /login (xem chú thích đầy đủ ở shouldConfirmKick()/
+    // grantSessionAfterLogin(), mục "1 tài khoản chỉ 1 kết nối tại 1 thời điểm", 10/2026, cập nhật
+    // 11/2026 thêm bước xác nhận trước khi đá phiên cũ).
+    if (shouldConfirmKick(updatedUser)) {
+      await setEphemeralToken(kickConfirmKey(canonicalUsername), true, KICK_CONFIRM_TTL_MS);
+      return res.json({ confirmKickRequired: true, username: canonicalUsername });
+    }
+    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
-    res.json(toSafeUser(updatedUser));
+    res.json(toSafeUser(sessionUser));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('POST /api/auth/verify-totp-login lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xác thực' });
+  }
+});
+
+// POST /api/auth/confirm-kick-session — bước XÁC NHẬN cuối cùng sau khi 1 trong 3 nhánh cấp phiên trên
+// trả confirmKickRequired:true (xem chú thích đầy đủ ở shouldConfirmKick() phía trên). CHỈ cần username
+// (không cần gửi lại mật khẩu/mã TOTP/vân tay — đã xác thực đúng ở nhánh gốc ngay trước đó rồi; vân
+// tay/mã khôi phục TOTP còn không thể "gửi lại" được vì đã bị dùng/xoá 1 lần). Phiếu chờ (ephemeralStore,
+// TTL 2 phút) là thứ duy nhất xác minh "đã qua xác thực thật ở nhánh gốc" — không có phiếu hợp lệ thì từ
+// chối thẳng, không suy luận gì thêm từ username.
+router.post('/confirm-kick-session', loginRateLimiter, async (req, res) => {
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'Thiếu tên đăng nhập' });
+  try {
+    const users = (await getAppDataValue('users')) || [];
+    const user = findUserByUsernameCI(users, username);
+    const canonicalUsername = user ? user.username : username;
+    const ticket = await consumeEphemeralToken(kickConfirmKey(canonicalUsername));
+    if (!ticket) {
+      return res.status(401).json({ error: 'Yêu cầu xác nhận đã hết hạn, vui lòng đăng nhập lại' });
+    }
+    if (!user) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    if (user.active === false) {
+      return res.status(403).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
+    }
+    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser);
+    setAuthCookie(res, token);
+    warnIfCookieLikelyNotPersisted(req);
+    res.json(toSafeUser(sessionUser));
+  } catch (err) {
+    console.error('POST /api/auth/confirm-kick-session lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể đăng nhập' });
   }
 });
 
@@ -354,7 +443,10 @@ router.post('/logout', async (req, res) => {
           const list = Array.isArray(collection) ? collection : [];
           const idx = list.findIndex(u => u.username === payload.sub);
           if (idx === -1) return list;
-          list[idx] = { ...list[idx], sessionVersion: (list[idx].sessionVersion || 0) + 1 };
+          // lastLoginAt: null — đăng xuất TỰ NGUYỆN nghĩa là không còn phiên nào cần lo đá nhầm nữa, nên
+          // lượt đăng nhập KẾ TIẾP của tài khoản này không cần hỏi xác nhận (shouldConfirmKick() ở trên)
+          // dù có đăng nhập lại ngay sau đó.
+          list[idx] = { ...list[idx], sessionVersion: (list[idx].sessionVersion || 0) + 1, lastLoginAt: null };
           return list;
         });
       }
@@ -1324,18 +1416,22 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
       );
       updatedUser = { ...list[idx], webauthnCredentials: creds };
       resetLoginAttempts(updatedUser);
-      // Phiên THẬT được cấp ngay sau đây -> tăng sessionVersion, đá mọi phiên cũ ở thiết bị khác — cùng
-      // lý do/cơ chế đã áp dụng cho POST /login/verify-totp-login (xem chú thích đầy đủ ở POST /login,
-      // mục "1 tài khoản chỉ 1 kết nối tại 1 thời điểm", 10/2026).
-      updatedUser.sessionVersion = (updatedUser.sessionVersion || 0) + 1;
       list[idx] = updatedUser;
       return list;
     });
 
-    const token = signToken(updatedUser);
+    // Phiên THẬT được cấp ngay sau đây — cùng lý do/cơ chế đã áp dụng cho POST /login/verify-totp-login
+    // (xem chú thích đầy đủ ở shouldConfirmKick()/grantSessionAfterLogin(), mục "1 tài khoản chỉ 1 kết
+    // nối tại 1 thời điểm", 10/2026, cập nhật 11/2026 thêm bước xác nhận trước khi đá phiên cũ).
+    if (shouldConfirmKick(updatedUser)) {
+      await setEphemeralToken(kickConfirmKey(canonicalUsername), true, KICK_CONFIRM_TTL_MS);
+      return res.json({ confirmKickRequired: true, username: canonicalUsername });
+    }
+    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
-    res.json(toSafeUser(updatedUser));
+    res.json(toSafeUser(sessionUser));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('POST /api/auth/webauthn/login-verify lỗi:', err.message);
