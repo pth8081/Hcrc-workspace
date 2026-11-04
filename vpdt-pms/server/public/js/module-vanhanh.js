@@ -52,7 +52,14 @@ const OPERATION_KIND_META = {
     dashboardCards: 'operationRepairDashboardCards',
     pagKey: 'operationRepair',
     logModule: 'OPERATION_REPAIR',
-    titleField: (o) => o.title,
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo "tiêu đề đặt cho hồ sơ... không lấy được tiêu đề lớn" ở Danh
+    // Mục Đầu Tư): trước đây chỉ trả o.title ("Nội Dung Sửa Chữa", VD "Sửa chữa lớn"), thiếu hẳn
+    // o.storeName — trong khi buildOperationRowHTML() (màn "Sửa chữa" gốc) LUÔN hiện CẢ 2 (storeName in
+    // đậm + title bên dưới). titleField dùng ở RẤT NHIỀU nơi (cột "Siêu Thị / Nội Dung" của Danh Mục Đầu
+    // Tư/Thực Hiện/Nghiệm Thu, tiêu đề các modal, tìm kiếm từ khoá, thông báo email...) nên sửa ĐÚNG 1
+    // chỗ này thay vì vá lẻ từng nơi gọi — nhân tiện cũng sửa luôn lỗi tìm kiếm theo tên siêu thị không ra
+    // kết quả ở các màn đó (trước đây chỉ khớp theo "Nội Dung", không khớp theo tên siêu thị).
+    titleField: (o) => o.storeName ? `${o.storeName} — ${o.title}` : o.title,
     subLabel: 'Đề xuất sửa chữa siêu thị'
   }
 };
@@ -6421,5 +6428,10 @@ function bindOperationDelegation(rootId) {
 // VHST-5 (xem test-operation-vhst-uibugfix.js, kịch bản "Giao Lại" thêm cùng đợt vá này). Nút "🗑️ Xoá"
 // (deleteOperationWorkItemClient) KHÔNG cần thêm gì ở danh sách này — nó dùng showConfirmModal()/
 // #genericConfirmModal (bindCspDelegation() riêng ở core.js, độc lập hoàn toàn với danh sách này).
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal'].forEach(bindOperationDelegation);
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "ấn nút lưu và hủy ko khả dụng ở phần sửa chữa"): 'editOperationRepairModal'
+// (modal "✏️ Sửa Đề Xuất Sửa Chữa", A3) CŨNG là 1 <div> độc lập cấp cao như operationWorkItemDependencyModal/
+// operationWorkItemReassignModal ở trên, bị bỏ sót khỏi mảng này — nút mở modal (openEditOperationRepairModal,
+// nằm TRONG operationProcessModal đã bind) vẫn chạy bình thường, nhưng "💾 Lưu Thay Đổi"/"✕ Hủy Bỏ"/chọn
+// tệp đính kèm BÊN TRONG modal này hoàn toàn không phản hồi khi bấm thật.
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal'].forEach(bindOperationDelegation);
 

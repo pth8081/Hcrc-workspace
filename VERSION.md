@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**29.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.15 (2026-11): Fix nút "Lưu Thay Đổi"/"Hủy Bỏ" không phản hồi ở "Sửa Đề Xuất Sửa Chữa" + thiếu tên Siêu Thị ở Danh Mục Đầu Tư
+
+Người dùng báo (kèm ảnh chụp): (1) nút "💾 Lưu Thay Đổi"/"✕ Hủy Bỏ" trong modal "✏️ Sửa Đề Xuất Sửa
+Chữa" bấm không có tác dụng gì; (2) cột "Siêu Thị / Nội Dung" ở tab Danh Mục Đầu Tư chỉ hiện "Nội Dung
+Sửa Chữa", thiếu hẳn tên Siêu Thị — trong khi màn "Sửa chữa" gốc hiện đúng cả 2.
+
+**Bug 1 — nút Lưu/Hủy "chết":** modal `editOperationRepairModal` (public/index.html) là 1 `<div>` độc
+lập cấp cao, bị bỏ sót khỏi danh sách đăng ký lắng nghe click (`forEach(bindOperationDelegation(...))`,
+`module-vanhanh.js`) — cùng lớp lỗi đã vá ở "🔗 Liên kết" (VHST-5) và "🔁 Giao Lại" (v29.14). Nút MỞ
+modal vẫn chạy bình thường (nằm trong `operationProcessModal` đã đăng ký), nhưng mọi thao tác BÊN TRONG
+modal này (Lưu/Hủy/chọn tệp đính kèm) hoàn toàn không phản hồi. Đã thêm `'editOperationRepairModal'`
+vào danh sách đăng ký.
+
+**Bug 2 — thiếu tên Siêu Thị ở cột "Siêu Thị / Nội Dung":** `OPERATION_KIND_META.operationRepairs.titleField`
+trước đây chỉ trả về `o.title` (Nội Dung Sửa Chữa), thiếu `o.storeName` — field này dùng ở RẤT NHIỀU nơi
+(cột "Siêu Thị / Nội Dung" của Danh Mục Đầu Tư/Thực Hiện/Nghiệm Thu, tiêu đề các modal liên quan, tìm
+kiếm từ khoá, nội dung email thông báo...). Sửa thành `${o.storeName} — ${o.title}` — nhân tiện cũng sửa
+luôn lỗi tìm kiếm theo tên Siêu Thị không ra kết quả ở các màn đó.
+
+**Test:** file mới `tests/test-operation-repair-edit-modal-and-title.js` (Playwright thật, bấm nút
+thật) — xác nhận: bấm "💾 Lưu Thay Đổi" lưu đúng + modal tự đóng; bấm "✕ Hủy Bỏ" đóng modal mà KHÔNG lưu
+gì; cột "Siêu Thị / Nội Dung" + tiêu đề modal Danh Mục Đầu Tư hiện đúng cả 2 trường. Đã xác nhận: revert
+riêng `module-vanhanh.js` làm 4/6 kịch bản FAIL đúng như lỗi người dùng báo, áp lại fix thì PASS 6/6.
+Nhân lúc viết test này cũng phát hiện + vá thêm 1 gap ở bộ test giả lập (`tests/testHarness.js` thiếu
+hẳn mock cho action `operationRepairs:update`, khiến MỌI test Playwright thật đi qua nút này trước đây
+không thể viết được — không phải lỗi code thật, chỉ là hạ tầng test). Chạy lại ~8 file test khác liên
+quan module Vận Hành/Sửa Chữa/Danh Mục Đầu Tư, không có regression.
+
+**Lưu ý còn mở**: tab "Mở Mới" (operationStoreOpenings) hiện CHƯA có tính năng "✏️ Sửa Đề Xuất" nào cả
+(không phải lỗi — tính năng này trước giờ chỉ làm cho Sửa Chữa, A3). Đã hỏi lại người dùng có cần bổ
+sung tính năng này cho Mở Mới hay không trước khi tự ý làm thêm.
+
+**Deploy:** chỉ đổi code client (`public/js/module-vanhanh.js`) — copy code + `pm2 restart` là đủ,
+không cần migrate DB/env mới, không cần build lại CSS.
 
 ## v29.14 (2026-11): Fix nút "🗑️ Xoá" + "🔁 Giao Lại" không phản hồi ở QLDA > Thực Hiện
 

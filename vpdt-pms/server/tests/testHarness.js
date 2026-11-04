@@ -356,9 +356,18 @@ function createDispatcher(state) {
     const sourceRecord = sourceRecordForWorkItem(item);
     return recordActions.reassignOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
   };
-  // operationStoreOpenings/operationRepairs:update ĐÃ BỊ XOÁ khỏi đây cùng
-  // editOperationStoreOpeningDraft()/editOperationRepairDraft() (lib/recordActions.js) — cơ chế "Sửa &
-  // Gửi Lại Bổ Sung" không còn tồn tại cho 2 collection này (Mục H, 60c473b).
+  // operationStoreOpenings/operationRepairs:update (cơ chế "Sửa & Gửi Lại Bổ Sung" CŨ, editOperationStoreOpeningDraft()/
+  // editOperationRepairDraft()) ĐÃ BỊ XOÁ khỏi đây — không còn tồn tại cho 2 collection này (Mục H, 60c473b).
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "ấn nút lưu... ko khả dụng": root cause THẬT là CSP-delegation,
+  // nhưng lúc điều tra bằng Playwright phát hiện THÊM 1 gap: action "update" đã được TÁI SỬ DỤNG cho A3
+  // "✏️ Sửa Đề Xuất" (updateOperationRepairDetails(), KHÁC HẲN cơ chế DRAFT cũ đã xoá ở trên — route thật
+  // POST /operationRepairs/:id/update, routes/records.js) nhưng CHƯA TỪNG được mirror vào đây, khiến MỌI
+  // test Playwright thật đi qua nút "💾 Lưu Thay Đổi" đều gặp lỗi mock "Mock chưa hỗ trợ hành động" dù
+  // code thật (route + CSP delegation) đã đúng — xem test-operation-repair-edit-modal-and-title.js.
+  actionHandlers['operationRepairs:update'] = (u, item, body) => {
+    const workItems = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_REPAIR' && w.sourceId === item.id);
+    return recordActions.updateOperationRepairDetails(u, item, body || {}, workItems);
+  };
   // confirmOperationUse() nay nhận thêm sourceType tường minh (Overhaul quyền — canManageOperationRecord()
   // không tự suy luận ngược từ sourceRecord) — mirror ĐÚNG route thật.
   actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {
