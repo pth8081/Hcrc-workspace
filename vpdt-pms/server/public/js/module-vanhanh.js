@@ -6135,6 +6135,21 @@ const OP_CLICK_ACTIONS = {
   confirmOperationUseAction: el => confirmOperationUseAction(el.dataset.kind, Number(el.dataset.id)),
   closeOperationWorkItemFormModal: () => closeOperationWorkItemFormModal(),
   openOperationWorkItemEditModal: el => openOperationWorkItemEditModal(Number(el.dataset.id)),
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "không thao tác được nút xóa và nút giao việc trong qlda với thực
+  // hiện — CẢ hai nút không mở ra cái gì"): root cause THẬT (khác hẳn suy đoán ban đầu về modal Giao Lại
+  // thiếu bindOperationDelegation — lỗi ĐÓ cũng có thật, đã vá riêng ở forEach(bindOperationDelegation),
+  // nhưng KHÔNG phải nguyên nhân chính khiến 2 nút này "không mở gì cả"): deleteOperationWorkItemClient()/
+  // openOperationWorkItemReassignModal() CHƯA TỪNG được khai ở registry OP_CLICK_ACTIONS này (khác hẳn
+  // openOperationWorkItemEditModal/openOperationWorkItemHistoryModal... ngay bên cạnh) nên rơi vào nhánh
+  // fallback cspDispatchOp() chung (core.js) — hàm đó chỉ đọc tham số qua cspCollectArgs() (data-arg0/
+  // argN/arg-value/arg-el/arg-event), KHÔNG hề đọc "data-id" mà 2 nút này dùng (data-id="${w.id}", đúng
+  // quy ước RIÊNG của registry OP_CLICK_ACTIONS này, xem openOperationWorkItemEditModal ngay trên) — nên
+  // bị gọi với 0 tham số, id=undefined, rơi ngay vào "if (!w) return;" đầu mỗi hàm -> KHÔNG MỞ GÌ CẢ,
+  // không có lỗi JS nào bị ném ra (im lặng tuyệt đối). Đúng loại lỗi đã tự cảnh báo nhiều lần ở chú thích
+  // đầu OP_CLICK_ACTIONS ("hàm chưa khai báo... bị bỏ qua lặng lẽ") — khai báo tường minh, đọc "id" ĐÚNG
+  // qua el.dataset.id (mirror các entry khác), là đủ sửa dứt điểm.
+  deleteOperationWorkItemClient: el => deleteOperationWorkItemClient(Number(el.dataset.id)),
+  openOperationWorkItemReassignModal: el => openOperationWorkItemReassignModal(Number(el.dataset.id)),
   updateOperationWorkItemProgressAction: el => updateOperationWorkItemProgressAction(Number(el.dataset.id), el.dataset.status),
   // Correction 3 — modal "🔄 Cập Nhật Tiến Độ" (mirror #taskProgressModal), xem operationWorkItemProgressModal.
   openOperationWorkItemProgressModal: el => openOperationWorkItemProgressModal(Number(el.dataset.id)),
@@ -6394,5 +6409,17 @@ function bindOperationDelegation(rootId) {
 // modal vẫn mở ra bình thường — chỉ các thao tác BÊN TRONG modal mới bị "chết"). Cùng lớp lỗi với
 // hrLifecycleSection (CSP-delegation) đã phát hiện ở Đợt E — xem chú thích ở đó. Thêm modal này vào danh
 // sách là fix DUY NHẤT cần thiết, không cần đổi gì ở HTML/logic khác.
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal'].forEach(bindOperationDelegation);
+//
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "không thao tác được nút xóa và nút giao việc trong qlda với thực
+// hiện"): đây là fix THỨ 2, BỔ SUNG cho nguyên nhân CHÍNH đã vá ở OP_CLICK_ACTIONS (xem chú thích đầy đủ
+// tại entry "deleteOperationWorkItemClient"/"openOperationWorkItemReassignModal" phía trên — nguyên nhân
+// chính khiến CẢ 2 nút "không mở gì cả" là thiếu khai báo registry, KHÔNG phải lỗi modal này). Nhưng
+// 'operationWorkItemReassignModal' (public/index.html, nút "🔁 Giao Lại" thêm 11/2026) RIÊNG nó còn có
+// thêm 1 lỗi lớp thứ 2: nó CŨNG là 1 <div> ĐỘC LẬP cấp cao như operationWorkItemDependencyModal ở trên,
+// bị bỏ sót khỏi mảng này — nên NGAY CẢ SAU KHI vá registry (modal mở ra đúng), nút "💾 Giao Lại"/"Huỷ"
+// BÊN TRONG modal vẫn sẽ "chết" nếu thiếu dòng dưới đây, đúng y hệt triệu chứng + nguyên nhân đã có ở
+// VHST-5 (xem test-operation-vhst-uibugfix.js, kịch bản "Giao Lại" thêm cùng đợt vá này). Nút "🗑️ Xoá"
+// (deleteOperationWorkItemClient) KHÔNG cần thêm gì ở danh sách này — nó dùng showConfirmModal()/
+// #genericConfirmModal (bindCspDelegation() riêng ở core.js, độc lập hoàn toàn với danh sách này).
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal'].forEach(bindOperationDelegation);
 

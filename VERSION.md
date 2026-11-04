@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**29.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.14 (2026-11): Fix nút "🗑️ Xoá" + "🔁 Giao Lại" không phản hồi ở QLDA > Thực Hiện
+
+Người dùng báo "không thao tác được nút xóa và nút giao việc trong qlda với thực hiện — CẢ hai nút
+không mở ra cái gì đâu" (màn "🏬 QLDA/Siêu Thị" → tab Thực Hiện, danh sách công việc của 1 hồ sơ
+Đặt Hàng/Mở Mới/Sửa Chữa).
+
+**Root cause chính (cả 2 nút):** `deleteOperationWorkItemClient()`/`openOperationWorkItemReassignModal()`
+(`module-vanhanh.js`) nhận id công việc qua thuộc tính `data-id="..."` trên nút bấm — đúng quy ước
+riêng của registry `OP_CLICK_ACTIONS` (module Vận Hành dùng registry riêng thay vì dò `window[fnName]`
+chung, xem chú thích đầu file) — nhưng CẢ 2 hàm này CHƯA TỪNG được khai báo ở registry đó. Click rơi
+vào nhánh dự phòng `cspDispatchOp()` (`core.js`), hàm đó chỉ đọc tham số qua `data-arg0`/`data-argN`
+(không đọc `data-id`) nên gọi hàm với **0 tham số** — `id` thành `undefined`, cả 2 hàm đều có `if (!w)
+return;` ngay đầu nên thoát ngay lập tức, không mở gì cả, không 1 dòng lỗi console nào xuất hiện —
+đúng y hệt triệu chứng người dùng mô tả.
+
+**Lỗi thứ 2, riêng của "🔁 Giao Lại":** modal `operationWorkItemReassignModal` (`public/index.html`) là
+1 `<div>` độc lập cấp cao, cũng CHƯA TỪNG được đăng ký vào `forEach(bindOperationDelegation(...))` —
+cùng lớp lỗi đã gặp ở VHST-5 ("🔗 Liên kết"). Sau khi vá lỗi 1 (modal mở đúng), nút "💾 Giao Lại"/"Huỷ"
+BÊN TRONG modal vẫn sẽ "chết" nếu thiếu fix lớp này. Nút "🗑️ Xoá" không cần fix lớp 2 (dùng
+`showConfirmModal()`/`#genericConfirmModal`, đã có `bindCspDelegation()` riêng độc lập ở `core.js`).
+
+**Fix:** khai báo tường minh 2 entry ở `OP_CLICK_ACTIONS` (đọc `Number(el.dataset.id)` đúng quy ước,
+mirror `openOperationWorkItemEditModal`) + thêm `'operationWorkItemReassignModal'` vào danh sách
+`forEach(bindOperationDelegation(...))`.
+
+**Test:** mở rộng `tests/test-operation-vhst-uibugfix.js` (Playwright thật, bấm nút thật — không gọi
+hàm JS trực tiếp) thêm 2 kịch bản: bấm "🗑️ Xoá" trên công việc lá "Chưa bắt đầu" → popup xác nhận phải
+mở đúng tên công việc; mở modal "🔁 Giao Lại", gõ-tìm-chọn người nhận mới, bấm "💾 Giao Lại" → phải đổi
+đúng người phụ trách + modal tự đóng. Đã xác nhận: revert riêng `module-vanhanh.js` làm CẢ 2 kịch bản
+FAIL đúng như lỗi người dùng báo ("không mở ra cái gì"), áp lại fix thì PASS cả 16/16 kịch bản trong
+file. Chạy lại toàn bộ ~40 file test khác liên quan module Vận Hành (`test-operation-*.js`) — không có
+regression (1 file lỗi môi trường sandbox thiếu fixture PDF mẫu, không liên quan đợt vá này).
+
+**Deploy:** chỉ đổi code client (`public/js/module-vanhanh.js`) — copy code + `pm2 restart` là đủ,
+không cần migrate DB/env mới, không cần build lại CSS.
 
 ## v29.13 (2026-11): Fix 2 bug đăng nhập TOTP — mã bị từ chối do độ trễ + "login xong logout ngay"
 

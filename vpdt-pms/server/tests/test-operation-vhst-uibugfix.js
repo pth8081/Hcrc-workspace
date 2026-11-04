@@ -62,7 +62,13 @@ const CREATOR = {
   username: 'vh_creator_uibug', name: 'Người Tạo Hồ Sơ', dept: 'Vận Hành',
   perms: { operationStoreOpenCreate: true, operationRecordManageAll: true }, active: true
 };
-const state = createMockState({ depts: ['Vận Hành'], users: [CREATOR] });
+// LỖI ĐÃ VÁ (11/2026) — thêm ứng viên "🔁 Giao Lại" (xem kịch bản cuối file): cần ít nhất 1 tài khoản
+// active KHÁC CREATOR để renderPeopleMultiSelect() có ứng viên thật để chọn/chuyển giao.
+const REASSIGN_TARGET = {
+  username: 'vh_reassign_target_uibug', name: 'Người Nhận Việc Mới', dept: 'Vận Hành',
+  perms: {}, active: true
+};
+const state = createMockState({ depts: ['Vận Hành'], users: [CREATOR, REASSIGN_TARGET] });
 
 async function main() {
   const server = await startStaticServer(PORT);
@@ -342,6 +348,81 @@ async function main() {
         } catch (err) { return { blocked: true, message: err.message }; }
       }, rootWorkItemId);
       assert(serverCheck.blocked, 'Server (VHST-5 gate, không bị đợt nào sau đó làm hỏng) phải chặn "Bắt đầu"');
+    });
+
+    // ===================== 4) LỖI ĐÃ VÁ (11/2026): "🗑️ Xoá" + "🔁 Giao Lại" không mở gì cả =====================
+    // Người dùng báo "không thao tác được nút xóa và nút giao việc trong qlda với thực hiện — CẢ hai nút
+    // không mở ra cái gì đâu". Root cause CHÍNH (khác hẳn suy đoán ban đầu về modal thiếu
+    // bindOperationDelegation): deleteOperationWorkItemClient()/openOperationWorkItemReassignModal() dùng
+    // "data-id" (đúng quy ước riêng OP_CLICK_ACTIONS, xem openOperationWorkItemEditModal làm mẫu) nhưng
+    // CHƯA TỪNG được khai ở registry đó — rơi vào fallback cspDispatchOp() chung (core.js), hàm đó CHỈ
+    // đọc data-arg0/argN (xem cspCollectArgs()), KHÔNG đọc "data-id" -> gọi hàm với 0 tham số, id=undefined,
+    // rơi ngay vào "if (!w) return;" đầu hàm -> KHÔNG MỞ GÌ CẢ, không 1 dòng lỗi console nào. Đã vá bằng
+    // cách khai tường minh 2 entry ở OP_CLICK_ACTIONS (đọc Number(el.dataset.id) đúng quy ước). RIÊNG
+    // "🔁 Giao Lại" còn có thêm 1 lớp lỗi THỨ 2 (y hệt VHST-5): modal 'operationWorkItemReassignModal'
+    // cũng CHƯA TỪNG được đăng ký ở forEach(bindOperationDelegation) — sau khi vá lớp 1 (modal mở đúng),
+    // nút "💾 Giao Lại"/"Huỷ" BÊN TRONG modal vẫn sẽ "chết" nếu thiếu fix lớp 2 này. Kịch bản này xác nhận
+    // CẢ 2 lớp fix cùng lúc bằng page.click() thật (không gọi hàm JS trực tiếp).
+    await run.run('Xoá (DOM thật, bấm THẬT): bấm "🗑️ Xoá" trên 1 công việc LÁ "Chưa bắt đầu" -> popup xác nhận PHẢI mở ra đúng tên công việc (trước fix: không mở gì cả, id=undefined)', async () => {
+      // sourceType khớp đúng hồ sơ operationStoreOpenings đã tạo ở bước Setup đầu file (cùng khuôn
+      // otherWorkItemId ở kịch bản VHST-5 phía trên).
+      const leafId = await page.evaluate(async (id) => {
+        const r = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null,
+          title: 'Việc chờ xoá (test)', deadline: '2026-02-01', startDate: '2026-01-01'
+        });
+        DB.operationWorkItems.push(r.item);
+        return r.item.id;
+      }, recordId);
+      await page.evaluate(() => { renderOperationWorkItemModalBody(); });
+      await page.waitForTimeout(80);
+
+      await page.click(`button[data-op="deleteOperationWorkItemClient"][data-id="${leafId}"]`);
+      await page.waitForTimeout(100);
+      const confirmState = await page.evaluate(() => ({
+        opened: !document.getElementById('genericConfirmModal').classList.contains('hidden'),
+        bodyText: document.getElementById('genericConfirmBody').innerText
+      }));
+      assert(confirmState.opened, 'Popup xác nhận xoá phải mở ra khi bấm "🗑️ Xoá" (nếu không mở: id=undefined, bug tái phát)');
+      assert(confirmState.bodyText.includes('Việc chờ xoá (test)'), `Popup phải hiện đúng tên công việc đang xoá (chứng minh id đọc đúng, không phải undefined), thực tế: ${confirmState.bodyText}`);
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-delete-confirm-open.png') });
+
+      await page.click('button[data-op="runConfirmedAction"]');
+      await page.waitForTimeout(200);
+      const stillExists = await page.evaluate((lid) => (DB.operationWorkItems || []).some(w => w.id === lid), leafId);
+      assert(!stillExists, 'Công việc phải được xoá khỏi DB.operationWorkItems sau khi xác nhận');
+    });
+
+    await run.run('Giao Lại (DOM thật, bấm THẬT): mở modal "🔁 Giao Lại", gõ-tìm-chọn người nhận mới (renderPeopleMultiSelect(), KHÔNG phải checkbox thường), bấm "💾 Giao Lại" -> PHẢI đổi đúng người phụ trách + modal PHẢI tự đóng (trước fix: cả 2 đều KHÔNG xảy ra)', async () => {
+      await page.click(`button[data-op="openOperationWorkItemReassignModal"][data-id="${rootWorkItemId}"]`);
+      await page.waitForTimeout(100);
+      const modalOpened = await page.evaluate(() => !document.getElementById('operationWorkItemReassignModal').classList.contains('hidden'));
+      assert(modalOpened, 'Modal "Giao Lại" phải mở ra khi bấm nút "🔁 Giao Lại" (nút này nằm TRONG operationWorkItemModal đã bind nên luôn mở được, kể cả trước khi vá — bug thật chỉ nằm ở các nút BÊN TRONG modal này)');
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-reassign-modal-open.png') });
+
+      // Ô "Người Thực Hiện Mới" dùng renderPeopleMultiSelect() (chip + ô tìm-gõ-chọn + dropdown), khớp
+      // đúng khuôn các test khác đã dùng cho widget này (xem test-shelf-threshold-ui-real-click.js) — KHÔNG
+      // phải checkbox hiện sẵn như owi-dependency-cb (VHST-5 ở trên, 1 widget khác hẳn).
+      await page.fill('#owiReassignAssignedToPicker [data-pms-search]', REASSIGN_TARGET.name);
+      await page.waitForTimeout(30);
+      await page.click('#owiReassignAssignedToPicker [data-pms-dropdown] [data-op="pmsAdd"]');
+      await page.waitForTimeout(30);
+      const chipsText = await page.evaluate(() => document.querySelector('#owiReassignAssignedToPicker [data-pms-chips]').textContent);
+      assert(chipsText.includes(REASSIGN_TARGET.username), `Phải hiện chip ${REASSIGN_TARGET.username} đã chọn trước khi bấm Giao Lại, thực tế: ${chipsText}`);
+
+      await page.click('button[data-op="submitOperationWorkItemReassign"]');
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-reassign-after-save.png'), fullPage: true });
+
+      const check = await page.evaluate((rid) => {
+        const item = DB.operationWorkItems.find(w => w.id === rid);
+        return {
+          assignedTo: item.assignedTo,
+          modalHidden: document.getElementById('operationWorkItemReassignModal').classList.contains('hidden')
+        };
+      }, rootWorkItemId);
+      assert(check.assignedTo.includes(REASSIGN_TARGET.username), `Phải lưu đúng người phụ trách mới sau khi bấm "💾 Giao Lại" THẬT (nếu không có trong danh sách: nút vẫn "chết", bug CSP-delegation TÁI PHÁT) — thực tế assignedTo: ${JSON.stringify(check.assignedTo)}`);
+      assert(check.modalHidden, 'Modal "Giao Lại" phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Giao Lại" vẫn "chết")');
     });
   } finally {
     await browser.close();
