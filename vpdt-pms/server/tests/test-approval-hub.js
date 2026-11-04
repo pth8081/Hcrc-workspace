@@ -386,7 +386,9 @@ async function scenario(name, fn) {
       ];
       renderApprovalHub();
       const rows = [...document.querySelectorAll('#approvalHubTableBody tr')];
-      const itPriceRow = rows.find(tr => tr.children[1].textContent.trim() === 'ITPG-001');
+      // children[1].textContent (cột "Mã") giờ còn chứa thêm dòng phụ "Gửi: <tên>" (11/2026, tính năng
+      // hiện người gửi/trình) — so khớp đúng text node mã hồ sơ (childNodes[0]), không phải toàn bộ ô.
+      const itPriceRow = rows.find(tr => (tr.children[1].childNodes[0]?.textContent || '').trim() === 'ITPG-001');
       const buttons = itPriceRow ? [...itPriceRow.querySelectorAll('button')].map(b => ({ label: b.textContent.trim(), op: b.getAttribute('data-op'), arg0: b.getAttribute('data-arg0') })) : [];
       const wiredFnIsRealFunction = buttons.length === 1 && typeof window[buttons[0].op] === 'function';
 
