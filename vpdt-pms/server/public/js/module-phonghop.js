@@ -1015,6 +1015,22 @@ function filterMeetingByCard(status) {
   applyDashboardCardFilter({ filterStatusMeeting: status }, 'meeting', renderMeetings);
 }
 
+// Hiển thị "Thời Gian Sử Dụng" theo mẫu người dùng yêu cầu (11/2026): dòng 1 = ngày (DD/MM/YYYY), dòng
+// 2 = "HH:MM – HH:MM" (bắt đầu – kết thúc) — thay cho định dạng ISO thô "2026-11-05T14:00" kèm mũi tên
+// "➔" trước đây (người dùng gửi ảnh so sánh, chê khó đọc). startTime/endTime luôn "YYYY-MM-DDTHH:MM"
+// (input type="datetime-local", xem #meetingStartTime/#meetingEndTime ở meetingSection.html) — tách
+// bằng regex thay vì new Date() để không phụ thuộc múi giờ trình duyệt (datetime-local vốn không có
+// timezone, new Date() sẽ coi là giờ địa phương nên đúng kết quả, nhưng regex đơn giản/chắc chắn hơn).
+function formatMeetingUsageTime(startTime, endTime) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(String(startTime || ''));
+  if (!m) return `${escapeHtml(startTime || '')}<br>➔ ${escapeHtml(endTime || '')}`; // dữ liệu lạ/cũ không đúng chuẩn -> giữ fallback định dạng cũ
+  const dateLabel = `${m[3]}/${m[2]}/${m[1]}`;
+  const startHm = m[4];
+  const endMatch = /T(\d{2}:\d{2})/.exec(String(endTime || ''));
+  const endHm = endMatch ? endMatch[1] : '';
+  return `${escapeHtml(dateLabel)}<br>${escapeHtml(startHm)} – ${escapeHtml(endHm)}`;
+}
+
 function renderMeetings() {
   const tbody = document.getElementById('meetingTableBody');
   if (!tbody) return;
@@ -1081,7 +1097,7 @@ function renderMeetings() {
           <div class="font-bold text-gray-800">${escapeHtml(m.title)}</div>
           <div class="text-xs text-gray-500">Số người: ${m.attendees} | Thiết bị: ${escapeHtml(m.equipment || 'Không')}</div>
         </td>
-        <td class="border p-2 text-xs">${escapeHtml(m.startTime)}<br>➔ ${escapeHtml(m.endTime)}</td>
+        <td class="border p-2 text-xs">${formatMeetingUsageTime(m.startTime, m.endTime)}</td>
         <td class="border p-2">${escapeHtml(m.dept)} (${escapeHtml(m.creatorName)})</td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center whitespace-nowrap text-gray-500">${m.createdAt ? escapeHtml(m.createdAt) : (m.id ? escapeHtml(new Date(m.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
