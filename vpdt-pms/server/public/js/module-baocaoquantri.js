@@ -727,8 +727,13 @@ const REPORT_MODULE_CONFIGS = {
     title: '📦 Báo Cáo Đơn Hàng (Vận Hành)',
     getRecords: (dept, from, to) => fetchReportRecords('operationOrders', dept, from, to,
       () => DB.operationOrders.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
-    statusOf: r => r.status,
-    statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['AWAITING_RECEIPT', 'Chờ nhập hàng', 'bg-blue-500'], ['RECEIVED', 'Đã nhập hàng', 'bg-green-500'], ['RECEIPT_CANCELLED', 'Đã huỷ nhập', 'bg-gray-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+    // RÚT GỌN (11/2026, luồng Nhập/Hủy Hàng đã tắt hẳn — người dùng xác nhận lại "không còn trạng thái
+    // nữa"): KHÔNG còn 3 bucket riêng AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED — gộp chung vào
+    // 'APPROVED' (đã qua xong bước duyệt, bất kể giai đoạn nhập hàng cũ của hồ sơ LỊCH SỬ ra sao, cùng
+    // ý nghĩa OP_ORDER_APPROVED_FAMILY ở module-vanhanh.js). KHÔNG gọi thẳng hằng số đó ở đây vì cụm
+    // module nạp lười "baocaoquantri" không khai deps tới "vanhanh" — trùng lặp nhỏ cục bộ thay vào đó.
+    statusOf: r => (r.status === 'AWAITING_RECEIPT' || r.status === 'RECEIVED' || r.status === 'RECEIPT_CANCELLED') ? 'APPROVED' : r.status,
+    statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Đã phê duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
   // estimateStatus buckets: Vận Hành > Siêu Thị ĐÃ BỎ HẲN phê duyệt Dự toán (chủ ứng dụng xác nhận) —
   // bấm Lưu là APPROVED ngay, không còn ai duyệt nên bỏ hẳn bucket PENDING (không còn hồ sơ MỚI nào dừng

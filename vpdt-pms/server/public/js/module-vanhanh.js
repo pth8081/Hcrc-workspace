@@ -1740,25 +1740,22 @@ function setOperationStoreSubTab(tab) {
 }
 
 // --- Trạng thái hiển thị CHỈ CÒN dùng cho operationOrders (khớp DRAFT/PENDING/APPROVED/REJECTED của
-// workflowEngine — luồng Đơn Hàng KHÔNG đụng tới, vẫn giữ nguyên quy trình duyệt cũ). Đợt "Báo Cáo +
-// Nhập Hàng" thêm 3 trạng thái MỚI TIẾP SAU APPROVED: AWAITING_RECEIPT (Chờ nhập hàng, applyWorkflowAction()
-// ở lib/workflowEngine.js tự chuyển sang ngay khi duyệt xong bước cuối) -> RECEIVED (Đã nhập hàng,
-// "kết thúc" đơn) hoặc RECEIPT_CANCELLED (Đã hủy nhập, hàng không về thực tế). 'APPROVED' vẫn giữ lại ở
-// đây (không xoá nhánh) làm lưới an toàn hiển thị cho khoảnh khắc cực hiếm giữa lúc
-// migrateApprovedOperationOrdersToAwaitingReceipt() (seedDefaults.js) chưa kịp chạy xong sau khi nâng
-// cấp — hồ sơ thật sự không nên còn kẹt ở đây lâu dài. ---
+// workflowEngine — luồng Đơn Hàng KHÔNG đụng tới, vẫn giữ nguyên quy trình duyệt cũ). Luồng Nhập/Hủy
+// Hàng (AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED) đã TẮT HẲN (11/2026, người dùng xác nhận lại 2 lượt
+// liên tiếp — không còn trạng thái riêng cho luồng này nữa, cả Danh Sách/Báo Cáo lẫn badge từng dòng).
+// 3 trạng thái cũ này CHỈ còn tồn tại trên dữ liệu LỊCH SỬ (không còn đường tạo mới) — hiện CHUNG 1 badge
+// "✅ Đã phê duyệt" với APPROVED (OP_ORDER_APPROVED_FAMILY, định nghĩa ở computeOperationOrderReportStats()
+// bên dưới), KHÔNG còn 3 nhãn/màu riêng như trước. ---
 function operationStatusBadge(o) {
   if (o.status === 'DRAFT') return `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
-  if (o.status === 'AWAITING_RECEIPT') return `<span class="badge-info">📥 Chờ nhập hàng</span>`;
-  if (o.status === 'RECEIVED') return `<span class="badge-success">✅ Đã nhập hàng</span>`;
-  if (o.status === 'RECEIPT_CANCELLED') return `<span class="badge-danger">🚫 Đã hủy nhập</span>`;
   // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — xem chú thích tại
-  // getWorkflowStepProgress()/workflowStepProgressText() (core.js). AWAITING_RECEIPT/RECEIVED/
-  // RECEIPT_CANCELLED ở trên đều NẰM SAU khi quy trình duyệt đã xong hẳn (APPROVED cũ) nên không cần
-  // ratio — chỉ APPROVED/REJECTED/đang duyệt dở mới cần.
-  const effectiveStatus = o.status === 'APPROVED' ? 'APPROVED' : o.status;
+  // getWorkflowStepProgress()/workflowStepProgressText() (core.js). 3 trạng thái cũ AWAITING_RECEIPT/
+  // RECEIVED/RECEIPT_CANCELLED ở dưới đều NẰM SAU khi quy trình duyệt đã xong hẳn (APPROVED cũ) nên
+  // không cần ratio — chỉ APPROVED/REJECTED/đang duyệt dở mới cần.
+  const isApprovedFamily = o.status === 'APPROVED' || o.status === 'AWAITING_RECEIPT' || o.status === 'RECEIVED' || o.status === 'RECEIPT_CANCELLED';
+  const effectiveStatus = isApprovedFamily ? 'APPROVED' : o.status;
   const stepRatioText = workflowStepProgressText(resolveOperationOrderWorkflowConfigForItemClient(o), o.currentStep, effectiveStatus);
-  if (o.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
+  if (isApprovedFamily) return `<span class="badge-success">✅ Đã phê duyệt${stepRatioText ? ` (${stepRatioText})` : ''}</span>`;
   if (o.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
   return `<span class="badge-info">⏳ Bước ${stepRatioText}</span>`;
 }
@@ -3273,11 +3270,8 @@ function buildOperationOrderApprovalSlipHTML(o) {
       <tr><td class="as-label">Tổng giá trị thanh toán:</td><td>${(o.paymentTotalAmount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
     </table>` : '';
 
-  const receiptNote = o.status === 'RECEIVED'
-    ? `<div class="as-section-title">Nhập Hàng</div><table class="as-field-table"><tr><td class="as-label">Trạng thái:</td><td>✅ Đã nhập hàng${o.receivedAt ? ` lúc ${escapeHtml(o.receivedAt)}` : ''}</td></tr></table>`
-    : o.status === 'RECEIPT_CANCELLED'
-      ? `<div class="as-section-title">Nhập Hàng</div><table class="as-field-table"><tr><td class="as-label">Trạng thái:</td><td>🚫 Đã hủy nhập hàng</td></tr></table>`
-      : '';
+  // Khối "Nhập Hàng" riêng cho RECEIVED/RECEIPT_CANCELLED — ĐÃ BỎ (11/2026, luồng Nhập/Hủy Hàng tắt
+  // hẳn, không còn trạng thái riêng nào để ghi chú ở đây nữa, xem operationStatusBadge() ở trên).
 
   const bodyHTML = `
     <table class="as-field-table">
@@ -3295,7 +3289,6 @@ function buildOperationOrderApprovalSlipHTML(o) {
       <thead><tr><th>STT</th><th>Tên hàng</th><th>Mã hàng</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
-    ${receiptNote}
   `;
 
   return buildApprovalSlipShellHTML({

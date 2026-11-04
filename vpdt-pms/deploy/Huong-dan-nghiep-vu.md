@@ -2675,7 +2675,15 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Báo Cáo cũng bỏ luôn 2 ô tổng giá trị, 2 biểu đồ theo tháng, và bảng
     "Số Đơn Theo Từng Siêu Thị" — chỉ còn đúng 4 thẻ trạng thái (Tổng Số
     Đơn/Đã Phê Duyệt/Chưa Phê Duyệt/Bị Từ Chối) cho cả 3 khối Tổng Chuỗi/
-    Siêu Thị/HO.
+    Siêu Thị/HO. **Cập nhật lần 2 (11/2026)**: đợt trên mới dọn Danh Sách +
+    Báo Cáo nội bộ của Đơn Hàng — rà soát lại phát hiện còn SÓT 3 nơi khác
+    vẫn hiện riêng "Chờ nhập hàng"/"Đã nhập hàng"/"Đã hủy nhập" cho dữ liệu
+    LỊCH SỬ, nay cũng gộp chung vào "✅ Đã phê duyệt": (1) badge trạng thái
+    trên TỪNG DÒNG đơn hàng ở Danh Sách; (2) Phiếu Phê Duyệt in/tải (bỏ hẳn
+    khối "Nhập Hàng" riêng); (3) 📊 Báo Cáo Quản Trị (module Báo Cáo chung
+    toàn hệ thống, khác Báo Cáo nội bộ của Đơn Hàng) → Vận Hành → "📦 Báo
+    Cáo Đơn Hàng" — statusBuckets cũng gộp 3 trạng thái cũ vào "Đã phê
+    duyệt". Từ nay KHÔNG còn nơi nào trên UI hiện riêng 3 trạng thái này nữa.
   - **Duyệt Nhập Hàng/Hủy Đơn — sub-tab riêng + quyền riêng, tách khỏi luồng
     duyệt nội bộ**: 2 nút "✅ Xác nhận nhập hàng"/"❌ Hủy đơn" (áp dụng khi đơn
     đã ở trạng thái **Chờ Nhập Hàng** — tức đã qua đủ các bước duyệt nội bộ

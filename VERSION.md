@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.26 (2026-11): Vận Hành > Đơn Hàng — dọn sạch 3 nơi SÓT lại trạng thái Nhập/Hủy Hàng (badge dòng, phiếu in, Báo Cáo Quản Trị)
+
+Người dùng phản hồi ngay sau v29.25: "Tôi đã yêu cầu bỏ trạng thái chờ nhập, đã nhập và hủy nhập đi từ
+lâu rồi, không còn trạng thái nữa [...] kiểm tra lại đi". Rà soát lại toàn hệ thống (grep đúng 3 nhãn
+tiếng Việt "Chờ nhập hàng"/"Đã nhập hàng"/"Đã hủy nhập" trên mọi file `public/`) phát hiện v29.25 mới xử
+lý Danh Sách + Báo Cáo nội bộ của Đơn Hàng (đúng yêu cầu lúc đó), nhưng còn SÓT 3 nơi khác vẫn hiện 3
+nhãn/trạng thái cũ cho dữ liệu LỊCH SỬ (hồ sơ tạo trước khi tắt luồng Nhập/Hủy Hàng):
+
+1. **`operationStatusBadge()`** (badge trạng thái trên TỪNG DÒNG đơn hàng, cả Danh Sách Siêu Thị/HO) —
+   trước đó vẫn hiện riêng "📥 Chờ nhập hàng"/"✅ Đã nhập hàng"/"🚫 Đã hủy nhập" cho 3 status cũ. Nay gộp
+   chung CẢ 3 vào đúng badge "✅ Đã phê duyệt" như APPROVED — khớp với cách Danh Sách/Báo Cáo đã đếm từ
+   v29.25 (OP_ORDER_APPROVED_FAMILY).
+2. **Phiếu Phê Duyệt in/tải (`buildOperationOrderApprovalSlipHTML()`)** — bỏ hẳn khối "Nhập Hàng" riêng
+   từng hiện "Đã nhập hàng"/"Đã hủy nhập hàng" cho RECEIVED/RECEIPT_CANCELLED.
+3. **📊 Báo Cáo Quản Trị → Vận Hành → "📦 Báo Cáo Đơn Hàng"** (`module-baocaoquantri.js`, module Báo Cáo
+   TOP-LEVEL khác hẳn Báo Cáo nội bộ của Đơn Hàng đã sửa ở v29.25) — statusBuckets vẫn còn nguyên 3 bucket
+   AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED. Nay gộp chung vào bucket 'APPROVED', chỉ còn 3 bucket
+   Đang Chờ Duyệt/Đã Phê Duyệt/Từ Chối (cả thẻ đếm lẫn dropdown lọc "Tra Cứu Chi Tiết").
+
+**Thay đổi:** `public/js/module-vanhanh.js`, `public/js/module-baocaoquantri.js`,
+`tests/test-giai-doan-3-batch-a-badges.js` (viết lại assertion khớp badge mới).
+
+**Test kỹ trước merge:** chạy lại toàn bộ 15/16 file `test-operation-order-*.js` (1 file lỗi môi trường
+sandbox từ trước, không liên quan), `test-giai-doan-3-batch-a-badges.js` (5/5), `test-reports.js`
+(24/24) — tất cả pass. Grep CSP sạch.
+
+**Deploy-impact:** chỉ copy code + `pm2 restart`, không đổi `schema.sql`/`.env`/dependencies.
 
 ## v29.25 (2026-11): Vận Hành > Đơn Hàng — bỏ hẳn các trạng thái Nhập/Hủy Hàng khỏi Danh Sách + Báo Cáo
 

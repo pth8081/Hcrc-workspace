@@ -67,7 +67,7 @@ async function main() {
     const { browser, page } = await launchPage(PORT_UI + 1, state);
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
 
-    await run.run('Đơn Hàng Vận Hành: operationStatusBadge() — 6 trạng thái + đang ở bước đều đúng class dùng chung', async () => {
+    await run.run('Đơn Hàng Vận Hành: operationStatusBadge() — RÚT GỌN (11/2026): AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED (dữ liệu lịch sử, luồng Nhập/Hủy Hàng đã tắt hẳn) đều hiện CHUNG badge "Đã phê duyệt" với APPROVED, không còn 3 nhãn/màu riêng', async () => {
       const result = await page.evaluate(() => ({
         draft: operationStatusBadge({ status: 'DRAFT' }),
         awaiting: operationStatusBadge({ status: 'AWAITING_RECEIPT' }),
@@ -78,9 +78,9 @@ async function main() {
         pending: operationStatusBadge({ status: 'PENDING', currentStep: 1 })
       }));
       assertEqual(result.draft.includes('badge-warning'), true, 'DRAFT (cần bổ sung) phải dùng badge-warning');
-      assertEqual(result.awaiting.includes('badge-info'), true, 'AWAITING_RECEIPT phải dùng badge-info');
-      assertEqual(result.received.includes('badge-success'), true, 'RECEIVED phải dùng badge-success');
-      assertEqual(result.receiptCancelled.includes('badge-danger'), true, 'RECEIPT_CANCELLED phải dùng badge-danger');
+      assertEqual(result.awaiting.includes('badge-success') && result.awaiting.includes('Đã phê duyệt'), true, 'AWAITING_RECEIPT (dữ liệu lịch sử) phải hiện CHUNG badge-success "Đã phê duyệt", KHÔNG còn nhãn "Chờ nhập hàng" riêng');
+      assertEqual(result.received.includes('badge-success') && result.received.includes('Đã phê duyệt'), true, 'RECEIVED (dữ liệu lịch sử) phải hiện CHUNG badge-success "Đã phê duyệt", KHÔNG còn nhãn "Đã nhập hàng" riêng');
+      assertEqual(result.receiptCancelled.includes('badge-success') && result.receiptCancelled.includes('Đã phê duyệt'), true, 'RECEIPT_CANCELLED (dữ liệu lịch sử) phải hiện CHUNG badge-success "Đã phê duyệt", KHÔNG còn nhãn "Đã hủy nhập" riêng');
       assertEqual(result.approved.includes('badge-success'), true, 'APPROVED phải dùng badge-success');
       assertEqual(result.rejected.includes('badge-danger'), true, 'REJECTED phải dùng badge-danger');
       assertEqual(result.pending.includes('badge-info'), true, 'Đang ở bước phải dùng badge-info');
