@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**29.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.29 (2026-11): 4 phản hồi người dùng — Hỗ Trợ IT (bổ sung giá bắt buộc duyệt lại + thông báo
+ticket mới + badge "Chờ Duyệt Hủy") và Vận Hành (Sửa/Hủy cho "Mở Mới")
+
+Phản hồi trực tiếp từ người dùng (kèm ảnh chụp màn hình thực tế), 4 việc độc lập:
+
+1. **[Bảo mật nghiệp vụ] IT yêu cầu bổ sung bảng giá SAU KHI đã phê duyệt — file mới bỏ qua bước duyệt
+   lại.** Trước đây `item.infoRequests[]` dùng chung cho CẢ 2 luồng "Yêu Cầu Bổ Sung" (approver giữa
+   chừng vs. IT sau khi đã duyệt xong), nhưng chỉ nhánh approver-origin mới tự invalidate lịch sử Duyệt +
+   reset về Bước 1 — nhánh IT-origin (`byRole:'it'`, lúc hồ sơ đã `APPROVED`) được thiết kế có chủ đích là
+   "chỉnh sửa/hoàn thiện tệp trước khi áp giá" và KHÔNG bắt duyệt lại, khiến người đề xuất gửi file bổ
+   sung có thể đổi số liệu mà không ai phê duyệt lại số mới trước khi IT áp giá. **Sửa:** mở rộng
+   `submitPriceSupplementFile()` (`lib/recordActions.js`) — cả 2 nhánh giờ đều tự invalidate các bước
+   `APPROVED` cũ + chuyển hồ sơ về `PENDING`, Bước 1 (riêng nhánh IT còn tự huỷ `approvedFileId`/
+   `applyClaimedBy` đang giữ, chặn áp giá tới khi duyệt lại xong — test xác nhận request áp giá bị chặn
+   409 "chưa được phê duyệt xong" cho tới khi người duyệt Bước 1 duyệt lại).
+2. **Tạo "Hỗ Trợ Yêu Cầu" (ticket IT chung) không có cách nào báo cho đội Hỗ Trợ IT biết.** Trước đây
+   đội IT chỉ phát hiện ticket mới bằng cách tự vào danh sách kiểm tra thủ công. **Sửa:** `submitItTicket()`
+   (`module-itsupport-price.js`) tự gọi `notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_CREATED', ...)`
+   gửi cho mọi tài khoản có quyền `itManage`/`admin` ngay sau khi tạo — có thể tắt qua màn Email Phê
+   Duyệt như mọi email khác (`APPROVAL_EMAIL_EVENTS.IT_SUPPORT.ticketCreated`, `core.js`).
+3. **Gửi yêu cầu "Từ Chối Khẩn Cấp" (huỷ hồ sơ đã duyệt) — trạng thái ngoài danh sách/tiêu đề vẫn hiện
+   "✅ Đã phê duyệt", gây nhầm lẫn với Approval Hub (hiện đúng "⏳ Đang chờ duyệt").** Root cause:
+   `itPriceStatusBadge()` (`module-itsupport-price.js`) chỉ đọc `p.status` (vẫn `APPROVED` lúc này), hoàn
+   toàn bỏ qua `p.emergencyRejectStatus` — khác với Approval Hub (`lib/approvalAggregator.js` +
+   `core-approvalhub.js`) vốn đã đọc đúng field này từ trước, tạo ra 2 nơi hiển thị lệch nhau. **Sửa:**
+   thêm nhánh chặn sớm — `emergencyRejectStatus === 'PENDING'` hiện ngay "⏳ Chờ Duyệt Hủy" (áp dụng cho
+   cả bảng danh sách lẫn tiêu đề modal chi tiết, cùng dùng 1 hàm). Email cho người duyệt (kèm lý do) và
+   email phản hồi người gửi (duyệt/từ chối) đã có sẵn từ trước, không cần bổ sung.
+4. **"Mở Mới" siêu thị (operationStoreOpenings) thiếu nút Sửa/Hủy Đề Xuất mà "Sửa Chữa" đã có.** Lớp
+   nghiệp vụ (`cancelOperationRecord()`, `canManageOperationRecord()`) vốn đã generic theo sourceType từ
+   đợt refactor "Overhaul quyền Vận Hành" trước đó — chỉ thiếu route HTTP + hàm sửa riêng (field khác hẳn
+   Sửa Chữa: storeName/address/area/approvedBudget/expectedOpenDate/personInCharge/note, không có title/
+   description/attachments) + UI client. **Thêm mới:** `updateOperationStoreOpeningDetails()`
+   (`lib/recordActions.js`, khoá storeName/address/area/approvedBudget/expectedOpenDate khi đã có công
+   việc triển khai, note/personInCharge luôn sửa được); 2 route `POST /operationStoreOpenings/:id/cancel`
+   + `/update` (`routes/records.js`); modal `#editOperationStoreOpeningModal` (`index.html`) + các hàm
+   client `cancelOperationStoreOpeningClient()`/`openEditOperationStoreOpeningModal()`/
+   `submitEditOperationStoreOpening()` (`module-vanhanh.js`), đăng ký vào `bindOperationDelegation()`.
+
+**Test:** 13 test đơn vị mới (`test-operation-store-opening-edit-cancel.js`) + 6 kịch bản Playwright bấm
+nút thật (`test-operation-store-opening-edit-modal.js`, có demo ảnh) cho mục 4; mở rộng
+`test-it-support.js` (nay 24/24 kịch bản, bao gồm cả assertion mới cho mục 1/2/3) + chạy lại toàn bộ
+regression liên quan Vận Hành (`test-operation-store-lifecycle.js` 100/100, `test-operation-repair-*`
+24/24) — tổng 167/167 pass, không có regression.
+
+**Deploy-impact:** chỉ code client+server, không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies — chỉ copy code + `pm2 restart`.
 
 ## v29.28 (2026-11): Nút "Duyệt" — thêm hộp thoại xác nhận (Đồng Ý/Hủy) cho TẤT CẢ module còn thiếu
 

@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent, resolveOperationPersonInChargeUsername } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { resolveStepApproverUsernames } = require('./positionApprovers');
@@ -2143,6 +2143,71 @@ function updateOperationRepairDetails(user, item, payload, allWorkItemsForSource
     item.fileName = item.attachments[0].fileName;
     item.fileType = item.attachments[0].fileType;
   }
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'UPDATED', comment: '', time: nowVN() });
+  return item;
+}
+
+// A2/A3 operationStoreOpenings ("Mở Mới" Siêu Thị) — phản hồi người dùng (11/2026, kèm ảnh chụp màn
+// "Đề xuất mở mới siêu thị: N02 Beriver... — Bạn chỉ có quyền xem thông tin hồ sơ này"): A2/A3 trước đây
+// CHỈ làm cho operationRepairs ("Sửa Chữa"), operationStoreOpenings hoàn toàn thiếu 2 action này dù cùng
+// 1 modal chi tiết dùng chung (openOperationProcessModal(), module-vanhanh.js) — người dùng xem mục
+// "Sửa Chữa" có nút Sửa/Hủy nhưng "Mở Mới" thì không, yêu cầu bổ sung cho đối xứng. cancelOperationRecord()
+// đã SẴN generic theo sourceType (không cần hàm hủy riêng) — chỉ còn thiếu route /operationStoreOpenings/
+// :id/cancel (xem routes/records.js) + hàm sửa riêng dưới đây (field đề xuất mở mới KHÁC hẳn sửa chữa:
+// storeName/address/area/approvedBudget/personInCharge/note/expectedOpenDate, không có title/description).
+// Khoá sửa storeName/approvedBudget/address/area/expectedOpenDate khi ĐÃ có công việc triển khai (cùng
+// tinh thần updateOperationRepairDetails() ở trên — các field "định danh/ngân sách gốc" không đổi được
+// nữa sau khi đã bắt đầu triển khai thật) — note/personInCharge LUÔN sửa được ở MỌI giai đoạn (ghi chú
+// nội bộ + đổi người phụ trách không ảnh hưởng gì tới các công việc/ngân sách đã lập).
+function updateOperationStoreOpeningDetails(user, item, payload, allWorkItemsForSource, users) {
+  if (!canManageOperationRecord(user, item, 'OPERATION_STORE_OPENING')) {
+    throw new HttpError(403, 'Bạn không có quyền sửa hồ sơ này');
+  }
+  if (item.status === 'CANCELLED') {
+    throw new HttpError(409, 'Hồ sơ đã hủy, không thể sửa');
+  }
+  const hasWorkItems = (allWorkItemsForSource || []).length > 0;
+  if (hasWorkItems) {
+    const newStoreName = String(payload?.storeName || '').trim();
+    const newAddress = String(payload?.address || '').trim();
+    const newArea = Math.max(0, Number(payload?.area) || 0);
+    const newBudget = Number(payload?.approvedBudget);
+    if (newStoreName && newStoreName !== item.storeName) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Tên Siêu Thị Dự Kiến nữa');
+    }
+    if (newAddress && newAddress !== item.address) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Địa Điểm Dự Kiến nữa');
+    }
+    if (payload?.area !== undefined && payload?.area !== null && payload?.area !== '' && newArea !== item.area) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Diện Tích Dự Kiến nữa');
+    }
+    if (payload?.approvedBudget !== undefined && payload?.approvedBudget !== null && payload?.approvedBudget !== '' && newBudget !== item.approvedBudget) {
+      throw new HttpError(409, 'Hồ sơ đã có công việc triển khai — không thể sửa Ngân Sách Phê Duyệt nữa');
+    }
+  } else {
+    const newStoreName = String(payload?.storeName || '').trim();
+    if (!newStoreName) throw new HttpError(400, 'Vui lòng nhập tên siêu thị dự kiến');
+    const newAddress = String(payload?.address || '').trim();
+    if (!newAddress) throw new HttpError(400, 'Vui lòng nhập địa điểm dự kiến');
+    const newBudget = Number(payload?.approvedBudget);
+    if (!Number.isFinite(newBudget) || newBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+    item.storeName = newStoreName;
+    item.address = newAddress;
+    item.area = Math.max(0, Number(payload?.area) || 0);
+    item.approvedBudget = newBudget;
+    if (payload?.expectedOpenDate) {
+      const d = new Date(payload.expectedOpenDate);
+      if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Ngày dự kiến khai trương không hợp lệ');
+      item.expectedOpenDate = d.toISOString();
+    } else {
+      item.expectedOpenDate = '';
+    }
+  }
+  const personInChargeUser = resolveOperationPersonInChargeUsername(payload?.personInCharge, users);
+  item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
+  item.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
+  item.note = String(payload?.note || '').trim();
   item.history = item.history || [];
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'UPDATED', comment: '', time: nowVN() });
   return item;
@@ -6786,22 +6851,45 @@ function submitPriceSupplementFile(user, item, payload) {
   });
   // LỖI ĐÃ VÁ (rà soát chuyên sâu Hỗ Trợ IT, 9/2026): yêu cầu bổ sung giữa chừng (byRole:'approver', xem
   // nhánh REQUEST_INFO ở lib/workflowEngine.js) chỉ đính kèm thêm tệp mà KHÔNG đối chiếu lại với các bước
-  // ĐÃ DUYỆT TRƯỚC bước hiện tại — nếu tệp bổ sung thực sự thay đổi số liệu giá (khác lý do IT yêu cầu
-  // bổ sung SAU khi đã APPROVED xong, xem requestPriceInfoFromIt() ở trên — đó chỉ là chỉnh sửa/hoàn
-  // thiện tệp trước khi áp giá, không phải "duyệt lại"), các approver bước TRƯỚC vẫn coi như đã duyệt
-  // xong dựa trên tệp CŨ, không ai xét lại dựa trên tệp bảng giá MỚI. Cùng cách REQUEST_CHANGES đã xử lý
-  // (đánh dấu invalidated=true), khác ở chỗ itPriceApprovals KHÔNG dùng supportsRequestChanges (đưa về
-  // NHÁP) mà giữ nguyên PENDING + reset về Bước 1 để duyệt lại ngay — đúng khuôn RESOLVE_FILE_PROPOSAL
-  // nhánh "Đồng ý" của Văn Bản Trình (submissions) đã áp dụng cho đúng tình huống người trình tự xác nhận
-  // nội dung thay thế, không cần qua NHÁP.
-  if (openReq.byRole === 'approver' && item.status === 'PENDING') {
+  // ĐÃ DUYỆT TRƯỚC bước hiện tại — nếu tệp bổ sung thực sự thay đổi số liệu giá, các approver bước TRƯỚC
+  // vẫn coi như đã duyệt xong dựa trên tệp CŨ, không ai xét lại dựa trên tệp bảng giá MỚI. Cùng cách
+  // REQUEST_CHANGES đã xử lý (đánh dấu invalidated=true), khác ở chỗ itPriceApprovals KHÔNG dùng
+  // supportsRequestChanges (đưa về NHÁP) mà giữ nguyên PENDING + reset về Bước 1 để duyệt lại ngay — đúng
+  // khuôn RESOLVE_FILE_PROPOSAL nhánh "Đồng ý" của Văn Bản Trình (submissions) đã áp dụng cho đúng tình
+  // huống người trình tự xác nhận nội dung thay thế, không cần qua NHÁP.
+  //
+  // LỖI ĐÃ VÁ #2 (phản hồi người dùng, 11/2026, kèm ảnh chụp production — ticket ITPG-BL-023): nhánh
+  // byRole:'it' (yêu cầu bổ sung từ đội Hỗ Trợ IT, SAU khi đã APPROVED, xem requestPriceInfoFromIt() ở
+  // trên) TRƯỚC ĐÂY cố tình KHÔNG áp cùng cơ chế invalidate/reset này — comment cũ coi đây "chỉ là chỉnh
+  // sửa/hoàn thiện tệp trước khi áp giá, không phải duyệt lại". Nhưng thực tế tệp bổ sung này hoàn toàn
+  // có thể thay đổi số liệu giá (đúng tệp .xlsx, có thể sai khác hoàn toàn so với tệp đã duyệt — xem bảng
+  // "So Sánh Thay Đổi" ở UI tự dựng cho đúng tình huống này), và sau khi item.infoRequests đánh dấu đã
+  // phản hồi (openReq.response), applyPriceApproval() hết chặn (hasUnresolvedPriceInfoRequest() trả
+  // false) — đội Hỗ Trợ IT áp giá NGAY bằng tệp MỚI này vào hệ thống bán hàng mà KHÔNG CÓ AI (kể cả
+  // người đã duyệt giá ban đầu) xét lại số liệu mới. Nay xử lý ĐỐI XỨNG với nhánh 'approver': tệp bổ
+  // sung đáp ứng yêu cầu của Hỗ Trợ IT cũng đưa hồ sơ về lại PENDING + Bước 1, Hỗ Trợ IT phải CHỜ hồ sơ
+  // được duyệt lại từ đầu mới áp giá tiếp được (applyPriceApproval() tự chặn vì status không còn
+  // APPROVED) — đồng thời dọn applyClaimedBy/approvedFileId (không còn ý nghĩa khi hồ sơ quay lại PENDING,
+  // tránh hiện nhầm "File Đã Được Phê Duyệt"/khoá nhận xử lý cho vòng duyệt MỚI).
+  const isApproverRestart = openReq.byRole === 'approver' && item.status === 'PENDING';
+  const isItRestart = openReq.byRole === 'it' && item.status === 'APPROVED';
+  if (isApproverRestart || isItRestart) {
     const hadPriorApproved = item.history.some(h => h.action === 'APPROVED' && !h.invalidated);
     if (hadPriorApproved) {
       item.history.forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
       item.currentStep = 1;
+      if (isItRestart) {
+        item.status = 'PENDING';
+        item.approvedFileId = null;
+        item.applyClaimedBy = null;
+        item.applyClaimedByName = null;
+        item.applyClaimedAt = null;
+      }
       item.history.push({
         step: 1, approver: user.name, username: user.username, action: 'SUPPLEMENT_RESTART',
-        comment: 'Tệp bảng giá bổ sung có thể làm thay đổi nội dung — các bước đã duyệt trước đó không còn hiệu lực, quy trình duyệt lại từ Bước 1.',
+        comment: isItRestart
+          ? 'Tệp bảng giá bổ sung theo yêu cầu của Hỗ Trợ IT có thể làm thay đổi nội dung — đề xuất chuyển lại về Chờ Phê Duyệt, quy trình duyệt lại từ Bước 1 trước khi Hỗ Trợ IT được áp giá tiếp.'
+          : 'Tệp bảng giá bổ sung có thể làm thay đổi nội dung — các bước đã duyệt trước đó không còn hiệu lực, quy trình duyệt lại từ Bước 1.',
         time: nowVN()
       });
     }
@@ -9473,6 +9561,7 @@ module.exports = {
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
   startOperationExecutionPeriod, confirmOperationUse,
   computeOperationRecordStageStatus, OPERATION_STAGE_LABELS, cancelOperationRecord, updateOperationRepairDetails,
+  updateOperationStoreOpeningDetails,
   // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
   workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
   resolveOperationAcceptanceConfig,

@@ -1151,6 +1151,17 @@ function canViewItPriceApproval(user, p) {
 // getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
 
 function itPriceStatusBadge(p) {
+  // LỖI ĐÃ VÁ (11/2026, phản hồi người dùng kèm ảnh chụp — "Hoàng Văn Đại đã gửi phê duyệt khẩn cấp
+  // nhưng trạng thái bên ngoài ko chuyển sang đang chờ phê duyệt... gây nhầm lẫn"): hàm này trước đây CHỈ
+  // đọc p.status (REJECTED/APPROVED/PENDING), hoàn toàn bỏ qua p.emergencyRejectStatus — nên 1 hồ sơ
+  // APPROVED đang có yêu cầu "Từ Chối Khẩn Cấp" (requestItPriceEmergencyReject(), lib/recordActions.js)
+  // CHỜ duyệt/từ chối vẫn hiện nguyên "✅ Đã phê duyệt" ở danh sách/tiêu đề modal (chỉ thấy đúng trạng
+  // thái này nếu mở modal chi tiết xem riêng banner ở renderItPriceModalControls()), trong khi Approval
+  // Hub (lib/approvalAggregator.js + core-approvalhub.js) đọc ĐÚNG field này nên hiện "⏳ ĐANG CHỜ DUYỆT"
+  // — 2 nơi lệch nhau gây nhầm lẫn như người dùng mô tả. Chặn SỚM ngay đầu hàm (áp dụng cho MỌI nơi gọi
+  // hàm này — danh sách lẫn tiêu đề modal chi tiết, xem itPriceStatusBadge() ở buildItPriceRowHtml()/
+  // renderItPriceModal()) trước khi rơi vào nhánh p.status thường.
+  if (p.emergencyRejectStatus === 'PENDING') return `<span class="badge-warning">⏳ Chờ Duyệt Hủy</span>`;
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   // LỖI ĐÃ VÁ (11/2026, người dùng phát hiện "BƯỚC 0/1" dù hồ sơ có 2 bước duyệt): trước đây tính tổng số
   // bước bằng cách tra LẠI base workflow thô qua DB.workflows.find(wfConfig.workflowId) — bỏ qua MẤT lớp
@@ -2374,6 +2385,17 @@ async function submitItTicket(e) {
 
   DB.itSupportTickets.unshift(newItem);
   logSystemAction('IT_SUPPORT', 'CREATE_IT_TICKET', `Tạo yêu cầu hỗ trợ IT [${code} - ${newItem.title}]`, 'SUCCESS', code);
+  // Báo đội Hỗ Trợ IT qua email khi có ticket mới (phản hồi người dùng, 11/2026 — trước đây tạo ticket
+  // KHÔNG gửi email cho ai, IT chỉ phát hiện bằng cách tự mở tab lên xem). Người nhận = mọi tài khoản
+  // đang có quyền xử lý ticket (canManageItSupport(): itManage/admin), mirror ĐÚNG danh sách role dùng
+  // cho jobs/itServiceRenewalReminder.js — không cần màn cấu hình riêng, admin tự cấp/thu quyền itManage
+  // là đủ để thêm/bớt người nhận.
+  const itSupportRecipients = DB.users
+    .filter(u => u && u.active !== false && (u.perms?.admin || u.perms?.itManage))
+    .map(u => u.username);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_CREATED', newItem.code, itSupportRecipients,
+    `[VPDT] Yêu cầu hỗ trợ IT mới ${newItem.code}`,
+    `${newItem.creatorName || newItem.creator} vừa gửi yêu cầu hỗ trợ IT mới "${newItem.title}" (${newItem.code}).\nDanh mục: ${getItTicketCategoryLabel(newItem.category)}`);
   alert('✅ Đã gửi yêu cầu hỗ trợ IT thành công!');
   resetItTicketForm();
   renderItTickets();

@@ -7790,6 +7790,7 @@ const APPROVAL_EMAIL_EVENTS = [
     { key: 'emergencyRejectRequest', label: 'Yêu cầu huỷ khẩn cấp — gửi người duyệt', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST'] },
     { key: 'emergencyRejectApproved', label: 'Huỷ khẩn cấp được duyệt', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED'] },
     { key: 'emergencyRejectDenied', label: 'Huỷ khẩn cấp bị từ chối', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED'] },
+    { key: 'ticketCreated', label: 'Ticket mới được tạo (báo đội Hỗ Trợ IT)', actionTypes: ['NOTIFY_TICKET_CREATED'] },
     { key: 'ticketApprovalNeeded', label: 'Ticket cần phê duyệt', actionTypes: ['NOTIFY_TICKET_APPROVAL_NEEDED'] },
     { key: 'ticketEscalationApproved', label: 'Ticket leo thang được duyệt', actionTypes: ['NOTIFY_TICKET_ESCALATION_APPROVED'] },
     { key: 'ticketEscalationDenied', label: 'Ticket leo thang bị từ chối', actionTypes: ['NOTIFY_TICKET_ESCALATION_DENIED'] },
@@ -8041,6 +8042,11 @@ const ACTION_TYPE_EMAIL_META = {
   NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST: { status: 'warning', badge: '⚠️ Yêu cầu từ chối khẩn cấp' },
   NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED: { status: 'danger', badge: '❌ Từ chối khẩn cấp được duyệt' },
   NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED: { status: 'info', badge: 'ℹ️ Từ chối khẩn cấp bị từ chối' },
+  // NOTIFY_TICKET_CREATED (phản hồi người dùng, 11/2026 — "khi user tạo yêu cầu thì không có chỗ nào
+  // cấu hình để IT biết và nhận email để hỗ trợ"): trước đây tạo ticket "Hỗ Trợ Yêu Cầu" KHÔNG gửi email
+  // cho ai cả — đội Hỗ Trợ IT chỉ phát hiện ticket mới bằng cách tự mở tab lên xem. Xem submitItTicket()
+  // ở module-itsupport-price.js.
+  NOTIFY_TICKET_CREATED: { status: 'info', badge: '🎫 Ticket mới' },
   NOTIFY_TICKET_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Ticket cần phê duyệt' },
   NOTIFY_TICKET_ESCALATION_APPROVED: { status: 'success', badge: '✅ Ticket leo thang được duyệt' },
   NOTIFY_TICKET_ESCALATION_DENIED: { status: 'danger', badge: '❌ Ticket leo thang bị từ chối' },

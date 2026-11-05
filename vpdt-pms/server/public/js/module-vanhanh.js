@@ -2847,6 +2847,93 @@ async function submitEditOperationRepair() {
   } catch (err) { alert(`⛔ ${err.message}`); }
 }
 
+// A2/A3 mirror cho "Mở Mới" Siêu Thị (11/2026, yêu cầu người dùng "với mở mới siêu thi tôi cũng muốn có
+// nút sửa và mở mới như sửa chữa") — cùng khuôn cancelOperationRepairClient()/openEditOperationRepairModal()
+// ở trên, khác field (storeName/address/area/expectedOpenDate/personInCharge/note, KHÔNG có title/
+// description/attachments — operationStoreOpenings chỉ có 1 fileUrl duy nhất, không sửa file đợt này).
+function cancelOperationStoreOpeningClient(id) {
+  const o = DB.operationStoreOpenings.find(x => x.id === id);
+  if (!o) return;
+  showConfirmModal({
+    title: '🚫 Xác Nhận Hủy Đề Xuất',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>hủy</b> đề xuất mở mới siêu thị "<b>${escapeHtml(o.storeName)}</b>" (${escapeHtml(o.code)})?</p><p class="mt-2 text-gray-600">Hồ sơ sẽ chuyển sang trạng thái "Đã hủy" — KHÔNG xoá dữ liệu, vẫn tra cứu lại được.</p>`,
+    confirmLabel: 'Hủy Đề Xuất',
+    onConfirm: async () => {
+      try {
+        const result = await callRecordAction('operationStoreOpenings', id, 'cancel', {});
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id);
+        if (idx !== -1) DB.operationStoreOpenings[idx] = result.item;
+        logSystemAction(OPERATION_KIND_META.operationStoreOpenings.logModule, 'CANCEL', `Hủy đề xuất mở mới siêu thị [${o.code}]`, 'SUCCESS', o.code);
+        alert('✅ Đã hủy đề xuất!');
+        closeOperationProcessModal();
+        renderOperationList('operationStoreOpenings');
+      } catch (err) { alert(`⛔ ${err.message}`); }
+    }
+  });
+}
+function openEditOperationStoreOpeningModal(id) {
+  const o = DB.operationStoreOpenings.find(x => x.id === id);
+  if (!o) return;
+  if (!canManageOperationRecordClient(currentUser, 'operationStoreOpenings', o)) return alert('⛔ Bạn không có quyền sửa hồ sơ này!');
+  if (o.status === 'CANCELLED') return alert('⛔ Hồ sơ đã hủy, không thể sửa!');
+  populateSystemUsersDatalist();
+  document.getElementById('editVsoId').value = id;
+  document.getElementById('editVsoStoreName').value = o.storeName || '';
+  document.getElementById('editVsoAddress').value = o.address || '';
+  document.getElementById('editVsoArea').value = o.area || '';
+  document.getElementById('editVsoApprovedBudget').value = o.approvedBudget != null ? Number(o.approvedBudget).toLocaleString('vi-VN') : '';
+  document.getElementById('editVsoOpenDate').value = o.expectedOpenDate ? new Date(o.expectedOpenDate).toISOString().slice(0, 10) : '';
+  document.getElementById('editVsoPersonInChargeInput').value = (o.personInChargeName && o.personInCharge) ? `${o.personInChargeName} — (${o.personInCharge})` : '';
+  document.getElementById('editVsoPersonInChargeUsername').value = o.personInCharge || '';
+  document.getElementById('editVsoNote').value = o.note || '';
+  const hasWorkItems = getOperationWorkItemsForRecord('operationStoreOpenings', id).length > 0;
+  document.getElementById('editVsoLockedNote').classList.toggle('hidden', !hasWorkItems);
+  ['editVsoStoreName', 'editVsoAddress', 'editVsoArea', 'editVsoApprovedBudget', 'editVsoOpenDate'].forEach(fid => {
+    const el = document.getElementById(fid);
+    el.disabled = hasWorkItems;
+    el.classList.toggle('bg-gray-100', hasWorkItems);
+  });
+  document.getElementById('editOperationStoreOpeningModal').classList.remove('hidden');
+}
+function closeEditOperationStoreOpeningModal() {
+  document.getElementById('editOperationStoreOpeningModal').classList.add('hidden');
+}
+// Đăng ký TƯỜNG MINH ở OP_CHANGE_ACTIONS (dưới cuối file) — registry riêng bindOperationDelegation()
+// không tự soi window[fnName] như bindCspDelegation() chung, cùng lớp lưu ý mọi entry resolveVsoXxx/
+// resolveVrXxx khác trong file này.
+function resolveEditVsoPersonInChargeInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('editVsoPersonInChargeUsername').value = m ? m[2].trim() : '';
+}
+async function submitEditOperationStoreOpening() {
+  const id = Number(document.getElementById('editVsoId').value);
+  if (!Number.isFinite(id)) return;
+  const storeNameEl = document.getElementById('editVsoStoreName');
+  const addressEl = document.getElementById('editVsoAddress');
+  const areaEl = document.getElementById('editVsoArea');
+  const budgetEl = document.getElementById('editVsoApprovedBudget');
+  const openDateEl = document.getElementById('editVsoOpenDate');
+  const payload = {
+    storeName: storeNameEl.disabled ? undefined : storeNameEl.value.trim(),
+    address: addressEl.disabled ? undefined : addressEl.value.trim(),
+    area: areaEl.disabled ? undefined : (Number(areaEl.value) || 0),
+    approvedBudget: budgetEl.disabled ? undefined : getMoneyValue(budgetEl),
+    expectedOpenDate: openDateEl.disabled ? undefined : openDateEl.value,
+    personInCharge: document.getElementById('editVsoPersonInChargeUsername').value || '',
+    note: document.getElementById('editVsoNote').value.trim()
+  };
+  try {
+    const result = await callRecordAction('operationStoreOpenings', id, 'update', payload);
+    const idx = DB.operationStoreOpenings.findIndex(x => x.id === id);
+    if (idx !== -1) DB.operationStoreOpenings[idx] = result.item;
+    logSystemAction(OPERATION_KIND_META.operationStoreOpenings.logModule, 'UPDATE', `Sửa đề xuất mở mới siêu thị [${result.item.code}]`, 'SUCCESS', result.item.code);
+    alert('✅ Đã lưu thay đổi!');
+    closeEditOperationStoreOpeningModal();
+    closeOperationProcessModal();
+    renderOperationList('operationStoreOpenings');
+  } catch (err) { alert(`⛔ ${err.message}`); }
+}
+
 function notifyOperationApprovalNeeded(kind, item) {
   const meta = OPERATION_KIND_META[kind];
   const wfConfig = meta.resolveWfConfigForItem(item);
@@ -3169,6 +3256,7 @@ function buildOperationDetailsHTML(kind, o) {
   }
   if (kind === 'operationStoreOpenings') {
     return `
+      ${o.status === 'CANCELLED' ? `<div class="mb-2">${operationStageBadge('CANCELLED')}${o.cancelledByName ? ` <span class="text-gray-500">— huỷ bởi ${escapeHtml(o.cancelledByName)} lúc ${escapeHtml(o.cancelledAt || '')}</span>` : ''}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div><b>Địa điểm dự kiến:</b> ${escapeHtml(o.address || 'N/A')}</div>
         <div><b>Diện tích dự kiến:</b> ${(o.area || 0).toLocaleString('vi-VN')} m²</div>
@@ -3491,6 +3579,18 @@ function openOperationProcessModal(kind, id) {
       <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
         <button data-op="openEditOperationRepairModal" data-arg0="${o.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded font-bold hover:bg-amber-700 text-xs">✏️ Sửa Đề Xuất</button>
         <button data-op="cancelOperationRepairClient" data-arg0="${o.id}" class="bg-red-100 text-red-700 border border-red-600 px-3 py-1.5 rounded font-bold hover:bg-red-200 text-xs">🚫 Hủy Đề Xuất</button>
+      </div>
+    `;
+  }
+
+  // A2/A3 mirror cho "Mở Mới" siêu thị (11/2026, phản hồi người dùng — "với mở mới siêu thi tôi cũng
+  // muốn có nút sửa và huỷ như sửa chữa") — cùng gate canManageOperationRecordClient() đã generic sẵn
+  // theo kind, chỉ khác tên hàm mở modal/hủy riêng cho operationStoreOpenings.
+  if (kind === 'operationStoreOpenings' && o.status !== 'CANCELLED' && canManageOperationRecordClient(currentUser, kind, o)) {
+    controls.innerHTML += `
+      <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
+        <button data-op="openEditOperationStoreOpeningModal" data-arg0="${o.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded font-bold hover:bg-amber-700 text-xs">✏️ Sửa Đề Xuất</button>
+        <button data-op="cancelOperationStoreOpeningClient" data-arg0="${o.id}" class="bg-red-100 text-red-700 border border-red-600 px-3 py-1.5 rounded font-bold hover:bg-red-200 text-xs">🚫 Hủy Đề Xuất</button>
       </div>
     `;
   }
@@ -6246,6 +6346,7 @@ const OP_CHANGE_ACTIONS = {
   resolveOwiAcceptorInput: el => resolveOwiAcceptorInput(el.value),
   resolveVsoPersonInChargeInput: el => resolveVsoPersonInChargeInput(el.value),
   resolveVrPersonInChargeInput: el => resolveVrPersonInChargeInput(el.value),
+  resolveEditVsoPersonInChargeInput: el => resolveEditVsoPersonInChargeInput(el.value),
   onOwiAcceptanceModeChange: () => onOwiAcceptanceModeChange(),
   syncOwiDateBounds: () => syncOwiDateBounds(),
   onOperationEstimateImportFileChange: (el, e) => onOperationEstimateImportFileChange(e),
@@ -6415,5 +6516,5 @@ function bindOperationDelegation(rootId) {
 // gì"): 'operationWorkItemContractModal' (C2, Giá Trị Đầu Tư tự động theo Danh Mục Đầu Tư + Giá Trị Hợp
 // Đồng + tệp đính kèm nhiều file) CŨNG là 1 <div> độc lập cấp cao, bị bỏ sót khỏi mảng này — cùng lớp lỗi
 // editOperationRepairModal/operationWorkItemReassignModal ở trên.
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal', 'operationWorkItemContractModal'].forEach(bindOperationDelegation);
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal', 'operationWorkItemContractModal', 'editOperationStoreOpeningModal'].forEach(bindOperationDelegation);
 

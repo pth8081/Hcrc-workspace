@@ -376,6 +376,23 @@ function createDispatcher(state) {
     const workItems = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_REPAIR' && w.sourceId === item.id);
     return recordActions.updateOperationRepairDetails(u, item, body || {}, workItems);
   };
+  // A2 mirror cho operationStoreOpenings ("Mở Mới", 11/2026) + operationRepairs:cancel (gap TRƯỚC ĐÓ
+  // chưa từng mirror — cancelOperationRecord() đã generic theo sourceType từ lâu, chỉ thiếu wiring vào
+  // mock này) — mirror ĐÚNG route thật (routes/records.js POST /operation<Repairs|StoreOpenings>/:id/cancel).
+  actionHandlers['operationRepairs:cancel'] = (u, item) => {
+    const workItems = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_REPAIR' && w.sourceId === item.id);
+    return recordActions.cancelOperationRecord(u, item, 'OPERATION_REPAIR', workItems);
+  };
+  actionHandlers['operationStoreOpenings:cancel'] = (u, item) => {
+    const workItems = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
+    return recordActions.cancelOperationRecord(u, item, 'OPERATION_STORE_OPENING', workItems);
+  };
+  // E3 (11/2026, "Mở Mới" Sửa Đề Xuất) — mirror ĐÚNG route thật (routes/records.js POST
+  // /operationStoreOpenings/:id/update), xem lib/recordActions.js updateOperationStoreOpeningDetails().
+  actionHandlers['operationStoreOpenings:update'] = (u, item, body) => {
+    const workItems = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
+    return recordActions.updateOperationStoreOpeningDetails(u, item, body || {}, workItems, state.users);
+  };
   // confirmOperationUse() nay nhận thêm sourceType tường minh (Overhaul quyền — canManageOperationRecord()
   // không tự suy luận ngược từ sourceRecord) — mirror ĐÚNG route thật.
   actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {

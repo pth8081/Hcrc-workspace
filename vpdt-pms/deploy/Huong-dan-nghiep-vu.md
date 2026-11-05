@@ -1888,6 +1888,34 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     thô dài như `0.252...`), cột có định dạng phân cách nghìn hiện đúng dấu
     chấm ngăn cách, cột ngày tháng hiện đúng `dd/mm/yyyy` — thay vì hiện
     nguyên giá trị thô đọc được từ ô Excel như trước.
+  - **IT yêu cầu bổ sung bảng giá SAU KHI hồ sơ đã phê duyệt xong — nay BẮT
+    BUỘC duyệt lại từ Bước 1 trước khi áp giá tiếp (vá lỗ hổng 11/2026)**:
+    trước đây nếu đội Hỗ Trợ IT bấm "Yêu Cầu Bổ Sung" khi hồ sơ ĐÃ ở trạng
+    thái Đã Phê Duyệt (khác với "Yêu Cầu Bổ Sung" của người duyệt GIỮA
+    CHỪNG đã có từ trước, mục ngay trên), tệp bảng giá mới người đề xuất nộp
+    lên có thể chứa số liệu khác hẳn tệp đã duyệt mà KHÔNG ai phê duyệt lại
+    — IT áp giá thẳng theo file mới mà không qua bước xét duyệt nào. Nay cả
+    2 tình huống (approver giữa chừng / IT sau khi đã duyệt xong) đều CÙNG
+    áp dụng luật: nộp tệp bổ sung tự mất hiệu lực các bước đã duyệt trước
+    đó + hồ sơ quay lại "Chờ Phê Duyệt", Bước 1 — áp giá chỉ thực hiện được
+    sau khi duyệt lại xong từ đầu với số liệu mới.
+  - **"🎫 Hỗ Trợ Yêu Cầu" (ticket IT chung) tạo xong tự gửi email báo đội Hỗ
+    Trợ IT (MỚI 11/2026)**: trước đây tạo ticket mới hoàn toàn không có
+    thông báo gì — đội IT chỉ biết bằng cách tự vào danh sách kiểm tra thủ
+    công, dễ bỏ sót ticket khẩn. Nay tạo ticket xong tự gửi email cho mọi
+    tài khoản có quyền "🛠️ Đội Hỗ Trợ IT"/admin, nêu rõ người gửi + tiêu đề +
+    danh mục sự cố — admin có thể tắt riêng email này ở "🔔 Thông Báo Email
+    Phê Duyệt" (Hệ Thống) nếu không muốn nhận.
+  - **Gửi "Từ Chối Khẩn Cấp" — trạng thái ngoài danh sách/tiêu đề hồ sơ nay
+    hiện đúng "⏳ Chờ Duyệt Hủy" (vá lỗi hiển thị 11/2026)**: trước đây sau
+    khi gửi yêu cầu Từ Chối Khẩn Cấp cho 1 hồ sơ đã phê duyệt, danh sách Phê
+    Duyệt Giá/tiêu đề modal chi tiết của CHÍNH hồ sơ đó vẫn hiện nguyên "✅
+    Đã phê duyệt" — chỉ mở modal chi tiết mới thấy rõ đang có yêu cầu chờ
+    xét duyệt, dễ nhầm tưởng hồ sơ đã ổn định trong khi thực ra đang chờ
+    quyết định huỷ. Nay badge trạng thái hiện đúng "⏳ Chờ Duyệt Hủy" ngay ở
+    danh sách lẫn tiêu đề chi tiết — khớp đúng với "⏳ Đang chờ duyệt" đã
+    hiện sẵn ở Approval Hub. Email cho người duyệt (kèm lý do) + email phản
+    hồi người gửi khi duyệt/từ chối yêu cầu vẫn giữ nguyên như trước.
   - **"🏪 QT Giá Bán Buôn (Siêu Thị)" — người duyệt Phê Duyệt Giá Bán Buôn
     (10/2026, CÙNG CƠ CHẾ "🏬 Quy Trình Đặt Hàng Siêu Thị" ở mục 4.4 Vận Hành,
     xem đầy đủ cách khớp Chức danh/Người cụ thể/Siêu Thị Phụ Trách ở đó)**:
@@ -2445,6 +2473,22 @@ tách biệt, xem mục 4.7); tab con bên trong (Mở Mới/Sửa Chữa Siêu 
 đời "dự án nhỏ" của nó) hiện **"🏬 QLDA"**. Nhãn "QLDA - ..." ở các màn khác
 (cấu hình quy trình, Approval Hub, Biểu Mẫu...) CHỈ dùng cho phần Mở Mới/Sửa
 Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
+
+**"✏️ Sửa Đề Xuất"/"🚫 Hủy Đề Xuất" cho cả Mở Mới LẪN Sửa Chữa (MỞ RỘNG
+11/2026)**: mở modal chi tiết 1 đề xuất "Mở Mới" hoặc "Sửa Chữa" (chưa Hủy),
+người tạo/người có toàn quyền quản lý hồ sơ Vận Hành thấy thêm 2 nút này ở
+cuối khối thao tác (trước đây "Mở Mới" chỉ xem được, không sửa/hủy được gì —
+chỉ "Sửa Chữa" có sẵn). **"🚫 Hủy Đề Xuất"**: chuyển hồ sơ sang "Đã hủy",
+KHÔNG xoá dữ liệu, vẫn tra cứu lại được (có hộp thoại xác nhận Đồng Ý/Hủy
+trước khi hủy thật). **"✏️ Sửa Đề Xuất"**: "Mở Mới" sửa được Tên Siêu Thị Dự
+Kiến/Địa Điểm/Diện Tích/Ngân Sách Phê Duyệt/Ngày Dự Kiến Khai Trương/Người
+Phụ Trách/Ghi Chú; "Sửa Chữa" sửa được Nội Dung Sửa Chữa/Ngân Sách Phê
+Duyệt/Mô Tả/tệp đính kèm — **nếu hồ sơ đã có ít nhất 1 công việc triển khai
+("Kỳ Thực Hiện")**, các field "định danh/ngân sách gốc" (Tên Siêu Thị/Địa
+Điểm/Diện Tích/Ngân Sách/Ngày Dự Kiến Khai Trương ở Mở Mới; Nội Dung/Ngân
+Sách ở Sửa Chữa) tự khoá lại không sửa được nữa (tránh đổi số liệu gốc sau
+khi công việc/chi phí đã bắt đầu triển khai thật) — riêng Người Phụ Trách/
+Ghi Chú luôn sửa được ở mọi giai đoạn.
 
 - **Đơn Hàng** (Đặt Hàng Tại Siêu Thị / Đặt Hàng Tại HO) — duyệt theo **mức
   giá trị đơn hàng** (tier cố định), không theo phòng ban, 2 quy trình tách

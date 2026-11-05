@@ -194,7 +194,7 @@ async function main() {
     // submitPriceSupplementFile() ở lib/recordActions.js CHỈ CHO chính người đề xuất (item.creator) tải
     // tệp bổ sung — nên kịch bản phải đổi user đúng vai trò ở từng bước (IT yêu cầu -> người đề xuất
     // phản hồi -> IT xác nhận áp giá), không thể làm hết bằng 1 user.
-    await run.run('Yêu Cầu Bổ Sung từ Hỗ Trợ IT chặn áp giá tới khi có tệp bổ sung (append-only)', async () => {
+    await run.run('Yêu Cầu Bổ Sung từ Hỗ Trợ IT: append-only + BẮT BUỘC duyệt lại từ Bước 1 trước khi áp giá tiếp (v29.28)', async () => {
       await loginAs(page, IT1);
       const step1 = await page.evaluate(async (id) => {
         switchTab('itSupport');
@@ -239,43 +239,94 @@ async function main() {
           fileCount: item.files.length,
           supplementColumnLabelsLen: item.files[1].columnLabels.length,
           infoRequestReason: item.infoRequests[0].reason,
-          infoRequestResponded: !!item.infoRequests[0].response
+          infoRequestResponded: !!item.infoRequests[0].response,
+          status: item.status,
+          currentStep: item.currentStep,
+          approvedFileId: item.approvedFileId,
+          applyClaimedBy: item.applyClaimedBy,
+          hasRestartHistory: item.history.some(h => h.action === 'SUPPLEMENT_RESTART')
         };
       }, priceApprovalId);
       assertEqual(step2.fileCount, 2, 'Tệp bổ sung phải được THÊM vào cuối (append-only) — tổng 2 tệp (gốc + bổ sung)');
       assertEqual(step2.supplementColumnLabelsLen, 4, 'Tệp bổ sung cũng phải được sanitize + gắn columnLabels riêng của nó (snapshot đúng lúc nộp)');
       assertEqual(step2.infoRequestReason, 'Cần bổ sung ảnh chụp bảng giá kệ hàng thực tế', 'Phải ghi đúng lý do yêu cầu bổ sung');
       assert(step2.infoRequestResponded, 'Yêu cầu bổ sung phải được đánh dấu đã phản hồi sau khi có tệp bổ sung');
+      // LỖI ĐÃ VÁ (phản hồi người dùng, 11/2026 — ảnh chụp ticket ITPG-BL-023 production): tệp bổ sung
+      // đáp ứng yêu cầu của Hỗ Trợ IT (byRole:'it', SAU khi đã APPROVED) TRƯỚC ĐÂY không đối chiếu lại
+      // với approver nào — IT áp giá thẳng bằng tệp mới chưa ai duyệt. Nay phải quay lại PENDING/Bước 1,
+      // y hệt luồng supplement khi còn PENDING (byRole:'approver').
+      assertEqual(step2.status, 'PENDING', 'Tệp bổ sung theo yêu cầu Hỗ Trợ IT phải đưa hồ sơ về lại PENDING — chờ duyệt lại, không giữ nguyên APPROVED');
+      assertEqual(step2.currentStep, 1, 'Phải reset về Bước 1 để duyệt lại từ đầu với tệp MỚI');
+      assertEqual(step2.approvedFileId, null, 'approvedFileId cũ phải được dọn — không còn tệp nào "đã duyệt" cho tới khi duyệt lại xong');
+      assertEqual(step2.applyClaimedBy, null, 'Lượt nhận xử lý áp giá cũ (claim trước khi còn APPROVED) phải được dọn, không còn ý nghĩa khi hồ sơ quay lại PENDING');
+      assert(step2.hasRestartHistory, 'Phải ghi 1 dòng lịch sử SUPPLEMENT_RESTART giải thích lý do quay lại Bước 1');
 
-      // Người đã nhận xử lý (IT1) giờ xác nhận áp giá lại phải thành công.
+      // Đội IT (IT1) thử áp giá NGAY sau khi có tệp bổ sung -> PHẢI BỊ CHẶN (hồ sơ không còn APPROVED,
+      // phải chờ duyệt lại từ Bước 1 trước — đây chính là hành vi được vá, KHÁC bản cũ coi đây là thành công).
       await loginAs(page, IT1);
       const step3 = await page.evaluate(async (id) => {
         window.__resetCapture();
         await applyItPriceAction(id);
         const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { applied: item.applied, alerts: window.__alerts.slice() };
+      }, priceApprovalId);
+      assertEqual(step3.applied, false, 'Chưa được duyệt lại -> xác nhận áp giá PHẢI bị chặn (đúng hành vi đã vá)');
+      assertIncludes(step3.alerts, 'chưa được phê duyệt xong', 'Phải báo rõ hồ sơ chưa được phê duyệt xong (status không còn APPROVED)');
+
+      // Trưởng phòng (APPROVER1) duyệt lại Bước 1 với tệp MỚI -> hồ sơ APPROVED trở lại.
+      await loginAs(page, APPROVER1);
+      const step4 = await page.evaluate(async (id) => {
+        window.__resetCapture();
+        await approveItPriceConfirmed(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.status, alerts: window.__alerts.slice() };
+      }, priceApprovalId);
+      assertEqual(step4.status, 'APPROVED', 'Sau khi Trưởng phòng duyệt lại Bước 1, hồ sơ phải chuyển lại APPROVED');
+      assertIncludes(step4.alerts, 'Phê duyệt đề xuất giá thành công', 'Phải thông báo phê duyệt hoàn tất lần 2');
+
+      // Giờ IT (IT1) mới xác nhận áp giá được — claim lại (claim cũ đã bị dọn ở step2) rồi xác nhận.
+      await loginAs(page, IT1);
+      const step5 = await page.evaluate(async (id) => {
+        window.__resetCapture();
+        await claimPriceApplyAction(id);
+        await applyItPriceAction(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
         return { applied: item.applied, appliedByName: item.appliedByName, alerts: window.__alerts.slice() };
       }, priceApprovalId);
-      assertEqual(step3.applied, true, 'Sau khi có tệp bổ sung, xác nhận áp giá phải thành công');
-      assertEqual(step3.appliedByName, IT1.name, 'Phải ghi đúng người xác nhận áp giá');
-      assertIncludes(step3.alerts, 'Đã xác nhận áp giá thành công', 'Phải có thông báo áp giá thành công');
+      assertEqual(step5.applied, true, 'Sau khi duyệt lại xong, xác nhận áp giá phải thành công');
+      assertEqual(step5.appliedByName, IT1.name, 'Phải ghi đúng người xác nhận áp giá');
+      assertIncludes(step5.alerts, 'Đã xác nhận áp giá thành công', 'Phải có thông báo áp giá thành công');
     });
 
     // ===== 4) Hỗ Trợ Yêu Cầu: tạo ticket (mở cho toàn bộ nhân viên) =====
     await run.run('Hỗ Trợ Yêu Cầu: bất kỳ nhân viên nào cũng tạo được ticket (happy path)', async () => {
       await loginAs(page, PLAIN);
       const result = await page.evaluate(async () => {
+        // (11/2026, phản hồi người dùng — "khi user tạo yêu cầu thì ko có chõ nào cấu hình để IT biết và
+        // nhận email để hỗ trợ") — monkeypatch notifyUsersByEmail() thành spy (cùng khuôn test-payment-
+        // approval-needed-email.js) để xác nhận NOTIFY_TICKET_CREATED được gửi đúng người (itManage=IT1).
+        window.__emailCalls = [];
+        window.notifyUsersByEmail = (...args) => { window.__emailCalls.push(args); };
         switchTab('itSupport');
         setItSupportSubTab('TICKET');
         document.getElementById('itTicketTitle').value = 'Máy tính không lên nguồn';
         document.getElementById('itTicketCategory').value = 'HARDWARE';
         document.getElementById('itTicketDescription').value = 'Bấm nút nguồn không có phản hồi, đèn báo tắt hẳn.';
         await submitItTicket({ preventDefault() {}, target: { reset() {} } });
-        return { alerts: window.__alerts, item: DB.itSupportTickets[0] };
+        return { alerts: window.__alerts, item: DB.itSupportTickets[0], emailCalls: window.__emailCalls };
       });
       assert(result.item, 'Ticket phải được tạo thành công');
       assertEqual(result.item.status, 'TODO', 'Ticket mới tạo phải ở trạng thái TODO');
       assertEqual(result.item.creator, PLAIN.username, 'Phải ghi đúng người tạo');
       assertIncludes(result.alerts, 'Đã gửi yêu cầu hỗ trợ IT thành công', 'Phải có thông báo tạo ticket thành công');
+      assertEqual(result.emailCalls.length, 1, 'Phải gọi notifyUsersByEmail đúng 1 lần khi tạo ticket mới');
+      const [module, actionType, code, recipients, subject, bodyText] = result.emailCalls[0];
+      assertEqual(module, 'IT_SUPPORT', 'Phải gửi đúng module IT_SUPPORT');
+      assertEqual(actionType, 'NOTIFY_TICKET_CREATED', 'Phải gửi đúng actionType NOTIFY_TICKET_CREATED');
+      assertEqual(code, result.item.code, 'Phải gửi đúng mã ticket vừa tạo');
+      assertIncludes(recipients, IT1.username, 'Phải gửi tới IT1 (có quyền itManage)');
+      assert(subject.includes(result.item.code), 'Tiêu đề email phải chứa mã ticket');
+      assert(bodyText.includes(PLAIN.name) && bodyText.includes('Máy tính không lên nguồn'), 'Nội dung email phải có tên người gửi + tiêu đề ticket');
       ticketDoneId = result.item.id;
     });
 
@@ -505,6 +556,16 @@ async function main() {
       assertEqual(requested.status, 'PENDING', 'Yêu cầu Từ chối khẩn cấp phải chuyển emergencyRejectStatus sang PENDING');
       assertEqual(requested.reason, 'Phát hiện giá mới tính sai, cần dừng lại trước khi áp dụng', 'Phải lưu đúng lý do từ chối khẩn cấp');
       assertEqual(requested.requestedByName, APPROVER1.name, 'Phải ghi đúng người gửi yêu cầu');
+
+      // LỖI ĐÃ VÁ (11/2026, phản hồi người dùng — "trạng thái bên ngoài ko chuyển sang đang chờ phê
+      // duyệt... gây nhầm lẫn"): itPriceStatusBadge() trước đây chỉ đọc p.status (vẫn APPROVED lúc này)
+      // nên hiện "✅ Đã phê duyệt" dù đang có yêu cầu Từ chối khẩn cấp PENDING — giờ phải hiện đúng badge
+      // "Chờ Duyệt Hủy" ở cả danh sách lẫn tiêu đề modal (itPriceStatusBadge() dùng chung cho cả 2 nơi).
+      const badgeWhilePending = await page.evaluate((id) => {
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return itPriceStatusBadge(item);
+      }, emergencyPriceApprovalId);
+      assertIncludes(badgeWhilePending, 'Chờ Duyệt Hủy', 'Badge trạng thái phải hiện "Chờ Duyệt Hủy" khi đang có yêu cầu Từ chối khẩn cấp PENDING, không được hiện "Đã phê duyệt" gây nhầm lẫn');
 
       await loginAs(page, IT1);
       const blockedApply = await page.evaluate(async (id) => {

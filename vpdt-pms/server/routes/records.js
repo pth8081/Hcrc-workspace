@@ -4054,6 +4054,38 @@ router.post('/operationRepairs/:id/update', async (req, res) => {
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/update`, err); }
 });
 
+// POST /api/records/operationStoreOpenings/:id/cancel — "🚫 Hủy" đề xuất (đối xứng A2 operationRepairs,
+// phản hồi người dùng 11/2026 — "Mở Mới" trước đây thiếu hẳn route này dù modal chi tiết dùng chung đã
+// có sẵn nút). cancelOperationRecord() đã generic theo sourceType, không cần hàm riêng.
+router.post('/operationStoreOpenings/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, async (item) => {
+      const workItems = await getWorkItemsBySource('OPERATION_STORE_OPENING', itemId);
+      return recordActions.cancelOperationRecord(freshUser, item, 'OPERATION_STORE_OPENING', workItems);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/cancel`, err); }
+});
+
+// POST /api/records/operationStoreOpenings/:id/update — "✏️ Sửa Đề Xuất" (đối xứng A3 operationRepairs)
+// — sửa Tên Siêu Thị/Địa Điểm/Diện Tích/Ngân Sách/Người Phụ Trách/Ghi Chú, xem lib/recordActions.js
+// updateOperationStoreOpeningDetails() (tự chặn sửa field định danh/ngân sách khi đã có công việc triển khai).
+router.post('/operationStoreOpenings/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, async (item) => {
+      const workItems = await getWorkItemsBySource('OPERATION_STORE_OPENING', itemId);
+      return recordActions.updateOperationStoreOpeningDetails(freshUser, item, req.body || {}, workItems, users);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/update`, err); }
+});
+
 // POST /api/records/budgetTemplates/:id/update — sửa tên/cột bổ sung 1 mẫu ngân sách đã tạo.
 router.post('/budgetTemplates/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);
