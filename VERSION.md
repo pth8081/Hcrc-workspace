@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**29.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.34 (2026-11): Hộp Thư Phê Duyệt — tự vẽ lại ĐÚNG sub-tab riêng của 9 module + Ngân Sách khi có hồ sơ mới/vừa xử lý xong
+
+Phản hồi người dùng: "Bạn xem ứng dụng có đang để auto refresh không? Vì người dùng đang phàn nàn có yêu
+cầu rồi mà ko thấy phê duyệt, có phê duyệt nhưng chưa thấy để xử lý tiếp."
+
+**Nguyên nhân**: nhịp poll ngầm mỗi 3 giây (`runApprovalPollTick()`, core.js) đã tự cập nhật ĐÚNG số đếm
+trên nav + bảng ở màn "🔔 Hộp Thư Phê Duyệt" (Approval Hub) từ trước, nhưng CỐ TÌNH chưa mở rộng sang 9
+tab "Phê duyệt" riêng của từng module (Tài liệu/Văn bản trình/Hợp đồng/Phòng Họp/Đăng ký xe/VPP/Văn
+Phòng-Mua Bán+Sửa Chữa/Thanh Toán/Vận Hành-Đơn Hàng) — người dùng đang đứng SẴN ở 1 trong 9 màn đó (không
+qua Hộp Thư Phê Duyệt chung) phải tự F5 hoặc chuyển tab ra vào mới thấy hồ sơ mới/kết quả vừa xử lý.
+
+**Sửa**: `runApprovalPollTick()` nay tự kiểm tra ĐÚNG section nào đang hiển thị (cùng cách `switchTab()`
+tự kiểm, không cần biến "tab hiện tại" riêng) rồi gọi lại đúng hàm render của module đó — `renderDocs()`/
+`renderSubmissionReqs()`/`renderContracts()`/`renderMeetings()`/`renderCarRegs()`/`renderVppRegistrations()`.
+Văn Phòng xử lý riêng theo sub-tab đang mở: Mua Bán/Sửa Chữa gọi `renderOfficeReqs()`, còn "💰 Thanh
+Toán" (lồng trong cùng section) gọi `renderPaymentRequests()`+`renderPaymentManageTab()` — đúng khuôn
+module-thanhtoan.js đã tự gọi cả 2 hàm này sau mỗi hành động phê duyệt. Vận Hành (module phức tạp nhất,
+nhiều cấp sub-tab lồng nhau) chỉ vẽ lại đúng bảng "📋 Danh Sách" Đơn Hàng (`renderOperationList('operationOrders')`)
+khi đang ở đúng sub-tab Đặt Hàng Siêu Thị/HO — không đụng tới Tồn Kho/Kiểm Soát Hàng Hóa/Phê Duyệt Giá/Báo
+Cáo/Nhập Hàng của cùng module, giảm rủi ro ảnh hưởng chức năng khác. Mọi hàm render đều có sẵn
+`if (!tbody) return;` ở đầu thân hàm nên gọi lại vô điều kiện (giống đúng cách `renderApprovalHub()` đã
+làm từ trước) không gây lỗi, và không reset trang/bộ lọc đang xem (`paginateList()` không tự reset trang
+mỗi lần gọi).
+
+**Phần 2 (cùng đợt, "Việc B") — Ngân Sách cũng tự làm mới**: Ngân Sách KHÔNG nằm trong `computeMyPendingApprovalKeys()`/Hộp Thư Phê Duyệt (quyết định v23.0, giữ nguyên — duyệt NGAY tại module Ngân Sách) nên nhịp poll ở trên vốn không biết gì về nó. Thêm `computeMyPendingBudgetSignature(user, budgetLines)`
+(`routes/approvals.js`) — tính riêng 1 "chữ ký" NHẸ (id các dòng `stage==='PROPOSED'`, chỉ cho người có
+`budgetManage`/`admin`, KHÔNG gộp vào `keys`/`count`/badge Hub) trả thêm qua field `budgetSignature` ở
+response. Client (`runApprovalPollTick()`) gộp `budgetSignature` vào chữ ký tổng (`keys.join('|') + '§' +
+budgetSignature`) CHỈ để làm trigger tải lại/vẽ lại — nhờ vậy 1 dòng Đề Xuất Ngân Sách mới cũng kích đúng
+pha "tải lại DB + vẽ lại", rồi gọi `renderBudgetLineList('PROPOSED'|'APPROVED')` nếu đang đứng đúng tab
+"📝 Đề Xuất"/"✅ Duyệt" của Ngân Sách (`activeBudgetLineTab`, module-ngansach.js) — không đụng gì tới đếm/
+badge Hub.
+
+**Test**: file mới `test-approval-poll-subtabs.js` (19 kịch bản Playwright thật — bọc từng hàm render
+bằng bộ đếm, chuyển qua đúng 9 tab/sub-tab + 3 sub-tab Ngân Sách rồi gọi `runApprovalPollTick()` thật, xác
+nhận ĐÚNG hàm nào được gọi/KHÔNG gọi nhầm hàm của sub-tab khác — gồm cả kịch bản cốt lõi "keys không đổi
+nhưng budgetSignature đổi -> vẫn tự vẽ lại", chứng minh đúng thiết kế gộp chữ ký) — 19/19 pass (chạy lại
+3 lần liên tiếp, không flaky). `test-approval-polling.js` thêm 3 kịch bản cho endpoint `budgetSignature`
+(gate quyền budgetManage/admin, lọc đúng PROPOSED, đổi chữ ký khi thêm dòng mới) — 28/28 pass. Chạy lại
+`test-approval-hub.js` (57/57) + `test-office-budget.js` (27/27) + `test-budget-lines.js` (77/77) — toàn
+bộ pass, không regression.
+
+**Deploy-impact:** `public/js/core.js` + `routes/approvals.js` — không đổi schema/`.env.example`/
+dependencies, chỉ copy code + `pm2 restart`.
 
 ## v29.33 (2026-11): Vận Hành — modal "💰 Giá Trị Hợp Đồng" hỗ trợ NHIỀU nhà thầu, mỗi nhà thầu 1 giá trị
 + tệp đính kèm riêng

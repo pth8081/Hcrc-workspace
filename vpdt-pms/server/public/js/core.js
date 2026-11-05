@@ -10962,6 +10962,7 @@ async function runApprovalPollTick() {
   // ngay lập tức nên đây gần như không bao giờ xảy ra) — bỏ qua lượt này thay vì gọi API bằng phiên rỗng.
   if (!currentUser) return;
   let keys;
+  let budgetSignature = '';
   try {
     const res = await fetch('/api/approvals/pending-signature');
     // 401 (hết phiên) — startSessionKeepAlive() đã lo việc PHÁT HIỆN hết phiên + đăng xuất (ping riêng,
@@ -10969,11 +10970,17 @@ async function runApprovalPollTick() {
     if (!res.ok) return;
     const data = await res.json();
     keys = Array.isArray(data.keys) ? data.keys : [];
+    budgetSignature = typeof data.budgetSignature === 'string' ? data.budgetSignature : '';
   } catch (e) {
     return; // mất mạng tạm thời — bỏ qua, thử lại ở lượt poll kế tiếp (cùng cách startSessionKeepAlive() xử lý)
   }
 
-  const signature = keys.join('|');
+  // budgetSignature (MỚI, 11/2026, "Việc B" — Ngân Sách KHÔNG có trong 'keys'/badge Hub, quyết định v23.0
+  // vẫn giữ nguyên) GỘP vào chữ ký tổng CHỈ để làm trigger tải lại/vẽ lại — KHÔNG đưa vào nhãn đếm Hub ở
+  // bước (a) ngay dưới (hubLabel vẫn chỉ đọc keys.length, không đụng gì). Có đổi dòng Đề Xuất đang
+  // PROPOSED nào đó (routes/approvals.js computeMyPendingBudgetSignature()) thì chữ ký tổng đổi theo,
+  // kích đúng pha "tải lại DB + vẽ lại" ở bước (c) bên dưới (xem nhánh budgetSection cuối hàm này).
+  const signature = keys.join('|') + '§' + budgetSignature;
 
   // (a) Cập nhật NGAY nhãn số đếm trên nav — CỐ TÌNH lấy số từ CHÍNH kết quả poll (keys.length, server đã
   // tính đúng bằng computeMyPendingApprovalKeys()) thay vì gọi lại updateApprovalHubBadge() (hàm đó tự
@@ -11045,6 +11052,48 @@ async function runApprovalPollTick() {
 
   updateApprovalHubBadge();
   if (!document.getElementById('approvalHubSection').classList.contains('hidden')) renderApprovalHub();
+
+  // (d) Mở rộng (11/2026, "Việc A" — người dùng phản hồi "có yêu cầu rồi mà ko thấy phê duyệt, có phê
+  // duyệt nhưng chưa thấy để xử lý tiếp"): tự vẽ lại ĐÚNG sub-tab "Phê duyệt" riêng của 9 module, NẾU
+  // người dùng đang đứng đúng màn đó — không cần F5/chuyển tab ra vào mới thấy hồ sơ mới/badge mới cập
+  // nhật. Mỗi hàm render dưới đây đã tự có `if (!tbody) return;`/tương đương ở đầu thân hàm (tự kiểm tra
+  // kỹ từng hàm trước khi gọi vô điều kiện ở đây) — AN TOÀN gọi lại dù đang lọc theo bộ lọc nào, giống
+  // đúng cách renderApprovalHub() ở trên đã làm, không cần biết "đang lọc theo status/dept gì".
+  if (!document.getElementById('docSection').classList.contains('hidden')) renderDocs();
+  if (!document.getElementById('submissionSection').classList.contains('hidden')) renderSubmissionReqs();
+  if (!document.getElementById('contractSection').classList.contains('hidden')) renderContracts();
+  if (!document.getElementById('meetingSection').classList.contains('hidden')) renderMeetings();
+  if (!document.getElementById('carSection').classList.contains('hidden')) renderCarRegs();
+  if (!document.getElementById('vppSection').classList.contains('hidden')) renderVppRegistrations();
+  if (!document.getElementById('officeSection').classList.contains('hidden')) {
+    // officeSection còn lồng sub-tab "💰 Thanh Toán" (activeOfficeSubTab === 'PAYMENT', xem
+    // setOfficeSubTab()) — bảng/dashboard của Mua Bán/Sửa Chữa (renderOfficeReqs()) không hiển thị lúc
+    // đó, phải gọi đúng 2 hàm render của Thanh Toán (đúng khuôn module-thanhtoan.js đã tự gọi CẢ 2 hàm
+    // này cùng lúc sau mỗi hành động phê duyệt, xem approvePaymentRequestAction()).
+    if (activeOfficeSubTab === 'PAYMENT') { renderPaymentRequests(); renderPaymentManageTab(); }
+    else renderOfficeReqs();
+  }
+  if (!document.getElementById('vanHanhSection').classList.contains('hidden')
+      && activeVanHanhSubTab === 'ORDERS'
+      && (activeOperationOrderSubTab === 'STORE' || activeOperationOrderSubTab === 'HO')) {
+    // Vận Hành có nhiều cấp sub-tab lồng nhau (ORDERS/STORE/ITPRICE/SHELF ở cấp 1, rồi STORE/HO/REPORT/
+    // RECEIPT ở cấp 2 riêng trong ORDERS) — CHỈ vẽ lại đúng bảng "📋 Danh Sách" Đơn Hàng (STORE/HO, nơi
+    // hiện hồ sơ đang chờ phê duyệt) khi người dùng đang đứng đúng 2 cấp đó, KHÔNG đụng tới Tồn Kho/Kiểm
+    // Soát Hàng Hóa/Phê Duyệt Giá/Báo Cáo/Nhập Hàng — đúng phạm vi yêu cầu, giảm rủi ro ảnh hưởng chức
+    // năng khác của module phức tạp nhất trong 9 module này.
+    renderOperationList('operationOrders');
+  }
+
+  // "Việc B" (MỚI, 11/2026) — Ngân Sách KHÔNG nằm trong Hộp Thư Phê Duyệt (quyết định v23.0, xem chú
+  // thích ở routes/approvals.js computeMyPendingBudgetSignature()) nên không chung khuôn renderApprovalHub()
+  // ở trên, nhưng VẪN cần tự vẽ lại NẾU người dùng đang đứng đúng sub-tab "✅ Duyệt" của Ngân Sách
+  // (activeBudgetLineTab, module-ngansach.js) khi có dòng Đề Xuất mới chờ duyệt — mirror ĐÚNG khuôn gọi
+  // renderBudgetLineList(stage) mà tab-switch function của module đó tự gọi (stage='APPROVED' cho tab
+  // Duyệt, 'PROPOSED' cho tab Đề Xuất — người đề xuất cũng nên thấy ngay trạng thái dòng mới của mình).
+  if (!document.getElementById('budgetSection').classList.contains('hidden')
+      && (activeBudgetLineTab === 'PROPOSE' || activeBudgetLineTab === 'APPROVE')) {
+    renderBudgetLineList(activeBudgetLineTab === 'PROPOSE' ? 'PROPOSED' : 'APPROVED');
+  }
 }
 
 // Đăng xuất phía server (xoá cookie phiên) — chạy song song (fire-and-forget), không chặn việc dọn

@@ -53,6 +53,15 @@ function buildFixtureAppData() {
     operationOrderStoreTierWorkflows: {},
     operationOrderHOTierWorkflows: { LT100M: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
 
+    // budgetLines (MỚI, 11/2026, "Việc B" — computeMyPendingBudgetSignature(), routes/approvals.js): KHÔNG
+    // đi qua computeMyPendingApprovalKeys()/'keys' (quyết định v23.0 giữ nguyên, Ngân Sách không ở Hộp Thư
+    // Phê Duyệt) — chỉ cần 1 dòng PROPOSED (501) + 1 dòng KHÔNG PROPOSED (502, phải bị loại khỏi chữ ký)
+    // để Phần B bên dưới kiểm tra đúng filter + gate quyền budgetManage/admin.
+    budgetLines: [
+      { id: 501, dept: 'Kế Toán', stage: 'PROPOSED', status: 'SUBMITTED' },
+      { id: 502, dept: 'Kế Toán', stage: 'APPROVED', status: 'SUBMITTED' }
+    ],
+
     // ----- Collection hồ sơ (đã migrate sang dbo.Records — ở đây chỉ là mảng JS thuần, hàm test không
     // quan tâm nguồn lưu trữ thật) — mỗi module: 1 bản ghi duyet1 ĐƯỢC duyệt + 1 bản ghi PHẢI bị loại
     // (khác phòng ban/đã xử lý xong/thiếu quyền) để phép thử thật sự kiểm tra được bộ lọc, không chỉ
@@ -148,7 +157,7 @@ const DUYET1 = {
   username: 'duyet1', name: 'Người Duyệt Một', dept: 'Kế Toán',
   perms: {
     admin: false, meetingApprove: true, internalPostApprove: true, licenseApprove: true,
-    paymentManage: true, itPriceEmergencyRejectApproveRetail: true,
+    paymentManage: true, itPriceEmergencyRejectApproveRetail: true, budgetManage: true,
     // operationOrderReceiptManage: quyền RIÊNG (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung"), KHÔNG còn mirror
     // quần thể duyệt/từ chối dept-workflow của đơn hàng nữa — xem isApproverForOperationOrderReceipt()
     // (lib/recordActions.js). Chỉ cấp scope 'HO' (KHÔNG all:true) để bài test dưới còn phân biệt được
@@ -536,6 +545,37 @@ async function runPartB(run) {
       const res = await api('GET', '/api/approvals/pending-signature', 'khong.duyet');
       assertEqual(res.status, 200);
       assertEqual(res.body.keys.length, 0, JSON.stringify(res.body));
+    });
+
+    // ==========================================================================
+    // "Việc B" (MỚI, 11/2026) — budgetSignature: KHÔNG gộp vào 'keys'/'count' (Ngân Sách vẫn ngoài Hộp Thư
+    // Phê Duyệt, quyết định v23.0 giữ nguyên), nhưng PHẢI có mặt trong body để client (core.js
+    // runApprovalPollTick()) phát hiện thay đổi dòng Đề Xuất và tự vẽ lại đúng tab "✅ Duyệt" Ngân Sách.
+    // ==========================================================================
+    await run.run('budgetSignature: duyet1 (có budgetManage) nhận chữ ký KHÔNG RỖNG, chỉ gồm dòng PROPOSED (501), KHÔNG gồm dòng APPROVED (502)', async () => {
+      resetAppDataState();
+      const res = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      assertEqual(res.status, 200);
+      assert(typeof res.body.budgetSignature === 'string', 'body.budgetSignature phải là chuỗi');
+      assert(res.body.budgetSignature.includes('501'), 'chữ ký phải gồm id dòng PROPOSED (501): ' + res.body.budgetSignature);
+      assert(!res.body.budgetSignature.includes('502'), 'chữ ký KHÔNG được gồm id dòng APPROVED (502, không phải PROPOSED): ' + res.body.budgetSignature);
+      assert(!res.body.keys.some(k => k.startsWith('budget')), 'budgetSignature KHÔNG được gộp vào keys/count của Hộp Thư Phê Duyệt (quyết định v23.0)');
+    });
+
+    await run.run('budgetSignature: outsider (KHÔNG budgetManage/admin) nhận chữ ký RỖNG dù CÓ dòng PROPOSED tồn tại', async () => {
+      resetAppDataState();
+      const res = await api('GET', '/api/approvals/pending-signature', 'khong.duyet');
+      assertEqual(res.status, 200);
+      assertEqual(res.body.budgetSignature, '', 'outsider không có quyền budgetManage/admin -> budgetSignature phải rỗng');
+    });
+
+    await run.run('budgetSignature: thêm 1 dòng PROPOSED mới -> chữ ký đổi (trigger đúng khuôn add-rồi-resolve ở keys)', async () => {
+      resetAppDataState();
+      const r0 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      APP_DATA_STATE.budgetLines.push({ id: 503, dept: 'Kế Toán', stage: 'PROPOSED', status: 'SUBMITTED' });
+      const r1 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      assert(r1.body.budgetSignature !== r0.body.budgetSignature, 'thêm 1 dòng Đề Xuất mới phải đổi budgetSignature');
+      assert(r1.body.budgetSignature.includes('503'), 'chữ ký mới phải gồm id dòng vừa thêm (503): ' + r1.body.budgetSignature);
     });
 
     // ==========================================================================

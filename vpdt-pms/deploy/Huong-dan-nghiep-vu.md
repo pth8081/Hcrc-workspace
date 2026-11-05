@@ -701,6 +701,22 @@ tải lại + áp lại đúng phần mình vừa sửa + lưu lại 1 lần" (t
 Dùng & Phân Quyền → Nhóm Phân Quyền) — nhiều admin cùng sửa các nhóm khác
 nhau gần như đồng thời sẽ không còn bị báo lỗi xung đột giả nữa.
 
+**11/2026 — mở rộng "tự làm mới" sang ĐÚNG tab "Phê duyệt" riêng của 9 module**:
+trước đây cơ chế polling nhẹ ở trên CHỈ tự vẽ lại màn Hộp Thư Phê Duyệt tổng
+hợp (mục này) — người dùng đang đứng sẵn ở tab "Phê duyệt" riêng của 1 module
+cụ thể (Tài liệu, Văn Bản Trình, Hợp Đồng, Phòng Họp, Đăng Ký Xe, VPP, Văn
+Phòng — cả Mua Bán/Sửa Chữa lẫn Thanh Toán, Vận Hành — Đơn Hàng) phải tự F5
+hoặc chuyển qua tab khác rồi quay lại mới thấy hồ sơ mới cần duyệt/kết quả vừa
+xử lý xong của người khác. Nay 9 tab này cũng tự vẽ lại theo cùng nhịp, không
+cần làm gì thêm — vẫn giữ nguyên bộ lọc/trang đang xem.
+
+**11/2026 — Ngân Sách cũng tự làm mới tab "✅ Duyệt"/"📝 Đề Xuất"**: Ngân Sách
+KHÔNG nằm trong Hộp Thư Phê Duyệt chung (đã gỡ từ v23.0, duyệt NGAY tại module
+Ngân Sách) nên trước đây KHÔNG tự làm mới theo cơ chế trên — người có quyền
+duyệt Ngân Sách đang đứng ở tab "✅ Duyệt" phải tự F5 mới thấy dòng Đề Xuất mới
+ai đó vừa gửi. Nay tab "✅ Duyệt"/"📝 Đề Xuất" của Ngân Sách cũng tự vẽ lại
+theo cùng nhịp polling, không cần làm gì thêm.
+
 ### 3.5. Ví dụ cấu hình cụ thể
 
 **Yêu cầu**: "Trưởng phòng Pháp Chế duyệt bước 2 của quy trình Hợp Đồng."

@@ -50,6 +50,24 @@ const RECORD_COLLECTIONS_NEEDED = [
   'uniformPeriods', 'uniformTransfers', 'leaveRequests', 'shiftSwapRequests', 'shiftRoster', 'trainingRegistrations'
 ];
 
+// budgetSignature (MỚI, 11/2026, phản hồi người dùng "Ngân Sách không tự hiện dòng mới cần duyệt"): Ngân
+// Sách CỐ Ý không nằm trong computeMyPendingApprovalKeys()/'keys' ở trên (quyết định v23.0 — Ngân Sách đã
+// bị gỡ khỏi Hộp Thư Phê Duyệt, duyệt NGAY tại module Ngân Sách, không qua Hub) — nhưng module đó lại
+// KHÔNG có polling riêng, nên 1 dòng "Đề Xuất" mới chờ ai đó có quyền budgetManage duyệt sẽ không tự hiện
+// ra cho người duyệt cho tới khi có việc KHÁC (không liên quan Ngân Sách) khiến 'keys' đổi, hoặc F5. Tính
+// riêng 1 "chữ ký" NHẸ (chỉ id các dòng đang PROPOSED, KHÔNG gộp vào 'keys'/badge Hub — giữ nguyên quyết
+// định v23.0) để client (runApprovalPollTick(), core.js) phát hiện thay đổi và tự vẽ lại ĐÚNG tab "✅ Duyệt"
+// của Ngân Sách NẾU đang đứng đúng màn đó — cùng khuôn vá cho 9 module khác ở đợt này (xem core.js).
+// canManageBudget() (lib/recordActions.js) là quyền PHẲNG (không theo phòng ban) nên không cần lọc dept.
+function computeMyPendingBudgetSignature(user, budgetLines) {
+  if (!(user.perms?.admin || user.perms?.budgetManage)) return '';
+  return (budgetLines || [])
+    .filter((l) => l.stage === 'PROPOSED')
+    .map((l) => l.id)
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
 // GET /api/approvals/pending-signature -> { count, keys }. "keys" là dữ liệu client THỰC SỰ cần để so
 // sánh (xem chú thích đầu file) — "count" chỉ kèm thêm cho tiện gỡ lỗi/log, không dùng để quyết định gì.
 router.get('/pending-signature', async (req, res) => {
@@ -57,8 +75,9 @@ router.get('/pending-signature', async (req, res) => {
     // Tái sử dụng ĐÚNG 2 lớp cache ngắn hạn (3s, chung APPDATA_CACHE_TTL_MS) mà GET /api/data đang dùng
     // (lib/appData.js + lib/recordStore.js) — không thêm tầng cache mới, cùng mức chặn tải DB dù polling
     // dồn dập từ nhiều người dùng cùng lúc. Đọc SONG SONG (Promise.all), cùng lý do GET /api/data.
-    const [cachedAppData, ...collectionResults] = await Promise.all([
+    const [cachedAppData, budgetLines, ...collectionResults] = await Promise.all([
       getAllAppDataWithVersionsCached(),
+      getAllForCollectionCached('budgetLines'),
       ...RECORD_COLLECTIONS_NEEDED.map(collection => getAllForCollectionCached(collection))
     ]);
     // Shallow-clone giống hệt GET /api/data (routes/data.js) — cachedAppData.data DÙNG CHUNG giữa nhiều
@@ -67,7 +86,8 @@ router.get('/pending-signature', async (req, res) => {
     RECORD_COLLECTIONS_NEEDED.forEach((collection, i) => { appData[collection] = collectionResults[i]; });
 
     const keys = computeMyPendingApprovalKeys(req.freshUser, appData);
-    res.json({ count: keys.length, keys });
+    const budgetSignature = computeMyPendingBudgetSignature(req.freshUser, budgetLines);
+    res.json({ count: keys.length, keys, budgetSignature });
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/approvals/pending-signature', 'Không thể tải danh sách hồ sơ chờ bạn duyệt');
   }
