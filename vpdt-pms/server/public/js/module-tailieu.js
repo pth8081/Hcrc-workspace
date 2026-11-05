@@ -1795,7 +1795,7 @@ async function approveDocConfirmed(docId) {
   }
 
   logSystemAction('DOC', 'APPROVE_DOC', `Phê duyệt tài liệu [${updatedDoc.code}] thành công.`, 'SUCCESS', updatedDoc.code);
-  alert(msg);
+  showApprovalToast(msg);
   renderDocs();
   refreshApprovalSurfaces();
 }
@@ -1823,7 +1823,7 @@ async function rejectDoc(docId) {
     `[VPDT] Tài liệu ${updatedDoc.code} bị từ chối`,
     `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã bị từ chối/trả về.`,
     reason);
-  alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
+  showApprovalToast('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
   renderDocs();
   refreshApprovalSurfaces();
 }

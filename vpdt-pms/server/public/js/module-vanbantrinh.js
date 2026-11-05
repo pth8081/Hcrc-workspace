@@ -1138,7 +1138,7 @@ async function processSubmission(actionType) {
   }
 
   logSystemAction('SUBMISSION', `PROCESS_${actionType}`, `Xử lý tờ trình [${updatedSub.code}]: ${actionType}`, 'SUCCESS', updatedSub.code);
-  alert(msg);
+  showApprovalToast(msg);
   closeProcessSubmissionModal();
   renderSubmissionReqs();
   refreshApprovalSurfaces();

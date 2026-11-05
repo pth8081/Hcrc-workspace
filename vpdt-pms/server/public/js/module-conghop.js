@@ -408,7 +408,7 @@ async function approveHacLeaveRequestConfirmed(id) {
     hacApplyLeaveRequestUpdate(result.item);
     await initDatabase(currentUser);
     renderHacApproveView();
-    alert('✅ Đã duyệt đơn nghỉ phép.');
+    showApprovalToast('✅ Đã duyệt đơn nghỉ phép.');
   } catch (err) {
     alert('⛔ ' + err.message);
   }
@@ -547,7 +547,7 @@ async function approveHacSwapRequestConfirmed(id) {
     hacApplySwapUpdate(result.item);
     await initDatabase(currentUser);
     renderHacRosterView();
-    alert('✅ Đã duyệt đổi ca.');
+    showApprovalToast('✅ Đã duyệt đổi ca.');
   } catch (err) {
     alert('⛔ ' + err.message);
   }

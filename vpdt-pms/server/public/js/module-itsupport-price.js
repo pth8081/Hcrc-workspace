@@ -1474,9 +1474,9 @@ async function approveItPriceConfirmed(id) {
   }
 
   logSystemAction('IT_SUPPORT', 'APPROVE_IT_PRICE', `Phê duyệt đề xuất giá [${updated.code}] thành công.`, 'SUCCESS', updated.code);
-  alert(msg);
+  showApprovalToast(msg);
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
   refreshApprovalSurfaces();
 }
 
@@ -1503,9 +1503,9 @@ async function rejectItPrice(id) {
     `[VPDT] Đề xuất duyệt giá ${updated.code} bị từ chối`,
     `Đề xuất duyệt giá (${updated.code}) của bạn đã bị từ chối.`,
     reason);
-  alert('❌ Đã từ chối đề xuất duyệt giá!');
+  showApprovalToast('❌ Đã từ chối đề xuất duyệt giá!');
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
   refreshApprovalSurfaces();
 }
 
@@ -1568,9 +1568,9 @@ async function applyItPriceAction(id) {
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPLIED', p.code, [result.item.creator],
     `[VPDT] Đề xuất duyệt giá ${p.code} đã áp giá xong`,
     `Đề xuất duyệt giá (${p.code}) của bạn đã được đội Hỗ Trợ IT áp giá vào hệ thống bán hàng, hoàn tất toàn bộ quy trình.`);
-  alert('✅ Đã xác nhận áp giá thành công!');
+  showApprovalToast('✅ Đã xác nhận áp giá thành công!');
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 function deleteItPriceAction(id) {
@@ -2173,9 +2173,9 @@ async function requestItPriceInfoApprover(id) {
     `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
     `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung.`,
     reason.trim());
-  alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
+  showApprovalToast('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 // "Từ chối khẩn cấp" — chỉ đúng người đã duyệt bước cuối cùng (isFinalStepApproverOfItPriceClient()) mới
@@ -2203,10 +2203,10 @@ async function requestItPriceEmergencyRejectAction(id) {
       `${currentUser.name} đã gửi yêu cầu Từ chối khẩn cấp cho đề xuất duyệt giá "${updated.productName}" (${updated.code}).`,
       reason.trim());
   }
-  alert('✅ Đã gửi yêu cầu Từ chối khẩn cấp — chờ người có quyền xét duyệt.');
+  showApprovalToast('✅ Đã gửi yêu cầu Từ chối khẩn cấp — chờ người có quyền xét duyệt.');
   refreshApprovalSurfaces();
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 async function approveItPriceEmergencyRejectAction(id) {
@@ -2223,10 +2223,10 @@ async function approveItPriceEmergencyRejectAction(id) {
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED', updated.code, [updated.creator],
     `[VPDT] Đề xuất duyệt giá ${updated.code} đã bị từ chối khẩn cấp`,
     `${currentUser.name} đã duyệt yêu cầu Từ chối khẩn cấp — đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã chuyển sang Từ chối.`);
-  alert('✅ Đã duyệt — hồ sơ chuyển sang Từ chối.');
+  showApprovalToast('✅ Đã duyệt — hồ sơ chuyển sang Từ chối.');
   refreshApprovalSurfaces();
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 async function denyItPriceEmergencyRejectAction(id) {
@@ -2250,10 +2250,10 @@ async function denyItPriceEmergencyRejectAction(id) {
       `${currentUser.name} đã từ chối yêu cầu Từ chối khẩn cấp của bạn cho đề xuất "${updated.productName}" (${updated.code}).`,
       comment.trim());
   }
-  alert('❌ Đã từ chối yêu cầu Từ chối khẩn cấp.');
+  showApprovalToast('❌ Đã từ chối yêu cầu Từ chối khẩn cấp.');
   refreshApprovalSurfaces();
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 // Yêu Cầu Bổ Sung từ đội Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá) — route riêng (không đi qua
@@ -2277,9 +2277,9 @@ async function requestItPriceInfoIt(id) {
     `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
     `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung.`,
     reason.trim());
-  alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
+  showApprovalToast('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 let itPriceSupplementPendingFile = null;
@@ -2334,9 +2334,9 @@ async function submitItPriceSupplementAction(id) {
   if (idx !== -1) DB.itPriceApprovals[idx] = updated;
   itPriceSupplementPendingFile = null;
   logSystemAction('IT_SUPPORT', 'SUBMIT_IT_PRICE_SUPPLEMENT', `Tải lên tệp bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
-  alert('✅ Đã gửi tệp bổ sung — không thay thế tệp gốc, người duyệt/IT sẽ thấy cả bảng so sánh.');
+  showApprovalToast('✅ Đã gửi tệp bổ sung — không thay thế tệp gốc, người duyệt/IT sẽ thấy cả bảng so sánh.');
   renderItPriceApprovals();
-  if (currentItPriceModalId === id) renderItPriceModal();
+  if (currentItPriceModalId === id) closeItPriceModal();
 }
 
 // ----- 🎫 Hỗ Trợ Yêu Cầu -----

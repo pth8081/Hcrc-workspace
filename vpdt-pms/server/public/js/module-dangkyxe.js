@@ -1593,7 +1593,7 @@ async function processCarReg(actionType) {
   }
 
   logSystemAction('CAR', `PROCESS_${actionType}`, `Xử lý đăng ký xe [${updatedCar.code}]: ${actionType}`, 'SUCCESS', updatedCar.code);
-  alert(msg);
+  showApprovalToast(msg);
   closeCarProcessModal();
   renderCarRegs();
   refreshApprovalSurfaces();

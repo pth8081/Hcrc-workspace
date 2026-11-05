@@ -71,6 +71,9 @@ async function main() {
     // ---------- Test doubles: fetch stub + alert/confirm capture ----------
     const alerts = [];
     window.alert = (m) => { alerts.push(String(m)); };
+    // showApprovalToast() (core.js, 11/2026) thay alert() chặn thao tác cho kết quả Duyệt/Từ chối — ghi
+    // vào CÙNG mảng alerts để assertion cũ không cần sửa, không thật sự vẽ DOM (không cần cho test này).
+    window.showApprovalToast = (m) => { alerts.push(String(m)); };
     window.confirm = () => true;
     let promptAnswer = null;
     window.prompt = () => promptAnswer;

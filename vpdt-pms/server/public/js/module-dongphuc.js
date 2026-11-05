@@ -534,7 +534,7 @@ function approveUniformPeriodAction(periodId) {
       const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
       if (idx !== -1) DB.uniformPeriods[idx] = result.item;
       logSystemAction('UNIFORM', 'APPROVE_UNIFORM_PERIOD', `Duyệt kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
-      alert('✅ Đã duyệt kỳ cấp phát!');
+      showApprovalToast('✅ Đã duyệt kỳ cấp phát!');
       renderUniformPeriodsList();
     }
   });
@@ -1653,7 +1653,7 @@ function approveUniformTransferAction(id) {
       const idx = DB.uniformTransfers.findIndex(x => x.id === id);
       if (idx !== -1) DB.uniformTransfers[idx] = result.item;
       logSystemAction('UNIFORM', 'APPROVE_UNIFORM_TRANSFER', `Duyệt điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
-      alert('✅ Đã duyệt điều chuyển kho! Hàng đang vận chuyển, chờ siêu thị đích xác nhận đã nhận.');
+      showApprovalToast('✅ Đã duyệt điều chuyển kho! Hàng đang vận chuyển, chờ siêu thị đích xác nhận đã nhận.');
       renderUniformTransferApprovalQueue();
       renderUniformTransferCancelQueue();
       renderUniformTransferReceiveQueue();

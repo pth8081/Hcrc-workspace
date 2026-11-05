@@ -398,7 +398,7 @@ function approveBudgetLineDraft(id, stage) {
       if (idx !== -1) DB.budgetLines[idx] = result.item;
       if (result.usedItem) DB.budgetLines.unshift(result.usedItem);
       logSystemAction('BUDGET', 'APPROVE_BUDGET_LINE', `Duyệt dòng ${isProposal ? 'Đề Xuất' : 'Phê Duyệt'} ngân sách [${result.item.content}]`, 'SUCCESS', String(id));
-      alert(isProposal ? '✅ Đã duyệt đề xuất!' : '✅ Đã duyệt — đã tự sinh dòng Sử Dụng!');
+      showApprovalToast(isProposal ? '✅ Đã duyệt đề xuất!' : '✅ Đã duyệt — đã tự sinh dòng Sử Dụng!');
       renderBudgetLineList(stage);
     }
   });

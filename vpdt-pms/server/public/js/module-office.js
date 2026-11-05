@@ -778,7 +778,7 @@ async function processOfficeReq(actionType) {
   }
 
   logSystemAction('OFFICE', `PROCESS_${actionType}`, `Xử lý đề xuất văn phòng [${updatedOffice.code}]: ${actionType}`, 'SUCCESS', updatedOffice.code);
-  alert(msg);
+  showApprovalToast(msg);
   closeOfficeProcessModal();
   renderOfficeReqs();
   refreshApprovalSurfaces();

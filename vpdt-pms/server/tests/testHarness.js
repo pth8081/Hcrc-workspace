@@ -1057,6 +1057,15 @@ async function launchPage(port, state) {
     window.alert = (msg) => { window.__alerts.push(String(msg)); };
     window.confirm = (msg) => { window.__confirms.push(String(msg)); return true; };
     window.prompt = (msg) => { window.__prompts.push(String(msg)); return window.__promptAnswer; };
+    // showApprovalToast() (core.js, 11/2026) thay alert() chặn thao tác cho kết quả Duyệt/Từ chối... —
+    // ghi vào CÙNG window.__alerts để test cũ (assertIncludes(result.alerts, ...)) không cần sửa gì, ĐỒNG
+    // THỜI vẫn gọi tiếp bản THẬT (giữ hành vi vẽ DOM/tự ẩn thật) để demo script nào cần chụp ảnh toast
+    // thật vẫn hoạt động — không mất gì so với chỉ capture suông.
+    const __realShowApprovalToast = window.showApprovalToast;
+    window.showApprovalToast = (msg, tone) => {
+      window.__alerts.push(String(msg));
+      if (typeof __realShowApprovalToast === 'function') __realShowApprovalToast(msg, tone);
+    };
 
     // POST /api/upload (multipart FormData) — File objects don't survive the exposeFunction() CDP
     // boundary to the Node side, so this is faked entirely in-page (mirrors tests/test-doc.js's inline

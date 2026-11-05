@@ -1488,7 +1488,7 @@ function approveContractAction(id) {
       } else if (transition.type === 'PARTIAL_APPROVE') {
         msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
       }
-      alert(msg);
+      showApprovalToast(msg);
       renderContracts();
       refreshApprovalSurfaces();
     })
@@ -1520,7 +1520,7 @@ function rejectContractAction(id) {
         `[VPDT] Hợp đồng ${updated.code} đã bị từ chối`,
         `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.`,
         reason.trim());
-      alert('❌ Đã từ chối hợp đồng!');
+      showApprovalToast('❌ Đã từ chối hợp đồng!');
       renderContracts();
       refreshApprovalSurfaces();
     }
@@ -1557,7 +1557,7 @@ function approveContractSignedFileAction(id) {
       if (transition.type === 'COMPLETED') msg = '✅ Duyệt tài liệu ký thành công — có thể chuyển sang thanh toán!';
       else if (transition.type === 'ADVANCED') msg = getStepAdvanceMessage(transition.stepApprovers);
       else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
-      alert(msg);
+      showApprovalToast(msg);
       renderContracts();
       refreshApprovalSurfaces();
     })
@@ -1585,7 +1585,7 @@ function rejectContractSignedFileAction(id) {
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
-      alert('❌ Đã từ chối tài liệu ký!');
+      showApprovalToast('❌ Đã từ chối tài liệu ký!');
       renderContracts();
       refreshApprovalSurfaces();
     }

@@ -3677,7 +3677,7 @@ async function processOperation(actionType) {
   }
 
   logSystemAction(meta.logModule, `PROCESS_${actionType}`, `Xử lý ${meta.subLabel.toLowerCase()} [${updated.code}]: ${actionType}`, 'SUCCESS', updated.code);
-  alert(msg);
+  showApprovalToast(msg);
   closeOperationProcessModal();
   renderOperationList(kind);
   refreshApprovalSurfaces();

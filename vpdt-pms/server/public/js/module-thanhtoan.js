@@ -954,7 +954,7 @@ function approvePaymentRequestAction(id) {
         notifyPaymentApprovalNeeded(updated, transition.nextApprovers, transition.nextStepName);
       }
       else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
-      alert(msg);
+      showApprovalToast(msg);
       renderPaymentRequests();
       renderPaymentManageTab();
       refreshApprovalSurfaces();

@@ -288,6 +288,9 @@ async function main() {
   await page.evaluate((seed) => {
     window.__alerts = [];
     window.alert = (m) => { window.__alerts.push(String(m)); };
+    // showApprovalToast() (core.js, 11/2026) thay alert() chặn thao tác cho kết quả Duyệt/Từ chối — ghi
+    // vào CÙNG mảng __alerts để assertion cũ không cần sửa, không thật sự vẽ DOM (không cần cho test này).
+    window.showApprovalToast = (m) => { window.__alerts.push(String(m)); };
     window.confirm = () => true;
     Object.assign(DB, seed);
   }, seedDB);

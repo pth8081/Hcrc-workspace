@@ -8593,6 +8593,33 @@ function closeGenericConfirmModal() {
   _pendingConfirmAction = null;
 }
 
+// Thông báo kết quả Duyệt/Từ chối/Yêu Cầu Bổ Sung... — TỰ biến mất, KHÔNG chặn thao tác như alert()
+// (11/2026, phản hồi người dùng: "ấn phê duyệt thì đóng màn hình luôn, không cần thao tác gì thêm" —
+// trước đây alert() của trình duyệt bắt buộc phải bấm OK mới cho làm gì tiếp, kể cả đóng modal chi tiết
+// phía sau nó dù modal đó đã gọi close...Modal() ngay sau alert() trong code). CHỈ dùng cho kết quả tức
+// thời của 1 hành động Duyệt/Từ chối/Bổ Sung/Hoàn tất... ở các module nghiệp vụ — KHÔNG dùng cho tổng kết
+// nhập liệu hàng loạt (Excel import/đồng bộ DSmart...) vì các thông báo đó thường liệt kê danh sách dòng
+// lỗi/bị bỏ qua mà người dùng cần chủ động đọc hết, không nên tự biến mất.
+let _approvalToastContainer = null;
+function showApprovalToast(message, tone) {
+  if (!_approvalToastContainer) {
+    _approvalToastContainer = document.createElement('div');
+    _approvalToastContainer.id = 'approvalToastContainer';
+    _approvalToastContainer.className = 'fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm';
+    document.body.appendChild(_approvalToastContainer);
+  }
+  const toneClass = tone === 'error' ? 'bg-rose-600' : tone === 'warning' ? 'bg-amber-500' : 'bg-emerald-600';
+  const el = document.createElement('div');
+  el.className = `${toneClass} text-white text-sm font-semibold px-4 py-3 rounded-lg shadow-xl whitespace-pre-line opacity-0 -translate-y-2 transition-all duration-300`;
+  el.textContent = message;
+  _approvalToastContainer.appendChild(el);
+  requestAnimationFrame(() => el.classList.remove('opacity-0', '-translate-y-2'));
+  setTimeout(() => {
+    el.classList.add('opacity-0');
+    setTimeout(() => el.remove(), 300);
+  }, 4000);
+}
+
 // Tách hành động ra khỏi biến toàn cục TRƯỚC khi đóng modal/gọi hành động — tránh trường hợp hành
 // động (vd mở tiếp modal xác thực mật khẩu/OTP của withApprovalAuth) vô tình bị closeGenericConfirmModal()
 // gọi sau đó xoá mất state đang cần dùng.

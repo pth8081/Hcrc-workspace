@@ -949,7 +949,7 @@ async function processVppReg(actionType) {
   }
 
   logSystemAction('VPP', `PROCESS_${actionType}`, `Xử lý đăng ký Văn phòng phẩm [${updatedReg.code}]: ${actionType}`, 'SUCCESS', updatedReg.code);
-  alert(msg);
+  showApprovalToast(msg);
   closeVppRegModal();
   renderVppRegistrations();
   refreshApprovalSurfaces();

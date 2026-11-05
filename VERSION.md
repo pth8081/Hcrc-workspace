@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**29.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.32 (2026-11): Màn hình Phê Duyệt (tất cả module) — bấm "Phê Duyệt" tự đóng ngay, bỏ alert() chặn
+thao tác
+
+Phản hồi người dùng kèm ảnh chụp màn Phê Duyệt Giá IT: "nếu ấn phê duyệt thì sẽ đóng màn hình phê duyệt
+luôn ko cần hiện ra thông báo nào khác để phải thao tác."
+
+**Nguyên nhân**: sau khi bấm "Phê Duyệt" trong hộp xác nhận, hệ thống dùng `alert()` gốc của trình duyệt
+để báo kết quả — bắt buộc người dùng phải bấm OK mới làm được gì tiếp, kể cả khi code phía sau đã gọi
+đóng modal chi tiết ngay sau đó. Riêng Phê Duyệt Giá IT còn tệ hơn: sau khi tắt alert(), modal chi tiết
+còn tự MỞ LẠI (vẽ lại nội dung thay vì đóng), bắt người dùng tự đóng thêm 1 lần nữa.
+
+**Sửa**: thêm `showApprovalToast()` (core.js) — thông báo dạng toast góc phải màn hình, tự biến mất sau
+4 giây, không chặn thao tác. Áp dụng cho toàn bộ 26 điểm gọi `alert()` sau khi Duyệt/Từ chối/Yêu Cầu Bổ
+Sung/Từ Chối Khẩn Cấp trên 12 module: Phê Duyệt Giá IT, Tài Liệu, Hợp Đồng, Thanh Toán, Văn Bản Trình,
+Vận Hành, VPP, Đăng Ký Xe, Văn Phòng, HCRC Đồng Hành (nghỉ phép/đổi ca), Đồng Phục, Ngân Sách — KHÔNG đụng
+tới các thông báo tổng kết nhập liệu hàng loạt (Excel import/đồng bộ DSmart) vì các thông báo đó thường
+có danh sách lỗi/dòng bị bỏ qua cần người dùng chủ động đọc hết. Riêng Phê Duyệt Giá IT: đổi tất cả
+`renderItPriceModal()` (vẽ lại, giữ mở) sau hành động quyết định thành `closeItPriceModal()` (đóng hẳn).
+
+**Build**: `showApprovalToast()` dùng class Tailwind mới (`fixed`, `z-[9999]`...) chưa từng xuất hiện ở
+đâu trong hệ thống trước đó — đã chạy lại `npm run build:css` và commit `public/tailwind.css` mới (đúng
+quy trình đã ghi chú sẵn ở `index.html`, thiếu bước này sẽ khiến toast không hiển thị dù code JS đúng).
+
+**Test**: `testHarness.js` (dùng chung nhiều file test) cập nhật để `showApprovalToast()` vừa ghi vào
+`window.__alerts` (test cũ không cần sửa gì) vừa gọi tiếp bản THẬT (để demo chụp ảnh toast thật hoạt
+động) + viết demo Playwright thật (`demo-approve-toast-autoclose.js`, chụp ảnh trước/trong/ngay sau/4s
+sau) xác nhận đúng: modal tự đóng ngay, toast hiện rồi tự biến mất, không cần thao tác gì thêm. Chạy lại
+11 bộ test liên quan tới tất cả module bị đụng (it-support/doc/submission/vpp/hopdong/payment/budget-
+lines/uniform/leave-shiftswap...) — toàn bộ pass (trừ 1 lỗi đã xác nhận có sẵn từ trước ở test-vpp.js,
+không liên quan đợt sửa này).
+
+**Deploy-impact:** 13 file client JS + 1 file CSS build (`tailwind.css`) — không đổi schema/`.env.example`/
+dependencies, chỉ copy code + `pm2 restart`.
 
 ## v29.31 (2026-11): Dashboard — tin ưu tiên Tuyển dụng không hiện ngay lúc đăng nhập, phải F5 mới thấy
 
