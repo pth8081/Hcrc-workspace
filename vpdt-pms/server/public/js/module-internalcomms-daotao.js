@@ -2141,8 +2141,17 @@ async function saveTrainingResult(regId) {
 // được từ 2 nơi: bảng Kết Quả của TỪNG lớp (renderTrainingResultsModalBody()) và hộp tổng hợp mọi yêu
 // cầu đang chờ ở đầu tab Lớp Học (renderTrainingCancelRequestsQueue()) — nên refresh cả 2 nơi sau khi
 // xong, bất kể request đến từ đâu (an toàn, không tồn tại thì DOM query trả về null, không lỗi gì).
-async function approveCancelTrainingRegAction(regId) {
-  if (!confirm('Duyệt yêu cầu huỷ đăng ký này? Học viên sẽ bị huỷ khỏi lớp học.')) return;
+function approveCancelTrainingRegAction(regId) {
+  const reg = (DB.trainingRegistrations || []).find(r => r.id === regId);
+  if (!reg) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>duyệt yêu cầu huỷ đăng ký</b> lớp "${escapeHtml(reg.classCode || '')}" của <b>${escapeHtml(reg.creatorName || '')}</b> không? Học viên sẽ bị huỷ khỏi lớp học.`,
+    confirmLabel: 'Duyệt',
+    onConfirm: () => approveCancelTrainingRegActionConfirmed(regId)
+  });
+}
+async function approveCancelTrainingRegActionConfirmed(regId) {
   let updated;
   try {
     const res = await callRecordAction('trainingRegistrations', regId, 'approve-cancel', {});

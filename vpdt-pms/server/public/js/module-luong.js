@@ -264,8 +264,17 @@ async function hrpSubmit(id) {
   try { hrpApplyPeriodUpdate((await hrpApiCall('POST', `/api/payroll/periods/${id}/submit`)).item); renderHrpPeriodsTable(); }
   catch (err) { alert('⛔ ' + err.message); }
 }
-async function hrpApprove(id) {
-  if (!confirm('Duyệt kỳ lương này?')) return;
+function hrpApprove(id) {
+  const p = (DB.payrollPeriods || []).find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>duyệt</b> kỳ lương ${p ? `Tháng ${escapeHtml(String(p.periodMonth))}/${escapeHtml(String(p.periodYear))}` : 'này'} không?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: () => hrpApproveConfirmed(id)
+  });
+}
+async function hrpApproveConfirmed(id) {
   try { hrpApplyPeriodUpdate((await hrpApiCall('POST', `/api/payroll/periods/${id}/approve`)).item); renderHrpPeriodsTable(); }
   catch (err) { alert('⛔ ' + err.message); }
 }

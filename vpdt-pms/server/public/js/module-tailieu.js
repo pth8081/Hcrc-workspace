@@ -1748,7 +1748,14 @@ function toggleUploadTypeExtFromCheckbox(moduleKey, ext, checkboxEl) {
 // tưởng cấu hình này áp dụng cho MỌI lượt duyệt của mình nhưng Tài Liệu/Hợp Đồng/VPP lại không được
 // bảo vệ. Nay áp cho cả 7 module (khớp routes/workflow.js APPROVAL_REAUTH_MODULES đã mở rộng).
 function approveDoc(docId) {
-  withApprovalAuth(() => approveDocConfirmed(docId));
+  const doc = DB.docs.find(d => d.id === docId);
+  if (!doc) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> tài liệu "${escapeHtml(doc.title)}" (${escapeHtml(doc.code)}) không?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: () => withApprovalAuth(() => approveDocConfirmed(docId))
+  });
 }
 async function approveDocConfirmed(docId) {
   const doc = DB.docs.find(d => d.id === docId);

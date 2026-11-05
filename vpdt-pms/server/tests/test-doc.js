@@ -289,7 +289,8 @@ async function main() {
       const doc = DB.docs.find(d => d.status === 'PENDING');
       approvedDocId = doc.id;
       const before = doc.status;
-      approveDoc(doc.id); // withApprovalAuth() runs actionFn immediately since perms.approverAuthLevel unset
+      approveDoc(doc.id); // opens showConfirmModal() first now — click "Đồng Ý" via runConfirmedAction()
+      runConfirmedAction(); // withApprovalAuth() runs actionFn immediately since perms.approverAuthLevel unset
       await new Promise(r => setTimeout(r, 0)); // let the async approveDocConfirmed() microtasks settle
 
       const updated = DB.docs.find(d => d.id === approvedDocId);
@@ -540,6 +541,7 @@ async function main() {
       // Duyệt lại bình thường sau khi bổ sung.
       alerts.length = 0;
       approveDoc(doc.id);
+      runConfirmedAction();
       await new Promise(r => setTimeout(r, 0));
       const docFinal = DB.docs.find(d => d.id === doc.id);
       check(

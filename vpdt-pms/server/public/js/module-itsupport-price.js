@@ -1414,7 +1414,14 @@ function renderItPriceApprovals() {
 }
 
 function approveItPrice(id) {
-  withApprovalAuth(() => approveItPriceConfirmed(id));
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> đề xuất duyệt giá (${escapeHtml(p.code)}) không?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: () => withApprovalAuth(() => approveItPriceConfirmed(id))
+  });
 }
 async function approveItPriceConfirmed(id) {
   const p = DB.itPriceApprovals.find(x => x.id === id);

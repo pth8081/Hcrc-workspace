@@ -515,7 +515,8 @@ async function main() {
     switchTab('meeting');
     const canApproveBefore = canApproveMeeting(currentUser);
     const canCancelOthersBefore = canCancelMeeting(currentUser, { creator: 'someone-else' });
-    runMeetingAction(meetingId, 'approve');
+    runMeetingAction(meetingId, 'approve'); // opens showConfirmModal() first now
+    runConfirmedAction(); // click "Phê Duyệt" to drive the actual approve call
     await new Promise((r) => setTimeout(r, 200));
     const statusAfterApprove = DB.meetings.find((m) => m.id === meetingId).status;
     runMeetingAction(meetingId, 'cancel');
@@ -546,7 +547,8 @@ async function main() {
   const m7 = await page.evaluate(({ a, b }) => { DB.meetings.push(a, b); }, { a: raceMeetingA, b: raceMeetingB });
   const m7result = await page.evaluate(async (meetingBId) => {
     window.__alerts = [];
-    runMeetingAction(meetingBId, 'approve');
+    runMeetingAction(meetingBId, 'approve'); // opens showConfirmModal() first now
+    runConfirmedAction(); // click "Phê Duyệt" to drive the actual approve call
     await new Promise((r) => setTimeout(r, 200));
     return { alerts: window.__alerts.slice(), status: DB.meetings.find((m) => m.id === meetingBId).status };
   }, raceMeetingB.id);

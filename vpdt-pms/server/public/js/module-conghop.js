@@ -392,8 +392,17 @@ function hacApplyLeaveRequestUpdate(item) {
   if (idx >= 0) DB.leaveRequests[idx] = item; else DB.leaveRequests.unshift(item);
 }
 
-async function approveHacLeaveRequest(id) {
-  if (!confirm('Duyệt đơn nghỉ phép này?')) return;
+function approveHacLeaveRequest(id) {
+  const r = (DB.leaveRequests || []).find(x => x.id === id);
+  if (!r) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>duyệt</b> đơn nghỉ phép của <b>${escapeHtml(r.employeeCode)}</b> (${escapeHtml(r.fromDate)} → ${escapeHtml(r.toDate)}) không?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: () => approveHacLeaveRequestConfirmed(id)
+  });
+}
+async function approveHacLeaveRequestConfirmed(id) {
   try {
     const result = await callRecordAction('leaveRequests', id, 'approve', {});
     hacApplyLeaveRequestUpdate(result.item);
@@ -522,8 +531,17 @@ async function cancelHacRoster(id) {
   }
 }
 
-async function approveHacSwapRequest(id) {
-  if (!confirm('Duyệt yêu cầu đổi ca này?')) return;
+function approveHacSwapRequest(id) {
+  const s = (DB.shiftSwapRequests || []).find(x => x.id === id);
+  if (!s) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>duyệt</b> yêu cầu đổi ca giữa <b>${escapeHtml(s.requesterEmployeeCode)}</b> và <b>${escapeHtml(s.targetEmployeeCode)}</b> không?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: () => approveHacSwapRequestConfirmed(id)
+  });
+}
+async function approveHacSwapRequestConfirmed(id) {
   try {
     const result = await callRecordAction('shiftSwapRequests', id, 'approve', {});
     hacApplySwapUpdate(result.item);

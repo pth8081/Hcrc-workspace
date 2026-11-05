@@ -1129,7 +1129,18 @@ function runMeetingAction(id, action) {
   }
 }
 
-async function approveMeeting(id) {
+function approveMeeting(id) {
+  const m = DB.meetings.find(item => item.id === id);
+  if (!m) return;
+  showConfirmModal({
+    title: 'Xác Nhận Phê Duyệt',
+    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> lịch đặt phòng "${escapeHtml(m.room)}" (${escapeHtml(m.code)}) không?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: () => approveMeetingConfirmed(id)
+  });
+}
+
+async function approveMeetingConfirmed(id) {
   const m = DB.meetings.find(item => item.id === id);
   if (!m) return;
 

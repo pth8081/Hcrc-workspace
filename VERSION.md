@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**29.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.28 (2026-11): Nút "Duyệt" — thêm hộp thoại xác nhận (Đồng Ý/Hủy) cho TẤT CẢ module còn thiếu
+
+Người dùng yêu cầu: bấm "Duyệt" phải hỏi lại xác nhận trước khi thực hiện (Đồng Ý mới thực sự duyệt,
+Hủy thì không làm gì), áp dụng cho TẤT CẢ module có luồng phê duyệt — để tránh bấm nhầm.
+
+Rà soát toàn hệ thống (mọi hàm `approve*`/nút "Duyệt"/"Phê duyệt") phát hiện: **phần lớn module đã có
+sẵn** hộp thoại xác nhận kiểu "Đồng Ý/Hủy" dùng chung (`showConfirmModal()`, core.js) — Đăng Ký Xe, Vận
+Hành, Văn Phòng, VPP, Văn Bản Trình, Hợp Đồng, Thanh Toán, Ngân Sách, Đồng Phục, Nhịp Sống nội bộ, Gia
+Hạn/Hủy Công Việc. Đợt này vá 2 nhóm còn thiếu:
+
+1. **Hoàn toàn chưa có xác nhận gì** (bấm Duyệt là thực hiện ngay) — bổ sung `showConfirmModal()`:
+   - **Phòng Họp** — `approveMeeting()` (module-phonghop.js), tách thành `approveMeeting()` (mở hộp
+     thoại) + `approveMeetingConfirmed()` (logic thật, giữ nguyên 100%).
+   - **Tài Liệu** (nút Duyệt chính của luồng xét duyệt) — `approveDoc()` (module-tailieu.js), giữ
+     nguyên chuỗi `withApprovalAuth()` (xác thực lại mật khẩu/OTP nếu có cấu hình) bên trong `onConfirm`.
+   - **Hỗ Trợ IT > Phê Duyệt Giá** — `approveItPrice()` (module-itsupport-price.js), cùng khuôn.
+2. **Có xác nhận nhưng dùng popup trình duyệt thô `confirm()`** — đổi sang `showConfirmModal()` đồng bộ
+   giao diện toàn hệ thống:
+   - Công & Phép: `approveHacLeaveRequest()`, `approveHacSwapRequest()` (module-conghop.js).
+   - Lương: `hrpApprove()` (module-luong.js).
+   - Đào Tạo: `approveCancelTrainingRegAction()` (module-internalcomms-daotao.js).
+
+Mỗi hàm được tách thành cặp `xxx()` (mở hộp thoại, hiện rõ tên/mã hồ sơ liên quan) + `xxxConfirmed()`
+(logic gọi API thật, giữ nguyên 100% không đổi) — không đổi hành vi/API call nào, chỉ thêm 1 bước xác
+nhận trước khi gọi.
+
+**Phạm vi KHÔNG đổi (cố ý)**: các action Từ Chối/Yêu Cầu Bổ Sung ở mọi module đã có bước nhập lý do bắt
+buộc (modal/prompt) — tự thân đã là 1 bước xác nhận, không cần thêm lớp Đồng Ý/Hủy nữa.
+
+**Thay đổi:** `public/js/module-phonghop.js`, `public/js/module-tailieu.js`,
+`public/js/module-itsupport-price.js`, `public/js/module-conghop.js`, `public/js/module-luong.js`,
+`public/js/module-internalcomms-daotao.js`.
+
+**Test kỹ trước merge:** vá kèm 2 file test (`tests/test-doc.js`, `tests/test-meeting-car.js`) gọi thẳng
+`approveDoc()`/`runMeetingAction(id,'approve')` — thêm bước `runConfirmedAction()` (mô phỏng bấm "Đồng
+Ý") khớp đúng pattern test-submission.js đã dùng cho `confirmProcessSubmission()`. Chạy lại 11 file test
+liên quan (test-doc.js 24/24, test-meeting-car.js 104/104 sau vá, test-meeting-dept-workflow.js 9/9,
+test-meeting-approval-hub-self-decide.js 7/7, test-it-support.js 24/24, test-itprice-approval-and-
+emergency.js 17/17, test-conghop-holiday-edit-ui.js 7/7, test-attendance-leave.js 74/74, test-payroll.js
+28/28, test-internal-training.js 53/53, test-selfapprove-leave-shiftswap-meeting.js 15/15) — tất cả
+PASS. `node -c` sạch toàn bộ `public/js/*.js`. Grep CSP sạch (không có inline handler/style mới).
+
+**Deploy-impact:** chỉ copy code + `pm2 restart`, không đổi `schema.sql`/`.env`/dependencies.
 
 ## v29.27 (2026-11): Email tự động — thêm khối "Lý do" (phê duyệt/từ chối/yêu cầu bổ sung) vào TẤT CẢ module
 
