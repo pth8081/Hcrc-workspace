@@ -573,6 +573,13 @@ function itPriceHasUnresolvedInfoRequest(p) {
 }
 
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
+// "Việc D" (MỚI, 11/2026) — mốc THẬT SỰ "DB.* vừa được tải lại từ server lúc nào" (set 1 LẦN ở cuối
+// initDatabase() khi thành công, KHÔNG set lại mỗi lần chỉ vẽ lại 1 màn nào đó từ dữ liệu ĐÃ CÓ sẵn trong
+// bộ nhớ — VD đổi bộ lọc/sắp xếp ở Hộp Thư Phê Duyệt KHÔNG gọi lại initDatabase() nên KHÔNG được tự ý coi
+// là "vừa cập nhật", nếu không nhãn "Cập nhật lúc..." sẽ nói dối người dùng là dữ liệu mới hơn thực tế).
+// Dùng chung cho updateApprovalHubLastUpdatedLabel() (core-approvalhub.js) — đặt ở core.js vì initDatabase()
+// nằm ở đây, không riêng Approval Hub (ai cần biết "DB.* mới tới đâu" đều đọc được biến này).
+let lastDbLoadAt = null;
 const DB = {
   depts: [], cats: [], stores: [], users: [], docs: [],
   deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
@@ -5847,6 +5854,7 @@ async function initDatabase(loggingInUser, opts) {
     // LỚP 1: lưu lại snapshot DB.* vừa tải xong (đã "gán/di trú" đầy đủ) để lượt đăng nhập KẾ TIẾP của
     // đúng tài khoản này có thể hiện giao diện ngay từ cache trong lúc chờ tải bản mới nhất ở nền.
     if (loggingInUser?.username) saveDbSnapshotToCache(loggingInUser);
+    lastDbLoadAt = new Date(); // "Việc D" — CHỈ set ở đúng điểm DB.* vừa tải lại từ server thành công.
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
     if (silent) throw e; // gọi ngầm phía sau -> để nơi gọi tự xử lý (giữ dữ liệu cũ, thử lại sau), không alert

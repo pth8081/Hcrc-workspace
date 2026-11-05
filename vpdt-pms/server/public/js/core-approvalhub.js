@@ -1007,4 +1007,46 @@ function renderApprovalHub() {
   `).join('');
 
   updateApprovalHubBadge();
+  // "Việc D" (11/2026) — mỗi lần bảng vẽ lại (cả nhịp poll ngầm 3s LẪN bấm nút "🔄 Làm Mới" tay) đều cập
+  // nhật mốc "Cập nhật lúc..." — xem refreshApprovalHubManually() ngay dưới.
+  updateApprovalHubLastUpdatedLabel();
+}
+
+// "Việc D" (MỚI, 11/2026, phản hồi người dùng "auto refresh... có phê duyệt nhưng chưa thấy để xử lý
+// tiếp"): nút "🔄 Làm Mới" TAY ở đầu màn Hộp Thư Phê Duyệt (index.html, #approvalHubRefreshBtn) — bấm là
+// tải lại NGAY, bỏ qua HẲN 2 lớp "chữ ký không đổi thì khỏi tải lại" của runApprovalPollTick() (core.js,
+// lastSeenApprovalSignature/lastAppliedApprovalSignature) vì đây là ý định CHỦ ĐỘNG của người dùng, không
+// phải nhịp ngầm — họ bấm nghĩa là họ MUỐN thấy đúng trạng thái mới nhất ngay lúc này, không cần chờ chữ
+// ký đổi.
+// LỖI ĐÃ VÁ TRƯỚC KHI KỊP ĐƯA VÀO PRODUCTION (tự rà soát lại trước khi báo hoàn tất, test thật phát hiện):
+// ban đầu gọi initDatabase(currentUser) KHÔNG kèm {silent:true} với ý định "để lỗi tự lộ ra ngoài cho
+// catch bên dưới xử lý" — nhưng initDatabase() ở chế độ KHÔNG silent lại TỰ alert() lỗi của CHÍNH NÓ rồi
+// NUỐT LUÔN (không throw lại, xem catch cuối initDatabase() — chỉ throw lại khi silent:true), khiến khối
+// catch bên dưới KHÔNG BAO GIỜ nhận được lỗi để tự alert thông báo rõ hơn ("⛔ Không thể làm mới: ...") —
+// y hệt lớp lỗi "silent giả" đã từng vá ở runApprovalPollTick() (task #133). Phải dùng {silent:true} để
+// initDatabase() NÉM LẠI lỗi, cho khối catch ở đây thật sự chạy.
+async function refreshApprovalHubManually() {
+  const btn = document.getElementById('approvalHubRefreshBtn');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Đang làm mới...'; }
+  try {
+    await initDatabase(currentUser, { silent: true });
+    renderApprovalHub();
+  } catch (e) {
+    alert('⛔ Không thể làm mới: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '🔄 Làm Mới'; }
+  }
+}
+
+function updateApprovalHubLastUpdatedLabel() {
+  const el = document.getElementById('approvalHubLastUpdated');
+  if (!el) return;
+  // LỖI ĐÃ VÁ TRƯỚC KHI KỊP ĐƯA VÀO PRODUCTION (tự rà soát lại trước khi báo hoàn tất): hàm này được gọi
+  // ở CUỐI MỌI lượt renderApprovalHub() (kể cả đổi bộ lọc/đổi chiều sắp xếp — KHÔNG hề tải lại DB.* từ
+  // server) — nếu dùng thẳng `new Date()` ở đây thì "Cập nhật lúc..." sẽ tự nhảy theo mỗi lần người dùng
+  // chỉ đổi bộ lọc, nói dối là dữ liệu vừa mới tải lại trong khi KHÔNG hề có request nào gửi đi. Đọc
+  // `lastDbLoadAt` (core.js, chỉ set đúng 1 chỗ — cuối initDatabase() khi tải THẬT thành công) để mốc này
+  // luôn phản ánh ĐÚNG lần tải dữ liệu gần nhất, dù renderApprovalHub() được gọi lại bao nhiêu lần không
+  // kèm tải mới (vẽ lại label = y nguyên giá trị cũ, không đổi).
+  el.innerText = lastDbLoadAt ? `Cập nhật lúc ${lastDbLoadAt.toLocaleTimeString('vi-VN')}` : '';
 }

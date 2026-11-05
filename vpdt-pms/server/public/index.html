@@ -706,6 +706,15 @@
         <h2 class="text-xl font-bold text-gray-800">✅ Phê Duyệt</h2>
         <p class="text-sm text-gray-500">Toàn bộ hồ sơ đang chờ ĐÚNG bạn duyệt, gộp từ mọi module — bấm Duyệt/Từ chối ngay tại đây không cần vào từng module. Đổi "Trạng thái" bên dưới để xem lại hồ sơ bạn đã duyệt/từ chối trước đây.</p>
       </div>
+      <!-- "Việc D" (11/2026, phản hồi người dùng "auto refresh... có phê duyệt nhưng chưa thấy để xử lý
+           tiếp"): nút làm mới TAY (bỏ qua 2 lớp "chữ ký không đổi thì khỏi tải lại" của nhịp poll ngầm —
+           xem refreshApprovalHubManually(), core-approvalhub.js) + mốc "Cập nhật lúc..." để người dùng tự
+           biết dữ liệu đang xem mới tới đâu, không phải đoán. updateApprovalHubLastUpdatedLabel() tự cập
+           nhật mốc này mỗi khi renderApprovalHub() chạy (cả nhịp poll ngầm LẪN bấm nút này). -->
+      <div class="text-right">
+        <button id="approvalHubRefreshBtn" type="button" data-op="refreshApprovalHubManually" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+        <div id="approvalHubLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+      </div>
     </div>
 
     <div class="bg-white p-3 rounded border flex flex-wrap gap-3 items-end">

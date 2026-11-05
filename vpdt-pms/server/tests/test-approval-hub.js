@@ -666,6 +666,71 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // "Việc D" (MỚI, 11/2026, phản hồi người dùng "auto refresh... có phê duyệt nhưng chưa thấy để xử lý
+  // tiếp"): nút "🔄 Làm Mới" TAY (#approvalHubRefreshBtn) + mốc "Cập nhật lúc..." (#approvalHubLastUpdated)
+  // — xem refreshApprovalHubManually()/updateApprovalHubLastUpdatedLabel() (core-approvalhub.js). Bấm
+  // THẬT qua .click() (đúng cơ chế CSP data-op, không gọi thẳng hàm JS) — xác nhận: (1) mốc thời gian tự
+  // hiện ngay khi vào màn (không cần bấm gì), (2) bấm nút tải lại DỮ LIỆU MỚI từ server (bỏ qua hẳn nhịp
+  // poll ngầm, không cần đợi "chữ ký" đổi), (3) mốc thời gian đổi sau khi bấm, (4) nút tự bật lại đúng
+  // nhãn gốc sau khi xong (không bị "kẹt" ở trạng thái "Đang làm mới...").
+  // ==========================================================================
+  await scenario('nút "🔄 Làm Mới" + mốc "Cập nhật lúc..." ở Hộp Thư Phê Duyệt', async () => {
+    const r = await page.evaluate(async () => {
+      // Reset về trạng thái bộ lọc SẠCH — nhiều scenario trước đó (đổi chiều sắp xếp, lọc theo Loại...)
+      // có thể còn để lại giá trị khác mặc định, không liên quan gì tới tính năng đang kiểm ở đây.
+      document.getElementById('approvalHubFilterStatus').value = 'PENDING';
+      document.getElementById('approvalHubFilterType').value = '';
+      document.getElementById('approvalHubSearch').value = '';
+      // Mirror ĐÚNG thực tế production: harness file này hand-seed DB.* trực tiếp (không qua
+      // proceedAfterAuth()/initDatabase() thật như testHarness.js các file khác — xem SETUP ở đầu file),
+      // nên lastDbLoadAt (core.js) chưa từng được set trước điểm này. Người dùng thật LUÔN có
+      // initDatabase() của chính lượt đăng nhập chạy xong TRƯỚC KHI vào được bất kỳ tab nào — giả lập
+      // đúng tiền đề đó ở đây (không phải "chữa cháy" cho lỗi gì, chỉ là mô phỏng đúng trạng thái đã có
+      // sẵn lúc đăng nhập mà scenario này không tự dựng lại từ đầu).
+      lastDbLoadAt = new Date();
+      await switchTab('approvalHub');
+      const labelOnOpen = document.getElementById('approvalHubLastUpdated').textContent;
+      const codesBefore = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim()).sort();
+
+      // Server có thêm 1 hồ sơ MỚI (TL-004) — mirror ĐÚNG "Object.assign({}, DB, {...})" để KHÔNG làm
+      // rỗng mất mọi collection khác test này đã seed (initDatabase() thật gán DB[key] = data[key] || []
+      // cho MỌI key nó quản lý, thiếu key nào trong body sẽ bị xoá rỗng key đó).
+      window.__fetchHandlers['GET /api/data'] = () => ({
+        status: 200,
+        body: Object.assign({}, DB, {
+          docs: [...DB.docs, { id: 104, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], displayCode: 'TL-004', title: 'Tài liệu MỚI xuất hiện sau khi bấm Làm Mới', createdAt: '2026-08-25' }]
+        })
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20)); // đảm bảo mốc giờ:phút:giây có cơ hội đổi (toLocaleTimeString không có phần giây lẻ).
+      document.getElementById('approvalHubRefreshBtn').click();
+      // click() chạy refreshApprovalHubManually() bất đồng bộ (fire-and-forget từ góc nhìn trình xử lý
+      // sự kiện) — chờ tới khi nút tự bật lại đúng nhãn gốc mới coi là đã xong, tránh race đọc kết quả
+      // quá sớm.
+      for (let i = 0; i < 50 && document.getElementById('approvalHubRefreshBtn').disabled; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      const btn = document.getElementById('approvalHubRefreshBtn');
+      const codesAfter = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim()).sort();
+      const labelAfterRefresh = document.getElementById('approvalHubLastUpdated').textContent;
+
+      delete window.__fetchHandlers['GET /api/data']; // dọn sạch cho scenario sau.
+      return { labelOnOpen, codesBefore, codesAfter, labelAfterRefresh, btnDisabledAfter: btn.disabled, btnLabelAfter: btn.textContent.trim() };
+    });
+    record('mốc "Cập nhật lúc..." tự hiện ngay khi vào màn Hộp Thư Phê Duyệt (không cần bấm Làm Mới)',
+      /^Cập nhật lúc \d{1,2}:\d{2}:\d{2}$/.test(r.labelOnOpen), JSON.stringify(r));
+    record('trước khi bấm "Làm Mới": chỉ 3 hồ sơ cũ (TL-001/VBT-001/HD-001), CHƯA có TL-004',
+      JSON.stringify(r.codesBefore) === JSON.stringify(['HD-001', 'TL-001', 'VBT-001']), JSON.stringify(r));
+    record('bấm THẬT nút "🔄 Làm Mới" (qua .click(), đúng cơ chế data-op) -> tải lại dữ liệu MỚI, bảng hiện thêm TL-004',
+      JSON.stringify(r.codesAfter) === JSON.stringify(['HD-001', 'TL-001', 'TL-004', 'VBT-001']), JSON.stringify(r));
+    record('mốc "Cập nhật lúc..." vẫn đúng định dạng sau khi bấm Làm Mới',
+      /^Cập nhật lúc \d{1,2}:\d{2}:\d{2}$/.test(r.labelAfterRefresh), JSON.stringify(r));
+    record('nút "🔄 Làm Mới" tự bật lại (không bị kẹt ở trạng thái disabled/"Đang làm mới...") sau khi xong',
+      r.btnDisabledAfter === false && r.btnLabelAfter === '🔄 Làm Mới', JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Access gating: a user in NO approval flow at all cannot open the hub.
   // ==========================================================================
   await scenario('canAccessApprovalHub()/switchTab() gate out a user with no approval flow at all', async () => {

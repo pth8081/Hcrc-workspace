@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**29.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.36 (2026-11): Hộp Thư Phê Duyệt — nút "🔄 Làm Mới" + mốc "Cập nhật lúc..."
+
+Phần cuối cùng của đợt "auto refresh" (sau Việc A/B ở v29.34): thêm nút "🔄 Làm Mới" TAY + mốc "Cập nhật
+lúc..." ở đầu màn "✅ Phê Duyệt" (Hộp Thư Phê Duyệt) — người dùng tự ép tải lại NGAY (bỏ qua hẳn 2 lớp
+"chữ ký không đổi thì khỏi tải lại" của nhịp poll ngầm), đồng thời luôn thấy rõ dữ liệu đang xem mới tới
+đâu, không phải đoán.
+
+**2 lỗi thật tự rà soát phát hiện VÀ vá TRƯỚC KHI đưa vào production (test thật bắt được, không phải suy
+đoán)**:
+1. `updateApprovalHubLastUpdatedLabel()` ban đầu dùng `new Date()` trực tiếp mỗi khi gọi — mà hàm này
+   chạy ở CUỐI MỌI lượt `renderApprovalHub()`, kể cả khi người dùng chỉ đổi bộ lọc/sắp xếp (KHÔNG hề tải
+   lại dữ liệu từ server) — khiến mốc "Cập nhật lúc..." tự nhảy theo đồng hồ dù không có request nào gửi
+   đi, nói dối người dùng về độ mới của dữ liệu. Sửa: thêm `lastDbLoadAt` (core.js, set ĐÚNG 1 chỗ — cuối
+   `initDatabase()` khi tải thành công thật sự), nhãn đọc biến này thay vì tự tạo `new Date()`.
+2. `refreshApprovalHubManually()` gọi `initDatabase(currentUser)` KHÔNG kèm `{silent:true}` với ý định để
+   lỗi "lộ ra ngoài" cho khối catch của chính nó tự alert rõ hơn ("⛔ Không thể làm mới: ...") — nhưng
+   `initDatabase()` ở chế độ KHÔNG silent lại TỰ alert lỗi CỦA CHÍNH NÓ rồi nuốt luôn (chỉ throw lại khi
+   silent:true), khiến khối catch bên ngoài không bao giờ chạy — dead code, cùng lớp lỗi "silent giả" đã
+   từng vá ở `runApprovalPollTick()` (task #133). Sửa: gọi `initDatabase(currentUser, {silent:true})`.
+
+**Test**: file mới `test-approval-hub-refresh.js` (4 kịch bản — mốc hiện đúng khi mở màn, GIỮ NGUYÊN khi
+chỉ đổi bộ lọc, cập nhật mới hơn sau khi bấm Làm Mới thật, alert() đúng lỗi + nút tự bật lại khi lỗi mạng)
+— 4/4 pass, chạy lại 3 lần không flaky. Thêm 1 kịch bản vào `test-approval-hub.js` hiện có (bấm THẬT qua
+`.click()`, xác nhận bảng tải thêm hồ sơ mới) — 62/62 pass. Chạy lại `test-approval-polling.js` (28/28) +
+`test-approval-poll-subtabs.js` (19/19) — không regression.
+
+**Deploy-impact:** `public/index.html` + `public/js/core.js` + `public/js/core-approvalhub.js` — không
+đổi schema/`.env.example`/dependencies, chỉ copy code + `pm2 restart`.
 
 ## v29.35 (2026-11): Vận Hành — cảnh báo mũi tên ▲/▼ so Giá Trị Đầu Tư (dự toán) vs Giá Trị Hợp Đồng (thực tế)
 
