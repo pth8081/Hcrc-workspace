@@ -3546,12 +3546,14 @@ async function processOperation(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
       `[VPDT] ${meta.subLabel} ${updated.code} cần bổ sung/chỉnh sửa`,
-      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Vận Hành để sửa và gửi lại.`);
+      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Vui lòng vào mục Vận Hành để sửa và gửi lại.`,
+      comment);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REJECTED', updated.code, [updated.creator],
       `[VPDT] ${meta.subLabel} ${updated.code} bị từ chối`,
-      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn đã bị từ chối.`,
+      comment);
     msg = '✅ Đã từ chối hồ sơ!';
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
@@ -3561,14 +3563,15 @@ async function processOperation(actionType) {
         buildApprovalNeededEmailBody({
           ticketType: meta.subLabel, ticketNumber: updated.code, summary: meta.titleField(updated),
           creatorName: updated.creatorName, creatorDept: updated.dept, createdAt: updated.createdAt,
-          stepName: transition.nextStepName
+          stepName: transition.nextStepName, previousStepNote: comment
         }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = `✅ Phê duyệt ${meta.subLabel.toLowerCase()} thành công!`;
     notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVED', updated.code, [updated.creator],
       `[VPDT] ${meta.subLabel} ${updated.code} đã được phê duyệt`,
-      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn đã được phê duyệt hoàn tất.`,
+      comment);
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }

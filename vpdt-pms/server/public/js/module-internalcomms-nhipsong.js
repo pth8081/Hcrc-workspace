@@ -960,7 +960,8 @@ function requestInternalPostInfoAction(id) {
       logSystemAction('INTERNAL', 'REQUEST_INFO_INTERNAL_POST', `Yêu cầu bổ sung bài Góc chia sẻ [${updated.code} - ${updated.title}] - ${comment.trim()}`, 'WARNING', updated.code);
       notifyUsersByEmail('INTERNAL', 'NOTIFY_NEED_INFO', updated.code, [updated.author],
         `[VPDT] Bài đăng "${updated.title}" cần bổ sung`,
-        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn cần bổ sung trước khi duyệt.\nNội dung: ${comment.trim()}`);
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn cần bổ sung trước khi duyệt.`,
+        comment.trim());
       closeInternalArticleModal();
       renderInternalPosts();
       refreshApprovalSurfaces();
@@ -2624,7 +2625,8 @@ function rejectInternalPostAction(id) {
       logSystemAction('INTERNAL', 'REJECT_INTERNAL_POST', `Từ chối bài Góc chia sẻ [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       notifyUsersByEmail('INTERNAL', 'NOTIFY_REJECTED', updated.code, [updated.author],
         `[VPDT] Bài đăng "${updated.title}" đã bị từ chối`,
-        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã bị từ chối.\nLý do: ${reason.trim()}`);
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã bị từ chối.`,
+        reason.trim());
       closeInternalArticleModal();
       renderInternalPosts();
       refreshApprovalSurfaces();

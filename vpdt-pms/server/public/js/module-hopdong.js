@@ -1518,7 +1518,8 @@ function rejectContractAction(id) {
       logSystemAction('CONTRACT', 'REJECT_CONTRACT', `Từ chối hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       notifyUsersByEmail('CONTRACT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
         `[VPDT] Hợp đồng ${updated.code} đã bị từ chối`,
-        `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.\nLý do: ${reason.trim()}`);
+        `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.`,
+        reason.trim());
       alert('❌ Đã từ chối hợp đồng!');
       renderContracts();
       refreshApprovalSurfaces();
@@ -1617,7 +1618,8 @@ function requestContractChangesAction(id) {
       logSystemAction('CONTRACT', 'REQUEST_CHANGES', `Yêu cầu bổ sung hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       notifyUsersByEmail('CONTRACT', 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
         `[VPDT] Hợp đồng ${updated.code} cần bổ sung/chỉnh sửa`,
-        `Hợp đồng "${updated.title}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${reason.trim()}. Vui lòng vào mục Hợp Đồng để sửa (nút "✏️ Sửa") — hệ thống tự gửi lại khi lưu.`);
+        `Hợp đồng "${updated.title}" (${updated.code}) của bạn cần được sửa lại. Vui lòng vào mục Hợp Đồng để sửa (nút "✏️ Sửa") — hệ thống tự gửi lại khi lưu.`,
+        reason.trim());
       alert('✅ Đã yêu cầu bổ sung — hợp đồng đã chuyển về NHÁP để người tạo sửa lại!');
       renderContracts();
       refreshApprovalSurfaces();

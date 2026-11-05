@@ -1483,7 +1483,8 @@ async function rejectItPrice(id) {
   logSystemAction('IT_SUPPORT', 'REJECT_IT_PRICE', `Từ chối đề xuất giá [${updated.code}]. Lý do: ${reason}`, 'SUCCESS', updated.code);
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
     `[VPDT] Đề xuất duyệt giá ${updated.code} bị từ chối`,
-    `Đề xuất duyệt giá (${updated.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
+    `Đề xuất duyệt giá (${updated.code}) của bạn đã bị từ chối.`,
+    reason);
   alert('❌ Đã từ chối đề xuất duyệt giá!');
   renderItPriceApprovals();
   if (currentItPriceModalId === id) renderItPriceModal();
@@ -2152,7 +2153,8 @@ async function requestItPriceInfoApprover(id) {
   logSystemAction('IT_SUPPORT', 'REQUEST_INFO_IT_PRICE', `Yêu cầu bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REQUEST_INFO', updated.code, [updated.creator],
     `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
-    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung: ${reason.trim()}`);
+    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung.`,
+    reason.trim());
   alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
   renderItPriceApprovals();
   if (currentItPriceModalId === id) renderItPriceModal();
@@ -2180,7 +2182,8 @@ async function requestItPriceEmergencyRejectAction(id) {
   if (approverUsernames.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST', updated.code, approverUsernames,
       `[VPDT] Yêu cầu Từ chối khẩn cấp cho ${updated.code} cần xét duyệt`,
-      `${currentUser.name} đã gửi yêu cầu Từ chối khẩn cấp cho đề xuất duyệt giá "${updated.productName}" (${updated.code}). Lý do: ${reason.trim()}`);
+      `${currentUser.name} đã gửi yêu cầu Từ chối khẩn cấp cho đề xuất duyệt giá "${updated.productName}" (${updated.code}).`,
+      reason.trim());
   }
   alert('✅ Đã gửi yêu cầu Từ chối khẩn cấp — chờ người có quyền xét duyệt.');
   refreshApprovalSurfaces();
@@ -2226,7 +2229,8 @@ async function denyItPriceEmergencyRejectAction(id) {
   if (updated.emergencyRejectRequestedBy) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED', updated.code, [updated.emergencyRejectRequestedBy],
       `[VPDT] Yêu cầu Từ chối khẩn cấp cho ${updated.code} bị từ chối`,
-      `${currentUser.name} đã từ chối yêu cầu Từ chối khẩn cấp của bạn cho đề xuất "${updated.productName}" (${updated.code}). Lý do: ${comment.trim()}`);
+      `${currentUser.name} đã từ chối yêu cầu Từ chối khẩn cấp của bạn cho đề xuất "${updated.productName}" (${updated.code}).`,
+      comment.trim());
   }
   alert('❌ Đã từ chối yêu cầu Từ chối khẩn cấp.');
   refreshApprovalSurfaces();
@@ -2253,7 +2257,8 @@ async function requestItPriceInfoIt(id) {
   logSystemAction('IT_SUPPORT', 'REQUEST_INFO_IT_PRICE', `Yêu cầu bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REQUEST_INFO', updated.code, [updated.creator],
     `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
-    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung: ${reason.trim()}`);
+    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung.`,
+    reason.trim());
   alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
   renderItPriceApprovals();
   if (currentItPriceModalId === id) renderItPriceModal();

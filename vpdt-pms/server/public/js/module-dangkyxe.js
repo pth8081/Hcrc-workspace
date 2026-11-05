@@ -1563,12 +1563,14 @@ async function processCarReg(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail('CAR', 'NOTIFY_REQUEST_CHANGES', updatedCar.code, [updatedCar.creator],
       `[VPDT] Đăng ký xe ${updatedCar.code} cần bổ sung/chỉnh sửa`,
-      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Đăng Ký Xe để sửa và gửi lại.`);
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn cần được sửa lại. Vui lòng vào mục Đăng Ký Xe để sửa và gửi lại.`,
+      comment);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người đăng ký sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', updatedCar.code, [updatedCar.creator],
       `[VPDT] Đăng ký xe ${updatedCar.code} bị từ chối`,
-      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã bị từ chối.`,
+      comment);
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {
@@ -1577,14 +1579,15 @@ async function processCarReg(actionType) {
         buildApprovalNeededEmailBody({
           ticketType: 'Đăng Ký Xe', ticketNumber: updatedCar.code, summary: updatedCar.destination,
           creatorName: updatedCar.creatorName, creatorDept: updatedCar.dept, createdAt: updatedCar.createdAt,
-          stepName: transition.nextStepName
+          stepName: transition.nextStepName, previousStepNote: comment
         }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đăng ký xe thành công!';
     notifyUsersByEmail('CAR', 'NOTIFY_APPROVED', updatedCar.code, [updatedCar.creator],
       `[VPDT] Đăng ký xe ${updatedCar.code} đã được phê duyệt`,
-      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã được phê duyệt hoàn tất.`,
+      comment);
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }

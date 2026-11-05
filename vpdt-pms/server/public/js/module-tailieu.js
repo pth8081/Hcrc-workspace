@@ -1814,7 +1814,8 @@ async function rejectDoc(docId) {
   logSystemAction('DOC', 'REJECT_DOC', `Từ chối tài liệu [${updatedDoc.code}]. Lý do: ${reason}`, 'SUCCESS', updatedDoc.code);
   notifyUsersByEmail('DOC', 'NOTIFY_REJECTED', updatedDoc.code, [updatedDoc.uploader],
     `[VPDT] Tài liệu ${updatedDoc.code} bị từ chối`,
-    `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã bị từ chối/trả về. Lý do: ${reason}`);
+    `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã bị từ chối/trả về.`,
+    reason);
   alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
   renderDocs();
   refreshApprovalSurfaces();

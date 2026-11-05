@@ -1095,12 +1095,14 @@ async function processSubmission(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_CHANGES', updatedSub.code, [updatedSub.creator],
       `[VPDT] Tờ trình ${updatedSub.code} cần bổ sung/chỉnh sửa`,
-      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Bản Trình để sửa và gửi lại.`);
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần được sửa lại. Vui lòng vào mục Văn Bản Trình để sửa và gửi lại.`,
+      comment);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người trình sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', updatedSub.code, [updatedSub.creator],
       `[VPDT] Tờ trình ${updatedSub.code} bị từ chối`,
-      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã bị từ chối/trả về.`,
+      comment);
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {
@@ -1109,14 +1111,16 @@ async function processSubmission(actionType) {
         buildApprovalNeededEmailBody({
           ticketType: 'Văn Bản Trình', ticketNumber: updatedSub.code, summary: updatedSub.title,
           creatorName: updatedSub.creatorName, creatorDept: updatedSub.dept, createdAt: updatedSub.createdAt,
-          stepName: transition.nextStepName, deadline: updatedSub.desiredApprovalDate, urgency: updatedSub.priority
+          stepName: transition.nextStepName, deadline: updatedSub.desiredApprovalDate, urgency: updatedSub.priority,
+          previousStepNote: comment
         }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt tờ trình thành công!';
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVED', updatedSub.code, [updatedSub.creator],
       `[VPDT] Tờ trình ${updatedSub.code} đã được phê duyệt`,
-      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã được phê duyệt hoàn tất.`,
+      comment);
 
     // TỰ ĐỘNG tạo Công việc theo dõi ngay khi có ý kiến chỉ đạo ở bước phê duyệt cuối cùng —
     // không cần bấm "📌 Giao việc" thủ công nữa. Chưa gán người nhận (theo yêu cầu), người

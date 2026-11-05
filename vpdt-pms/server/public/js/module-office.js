@@ -748,12 +748,14 @@ async function processOfficeReq(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail('OFFICE', 'NOTIFY_REQUEST_CHANGES', updatedOffice.code, [updatedOffice.creator],
       `[VPDT] Đề xuất văn phòng ${updatedOffice.code} cần bổ sung/chỉnh sửa`,
-      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Phòng Tổng Hợp để sửa và gửi lại.`);
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn cần được sửa lại. Vui lòng vào mục Văn Phòng Tổng Hợp để sửa và gửi lại.`,
+      comment);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', updatedOffice.code, [updatedOffice.creator],
       `[VPDT] Đề xuất văn phòng ${updatedOffice.code} bị từ chối`,
-      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã bị từ chối.`,
+      comment);
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {
@@ -762,14 +764,15 @@ async function processOfficeReq(actionType) {
         buildApprovalNeededEmailBody({
           ticketType: 'Đề Xuất Văn Phòng', ticketNumber: updatedOffice.code, summary: updatedOffice.title,
           creatorName: updatedOffice.creatorName, creatorDept: updatedOffice.dept, createdAt: updatedOffice.createdAt,
-          stepName: transition.nextStepName
+          stepName: transition.nextStepName, previousStepNote: comment
         }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
     notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', updatedOffice.code, [updatedOffice.creator],
       `[VPDT] Đề xuất văn phòng ${updatedOffice.code} đã được phê duyệt`,
-      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã được phê duyệt hoàn tất.`,
+      comment);
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }

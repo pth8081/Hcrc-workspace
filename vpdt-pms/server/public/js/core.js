@@ -7970,7 +7970,7 @@ function buildApprovalNeededEmailBody(opts) {
   const {
     ticketType, ticketNumber, summary,
     creatorName, creatorDept, createdAt,
-    stepName, actionRequired, deadline, urgency
+    stepName, actionRequired, deadline, urgency, previousStepNote
   } = opts || {};
   return [
     `Kính gửi ${APPROVAL_GREETING_PLACEHOLDER},`,
@@ -7986,6 +7986,9 @@ function buildApprovalNeededEmailBody(opts) {
     `- Yêu cầu: ${actionRequired || 'Phê duyệt'}`,
     `- Hạn xử lý: ${deadline || 'Không quy định'}`,
     `- Mức độ: ${urgency || 'Thường'}`,
+    // previousStepNote (11/2026) — CHỈ 1 dòng nếu người duyệt bước NGAY TRƯỚC có ghi chú (tuỳ chọn khi
+    // duyệt nên thường rỗng) — chỉ bước gần nhất, không gộp lịch sử nhiều bước trước đó.
+    ...(previousStepNote ? [`- Ghi chú của người duyệt bước trước: ${previousStepNote}`] : []),
     '',
     'Anh/Chị vui lòng truy cập đường dẫn dưới đây để xem chi tiết và xử lý phiếu:',
     APPROVAL_SIGNATURE_PLACEHOLDER
@@ -8079,7 +8082,7 @@ function renderPlainEmailBodyHtml(text) {
 function renderApprovalNeededEmailBodyHtml(greeting, opts) {
   const {
     ticketType, ticketNumber, summary, creatorName, creatorDept, createdAt,
-    stepName, actionRequired, deadline, urgency
+    stepName, actionRequired, deadline, urgency, previousStepNote
   } = opts || {};
   const rows = [
     ['Loại phiếu', ticketType || ''],
@@ -8097,6 +8100,10 @@ function renderApprovalNeededEmailBodyHtml(greeting, opts) {
     <td style="padding:12px 16px;font:600 13px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;">${escapeHtml(value)}</td></tr>
     ${idx < rows.length - 1 ? '<tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>' : ''}
   `).join('');
+  // previousStepNote (11/2026, người dùng yêu cầu — "người nhận email phê duyệt cũng phải có thông tin
+  // lý do, không chỉ người được trả về phê duyệt"): ghi chú của người VỪA duyệt bước ngay trước đó (CHỈ
+  // bước gần nhất, không gộp lịch sử nhiều bước) — rỗng/không có (ghi chú lúc duyệt là TUỲ CHỌN) thì
+  // buildReasonRowHtml() tự trả '', không hiện khối gì thêm.
   return `
     <tr><td style="padding:14px 28px 0;font:400 14px/1.6 -apple-system,Segoe UI,Arial,sans-serif;color:#1e293b;">
       Kính gửi ${escapeHtml(greeting)},<br><br>
@@ -8105,8 +8112,41 @@ function renderApprovalNeededEmailBodyHtml(greeting, opts) {
     <tr><td style="padding:18px 28px 0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;">${rowsHtml}</table>
     </td></tr>
+    ${buildReasonRowHtml('info', '📝 Ghi chú của người duyệt bước trước', previousStepNote)}
   `;
 }
+
+// buildReasonRowHtml (11/2026, "thêm phần lý do vào MỌI email trả về" — người dùng yêu cầu, xem ảnh demo
+// đã gửi xác nhận) — khối "📝 Lý do..." viền trái màu theo ĐÚNG accent của status (xanh lá/đỏ/cam/xanh
+// dương), dùng CHUNG cho cả family 'result' (Đã duyệt/Từ chối/Yêu cầu bổ sung, qua EMAIL_REASON_ROW_LABEL
+// + tham số `reason` MỚI của notifyUsersByEmail()/notifyRecipientsByEmail() ngay dưới) lẫn family
+// 'approvalNeeded' (previousStepNote ở trên). reason rỗng/không có -> trả '' , KHÔNG hiện khối trống —
+// ghi chú lúc duyệt luôn TUỲ CHỌN (không bắt buộc như lúc Từ chối/Yêu cầu bổ sung) nên trường hợp này
+// xảy ra thường xuyên, phải tự ẩn gọn gàng chứ không hiện ô trống xấu.
+function buildReasonRowHtml(status, label, reason) {
+  if (!reason) return '';
+  const theme = EMAIL_STATUS_THEME[status] || EMAIL_STATUS_THEME.info;
+  return `
+    <tr><td style="padding:16px 28px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;">
+        <tr><td style="width:4px;background:${theme.accent};border-radius:8px 0 0 8px;font-size:0;line-height:0;">&nbsp;</td>
+          <td style="padding:14px 16px;">
+            <div style="font:700 11px -apple-system,Segoe UI,Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">${escapeHtml(label)}</div>
+            <div style="font:400 14px/1.6 -apple-system,Segoe UI,Arial,sans-serif;color:#1e293b;">${escapeHtml(reason)}</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>`;
+}
+// EMAIL_REASON_ROW_LABEL: tra nhãn khối "📝 Lý do..." theo actionType cho family 'result' — actionType
+// KHÔNG có mặt (module/sự kiện tương lai) rơi về nhãn trung tính '📝 Lý do'.
+const EMAIL_REASON_ROW_LABEL = {
+  NOTIFY_APPROVED: '📝 Lý do phê duyệt',
+  NOTIFY_REJECTED: '📝 Lý do từ chối',
+  NOTIFY_REQUEST_CHANGES: '📝 Lý do yêu cầu bổ sung',
+  NOTIFY_NEED_INFO: '📝 Lý do yêu cầu bổ sung',
+  NOTIFY_REQUEST_INFO: '📝 Lý do yêu cầu bổ sung'
+};
 
 // buildNotificationEmailHtml({status, badge, bodyRowsHtml, ctaUrl, ctaText}) — KHUNG CHUNG (header navy +
 // icon thương hiệu, dải màu trạng thái, badge tròn, nội dung, nút hành động, chữ ký) cho MỌI email của
@@ -8153,7 +8193,11 @@ function buildNotificationEmailHtml({ status, badge, bodyRowsHtml, ctaUrl, ctaTe
 
 // Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username hệ thống) — tra email từ
 // DB.users rồi giao cho notifyRecipientsByEmail() xử lý gửi + ghi log dùng chung.
-function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText) {
+// reason (11/2026, tham số MỚI, tuỳ chọn, thứ 7 — "thêm lý do vào MỌI email trả về", xem
+// EMAIL_REASON_ROW_LABEL/buildReasonRowHtml() ở notifyRecipientsByEmail()): ghi chú/lý do của ĐÚNG hành
+// động vừa xảy ra (duyệt/từ chối/yêu cầu bổ sung) — truyền THẲNG biến `comment` đã có sẵn ở mọi điểm gọi
+// (không cần ghép thủ công "Lý do: ..." vào bodyText như trước nữa, notifyRecipientsByEmail() tự lo).
+function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText, reason) {
   const recipients = [];
   const missingEmail = [];
   for (const uname of new Set((usernames || []).filter(Boolean))) {
@@ -8173,7 +8217,7 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
       `⚠️ ${missingEmail.length} người nhận dự kiến KHÔNG có email trong hồ sơ nên không nhận được thông báo "${subject}": ${missingEmail.map(u => `${u.name || u.username} (${u.username})`).join(', ')} — vào Hệ Thống > Người Dùng bổ sung email để khắc phục.`,
       'MISSING_EMAIL', targetCode);
   }
-  notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText);
+  notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText, reason);
 }
 
 // Gửi + ghi log thông báo email cho 1 nhóm người nhận đã có sẵn {name, email} (không cần tra theo
@@ -8377,7 +8421,7 @@ function buildApprovalEmailLink(module, actionType, targetCode) {
   return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${rawUrl}`;
 }
 
-function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
+function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText, reason) {
   const valid = (recipients || []).filter(r => r && r.email);
   // Điền placeholder của buildApprovalNeededEmailBody() (mẫu email "Cần phê duyệt" dùng chung, 11/2026)
   // — KHÔNG ảnh hưởng bodyText của mọi lời gọi khác (family result/forward*/...) vì các placeholder này
@@ -8394,6 +8438,12 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
   bodyText = (bodyText && bodyText.includes(APPROVAL_SIGNATURE_PLACEHOLDER))
     ? bodyText.split(APPROVAL_SIGNATURE_PLACEHOLDER).join(`${link}\n\n${APPROVAL_SIGNATURE_TEXT}`)
     : `${bodyText}${link}`;
+  // bodyTextForHtml (11/2026, tham số `reason` MỚI — xem buildReasonRowHtml()): chụp lại bodyText NGAY
+  // TRƯỚC KHI gắn "Lý do" — bản HTML hiện lý do ở khối riêng (buildReasonRowHtml()) thay vì lặp lại
+  // trong đoạn văn thường. Bản chữ thuần (`bodyText`, dùng cho email text/Nhật Ký hệ thống) VẪN giữ câu
+  // "Lý do: ..." nối cuối như hành vi cũ, không mất thông tin ở client KHÔNG hiển thị HTML.
+  const bodyTextForHtml = bodyText;
+  if (reason) bodyText = `${bodyText}\n\nLý do: ${reason}`;
 
   // Lấy + XOÁ NGAY LAST_APPROVAL_NEEDED_OPTS (xem chú thích đầy đủ tại khai báo biến này, ngay trước
   // buildApprovalNeededEmailBody()) — phải đọc-và-reset ở ĐÂY, TRƯỚC mọi nhánh return sớm bên dưới
@@ -8453,9 +8503,14 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
   // khác (result/forward*/ticket*/...) dùng NGUYÊN bodyText (đã có link/chữ ký) cho đoạn văn thường.
   const emailMeta = ACTION_TYPE_EMAIL_META[actionType] || DEFAULT_EMAIL_META;
   const greetingForHtml = valid.length === 1 ? (valid[0].name || valid[0].email) : 'Anh/Chị';
+  // reasonLabel/buildReasonRowHtml (11/2026): family 'approvalNeeded' đã tự xử lý previousStepNote BÊN
+  // TRONG renderApprovalNeededEmailBodyHtml() (qua approvalOpts) — KHÔNG dùng `reason` ở đây (2 cơ chế
+  // tách biệt, xem chú thích tại buildApprovalNeededEmailBody()). `reason` chỉ áp dụng cho family
+  // 'result' (đoạn văn thường) — rỗng/không truyền thì buildReasonRowHtml() tự trả '', không hiện gì.
+  const reasonLabel = EMAIL_REASON_ROW_LABEL[actionType] || '📝 Lý do';
   const bodyRowsHtml = approvalOpts
     ? renderApprovalNeededEmailBodyHtml(greetingForHtml, approvalOpts)
-    : renderPlainEmailBodyHtml(bodyText);
+    : renderPlainEmailBodyHtml(bodyTextForHtml) + buildReasonRowHtml(emailMeta.status, reasonLabel, reason);
   const html = buildNotificationEmailHtml({
     status: emailMeta.status,
     badge: emailMeta.badge,

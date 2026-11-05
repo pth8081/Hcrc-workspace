@@ -1,9 +1,69 @@
 # Phiên bản hiện tại
 
-**29.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.27 (2026-11): Email tự động — thêm khối "Lý do" (phê duyệt/từ chối/yêu cầu bổ sung) vào TẤT CẢ module
+
+Người dùng gửi ảnh email thật trên production (kết quả phê duyệt giá "✅ Đã
+duyệt") và yêu cầu bổ sung: mọi email trả về kết quả phê duyệt (Đã duyệt/Từ
+chối/Yêu cầu bổ sung) phải hiện rõ phần "Lý do", ở TẤT CẢ module — không chỉ
+người nhận kết quả (người gửi hồ sơ) mà cả người duyệt BƯỚC KẾ TIẾP (email
+"⏳ Cần Phê Duyệt") cũng phải thấy ghi chú/lý do của người duyệt bước ngay
+trước đó (chỉ bước vừa trước, không phải toàn bộ lịch sử nhiều bước — theo
+xác nhận của người dùng). Đã demo 2 vòng ảnh (trước/sau) cho người dùng xác
+nhận trước khi triển khai thật.
+
+**Thiết kế:**
+- `core.js`: thêm `buildReasonRowHtml(status, label, reason)` — khối "Lý do"
+  dạng box màu theo trạng thái email (accent trái, nhãn hoa + nội dung), tự
+  ẩn (trả về `''`) khi không có lý do (trường hợp phổ biến: duyệt không ghi
+  chú) — không làm thay đổi layout email khi không có dữ liệu.
+- `EMAIL_REASON_ROW_LABEL`: nhãn tiếng Việt theo actionType (Lý do phê
+  duyệt/từ chối/yêu cầu bổ sung) cho family email "kết quả" (result).
+- `notifyUsersByEmail()`/`notifyRecipientsByEmail()`: thêm tham số thứ 7
+  `reason` (tuỳ chọn) — bản HTML hiện khối "Lý do" riêng (không trùng với
+  câu mô tả sẵn có), bản plain-text/log vẫn giữ quy ước cũ "Lý do: X" ở cuối
+  — không phá vỡ bất kỳ lời gọi cũ nào chưa truyền `reason`.
+- `buildApprovalNeededEmailBody()`/`renderApprovalNeededEmailBodyHtml()`:
+  thêm field `previousStepNote` (ghi chú của người duyệt bước ngay trước,
+  hiện cho email "Cần Phê Duyệt" gửi người duyệt bước kế tiếp).
+- Mọi lời gọi đã sẵn có `comment`/`reason` (lấy từ textarea/modal hoặc
+  `prompt()` đã tồn tại từ trước — KHÔNG thêm input mới ở đâu) được nối
+  thêm vào các hàm trên, đúng tại các bước REQUEST_CHANGES/REJECTED/
+  ADVANCED/COMPLETED của: Vận Hành (Đơn Hàng/Mở Siêu Thị/Sửa Chữa), Đăng Ký
+  Xe, Văn Phòng Phẩm, VP (Office), Văn Bản Trình, Tài Liệu (riêng nhánh Từ
+  Chối), Hợp Đồng (riêng nhánh Từ Chối/Yêu Cầu Bổ Sung), Hỗ Trợ IT - Giá
+  (5/8 điểm có comment), Truyền Thông Nội Bộ - Nhịp Sống (2/3 điểm có
+  comment).
+- **Khoảng trống đã biết (không phải lỗi sót, do hành động APPROVE ở các
+  module này chưa từng thu thập ghi chú)**: Tài Liệu/Hợp Đồng/Hỗ Trợ IT-Giá
+  (duyệt chính)/Truyền Thông Nội Bộ khi bấm DUYỆT không có ô nhập lý do —
+  email duyệt các module này vẫn chưa có khối "Lý do" cho tới khi có UI thu
+  thập ghi chú lúc duyệt. Module Phòng Họp hoàn toàn không có luồng nhiều
+  bước/ghi chú (duyệt 1 cú bấm) nên không áp dụng.
+
+**Thay đổi:** `public/js/core.js`, `public/js/module-vanhanh.js`,
+`public/js/module-dangkyxe.js`, `public/js/module-office.js`,
+`public/js/module-tailieu.js`, `public/js/module-vanbantrinh.js`,
+`public/js/module-vpp.js`, `public/js/module-hopdong.js`,
+`public/js/module-itsupport-price.js`,
+`public/js/module-internalcomms-nhipsong.js`.
+
+**Test kỹ trước merge:** `node -c` sạch toàn bộ `public/js/*.js`. Chạy lại
+toàn bộ 7 file test hạ tầng email hiện có (PASS) + 10 file test regression
+cấp module liên quan (9/10 PASS; `test-vpp.js` có 1 lỗi "VPP-exclude" đã xác
+nhận là lỗi CŨ/không liên quan — tái hiện giống nhau khi `git stash` tắt hẳn
+thay đổi của đợt này rồi chạy lại, chứng minh không phải do đợt này gây ra).
+Grep CSP sạch (các `style="` nội tuyến mới chỉ nằm trong HTML email gửi qua
+`dispatchRealEmail`, không phải DOM app — khớp đúng 46 chỗ `style=` sẵn có từ
+trước trong các hàm dựng email HTML của `core.js`, email client bắt buộc
+inline style, không áp dụng CSP app).
+
+**Deploy-impact:** chỉ copy code + `pm2 restart`, không đổi `schema.sql`/
+`.env`/dependencies (toàn bộ thay đổi ở phía client `public/js/*.js`).
 
 ## v29.26 (2026-11): Vận Hành > Đơn Hàng — dọn sạch 3 nơi SÓT lại trạng thái Nhập/Hủy Hàng (badge dòng, phiếu in, Báo Cáo Quản Trị)
 

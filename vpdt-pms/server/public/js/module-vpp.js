@@ -918,12 +918,14 @@ async function processVppReg(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail('VPP', 'NOTIFY_REQUEST_CHANGES', updatedReg.code, [updatedReg.creator],
       `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bổ sung/chỉnh sửa`,
-      `Đăng ký Văn phòng phẩm của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Phòng Phẩm để sửa và gửi lại.`);
+      `Đăng ký Văn phòng phẩm của bạn cần được sửa lại. Vui lòng vào mục Văn Phòng Phẩm để sửa và gửi lại.`,
+      comment);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người đăng ký sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('VPP', 'NOTIFY_REJECTED', updatedReg.code, [updatedReg.creator],
       `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} bị từ chối`,
-      `Đăng ký Văn phòng phẩm của bạn đã bị từ chối. Lý do: ${comment}`);
+      `Đăng ký Văn phòng phẩm của bạn đã bị từ chối.`,
+      comment);
     msg = '✅ Đã từ chối đăng ký!';
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
@@ -933,14 +935,15 @@ async function processVppReg(actionType) {
         buildApprovalNeededEmailBody({
           ticketType: 'Văn Phòng Phẩm', ticketNumber: updatedReg.code, summary: `Kỳ ${updatedReg.periodName}`,
           creatorName: updatedReg.creatorName, creatorDept: updatedReg.dept, createdAt: updatedReg.createdAt,
-          stepName: transition.nextStepName
+          stepName: transition.nextStepName, previousStepNote: comment
         }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đăng ký Văn phòng phẩm thành công!';
     notifyUsersByEmail('VPP', 'NOTIFY_APPROVED', updatedReg.code, [updatedReg.creator],
       `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} đã được phê duyệt`,
-      `Đăng ký Văn phòng phẩm của bạn đã được phê duyệt hoàn tất.`);
+      `Đăng ký Văn phòng phẩm của bạn đã được phê duyệt hoàn tất.`,
+      comment);
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
