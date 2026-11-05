@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**29.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.39 (2026-11): [KHẨN] Kiểm Soát Hàng Hóa — "Thêm Quầy Kệ"/ghi nhận kệ/thêm Ngưỡng Tồn báo lỗi "Không thể tạo hồ sơ" TRÊN PRODUCTION (chắc chắn lỗi 100% lần, không phải ngẫu nhiên)
+
+**LỖI ĐÃ VÁ (báo cáo người dùng trực tiếp trên production, kèm ảnh chụp)**: bấm "➕ Thêm Quầy Kệ" (Vận
+Hành > Kiểm Soát Hàng Hóa > Quầy Kệ) báo `⛔ Không thể tạo hồ sơ`. Người dùng cũng dự đoán đúng "khả năng
+ghi nhận kệ (Ghi Nhận) cũng báo lỗi" — xác nhận đúng, và thêm Ngưỡng Tồn cũng cùng lỗi.
+
+**Nguyên nhân**: 3 collection `shelfLocations`/`shelfRecords`/`shelfStockThresholds` (Kiểm Soát Hàng Hóa,
+Phase 1 MVP) ghi dữ liệu qua `createForCollection()`/`withLockedAppDataValue()` (`lib/recordStore.js` +
+`lib/appData.js`) — hàm này **THROW** `"Key không tồn tại trong AppData: <key>"` nếu dòng dữ liệu cho key
+đó CHƯA TỪNG được seed trong bảng `dbo.AppData`. Cả 3 key này bị **bỏ sót khỏi `defaults.js`** (`DEFAULTS`)
+ngay từ lúc viết tính năng — `seedDefaults()` (chạy mỗi lần khởi động server, PM2 restart) CHỈ tạo dòng cho
+key CÓ MẶT trong `DEFAULTS`, nên trên MỌI môi trường (kể cả production đã restart nhiều lần từ lúc tính
+năng này go-live) dòng AppData cho 3 key này **chưa bao giờ được tạo** — nghĩa là bất kỳ ai, ở BẤT KỲ siêu
+thị nào, bấm "Thêm Quầy Kệ"/ghi nhận/thêm ngưỡng tồn đều chắc chắn gặp lỗi này 100% (không phải lỗi theo
+tài khoản/quyền). Đọc dữ liệu (GET /api/data, các màn hiển thị) vẫn chạy bình thường (coi key thiếu = mảng
+rỗng `[]`) nên màn hình vẫn hiển thị được như không có gì bất thường — chỉ riêng THAO TÁC GHI chắc chắn
+lỗi, đúng khớp triệu chứng người dùng báo (xem được danh sách, chỉ tạo mới là lỗi).
+
+**Sửa**: thêm `shelfLocations: []`, `shelfRecords: []`, `shelfStockThresholds: []` vào `defaults.js`
+(`DEFAULTS`) — `seedDefaults()` sẽ tự tạo 3 dòng AppData còn thiếu ngay ở lần khởi động server kế tiếp.
+
+**Test**: file mới `test-shelf-defaults-seed.js` — mock thẳng `../db` (SQL Server) để tái hiện ĐÚNG cơ chế
+lỗi thật (không chỉ mock phía client như `testHarness.js`): (1) xác nhận BUG THẬT tái hiện được — gọi
+`createForCollection()` cho cả 3 key trên nền AppData CHƯA seed (mô phỏng đúng trạng thái production trước
+bản vá) → throw đúng message người dùng gặp; (2) chạy lại đúng vòng lặp seed của `seedDefaults.js` dùng
+`defaults.js` đã vá → cả 3 key được tạo; (3) gọi lại `createForCollection()` → THÀNH CÔNG; (4) regression
+toàn hệ thống — rà lại **TOÀN BỘ 51 `dbKey`** của `CREATE_MODULE_CONFIGS` (không riêng shelf), xác nhận
+KHÔNG còn module nào khác rơi vào đúng lớp lỗi này (chặn tái phát ở module mới sau này) — 7/7 pass. Chạy
+lại toàn bộ 18 file test hiện có của module Kiểm Soát Hàng Hóa (`test-shelf-*.js` + `test-inventory-recon.js`)
+— không regression. Chạy lại `test-seed-defaults-fresh-install.js` (mô phỏng cài đặt mới + restart 2 lần
+liên tiếp bằng `seedDefaults()` THẬT) — vẫn pass, xác nhận 3 key mới tích hợp đúng vào toàn bộ luồng seed
+thật, không chỉ trong test cô lập.
+
+**Riêng về 2 ảnh người dùng gửi kèm — ảnh quét mã vạch "Không khớp tồn kho hệ thống"**: đã rà lại code
+(`matchShelfSystemInventoryByMaVach()`, `public/js/module-vanhanh.js`) — đây là THIẾT KẾ CÓ CHỦ Ý (tài liệu
+sẵn trong code từ 11/2026): quét/gõ mã vạch LUÔN điền vào ô Mã Vạch, chỉ TỰ khớp thêm Mã Hàng + Tên Sản
+Phẩm nếu mã vạch đó CÓ trong dữ liệu tồn kho hệ thống (BRGMART) đã tải cho siêu thị đó; không khớp được
+(mã vạch mờ/mặt hàng chưa khai mã vạch ở hệ thống nguồn) thì để trống Mã Hàng + hiện cảnh báo, nhân viên tự
+dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" tìm theo tên/mã hàng — đây là đường dự phòng đã thiết kế, KHÔNG
+phải lỗi code. Không loại trừ khả năng mã vạch `4601958310003` thật sự CHƯA có trong dữ liệu BRGMART cho
+siêu thị đó (ngoài phạm vi kiểm tra được từ code) — nếu sau khi đọc phần giải thích này vẫn thấy bất thường
+(VD mã vạch đó chắc chắn PHẢI có trong hệ thống), báo lại để điều tra tiếp ở tầng dữ liệu API Tồn Kho.
+
+**Deploy-impact:** chỉ đổi `server/defaults.js` (thêm 3 key mặc định) — không đổi schema/`.env.example`/
+`dependencies`. **BẮT BUỘC phải `pm2 restart` để bản vá có tác dụng thật** (khác các bản vá logic thuần —
+`seedDefaults()` chỉ chạy lúc khởi động, nên code đã merge nhưng CHƯA restart thì lỗi vẫn còn nguyên).
 
 ## v29.38 (2026-11): Quy Trình Hỗn Hợp (QT Giá Bán Buôn + Đặt Hàng Siêu Thị) — chức danh KIÊM NHIỆM không duyệt được dù cấu hình đúng
 

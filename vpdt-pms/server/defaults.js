@@ -940,6 +940,22 @@ const DEFAULTS = {
     lastSyncStatus: null,
     lastSyncMessage: null
   },
+  // shelfLocations/shelfRecords/shelfStockThresholds (Kiểm Soát Hàng Hóa, Phase 1 MVP 11/2026) — BUG THẬT
+  // phát hiện 11/2026 (người dùng báo "Thêm Quầy Kệ" báo lỗi "Không thể tạo hồ sơ" ngay trên production):
+  // CẢ 3 collection này đi qua createForCollection()/withLockedAppDataValue() (lib/recordStore.js, không
+  // thuộc DEDICATED_TABLES) — hàm đó THROW "Key không tồn tại trong AppData: <key>" nếu dòng dữ liệu chưa
+  // từng được seed (xem withLockedAppDataValue() ở lib/appData.js), rơi vào nhánh lỗi 500 chung ở
+  // routes/create.js ("Không thể tạo hồ sơ"). 3 key này đã bị BỎ SÓT khỏi DEFAULTS từ lúc viết tính năng
+  // (chỉ 3 key cấu hình lịch gửi/người nhận digest ngay dưới được thêm đúng) — seedDefaults() (chạy mỗi
+  // lần khởi động server) CHỈ seed key có mặt trong DEFAULTS, nên trên MỌI môi trường (kể cả production
+  // đã chạy nhiều ngày) dòng AppData cho 3 key này CHƯA BAO GIỜ được tạo, khiến MỌI lần "Thêm Quầy Kệ"/ghi
+  // nhận kệ/thêm ngưỡng tồn đều chắc chắn lỗi 500 (không phải lỗi ngẫu nhiên theo tài khoản). Đọc dữ liệu
+  // (GET /api/data, getAllForCollection()) vẫn chạy bình thường (coi key thiếu = mảng rỗng) nên màn hình
+  // vẫn hiển thị được, chỉ riêng THAO TÁC GHI là chắc chắn lỗi — đúng y hệt triệu chứng người dùng báo.
+  // Cần RESTART server (pm2 restart, seedDefaults() tự chạy lại) để 3 dòng AppData mới này được tạo.
+  shelfLocations: [],
+  shelfRecords: [],
+  shelfStockThresholds: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn
