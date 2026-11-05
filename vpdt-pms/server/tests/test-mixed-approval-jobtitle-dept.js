@@ -120,9 +120,13 @@ function freshOrder(overrides) {
 
 // ===================== 3) secondaryPositions ("Vị Trí Kiêm Nhiệm") cùng cặp jobTitle+jobTitleDept =====================
 {
-  // Lọc đầu tiên của resolveOperationOrderStoreMixedApprovalRuleUsernames() yêu cầu u.jobTitle === rule.jobTitle
-  // TRƯỚC KHI xét matchesDeptCondition() — "Vị Trí Kiêm Nhiệm" chỉ mở rộng PHÒNG BAN được công nhận, không
-  // thay cho chức danh chính (giống hệt thiết kế secondaryPositions gốc ở test-operation-order-store-approver-scope.js).
+  // CẬP NHẬT (11/2026, LỖI ĐÃ VÁ — xem test-mixed-approval-secondary-jobtitle.js cho bộ test đầy đủ):
+  // userHasMixedApprovalPosition() (lib/workflowEngine.js) giờ coi chức danh CHÍNH + từng mục "Vị Trí
+  // Kiêm Nhiệm" là các vị trí ĐỘC LẬP — khớp được NGAY CẢ KHI chức danh CHÍNH của người đó khác hẳn rule
+  // (trước đây BẮT BUỘC chức danh CHÍNH phải khớp trước, kiêm nhiệm chỉ mở rộng phòng ban cho người ĐÃ
+  // khớp sẵn — đây chính là lỗi "Loan giữ chức danh kiêm nhiệm không duyệt được" đã vá). Kịch bản dưới đây
+  // (chức danh CHÍNH "Trưởng phòng" TRÙNG rule.jobTitle, chỉ khác phòng ban) vẫn tiếp tục đúng như cũ,
+  // không bị ảnh hưởng — chỉ là 1 TRƯỜNG HỢP RIÊNG của quy tắc tổng quát hơn giờ đã có.
   const kiemNhiem = {
     username: 'tp.kiemnhiem', name: 'TP Kiêm Nhiệm', jobTitle: 'Trưởng phòng', dept: 'Phòng Khác', perms: {},
     secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng CNTT' }]

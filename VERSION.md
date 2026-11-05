@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**29.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.38 (2026-11): Quy Trình Hỗn Hợp (QT Giá Bán Buôn + Đặt Hàng Siêu Thị) — chức danh KIÊM NHIỆM không duyệt được dù cấu hình đúng
+
+**LỖI ĐÃ VÁ (báo cáo người dùng)**: "Loan giữ chức danh kiêm nhiệm 'Thẩm định FMCG 2' ở Cấu Hình Quy
+Trình Nâng Cao (QT Giá Bán Buôn) nhưng khi Xem Trước Quy Trình, Bước 1 không hiện Loan dù đã chọn đúng
+ngành hàng Loan phụ trách — chỉ hiện người theo Siêu Thị". Điều tra qua nhiều vòng (loại trừ nghi ngờ "chỉ
+đối chiếu ngành hàng từ Bước 2 trở lên", loại trừ trùng mã Danh Mục Ngành Hàng) mới tìm ra nguyên nhân thật
+khi người dùng xác nhận "tất cả là vị trí kiêm nhiệm".
+
+**Nguyên nhân**: hàm khớp người duyệt theo "Chức danh" (dùng CHUNG cho cả 🏪 QT Giá Bán Buôn lẫn 🏬 Đặt
+Hàng Siêu Thị, cả bản server lẫn bản xem trước client) trước đây lọc `u.jobTitle === rule.jobTitle` (CHỨC
+DANH CHÍNH) TRƯỚC — "Vị Trí Kiêm Nhiệm" (`secondaryPositions`) chỉ được xét SAU ĐÓ để mở rộng PHÒNG BAN
+cho người ĐÃ khớp sẵn chức danh chính. Hậu quả: người giữ ĐÚNG chức danh rule yêu cầu nhưng HOÀN TOÀN dưới
+dạng kiêm nhiệm (chức danh chính là thứ khác hẳn) không bao giờ lọt qua được bước lọc đầu — approvers[]
+trống, bước treo vĩnh viễn (chỉ admin bypass được). Ảnh hưởng CẢ 2 module (cùng khuôn code) lẫn CẢ xem
+trước lẫn luồng duyệt thật trên server.
+
+**Sửa**: `userHasMixedApprovalPosition()` (lib/workflowEngine.js, dùng chung cho
+`resolveOperationOrderStoreMixedApprovalRuleUsernames()`/`resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()`)
++ bản mirror client `userHasMixedApprovalPositionClient()` (public/js/core.js) — coi chức danh CHÍNH +
+từng mục Vị Trí Kiêm Nhiệm của 1 người là các "vị trí" độc lập, khớp rule nếu BẤT KỲ 1 vị trí nào có ĐÚNG
+jobTitle VÀ thoả điều kiện phòng ban của CHÍNH vị trí đó (cố ý KHÔNG trộn phòng ban giữa các vị trí khác
+nhau của cùng 1 người — tránh 1 kiêm nhiệm KHÁC chức danh vô tình "cho mượn" dept của nó).
+
+**Test**: file mới `test-mixed-approval-secondary-jobtitle.js` (13 kịch bản — cả 2 module, cả server lẫn
+client mirror, kèm kịch bản "cách ly vị trí" chống hồi quy false-positive) — 13/13 pass. Chạy lại 23 file
+test liên quan trực tiếp (mixed-approval/operation-order/itprice-wholesale/secondary-positions) — không
+regression. Chạy lại TOÀN BỘ 645 file test — chỉ 2 file lỗi (test-admin-totp.js, test-admin-users-permgroups.js)
+đã xác nhận lỗi CÓ TỪ TRƯỚC (tái hiện y hệt trên `main` sạch chưa có bản vá này), không liên quan. Demo
+Playwright dựng lại đúng kịch bản Loan qua UI thật (cấu hình qua Cấu Hình Quy Trình Nâng Cao, bấm "🔍 Xem
+Quy Trình" thật trên form đề xuất, Loan bấm Duyệt thật) — ảnh xác nhận Bước 1 hiện đúng cả 2 người, Loan
+duyệt thành công.
+
+**Deploy-impact:** `public/js/core.js` + `lib/workflowEngine.js` — không đổi schema/`.env.example`/
+dependencies, chỉ copy code + `pm2 restart`.
 
 ## v29.37 (2026-11): Cấu Hình Quy Trình Nâng Cao — thu gọn cột "Người/Chức Danh" + rút gọn danh sách dài
 

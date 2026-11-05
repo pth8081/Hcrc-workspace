@@ -307,6 +307,28 @@ function computeOperationOrderTier(locationType, amount) {
 // THUỘC storeJobTitleLabels giữ NGUYÊN 100% hành vi cũ. Mirror ĐÚNG bản client
 // resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() (public/js/core.js), sửa 1 bên PHẢI sửa cả
 // 2 bên.
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "Loan giữ chức danh kiêm nhiệm 'Thẩm định FMCG 2' nhưng không
+// lên danh sách duyệt dù cấu hình đúng" ở QT Giá Bán Buôn, CÙNG LỚP LỖI ở Đặt Hàng Siêu Thị): thiết kế CŨ
+// (xem test-mixed-approval-jobtitle-dept.js mục 3, nay đã cập nhật) lọc u.jobTitle === rule.jobTitle
+// TRƯỚC, "Vị Trí Kiêm Nhiệm" (secondaryPositions) CHỈ được xét SAU đó để mở rộng PHÒNG BAN cho người ĐÃ
+// khớp sẵn chức danh CHÍNH — 1 người giữ ĐÚNG chức danh rule yêu cầu nhưng HOÀN TOÀN dưới dạng kiêm nhiệm
+// (chức danh chính là thứ khác hẳn, VD "Nhân Viên Mua Hàng" kiêm "Thẩm định FMCG 2") không bao giờ lọt
+// qua được, dù đúng chức danh đúng phòng ban. Nay coi chức danh CHÍNH + từng mục Vị Trí Kiêm Nhiệm của 1
+// người là các "vị trí" độc lập — khớp rule NẾU BẤT KỲ 1 vị trí nào có ĐÚNG jobTitle VÀ thoả điều kiện
+// phòng ban của CHÍNH vị trí đó (cố ý KHÔNG trộn phòng ban giữa các vị trí khác nhau của cùng 1 người —
+// tránh 1 kiêm nhiệm KHÁC chức danh vô tình "cho mượn" dept của nó cho vị trí đang xét). Dùng CHUNG cho cả
+// operationOrders STORE lẫn itPriceWholesale (2 hàm resolve*RuleUsernames* đều gọi hàm này, chỉ khác cách
+// tính `deptInScope`) — mirror ĐÚNG bản client userHasMixedApprovalPositionClient() (public/js/core.js),
+// sửa 1 bên PHẢI sửa cả 2 bên.
+function userHasMixedApprovalPosition(u, rule, isStoreFlatJobTitle, deptInScope) {
+  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || [])];
+  return positions.some(p => {
+    if (p.jobTitle !== rule.jobTitle) return false;
+    if (rule.jobTitleDept) return p.dept === rule.jobTitleDept;
+    if (!isStoreFlatJobTitle) return true; // chức danh cấp công ty — khớp mọi người giữ chức danh, không phụ thuộc siêu thị
+    return deptInScope(p.dept);
+  });
+}
 function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users, storeJobTitleLabels) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   // Dòng KHÔNG khai "Siêu Thị Phụ Trách" (mặc định) áp dụng cho MỌI siêu thị; dòng CÓ khai (ngoại lệ) chỉ
@@ -339,17 +361,9 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // đã gán — HOÀN TOÀN ĐỘC LẬP với storeDept của đơn (phòng ban HO không liên quan gì tới siêu thị lập
   // đơn). Dòng cũ không có `jobTitleDept` (undefined) giữ NGUYÊN 2 nhánh hành vi gốc ở trên, không đổi gì.
   const isStoreFlatJobTitle = (storeJobTitleLabels || []).includes(rule.jobTitle);
-  const matchesDeptCondition = (u) => {
-    if (rule.jobTitleDept) {
-      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
-    }
-    if (!isStoreFlatJobTitle) return true; // chức danh cấp công ty — khớp mọi người giữ chức danh, không phụ thuộc siêu thị
-    return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
-  };
   return (users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(matchesDeptCondition)
+    .filter(u => userHasMixedApprovalPosition(u, rule, isStoreFlatJobTitle, (dept) => hasExplicitStores || dept === storeDept))
     .map(u => u.username);
 }
 // THÊM chiều "Mức" (10/2026, theo yêu cầu người dùng — Đặt Hàng Siêu Thị cần cấu hình người duyệt RIÊNG
@@ -438,17 +452,11 @@ function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores
   const isActiveUsername = (username) => (users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
   const isStoreFlatJobTitle = (storeJobTitleLabels || []).includes(rule.jobTitle);
-  const matchesDeptCondition = (u) => {
-    if (rule.jobTitleDept) {
-      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
-    }
-    if (!isStoreFlatJobTitle) return true; // chức danh cấp công ty — khớp mọi người giữ chức danh, không phụ thuộc siêu thị
-    return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
-  };
+  // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở userHasMixedApprovalPosition() phía trên: chức danh
+  // KIÊM NHIỆM (secondaryPositions) giờ cũng được công nhận để khớp rule, không chỉ chức danh CHÍNH.
   return (users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(matchesDeptCondition)
+    .filter(u => userHasMixedApprovalPosition(u, rule, isStoreFlatJobTitle, (dept) => hasExplicitStores || storeList.includes(dept)))
     .map(u => u.username);
 }
 function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, stores, itemNganhHang, users, storeJobTitleLabels) {

@@ -3648,6 +3648,25 @@ function operationOrderTierLabel(locationType, tier) {
 // phải tên 1 siêu thị) để "Siêu Thị Phụ Trách" = Mặc định trước đây KHÔNG BAO GIỜ khớp được. Nay: jobTitle
 // KHÔNG thuộc DB.storeJobTitles -> khớp mọi người giữ đúng chức danh đó. Chức danh THUỘC DB.storeJobTitles
 // giữ NGUYÊN 100% hành vi cũ — không đụng gì cơ chế GĐST đã có từ trước.
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "Loan giữ chức danh kiêm nhiệm 'Thẩm định FMCG 2' nhưng không
+// lên danh sách duyệt dù cấu hình đúng" ở QT Giá Bán Buôn, CÙNG LỚP LỖI ở Đặt Hàng Siêu Thị): thiết kế CŨ
+// lọc u.jobTitle === rule.jobTitle TRƯỚC, "Vị Trí Kiêm Nhiệm" (secondaryPositions) CHỈ được xét SAU đó để
+// mở rộng PHÒNG BAN cho người ĐÃ khớp sẵn chức danh CHÍNH — 1 người giữ ĐÚNG chức danh rule yêu cầu nhưng
+// HOÀN TOÀN dưới dạng kiêm nhiệm (chức danh chính là thứ khác hẳn) không bao giờ lọt qua được. Nay coi
+// chức danh CHÍNH + từng mục Vị Trí Kiêm Nhiệm của 1 người là các "vị trí" độc lập — khớp rule NẾU BẤT KỲ
+// 1 vị trí nào có ĐÚNG jobTitle VÀ thoả điều kiện phòng ban của CHÍNH vị trí đó (cố ý KHÔNG trộn phòng ban
+// giữa các vị trí khác nhau của cùng 1 người). Dùng CHUNG cho cả operationOrders STORE lẫn itPriceWholesale
+// — mirror ĐÚNG bản server userHasMixedApprovalPosition() (lib/workflowEngine.js), sửa 1 bên PHẢI sửa cả
+// 2 bên.
+function userHasMixedApprovalPositionClient(u, rule, isStoreFlatJobTitle, deptInScope) {
+  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || [])];
+  return positions.some(p => {
+    if (p.jobTitle !== rule.jobTitle) return false;
+    if (rule.jobTitleDept) return p.dept === rule.jobTitleDept;
+    if (!isStoreFlatJobTitle) return true;
+    return deptInScope(p.dept);
+  });
+}
 function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
@@ -3660,17 +3679,9 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeD
   // — lib/workflowEngine.js, xem chú thích đầy đủ ở đó): dòng gán cố định 1 cặp (chức danh, phòng ban) từ
   // "Vị Trí Tham Gia Quy Trình" khớp ĐÚNG phòng ban đó, độc lập hoàn toàn với storeDept của đơn.
   const isStoreFlatJobTitle = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
-  const matchesDeptCondition = (u) => {
-    if (rule.jobTitleDept) {
-      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
-    }
-    if (!isStoreFlatJobTitle) return true;
-    return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
-  };
   return (DB.users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(matchesDeptCondition)
+    .filter(u => userHasMixedApprovalPositionClient(u, rule, isStoreFlatJobTitle, (dept) => hasExplicitStores || dept === storeDept))
     .map(u => u.username);
 }
 // Tham số `tier` (10/2026, mirror ĐÚNG bản vá server resolveOperationOrderStoreMixedApprovers() —
@@ -3726,17 +3737,11 @@ function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient(rule, 
   const isActiveUsername = (username) => (DB.users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
   const isStoreFlatJobTitle = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
-  const matchesDeptCondition = (u) => {
-    if (rule.jobTitleDept) {
-      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
-    }
-    if (!isStoreFlatJobTitle) return true;
-    return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
-  };
+  // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở userHasMixedApprovalPositionClient() phía trên: chức
+  // danh KIÊM NHIỆM (secondaryPositions) giờ cũng được công nhận để khớp rule, không chỉ chức danh CHÍNH.
   return (DB.users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(matchesDeptCondition)
+    .filter(u => userHasMixedApprovalPositionClient(u, rule, isStoreFlatJobTitle, (dept) => hasExplicitStores || storeList.includes(dept)))
     .map(u => u.username);
 }
 function resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(rule, stores, itemNganhHang) {
