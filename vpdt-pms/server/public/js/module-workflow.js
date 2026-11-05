@@ -783,6 +783,20 @@ async function deleteQuickApplyConfig(configId) {
 function mixedApprovalPersonLabel(u) {
   return `${u.name} (${u.username}) - ${u.dept || 'Chưa rõ phòng'}`;
 }
+// mixedApprovalTruncatedList(htmlItems, plainTextForTitle, maxShow) — rút gọn danh sách dài (Siêu Thị
+// Phụ Trách/Ngành Hàng Phụ Trách) thành "A, B, C và N khác" (11/2026, phản hồi người dùng "quy trình dài
+// xuống dưới khó thao tác" kèm ảnh chụp dòng cấu hình liệt kê ~20 ngành hàng kéo dài cả màn hình theo
+// chiều dọc). KHÔNG mất dữ liệu — danh sách ĐẦY ĐỦ vẫn còn nguyên trong `title` (tooltip hover chuẩn
+// trình duyệt, không cần thêm JS/click nào), chỉ đổi cách HIỂN THỊ để mỗi dòng gọn lại 1-2 dòng thay vì
+// nhiều dòng. `htmlItems` PHẢI đã escapeHtml() sẵn (gọi ở nơi build ra, có thể đã lồng thêm badge/span
+// riêng như nganhHangLabel ở dưới) — hàm này chỉ ghép/cắt, không tự escape.
+function mixedApprovalTruncatedList(htmlItems, plainTextForTitle, maxShow) {
+  maxShow = maxShow || 3;
+  if (htmlItems.length <= maxShow) return htmlItems.join(', ');
+  const shown = htmlItems.slice(0, maxShow).join(', ');
+  const rest = htmlItems.length - maxShow;
+  return `${shown} <span class="text-gray-500 font-normal cursor-help" title="${escapeHtml(plainTextForTitle)}">và ${rest} khác</span>`;
+}
 // Mở rộng ô tìm-kiếm-gõ-chọn (maNewJobTitleInput/maNewPersonInput/ipma*) theo đúng độ dài chuỗi DÀI
 // NHẤT đang có trong danh mục hiện tại (theo yêu cầu người dùng, 11/2026 — nhãn kiểu "Trưởng phòng — HO
 // – Phòng Kiểm soát chỉ số Vận hành — HO" bị cắt ngắn ở ô cố định w-56/224px cũ). Gán `.style.width`
@@ -793,11 +807,20 @@ function mixedApprovalPersonLabel(u) {
 // chung (19 điểm khác trong hệ thống đang dùng ô tìm-kiếm-gõ-chọn, xem CLAUDE.md), tránh ảnh hưởng ngoài
 // phạm vi. Đơn vị `ch` (≈ bề rộng 1 ký tự ở cỡ chữ hiện tại) + đệm cho khoảng trắng/dấu; có sàn tối
 // thiểu để không co lại nhỏ hơn placeholder khi danh mục rỗng/toàn chuỗi ngắn.
+// TRẦN 34ch (11/2026, phản hồi người dùng "độ rộng cột Người/Chức Danh đang quá rộng" kèm ảnh chụp màn
+// Cấu Hình Nâng Cao): trước đây KHÔNG có trần — 1 nhãn DÀI NHẤT trong TOÀN BỘ danh mục (VD "Trưởng Phòng
+// — Phòng Kiểm soát chỉ số vận hành — HO", ~50-70 ký tự) tự kéo rộng ô input này, mà bảng dùng layout
+// mặc định (không table-fixed) nên kéo rộng LUÔN CẢ CỘT "Người / Chức Danh" của toàn bộ bảng, dù hầu hết
+// dòng dữ liệu thật chỉ ngắn gọn (badge "Chức danh"/"Người cụ thể" + tên). Khung gợi ý (sddPositionAndShow(),
+// core.js) đã tự co giãn ĐỘC LẬP theo đúng nhãn đang hiện (không bị giới hạn bởi độ rộng ô input) nên hạ
+// trần ở đây KHÔNG làm mất khả năng đọc đủ nhãn dài lúc đang gõ-tìm/chọn — chỉ ảnh hưởng ô input SAU KHI
+// đã chọn xong 1 nhãn vượt trần (cuộn ngang trong ô, xem lại đủ bằng cách bấm vào ô để mở lại khung gợi ý).
 function widenSddInputToLongestOption(inputId, labels) {
   const input = document.getElementById(inputId);
   if (!input) return;
+  const CAP_CH = 34;
   const maxLen = (labels || []).reduce((m, l) => Math.max(m, String(l || '').length), 0);
-  input.style.width = `${Math.max(maxLen + 2, 24)}ch`;
+  input.style.width = `${Math.min(Math.max(maxLen + 2, 24), CAP_CH)}ch`;
 }
 function mixedApprovalResolvePersonInput(rawValue) {
   const m = String(rawValue || '').match(/^(.*) \(([^()]+)\) - .*$/);
@@ -934,7 +957,7 @@ function renderMixedApprovalSection() {
       const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle, row.jobTitleDept) : '') + personInvalidBadge;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
-        ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
+        ? `${mixedApprovalTruncatedList(row.stores.map(escapeHtml), row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
         : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
       // "Mức Áp Dụng" (10/2026) — dòng CŨ chưa gán tier hiện badge "Mọi mức" (wildcard, xem chú thích đầy
       // đủ ở defaults.js::operationOrderStoreMixedApprovalRules); dòng MỚI hiện đúng tên Mức đã chọn.
@@ -1246,18 +1269,24 @@ function renderItPriceWholesaleMixedApprovalSection() {
       const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle, row.jobTitleDept) : '') + personInvalidBadge;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
-        ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
+        ? `${mixedApprovalTruncatedList(row.stores.map(escapeHtml), row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
         : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
       // "Ngành Hàng Phụ Trách" (10/2026) — ĐỘC LẬP với storesLabel ở trên (xem chú thích đầy đủ ở
       // defaults.js::itPriceWholesaleStoreMixedApprovalRules): hiện tên ngành hàng (tra theo code trong
       // DB.nganhHangCatalog) thay vì mã thô cho dễ đọc; mã mồ côi (danh mục đã xoá/đổi code) vẫn hiện
       // nguyên mã kèm cảnh báo, không âm thầm biến mất khỏi màn cấu hình.
       const hasNganhHang = !!(row.nganhHang && row.nganhHang.length);
+      // mixedApprovalTruncatedList() (11/2026) — cắt gọn khi gán NHIỀU ngành hàng (ảnh chụp người dùng
+      // gửi cho thấy 1 dòng liệt kê ~20 ngành hàng kéo dài cả màn hình theo chiều dọc). nganhHangPlainNames
+      // (KHÔNG có HTML/badge) dùng riêng cho `title` tooltip — item nào đã xoá khỏi danh mục vẫn giữ
+      // nguyên mã thô trong tooltip, khớp đúng cách hiện trong danh sách đầy đủ.
+      const nganhHangItemsHtml = hasNganhHang ? row.nganhHang.map(code => {
+        const n = (DB.nganhHangCatalog || []).find(x => x.code === code);
+        return n ? escapeHtml(n.name) : `<span class="text-red-600">${escapeHtml(code)} (đã xoá khỏi danh mục)</span>`;
+      }) : [];
+      const nganhHangPlainNames = hasNganhHang ? row.nganhHang.map(code => (DB.nganhHangCatalog || []).find(x => x.code === code)?.name || code) : [];
       const nganhHangLabel = hasNganhHang
-        ? row.nganhHang.map(code => {
-            const n = (DB.nganhHangCatalog || []).find(x => x.code === code);
-            return n ? escapeHtml(n.name) : `<span class="text-red-600">${escapeHtml(code)} (đã xoá khỏi danh mục)</span>`;
-          }).join(', ')
+        ? mixedApprovalTruncatedList(nganhHangItemsHtml, nganhHangPlainNames.join(', '))
         : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi ngành hàng</span>`;
       return `
         <tr class="border-b${hasStores ? ' bg-amber-50' : ''}">

@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.37 (2026-11): Cấu Hình Quy Trình Nâng Cao — thu gọn cột "Người/Chức Danh" + rút gọn danh sách dài
+
+Phản hồi người dùng kèm ảnh chụp màn "Cấu hình quy trình nâng cao giá bán buôn và đặt hàng siêu thị"
+(sub-tab "⚙️ Quy Trình Hỗn Hợp" của cả 🏪 Đặt Hàng Siêu Thị lẫn 🏷️ Giá Bán Buôn): (1) cột "Người/Chức
+Danh" bị kéo rộng vô hạn vì co giãn theo nhãn DÀI NHẤT đang có trong toàn bộ danh mục; (2) các dòng có
+nhiều "Ngành Hàng Phụ Trách" (VD "Thẩm định FMCG" gán ~18-20 ngành hàng) liệt kê hết ra, kéo mỗi dòng
+tràn xuống nhiều dòng, khiến cả bảng dài vô hạn khó thao tác.
+
+**Sửa (`module-workflow.js`)**:
+1. `widenSddInputToLongestOption()` (dùng cho 2 ô "Người/Chức Danh" ở cả 2 bảng) — thêm trần `34ch`
+   (trước đây không trần, co theo nhãn dài nhất tuyệt đối). Đã xác nhận `sddPositionAndShow()` (dropdown
+   gợi ý khi gõ) tự co giãn ĐỘC LẬP theo text thật đang khớp (160-480px), không phụ thuộc độ rộng ô input
+   — nên đặt trần cho ô input không làm mất khả năng đọc đủ tên dài khi đang gõ tìm.
+2. `mixedApprovalTruncatedList(htmlItems, plainTextForTitle, maxShow=3)` (hàm mới, dùng chung) — cắt 1
+   danh sách dài còn 3 mục đầu + `và N khác`, giữ NGUYÊN toàn bộ danh sách trong thuộc tính `title` (tooltip
+   trình duyệt khi rê chuột) — không mất dữ liệu, kể cả cảnh báo "đã xoá khỏi danh mục" cho mã ngành hàng
+   mồ côi. Áp dụng cho cột "Siêu Thị Phụ Trách" (bảng Đặt Hàng Siêu Thị) và "Siêu Thị Phụ Trách" +
+   "Ngành Hàng Phụ Trách" (bảng Giá Bán Buôn).
+
+**Test**: file mới `test-mixed-approval-column-width.js` (12 kịch bản — hàm cắt danh sách, trần `34ch`
+không ảnh hưởng nhãn ngắn, tích hợp qua cả 2 hàm render thật, giữ nguyên cảnh báo mã mồ côi) — 12/12 pass,
+ổn định qua 3 lần chạy. Chạy lại 7 file `test-mixed-approval-*.js` hiện có — không regression. Demo
+Playwright dựng lại đúng kịch bản trong ảnh người dùng gửi (10 chức danh, 12 ngành hàng, 1 dòng gán hết)
+— xác nhận trực quan cột gọn lại, tooltip đầy đủ.
+
+**Deploy-impact:** chỉ `public/js/module-workflow.js` — không đổi schema/`.env.example`/dependencies, chỉ
+copy code + `pm2 restart`.
 
 ## v29.36 (2026-11): Hộp Thư Phê Duyệt — nút "🔄 Làm Mới" + mốc "Cập nhật lúc..."
 
