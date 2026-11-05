@@ -4759,8 +4759,16 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // đổi gì cho đa số hồ sơ cũ/đơn giản chỉ có 1 giá trị duy nhất.
     const contractorCount = Array.isArray(w.contractors) ? w.contractors.length : 0;
     const contractSubLabel = contractorCount > 1 ? `(nhập tay qua 💰 — ${contractorCount} nhà thầu)` : '(nhập tay qua 💰)';
+    // Cảnh báo mũi tên so Giá Trị Đầu Tư (dự toán) vs Giá Trị Hợp Đồng (thực tế) — MỚI (11/2026, phản hồi
+    // người dùng kèm ảnh demo modal "💰": "nếu giá trị đầu tư lớn hơn/thấp hơn giá trị hợp đồng có nên có
+    // cảnh báo kiểu mũi tên để biết cao hơn/thấp hơn không?"). Chỉ áp dụng cho công việc CÓ liên kết Danh
+    // Mục Đầu Tư (linkedEstimateItem — có dự toán để so) VÀ đã nhập Giá Trị Hợp Đồng qua modal "💰" (vốn
+    // VẪN nhập được cho công việc đã liên kết, chỉ là trước đây không hiện lại ở cột này — xem
+    // buildBudgetVsActualBadge() khai báo ngay dưới cho logic dùng CHUNG với chân modal "💰").
+    const budgetVsActualBadge = (linkedEstimateItem && w.contractValue > 0)
+      ? buildBudgetVsActualBadge(linkedEstimateItem.amount || 0, w.contractValue) : '';
     const investmentValueCellBody = linkedEstimateItem
-      ? escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0))
+      ? `${escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0))}${budgetVsActualBadge ? `<div class="text-[9px] font-sans mt-0.5">${budgetVsActualBadge}</div>` : ''}`
       : (w.contractValue
         ? `<span class="text-emerald-700">${escapeHtml(formatMoneyDisplay(w.contractValue))}</span><div class="text-[9px] text-gray-400 font-sans">${contractSubLabel}</div>`
         : '<span class="text-gray-300">—</span>');
@@ -4951,11 +4959,39 @@ function closeOperationWorkItemHistoryModal() {
 // xuất Excel không cần sửa gì.
 let owiContractors = [];
 let owiContractAttachmentUploading = false;
+// Giá Trị Đầu Tư (dự toán, tự động theo Danh Mục Đầu Tư) để so sánh với Tổng Giá Trị Hợp Đồng (thực tế,
+// nhập tay) — MỚI (11/2026, phản hồi người dùng kèm ảnh demo modal: "nếu giá trị đầu tư lớn hơn/thấp hơn
+// giá trị hợp đồng có nên có cảnh báo kiểu mũi tên để biết cao hơn/thấp hơn không?"). null = công việc
+// tạo tay, KHÔNG liên kết Danh Mục Đầu Tư -> không có cơ sở so sánh, ẩn hẳn phần này (xem
+// updateOwiContractTotalDisplay()). Đặt lại mỗi lần mở modal ở openOperationWorkItemContractModal().
+let owiContractBudgetAmount = null;
+// buildBudgetVsActualBadge(budget, actual) -> HTML cảnh báo mũi tên dùng CHUNG cho cả modal "💰" (chân
+// modal, so TỔNG mọi nhà thầu) VÀ cột "Giá Trị Đầu Tư" trong bảng #operationWorkItemTableBody (xem
+// investmentValueCell ở buildOperationWorkItemRow()) — 1 nơi tính toán duy nhất, tránh lệch logic giữa 2
+// chỗ hiện. Chỉ hiện khi CẢ 2 giá trị > 0 (budget=0 không có ý nghĩa so sánh — bỏ qua, không chia 0).
+function buildBudgetVsActualBadge(budget, actual) {
+  if (!(budget > 0) || !(actual > 0)) return '';
+  const diff = actual - budget;
+  const absDiffText = escapeHtml(formatMoneyDisplay(Math.abs(diff)));
+  if (diff === 0) {
+    return `<span class="inline-flex items-center gap-0.5 text-gray-500" title="Giá trị hợp đồng thực tế đúng bằng Giá Trị Đầu Tư dự toán">= Đúng dự toán</span>`;
+  }
+  const over = diff > 0;
+  const pct = (Math.abs(diff) / budget * 100).toFixed(1);
+  const colorClass = over ? 'text-red-600' : 'text-emerald-600';
+  const arrow = over ? '▲' : '▼';
+  const word = over ? 'Vượt dự toán' : 'Thấp hơn dự toán';
+  const tip = `Giá trị hợp đồng thực tế (${escapeHtml(formatMoneyDisplay(actual))}) ${over ? 'CAO HƠN' : 'THẤP HƠN'} Giá Trị Đầu Tư dự toán (${escapeHtml(formatMoneyDisplay(budget))}) — chênh lệch ${absDiffText} (${pct}%)`;
+  return `<span class="inline-flex items-center gap-0.5 ${colorClass} font-bold" title="${tip}">${arrow} ${word} ${absDiffText}</span>`;
+}
 function openOperationWorkItemContractModal(id) {
   const w = (DB.operationWorkItems || []).find(x => x.id === id);
   if (!w) return;
   document.getElementById('owiContractId').value = id;
   document.getElementById('owiContractTitle').innerText = `💰 Giá trị hợp đồng: ${w.title}`;
+  const linkedSourceRecord = operationWorkItemSourceRecord(operationKindFromSourceType(w.sourceType), w.sourceId);
+  const linkedEstimateItem = w.estimateItemId != null ? (linkedSourceRecord?.estimateItems || []).find(it => it.id === w.estimateItemId) : null;
+  owiContractBudgetAmount = linkedEstimateItem ? (linkedEstimateItem.amount || 0) : null;
   // Hồ sơ CŨ (trước khi có tính năng nhiều nhà thầu) chỉ có w.contractValue/w.contractAttachments (1 giá
   // trị, không tên nhà thầu) — dựng lại thành 1 dòng để không mất dữ liệu đã nhập trước đó; dòng này tự
   // "nâng cấp" lên cấu trúc contractors[] thật ngay lần Lưu kế tiếp (xem updateOperationWorkItemContract()).
@@ -4998,6 +5034,17 @@ function updateOwiContractTotalDisplay() {
   if (!totalEl) return;
   const total = owiContractors.reduce((sum, c) => sum + (Number(c.value) || 0), 0);
   totalEl.innerText = formatMoneyDisplay(total) + ' VNĐ';
+  const compareEl = document.getElementById('owiContractBudgetCompare');
+  if (compareEl) {
+    const badge = owiContractBudgetAmount != null ? buildBudgetVsActualBadge(owiContractBudgetAmount, total) : '';
+    if (badge) {
+      compareEl.innerHTML = `Giá Trị Đầu Tư (dự toán): ${escapeHtml(formatMoneyDisplay(owiContractBudgetAmount))} VNĐ — ${badge}`;
+      compareEl.classList.remove('hidden');
+    } else {
+      compareEl.innerHTML = '';
+      compareEl.classList.add('hidden');
+    }
+  }
 }
 async function onOwiContractorFileChange(inputEl, idx) {
   const files = Array.from(inputEl.files || []);

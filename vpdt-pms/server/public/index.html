@@ -1246,6 +1246,11 @@
         </div>
         <div id="owiContractorsList" class="space-y-2"></div>
         <div class="text-right text-xs font-bold text-gray-700 border-t pt-2">Tổng cộng: <span id="owiContractTotalValue" class="text-emerald-700"></span></div>
+        <!-- So sánh với Giá Trị Đầu Tư (MỚI, 11/2026, phản hồi người dùng — "nếu giá trị đầu tư lớn hơn/
+             thấp hơn giá trị hợp đồng có nên có cảnh báo mũi tên"): chỉ hiện khi công việc CÓ liên kết
+             Danh Mục Đầu Tư (có dự toán để so sánh) — ẩn/rỗng cho công việc tạo tay, xem
+             updateOwiContractTotalDisplay() (module-vanhanh.js). -->
+        <div id="owiContractBudgetCompare" class="text-right text-[11px] hidden"></div>
         <div class="flex justify-end gap-2 pt-1">
           <button type="button" data-op="closeOperationWorkItemContractModal" class="bg-gray-200 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
           <button type="button" data-op="submitOperationWorkItemContract" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu</button>

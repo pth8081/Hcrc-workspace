@@ -3067,6 +3067,17 @@ Ghi Chú luôn sửa được ở mọi giai đoạn.
       nhà thầu trở lên để phân biệt. Hồ sơ cũ (nhập trước khi có tính năng
       này) mở lại modal tự dựng thành đúng 1 dòng nhà thầu, không mất dữ
       liệu đã nhập trước đó.
+      **(Cập nhật lần 3, 11/2026, phản hồi người dùng "nếu giá trị đầu tư
+      lớn hơn/thấp hơn giá trị hợp đồng có nên có cảnh báo mũi tên")**: công
+      việc CÓ liên kết Danh Mục Đầu Tư VÀ đã nhập Giá Trị Hợp Đồng qua "💰" —
+      cả cột bảng lẫn chân modal tự hiện thêm 1 cảnh báo mũi tên so Giá Trị
+      Đầu Tư (dự toán) với Tổng Giá Trị Hợp Đồng (thực tế, tổng mọi nhà
+      thầu): "▲ Vượt dự toán ..." (đỏ, hợp đồng CAO HƠN dự toán), "▼ Thấp
+      hơn dự toán ..." (xanh, hợp đồng THẤP HƠN dự toán), hoặc "= Đúng dự
+      toán" (bằng nhau) — kèm số tiền chênh lệch cụ thể. Cập nhật ngay khi
+      gõ ở modal, không cần Lưu mới thấy. Công việc tạo tay (không liên kết)
+      hoặc chưa nhập Giá Trị Hợp Đồng — không hiện cảnh báo (không có dự
+      toán để so).
     - **Báo Cáo Tổng Quan**: bảng "📋 Tổng Quan Toàn Bộ Công Việc" (tab Báo
       Cáo) gom nhóm các dòng công việc theo mã hồ sơ, mặc định đóng — bấm
       vào dòng hồ sơ để xổ ra công việc con, có nút "Mở Hết"/"Đóng Hết" xổ/

@@ -334,6 +334,58 @@ async function runUiTests() {
   const afterRemove = await page.evaluate(() => owiContractors.length);
   record('C2 (f): bấm THẬT "✕" xoá dòng nhà thầu -> giảm đúng 1 dòng', beforeRemove === 2 && afterRemove === 1, `before=${beforeRemove} after=${afterRemove}`);
 
+  // ===== (g) MỚI (11/2026, phản hồi người dùng kèm ảnh demo modal "💰"): cảnh báo mũi tên ▲/▼ so Giá
+  // Trị Đầu Tư (dự toán) vs Giá Trị Hợp Đồng (thực tế) — cả ở cột bảng (investmentValueCell) LẪN chân
+  // modal "💰" (owiContractBudgetCompare), dùng CHUNG buildBudgetVsActualBadge(). =====
+  const badgeCellOut = await page.evaluate(() => {
+    const sourceRecord = { estimateItems: [{ id: 5001, content: 'Hạng mục A', amount: 30000000 }] };
+    const over = { id: 30, title: 'Vượt dự toán', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: 5001, contractValue: 35000000 };
+    const under = { id: 31, title: 'Thấp hơn dự toán', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: 5001, contractValue: 20000000 };
+    const equal = { id: 32, title: 'Đúng dự toán', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: 5001, contractValue: 30000000 };
+    const noContract = { id: 33, title: 'Chưa nhập hợp đồng', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: 5001, contractValue: 0 };
+    const unlinked = { id: 34, title: 'Tạo tay, có hợp đồng', status: 'CHUA_BAT_DAU', assignedToName: [], assignedTo: [], estimateItemId: null, contractValue: 99000000 };
+    return {
+      rowOver: buildOperationWorkItemRow(over, 0, false, 'EXECUTION', true, false, true, [], sourceRecord),
+      rowUnder: buildOperationWorkItemRow(under, 0, false, 'EXECUTION', true, false, true, [], sourceRecord),
+      rowEqual: buildOperationWorkItemRow(equal, 0, false, 'EXECUTION', true, false, true, [], sourceRecord),
+      rowNoContract: buildOperationWorkItemRow(noContract, 0, false, 'EXECUTION', true, false, true, [], sourceRecord),
+      rowUnlinked: buildOperationWorkItemRow(unlinked, 0, false, 'EXECUTION', true, false, true, [], sourceRecord)
+    };
+  });
+  record('C2 (g): Hợp đồng (35tr) VƯỢT Đầu Tư (30tr) -> cột hiện "▲ Vượt dự toán" màu đỏ (text-red-600)', badgeCellOut.rowOver.includes('▲ Vượt dự toán') && badgeCellOut.rowOver.includes('text-red-600'), badgeCellOut.rowOver);
+  record('C2 (g): Hợp đồng (20tr) THẤP HƠN Đầu Tư (30tr) -> cột hiện "▼ Thấp hơn dự toán" màu xanh (text-emerald-600)', badgeCellOut.rowUnder.includes('▼ Thấp hơn dự toán') && badgeCellOut.rowUnder.includes('text-emerald-600'), badgeCellOut.rowUnder);
+  record('C2 (g): Hợp đồng ĐÚNG BẰNG Đầu Tư (30tr = 30tr) -> cột hiện "Đúng dự toán", không có mũi tên', badgeCellOut.rowEqual.includes('Đúng dự toán') && !badgeCellOut.rowEqual.includes('▲') && !badgeCellOut.rowEqual.includes('▼'), badgeCellOut.rowEqual);
+  record('C2 (g): CHƯA nhập Giá Trị Hợp Đồng (contractValue=0) -> KHÔNG hiện cảnh báo gì (không có cơ sở so sánh)', !badgeCellOut.rowNoContract.includes('dự toán'), badgeCellOut.rowNoContract);
+  record('C2 (g): công việc tạo tay (không liên kết Danh Mục Đầu Tư) -> KHÔNG hiện cảnh báo (không có Giá Trị Đầu Tư để so)', !badgeCellOut.rowUnlinked.includes('dự toán'), badgeCellOut.rowUnlinked);
+
+  // ===== (g2) Chân modal "💰" (#owiContractBudgetCompare) — gõ THẬT giá trị hợp đồng vượt dự toán, xác
+  // nhận cảnh báo tự cập nhật theo thời gian thực (mirror updateOwiContractTotalDisplay() mỗi lần gõ) =====
+  await page.evaluate(() => {
+    DB.operationRepairs = [{ id: 100, code: 'HCRC-VH-SCST-100', title: 'Sửa kho A', estimateItems: [{ id: 5001, content: 'Hạng mục A', amount: 30000000 }] }];
+    DB.operationWorkItems = [{ id: 40, title: 'Việc E', sourceType: 'OPERATION_REPAIR', sourceId: 100, estimateItemId: 5001, contractValue: 0, contractAttachments: [], contractors: [] }];
+    openOperationWorkItemContractModal(40);
+  });
+  const compareHiddenBefore = await page.evaluate(() => document.getElementById('owiContractBudgetCompare').classList.contains('hidden'));
+  record('C2 (g2): mở modal, CHƯA nhập gì -> #owiContractBudgetCompare ẨN (contractValue=0, không có cơ sở so)', compareHiddenBefore === true, String(compareHiddenBefore));
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', '40.000.000');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', 'input');
+  const compareAfterOver = await page.evaluate(() => ({
+    hidden: document.getElementById('owiContractBudgetCompare').classList.contains('hidden'),
+    text: document.getElementById('owiContractBudgetCompare').innerText
+  }));
+  record('C2 (g2): gõ THẬT 40tr (> 30tr dự toán) -> #owiContractBudgetCompare HIỆN "▲ Vượt dự toán"', compareAfterOver.hidden === false && compareAfterOver.text.includes('Vượt dự toán'), JSON.stringify(compareAfterOver));
+
+  // ===== (g3) công việc tạo tay (không liên kết Danh Mục Đầu Tư) -> #owiContractBudgetCompare LUÔN ẨN
+  // dù có nhập Giá Trị Hợp Đồng, vì không có dự toán để so sánh =====
+  await page.evaluate(() => {
+    DB.operationWorkItems = [{ id: 41, title: 'Việc F (tạo tay)', sourceType: 'OPERATION_REPAIR', sourceId: 100, estimateItemId: null, contractValue: 0, contractAttachments: [], contractors: [] }];
+    openOperationWorkItemContractModal(41);
+  });
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', '15.000.000');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', 'input');
+  const compareUnlinked = await page.evaluate(() => document.getElementById('owiContractBudgetCompare').classList.contains('hidden'));
+  record('C2 (g3): công việc tạo tay, dù gõ Giá Trị Hợp Đồng -> #owiContractBudgetCompare VẪN ẨN (không có Giá Trị Đầu Tư để so)', compareUnlinked === true, String(compareUnlinked));
+
   // ===== (d) exportOperationWorkItems() có đủ cột Giá Trị Đầu Tư/Giá Trị Hợp Đồng/Tệp Đính Kèm HĐ =====
   // v29.20: investmentValue giờ tính ĐÚNG THEO TỪNG DÒNG (estimateItemId), KHÔNG còn estimateTotalAmount
   // (tổng cả hồ sơ) lặp lại ở mọi dòng — 2 công việc trong fixture liên kết 2 hạng mục KHÁC NHAU để xác

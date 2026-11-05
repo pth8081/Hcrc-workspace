@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.35 (2026-11): Vận Hành — cảnh báo mũi tên ▲/▼ so Giá Trị Đầu Tư (dự toán) vs Giá Trị Hợp Đồng (thực tế)
+
+Phản hồi người dùng (ngay sau khi xem demo modal "💰 Nhiều Nhà Thầu" của v29.33): "Nếu giá trị đầu tư lớn
+hơn và thấp hơn giá trị hợp đồng có nên có cảnh báo kiểu mũi tên ở bên ngoài để biết cao hơn hoặc thấp hơn
+giá trị hợp đồng ko?"
+
+**Bối cảnh**: công việc LIÊN KẾT Danh Mục Đầu Tư (có `estimateItemId`) hiện cột "Giá Trị Đầu Tư" = dự
+toán (`linkedEstimateItem.amount`) — NHƯNG người phụ trách VẪN điền được Giá Trị Hợp Đồng thực tế qua
+modal "💰" (gate theo `isOwner`/`canEditWorkItems`, không phụ thuộc đã liên kết hay chưa). Trước đây 2
+con số này tồn tại song song mà KHÔNG BAO GIỜ hiện cùng lúc để so sánh — cột bảng chỉ hiện dự toán, modal
+chỉ hiện tổng hợp đồng, không ai cảnh báo khi hợp đồng thực tế vượt/thấp hơn dự toán.
+
+**Sửa**: `buildBudgetVsActualBadge(budget, actual)` (module-vanhanh.js, dùng CHUNG cho cả 2 nơi) — so 2
+giá trị, chỉ hiện khi CẢ HAI đều > 0: `▲ Vượt dự toán <chênh lệch>` (đỏ) nếu hợp đồng thực tế CAO HƠN dự
+toán, `▼ Thấp hơn dự toán <chênh lệch>` (xanh) nếu THẤP HƠN, `= Đúng dự toán` (xám) nếu bằng nhau. Hiện ở
+2 chỗ: (1) cột "Giá Trị Đầu Tư" trong bảng Thực Hiện, ngay dưới số dự toán; (2) chân modal "💰", ngay dưới
+dòng "Tổng cộng" — cập nhật REAL-TIME theo từng lượt gõ (giống `updateOwiContractTotalDisplay()` đã có).
+Công việc TẠO TAY (không liên kết Danh Mục Đầu Tư, không có dự toán để so) hoặc CHƯA nhập Giá Trị Hợp
+Đồng — KHÔNG hiện cảnh báo gì (không đủ cơ sở so sánh).
+
+**Test**: `test-operation-workitem-contract-c2.js` thêm 9 kịch bản (C2 (g)/(g2)/(g3) — vượt/thấp hơn/bằng
+dự toán ở cột bảng, real-time ở chân modal khi gõ THẬT, ẩn hoàn toàn cho công việc tạo tay) — 38/38 pass.
+Chạy lại `test-operation-vhst-uibugfix.js` (18/18) — không regression.
+
+**Deploy-impact:** `public/index.html` + `public/js/module-vanhanh.js` — không đổi schema/`.env.example`/
+dependencies, không thêm class Tailwind mới (chỉ dùng class có sẵn: `text-red-600`/`text-emerald-600`/
+`text-gray-500`), chỉ copy code + `pm2 restart`.
 
 ## v29.34 (2026-11): Hộp Thư Phê Duyệt — tự vẽ lại ĐÚNG sub-tab riêng của 9 module + Ngân Sách khi có hồ sơ mới/vừa xử lý xong
 
