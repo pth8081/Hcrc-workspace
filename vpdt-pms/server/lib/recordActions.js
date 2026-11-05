@@ -1625,7 +1625,10 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     // CHƯA hỗ trợ gửi lúc tạo (tải file cần làm SAU khi có id, qua đúng action riêng) — luôn rỗng lúc
     // tạo, không đọc từ payload ở đây.
     contractValue: (() => { const n = Number(payload?.contractValue); return Number.isFinite(n) && n >= 0 ? n : 0; })(),
-    contractAttachments: []
+    contractAttachments: [],
+    // contractors[] — nhiều nhà thầu (11/2026, xem updateOperationWorkItemContract()) — luôn rỗng lúc
+    // tạo, điền SAU qua modal "💰" giống contractValue/contractAttachments ở trên.
+    contractors: []
   };
 }
 
@@ -1693,7 +1696,7 @@ function buildAutoWorkItemsFromEstimate(user, sourceRecord, sourceType, validIte
         history: [{ action: 'AUTO_CREATED_FROM_ESTIMATE', by: user.username, byName: user.name, time: nowVN() }],
         createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
         sourceType, sourceCode: sourceRecord.code, customData: {},
-        contractValue: 0, contractAttachments: [],
+        contractValue: 0, contractAttachments: [], contractors: [],
         estimateItemId: top.id
       };
       toCreate.push(rootWorkItem);
@@ -1717,7 +1720,7 @@ function buildAutoWorkItemsFromEstimate(user, sourceRecord, sourceType, validIte
         history: [{ action: 'AUTO_CREATED_FROM_ESTIMATE', by: user.username, byName: user.name, time: nowVN() }],
         createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
         sourceType, sourceCode: sourceRecord.code, customData: {},
-        contractValue: 0, contractAttachments: [],
+        contractValue: 0, contractAttachments: [], contractors: [],
         estimateItemId: child.id
       });
     }
@@ -1958,17 +1961,53 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord, hasChil
 // status/DA_NGHIEM_THU như editOperationWorkItem() — giá trị hợp đồng thật thường chỉ xác định ĐƯỢC
 // sau khi công việc đã hoàn thành/nghiệm thu xong (quyết toán cuối), chặn sửa sau khi nghiệm thu sẽ
 // khiến field này không bao giờ điền đúng được cho phần lớn trường hợp thực tế.
+// ĐỔI THIẾT KẾ (11/2026, phản hồi người dùng kèm ảnh demo — "khi người ta nhập giá trị thực tế hợp đồng
+// ấy thì người ta phải thuê nhiều nhà thầu... có thể tạo ra nhiều nhà cung cấp để tôi nhập các giá trị
+// khác nhau được không?"): 1 công việc có thể do NHIỀU nhà thầu cùng thực hiện, mỗi nhà thầu 1 giá trị
+// hợp đồng + bộ tệp đính kèm RIÊNG — thay vì chỉ 1 ô "Giá Trị Hợp Đồng" + 1 danh sách tệp DÙNG CHUNG như
+// trước. item.contractors[] = [{name, value, attachments[]}] là nguồn dữ liệu THẬT từ nay; item.contractValue
+// (TỔNG mọi nhà thầu) + item.contractAttachments (GỘP tệp mọi nhà thầu) VẪN được tính lại và ghi đè mỗi
+// lần lưu — giữ NGUYÊN để mọi nơi đang đọc 2 field cũ (cột "Giá Trị Đầu Tư" ở buildOperationWorkItemRow(),
+// xuất Excel, assertPayloadFileUrlsOwnedByUser() ở routes/records.js) tiếp tục đúng mà KHÔNG cần sửa gì
+// thêm — xem chú thích đầy đủ tại investmentValueCell (module-vanhanh.js).
 function updateOperationWorkItemContract(user, item, payload, sourceRecord) {
   const isOwner = isWorkItemAssignee(item, user.username);
   if (!canManageOperationRecord(user, sourceRecord, item.sourceType) && !isOwner) {
     throw new HttpError(403, 'Bạn không có quyền điền giá trị hợp đồng cho công việc này');
   }
-  const contractValue = Number(payload?.contractValue);
-  if (!Number.isFinite(contractValue) || contractValue < 0) {
-    throw new HttpError(400, 'Giá trị hợp đồng không hợp lệ (phải là số không âm)');
+  const existingContractors = Array.isArray(item.contractors) ? item.contractors : [];
+  let contractors;
+  if (Array.isArray(payload?.contractors)) {
+    // Dồn tệp CŨ của MỌI nhà thầu vào 1 "nguồn tra cứu" chung (theo fileUrl) trước khi sanitize từng nhà
+    // thầu — để sanitizeOperationEstimateAttachments() vẫn giữ đúng uploadedByName/uploadedAt gốc dù
+    // người dùng đổi thứ tự/tên nhà thầu giữa các lần lưu (khớp đúng nhau theo fileUrl, không theo index).
+    const allExistingAttachments = existingContractors.flatMap((c) => (Array.isArray(c.attachments) ? c.attachments : []));
+    contractors = payload.contractors.slice(0, 20).map((c, idx) => {
+      const value = Number(c?.value);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new HttpError(400, `Giá trị hợp đồng không hợp lệ ở nhà thầu thứ ${idx + 1} (phải là số không âm)`);
+      }
+      return {
+        name: String(c?.name || '').trim().slice(0, 200) || `Nhà thầu ${idx + 1}`,
+        value,
+        attachments: sanitizeOperationEstimateAttachments(c?.attachments, allExistingAttachments, user)
+      };
+    });
+  } else {
+    // Khuôn CŨ (tương thích ngược — client cache JS cũ chưa tải lại, hoặc gọi API trực tiếp kiểu cũ):
+    // coi như 1 nhà thầu duy nhất không tên, y hệt hành vi trước khi có tính năng nhiều nhà thầu.
+    const contractValue = Number(payload?.contractValue);
+    if (!Number.isFinite(contractValue) || contractValue < 0) {
+      throw new HttpError(400, 'Giá trị hợp đồng không hợp lệ (phải là số không âm)');
+    }
+    const hasAttachments = Array.isArray(payload?.contractAttachments) && payload.contractAttachments.length > 0;
+    contractors = (contractValue > 0 || hasAttachments)
+      ? [{ name: '', value: contractValue, attachments: sanitizeOperationEstimateAttachments(payload?.contractAttachments, item.contractAttachments, user) }]
+      : [];
   }
-  item.contractValue = contractValue;
-  item.contractAttachments = sanitizeOperationEstimateAttachments(payload?.contractAttachments, item.contractAttachments, user);
+  item.contractors = contractors;
+  item.contractValue = contractors.reduce((sum, c) => sum + c.value, 0);
+  item.contractAttachments = contractors.flatMap((c) => c.attachments);
   item.history = item.history || [];
   item.history.push({ action: 'CONTRACT_UPDATED', by: user.username, byName: user.name, time: nowVN() });
   return item;

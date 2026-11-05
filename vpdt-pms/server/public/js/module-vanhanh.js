@@ -4754,10 +4754,15 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // Giờ nếu chưa liên kết nhưng ĐÃ có w.contractValue (nhập qua 💰) thì hiện số đó thay vì gạch ngang vô
     // nghĩa, kèm nhãn nhỏ "(nhập tay qua 💰)" để không nhầm với số TỰ ĐỘNG lấy từ Danh Mục Đầu Tư — hành vi
     // công việc ĐÃ liên kết (nhánh linkedEstimateItem) giữ NGUYÊN 100% như cũ, không đụng gì.
+    // "(X nhà thầu)" (11/2026, tính năng Nhiều Nhà Thầu) — chỉ thêm số đếm khi THẬT SỰ có từ 2 nhà thầu
+    // trở lên (w.contractors[]); 0 hoặc 1 nhà thầu giữ nguyên nhãn cũ "(nhập tay qua 💰)" như trước, không
+    // đổi gì cho đa số hồ sơ cũ/đơn giản chỉ có 1 giá trị duy nhất.
+    const contractorCount = Array.isArray(w.contractors) ? w.contractors.length : 0;
+    const contractSubLabel = contractorCount > 1 ? `(nhập tay qua 💰 — ${contractorCount} nhà thầu)` : '(nhập tay qua 💰)';
     const investmentValueCellBody = linkedEstimateItem
       ? escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0))
       : (w.contractValue
-        ? `<span class="text-emerald-700">${escapeHtml(formatMoneyDisplay(w.contractValue))}</span><div class="text-[9px] text-gray-400 font-sans">(nhập tay qua 💰)</div>`
+        ? `<span class="text-emerald-700">${escapeHtml(formatMoneyDisplay(w.contractValue))}</span><div class="text-[9px] text-gray-400 font-sans">${contractSubLabel}</div>`
         : '<span class="text-gray-300">—</span>');
     const investmentValueCell = `<td class="border p-2 text-right font-mono">${investmentValueCellBody}</td>`;
     // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
@@ -4936,28 +4941,73 @@ function closeOperationWorkItemHistoryModal() {
 // phát hiện qua demo thật). Giá trị này giờ hiện ĐÚNG (link qua estimateItemId) ở 1 cột riêng trong
 // bảng #operationWorkItemTableBody (xem investmentValueCell ở buildOperationWorkItemRow()) — modal
 // này giờ CHỈ còn "Giá Trị Hợp Đồng" (nhập tay) + tệp đính kèm, không có field tự động nào nữa.
-let owiContractPendingAttachments = [];
+// ĐỔI THIẾT KẾ LẦN 2 (11/2026, phản hồi người dùng kèm ảnh demo tự vẽ tay — "khi người ta nhập giá trị
+// thực tế hợp đồng ấy thì người ta phải thuê nhiều nhà thầu... có thể tạo ra nhiều nhà cung cấp để tôi
+// nhập các giá trị khác nhau được không?"): owiContractors[] thay cho owiContractPendingAttachments (1
+// danh sách tệp DÙNG CHUNG) — mỗi phần tử {name, value, attachments[]} là 1 nhà thầu RIÊNG, mỗi nhà thầu
+// có giá trị hợp đồng + tối đa 10 tệp đính kèm CỦA RIÊNG mình. Server (updateOperationWorkItemContract(),
+// lib/recordActions.js) vẫn tự tính lại item.contractValue = TỔNG mọi nhà thầu + item.contractAttachments
+// = GỘP tệp mọi nhà thầu — 2 field cũ này giữ nguyên nên cột "Giá Trị Đầu Tư" (investmentValueCell) và
+// xuất Excel không cần sửa gì.
+let owiContractors = [];
 let owiContractAttachmentUploading = false;
 function openOperationWorkItemContractModal(id) {
   const w = (DB.operationWorkItems || []).find(x => x.id === id);
   if (!w) return;
   document.getElementById('owiContractId').value = id;
   document.getElementById('owiContractTitle').innerText = `💰 Giá trị hợp đồng: ${w.title}`;
-  document.getElementById('owiContractValue').value = w.contractValue ? formatMoneyDisplay(w.contractValue) : '';
-  owiContractPendingAttachments = (w.contractAttachments || []).slice();
-  renderOwiContractAttachmentChips();
+  // Hồ sơ CŨ (trước khi có tính năng nhiều nhà thầu) chỉ có w.contractValue/w.contractAttachments (1 giá
+  // trị, không tên nhà thầu) — dựng lại thành 1 dòng để không mất dữ liệu đã nhập trước đó; dòng này tự
+  // "nâng cấp" lên cấu trúc contractors[] thật ngay lần Lưu kế tiếp (xem updateOperationWorkItemContract()).
+  if (Array.isArray(w.contractors) && w.contractors.length) {
+    owiContractors = w.contractors.map(c => ({ name: c.name || '', value: c.value || 0, attachments: (c.attachments || []).slice() }));
+  } else if (w.contractValue || (w.contractAttachments || []).length) {
+    owiContractors = [{ name: '', value: w.contractValue || 0, attachments: (w.contractAttachments || []).slice() }];
+  } else {
+    owiContractors = [{ name: '', value: 0, attachments: [] }];
+  }
+  renderOwiContractorRows();
   document.getElementById('operationWorkItemContractModal').classList.remove('hidden');
 }
 function closeOperationWorkItemContractModal() {
   document.getElementById('operationWorkItemContractModal').classList.add('hidden');
 }
-async function onOwiContractFileChange(inputEl) {
+function addOwiContractorRow() {
+  owiContractors.push({ name: '', value: 0, attachments: [] });
+  renderOwiContractorRows();
+}
+function removeOwiContractorRow(idx) {
+  if (!owiContractors[idx]) return;
+  owiContractors.splice(idx, 1);
+  renderOwiContractorRows();
+}
+// Gõ tên/giá trị KHÔNG render lại cả danh sách (mirror updateOperationEstimateItemField()) — giữ nguyên
+// con trỏ/focus đang gõ dở, chỉ cập nhật state; tổng cộng ở chân modal vẫn cần đồng bộ riêng.
+function onOwiContractorNameInput(el) {
+  const c = owiContractors[Number(el.dataset.idx)];
+  if (c) c.name = el.value;
+}
+function onOwiContractorValueInput(el) {
+  const c = owiContractors[Number(el.dataset.idx)];
+  if (!c) return;
+  c.value = getMoneyValue(el);
+  updateOwiContractTotalDisplay();
+}
+function updateOwiContractTotalDisplay() {
+  const totalEl = document.getElementById('owiContractTotalValue');
+  if (!totalEl) return;
+  const total = owiContractors.reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+  totalEl.innerText = formatMoneyDisplay(total) + ' VNĐ';
+}
+async function onOwiContractorFileChange(inputEl, idx) {
   const files = Array.from(inputEl.files || []);
   inputEl.value = '';
   if (!files.length) return;
+  const c = owiContractors[idx];
+  if (!c) return;
   if (owiContractAttachmentUploading) return alert('⏳ Đang tải tệp, vui lòng đợi tải xong rồi thử lại.');
-  const remaining = 10 - owiContractPendingAttachments.length;
-  if (remaining <= 0) return alert('⛔ Đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
+  const remaining = 10 - c.attachments.length;
+  if (remaining <= 0) return alert('⛔ Nhà thầu này đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
   const toUpload = files.slice(0, remaining);
   const overflowCount = files.length - toUpload.length;
   owiContractAttachmentUploading = true;
@@ -4966,34 +5016,52 @@ async function onOwiContractFileChange(inputEl) {
     for (const file of toUpload) {
       try {
         const data = await uploadFileToServer(file, 'operationWorkItemContract');
-        owiContractPendingAttachments.push({
+        c.attachments.push({
           fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
           uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
         });
       } catch (err) { failed.push(`${file.name}: ${err.message}`); }
     }
   } finally { owiContractAttachmentUploading = false; }
-  renderOwiContractAttachmentChips();
+  renderOwiContractorRows();
   const notices = [];
   if (failed.length) notices.push(`⛔ ${failed.length} tệp tải lỗi:\n${failed.join('\n')}`);
-  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — chỉ nhận tối đa 10 tệp đính kèm.`);
+  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — chỉ nhận tối đa 10 tệp đính kèm cho mỗi nhà thầu.`);
   if (notices.length) alert(notices.join('\n\n'));
 }
-function removeOwiContractAttachment(idx) {
-  owiContractPendingAttachments.splice(idx, 1);
-  renderOwiContractAttachmentChips();
+function removeOwiContractorAttachment(idx, fileIdx) {
+  const c = owiContractors[idx];
+  if (!c || !c.attachments[fileIdx]) return;
+  c.attachments.splice(fileIdx, 1);
+  renderOwiContractorRows();
 }
-function renderOwiContractAttachmentChips() {
-  const chipEl = document.getElementById('owiContractFileChip');
-  if (!chipEl) return;
-  chipEl.innerHTML = owiContractPendingAttachments.map((a, idx) => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="hover:underline">${escapeHtml(a.fileName)}</a><button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeOwiContractAttachment" data-arg0="${idx}">✕</button></span>`).join('');
+function renderOwiContractorRows() {
+  const listEl = document.getElementById('owiContractorsList');
+  if (!listEl) return;
+  listEl.innerHTML = owiContractors.map((c, idx) => {
+    const chips = (c.attachments || []).map((a, fIdx) => `<span class="inline-flex items-center gap-1 bg-white border rounded px-2 py-0.5 text-[11px]">📎 <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" download="${escapeHtml(a.fileName || '')}" class="hover:underline">${escapeHtml(a.fileName)}</a><button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeOwiContractorAttachment" data-idx="${idx}" data-fidx="${fIdx}">✕</button></span>`).join('');
+    return `
+    <div class="border rounded p-2.5 bg-gray-50">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" value="${escapeHtml(c.name)}" placeholder="Tên nhà thầu (VD: Công ty TNHH A)" data-op-input="onOwiContractorNameInput" data-idx="${idx}" class="border rounded px-2 py-1 text-xs flex-1">
+        ${owiContractors.length > 1 ? `<button type="button" data-op="removeOwiContractorRow" data-idx="${idx}" class="text-red-600 hover:text-red-800 text-xs font-bold px-1" title="Xoá nhà thầu này">✕</button>` : ''}
+      </div>
+      <label class="text-[10px] text-gray-500">Giá Trị Hợp Đồng (VNĐ)</label>
+      <input type="text" inputmode="numeric" value="${c.value ? formatMoneyDisplay(c.value) : ''}" placeholder="0" data-op-input="onOwiContractorValueInput" data-idx="${idx}" class="border rounded px-2 py-1.5 text-sm w-full money-input mb-1.5">
+      <label class="text-[10px] text-gray-500">📎 Tệp Đính Kèm (tối đa 10 tệp)</label>
+      <div class="flex flex-wrap gap-1 mt-1 mb-1">${chips}</div>
+      <label class="inline-block bg-white border px-2 py-0.5 rounded text-[11px] font-bold text-gray-700 cursor-pointer hover:bg-gray-50">📤 Tải Tệp
+        <input type="file" multiple data-op-change="onOwiContractorFileChange" data-idx="${idx}" class="hidden">
+      </label>
+    </div>`;
+  }).join('');
+  updateOwiContractTotalDisplay();
 }
 async function submitOperationWorkItemContract() {
   const id = Number(document.getElementById('owiContractId').value);
   if (!Number.isFinite(id)) return;
   const payload = {
-    contractValue: getMoneyValue(document.getElementById('owiContractValue')),
-    contractAttachments: owiContractPendingAttachments
+    contractors: owiContractors.map(c => ({ name: (c.name || '').trim(), value: c.value || 0, attachments: c.attachments }))
   };
   try {
     const result = await callRecordAction('operationWorkItems', id, 'contract', payload);
@@ -6247,6 +6315,12 @@ const OP_CLICK_ACTIONS = {
   // openOperationWorkItemContractModal() cũng dùng data-id nhưng CHƯA TỪNG được khai ở registry này, rơi
   // vào fallback chỉ đọc data-arg0/argN -> id=undefined -> "if (!w) return;" thoát ngay, không mở gì cả.
   openOperationWorkItemContractModal: el => openOperationWorkItemContractModal(Number(el.dataset.id)),
+  // "Nhiều Nhà Thầu" (11/2026) — dòng nhà thầu ĐỘNG trong modal "💰", mirror ĐÚNG lý do khai báo tường
+  // minh ở ngay trên (data-idx/data-fidx, không phải data-arg0/argN nên fallback cspDispatchOp() không
+  // tự hiểu được — phải khai ở đây mới gọi đúng hàm kèm đúng tham số).
+  addOwiContractorRow: () => addOwiContractorRow(),
+  removeOwiContractorRow: el => removeOwiContractorRow(Number(el.dataset.idx)),
+  removeOwiContractorAttachment: el => removeOwiContractorAttachment(Number(el.dataset.idx), Number(el.dataset.fidx)),
   updateOperationWorkItemProgressAction: el => updateOperationWorkItemProgressAction(Number(el.dataset.id), el.dataset.status),
   // Correction 3 — modal "🔄 Cập Nhật Tiến Độ" (mirror #taskProgressModal), xem operationWorkItemProgressModal.
   openOperationWorkItemProgressModal: el => openOperationWorkItemProgressModal(Number(el.dataset.id)),
@@ -6397,7 +6471,10 @@ const OP_CHANGE_ACTIONS = {
   onItPriceFileChange: (el, e) => onItPriceFileChange(e),
   onItPriceMasterListChange: () => onItPriceMasterListChange(),
   onItPriceExpiryModeChange: () => onItPriceExpiryModeChange(),
-  onMultiFileChosen: el => onMultiFileChosen(el, el.dataset.arg1)
+  onMultiFileChosen: el => onMultiFileChosen(el, el.dataset.arg1),
+  // "Nhiều Nhà Thầu" (11/2026) — input file RIÊNG của mỗi dòng nhà thầu trong modal "💰" (el chính là
+  // input file, data-idx="N" đọc trực tiếp từ el.dataset — mirror onOperationEstimateAttachmentFileChange() ở trên).
+  onOwiContractorFileChange: el => onOwiContractorFileChange(el, Number(el.dataset.idx))
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -6411,7 +6488,11 @@ const OP_INPUT_ACTIONS = {
   pmsFilter: el => pmsFilter(el.dataset.arg0, el.value),
   // Phê Duyệt Giá Bán Buôn — cùng lý do gmsAdd/gmsRemove ở OP_CLICK_ACTIONS: ô tìm siêu thị đề xuất dùng
   // data-op-input="gmsFilter" (khuôn generic multi-select ở core.js), phải khai báo tường minh ở đây.
-  gmsFilter: el => gmsFilter(el.dataset.arg0, el.value)
+  gmsFilter: el => gmsFilter(el.dataset.arg0, el.value),
+  // "Nhiều Nhà Thầu" (11/2026) — tên/giá trị hợp đồng của mỗi dòng nhà thầu trong modal "💰" (mirror
+  // updateOperationEstimateItemField ngay trên, cùng lý do khai báo tường minh).
+  onOwiContractorNameInput: el => onOwiContractorNameInput(el),
+  onOwiContractorValueInput: el => onOwiContractorValueInput(el)
 };
 const OP_SUBMIT_ACTIONS = {
   submitOperationOrder: e => submitOperationOrder(e),

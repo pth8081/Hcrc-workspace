@@ -1228,27 +1228,25 @@
        phản hồi người dùng: "Giá Trị Đầu Tư" (tự động theo Chi Phí Danh Mục Đầu Tư) chuyển hẳn ra cột
        riêng ngoài bảng #operationWorkItemTableBody, xem buildOperationWorkItemRow() — modal này CHỈ
        còn đúng 2 việc: "Giá Trị Hợp Đồng" nhập tay + tệp đính kèm, nhập bởi người phụ trách/toàn quyền
-       hồ sơ, mirror khuôn #editOperationRepairModal (A3) cho phần tải nhiều tệp. -->
+       hồ sơ, mirror khuôn #editOperationRepairModal (A3) cho phần tải nhiều tệp.
+       ĐỔI THIẾT KẾ LẦN 2 (11/2026, phản hồi người dùng kèm ảnh demo tự vẽ tay): 1 công việc có thể do
+       NHIỀU nhà thầu cùng làm, mỗi nhà thầu 1 giá trị hợp đồng + bộ tệp RIÊNG — #owiContractorsList render
+       ĐỘNG qua renderOwiContractorRows() (module-vanhanh.js), không còn 1 cặp input/tệp cố định ở đây. -->
   <div id="operationWorkItemContractModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
         <h3 id="owiContractTitle" class="font-bold text-base text-gray-800"></h3>
         <button data-op="closeOperationWorkItemContractModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
         <input type="hidden" id="owiContractId">
-        <div>
-          <label class="text-xs font-bold text-gray-600">📝 Giá Trị Hợp Đồng (VNĐ)</label>
-          <input type="text" id="owiContractValue" inputmode="numeric" class="border rounded px-2 py-1.5 text-sm w-full money-input" placeholder="0">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-gray-600">🏗️ Nhà Thầu / Giá Trị Hợp Đồng</label>
+          <button type="button" data-op="addOwiContractorRow" class="bg-sky-600 text-white px-2.5 py-1 rounded text-[11px] font-bold hover:bg-sky-700">+ Thêm Nhà Thầu</button>
         </div>
-        <div>
-          <label class="text-xs font-bold text-gray-600">📎 Tệp Đính Kèm (tối đa 10 tệp)</label>
-          <div id="owiContractFileChip" class="flex flex-wrap gap-1 mt-1"></div>
-          <label class="inline-block mt-1 bg-white border px-2.5 py-1 rounded text-xs font-bold text-gray-700 cursor-pointer hover:bg-gray-50">📤 Tải Tệp Lên
-            <input type="file" multiple data-op-change="onOwiContractFileChange" data-arg-el="0" class="hidden">
-          </label>
-        </div>
-        <div class="flex justify-end gap-2 pt-2">
+        <div id="owiContractorsList" class="space-y-2"></div>
+        <div class="text-right text-xs font-bold text-gray-700 border-t pt-2">Tổng cộng: <span id="owiContractTotalValue" class="text-emerald-700"></span></div>
+        <div class="flex justify-end gap-2 pt-1">
           <button type="button" data-op="closeOperationWorkItemContractModal" class="bg-gray-200 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
           <button type="button" data-op="submitOperationWorkItemContract" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu</button>
         </div>

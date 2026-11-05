@@ -3042,6 +3042,15 @@ Ghi Chú luôn sửa được ở mọi giai đoạn.
       "💰" (kèm nhãn nhỏ "nhập tay qua 💰" để phân biệt với số tự động) thay
       vì để trống — vẫn phải bấm "💰" để nhập/sửa, cột chỉ hiển thị lại,
       không gõ trực tiếp được.
+      **(Cập nhật lần 2, 11/2026, phản hồi người dùng kèm ảnh chụp "1 công
+      việc có thể do nhiều nhà thầu cùng làm")**: modal "💰" giờ cho thêm/bớt
+      NHIỀU "dòng nhà thầu" (nút "+ Thêm Nhà Thầu"), mỗi dòng có tên nhà thầu
+      + Giá Trị Hợp Đồng + tối đa 10 tệp đính kèm RIÊNG, chân modal tự cộng
+      dồn "Tổng cộng". Cột "Giá Trị Đầu Tư" trong bảng vẫn hiện ĐÚNG 1 số duy
+      nhất (= tổng mọi nhà thầu), chỉ thêm nhãn "(X nhà thầu)" khi có từ 2
+      nhà thầu trở lên để phân biệt. Hồ sơ cũ (nhập trước khi có tính năng
+      này) mở lại modal tự dựng thành đúng 1 dòng nhà thầu, không mất dữ
+      liệu đã nhập trước đó.
     - **Báo Cáo Tổng Quan**: bảng "📋 Tổng Quan Toàn Bộ Công Việc" (tab Báo
       Cáo) gom nhóm các dòng công việc theo mã hồ sơ, mặc định đóng — bấm
       vào dòng hồ sơ để xổ ra công việc con, có nút "Mở Hết"/"Đóng Hết" xổ/

@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**29.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.33 (2026-11): Vận Hành — modal "💰 Giá Trị Hợp Đồng" hỗ trợ NHIỀU nhà thầu, mỗi nhà thầu 1 giá trị
++ tệp đính kèm riêng
+
+Phản hồi người dùng kèm ảnh chụp màn hình thật (HCRC-SX-SCST-004, "Bảng Biển") + ảnh tự vẽ minh hoạ ý
+tưởng: "khi người ta nhập giá trị thực tế hợp đồng ấy thì người ta phải thuê nhiều nhà thầu... có thể tạo
+ra nhiều nhà cung cấp để tôi nhập các giá trị khác nhau được không?"
+
+**Trước đây**: modal "💰" chỉ có đúng 1 ô "Giá Trị Hợp Đồng" + 1 danh sách tệp đính kèm DÙNG CHUNG — không
+thể hiện đúng thực tế 1 công việc do nhiều nhà thầu cùng làm, mỗi nhà thầu 1 hợp đồng/giá trị/bộ hồ sơ
+riêng.
+
+**Sửa**: modal giờ cho thêm/bớt nhiều "dòng nhà thầu" (nút "+ Thêm Nhà Thầu"), mỗi dòng có tên nhà thầu +
+giá trị hợp đồng + tối đa 10 tệp đính kèm RIÊNG, tự cộng dồn "Tổng cộng" ở chân modal. Dữ liệu mới lưu ở
+`item.contractors[]` (server, `updateOperationWorkItemContract()`, lib/recordActions.js); 2 field cũ
+`contractValue`/`contractAttachments` VẪN được server tự tính lại (= tổng/gộp mọi nhà thầu) mỗi lần lưu để
+cột "Giá Trị Đầu Tư" trong bảng Thực Hiện và xuất Excel tiếp tục đúng mà KHÔNG cần sửa gì — chỉ thêm nhãn
+nhỏ "(X nhà thầu)" khi có từ 2 nhà thầu trở lên. Hồ sơ CŨ (chỉ có 1 giá trị, chưa có `contractors[]`) khi
+mở lại modal tự dựng thành đúng 1 dòng nhà thầu, không mất dữ liệu đã nhập trước đó.
+
+**Build**: không cần — không thêm class Tailwind mới nào trong đợt này (rút kinh nghiệm từ v29.32).
+
+**Test**: viết lại 2 file test có sẵn theo đúng UI mới (`test-operation-workitem-contract-c2.js` 30/30,
+`test-operation-vhst-uibugfix.js` 18/18) + thêm 2 kịch bản bấm nút THẬT cho tính năng mới (thêm/xoá nhà
+thầu, nhập 2 giá trị riêng không bị trộn lẫn) + demo Playwright thật
+(`demo-owi-contract-multi-contractor.js`, dựng lại đúng kịch bản "Bảng Biển" trong ảnh người dùng gửi).
+Chạy lại 8 bộ test liên quan module Vận Hành — toàn bộ pass, không regression.
+
+**Deploy-impact:** 1 file HTML (`index.html`), 1 file client JS (`module-vanhanh.js`), 1 file server
+(`lib/recordActions.js`) — không đổi schema (operationWorkItems lưu dạng JSON blob, field mới chỉ là 1
+khoá JSON thêm vào, không cần migrate)/`.env.example`/dependencies, chỉ copy code + `pm2 restart`.
 
 ## v29.32 (2026-11): Màn hình Phê Duyệt (tất cả module) — bấm "Phê Duyệt" tự đóng ngay, bỏ alert() chặn
 thao tác

@@ -441,7 +441,11 @@ async function main() {
       const investmentElGone = await page.evaluate(() => document.getElementById('owiContractInvestmentValue') === null);
       assert(investmentElGone, 'Field "Giá Trị Đầu Tư" (owiContractInvestmentValue) phải ĐÃ BỊ BỎ khỏi modal (v29.20 — chuyển ra cột riêng trong bảng)');
 
-      await page.fill('#owiContractValue', '850000000');
+      // ĐỔI THIẾT KẾ (11/2026, "Nhiều Nhà Thầu"): ô nhập đơn #owiContractValue đã bỏ, thay bằng dòng nhà
+      // thầu động #owiContractorsList (mặc định 1 dòng rỗng khi hồ sơ chưa có giá trị gì) — xem đầy đủ ở
+      // test-operation-workitem-contract-c2.js.
+      await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', '850000000');
+      await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', 'input');
       await page.click('button[data-op="submitOperationWorkItemContract"]');
       await page.waitForTimeout(200);
       await page.screenshot({ path: path.join(SHOTS_DIR, 'owi-contract-after-save.png'), fullPage: true });

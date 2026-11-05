@@ -223,6 +223,9 @@ async function runUiTests() {
   record('C2 (a): toàn quyền quản lý hồ sơ -> CÓ nút 💰 (dù không phải phụ trách)', gateOut.asManager === true, JSON.stringify(gateOut));
 
   // ===== (b) modal CHỈ còn Giá Trị Hợp Đồng hiện có + tệp đính kèm — KHÔNG còn field Giá Trị Đầu Tư =====
+  // ĐỔI THIẾT KẾ LẦN 2 (11/2026, "Nhiều Nhà Thầu"): ô nhập đơn #owiContractValue/#owiContractFileChip ĐÃ
+  // BỎ hẳn, thay bằng #owiContractorsList render ĐỘNG qua renderOwiContractorRows() — hồ sơ CŨ chỉ có 1
+  // contractValue/contractAttachments (chưa có contractors[]) tự "dựng lại" thành ĐÚNG 1 dòng nhà thầu.
   const modalOut = await page.evaluate(() => {
     currentUser = { username: 'qlvh', perms: { operationRecordManageAll: true } };
     currentWorkItemModalKind = 'operationRepairs';
@@ -233,16 +236,21 @@ async function runUiTests() {
     return {
       titleText: document.getElementById('owiContractTitle').innerText,
       investmentElGone: document.getElementById('owiContractInvestmentValue') === null,
-      contractValueInput: document.getElementById('owiContractValue').value,
-      chipHtml: document.getElementById('owiContractFileChip').innerHTML,
+      legacySingleInputGone: document.getElementById('owiContractValue') === null,
+      rowCount: owiContractors.length,
+      listHtml: document.getElementById('owiContractorsList').innerHTML,
+      totalText: document.getElementById('owiContractTotalValue').innerText,
       modalVisible: !document.getElementById('operationWorkItemContractModal').classList.contains('hidden')
     };
   });
   record('C2 (b): modal hiện ra', modalOut.modalVisible === true, JSON.stringify(modalOut));
   record('C2 (b): tiêu đề modal KHÔNG còn nhắc "đầu tư" (đã đổi thành "Giá trị hợp đồng")', !modalOut.titleText.includes('đầu tư'), JSON.stringify(modalOut));
   record('C2 (b): field "Giá Trị Đầu Tư" (owiContractInvestmentValue) ĐÃ BỊ BỎ khỏi modal — chuyển ra cột riêng trong bảng', modalOut.investmentElGone === true, JSON.stringify(modalOut));
-  record('C2 (b): Giá Trị Hợp Đồng hiện có (12,000,000) được prefill vào ô nhập', modalOut.contractValueInput.includes('12.000.000') || modalOut.contractValueInput.includes('12,000,000'), JSON.stringify(modalOut));
-  record('C2 (b): tệp đính kèm hiện có hiển thị trong chip', modalOut.chipHtml.includes('hop_dong.pdf'), JSON.stringify(modalOut));
+  record('C2 (b): ô nhập đơn CŨ (owiContractValue) đã bỏ hẳn — thay bằng danh sách nhà thầu động', modalOut.legacySingleInputGone === true, JSON.stringify(modalOut));
+  record('C2 (b): hồ sơ CŨ (chỉ có contractValue, chưa có contractors[]) tự dựng lại thành ĐÚNG 1 dòng nhà thầu', modalOut.rowCount === 1, JSON.stringify(modalOut));
+  record('C2 (b): Giá Trị Hợp Đồng hiện có (12.000.000) được prefill vào dòng nhà thầu', modalOut.listHtml.includes('12.000.000'), JSON.stringify(modalOut));
+  record('C2 (b): tệp đính kèm hiện có hiển thị trong chip', modalOut.listHtml.includes('hop_dong.pdf'), JSON.stringify(modalOut));
+  record('C2 (b): Tổng cộng chân modal hiện đúng 12.000.000', modalOut.totalText.includes('12.000.000'), JSON.stringify(modalOut));
 
   // ===== (b2) MỚI (v29.20): cột "Giá Trị Đầu Tư" trong bảng hiện ĐÚNG Chi Phí của RIÊNG công việc đó
   // (qua estimateItemId), KHÔNG phải tổng cả hồ sơ — và hiện "—" cho công việc tạo tay (không liên kết).
@@ -257,23 +265,74 @@ async function runUiTests() {
   record('C2 (b2): công việc liên kết hạng mục 5001 (30.000.000) -> cột hiện ĐÚNG số này, KHÔNG phải tổng 2 hạng mục', investCellOut.rowLinked.includes('30.000.000') && !investCellOut.rowLinked.includes('129.000.000'), investCellOut.rowLinked);
   record('C2 (b2): công việc tạo tay (estimateItemId null) -> cột hiện "—", không suy luận/đoán số liệu', investCellOut.rowUnlinked.includes('—'), investCellOut.rowUnlinked);
 
-  // ===== (c) submit gọi ĐÚNG action 'contract' với payload đúng =====
+  // ===== (c) submit gọi ĐÚNG action 'contract' với payload.contractors[] đúng (gõ THẬT qua input, không
+  // chỉ gán biến JS) =====
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', '20.000.000');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', 'input');
   const submitOut = await page.evaluate(async () => {
     let calledWith = null;
     callRecordAction = async (collection, id, action, payload) => {
       calledWith = { collection, id, action, payload };
-      return { item: { id: 10, title: 'Việc B', contractValue: payload.contractValue, contractAttachments: payload.contractAttachments } };
+      return { item: { id: 10, title: 'Việc B', contractValue: payload.contractors.reduce((s, c) => s + c.value, 0), contractAttachments: [], contractors: payload.contractors } };
     };
     renderOperationWorkItemModalBody = () => {};
     renderOperationExecutionList = () => {};
     renderOperationAcceptanceList = () => {};
-    document.getElementById('owiContractValue').value = '20.000.000';
     await submitOperationWorkItemContract();
     return { calledWith, updatedInDb: DB.operationWorkItems.find(w => w.id === 10)?.contractValue };
   });
   record('C2 (c): submit gọi callRecordAction("operationWorkItems", id, "contract", ...)', submitOut.calledWith && submitOut.calledWith.collection === 'operationWorkItems' && submitOut.calledWith.id === 10 && submitOut.calledWith.action === 'contract', JSON.stringify(submitOut));
-  record('C2 (c): payload.contractValue đọc đúng từ ô nhập (20.000.000 -> 20000000)', submitOut.calledWith && submitOut.calledWith.payload.contractValue === 20000000, JSON.stringify(submitOut));
+  record('C2 (c): payload.contractors[0].value đọc đúng từ ô nhập THẬT đã gõ (20.000.000 -> 20000000)', submitOut.calledWith && submitOut.calledWith.payload.contractors[0].value === 20000000, JSON.stringify(submitOut));
   record('C2 (c): DB.operationWorkItems cập nhật lại đúng kết quả server trả về', submitOut.updatedInDb === 20000000, JSON.stringify(submitOut));
+
+  // ===== (e) MỚI (11/2026, "Nhiều Nhà Thầu"): bấm THẬT "+ Thêm Nhà Thầu" -> 2 dòng -> gõ tên + giá trị
+  // riêng từng dòng -> Lưu -> payload.contractors có ĐÚNG 2 phần tử với giá trị RIÊNG từng nhà thầu =====
+  await page.evaluate((id) => openOperationWorkItemContractModal(id), 10);
+  await page.click('[data-op="addOwiContractorRow"]');
+  const rowCountAfterAdd = await page.evaluate(() => owiContractors.length);
+  record('C2 (e): bấm THẬT "+ Thêm Nhà Thầu" -> thêm đúng 1 dòng mới (tổng 2 dòng)', rowCountAfterAdd === 2, String(rowCountAfterAdd));
+
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorNameInput"][data-idx="0"]', 'Công ty A');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorNameInput"][data-idx="0"]', 'input');
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', '20.000.000');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="0"]', 'input');
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorNameInput"][data-idx="1"]', 'Công ty B');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorNameInput"][data-idx="1"]', 'input');
+  await page.fill('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="1"]', '35.000.000');
+  await page.dispatchEvent('#owiContractorsList input[data-op-input="onOwiContractorValueInput"][data-idx="1"]', 'input');
+
+  const totalAfterFill = await page.evaluate(() => document.getElementById('owiContractTotalValue').innerText);
+  record('C2 (e): Tổng cộng chân modal TỰ cộng dồn đúng 2 nhà thầu (20tr + 35tr = 55.000.000)', totalAfterFill.includes('55.000.000'), totalAfterFill);
+
+  const twoContractorSubmit = await page.evaluate(async () => {
+    let calledWith = null;
+    callRecordAction = async (collection, id, action, payload) => {
+      calledWith = { collection, id, action, payload };
+      return { item: { id: 10, title: 'Việc B', contractValue: 55000000, contractAttachments: [], contractors: payload.contractors } };
+    };
+    renderOperationWorkItemModalBody = () => {};
+    renderOperationExecutionList = () => {};
+    renderOperationAcceptanceList = () => {};
+    await submitOperationWorkItemContract();
+    return calledWith;
+  });
+  record('C2 (e): payload.contractors có ĐÚNG 2 phần tử', twoContractorSubmit?.payload?.contractors?.length === 2, JSON.stringify(twoContractorSubmit));
+  record('C2 (e): nhà thầu 1 đúng tên + giá trị gõ thật (Công ty A, 20.000.000)', twoContractorSubmit?.payload?.contractors?.[0]?.name === 'Công ty A' && twoContractorSubmit.payload.contractors[0].value === 20000000, JSON.stringify(twoContractorSubmit));
+  record('C2 (e): nhà thầu 2 đúng tên + giá trị RIÊNG, không trộn với nhà thầu 1 (Công ty B, 35.000.000)', twoContractorSubmit?.payload?.contractors?.[1]?.name === 'Công ty B' && twoContractorSubmit.payload.contractors[1].value === 35000000, JSON.stringify(twoContractorSubmit));
+
+  // ===== (f) bấm THẬT nút "✕" xoá bớt 1 nhà thầu — reset lại item 10 về 1 nhà thầu (độc lập kết quả (e)
+  // vừa ghi 2 nhà thầu vào DB.operationWorkItems[10] qua submitOperationWorkItemContract() thật) =====
+  await page.evaluate((id) => {
+    const w = DB.operationWorkItems.find(x => x.id === id);
+    w.contractors = [{ name: 'Công ty A', value: 20000000, attachments: [] }];
+    w.contractValue = 20000000;
+    openOperationWorkItemContractModal(id);
+  }, 10);
+  await page.click('[data-op="addOwiContractorRow"]');
+  const beforeRemove = await page.evaluate(() => owiContractors.length);
+  await page.click('[data-op="removeOwiContractorRow"][data-idx="1"]');
+  const afterRemove = await page.evaluate(() => owiContractors.length);
+  record('C2 (f): bấm THẬT "✕" xoá dòng nhà thầu -> giảm đúng 1 dòng', beforeRemove === 2 && afterRemove === 1, `before=${beforeRemove} after=${afterRemove}`);
 
   // ===== (d) exportOperationWorkItems() có đủ cột Giá Trị Đầu Tư/Giá Trị Hợp Đồng/Tệp Đính Kèm HĐ =====
   // v29.20: investmentValue giờ tính ĐÚNG THEO TỪNG DÒNG (estimateItemId), KHÔNG còn estimateTotalAmount
