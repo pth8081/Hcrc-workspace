@@ -4747,7 +4747,19 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // Công việc tạo TAY (không qua Danh Mục Đầu Tư, estimateItemId rỗng) không có gì để tự động lấy —
     // hiện "—", không suy luận/đoán số liệu.
     const linkedEstimateItem = w.estimateItemId != null ? (sourceRecord?.estimateItems || []).find(it => it.id === w.estimateItemId) : null;
-    const investmentValueCell = `<td class="border p-2 text-right font-mono">${linkedEstimateItem ? escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0)) : '<span class="text-gray-300">—</span>'}</td>`;
+    // LỖI ĐÃ VÁ (11/2026, phản hồi người dùng — "ở thực hiện khi tạo 1 cv sẽ ko có link từ danh mục đầu
+    // tư tôi cần sửa và nhập được giá trị đầu tư ở mục thực hiện này"): công việc KHÔNG liên kết Danh Mục
+    // Đầu Tư trước đây LUÔN hiện "—" ở cột này dù người dùng ĐÃ nhập Giá Trị Hợp Đồng qua nút "💰" (field
+    // nhập tay vốn đã tồn tại sẵn — updateOperationWorkItemContract() — chỉ là KHÔNG hiện lại ở đây).
+    // Giờ nếu chưa liên kết nhưng ĐÃ có w.contractValue (nhập qua 💰) thì hiện số đó thay vì gạch ngang vô
+    // nghĩa, kèm nhãn nhỏ "(nhập tay qua 💰)" để không nhầm với số TỰ ĐỘNG lấy từ Danh Mục Đầu Tư — hành vi
+    // công việc ĐÃ liên kết (nhánh linkedEstimateItem) giữ NGUYÊN 100% như cũ, không đụng gì.
+    const investmentValueCellBody = linkedEstimateItem
+      ? escapeHtml(formatMoneyDisplay(linkedEstimateItem.amount || 0))
+      : (w.contractValue
+        ? `<span class="text-emerald-700">${escapeHtml(formatMoneyDisplay(w.contractValue))}</span><div class="text-[9px] text-gray-400 font-sans">(nhập tay qua 💰)</div>`
+        : '<span class="text-gray-300">—</span>');
+    const investmentValueCell = `<td class="border p-2 text-right font-mono">${investmentValueCellBody}</td>`;
     // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
     // trách (assignedTo[], Mục E) được tự cập nhật tiến độ VIỆC CỦA MÌNH — không được thêm/xoá cây (vẫn
     // chỉ canManageExecution), khớp lib/recordActions.js updateOperationWorkItemProgress().

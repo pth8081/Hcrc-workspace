@@ -457,16 +457,18 @@ async function main() {
       assert(check.modalHidden, 'Modal phải tự đóng sau khi lưu thành công (nếu vẫn mở: nút "💾 Lưu" vẫn "chết")');
     });
 
-    // ===================== 6) Cột "Giá Trị Đầu Tư" trong bảng (ĐỔI THIẾT KẾ v29.20) =====================
+    // ===================== 6) Cột "Giá Trị Đầu Tư" trong bảng (ĐỔI THIẾT KẾ v29.20, rồi mở rộng 11/2026) ====
     // v29.18: thêm 1 cột nhỏ hiện Giá Trị Hợp Đồng (contractValue, nhập tay) ngay trong bảng. v29.20
     // (phản hồi người dùng sau demo — "Giá Trị Đầu Tư" trong modal hiện SAI, lấy tổng cả hồ sơ thay vì
     // đúng hạng mục): đổi hẳn cột này thành "Giá Trị Đầu Tư" TỰ ĐỘNG (link qua estimateItemId), Giá Trị
-    // Hợp Đồng (nhập tay) nay CHỈ còn xem/sửa trong modal "💰", không còn hiện trong bảng nữa.
-    // rootWorkItemId trong file test này được TẠO TAY (nút "➕ Thêm Công Việc Gốc", KHÔNG qua Danh Mục
-    // Đầu Tư/buildAutoWorkItemsFromEstimate()) nên estimateItemId = null -> cột PHẢI hiện "—", kể cả sau
-    // khi vừa lưu 850.000.000 Giá Trị Hợp Đồng ở kịch bản (5) ngay trên — xác nhận ĐÚNG cột đang hiện
-    // Giá Trị Đầu Tư (không liên kết -> "—"), KHÔNG phải vô tình vẫn hiện Giá Trị Hợp Đồng cũ.
-    await run.run('Cột "Giá Trị Đầu Tư" (DOM thật): công việc TẠO TAY (không qua Danh Mục Đầu Tư) -> PHẢI hiện "—", KHÔNG hiện 850.000.000 vừa lưu ở Giá Trị Hợp Đồng (xác nhận cột đã đổi đúng, không còn là Giá Trị Hợp Đồng)', async () => {
+    // Hợp Đồng (nhập tay) chuyển CHỈ còn xem/sửa trong modal "💰".
+    // MỞ RỘNG (11/2026, phản hồi người dùng — "ở thực hiện khi tạo 1 cv sẽ ko có link từ danh mục đầu tư
+    // tôi cần sửa và nhập được giá trị đầu tư ở mục thực hiện này"): công việc KHÔNG liên kết Danh Mục
+    // Đầu Tư giờ hiện lại ĐÚNG Giá Trị Hợp Đồng vừa nhập qua "💰" (kèm nhãn "(nhập tay qua 💰)") thay vì
+    // "—" vô nghĩa — rootWorkItemId trong file test này tạo tay (estimateItemId=null) nên trước đây LUÔN
+    // "—"; sau khi lưu 850.000.000 Giá Trị Hợp Đồng ở kịch bản (5) ngay trên, cột này giờ PHẢI hiện đúng
+    // số đó (hành vi công việc CÓ liên kết — không đổi, vẫn kiểm riêng ở test-operation-workitem-contract-c2.js).
+    await run.run('Cột "Giá Trị Đầu Tư" (DOM thật): công việc TẠO TAY (không qua Danh Mục Đầu Tư) đã nhập Giá Trị Hợp Đồng qua "💰" -> cột PHẢI hiện lại đúng số đó (không còn "—" vô nghĩa)', async () => {
       const cellText = await page.evaluate((rid) => {
         const btn = document.querySelector(`button[data-op="openOperationWorkItemContractModal"][data-id="${rid}"]`);
         const row = btn && btn.closest('tr');
@@ -474,7 +476,8 @@ async function main() {
         const cells = row.querySelectorAll('td');
         return cells[4] ? cells[4].textContent.trim() : null; // 0=Tên,1=Người PT,2=Hạn,3=Trạng Thái,4=Giá Trị Đầu Tư
       }, rootWorkItemId);
-      assert(cellText === '—', `Cột "Giá Trị Đầu Tư" phải hiện "—" cho công việc tạo tay (không liên kết Danh Mục Đầu Tư) — thực tế: "${cellText}" (nếu hiện "850.000.000": cột VẪN đang hiện Giá Trị Hợp Đồng cũ, chưa đổi đúng)`);
+      assert(cellText && cellText.includes('850.000.000'), `Cột "Giá Trị Đầu Tư" phải hiện 850.000.000 (vừa lưu qua "💰") cho công việc tạo tay không liên kết Danh Mục Đầu Tư — thực tế: "${cellText}"`);
+      assert(cellText.includes('nhập tay'), `Cột phải kèm nhãn "(nhập tay qua 💰)" để phân biệt với số TỰ ĐỘNG lấy từ Danh Mục Đầu Tư — thực tế: "${cellText}"`);
     });
   } finally {
     await browser.close();

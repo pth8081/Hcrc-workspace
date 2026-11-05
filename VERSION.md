@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**29.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.30 (2026-11): Vận Hành — công việc KHÔNG liên kết Danh Mục Đầu Tư nay hiện lại đúng Giá Trị Hợp
+Đồng đã nhập tay thay vì "—" vô nghĩa
+
+Phản hồi người dùng: "Ở thực hiện khi xong một cv hoặc thêm 1 cv sẽ ko có link từ danh mục đầu tư tôi
+cần sửa và nhập được giá trị đầu tư ở mục thực hiện này." Điều tra xác nhận: cơ chế nhập tay ĐÃ TỒN TẠI
+sẵn (nút "💰" mở modal "Giá Trị Hợp Đồng", `updateOperationWorkItemContract()`, không giới hạn công việc
+phải liên kết Danh Mục Đầu Tư) — lỗ hổng duy nhất là cột **"Giá Trị Đầu Tư"** ở bảng "Thực hiện" LUÔN hiện
+"—" cho công việc không liên kết, KỂ CẢ sau khi đã nhập Giá Trị Hợp Đồng qua "💰" — khiến người dùng tưởng
+không có cách nào nhập/xem lại số liệu.
+
+**Sửa tối thiểu, không đổi hành vi hiện có**: `investmentValueCell` (`buildOperationWorkItemRow()`,
+module-vanhanh.js) — công việc CÓ liên kết Danh Mục Đầu Tư giữ NGUYÊN 100% (vẫn tự động lấy đúng Chi Phí
+hạng mục qua `estimateItemId`, không sửa được trực tiếp ở cột này); công việc KHÔNG liên kết nhưng ĐÃ có
+`contractValue` (nhập qua "💰") nay hiện lại đúng số đó kèm nhãn nhỏ "(nhập tay qua 💰)" để phân biệt rõ
+với số tự động; chỉ thật sự rỗng mới hiện "—" như cũ.
+
+**Test:** cập nhật đúng 1 assertion ở `test-operation-vhst-uibugfix.js` (test cũ encode hành vi THIẾT KẾ
+CŨ nay đã chủ động đổi theo yêu cầu người dùng) + chạy lại TOÀN BỘ 8 bộ test liên quan Vận Hành/IT (206/206
+pass, bao gồm `test-operation-workitem-contract-c2.js` xác nhận hành vi công việc CÓ liên kết không đổi).
+
+**Deploy-impact:** chỉ 1 file client (`module-vanhanh.js`), không đổi schema/`.env.example`/dependencies.
 
 ## v29.29 (2026-11): 4 phản hồi người dùng — Hỗ Trợ IT (bổ sung giá bắt buộc duyệt lại + thông báo
 ticket mới + badge "Chờ Duyệt Hủy") và Vận Hành (Sửa/Hủy cho "Mở Mới")

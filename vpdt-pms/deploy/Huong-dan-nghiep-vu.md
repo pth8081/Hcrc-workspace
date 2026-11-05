@@ -3032,6 +3032,16 @@ Ghi Chú luôn sửa được ở mọi giai đoạn.
       thu"). Mẫu Excel Nhập/Xuất Quản Lý Công Việc thêm cột "Giá Trị Hợp
       Đồng" (nhập được, mặc định 0 nếu bỏ trống); "Giá Trị Đầu Tư" chỉ có
       ở Xuất (không có ở mẫu/nhập vì là field tự động).
+      **(Cập nhật 11/2026, đã thay đổi so với đoạn trên)**: "Giá Trị Đầu Tư"
+      giờ là 1 CỘT RIÊNG ngay trong bảng "Thực hiện" (không còn trong modal
+      "💰"), tự động lấy ĐÚNG Chi Phí của hạng mục Danh Mục Đầu Tư sinh ra
+      ĐÚNG công việc đó (không phải tổng cả hồ sơ như trước) khi công việc
+      có liên kết. **Công việc tạo tay/không liên kết** (phản hồi người
+      dùng "cần nhập được giá trị đầu tư ở mục thực hiện này" khi không có
+      link): cột này tự hiện lại số **"Giá Trị Hợp Đồng"** đã nhập qua nút
+      "💰" (kèm nhãn nhỏ "nhập tay qua 💰" để phân biệt với số tự động) thay
+      vì để trống — vẫn phải bấm "💰" để nhập/sửa, cột chỉ hiển thị lại,
+      không gõ trực tiếp được.
     - **Báo Cáo Tổng Quan**: bảng "📋 Tổng Quan Toàn Bộ Công Việc" (tab Báo
       Cáo) gom nhóm các dòng công việc theo mã hồ sơ, mặc định đóng — bấm
       vào dòng hồ sơ để xổ ra công việc con, có nút "Mở Hết"/"Đóng Hết" xổ/
