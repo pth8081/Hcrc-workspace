@@ -129,6 +129,55 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "Tin ưu tiên Tuyển dụng không hiện ở Trang chủ lúc vừa đăng
+  // nhập, phải F5 mới thấy"): DB.recruitmentJobs thuộc nhóm DỮ LIỆU lazy 'internalHub' (khác "cụm
+  // SCRIPT lazy" ở kịch bản trên — 2 khái niệm riêng), KHÔNG tải cùng GET /api/data chính như
+  // internalPosts. Dashboard render LẦN ĐẦU ngay sau đăng nhập với mảng này RỖNG (TAB_DATA_GROUPS
+  // không có entry 'dashboard'), rồi prefetchLazyTabResources() mới âm thầm tải nhóm 'internalHub' NỀN
+  // — trước bản vá, không ai gọi lại renderDashboardNews() khi tải nền xong nên thẻ ưu tiên "biến mất"
+  // tới khi F5. Vá: loadDataGroup() (core.js) tự gọi lại renderDashboardNews() khi nhóm 'internalHub'
+  // tải xong, NẾU Trang chủ đang hiển thị. Mock fetch CHỈ đúng endpoint /api/data/lazy/internalHub (các
+  // fetch khác vẫn thật) để tái hiện ĐÚNG race condition gốc — KHÔNG gọi tay renderDashboardNews() ở
+  // kịch bản này, để chứng minh việc tự vẽ lại là do code sản phẩm, không phải do test tự gọi hộ.
+  // ==========================================================================
+  await scenario('Lazy-load nhóm internalHub tải xong (nền, qua loadDataGroup()) -> Tin ưu tiên Tuyển dụng TỰ hiện ở Trang chủ, không cần F5/gọi tay renderDashboardNews()', async () => {
+    const before = await page.evaluate(() => document.querySelectorAll('#dashboardNewsContainer .dash-news-card').length);
+    const after = await page.evaluate(async () => {
+      // Đảm bảo trạng thái sạch (không ăn theo cache/lượt gọi loadDataGroup('internalHub') thất bại
+      // trước đó từ prefetchLazyTabResources() của kịch bản login ở trên — endpoint này 404 trên static
+      // server thuần, promise cũ đã tự xoá khỏi cache theo đúng cơ chế .catch() của loadDataGroup()).
+      delete _loadedDataGroups.internalHub;
+      _settledDataGroups.delete('internalHub');
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (url, opts) => {
+        if (typeof url === 'string' && url.includes('/api/data/lazy/internalHub')) {
+          return Promise.resolve({
+            ok: true, status: 200,
+            json: async () => ({
+              recruitmentJobs: [{
+                id: 7001, title: 'Nhân Viên Bán Hàng (Test Lazy)', pinned: true, status: 'OPEN',
+                pinnedAt: new Date().toISOString(), location: 'Hà Nội', hiringDept: 'Kinh Doanh'
+              }]
+            })
+          });
+        }
+        return realFetch(url, opts);
+      };
+      await loadDataGroup('internalHub'); // mô phỏng đúng prefetchLazyTabResources() tải xong NỀN
+      window.fetch = realFetch;
+      const card = document.querySelector('#dashboardNewsContainer [data-op="openRecruitmentJobFromDashboard"]');
+      return {
+        cardCount: document.querySelectorAll('#dashboardNewsContainer .dash-news-card').length,
+        priorityCardFound: !!card,
+        priorityLabel: card ? card.textContent.includes('Tin ưu tiên') : false
+      };
+    });
+    record('TRƯỚC: Trang chủ mới chỉ có 1 thẻ (tin Nhịp Sống đã seed) — recruitmentJobs còn rỗng lúc render lần đầu', before === 1, String(before));
+    record('SAU khi loadDataGroup(\'internalHub\') tải xong NỀN: thẻ "🔥 Tin ưu tiên — Tuyển dụng" TỰ xuất hiện ở Trang chủ', after.priorityCardFound && after.priorityLabel, JSON.stringify(after));
+    record('Tổng số thẻ tăng đúng lên 2 (1 tin Nhịp Sống + 1 tin ưu tiên Tuyển dụng mới)', after.cardCount === 2, JSON.stringify(after));
+  });
+
+  // ==========================================================================
   // Chốt cấu trúc TAB_MODULE_GROUPS — chặn tái diễn nếu ai đó lỡ sửa lại thành [] trong tương lai.
   // ==========================================================================
   await scenario('TAB_MODULE_GROUPS.dashboard phải khai báo cụm "internalcomms-nhipsong" (chặn tái diễn lỗi gốc)', async () => {

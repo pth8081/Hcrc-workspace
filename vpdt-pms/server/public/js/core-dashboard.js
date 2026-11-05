@@ -241,9 +241,17 @@ function renderDashboardNews() {
   // thấy") — trước đây CHỈ nổi lên đầu danh sách NGAY TRONG tab Tuyển Dụng (isRecruitmentJobPriority(),
   // module-internalcomms-nhipsong.js — "pinned && status OPEN"), KHÔNG lộ ra Trang Chủ. Mirror NGUYÊN
   // VĂN điều kiện đó tại đây (không gọi hàm của module-internalcomms-nhipsong.js vì đó là cụm script tải
-  // lười RIÊNG, có thể CHƯA được nạp lúc Dashboard render — DB.recruitmentJobs thì luôn có sẵn, tải cùng
-  // initDatabase() không phụ thuộc module JS nào). Cùng gate module "internal" như internalPosts ở trên
-  // (canAccessInternalModule() đã chặn sớm đầu hàm) nên không lộ thêm dữ liệu ngoài phạm vi đã cho xem.
+  // lười RIÊNG, có thể CHƯA được nạp lúc Dashboard render). Cùng gate module "internal" như internalPosts
+  // ở trên (canAccessInternalModule() đã chặn sớm đầu hàm) nên không lộ thêm dữ liệu ngoài phạm vi đã cho
+  // xem.
+  // SỬA GHI CHÚ SAI (11/2026, cùng đợt vá lỗi "F5 mới hiện tin ưu tiên"): dòng cũ ở đây từng khẳng định
+  // "DB.recruitmentJobs thì luôn có sẵn, tải cùng initDatabase() không phụ thuộc module JS nào" — SAI,
+  // đây chính là nguyên nhân gốc của lỗi. DB.recruitmentJobs thuộc nhóm DỮ LIỆU lazy 'internalHub' (khác
+  // với "cụm SCRIPT lazy" nhắc ở trên — 2 khái niệm riêng, xem LAZY_DATA_GROUPS ở routes/data.js), chỉ
+  // tải XONG THỰC SỰ sau khi prefetchLazyTabResources() (core.js, chạy NỀN sau khi Dashboard đã render
+  // lần đầu) gọi loadDataGroup('internalHub') trả về — lúc Dashboard render lần đầu ngay sau đăng nhập,
+  // mảng này vẫn RỖNG. Vá tại loadDataGroup() (core.js): tự gọi lại renderDashboardNews() khi nhóm
+  // 'internalHub' tải xong, NẾU Trang chủ đang hiển thị — xem chú thích đầy đủ ở đó.
   // Xếp TRƯỚC CẢ bài ghim Nhịp Sống (ưu tiên tuyển dụng là tín hiệu "cần tuyển gấp", đẩy MỚI NHẤT trước).
   const priorityJobs = (DB.recruitmentJobs || [])
     .filter(j => j && j.pinned && j.status === 'OPEN')

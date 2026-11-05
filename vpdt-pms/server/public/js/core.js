@@ -189,6 +189,25 @@ function loadDataGroup(groupKey) {
     .then(data => {
       Object.keys(data).forEach(key => { DB[key] = data[key] || []; });
       _settledDataGroups.add(groupKey);
+      // LỖI ĐÃ VÁ (11/2026, người dùng báo "Tin ưu tiên Tuyển dụng không hiện ở Trang chủ lúc vừa đăng
+      // nhập, phải F5 mới thấy"): renderDashboardNews() (core-dashboard.js) đọc DB.recruitmentJobs cho
+      // thẻ "🔥 Tin ưu tiên" — field này thuộc nhóm lazy 'internalHub' (xem LAZY_DATA_GROUPS,
+      // routes/data.js), KHÔNG tải cùng GET /api/data chính như DB.internalPosts (bình luận cũ ngay tại
+      // renderDashboardNews() từng ghi sai giả định "luôn có sẵn"). finishLogin() -> switchTab('dashboard')
+      // render NGAY (TAB_DATA_GROUPS không có entry 'dashboard' nên không chờ gì) rồi mới âm thầm
+      // prefetchLazyTabResources() tải nền — 'internalHub' tải xong SAU KHI Dashboard đã render 1 lần với
+      // DB.recruitmentJobs rỗng, không ai gọi lại renderDashboardNews() khi tải nền xong nên thẻ ưu tiên
+      // "biến mất" tới khi F5 (initDatabase() chạy lại từ đầu, lúc đó cache/polling có thể đã có dữ liệu).
+      // KHÔNG thêm 'dashboard' vào TAB_DATA_GROUPS để chặn chờ (internalHub nặng — 13 collection Đào Tạo/
+      // Tuyển Dụng/Onboarding — sẽ làm chậm màn hình đầu tiên sau đăng nhập cho MỌI người dùng, kể cả ai
+      // không liên quan tới tin tuyển dụng) — chỉ tự vẽ lại ĐÚNG khối tin khi nhóm này tải xong, NẾU
+      // Trang chủ đang hiển thị (cùng khuôn `if (!...hidden) renderDashboard()` đã dùng ở
+      // migrateDashboardHiddenCardsFromLocalStorage(), core-dashboard.js) — không ảnh hưởng tab 'internal'
+      // (tab đó tự loadTabData(['internalHub', ...]) qua TAB_DATA_GROUPS như cũ, không đổi gì ở đây).
+      if (groupKey === 'internalHub' && typeof renderDashboardNews === 'function') {
+        const dashboardSection = document.getElementById('dashboardSection');
+        if (dashboardSection && !dashboardSection.classList.contains('hidden')) renderDashboardNews();
+      }
     });
   _loadedDataGroups[groupKey] = p;
   p.catch(() => { delete _loadedDataGroups[groupKey]; });

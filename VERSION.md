@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**29.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.31 (2026-11): Dashboard — tin ưu tiên Tuyển dụng không hiện ngay lúc đăng nhập, phải F5 mới thấy
+
+Phản hồi người dùng: "khi mà ưu tiên ấy nó phải hiển thị ra trang chủ. Nhưng mà tôi ấn vào khi đăng nhập
+vào mày login nó sẽ là trang chủ nhưng mà nó lại không hiện ra cái phần tin tuyển dụng đâu. Tôi phải
+refresh F5 lại nó mới hiện ra tiếp."
+
+**Nguyên nhân gốc**: `DB.recruitmentJobs` (nguồn dữ liệu thẻ "🔥 Tin ưu tiên — Tuyển dụng" ở
+`renderDashboardNews()`, core-dashboard.js) thuộc nhóm DỮ LIỆU tải lười `internalHub` (13 collection
+Đào Tạo/Tuyển Dụng/Onboarding — xem `LAZY_DATA_GROUPS`, `routes/data.js`), KHÁC với `DB.internalPosts`
+(tin Nhịp Sống) vốn tải ngay cùng `GET /api/data` chính lúc đăng nhập. Trang chủ không nằm trong
+`TAB_DATA_GROUPS` nên render NGAY với `DB.recruitmentJobs` còn rỗng; `prefetchLazyTabResources()`
+(core.js) mới âm thầm tải nhóm `internalHub` NỀN sau đó — tải xong không ai gọi lại
+`renderDashboardNews()` nên thẻ ưu tiên "biến mất" tới khi F5 (lúc đó `initDatabase()` chạy lại từ đầu,
+dữ liệu đã có sẵn).
+
+**Sửa tối thiểu, không chặn màn hình đầu tiên của bất kỳ ai**: chọn cách "tự vẽ lại khi xong" thay vì
+thêm `dashboard: ['internalHub']` vào chokepoint chặn `TAB_DATA_GROUPS` (sẽ làm MỌI người dùng phải chờ
+tải xong 13 collection nặng trước khi thấy Trang chủ, chỉ để vá 1 thẻ). `loadDataGroup()` (core.js): sau
+khi nhóm `internalHub` tải xong, nếu Trang chủ đang hiển thị thì tự gọi lại `renderDashboardNews()` —
+không ảnh hưởng tab Tuyển Dụng/Đào Tạo/Onboarding (vẫn `loadTabData()` qua `TAB_DATA_GROUPS` như cũ).
+Đồng thời sửa luôn 1 chú thích SAI trong code cũ (`renderDashboardNews()`) từng khẳng định
+`DB.recruitmentJobs` "luôn có sẵn" — chính giả định sai này khiến lỗi không được phát hiện sớm hơn.
+
+**Test:** viết thêm 1 kịch bản mới mô phỏng ĐÚNG race condition gốc (mock fetch cho đúng endpoint
+`/api/data/lazy/internalHub`, gọi `loadDataGroup('internalHub')`, xác nhận thẻ tự xuất hiện KHÔNG cần
+gọi tay `renderDashboardNews()`/F5) trong `tests/test-dashboard-news-first-login.js` (9/9 pass) + chạy
+lại 4 bộ test liên quan Dashboard/Tuyển Dụng hiện có (8/8 + 11/11 + 3/3 + 10/10 pass, không regression).
+
+**Deploy-impact:** chỉ 2 file client (`core.js`, `core-dashboard.js`), không đổi schema/`.env.example`/
+dependencies — copy code + `pm2 restart` là đủ.
 
 ## v29.30 (2026-11): Vận Hành — công việc KHÔNG liên kết Danh Mục Đầu Tư nay hiện lại đúng Giá Trị Hợp
 Đồng đã nhập tay thay vì "—" vô nghĩa
