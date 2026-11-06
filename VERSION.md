@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**29.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.44 (2026-11): Sửa lại "🏷️ Gán Vị Trí Kiêm Nhiệm" — KHÔNG update ngược lại Hồ Sơ Nhân Sự
+
+**Theo yêu cầu người dùng (hỏi lại ngay sau khi v29.43 vừa merge)**: "khi mình sửa kiêm nhiệm này, nó có
+update ngược lại phần hồ sơ nhân sự không nhỉ? Nếu mà mình sửa thì nó không update ngược lại thì nó mới
+đúng. Để cho nhân sự không nhìn thấy họ đỡ hoang mang". Thiết kế ban đầu ở v29.43 (ghi qua
+`applyProfileEdit()` thẳng vào `profile.secondaryPositions`) sai ở đúng điểm này — field đó CHÍNH LÀ field
+HR nhìn thấy ở Chi tiết hồ sơ → 🏷️ Vị Trí Kiêm Nhiệm, nên mọi lần admin sửa ở màn Phân Quyền sẽ lộ ra
+ngay trên hồ sơ của HR.
+
+**Sửa lại hoàn toàn 2 route** (`routes/employeeProfile.js`) — tách BIỆT HẲN 2 nguồn dữ liệu:
+- `GET/POST /api/hr-profile/secondary-position*` (quyền riêng `hrSecondaryPositionManage`) nay đọc/ghi
+  THẲNG `user.secondaryPositions[]`, **KHÔNG đụng tới `employeeProfiles`/`profile.secondaryPositions` ở
+  bất kỳ bước nào** — vì vậy cũng KHÔNG còn đòi hồ sơ Nhân Sự phải tồn tại/liên kết (bỏ hẳn lỗi 404 "chưa
+  liên kết hồ sơ" của v29.43). Mỗi dòng ghi được đánh dấu `source: 'ADMIN_QUICK_EDIT'`.
+- GET trả về **TOÀN BỘ** vị trí kiêm nhiệm tài khoản đang có (đúng yêu cầu "xử lý tất cả vị trí kiêm
+  nhiệm mình đã có chuyển sang box này") — dù gán kiểu cũ gõ tay hay HR đồng bộ xuống — tự khớp lại với
+  node POSITION thật trong Cơ Cấu Tổ Chức đang áp dụng; `legacyUnresolved` cho dòng không khớp được.
+- POST ghi đè đúng danh sách positionKey đang chọn trên màn (vẫn bắt buộc chọn vị trí CÓ THẬT, chặn trùng
+  lặp) — thay cho `applyProfileEdit()`, không còn gọi lại hàm đó cho route này nữa.
+
+**Vá kèm 1 lỗ hổng "âm thầm xoá" có thật, phát sinh đúng từ câu hỏi của người dùng**: PATCH
+`/by-code/:employeeCode` (HR lưu hồ sơ) trước đây (cả trước v29.43) đồng bộ GHI ĐÈ TOÀN BỘ
+`user.secondaryPositions[]` bằng `profile.secondaryPositions` MỖI LẦN HR lưu BẤT KỲ field nào (client
+luôn gửi kèm `secondaryPositions` ở scope MANAGE) — nếu HR chưa từng mở khối Kiêm Nhiệm cho hồ sơ đó
+(rỗng), lần lưu tiếp theo sẽ xoá sạch bất kỳ dữ liệu kiêm nhiệm nào KHÁC đang có trên tài khoản (gán kiểu
+cũ, hoặc giờ là gán qua quyền riêng mới). Sửa cả 3 điểm đồng bộ 1 chiều (PATCH `/by-code`, `link-account`,
+`relink-account`): đánh dấu dòng do HR ghi là `source: 'HR_PROFILE'`, mỗi lần đồng bộ CHỈ thay đúng phần
+`source:'HR_PROFILE'` của lần trước, GIỮ NGUYÊN mọi dòng khác (`ADMIN_QUICK_EDIT` hoặc không có `source`,
+tức dữ liệu cũ) — 2 phía cộng dồn đúng, không ai xoá mất phần của người khác.
+`matchesPositionPair()`/`resolvePositionApprovers()` (`lib/positionApprovers.js`) chỉ so khớp theo
+(jobTitle, dept), hoàn toàn không đọc field `source` nên không ảnh hưởng gì tới việc chấm "Theo vị trí"
+đang chạy ở mọi module khác.
+
+**Client** (`public/js/module-admin-userstaging.js` + `systemSection.html`): bỏ nhánh "chưa liên kết hồ
+sơ" (không còn cần), thêm dòng ghi chú tĩnh trong box xác nhận rõ hành vi mới ("Sửa ở đây KHÔNG ghi ngược
+lại Hồ Sơ Nhân Sự").
+
+**Test**: viết lại hoàn toàn `tests/test-hr-secondary-position-manage-perm.js` (12/12 pass) — thêm case
+xác nhận: box hiện đủ kiêm nhiệm cũ không cần hồ sơ Nhân Sự, sửa qua box KHÔNG đụng `employeeProfiles`,
+và quan trọng nhất — HR lưu hồ sơ KHÁC (secondaryPositions rỗng) SAU KHI admin đã gán qua box KHÔNG xoá
+mất phần admin gán, 2 chiều cộng dồn đúng khi cả HR và admin đều có dữ liệu. Cập nhật 2 case lỗi thời ở
+`tests/test-hr-profile-secondary-positions.js` (trước đây ngầm định hành vi "ghi đè toàn bộ" là đúng —
+giờ xác nhận lại đúng hành vi "giữ lại dữ liệu không do HR quản lý"), tổng 15/15 pass. Chạy lại toàn bộ
+test liên quan `secondaryPositions`/vị trí/phân quyền (test-perm-matrix-client 46/46,
+test-employeeprofile-relink-account 6/6, test-audit-nhansu-hoso 33/33, test-mixed-approval-jobtitle-dept
+10/10, test-mixed-approval-secondary-jobtitle 13/13, test-workflow-position-approvers 22/22,
+test-secondarypositions-rename-cascade 5/5, test-permgroup-jobtitle-match 13/13,
+test-hrprofile-self-position-assign 10/10) — không regression nào.
+
+**Không cần migrate dữ liệu/`.env`/`schema.sql` gì** — chỉ sửa route + logic merge ở tầng ứng dụng, chỉ
+cần copy code + `pm2 restart`.
 
 ## v29.43 (2026-11): Quyền riêng "🏷️ Gán Vị Trí Kiêm Nhiệm" cho admin KHÔNG có quyền Hồ Sơ Nhân Sự
 

@@ -391,57 +391,63 @@ function canManageSecondaryPositionsOnly(user) {
 // GET /api/hr-profile/secondary-position-options?username=X (11/2026, theo yêu cầu người dùng — "vị trí
 // kiêm nhiệm bị khoá ở màn Sửa Người Dùng từ khi chuyển sang Hồ Sơ Nhân Sự quản lý, quy trình module
 // khác dùng 'Theo vị trí' bị vô hiệu vì không ai (ngoài HR) gán lại được"): trả về danh sách vị trí CÓ
-// THẬT trong Cơ Cấu Tổ Chức đang áp dụng (để chọn, cùng nguồn GET /position-options) + Vị Trí Kiêm Nhiệm
-// HIỆN TẠI của tài khoản — đọc THẲNG profile.secondaryPositions (nguồn chính thức).
+// THẬT trong Cơ Cấu Tổ Chức đang áp dụng (để chọn) + Vị Trí Kiêm Nhiệm HIỆN TẠI của tài khoản.
 //
-// legacyUnresolved/current-fallback: hồ sơ có thể CHƯA từng được mở "Vị Trí Kiêm Nhiệm" ở Hồ Sơ Nhân Sự
-// (profile.secondaryPositions rỗng) trong khi user.secondaryPositions (gán qua màn Sửa Người Dùng kiểu
-// CŨ, trước khi khoá) vẫn còn dữ liệu — hiện TẠM (chưa ghi gì xuống DB) các cặp {jobTitle,dept} đó dưới
-// dạng vị trí đã khớp được với 1 node THẬT trong Cơ Cấu Tổ Chức (nếu có) để actor thấy ngay + bấm Lưu 1
-// lần là chuyển hẳn dữ liệu cũ sang model mới; cặp KHÔNG khớp được vị trí nào (dept đổi tên/vị trí chưa
-// từng có trong Cơ Cấu Tổ Chức...) liệt kê riêng ở legacyUnresolved để actor biết cần tạo vị trí đó
-// trong Cơ Cấu Tổ Chức trước, KHÔNG bị âm thầm mất (vẫn còn nguyên trong user.secondaryPositions cho tới
-// khi actor chủ động bấm Lưu ở màn mới này).
+// QUYẾT ĐỊNH THIẾT KẾ (xác nhận lại với người dùng, 11/2026 — "sửa ở đây không được update ngược lại Hồ
+// Sơ Nhân Sự, để HR không thấy/không hoang mang"): route này đọc/ghi THẲNG `user.secondaryPositions[]`,
+// KHÔNG đụng tới `employeeProfiles`/`profile.secondaryPositions` ở BẤT KỲ bước nào — vì vậy KHÔNG đòi hồ
+// sơ Nhân Sự phải tồn tại/liên kết (bỏ hẳn khái niệm hasProfile/employeeCode của bản trước). "current" ở
+// đây là TOÀN BỘ vị trí kiêm nhiệm ĐANG THỰC SỰ ảnh hưởng tới việc duyệt "Theo vị trí" của tài khoản này
+// (dù trước đó được gán kiểu CŨ gõ tay thẳng ở màn Sửa Người Dùng, hay do HR gán qua Hồ Sơ Nhân Sự rồi
+// đồng bộ 1 chiều xuống) — khớp lại với 1 node POSITION THẬT trong Cơ Cấu Tổ Chức theo (jobTitle, dept)
+// để hiện ra positionKey chọn được; cặp KHÔNG khớp được node nào (dept đổi tên/vị trí đã xoá khỏi Cơ Cấu
+// Tổ Chức...) liệt kê riêng ở legacyUnresolved — actor biết cần tạo lại đúng vị trí đó trong Cơ Cấu Tổ
+// Chức trước, KHÔNG bị âm thầm mất (vẫn còn nguyên trên user.secondaryPositions cho tới khi actor chủ
+// động bấm Lưu Ở ĐÂY — bấm Lưu sẽ GHI ĐÈ toàn bộ bằng đúng danh sách đang chọn trên màn, xem route POST
+// ngay dưới).
 router.get('/secondary-position-options', async (req, res) => {
   try {
     if (!canManageSecondaryPositionsOnly(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' });
     const username = String(req.query.username || '').trim();
     if (!username) return res.status(400).json({ error: 'Thiếu tài khoản cần xem' });
     const appData = await getAllAppData();
+    const userRecord = (appData.users || []).find(u => u.username === username);
+    if (!userRecord) return res.status(404).json({ error: 'Không tìm thấy tài khoản này' });
     const applied = orgChart.getAppliedVersion(appData.orgChartVersions || []);
     const positions = applied
       ? (applied.nodes || []).filter(n => n.nodeType === 'POSITION')
           .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
           .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
       : [];
-    const profiles = (await getAppDataValue('employeeProfiles')) || [];
-    const profile = employeeProfile.findProfileByUsername(profiles, username);
-    let current = profile ? (profile.secondaryPositions || []) : [];
-    let legacyUnresolved = [];
-    if (profile && !current.length && applied) {
-      const userRecord = (appData.users || []).find(u => u.username === username);
-      const legacyPairs = (userRecord?.secondaryPositions || []).filter(sp => sp && sp.jobTitle);
-      if (legacyPairs.length) {
-        const resolved = [];
-        legacyPairs.forEach(pair => {
-          const node = (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.jobTitle === pair.jobTitle && (
-            !pair.dept || (orgChart.findNearestDeptAncestor(applied, n)?.departmentRef === pair.dept)
-          ));
-          if (node) resolved.push({ positionKey: node.positionKey, jobTitle: node.jobTitle, dept: pair.dept || null, positionLabel: orgChart.buildNodeDisplayName(applied, node), fromLegacy: true });
-          else legacyUnresolved.push(pair);
-        });
-        current = resolved;
-      }
-    }
-    res.json({ positions, current, legacyUnresolved, hasProfile: !!profile, employeeCode: profile?.employeeCode || null });
+    const existingPairs = (userRecord.secondaryPositions || []).filter(sp => sp && sp.jobTitle);
+    const current = [];
+    const legacyUnresolved = [];
+    existingPairs.forEach(pair => {
+      const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.jobTitle === pair.jobTitle && (
+        !pair.dept || (orgChart.findNearestDeptAncestor(applied, n)?.departmentRef === pair.dept)
+      ));
+      if (node) current.push({ positionKey: node.positionKey, jobTitle: node.jobTitle, dept: pair.dept || null, positionLabel: orgChart.buildNodeDisplayName(applied, node) });
+      else legacyUnresolved.push(pair);
+    });
+    res.json({ positions, current, legacyUnresolved });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/secondary-position-options'); }
 });
 
-// POST /api/hr-profile/secondary-positions — ghi Vị Trí Kiêm Nhiệm cho 1 tài khoản, đi qua ĐÚNG
-// applyProfileEdit() case 'secondaryPositions' (lib/employeeProfile.js — vẫn bắt buộc chọn từ vị trí CÓ
-// THẬT trong Cơ Cấu Tổ Chức đang áp dụng, vẫn chặn tự gán cho chính mình) rồi đồng bộ xuống
-// user.secondaryPositions[] — CÙNG khuôn PATCH /by-code/:employeeCode ở dưới (field secondaryPositions),
-// chỉ khác phạm vi field được sửa (CHỈ đúng khối này) + quyền gác (xem canManageSecondaryPositionsOnly()).
+// POST /api/hr-profile/secondary-positions — ghi Vị Trí Kiêm Nhiệm cho 1 tài khoản, GHI ĐÈ toàn bộ
+// user.secondaryPositions[] bằng đúng danh sách positionKey gửi lên (đã chọn từ GET ở trên — luôn phản
+// ánh TOÀN BỘ trạng thái hiện tại, nên "ghi đè toàn bộ" ở đây tương đương "lưu đúng những gì đang chọn
+// trên màn", không làm mất gì actor không chủ động bỏ chọn). Vẫn bắt buộc mỗi positionKey phải là 1 node
+// POSITION THẬT trong Cơ Cấu Tổ Chức ĐANG áp dụng (không tự nhập tay) — tự tính lại (jobTitle, dept) từ
+// đúng node đó, không tin dữ liệu client gửi lên.
+//
+// KHÔNG đụng tới `employeeProfiles`/`profile.secondaryPositions` (xác nhận với người dùng — sửa ở đây
+// KHÔNG được "update ngược lại" Hồ Sơ Nhân Sự, để HR không thấy thay đổi họ không tự làm, tránh hoang
+// mang). Đánh dấu `source: 'ADMIN_QUICK_EDIT'` trên mỗi dòng ghi — dấu này CHỈ dùng để 3 điểm đồng bộ 1
+// chiều từ Hồ Sơ Nhân Sự xuống (PATCH /by-code, link-account, relink-account) biết đường GIỮ LẠI (không
+// vô tình xoá) những dòng actor vừa gán ở đây khi HR lưu hồ sơ (dù chỉ sửa field khác, không đụng khối
+// Kiêm Nhiệm) — matchesPositionPair()/resolvePositionApprovers() (lib/positionApprovers.js) chỉ so khớp
+// theo (jobTitle, dept), hoàn toàn không đọc field `source` này nên không ảnh hưởng gì tới việc chấm
+// "Theo vị trí" đang chạy.
 router.post('/secondary-positions', async (req, res) => {
   try {
     if (!canManageSecondaryPositionsOnly(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' });
@@ -449,24 +455,32 @@ router.post('/secondary-positions', async (req, res) => {
     if (!username) return res.status(400).json({ error: 'Thiếu tài khoản cần gán' });
     const appData = await getAllAppData();
     const applied = orgChart.getAppliedVersion(appData.orgChartVersions || []);
-    let updated;
-    await withLockedAppDataValue('employeeProfiles', (list) => {
-      const profile = employeeProfile.findProfileByUsername(list, username);
-      if (!profile) throw new HttpError(404, 'Tài khoản này chưa liên kết hồ sơ Nhân Sự nào — liên hệ Nhân Sự tạo/liên kết hồ sơ trước khi gán Vị Trí Kiêm Nhiệm');
-      employeeProfile.applyProfileEdit(profile, { secondaryPositions: req.body?.secondaryPositions }, ['secondaryPositions'], req.freshUser.username, req.freshUser.name, { orgChartAppliedVersion: applied });
-      updated = profile;
-      return list;
+    const items = Array.isArray(req.body?.secondaryPositions) ? req.body.secondaryPositions : [];
+    const seenKeys = new Set();
+    const resolved = items.map(item => {
+      const key = item && item.positionKey;
+      if (!key) throw new HttpError(400, 'Thiếu positionKey cho 1 dòng Vị Trí Kiêm Nhiệm');
+      if (seenKeys.has(key)) throw new HttpError(400, 'Trùng lặp vị trí trong danh sách gửi lên');
+      seenKeys.add(key);
+      const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.positionKey === key);
+      if (!node) throw new HttpError(400, `Vị trí không tồn tại trong Cơ Cấu Tổ Chức đang áp dụng: ${key}`);
+      const deptNode = orgChart.findNearestDeptAncestor(applied, node);
+      return { jobTitle: node.jobTitle, dept: deptNode ? deptNode.departmentRef : '', source: 'ADMIN_QUICK_EDIT' };
     });
-    await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-      u.username === username ? { ...u, secondaryPositions: (updated.secondaryPositions || []).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) } : u
-    ));
+    let found = false;
+    await withLockedAppDataValue('users', (list) => (list || []).map(u => {
+      if (u.username !== username) return u;
+      found = true;
+      return { ...u, secondaryPositions: resolved };
+    }));
+    if (!found) return res.status(404).json({ error: 'Không tìm thấy tài khoản này' });
     insertSystemLog({
       username: req.user.username, fullName: req.freshUser?.name || req.user.username, ipAddress: req.ip,
-      module: 'HR', actionType: 'UPDATE_SECONDARY_POSITIONS_NON_HR', targetObject: updated.employeeCode,
-      description: `Sửa Vị Trí Kiêm Nhiệm của tài khoản [${username}] qua màn Phân Quyền (quyền hrSecondaryPositionManage — không cần quyền Hồ Sơ Nhân Sự đầy đủ)`,
+      module: 'HR', actionType: 'UPDATE_SECONDARY_POSITIONS_NON_HR', targetObject: username,
+      description: `Sửa Vị Trí Kiêm Nhiệm của tài khoản [${username}] qua màn Phân Quyền (quyền hrSecondaryPositionManage — không cần quyền Hồ Sơ Nhân Sự đầy đủ, không update ngược lại Hồ Sơ Nhân Sự)`,
       status: 'SUCCESS'
     }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Vị Trí Kiêm Nhiệm):', e.message));
-    res.json({ ok: true, secondaryPositions: updated.secondaryPositions });
+    res.json({ ok: true, secondaryPositions: resolved });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile/secondary-positions'); }
 });
 
@@ -1003,14 +1017,22 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
         maritalStatuses: catalogAppData.maritalStatuses,
         orgChartAppliedVersion: applied
       });
-      // secondaryPositions (11/2026) — đồng bộ GHI ĐÈ sang user.secondaryPositions[] NẾU field này thực
-      // sự có mặt trong payload (client gửi lên — tránh đồng bộ dư thừa mỗi lần Lưu Hồ Sơ dù không đụng
-      // tới khối Kiêm Nhiệm) VÀ hồ sơ đã liên kết tài khoản VPDT — cùng khuôn đồng bộ dept/jobTitle ở
+      // secondaryPositions (11/2026) — đồng bộ sang user.secondaryPositions[] NẾU field này thực sự có
+      // mặt trong payload (client gửi lên — tránh đồng bộ dư thừa mỗi lần Lưu Hồ Sơ dù không đụng tới
+      // khối Kiêm Nhiệm) VÀ hồ sơ đã liên kết tài khoản VPDT — cùng khuôn đồng bộ dept/jobTitle ở
       // set-position bên dưới (2 lock TUẦN TỰ trên 2 collection khác nhau). "Vị Trí Kiêm Nhiệm" ở màn
       // Sửa Người Dùng từ nay là CHỈ ĐỌC cho tài khoản đã liên kết (xem GET /linked-usernames +
       // module-admin-userstaging.js::renderSecondaryPositionsWidget()).
+      //
+      // CHỈ GHI ĐÈ phần do CHÍNH HR quản lý (đánh dấu source:'HR_PROFILE'), GIỮ LẠI mọi dòng khác (gán
+      // qua quyền riêng hrSecondaryPositionManage ở màn Phân Quyền, source:'ADMIN_QUICK_EDIT', hoặc dữ
+      // liệu kiêm nhiệm CŨ gõ tay chưa từng gắn source) — xem chú thích đầy đủ tại POST
+      // /secondary-positions. KHÔNG làm vậy thì MỌI lần HR lưu hồ sơ (dù chỉ sửa field khác, không đụng
+      // khối Kiêm Nhiệm) sẽ ÂM THẦM xoá trắng những gì admin khác vừa gán ở màn Phân Quyền — bug thật đã
+      // phát hiện khi người dùng hỏi lại "sửa ở đây có update ngược Hồ Sơ Nhân Sự không" (ngược lại,
+      // CHIỀU NÀY vẫn giữ nguyên như cũ: HR sửa khối Kiêm Nhiệm ở Hồ Sơ Nhân Sự vẫn đồng bộ xuống NGAY).
       if (req.body && 'secondaryPositions' in req.body && profile.username) {
-        syncSecondaryPositions = { username: profile.username, secondaryPositions: (profile.secondaryPositions || []).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) };
+        syncSecondaryPositions = { username: profile.username, secondaryPositions: (profile.secondaryPositions || []).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })) };
       }
       // "Xác Nhận" (Ảnh 2, 10/2026 — cập nhật theo yêu cầu người dùng): lưu thành công lúc đang PENDING =
       // coi như ứng viên ĐÃ NHẬN VIỆC — chuyển onboardingQueueStatus sang CONFIRMED (KHÔNG còn reset về
@@ -1035,7 +1057,9 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     });
     if (syncSecondaryPositions) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === syncSecondaryPositions.username ? { ...u, secondaryPositions: syncSecondaryPositions.secondaryPositions } : u
+        u.username === syncSecondaryPositions.username
+          ? { ...u, secondaryPositions: [...syncSecondaryPositions.secondaryPositions, ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')] }
+          : u
       ));
     }
     logHrProfileAction(req, 'EDIT', req.params.employeeCode, `Sửa hồ sơ [${req.params.employeeCode}]`);
@@ -1131,13 +1155,20 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
     // secondaryPositions (11/2026) — CÙNG LỖI/CÁCH VÁ như positionKey ở trên: hồ sơ có thể đã được gán
     // vị trí kiêm nhiệm TRƯỚC KHI liên kết tài khoản (HR nhập kiêm nhiệm ngay lúc hồ sơ còn ở dạng
     // Onboarding/chưa có tài khoản) — đồng bộ luôn ngay khi liên kết, không chờ HR sửa lại khối Kiêm
-    // Nhiệm 1 lần nữa mới kích hoạt.
+    // Nhiệm 1 lần nữa mới kích hoạt. CHỈ ghi đè phần source:'HR_PROFILE', giữ lại mọi dòng khác (gán qua
+    // quyền riêng hrSecondaryPositionManage/dữ liệu cũ) — xem chú thích đầy đủ tại PATCH /by-code phía
+    // trên + POST /secondary-positions.
     if (updated.positionKey || (updated.secondaryPositions || []).length) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
         u.username === username ? {
           ...u,
           ...(updated.positionKey ? { jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : {}),
-          ...((updated.secondaryPositions || []).length ? { secondaryPositions: updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) } : {})
+          ...((updated.secondaryPositions || []).length ? {
+            secondaryPositions: [
+              ...updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })),
+              ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')
+            ]
+          } : {})
         } : u
       ));
     }
@@ -1166,13 +1197,19 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
       updated = employeeProfile.relinkAccount(list, req.params.employeeCode, username, req.freshUser.username, req.freshUser.name);
       return list;
     });
-    // secondaryPositions (11/2026) — xem chú thích đầy đủ ở route link-account phía trên.
+    // secondaryPositions (11/2026) — xem chú thích đầy đủ ở route link-account phía trên (chỉ ghi đè
+    // phần source:'HR_PROFILE', giữ lại mọi dòng khác).
     if (updated.positionKey || (updated.secondaryPositions || []).length) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
         u.username === username ? {
           ...u,
           ...(updated.positionKey ? { jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : {}),
-          ...((updated.secondaryPositions || []).length ? { secondaryPositions: updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) } : {})
+          ...((updated.secondaryPositions || []).length ? {
+            secondaryPositions: [
+              ...updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })),
+              ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')
+            ]
+          } : {})
         } : u
       ));
     }

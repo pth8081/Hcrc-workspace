@@ -225,15 +225,18 @@ async function main() {
 
   const server = await startApp();
   try {
-    await run.run('PATCH /by-code — hồ sơ ĐÃ liên kết tài khoản -> secondaryPositions trong payload đồng bộ GHI ĐÈ sang user.secondaryPositions[]', async () => {
+    await run.run('PATCH /by-code — hồ sơ ĐÃ liên kết tài khoản -> secondaryPositions trong payload đồng bộ sang user.secondaryPositions[], GIỮ LẠI kiêm nhiệm cũ gõ tay (KHÔNG cùng nguồn HR_PROFILE) — xem chú thích tại PATCH /by-code (routes/employeeProfile.js), vá đúng lỗ hổng "âm thầm xoá" được người dùng hỏi lại 11/2026 (sửa qua quyền riêng hrSecondaryPositionManage không được update ngược Hồ Sơ Nhân Sự, nhưng NGƯỢC LẠI HR lưu hồ sơ cũng không được xoá mất dữ liệu không do HR quản lý)', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV200', username: 'emp1' });
       const res = await api('PATCH', '/api/hr-profile/by-code/NV200', { secondaryPositions: [{ positionKey: 'POS-IT-01' }] }, HR_FULL);
       assertEqual(res.status, 200);
       const u = APP_DATA.users.find(x => x.username === 'emp1');
-      assertEqual(u.secondaryPositions.length, 1, 'Đồng bộ đúng 1 vị trí');
-      assertEqual(u.secondaryPositions[0].jobTitle, 'Chuyên Viên IT');
-      assertEqual(u.secondaryPositions[0].dept, 'Phòng IT');
+      assertEqual(u.secondaryPositions.length, 2, 'Đồng bộ đúng 1 vị trí MỚI từ HR + giữ nguyên 1 dòng kiêm nhiệm cũ gõ tay đã có sẵn (không bị xoá)');
+      const hrEntry = u.secondaryPositions.find(sp => sp.source === 'HR_PROFILE');
+      assertEqual(hrEntry.jobTitle, 'Chuyên Viên IT');
+      assertEqual(hrEntry.dept, 'Phòng IT');
+      const legacyEntry = u.secondaryPositions.find(sp => sp.jobTitle === 'Cũ Gõ Tay');
+      assertEqual(!!legacyEntry, true, 'Dòng kiêm nhiệm cũ (không có source) vẫn còn nguyên, không bị HR vô tình xoá');
     });
 
     await run.run('PATCH /by-code — field "secondaryPositions" KHÔNG có mặt trong payload -> KHÔNG đụng tới user.secondaryPositions[] cũ (sửa field khác không làm mất kiêm nhiệm cũ)', async () => {
@@ -254,15 +257,18 @@ async function main() {
       assertEqual(res.body.profile.secondaryPositions.length, 1);
     });
 
-    await run.run('POST /by-code/:code/link-account — hồ sơ ĐÃ có kiêm nhiệm TRƯỚC KHI liên kết -> đồng bộ NGAY LÚC liên kết (cùng lỗi/cách vá như positionKey)', async () => {
+    await run.run('POST /by-code/:code/link-account — hồ sơ ĐÃ có kiêm nhiệm TRƯỚC KHI liên kết -> đồng bộ NGAY LÚC liên kết (cùng lỗi/cách vá như positionKey), GIỮ LẠI kiêm nhiệm cũ gõ tay đã có sẵn trên tài khoản', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV200' });
       await api('PATCH', '/api/hr-profile/by-code/NV200', { secondaryPositions: [{ positionKey: 'POS-NV-KD' }] }, HR_FULL);
       const res = await api('POST', '/api/hr-profile/by-code/NV200/link-account', { username: 'emp1' }, HR_FULL);
       assertEqual(res.status, 200);
       const u = APP_DATA.users.find(x => x.username === 'emp1');
-      assertEqual(u.secondaryPositions.length, 1, 'Đồng bộ ngay khi liên kết, không chờ sửa lại');
-      assertEqual(u.secondaryPositions[0].jobTitle, 'Nhân Viên');
+      assertEqual(u.secondaryPositions.length, 2, 'Đồng bộ ngay khi liên kết + giữ nguyên 1 dòng kiêm nhiệm cũ đã có sẵn trên tài khoản emp1 trước khi liên kết');
+      const hrEntry = u.secondaryPositions.find(sp => sp.source === 'HR_PROFILE');
+      assertEqual(hrEntry.jobTitle, 'Nhân Viên');
+      const legacyEntry = u.secondaryPositions.find(sp => sp.jobTitle === 'Cũ Gõ Tay');
+      assertEqual(!!legacyEntry, true, 'Dòng kiêm nhiệm cũ vẫn còn nguyên, không bị liên kết hồ sơ xoá mất');
     });
 
     await run.run('GET /linked-usernames — trả đúng danh sách username đã liên kết, mở cho MỌI tài khoản đăng nhập (không đòi quyền Hồ Sơ Nhân Sự nào)', async () => {

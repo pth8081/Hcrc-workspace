@@ -78,11 +78,15 @@ function renderSecondaryPositionsWidget(existingPositions, locked, username) {
 
 // renderSecondaryPositionQuickEditor()/saveSecondaryPositionQuickEdit() (11/2026, quyền riêng
 // "hrSecondaryPositionManage") — gọi GET/POST /api/hr-profile/secondary-position* (routes/
-// employeeProfile.js): vẫn ghi qua ĐÚNG đường validate nghiêm ngặt của Hồ Sơ Nhân Sự (chỉ chọn được vị
-// trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng, không tự nhập tay free-text như ô "Vị Trí Kiêm Nhiệm"
-// chính ở trên) — xem employeeProfile.applyProfileEdit() case 'secondaryPositions'. Route GET trả thêm
-// legacyUnresolved (vị trí kiêm nhiệm cũ lưu trực tiếp trên user.secondaryPositions chưa từng được khớp
-// lại với hồ sơ Nhân Sự) để admin biết cần chọn lại nếu tên chức danh/phòng ban cũ không còn khớp.
+// employeeProfile.js). ĐÃ ĐỔI THIẾT KẾ (xác nhận lại với người dùng, 11/2026 — "sửa ở đây không update
+// ngược lại Hồ Sơ Nhân Sự, để HR không thấy/không hoang mang"): 2 route này đọc/ghi THẲNG
+// user.secondaryPositions[], KHÔNG đụng tới hồ sơ Nhân Sự ở bất kỳ bước nào — vì vậy KHÔNG đòi hồ sơ
+// Nhân Sự phải tồn tại/liên kết (bỏ hẳn nhánh "chưa liên kết hồ sơ" của bản trước). "current" trả về từ
+// GET luôn là TOÀN BỘ vị trí kiêm nhiệm ĐANG thực sự hiệu lực của tài khoản (dù gán kiểu CŨ gõ tay hay
+// do HR đồng bộ xuống) — vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự
+// nhập tay như ô "Vị Trí Kiêm Nhiệm" chính ở trên). legacyUnresolved là các cặp KHÔNG khớp được node nào
+// (tên chức danh/phòng ban cũ không còn trong Cơ Cấu Tổ Chức) — admin cần tạo lại đúng vị trí đó rồi mới
+// chọn lại được.
 async function renderSecondaryPositionQuickEditor(username) {
   const pickerEl = document.getElementById('uSecondaryPositionManagePicker');
   const noteEl = document.getElementById('uSecondaryPositionManageNote');
@@ -94,10 +98,6 @@ async function renderSecondaryPositionQuickEditor(username) {
     const res = await fetch(`/api/hr-profile/secondary-position-options?username=${encodeURIComponent(username)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi tải danh sách vị trí');
-    if (!data.hasProfile) {
-      if (pickerEl) pickerEl.innerHTML = '<p class="text-[11px] text-red-600">⛔ Tài khoản này chưa liên kết hồ sơ Nhân Sự — liên hệ Nhân Sự tạo/liên kết hồ sơ trước khi gán Vị Trí Kiêm Nhiệm.</p>';
-      return;
-    }
     const items = (data.positions || []).map(p => ({ value: p.positionKey, label: p.label }));
     if (pickerEl) pickerEl.innerHTML = '';
     renderMultiSelectDropdown('uSecondaryPositionManagePicker', items, (data.current || []).map(c => c.positionKey), {
