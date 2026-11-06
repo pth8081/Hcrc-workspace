@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**29.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.43 (2026-11): Quyền riêng "🏷️ Gán Vị Trí Kiêm Nhiệm" cho admin KHÔNG có quyền Hồ Sơ Nhân Sự
+
+**Yêu cầu người dùng**: "cái vị trí kiêm nhiệm này tôi đã up lên quy trình rồi, nhưng bây giờ nhân sự họ
+up hồ sơ là khóa luôn vị trí này, nên là trong cái quy trình nó bị vô hiệu... hoặc là cho tôi sửa cái vị
+trí này, hoặc là sinh ra một ô nào khác để tôi có thể đưa cái vị trí kiêm nhiệm vào tất cả quy trình khác
+được" (kèm ảnh chụp màn "Sửa Người Dùng & Phân Quyền" cho thấy ô "Vị Trí Kiêm Nhiệm" bị khoá mờ vì tài
+khoản đã liên kết hồ sơ Nhân Sự — nguồn kiêm nhiệm từ 11/2026 là Hồ Sơ Nhân Sự, chỉ `hrProfileManage`/
+`hrProfileEdit` sửa được, nhưng người dùng (admin cấu hình quy trình module khác) không có quyền đó).
+
+**Phương án đã chốt với người dùng** ("Đồng ý — thêm quyền riêng (khuyến nghị)"): thêm 1 quyền MỚI, HẸP
+— `hrSecondaryPositionManage` ("🏷️ Gán Vị Trí Kiêm Nhiệm") — mở lại ĐÚNG 1 ô này ngay tại màn Sửa Người
+Dùng, KHÔNG kèm bất kỳ quyền Hồ Sơ Nhân Sự nào khác (không xem/sửa CCCD, lương, kỷ luật...), vẫn bắt
+buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự nhập tay free-text như ô kiêm
+nhiệm CŨ trước khi có Hồ Sơ Nhân Sự).
+
+**Sửa** (`routes/employeeProfile.js`): 2 route mới, gác bởi `canManageSecondaryPositionsOnly()` (quyền
+riêng HOẶC đã có quyền sửa Hồ Sơ Nhân Sự đầy đủ):
+- `GET /api/hr-profile/secondary-position-options?username=X` — trả danh sách vị trí CÓ THẬT trong Cơ
+  Cấu Tổ Chức đang áp dụng + vị trí đang gán hiện tại. Có fallback tự khớp lại kiêm nhiệm CŨ (lưu trực
+  tiếp trên `user.secondaryPositions`, trước khi có khái niệm `profile.secondaryPositions`) với node
+  POSITION thật theo (jobTitle, dept) — admin thấy ngay và chọn lại đúng nếu tên chức danh/phòng ban cũ
+  không còn khớp (`legacyUnresolved`).
+- `POST /api/hr-profile/secondary-positions` — ghi qua ĐÚNG đường validate nghiêm ngặt
+  `employeeProfile.applyProfileEdit()` case `'secondaryPositions'` (y hệt đường HR dùng ở Chi tiết hồ sơ),
+  rồi đồng bộ NGAY sang `user.secondaryPositions[]` — để `resolvePositionApprovers()`
+  (`lib/positionApprovers.js`, luồng chấm "Theo vị trí" THẬT của mọi module khác) nhận diện đúng ngay,
+  không cần chờ HR mở lại hồ sơ.
+
+Cả 2 route thêm vào `HR_PROFILE_MODULE_EXEMPT_PATHS` (giống `/linked-usernames`) — không đòi quyền module
+Khối 0 "Hồ Sơ Nhân Sự" (người giữ quyền riêng này có thể không có module đó).
+
+**Client** (`public/js/module-admin-userstaging.js` + `public/fragments/systemSection.html`): khối "🏷️
+Gán Vị Trí Kiêm Nhiệm" mới xuất hiện NGAY dưới ô kiêm nhiệm chính (đã bị khoá) khi tài khoản đã liên kết
+hồ sơ Nhân Sự VÀ người đang sửa có quyền riêng `hrSecondaryPositionManage` — chọn vị trí qua
+`renderMultiSelectDropdown()` (không tự nhập tay), lưu bằng nút "💾 Lưu Vị Trí Kiêm Nhiệm" (CSP chuẩn,
+`data-op`, không inline onclick/style).
+
+**Quyền** (`systemSection.html` + `module-admin-permtree.js` + `module-admin-permgroups.js`): checkbox
+"🏷️ Gán Vị Trí Kiêm Nhiệm" ngay cạnh "✏️ Sửa Hồ Sơ Nhân Sự" trong cây Phân Quyền + nhãn tiếng Việt DUY
+NHẤT vào `PERM_KEY_VN_LABELS` (đủ 2 điều kiện bắt buộc cho quyền mới theo CLAUDE.md).
+
+**Test**: file mới `tests/test-hr-secondary-position-manage-perm.js` (9/9 pass, HTTP thật qua Express) —
+xác nhận: chặn 403 khi không có quyền, admin CHỈ có quyền riêng (không có `hrProfileManage`/
+`hrProfileEdit`) vẫn dùng được cả 2 route, vẫn bắt buộc vị trí CÓ THẬT (positionKey giả → 400), tự khớp
+lại kiêm nhiệm cũ free-text, đồng bộ đúng sang `user.secondaryPositions[]` rồi `resolvePositionApprovers()`
+nhận diện đúng ngay, tài khoản chưa liên kết hồ sơ → 404 rõ ràng, HR đầy đủ quyền (không có quyền riêng
+này) vẫn dùng được. Chạy lại `tests/test-hr-profile-secondary-positions.js` (15/15) +
+`tests/test-perm-matrix-client.js` (46/46) — không có regression.
+
+**Không cần migrate dữ liệu/`.env`/`schema.sql` gì** — chỉ thêm route + quyền ở tầng ứng dụng, chỉ cần
+copy code + `pm2 restart`.
 
 ## v29.42 (2026-11): "⚡ Áp Dụng Nhanh" — thêm "👤 Gán Người Cụ Thể" (theo yêu cầu người dùng)
 

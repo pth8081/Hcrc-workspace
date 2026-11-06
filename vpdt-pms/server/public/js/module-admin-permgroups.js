@@ -434,6 +434,7 @@ const PERM_KEY_VN_LABELS = {
   "hrProfileFullView": "Nhân Sự — 👁️ Xem Toàn Bộ Hồ Sơ Nhân Sự (không giới hạn như quản lý trực tiếp, không sửa được)",
   "hrProfileManage": "Nhân Sự — 🗂️ Quản Lý Hồ Sơ Nhân Sự (HR — xem/sửa đầy đủ, liên kết tài khoản)",
   "hrProfileView": "Nhân Sự — 👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới (quản lý trực tiếp)",
+  "hrSecondaryPositionManage": "Nhân Sự — 🏷️ Gán Vị Trí Kiêm Nhiệm (riêng, không cần quyền Hồ Sơ Nhân Sự khác)",
   "hrReportView": "Nhân Sự — 📊 Xem Báo Cáo Nhân Sự (không kèm 2 quyền Quản Lý ở trên)",
   "hrShiftRosterManage": "Nhân Sự — 📅 Lập Lịch Phân Ca (Quản Lý Siêu Thị)",
   "hrShiftSwapApprove": "Nhân Sự — 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)",

@@ -2104,6 +2104,20 @@
           <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công.</p>
         </div>
 
+        <!-- Vị Trí Kiêm Nhiệm — Gán Nhanh (quyền riêng "hrSecondaryPositionManage", 11/2026, theo yêu
+             cầu người dùng) — CHỈ hiện khi ô trên bị khoá (tài khoản đã liên kết Hồ Sơ Nhân Sự) VÀ người
+             đang sửa có quyền riêng này (KHÔNG cần quyền Hồ Sơ Nhân Sự nào khác) — cho sửa NGAY tại đây
+             qua route riêng GET/POST /api/hr-profile/secondary-position* (routes/employeeProfile.js),
+             vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự nhập tay như
+             ô trên). Xem renderSecondaryPositionQuickEditor()/saveSecondaryPositionQuickEdit() ở
+             module-admin-userstaging.js. -->
+        <div id="uSecondaryPositionManageBlock" class="hidden bg-white p-3 rounded border border-teal-300">
+          <label class="block text-xs font-semibold text-teal-700 mb-1">🏷️ Gán Vị Trí Kiêm Nhiệm (quyền riêng — không cần quyền Hồ Sơ Nhân Sự khác)</label>
+          <div id="uSecondaryPositionManagePicker" class="border rounded p-2 bg-gray-50"></div>
+          <div id="uSecondaryPositionManageNote"></div>
+          <button type="button" id="uSecondaryPositionManageSaveBtn" data-op="saveSecondaryPositionQuickEdit" class="hidden mt-2 bg-teal-600 text-white text-[11px] font-bold px-3 py-1.5 rounded hover:bg-teal-700">💾 Lưu Vị Trí Kiêm Nhiệm</button>
+        </div>
+
         <!-- Mở thêm TỪNG mục cụ thể ở Nghiệp Vụ/Báo Cáo, ngoài phạm vi quyền module hiện có của người này
              (xem thêm 2 quyền "Xem Toàn Bộ" ở khối 24 phía trên nếu muốn mở HẲN toàn bộ thay vì chọn từng
              mục) — mảng string lưu thẳng trên user (user.nghiepVuExtraKeys/reportExtraKeys), KHÔNG phải
@@ -2920,6 +2934,17 @@
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrProfileEdit"> ✏️ Sửa Hồ Sơ Nhân Sự (đã có sẵn — không tự tạo hồ sơ mới nếu chưa tick "Tạo Mới")
+            </label>
+            <!-- hrSecondaryPositionManage (11/2026, theo yêu cầu người dùng — admin cấu hình quy trình
+                 module KHÁC [không phải HR] cần tự gán "Vị Trí Kiêm Nhiệm" cho 1 tài khoản để dùng ở
+                 "Theo vị trí" của quy trình bên module đó, nhưng ô này đã khoá hẳn ở màn Sửa Người Dùng
+                 cho tài khoản đã liên kết hồ sơ Nhân Sự — CHỈ HR [hrProfileManage/hrProfileEdit] sửa
+                 được ở Hồ Sơ Nhân Sự). Quyền RIÊNG, HẸP này mở lại đúng 1 ô Vị Trí Kiêm Nhiệm ở màn Sửa
+                 Người Dùng cho ai được cấp — KHÔNG kèm bất kỳ quyền nào khác của Hồ Sơ Nhân Sự (không
+                 xem/sửa CCCD, lương, kỷ luật...), vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ
+                 Chức đang áp dụng (xem POST /api/hr-profile/secondary-positions). -->
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrSecondaryPositionManage"> 🏷️ Gán Vị Trí Kiêm Nhiệm (riêng, không cần quyền Hồ Sơ Nhân Sự khác — sửa ngay ở màn Sửa Người Dùng)
             </label>
             <p class="text-[11px] text-gray-500 italic pt-1 border-t">Quyền dưới đây cho module con "Hợp Đồng Lao Động" — toàn quyền tạo/sửa/kích hoạt/gia hạn/chấm dứt hợp đồng, không có bước phê duyệt (khác hẳn module "Hợp Đồng" mua bán/nhà cung cấp).</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">

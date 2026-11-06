@@ -38,7 +38,14 @@ async function ensureHrLinkedUsernamesLoaded() {
 // Dùng sau đó KHÔNG vô tình xoá trắng secondaryPositions — xem getMultiSelectValues() ở core.js đọc
 // thẳng _gmsSelected, không quét DOM) — chỉ KHOÁ TƯƠNG TÁC bằng CSS (pointer-events-none + làm mờ) +
 // thêm ghi chú trỏ về Hồ Sơ Nhân Sự, không xoá/thay đổi cấu trúc DOM nội bộ của widget dùng chung.
-function renderSecondaryPositionsWidget(existingPositions, locked) {
+// username (11/2026, quyền riêng "hrSecondaryPositionManage") — THAM SỐ MỚI, chỉ có giá trị thật ở
+// đường sửa tài khoản ĐÃ TỒN TẠI (editUser()-tương đương, có user.username thật) — 2 nơi gọi còn lại
+// (hàng chờ staging CHƯA lưu + reset form tạo mới) không có tài khoản thật nên bỏ trống tham số này,
+// khối "Gán Nhanh" dưới đây tự ẩn vì không đủ điều kiện (thiếu username). Khi CÓ username + locked=true
+// + currentUser có quyền hrSecondaryPositionManage → hiện khối "🏷️ Gán Vị Trí Kiêm Nhiệm" ngay dưới ô
+// chính (đã bị khoá tương tác) để admin KHÔNG có quyền Hồ Sơ Nhân Sự vẫn tự gán được, qua route riêng
+// (xem renderSecondaryPositionQuickEditor() ngay dưới).
+function renderSecondaryPositionsWidget(existingPositions, locked, username) {
   try {
     const items = wfPositionPairPickerItems();
     const initialSelected = (existingPositions || []).map(encodeWfPositionPair);
@@ -60,6 +67,69 @@ function renderSecondaryPositionsWidget(existingPositions, locked) {
   container.classList.toggle('pointer-events-none', !!locked);
   if (locked) {
     container.insertAdjacentHTML('beforebegin', '<p id="uSecondaryPositionsLockedNote" class="text-[10.5px] text-amber-700 mb-1">🔒 Tài khoản đã liên kết Hồ Sơ Nhân Sự — sửa Vị Trí Kiêm Nhiệm tại Chi tiết hồ sơ (🏷️ Vị Trí Kiêm Nhiệm), không sửa được ở đây nữa.</p>');
+  }
+  const quickEditBlock = document.getElementById('uSecondaryPositionManageBlock');
+  if (quickEditBlock) {
+    const canQuickEdit = !!(locked && username && currentUser?.perms?.hrSecondaryPositionManage);
+    quickEditBlock.classList.toggle('hidden', !canQuickEdit);
+    if (canQuickEdit) renderSecondaryPositionQuickEditor(username);
+  }
+}
+
+// renderSecondaryPositionQuickEditor()/saveSecondaryPositionQuickEdit() (11/2026, quyền riêng
+// "hrSecondaryPositionManage") — gọi GET/POST /api/hr-profile/secondary-position* (routes/
+// employeeProfile.js): vẫn ghi qua ĐÚNG đường validate nghiêm ngặt của Hồ Sơ Nhân Sự (chỉ chọn được vị
+// trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng, không tự nhập tay free-text như ô "Vị Trí Kiêm Nhiệm"
+// chính ở trên) — xem employeeProfile.applyProfileEdit() case 'secondaryPositions'. Route GET trả thêm
+// legacyUnresolved (vị trí kiêm nhiệm cũ lưu trực tiếp trên user.secondaryPositions chưa từng được khớp
+// lại với hồ sơ Nhân Sự) để admin biết cần chọn lại nếu tên chức danh/phòng ban cũ không còn khớp.
+async function renderSecondaryPositionQuickEditor(username) {
+  const pickerEl = document.getElementById('uSecondaryPositionManagePicker');
+  const noteEl = document.getElementById('uSecondaryPositionManageNote');
+  const saveBtn = document.getElementById('uSecondaryPositionManageSaveBtn');
+  if (saveBtn) saveBtn.classList.add('hidden');
+  if (noteEl) noteEl.innerHTML = '';
+  if (pickerEl) pickerEl.innerHTML = '<p class="text-[11px] text-gray-400 italic">⏳ Đang tải danh sách vị trí...</p>';
+  try {
+    const res = await fetch(`/api/hr-profile/secondary-position-options?username=${encodeURIComponent(username)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi tải danh sách vị trí');
+    if (!data.hasProfile) {
+      if (pickerEl) pickerEl.innerHTML = '<p class="text-[11px] text-red-600">⛔ Tài khoản này chưa liên kết hồ sơ Nhân Sự — liên hệ Nhân Sự tạo/liên kết hồ sơ trước khi gán Vị Trí Kiêm Nhiệm.</p>';
+      return;
+    }
+    const items = (data.positions || []).map(p => ({ value: p.positionKey, label: p.label }));
+    if (pickerEl) pickerEl.innerHTML = '';
+    renderMultiSelectDropdown('uSecondaryPositionManagePicker', items, (data.current || []).map(c => c.positionKey), {
+      placeholder: '🔍 Tìm vị trí (Cơ Cấu Tổ Chức)...',
+      emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.',
+      chipClass: 'bg-teal-100 text-teal-700',
+      hoverClass: 'hover:bg-teal-50'
+    });
+    if (saveBtn) saveBtn.classList.remove('hidden');
+    if (noteEl && (data.legacyUnresolved || []).length) {
+      noteEl.innerHTML = `<p class="text-[11px] text-amber-700 mt-1">⚠️ ${data.legacyUnresolved.length} vị trí kiêm nhiệm cũ chưa khớp được với Cơ Cấu Tổ Chức hiện tại (có thể do tên chức danh/phòng ban đã đổi) — chọn lại đúng vị trí tương ứng ở trên rồi lưu.</p>`;
+    }
+  } catch (err) {
+    if (pickerEl) pickerEl.innerHTML = `<p class="text-[11px] text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function saveSecondaryPositionQuickEdit() {
+  const username = document.getElementById('uUsername')?.value;
+  if (!username) return;
+  const positionKeys = getMultiSelectValues('uSecondaryPositionManagePicker');
+  try {
+    const res = await fetch('/api/hr-profile/secondary-positions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, secondaryPositions: positionKeys.map(k => ({ positionKey: k })) })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    alert('✅ Đã lưu Vị Trí Kiêm Nhiệm.');
+    renderSecondaryPositionQuickEditor(username);
+  } catch (err) {
+    alert('⛔ ' + err.message);
   }
 }
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): "mở thêm TỪNG mục cụ thể" ngoài phạm vi quyền module
@@ -317,10 +387,10 @@ function editUser(id) {
   // locked state (11/2026): render ngay KHÔNG khoá (phản hồi tức thời), rồi kiểm tra liên kết hồ sơ Nhân
   // Sự ở background và render lại nếu CÓ liên kết — guard so username tránh khoá NHẦM form đang mở của
   // 1 người khác nếu admin bấm sửa người B trước khi kết quả kiểm tra của người A kịp trả về.
-  renderSecondaryPositionsWidget(user.secondaryPositions, false);
+  renderSecondaryPositionsWidget(user.secondaryPositions, false, user.username);
   ensureHrLinkedUsernamesLoaded().then(set => {
     if (document.getElementById('uUsername')?.value === user.username) {
-      renderSecondaryPositionsWidget(user.secondaryPositions, set.has(user.username));
+      renderSecondaryPositionsWidget(user.secondaryPositions, set.has(user.username), user.username);
     }
   });
   renderNVReportExtraKeysWidgets(user);
