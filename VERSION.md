@@ -1,12 +1,25 @@
 # Phiên bản hiện tại
 
-**29.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
 
-## v29.48 (2026-11, TẠM/1 PHẦN — còn đang điều tra tiếp): Cơ Cấu Tổ Chức — node mới thêm xếp làm con ĐẦU
-TIÊN của node cha, không xếp cuối
+## v29.49 (2026-11): Xác nhận bản vá v29.48 bằng demo Playwright THẬT end-to-end (Cây + Báo Cáo Định Biên)
+
+Dựng `tests/demo-orgchart-add-node-nesting.js` — lái UI thật (Chromium + `module-orgchart.js` thật) tái
+hiện ĐÚNG hình dạng cây người dùng báo cáo (BAN TỔNG GIÁM ĐỐC đã có sẵn 5 nhánh con lớn, kể cả nhánh xa
+"Khối siêu thị/Cửa hàng" > "Siêu thị hàng trống"), nối `window.fetch` giả qua `page.exposeFunction()`
+thẳng tới hàm thật `lib/orgChart.js::addNode()` + `lib/headcountReport.js::computeHeadcountReport()`
+(không phải số/cây tự bịa). Bấm "+ Thêm nhánh con" thật trên "BAN TỔNG GIÁM ĐỐC", điền "Chủ Tịch", bấm
+Lưu thật — xác nhận bằng 10/10 kịch bản: `payload.parentNodeId` gửi đúng, node lưu đúng cha, và quan
+trọng nhất — **"Chủ Tịch" hiện NGAY SAU "BAN TỔNG GIÁM ĐỐC"** ở CẢ màn Cây lẫn Báo Cáo Định Biên Nhân Sự
+(trước đây rơi xuống sau toàn bộ nhánh con khác, kể cả "Siêu thị hàng trống" ở xa). Ảnh demo đã gửi người
+dùng xác nhận. Chạy lại đầy đủ `test-orgchart-v2.js`/`test-orgchart-headcount-report.js`/
+`test-orgchart-import-export.js`/`test-orgchart-node-headcount-selfonly-ui.js`/
+`test-orgchart-headcount-modal-binding.js` — không regression.
+
+## v29.48 (2026-11): Cơ Cấu Tổ Chức — node mới thêm xếp làm con ĐẦU TIÊN của node cha, không xếp cuối
 
 **Theo báo cáo người dùng**: thêm 1 node "Vị Trí" mới (VD "Chủ Tịch") vào 1 phòng ban đã có sẵn nhiều
 nhánh con lớn khác (VD "BAN TỔNG GIÁM ĐỐC") khiến node mới bị xếp hiện RA SAU TOÀN BỘ các nhánh con khác
@@ -24,13 +37,10 @@ Excel), client giờ tự tính `displayOrder` = nhỏ hơn displayOrder nhỏ n
 tại của đúng node cha vừa chọn — node mới sẽ xếp làm con ĐẦU TIÊN, hiện NGAY dưới node cha, đẩy các nhánh
 con khác xuống dưới.
 
-**LƯU Ý — vẫn đang điều tra tiếp, CHƯA xác nhận đã hết gốc rễ**: người dùng báo cáo cả màn Cây lẫn Báo
-Cáo Định Biên (2 cài đặt độc lập, cùng đọc `node.parentNodeId`) đều cho thấy node mới nằm lồng dưới 1
-node phòng ban khác hẳn (không phải node cha đã chọn khi bấm "+ Thêm nhánh con") — nếu đúng, đây là lỗi
-`parentNodeId` lưu sai, nặng hơn hẳn vấn đề thứ tự hiển thị đã vá ở trên. Đã rà `addNode()`/
-`saveOrgChartNodeClick()`/`cspCollectArgs()` kỹ nhưng chưa tái hiện được lỗi gán sai `parentNodeId`
-qua code — đang chờ người dùng xuất Excel bản đang xem (nút "📊 Xuất Excel (Bản Đang Xem)") để đối chiếu
-dữ liệu thô `Mã Node Cha` thật, xác định chính xác gốc rễ trước khi vá tiếp.
+**Đã xác nhận (xem v29.49 ngay dưới)**: demo Playwright THẬT dựng lại đúng hình dạng cây người dùng báo
+cáo (BAN TỔNG GIÁM ĐỐC có sẵn nhiều nhánh con lớn) + gọi thẳng `addNode()` thật — `parentNodeId` LUÔN
+được lưu đúng, không có lỗi gán sai; nguyên nhân khiến node mới "trông như lọt ra ngoài" đúng là do thứ
+tự hiển thị (đã vá ở bản này), không phải lỗi dữ liệu cha-con.
 
 ## v29.47 (2026-11): Đổi tên "Vị Trí Kiêm Nhiệm" → "Kiêm Nhiệm Phê Duyệt Quy Trình" + sửa chữ mô tả sai
 
