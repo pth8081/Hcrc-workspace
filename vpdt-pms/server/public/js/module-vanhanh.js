@@ -2121,6 +2121,34 @@ function poFindValueAfterLabel(lines, label, offset, fromEnd) {
   }
   return '';
 }
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp "Phiếu Phê Duyệt Đặt Hàng NCC" từ DSmart — "Người
+// đặt: Nguyễn Thị Huyền" trong khi tên đầy đủ là "Nguyễn Thị Huyền Nhung", mất đúng từ cuối, lặp lại ở
+// 2 phiếu độc lập khác mã): poFindValueAfterLabel() chỉ lấy ĐÚNG 1 token ngay sau nhãn — đúng với PHẦN
+// LỚN trường hợp vì PDF.js thường gộp cả cụm tên vào 1 "text run"/1 token (xem fixture
+// operation-order-po-sample-2.pdf: "Nguyễn Thị Hương" ra ĐÚNG 1 token). Nhưng 1 số phiếu (tuỳ font/engine
+// xuất PDF của NCC/DSmart) tách tên thành NHIỀU text run liền kề trên CÙNG 1 dòng (VD "Nguyễn Thị Huyền" +
+// "Nhung" thành 2 token riêng biệt) — poFindValueAfterLabel() chỉ đọc token đầu, cắt mất từ cuối. Hàm này
+// GHÉP TẤT CẢ token liên tiếp sau nhãn cho tới khi gặp 1 token khác trông như NHÃN TRƯỜNG kế tiếp (kết
+// thúc bằng ':', cùng quy ước mọi nhãn trong mẫu phiếu này — "Tại trạm:"/"NCC:"/"Ngày đặt:"...) hoặc hết
+// dòng — an toàn không nuốt nhầm giá trị của field liền sau nếu lỡ chung 1 dòng, đồng thời khi chỉ có
+// ĐÚNG 1 token (trường hợp đa số hiện tại) thì trả về giống hệt poFindValueAfterLabel(), không đổi hành
+// vi cũ. Chỉ áp dụng cho field CÓ THỂ là cụm nhiều từ (hiện dùng cho ordererName) — các field khác
+// (mã/số/ngày...) luôn đúng 1 token, không cần đổi.
+function poFindMultiTokenValueAfterLabel(lines, label, offset) {
+  const start = offset || 1;
+  for (const tokens of lines) {
+    const idx = tokens.indexOf(label);
+    if (idx === -1) continue;
+    const parts = [];
+    for (let i = idx + start; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (/:$/.test(tok)) break; // gặp nhãn khác -> dừng, không gộp sang field kế tiếp
+      parts.push(tok);
+    }
+    if (parts.length) return parts.join(' ');
+  }
+  return '';
+}
 // LỖI ĐÃ VÁ (10/2026, mẫu "HD mua chung" — không lấy được Mã NCC): mẫu 1 ("NCC:") và mẫu 2 ("Nhà cung
 // cấp:") CÙNG cấu trúc dòng/offset giá trị, chỉ khác đúng chữ nhãn. poFindValueAfterLabel() so khớp
 // CHÍNH XÁC từng ký tự nên không bắt được nhãn khác. Thử LẦN LƯỢT từng nhãn biết trước, nhãn nào khớp
@@ -2181,7 +2209,7 @@ function parsePoLinesToFields(lines) {
   const orderTimeStr = orderTimeLine ? orderTimeLine[orderTimeLine.indexOf('Ngày đặt:') + 2] : '';
   f.orderDate = poDdMmYyyyHmToIso(orderDateStr, orderTimeStr);
   f.deliveryDate = poDdMmYyyyToIso(poFindValueAfterLabel(lines, 'Ngày giao:'));
-  f.ordererName = poFindValueAfterLabel(lines, 'Người đặt:');
+  f.ordererName = poFindMultiTokenValueAfterLabel(lines, 'Người đặt:');
   f.stationCode = poFindValueAfterLabel(lines, 'Tại trạm:');
   // LỖI ĐÃ VÁ (10/2026, file "HD mua chung"): mẫu 2 ghi đầy đủ "Nhà cung cấp:" thay vì viết tắt "NCC:"
   // — thử CẢ 2 nhãn, 'NCC:' luôn thử trước nên mẫu 1 không đổi hành vi.

@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.45 (2026-11): Vá lỗi cắt mất từ cuối tên "Người đặt" khi đọc PDF Phiếu Đặt Hàng NCC
+
+**Theo báo cáo người dùng** (kèm 2 ảnh chụp "Phiếu Phê Duyệt Đặt Hàng NCC" độc lập,
+HCRC-KSCSVH-DH-HO-004 và -001): mục "Người đặt" trên phiếu hiện "Nguyễn Thị Huyền" trong khi tên đầy đủ
+trên header phiếu là "Nguyễn Thị Huyền Nhung" — mất đúng từ cuối cùng, lặp lại ở cả 2 phiếu khác mã.
+
+**Gốc rễ** (`public/js/module-vanhanh.js`, bộ đọc PDF tự động điền form "Đặt Hàng Tại Siêu Thị/HO"):
+`poFindValueAfterLabel()` (hàm đọc giá trị sau 1 nhãn trên phiếu) chỉ lấy ĐÚNG 1 "token" (1 mẩu văn bản
+PDF.js tách ra) ngay sau nhãn "Người đặt:". Đa số phiếu PDF gộp cả cụm tên vào 1 token duy nhất (không
+lỗi) — nhưng tuỳ engine xuất PDF của từng NCC/DSmart, một số phiếu tách tên thành NHIỀU token liền kề
+trên cùng 1 dòng (VD "Nguyễn Thị Huyền" + "Nhung" thành 2 token riêng biệt do PDF đổi font/kerning giữa 2
+từ) — hàm cũ chỉ đọc token đầu, cắt mất phần sau.
+
+**Sửa**: thêm hàm `poFindMultiTokenValueAfterLabel()` — ghép TẤT CẢ token liên tiếp sau nhãn cho tới khi
+gặp 1 token khác trông như NHÃN TRƯỜNG kế tiếp (kết thúc bằng `:`, cùng quy ước mọi nhãn trong mẫu phiếu
+này) hoặc hết dòng, rồi nối lại bằng dấu cách — an toàn không nuốt nhầm giá trị field liền sau nếu lỡ
+chung 1 dòng; trường hợp chỉ có 1 token (đa số hiện tại) trả về giống hệt hành vi cũ, không đổi gì.
+`f.ordererName` (`parsePoLinesToFields()`) đổi sang dùng hàm mới — các field khác (mã/số/ngày, luôn đúng
+1 token) giữ nguyên `poFindValueAfterLabel()` cũ, không đổi.
+
+**Test**: `tests/test-po-orderer-name-multitoken.js` (mới, 8 kịch bản — tái hiện đúng lỗi báo cáo, tên
+dài 3 từ, phòng thủ không nuốt nhãn kế tiếp, không đổi hành vi trường hợp 1 token, tích hợp qua
+`parsePoLinesToFields()`) + chạy lại `tests/test-operation-order-pdf-hdmuachung.js` (PDF thật, 24/24
+pass) và `tests/test-operation-order-po-fields.js`/`test-operation-order-po-relock-stale.js` (không
+regression). **Lưu ý**: không có file PDF gốc của 2 phiếu người dùng báo lỗi để test trực tiếp — bản vá
+dựa trên phân tích đúng cơ chế PDF.js tách token + tái hiện chính xác kịch bản bằng dữ liệu mô phỏng;
+người dùng nên thử lại đúng 2 phiếu đó sau khi deploy để xác nhận.
 
 ## v29.44 (2026-11): Sửa lại "🏷️ Gán Vị Trí Kiêm Nhiệm" — KHÔNG update ngược lại Hồ Sơ Nhân Sự
 
