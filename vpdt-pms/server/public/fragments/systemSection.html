@@ -2099,24 +2099,27 @@
              xem lib/positionApprovers.js. Nguồn chọn = DB.workflowParticipatingPositions (cùng danh mục
              "Vị Trí Tham Gia Quy Trình" ở khối 17, xem wfPositionPairPickerItems()). -->
         <div class="bg-white p-3 rounded border">
-          <label class="block text-xs font-semibold text-gray-600 mb-1">🏷️ Vị Trí Kiêm Nhiệm (tuỳ chọn)</label>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">🔀 Kiêm Nhiệm Phê Duyệt Quy Trình (tuỳ chọn)</label>
           <div id="uSecondaryPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-          <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công.</p>
+          <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG phải chức vụ Cơ Cấu Tổ Chức (không đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công). Tài khoản ĐÃ liên kết Hồ Sơ Nhân Sự: sửa tại Hồ Sơ Nhân Sự → 🏷️ Vị Trí Kiêm Nhiệm thay vì ở đây.</p>
         </div>
 
-        <!-- Vị Trí Kiêm Nhiệm — Gán Nhanh (quyền riêng "hrSecondaryPositionManage", 11/2026, theo yêu
-             cầu người dùng) — CHỈ hiện khi ô trên bị khoá (tài khoản đã liên kết Hồ Sơ Nhân Sự) VÀ người
-             đang sửa có quyền riêng này (KHÔNG cần quyền Hồ Sơ Nhân Sự nào khác) — cho sửa NGAY tại đây
-             qua route riêng GET/POST /api/hr-profile/secondary-position* (routes/employeeProfile.js),
-             vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự nhập tay như
-             ô trên). Xem renderSecondaryPositionQuickEditor()/saveSecondaryPositionQuickEdit() ở
-             module-admin-userstaging.js. -->
+        <!-- Kiêm Nhiệm Phê Duyệt Quy Trình — Gán Nhanh (quyền riêng "hrSecondaryPositionManage", 11/2026,
+             theo yêu cầu người dùng) — CHỈ hiện khi ô trên bị khoá (tài khoản đã liên kết Hồ Sơ Nhân Sự)
+             VÀ người đang sửa có quyền riêng này (KHÔNG cần quyền Hồ Sơ Nhân Sự nào khác) — cho sửa NGAY
+             tại đây qua route riêng GET/POST /api/hr-profile/secondary-position* (routes/
+             employeeProfile.js). LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "Nó phải tách ra" — ô này và ô
+             trên GHI CHUNG 1 field, dễ hiểu nhầm là 2 loại kiêm nhiệm khác nhau; đồng thời dòng mô tả cũ
+             "chọn đúng vị trí CÓ THẬT trong Cơ Cấu Tổ Chức" đã SAI từ khi đổi nguồn chọn sang Vị Trí Tham
+             Gia Quy Trình, quên cập nhật lúc đó): đổi tên CẢ 2 ô cùng "Kiêm Nhiệm Phê Duyệt Quy Trình" +
+             sửa lại đúng mô tả nguồn chọn. Xem renderSecondaryPositionQuickEditor()/
+             saveSecondaryPositionQuickEdit() ở module-admin-userstaging.js. -->
         <div id="uSecondaryPositionManageBlock" class="hidden bg-white p-3 rounded border border-teal-300">
-          <label class="block text-xs font-semibold text-teal-700 mb-1">🏷️ Gán Vị Trí Kiêm Nhiệm (quyền riêng — không cần quyền Hồ Sơ Nhân Sự khác)</label>
-          <p class="text-[10.5px] text-gray-500 mb-1">Hiện đủ TẤT CẢ vị trí kiêm nhiệm tài khoản này đang có (kể cả gán kiểu cũ) — chọn đúng vị trí CÓ THẬT trong Cơ Cấu Tổ Chức rồi Lưu. Sửa ở đây KHÔNG ghi ngược lại Hồ Sơ Nhân Sự (Nhân Sự sẽ không thấy thay đổi này).</p>
+          <label class="block text-xs font-semibold text-teal-700 mb-1">🔀 Kiêm Nhiệm Phê Duyệt Quy Trình — Gán Nhanh (quyền riêng — không cần quyền Hồ Sơ Nhân Sự khác)</label>
+          <p class="text-[10.5px] text-gray-500 mb-1">Hiện đủ TẤT CẢ kiêm nhiệm phê duyệt quy trình tài khoản này đang có (kể cả gán kiểu cũ) — chọn đúng Chức Danh — Phòng Ban đã có trong danh mục 🧭 Vị Trí Tham Gia Quy Trình (Hệ Thống &gt; Quyền Đặc Biệt) rồi Lưu. Sửa ở đây KHÔNG ghi ngược lại Hồ Sơ Nhân Sự (Nhân Sự sẽ không thấy thay đổi này).</p>
           <div id="uSecondaryPositionManagePicker" class="border rounded p-2 bg-gray-50"></div>
           <div id="uSecondaryPositionManageNote"></div>
-          <button type="button" id="uSecondaryPositionManageSaveBtn" data-op="saveSecondaryPositionQuickEdit" class="hidden mt-2 bg-teal-600 text-white text-[11px] font-bold px-3 py-1.5 rounded hover:bg-teal-700">💾 Lưu Vị Trí Kiêm Nhiệm</button>
+          <button type="button" id="uSecondaryPositionManageSaveBtn" data-op="saveSecondaryPositionQuickEdit" class="hidden mt-2 bg-teal-600 text-white text-[11px] font-bold px-3 py-1.5 rounded hover:bg-teal-700">💾 Lưu Kiêm Nhiệm Phê Duyệt Quy Trình</button>
         </div>
 
         <!-- Mở thêm TỪNG mục cụ thể ở Nghiệp Vụ/Báo Cáo, ngoài phạm vi quyền module hiện có của người này

@@ -131,7 +131,7 @@ async function main() {
 
     const mainBoxLocked = await page.evaluate(() => document.getElementById('uSecondaryPositionsMultiSelect')?.classList.contains('pointer-events-none'));
     const quickEditBoxVisible = await page.evaluate(() => !document.getElementById('uSecondaryPositionManageBlock')?.classList.contains('hidden'));
-    console.log(`\n01: Ô kiêm nhiệm CHÍNH bị khoá (đã liên kết hồ sơ Nhân Sự)? ${mainBoxLocked} — Ô "🏷️ Gán Vị Trí Kiêm Nhiệm" MỚI hiện ra cho admin2 (chỉ có quyền riêng)? ${quickEditBoxVisible}`);
+    console.log(`\n01: Ô kiêm nhiệm CHÍNH bị khoá (đã liên kết hồ sơ Nhân Sự)? ${mainBoxLocked} — Ô "🔀 Kiêm Nhiệm Phê Duyệt Quy Trình — Gán Nhanh" MỚI hiện ra cho admin2 (chỉ có quyền riêng)? ${quickEditBoxVisible}`);
     if (!mainBoxLocked || !quickEditBoxVisible) throw new Error('❌ Box không hiện đúng như kỳ vọng.');
     await shot(page, '01-truoc-khi-gan-oKiemNhiemChinh-khoa-va-oGanNhanh-xuat-hien');
 

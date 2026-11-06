@@ -42,7 +42,8 @@ async function ensureHrLinkedUsernamesLoaded() {
 // đường sửa tài khoản ĐÃ TỒN TẠI (editUser()-tương đương, có user.username thật) — 2 nơi gọi còn lại
 // (hàng chờ staging CHƯA lưu + reset form tạo mới) không có tài khoản thật nên bỏ trống tham số này,
 // khối "Gán Nhanh" dưới đây tự ẩn vì không đủ điều kiện (thiếu username). Khi CÓ username + locked=true
-// + currentUser có quyền hrSecondaryPositionManage → hiện khối "🏷️ Gán Vị Trí Kiêm Nhiệm" ngay dưới ô
+// + currentUser có quyền hrSecondaryPositionManage → hiện khối "🔀 Kiêm Nhiệm Phê Duyệt Quy Trình — Gán
+// Nhanh" ngay dưới ô
 // chính (đã bị khoá tương tác) để admin KHÔNG có quyền Hồ Sơ Nhân Sự vẫn tự gán được, qua route riêng
 // (xem renderSecondaryPositionQuickEditor() ngay dưới).
 function renderSecondaryPositionsWidget(existingPositions, locked, username) {

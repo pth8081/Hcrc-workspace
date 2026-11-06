@@ -1,9 +1,28 @@
 # Phiên bản hiện tại
 
-**29.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.47 (2026-11): Đổi tên "Vị Trí Kiêm Nhiệm" → "Kiêm Nhiệm Phê Duyệt Quy Trình" + sửa chữ mô tả sai
+
+**Theo phản hồi người dùng** (sau v29.46): tên "🏷️ Vị Trí Kiêm Nhiệm (tuỳ chọn)" / "🏷️ Gán Vị Trí Kiêm
+Nhiệm" ở màn Sửa Người Dùng dễ khiến hiểu nhầm có 2 loại kiêm nhiệm khác nhau (1 thuộc Cơ Cấu Tổ Chức, 1
+thuộc quy trình phê duyệt) — thực tế **chỉ có 1 field duy nhất** (`user.secondaryPositions[]`) phục vụ
+**đúng 1 mục đích** (tính người duyệt "Theo vị trí"), 2 ô chỉ là 2 CỬA VÀO khác nhau để sửa field đó (ô
+trên dùng khi chưa liên kết Hồ Sơ Nhân Sự; ô dưới — quyền riêng `hrSecondaryPositionManage` — dùng khi ô
+trên đã khoá). Đổi tên cả 2 ô thành **"🔀 Kiêm Nhiệm Phê Duyệt Quy Trình"** để nói rõ ngay mục đích, không
+còn gợi liên tưởng tới Cơ Cấu Tổ Chức (`public/fragments/systemSection.html`).
+
+**Vá kèm 1 lỗi chữ thật phát hiện khi đổi tên**: dòng mô tả ở ô dưới vẫn còn ghi "chọn đúng vị trí CÓ
+THẬT trong Cơ Cấu Tổ Chức" — SAI từ sau bản vá v29.46 (nguồn chọn đã đổi sang Vị Trí Tham Gia Quy Trình,
+không còn đòi hỏi Cơ Cấu Tổ Chức nữa), chỉ là quên cập nhật chữ lúc đó. Sửa lại đúng: "chọn đúng Chức
+Danh — Phòng Ban đã có trong danh mục 🧭 Vị Trí Tham Gia Quy Trình (Hệ Thống > Quyền Đặc Biệt)".
+
+Chỉ đổi chữ hiển thị (label/helper text) + 1 dòng console.log trong demo — không đổi id, không đổi logic,
+không đổi route. Chạy lại `tests/test-hr-secondary-position-manage-perm.js` (15/15) +
+`tests/demo-hr-secondary-position-manage.js` — không regression.
 
 ## v29.46 (2026-11): "🏷️ Gán Vị Trí Kiêm Nhiệm" — bỏ yêu cầu phải có node thật trong Cơ Cấu Tổ Chức
 
