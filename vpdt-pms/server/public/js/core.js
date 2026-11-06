@@ -8599,6 +8599,35 @@ function showConfirmModal({ title, bodyHTML, onConfirm, confirmLabel }) {
   modal.classList.remove('hidden');
 }
 
+// Ô ghi chú TUỲ CHỌN khi Duyệt (11/2026, theo yêu cầu người dùng — áp dụng cho TOÀN HỆ THỐNG mọi module
+// có Duyệt/Từ chối, không bắt buộc điền): dùng CHUNG cho các module đi qua applyWorkflowAction()
+// (lib/workflowEngine.js) mà KHÔNG CÓ sẵn 1 modal xử lý trung gian riêng để nhét ô nhập liệu — cụ thể
+// itPriceApprovals/docs/contracts/contractsSignedFile/paymentRequests (5 module gọi thẳng
+// showConfirmModal() rồi callWorkflowAction(..., 'approve', {}) ngay trong onConfirm). 5 module CÒN LẠI
+// của cùng engine (carRegs/officeReqs/submissions/vppRegistrations/operationOrders) đã có sẵn 1 ô ghi chú
+// DÙNG CHUNG cho Duyệt/Từ chối/Yêu cầu bổ sung ngay trong modal xử lý riêng của chúng (txtCarComment/
+// txtOfficeComment/txtSubmissionComment/txtVppRegComment/txtOperationProcessComment, luôn optional khi
+// Duyệt, bắt buộc khi Từ chối/Yêu cầu bổ sung) — KHÔNG đụng vào các module đó, chỉ 5 module ở trên cần bổ
+// sung mới. Server (applyWorkflowAction()) đã lưu `comment` vào `history[]` cho CẢ APPROVE lẫn REJECT từ
+// trước (chỉ bắt buộc non-empty cho REJECT), và buildWorkflowStepsStatusHTML()/hiển thị lịch sử của từng
+// module đã sẵn sàng hiện `h.comment` cho dòng APPROVED nếu có — chỉ thiếu khâu THU THẬP input, nên
+// không cần sửa gì ở server/hiển thị, chỉ cần bổ sung ở bodyHTML lúc gọi showConfirmModal().
+//
+// ID CỐ ĐỊNH `approveCommentInput` AN TOÀN vì #genericConfirmModal là modal DUY NHẤT toàn hệ thống
+// (không bao giờ có 2 bản hiện cùng lúc) — mỗi lần showConfirmModal() đều ghi đè HOÀN TOÀN bodyHTML cũ
+// (kể cả ô nhập liệu bên trong) trước khi gắn nội dung mới, nên không có rủi ro đụng độ giữa 2 lượt gọi
+// khác nhau.
+function buildApproveCommentFieldHTML() {
+  return `<div class="mt-3 text-left">
+    <label class="block text-xs font-semibold text-gray-600 mb-1">📝 Ghi chú phê duyệt (không bắt buộc):</label>
+    <textarea id="approveCommentInput" class="w-full border p-2 rounded text-xs" rows="2" placeholder="Có thể để trống nếu không cần ghi chú gì thêm"></textarea>
+  </div>`;
+}
+function readApproveCommentInput() {
+  const el = document.getElementById('approveCommentInput');
+  return el ? el.value.trim() : '';
+}
+
 function closeGenericConfirmModal() {
   const modal = document.getElementById('genericConfirmModal');
   modal.classList.add('hidden');

@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**29.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.40 (2026-11): Ghi chú TUỲ CHỌN khi Duyệt — áp dụng toàn hệ thống (theo yêu cầu người dùng)
+
+**Yêu cầu người dùng**: ban đầu hỏi riêng về Phê Duyệt Giá ("phê duyệt giá bán buôn/bán lẻ, người phê
+duyệt phải nhập thông tin phê duyệt vào đúng không... nếu chưa có thì bổ sung luôn") — sau khi rà soát
+phát hiện đây là hành vi chung của CẢ HỆ THỐNG (Duyệt không cần lý do, chỉ Từ chối mới bắt buộc), người
+dùng xác nhận mở rộng áp dụng toàn hệ thống, ô ghi chú TUỲ CHỌN (không bắt buộc).
+
+**Rà soát trước khi code phát hiện 2 lớp đã tồn tại**:
+- **Lớp A** (`carRegs`/Đăng Ký Xe, `officeReqs`/Đề Xuất Mua-Sửa, `submissions`/Văn Bản Trình,
+  `vppRegistrations`/VPP, `operationOrders`/Đơn Hàng Vận Hành): **ĐÃ CÓ SẴN** 1 ô ghi chú dùng chung cho
+  Duyệt/Từ chối/Yêu cầu bổ sung ngay trong modal xử lý trung gian — không cần sửa gì.
+- **Lớp B** (`itPriceApprovals` — cả Bán Lẻ lẫn Bán Buôn, `docs`/Tài Liệu, `contracts`/Hợp Đồng,
+  `contractsSignedFile`/Tài Liệu Ký, `paymentRequests`/Thanh Toán): gọi thẳng `showConfirmModal()` rồi gửi
+  payload rỗng ngay trong `onConfirm` — **THIẾU** ô nhập liệu. Server (`applyWorkflowAction()`,
+  `lib/workflowEngine.js`) đã hỗ trợ sẵn `comment` optional cho APPROVE từ trước (chỉ bắt buộc cho
+  REJECT) — không cần sửa server, chỉ bổ sung UI thu thập.
+
+**Sửa**: `buildApproveCommentFieldHTML()`/`readApproveCommentInput()` (mới, `core.js`) — 1 ô `<textarea>`
+dùng chung (ID cố định `approveCommentInput`, an toàn vì `#genericConfirmModal` là modal DUY NHẤT toàn hệ
+thống, mỗi lần `showConfirmModal()` ghi đè hoàn toàn `bodyHTML` cũ) — gắn vào `bodyHTML` lúc gọi
+`showConfirmModal()` của cả 5 module Lớp B, đọc giá trị trong `onConfirm` rồi gửi `{ comment }` thay vì
+`{}`.
+
+**Phát hiện thêm trong lúc rà soát**: `paymentRequests` trước đây **không có bất kỳ nơi nào** hiển thị
+lịch sử duyệt từng bước (ai duyệt/khi nào/ghi chú gì) — bổ sung khối "📶 Quy Trình Phê Duyệt" (dùng chung
+`buildWorkflowStepsStatusHTML()`, đúng hàm các module khác đã dùng) vào `renderPaymentManageTab()` để ghi
+chú mới (và lịch sử duyệt nói chung) THỰC SỰ xem được, không chỉ âm thầm lưu trong DB.
+
+**Giới hạn đã biết**: `docs`/`contracts`/`contractsSignedFile` hiện **CHƯA có** nơi hiển thị lịch sử duyệt
+chi tiết trong giao diện (kể cả lý do Từ chối cũng vậy từ trước — khoảng trống có sẵn, không phải lỗi mới
+phát sinh từ bản vá này). Ghi chú khi Duyệt cho 3 module này vẫn được **thu thập + lưu đúng** vào
+`history[]` (xác nhận qua test round-trip thật), chỉ chưa có khối hiển thị như `itPriceApprovals`/
+`paymentRequests` — có thể bổ sung ở đợt sau nếu cần.
+
+**Test**: 2 file mới — `test-approve-optional-comment.js` (testHarness.js, itPriceApprovals: Duyệt kèm ghi
+chú lưu đúng + hiện đúng trong modal, để trống vẫn Duyệt được bình thường) và
+`test-approve-optional-comment-contracts.js` (_harness-contract.js, round-trip UI thật qua
+`confirmPending()` cho `contracts`/`paymentRequests`/`docs`) — 13/13 pass. Chạy lại 14 file test liên
+quan trực tiếp (itPrice × 5, contract × 3, payment × 3, docs × 1) — không regression (1 lỗi ở
+`test-contract-payment-type-change.js` xác nhận có sẵn trên `main` sạch trước bản vá, không liên quan).
+
+**Deploy-impact:** chỉ `public/js/core.js` + `module-itsupport-price.js` + `module-tailieu.js` +
+`module-hopdong.js` + `module-thanhtoan.js` — không đổi schema/`.env.example`/dependencies, chỉ cần copy
+code + `pm2 restart`.
 
 ## v29.39 (2026-11): [KHẨN] Kiểm Soát Hàng Hóa — "Thêm Quầy Kệ"/ghi nhận kệ/thêm Ngưỡng Tồn báo lỗi "Không thể tạo hồ sơ" TRÊN PRODUCTION (chắc chắn lỗi 100% lần, không phải ngẫu nhiên)
 

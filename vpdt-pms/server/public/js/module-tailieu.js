@@ -1752,18 +1752,18 @@ function approveDoc(docId) {
   if (!doc) return;
   showConfirmModal({
     title: 'Xác Nhận Phê Duyệt',
-    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> tài liệu "${escapeHtml(doc.title)}" (${escapeHtml(doc.code)}) không?`,
+    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> tài liệu "${escapeHtml(doc.title)}" (${escapeHtml(doc.code)}) không?${buildApproveCommentFieldHTML()}`,
     confirmLabel: 'Phê Duyệt',
-    onConfirm: () => withApprovalAuth(() => approveDocConfirmed(docId))
+    onConfirm: () => withApprovalAuth(() => approveDocConfirmed(docId, readApproveCommentInput()))
   });
 }
-async function approveDocConfirmed(docId) {
+async function approveDocConfirmed(docId, comment) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
 
   let result;
   try {
-    result = await callWorkflowAction('docs', docId, 'approve', {});
+    result = await callWorkflowAction('docs', docId, 'approve', { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }

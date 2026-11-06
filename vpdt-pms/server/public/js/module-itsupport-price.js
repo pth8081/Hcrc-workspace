@@ -1429,18 +1429,18 @@ function approveItPrice(id) {
   if (!p) return;
   showConfirmModal({
     title: 'Xác Nhận Phê Duyệt',
-    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> đề xuất duyệt giá (${escapeHtml(p.code)}) không?`,
+    bodyHTML: `Bạn có chắc chắn muốn <b>phê duyệt</b> đề xuất duyệt giá (${escapeHtml(p.code)}) không?${buildApproveCommentFieldHTML()}`,
     confirmLabel: 'Phê Duyệt',
-    onConfirm: () => withApprovalAuth(() => approveItPriceConfirmed(id))
+    onConfirm: () => withApprovalAuth(() => approveItPriceConfirmed(id, readApproveCommentInput()))
   });
 }
-async function approveItPriceConfirmed(id) {
+async function approveItPriceConfirmed(id, comment) {
   const p = DB.itPriceApprovals.find(x => x.id === id);
   if (!p) return;
 
   let result;
   try {
-    result = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+    result = await callWorkflowAction('itPriceApprovals', id, 'approve', { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }

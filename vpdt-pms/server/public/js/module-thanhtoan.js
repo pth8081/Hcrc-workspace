@@ -808,7 +808,16 @@ function renderPaymentManageTab() {
               mgmtBtns.push(`<button type="button" data-op="deletePaymentRequestAction" data-arg0="${pr.id}" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>`);
             }
           }
+          // Quy Trình Phê Duyệt (11/2026, theo yêu cầu người dùng "nhập ghi chú khi Duyệt áp dụng toàn
+          // hệ thống") — paymentRequests TRƯỚC ĐÂY không có bất kỳ chỗ nào hiển thị pr.history (bước nào
+          // đã duyệt/ai duyệt/ghi chú gì) dù server đã lưu đủ từ lâu — thêm vào để ghi chú duyệt mới (và
+          // cả lịch sử bước duyệt nói chung) THỰC SỰ xem được, không chỉ âm thầm lưu trong DB. Dùng
+          // CHUNG buildWorkflowStepsStatusHTML() (core.js) — đúng hàm các module khác (Tài Liệu/Văn Bản
+          // Trình/Đăng Ký Xe/Đề Xuất/VPP/Hợp Đồng/Phê Duyệt Giá) đã dùng.
+          const wfStepsStatusHTML = pr.status !== 'DRAFT'
+            ? buildWorkflowStepsStatusHTML(resolvePaymentApprovalWorkflow(pr), pr.history, pr.currentStep, pr.status) : '';
           return `
+            ${wfStepsStatusHTML}
             <div class="border-t pt-2">${readOnlyRows}${lumpFileRow}<div class="mt-1"><span class="text-[11px] font-semibold text-gray-600">📎 Hồ Sơ Đề Nghị Thanh Toán:</span>${requestFilesListHTML}</div></div>
             ${mgmtBtns.length ? `<div class="flex justify-end flex-wrap gap-2 pt-1">${mgmtBtns.join('')}</div>` : ''}
           `;
@@ -922,12 +931,13 @@ function approvePaymentRequestAction(id) {
   // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} đề nghị thanh toán`,
-    bodyHTML: `${escapeHtml(approveLabel)} đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
+    bodyHTML: `${escapeHtml(approveLabel)} đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?${buildApproveCommentFieldHTML()}`,
     confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
+      const comment = readApproveCommentInput();
       let result;
       try {
-        result = await callWorkflowAction('paymentRequests', id, 'approve', {});
+        result = await callWorkflowAction('paymentRequests', id, 'approve', { comment });
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const updated = result.item;
       const transition = result.transition;

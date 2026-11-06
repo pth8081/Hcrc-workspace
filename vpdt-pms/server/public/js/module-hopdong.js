@@ -1448,14 +1448,15 @@ function approveContractAction(id) {
   // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} hợp đồng`,
-    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?${buildApproveCommentFieldHTML()}`,
     confirmLabel: approveLabel,
     // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — khớp đúng cách approveDoc() ở trên, mở rộng
     // withApprovalAuth() ra cả 7 module dùng chung engine phê duyệt (trước đây Hợp Đồng không có).
     onConfirm: () => withApprovalAuth(async () => {
+      const comment = readApproveCommentInput();
       let result;
       try {
-        result = await callWorkflowAction('contracts', id, 'approve', {});
+        result = await callWorkflowAction('contracts', id, 'approve', { comment });
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
@@ -1538,12 +1539,13 @@ function approveContractSignedFileAction(id) {
   // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} tài liệu ký`,
-    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?${buildApproveCommentFieldHTML()}`,
     confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
+      const comment = readApproveCommentInput();
       let result;
       try {
-        result = await callWorkflowAction('contractsSignedFile', id, 'approve', {});
+        result = await callWorkflowAction('contractsSignedFile', id, 'approve', { comment });
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
