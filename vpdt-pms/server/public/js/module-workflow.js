@@ -185,7 +185,10 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
   // Y HỆT 1 danh sách pair vào MỌI phòng ban đang áp dụng — dept rỗng thì khớp Trưởng Phòng CẢ CÔNG TY,
   // dept cụ thể thì bị copy chéo sang phòng ban khác không liên quan). Target không có khái niệm phòng
   // ban (pureTier) giữ NGUYÊN dept rỗng — chấp nhận được vì bản thân luồng đó vốn không phân biệt phòng ban.
-  const emptyConfig = (workflowId, approverMode, approversByPosition, dept) => {
+  // approvers (tham số 5, "👤 Gán Người Cụ Thể", 11/2026): {stepOrder: [username,...]} — KHÔNG cần biến
+  // đổi theo dept như approversByPosition (chức danh mới cần tự khớp phòng ban của từng target, 1 người
+  // cụ thể thì ÁP DỤNG Y HỆT cho mọi target được chọn) — chỉ truyền thẳng qua.
+  const emptyConfig = (workflowId, approverMode, approversByPosition, dept, approvers) => {
     const finalMode = {};
     const finalPositions = {};
     Object.keys(approverMode || {}).forEach((stepOrder) => {
@@ -199,7 +202,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
         finalPositions[stepOrder] = (approversByPosition || {})[stepOrder];
       }
     });
-    return { workflowId, approvers: {}, approverMode: finalMode, approversByPosition: finalPositions };
+    return { workflowId, approvers: approvers || {}, approverMode: finalMode, approversByPosition: finalPositions };
   };
   // Tương thích ngược (10/2026, đợt tách ITPRICE thành ITPRICE_RETAIL/ITPRICE_WHOLESALE): cấu hình Áp
   // Dụng Nhanh đã lưu TỪ TRƯỚC có thể còn chứa khoá 'ITPRICE' cũ (không còn tồn tại trong
@@ -222,7 +225,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
         if (tierMap[tier.key]) return;
         targets.push({
           label: `${cfg.label} — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
-          apply: (workflowId, approverMode, approversByPosition) => { tierMap[tier.key] = emptyConfig(workflowId, approverMode, approversByPosition, null); }
+          apply: (workflowId, approverMode, approversByPosition, approvers) => { tierMap[tier.key] = emptyConfig(workflowId, approverMode, approversByPosition, null, approvers); }
         });
       });
       return;
@@ -241,9 +244,9 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
         if (resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL')) return;
         targets.push({
           label: `${cfg.label} — ${dept}`, dbKey: cfg.dbKey,
-          apply: (workflowId, approverMode, approversByPosition) => {
+          apply: (workflowId, approverMode, approversByPosition, approvers) => {
             if (!deptMap[dept] || typeof deptMap[dept] !== 'object') deptMap[dept] = {};
-            deptMap[dept].RETAIL = emptyConfig(workflowId, approverMode, approversByPosition, dept);
+            deptMap[dept].RETAIL = emptyConfig(workflowId, approverMode, approversByPosition, dept, approvers);
           }
         });
       });
@@ -269,9 +272,9 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
           if ((typeMap[type.key] && typeMap[type.key][dept]) || legacyMap[dept]) return;
           targets.push({
             label: `${cfg.label} (${type.label}) — ${dept}`, dbKey: cfg.dbKey,
-            apply: (workflowId, approverMode, approversByPosition) => {
+            apply: (workflowId, approverMode, approversByPosition, approvers) => {
               if (!typeMap[type.key]) typeMap[type.key] = {};
-              typeMap[type.key][dept] = emptyConfig(workflowId, approverMode, approversByPosition, dept);
+              typeMap[type.key][dept] = emptyConfig(workflowId, approverMode, approversByPosition, dept, approvers);
             }
           });
         });
@@ -286,7 +289,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
       if (deptMap[dept]) return;
       targets.push({
         label: `${cfg.label} — ${dept}`, dbKey: cfg.dbKey,
-        apply: (workflowId, approverMode, approversByPosition) => { deptMap[dept] = emptyConfig(workflowId, approverMode, approversByPosition, dept); }
+        apply: (workflowId, approverMode, approversByPosition, approvers) => { deptMap[dept] = emptyConfig(workflowId, approverMode, approversByPosition, dept, approvers); }
       });
     });
   });
@@ -308,6 +311,15 @@ let editingQuickApplyConfigId = null;
 // (lib/positionApprovers.js) đã hỗ trợ sẵn dept rỗng từ trước, không cần sửa gì ở resolver.
 let qaEditingApproverMode = {};
 let qaEditingApproversByPosition = {};
+// qaEditingApprovers (11/2026, "👤 Gán Người Cụ Thể" — theo yêu cầu người dùng, mở rộng Áp Dụng Nhanh
+// vốn trước đây CHỈ có "🧭 Gán theo Chức Danh" hoặc để trống): {stepOrder: [username,...]} — CÙNG SHAPE
+// approvers của 1 config dept thường, nhưng ở đây là 1 bộ DUY NHẤT dùng CHUNG cho TOÀN BỘ mục sẽ được
+// "⚡ Áp Dụng" (cùng tinh thần qaEditingApproversByPosition phía trên) — 1 người cụ thể (VD "Nguyễn Văn A")
+// duyệt bước N của NHIỀU quy trình/phòng ban khác nhau cùng lúc, không cần vào từng màn "Quy Trình & Phê
+// Duyệt" gán tay. approverMode[step]==='PEOPLE' đánh dấu bước đó dùng nguồn này — loại trừ lẫn nhau với
+// 'POSITION'/'POSITION_AUTO_DEPT' (bật cái này tự tắt cái kia, xem onQaStepPeopleToggle()/
+// onQaStepPositionToggle()).
+let qaEditingApprovers = {};
 
 // Gọi mỗi lần vào sub-tab "⚡ Áp Dụng Nhanh" (setSystemSubTab() nhánh QUICKAPPLY) VÀ mỗi lần danh sách
 // DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn khớp mẫu mới nhất, tránh chọn nhầm
@@ -410,16 +422,21 @@ function renderQuickApplyPositionSteps() {
 
   const positionPickersToRender = [];
   const autoDeptPickersToRender = [];
+  const peoplePickersToRender = [];
   wrap.innerHTML = wf.steps.map(step => {
     const stepKey = `qa_${step.order}`;
     const isAutoDeptMode = qaEditingApproverMode[step.order] === 'POSITION_AUTO_DEPT';
     const isPositionMode = qaEditingApproverMode[step.order] === 'POSITION' || isAutoDeptMode;
+    const isPeopleMode = qaEditingApproverMode[step.order] === 'PEOPLE';
     const currentPositions = qaEditingApproversByPosition[step.order] || [];
+    const currentApprovers = qaEditingApprovers[step.order] || [];
     const positionPickerId = `qaPositionPicker_${stepKey}`;
     const autoDeptPickerId = `qaAutoDeptPicker_${stepKey}`;
     const positionPreviewId = `qaPositionPreview_${stepKey}`;
+    const peoplePickerId = `qaPeoplePicker_${stepKey}`;
     positionPickersToRender.push({ positionPickerId, positionPreviewId, currentPositions });
     autoDeptPickersToRender.push({ autoDeptPickerId, positionPreviewId, currentPositions });
+    peoplePickersToRender.push({ peoplePickerId, currentApprovers, stepOrder: step.order });
     return `
       <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
         <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -433,12 +450,19 @@ function renderQuickApplyPositionSteps() {
               <input type="checkbox" id="qaAutoDeptToggle_${stepKey}" data-op-change="onQaAutoDeptToggle" data-arg0="${stepKey}" data-arg-el="1" ${isAutoDeptMode ? 'checked' : ''}>
               🏢 Tự động khớp đúng phòng ban của từng mục
             </label>
+            <label class="flex items-center gap-1 text-[11px] font-semibold text-rose-700 cursor-pointer whitespace-nowrap" title="Bật để MỌI mục thiếu cấu hình trong phạm vi module đã chọn được gán NGAY (các) người cụ thể này làm người duyệt bước này — không cần vào từng màn Quy Trình & Phê Duyệt gán tay">
+              <input type="checkbox" id="qaPeopleModeToggle_${stepKey}" data-op-change="onQaStepPeopleToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPeopleMode ? 'checked' : ''}>
+              👤 Gán Người Cụ Thể
+            </label>
           </div>
         </div>
         <div id="qaPositionBlock_${stepKey}" class="${isPositionMode ? '' : 'hidden'} space-y-1">
           <div id="${positionPickerId}" class="${isAutoDeptMode ? 'hidden' : ''}"></div>
           <div id="${autoDeptPickerId}" class="${isAutoDeptMode ? '' : 'hidden'}"></div>
           <div id="${positionPreviewId}"></div>
+        </div>
+        <div id="qaPeopleBlock_${stepKey}" class="${isPeopleMode ? '' : 'hidden'} space-y-1">
+          <div id="${peoplePickerId}"></div>
         </div>
       </div>
     `;
@@ -468,11 +492,43 @@ function renderQuickApplyPositionSteps() {
       }
     });
   });
+  // "👤 Gán Người Cụ Thể" (11/2026) — CÙNG widget renderPeopleMultiSelect() dùng ở renderWorkflowTab()/
+  // renderItPriceTierWorkflowTab() (ứng viên = getApproverCandidateUsers(), toàn hệ thống — không giới
+  // hạn theo phòng ban, cùng lý do nhánh pureTier của renderItPriceTierWorkflowTab() vốn cũng không có
+  // khái niệm phòng ban). data-step (KHÔNG cần thêm data-dept/data-tier như 2 màn kia) đã đủ phân biệt
+  // vì màn Áp Dụng Nhanh chỉ render ĐÚNG 1 form tại 1 thời điểm (không có nhiều thẻ dept/tier cùng lúc
+  // trên trang như renderWorkflowTab()/renderItPriceTierWorkflowTab()) — xem collectQaStepModesAndPositions().
+  peoplePickersToRender.forEach(({ peoplePickerId, currentApprovers, stepOrder }) => {
+    const candidates = getApproverCandidateUsers(currentApprovers);
+    renderPeopleMultiSelect(peoplePickerId, candidates, currentApprovers, 'qaPeopleApproverCheckbox', { 'data-step': stepOrder });
+  });
 }
 
 function onQaStepPositionToggle(stepKey, checkboxEl) {
   document.getElementById(`qaPositionBlock_${stepKey}`)?.classList.toggle('hidden', !checkboxEl.checked);
   document.getElementById(`qaAutoDeptLabel_${stepKey}`)?.classList.toggle('hidden', !checkboxEl.checked);
+  // Loại trừ lẫn nhau với "👤 Gán Người Cụ Thể" (xem chú thích đầy đủ tại khai báo qaEditingApprovers) —
+  // bật "Theo Chức Danh" thì tự tắt + ẩn khối "Người Cụ Thể" của ĐÚNG bước này.
+  if (checkboxEl.checked) {
+    const peopleToggle = document.getElementById(`qaPeopleModeToggle_${stepKey}`);
+    if (peopleToggle) peopleToggle.checked = false;
+    document.getElementById(`qaPeopleBlock_${stepKey}`)?.classList.add('hidden');
+  }
+}
+
+// onQaStepPeopleToggle: bật/tắt khối "👤 Gán Người Cụ Thể" của 1 bước + tự tắt "🧭 Gán theo Chức Danh"
+// (và khối con "🏢 Tự động khớp phòng ban") của ĐÚNG bước đó nếu đang bật — 1 bước chỉ ở ĐÚNG 1 trong 3
+// trạng thái (để trống/Theo Chức Danh/Người Cụ Thể) tại 1 thời điểm, xem collectQaStepModesAndPositions().
+function onQaStepPeopleToggle(stepKey, checkboxEl) {
+  document.getElementById(`qaPeopleBlock_${stepKey}`)?.classList.toggle('hidden', !checkboxEl.checked);
+  if (checkboxEl.checked) {
+    const posToggle = document.getElementById(`qaPosModeToggle_${stepKey}`);
+    if (posToggle) posToggle.checked = false;
+    const autoDeptToggle = document.getElementById(`qaAutoDeptToggle_${stepKey}`);
+    if (autoDeptToggle) autoDeptToggle.checked = false;
+    document.getElementById(`qaPositionBlock_${stepKey}`)?.classList.add('hidden');
+    document.getElementById(`qaAutoDeptLabel_${stepKey}`)?.classList.add('hidden');
+  }
 }
 
 // onQaAutoDeptToggle: chuyển đổi giữa 2 ô chọn của Bước 1 (cặp {Chức danh,Phòng ban} thường <-> chức danh
@@ -495,13 +551,23 @@ function onQaAutoDeptToggle(stepKey, checkboxEl) {
 }
 
 // Đọc lại toàn bộ toggle/picker vừa vẽ ở renderQuickApplyPositionSteps() thành đúng shape
-// approverMode/approversByPosition — gọi lúc saveQuickApplyConfig(), cùng khuôn
-// collectWfStepModesAndPositions() (module-itsupport-tier.js) nhưng không có nhánh PEOPLE.
+// approverMode/approversByPosition/approvers — gọi lúc saveQuickApplyConfig(), cùng khuôn
+// collectWfStepModesAndPositions() (module-itsupport-tier.js). Nay CÓ nhánh PEOPLE (11/2026, "👤 Gán
+// Người Cụ Thể") — đọc TRƯỚC nhánh POSITION vì onQaStepPeopleToggle()/onQaStepPositionToggle() đã tự
+// đảm bảo loại trừ lẫn nhau trên DOM (bật 1 bên tự tắt bên kia), nhưng đọc PEOPLE trước cho chắc dù cả 2
+// toggle lỡ cùng checked vì lý do nào đó (an toàn, không phụ thuộc hoàn toàn vào JS phía UI).
 function collectQaStepModesAndPositions(wf) {
   const approverMode = {};
   const approversByPosition = {};
+  const approvers = {};
   wf.steps.forEach(step => {
     const stepKey = `qa_${step.order}`;
+    const peopleToggle = document.getElementById(`qaPeopleModeToggle_${stepKey}`);
+    if (peopleToggle && peopleToggle.checked) {
+      approverMode[step.order] = 'PEOPLE';
+      approvers[step.order] = Array.from(document.querySelectorAll(`input.qaPeopleApproverCheckbox[data-step="${step.order}"]:checked`)).map(cb => cb.value);
+      return;
+    }
     const toggle = document.getElementById(`qaPosModeToggle_${stepKey}`);
     if (!toggle || !toggle.checked) return;
     const autoDeptToggle = document.getElementById(`qaAutoDeptToggle_${stepKey}`);
@@ -513,7 +579,7 @@ function collectQaStepModesAndPositions(wf) {
       approversByPosition[step.order] = getMultiSelectValues(`qaPositionPicker_${stepKey}`).map(decodeWfPositionPair).filter(Boolean);
     }
   });
-  return { approverMode, approversByPosition };
+  return { approverMode, approversByPosition, approvers };
 }
 
 function renderQuickApplyConfigList() {
@@ -529,6 +595,7 @@ function renderQuickApplyConfigList() {
     const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
     const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
     const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
+    const peopleStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'PEOPLE').length;
     // submissionTypeLabels: nhãn hiện tại của các loại đã chọn lọc (xem cfg.submissionTypeKeys ở
     // saveQuickApplyConfig() — tên field giữ nguyên vì lý do tương thích ngược dữ liệu đã lưu, nhưng từ
     // Release 3/3 chứa CẢ khoá loại tờ trình lẫn khoá Loại Pháp Lý, tuỳ cfg.modules đã chọn gì). Tra theo
@@ -549,6 +616,7 @@ function renderQuickApplyConfigList() {
               : `<span class="bg-red-50 border border-red-200 text-red-700 font-bold px-2 py-1 rounded-full">⚠️ Mẫu quy trình đã bị xoá</span>`}
             ${positionStepCount ? `<span class="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-full">🧭 ${positionStepCount} bước theo Chức Danh</span>` : ''}
             ${autoDeptStepCount ? `<span class="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-full">🏢 Tự động khớp phòng ban (${autoDeptStepCount} bước)</span>` : ''}
+            ${peopleStepCount ? `<span class="bg-rose-50 border border-rose-200 text-rose-700 font-bold px-2 py-1 rounded-full">👤 ${peopleStepCount} bước theo Người Cụ Thể</span>` : ''}
             ${submissionTypeLabels.length ? `<span class="bg-rose-50 border border-rose-200 text-rose-700 font-bold px-2 py-1 rounded-full">📑 Chỉ loại: ${submissionTypeLabels.map(escapeHtml).join(', ')}</span>` : ''}
             <span class="text-gray-400">→ gắn cho:</span>
             ${modLabels.map(l => `<span class="bg-white border rounded-full px-2 py-0.5">${escapeHtml(l)}</span>`).join('')}
@@ -606,18 +674,20 @@ async function applyQuickApplyConfig(configId) {
   const submissionTypeNote = submissionTypeLabels.length ? ` CHỈ áp dụng cho loại: ${submissionTypeLabels.join(', ')} (loại khác không bị đụng tới).` : '';
   const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
+  const peopleStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'PEOPLE').length;
   const positionNote = positionStepCount
     ? `Lưu ý: ${positionStepCount} bước đã gán "Theo Chức Danh" sẽ có người duyệt NGAY theo đúng chức danh đó — các bước còn lại vẫn để trống, bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.${autoDeptStepCount ? ` ${autoDeptStepCount} bước đã bật "🏢 Tự động khớp đúng phòng ban" — mỗi mục sẽ tự ra đúng người giữ chức danh đó CỦA RIÊNG phòng ban/mức tương ứng, không dùng chung 1 danh sách.` : ''}`
     : `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.`;
+  const peopleNote = peopleStepCount ? ` ${peopleStepCount} bước đã gán "👤 Người Cụ Thể" sẽ có ĐÚNG (các) người đó làm người duyệt NGAY, áp dụng Y HỆT cho mọi mục trong phạm vi này.` : '';
   const proceed = confirm(
     `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.${submissionTypeNote}\n\n` +
-    `${positionNote}\n\nTiếp tục?`
+    `${positionNote}${peopleNote}\n\nTiếp tục?`
   );
   if (!proceed) return;
 
   const dirtyKeys = [...new Set(targets.map(t => t.dbKey))];
   const snapshot = JSON.parse(JSON.stringify(Object.fromEntries(dirtyKeys.map(k => [k, DB[k] || {}]))));
-  targets.forEach(t => t.apply(cfg.workflowId, cfg.approverMode, cfg.approversByPosition));
+  targets.forEach(t => t.apply(cfg.workflowId, cfg.approverMode, cfg.approversByPosition, cfg.approvers));
 
   const savedKeys = [];
   const failedKeys = [];
@@ -660,7 +730,7 @@ async function saveQuickApplyConfig(e) {
   const modules = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
   if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
   const wf = DB.workflows.find(w => w.id === workflowId);
-  const { approverMode, approversByPosition } = wf ? collectQaStepModesAndPositions(wf) : { approverMode: {}, approversByPosition: {} };
+  const { approverMode, approversByPosition, approvers } = wf ? collectQaStepModesAndPositions(wf) : { approverMode: {}, approversByPosition: {}, approvers: {} };
   // submissionTypeKeys (tên field giữ nguyên để tương thích ngược dữ liệu đã lưu TRƯỚC Release 3 — từ
   // Release 3/3 thực chất là "danh sách khoá LOẠI đã chọn lọc", gộp CẢ khoá loại tờ trình (SUBMISSION)
   // lẫn khoá Loại Pháp Lý (CONTRACT_APPROVAL), xem qaTypePickerItems()/updateQaSubmissionTypesVisibility()):
@@ -677,10 +747,10 @@ async function saveQuickApplyConfig(e) {
   let configId = editingQuickApplyConfigId;
   if (configId) {
     const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
-    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; cfg.approverMode = approverMode; cfg.approversByPosition = approversByPosition; cfg.submissionTypeKeys = submissionTypeKeys; }
+    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; cfg.approverMode = approverMode; cfg.approversByPosition = approversByPosition; cfg.approvers = approvers; cfg.submissionTypeKeys = submissionTypeKeys; }
   } else {
     configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
-    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition, submissionTypeKeys }];
+    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition, approvers, submissionTypeKeys }];
   }
   if (!await syncStorage('quickApplyConfigs', { baseline: snapshot })) {
     DB.quickApplyConfigs = snapshot;
@@ -709,6 +779,7 @@ function editQuickApplyConfig(configId) {
   updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = JSON.parse(JSON.stringify(cfg.approverMode || {}));
   qaEditingApproversByPosition = JSON.parse(JSON.stringify(cfg.approversByPosition || {}));
+  qaEditingApprovers = JSON.parse(JSON.stringify(cfg.approvers || {}));
   renderQuickApplyPositionSteps();
   const btnSave = document.getElementById('btnSaveQaConfig');
   if (btnSave) btnSave.textContent = '💾 Lưu Thay Đổi';
@@ -726,6 +797,7 @@ function resetQuickApplyConfigForm() {
   updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = {};
   qaEditingApproversByPosition = {};
+  qaEditingApprovers = {};
   renderQuickApplyPositionSteps();
   const btnSave = document.getElementById('btnSaveQaConfig');
   if (btnSave) btnSave.textContent = '💾 Lưu Cấu Hình';

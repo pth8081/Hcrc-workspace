@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**29.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.42 (2026-11): "⚡ Áp Dụng Nhanh" — thêm "👤 Gán Người Cụ Thể" (theo yêu cầu người dùng)
+
+**Yêu cầu người dùng**: "áp dụng nhanh bạn cho tôi thêm phần gán theo 'Người cụ thể'" (kèm ảnh chụp màn
+"⚡ Áp Dụng Nhanh" cho thấy khối "3. Gán người duyệt theo Chức Danh cho từng bước" trước đây CHỈ có 2 lựa
+chọn/bước: để trống hoặc "🧭 Gán theo Chức Danh" — không có cách chọn thẳng 1 người cụ thể, dù màn cấu
+hình quy trình theo từng phòng ban ("🔄 Quy Trình & Phê Duyệt") vốn đã có sẵn cách này từ lâu).
+
+**Sửa** (`public/js/module-workflow.js`): mỗi bước trong khối "3. (Tuỳ chọn) Gán người duyệt theo Chức
+Danh HOẶC theo Người Cụ Thể cho từng bước" nay có thêm checkbox **"👤 Gán Người Cụ Thể"** (dùng CHUNG
+widget `renderPeopleMultiSelect()` — đúng widget màn cấu hình theo phòng ban đang dùng, ứng viên =
+`getApproverCandidateUsers()` toàn hệ thống, không giới hạn theo phòng ban vì Áp Dụng Nhanh vốn áp cho
+NHIỀU phòng ban/mức cùng lúc) — loại trừ lẫn nhau với "🧭 Gán theo Chức Danh" (bật 1 bên tự tắt bên kia,
+1 bước chỉ ở ĐÚNG 1 trong 3 trạng thái: để trống/Theo Chức Danh/Người Cụ Thể tại 1 thời điểm). Khi bật,
+(các) người được chọn sẽ là người duyệt bước đó cho **MỌI** phòng ban/mức trong phạm vi module đang áp
+dụng — giống hệt mọi nơi (không tự biến đổi theo từng phòng ban như "🏢 Tự động khớp đúng phòng ban" của
+chế độ Chức Danh, vì bản chất là 1 người cụ thể chứ không phải 1 chức danh suy ra theo từng đơn vị).
+
+**Không cần sửa server**: `resolveStepApproverUsernames()` (`lib/positionApprovers.js`) từ trước đã coi
+MỌI `approverMode` khác `'POSITION'` (kể cả `'PEOPLE'` tường minh) là "đọc thẳng `approvers[stepOrder]`"
+— đúng shape mới ghi ra từ Áp Dụng Nhanh, không có đường logic nào cần thêm ở phía xử lý duyệt hồ sơ
+thật.
+
+**Test**: file mới `tests/test-quick-apply-people-mode.js` (19/19 pass, Playwright điều hướng + click
+thật qua UI) — kiểm render checkbox, loại trừ lẫn nhau 2 chiều, lưu đúng shape, áp dụng ra ĐÚNG cùng 1
+người cho nhiều phòng ban, nạp lại đúng khi Sửa, dọn sạch đúng khi tạo mới, badge danh sách cấu hình.
+Chạy lại ĐẦY ĐỦ 5 file test "⚡ Áp Dụng Nhanh" hiện có (111/111 scenario) — không regression. CSP: grep
+sạch (`data-op-change`, không inline handler/style mới).
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env`/dependencies/database — chỉ copy code + `pm2 restart`.
 
 ## v29.41 (2026-11): Nâng giới hạn 4 màn Nhập Excel hàng loạt Nhân Sự lên 1500 dòng/lần
 
