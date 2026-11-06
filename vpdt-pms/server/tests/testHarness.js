@@ -28,10 +28,6 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-// orgChart (11/2026) — dùng cho mock GET/POST /api/hr-profile/secondary-position* ngay dưới, mirror
-// ĐÚNG logic 2 route thật (routes/employeeProfile.js) — demo tính năng "🏷️ Gán Vị Trí Kiêm Nhiệm"
-// (quyền riêng hrSecondaryPositionManage) cần dựng lại UI thật của màn Sửa Người Dùng.
-const orgChart = require('../lib/orgChart');
 const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
@@ -484,45 +480,45 @@ function createDispatcher(state) {
       function canManageSecondaryPositionsOnlyMock(user) {
         return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit || user?.perms?.hrSecondaryPositionManage);
       }
+      // buildWorkflowParticipatingPositionPairsMock() — mirror ĐÚNG buildWorkflowParticipatingPositionPairs()
+      // thật (routes/employeeProfile.js, 11/2026): ưu tiên state.workflowParticipatingPositions, rỗng thì
+      // fallback tích chéo jobTitles×depts + storeJobTitles×stores + positionTypes tự thêm. Sửa 1 bên
+      // PHẢI sửa cả 2 bên — xem chú thích đầy đủ ở hàm thật.
+      function buildWorkflowParticipatingPositionPairsMock() {
+        const catalog = Array.isArray(state.workflowParticipatingPositions) ? state.workflowParticipatingPositions : [];
+        if (catalog.length) return catalog.filter(p => p && p.jobTitle).map(p => ({ jobTitle: p.jobTitle, dept: p.dept || '' }));
+        const pairs = [];
+        (state.jobTitles || []).forEach(jt => { (state.depts || []).forEach(d => pairs.push({ jobTitle: jt, dept: d })); });
+        (state.storeJobTitles || []).forEach(t => { if (t && t.label) (state.stores || []).forEach(s => pairs.push({ jobTitle: t.label, dept: s })); });
+        (state.positionTypes || []).filter(t => t && !t.builtin).forEach(t => {
+          (t.jobTitles || []).forEach(jt => { (t.locations || []).forEach(d => pairs.push({ jobTitle: jt, dept: d })); });
+        });
+        return pairs;
+      }
       if (method === 'GET' && pathName === '/api/hr-profile/secondary-position-options') {
         if (!canManageSecondaryPositionsOnlyMock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' } };
         const targetUsername = new URL('http://x' + url).searchParams.get('username') || '';
         const targetUser = (state.users || []).find(u => u.username === targetUsername);
         if (!targetUser) return { status: 404, body: { error: 'Không tìm thấy tài khoản này' } };
-        const applied = orgChart.getAppliedVersion(state.orgChartVersions || []);
-        const positions = applied
-          ? (applied.nodes || []).filter(n => n.nodeType === 'POSITION')
-              .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
-              .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
-          : [];
-        const existingPairs = (targetUser.secondaryPositions || []).filter(sp => sp && sp.jobTitle);
-        const current = [], legacyUnresolved = [];
-        existingPairs.forEach(pair => {
-          const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.jobTitle === pair.jobTitle && (
-            !pair.dept || (orgChart.findNearestDeptAncestor(applied, n)?.departmentRef === pair.dept)
-          ));
-          if (node) current.push({ positionKey: node.positionKey, jobTitle: node.jobTitle, dept: pair.dept || null, positionLabel: orgChart.buildNodeDisplayName(applied, node) });
-          else legacyUnresolved.push(pair);
-        });
-        return { status: 200, body: { positions, current, legacyUnresolved } };
+        const positions = buildWorkflowParticipatingPositionPairsMock();
+        const current = (targetUser.secondaryPositions || []).filter(sp => sp && sp.jobTitle).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' }));
+        return { status: 200, body: { positions, current } };
       }
       if (method === 'POST' && pathName === '/api/hr-profile/secondary-positions') {
         if (!canManageSecondaryPositionsOnlyMock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' } };
         const targetUsername = String(body?.username || '').trim();
-        const applied = orgChart.getAppliedVersion(state.orgChartVersions || []);
         const items = Array.isArray(body?.secondaryPositions) ? body.secondaryPositions : [];
         const seenKeys = new Set();
         let resolved;
         try {
           resolved = items.map(item => {
-            const key = item && item.positionKey;
-            if (!key) throw new HttpError(400, 'Thiếu positionKey');
-            if (seenKeys.has(key)) throw new HttpError(400, 'Trùng lặp vị trí');
-            seenKeys.add(key);
-            const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.positionKey === key);
-            if (!node) throw new HttpError(400, `Vị trí không tồn tại: ${key}`);
-            const deptNode = orgChart.findNearestDeptAncestor(applied, node);
-            return { jobTitle: node.jobTitle, dept: deptNode ? deptNode.departmentRef : '', source: 'ADMIN_QUICK_EDIT' };
+            if (!item || typeof item.jobTitle !== 'string' || !item.jobTitle.trim()) throw new HttpError(400, 'Thiếu Chức Danh');
+            const jobTitle = item.jobTitle.trim().slice(0, 200);
+            const dept = typeof item.dept === 'string' ? item.dept.trim().slice(0, 200) : '';
+            const dedupeKey = `${jobTitle}\u0000${dept}`;
+            if (seenKeys.has(dedupeKey)) throw new HttpError(400, 'Trùng lặp vị trí');
+            seenKeys.add(dedupeKey);
+            return { jobTitle, dept, source: 'ADMIN_QUICK_EDIT' };
           });
         } catch (e) { return { status: e.status || 400, body: { error: e.message } }; }
         const idx = (state.users || []).findIndex(u => u.username === targetUsername);

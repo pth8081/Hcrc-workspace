@@ -8,7 +8,13 @@
 //      Sự nào khác (không xem/sửa CCCD, lương, kỷ luật...).
 //   2. Box này hiện ĐỦ TẤT CẢ vị trí kiêm nhiệm tài khoản ĐANG CÓ (kể cả gán kiểu cũ/legacy) — không cần
 //      hồ sơ Nhân Sự tồn tại/liên kết.
-//   3. Vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự nhập tay).
+//   3. ĐÃ ĐỔI (11/2026, báo cáo người dùng — "ô này chỉ tìm được vị trí CÓ THẬT trong Cơ Cấu Tổ Chức,
+//      trong khi ô 'Vị Trí Kiêm Nhiệm (tuỳ chọn)' ở TRÊN lại tìm được chức danh HO/Siêu Thị đã tạo ở
+//      phân quyền mà không cần có node — không nhất quán, không gán được 1 vị trí vẫn đang dùng cho quy
+//      trình nhưng chưa/không còn đặt thành node trong Cơ Cấu Tổ Chức"): KHÔNG còn đòi `positionKey`/
+//      node thật — nhận thẳng {jobTitle, dept}, nguồn chọn gợi ý lấy từ 🧭 Vị Trí Tham Gia Quy Trình
+//      (appData.workflowParticipatingPositions), đúng CÙNG nguồn ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" chính
+//      đã dùng (wfPositionPairPickerItems() phía client).
 //   4. Sửa ở box này vẫn "upline" đúng cho MỌI quy trình "Theo vị trí" đã có (resolvePositionApprovers()).
 //   5. ĐÃ XÁC NHẬN LẠI (người dùng hỏi trực tiếp): sửa ở box này KHÔNG được update ngược lại hồ sơ Nhân
 //      Sự (profile.secondaryPositions) — để HR không thấy/không hoang mang vì thay đổi họ không tự làm.
@@ -34,17 +40,29 @@ const employeeProfile = require('../lib/employeeProfile');
 const positionApprovers = require('../lib/positionApprovers');
 const { createRunner, assertEqual, assertIncludes } = require('./testHarness');
 
+// Cơ Cấu Tổ Chức — vẫn cần cho PHẦN C (PATCH /by-code, luồng HR_PROFILE, dùng positionKey/node như cũ,
+// KHÔNG đổi gì ở luồng đó). POS-TD-UF CỐ Ý KHÔNG tồn tại ở đây (mô phỏng đúng báo cáo người dùng — vị
+// trí "Thẩm định ultrafresh" không còn/chưa từng là 1 node thật trong Cơ Cấu Tổ Chức) — chỉ còn 1 node
+// POS-IT-01 để PHẦN C vẫn kiểm được luồng HR gán qua Hồ Sơ Nhân Sự.
 function buildOrgVersion() {
   return {
     id: 1, status: 'APPLIED',
     nodes: [
       { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
-      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', departmentRef: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', jobTitle: null, requiresDept: null, positionKey: null },
-      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Thẩm định ultrafresh', requiresDept: true, posType: 'HO', positionKey: 'POS-TD-UF' },
       { nodeId: 4, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng IT', departmentRef: 'Phòng IT', jobTitle: null, requiresDept: null, positionKey: null },
       { nodeId: 5, parentNodeId: 4, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Chuyên Viên IT', requiresDept: true, posType: 'HO', positionKey: 'POS-IT-01' }
     ]
   };
+}
+
+// Vị Trí Tham Gia Quy Trình (🧭, Hệ Thống > Quyền Đặc Biệt) — danh mục admin tự dựng, nguồn CHO CẢ "Theo
+// vị trí" 14 module lẫn Mixed Approval Rules, KHÔNG đòi hỏi node thật trong Cơ Cấu Tổ Chức. Đúng mẫu báo
+// cáo người dùng: "Thẩm định ultrafresh" đã cấu hình ở đây (ghép phòng ban) dù KHÔNG có node tương ứng.
+function buildWorkflowParticipatingPositions() {
+  return [
+    { jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' },
+    { jobTitle: 'Chuyên Viên IT', dept: 'Phòng IT' }
+  ];
 }
 
 async function main() {
@@ -62,7 +80,11 @@ async function main() {
       { username: 'emp2Legacy', name: 'Nhân Viên Legacy', dept: 'Cũ', jobTitle: 'Cũ', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }], perms: { canBeApprover: true }, active: true },
       { username: 'noProfile1', name: 'Chưa Liên Kết Hồ Sơ', dept: 'X', jobTitle: 'Y', secondaryPositions: [], perms: {}, active: true }
     ];
-    APP_DATA = { users: USERS, employeeProfiles: [], hrProcesses: [], orgChartVersions: [buildOrgVersion()] };
+    APP_DATA = {
+      users: USERS, employeeProfiles: [], hrProcesses: [], orgChartVersions: [buildOrgVersion()],
+      workflowParticipatingPositions: buildWorkflowParticipatingPositions(),
+      jobTitles: [], depts: [], storeJobTitles: [], stores: [], positionTypes: []
+    };
   }
 
   stubModule('lib/appData', {
@@ -115,7 +137,7 @@ async function main() {
 
   const server = await startApp();
   try {
-    // ===== PHẦN A: quyền + validate vị trí có thật =====
+    // ===== PHẦN A: quyền + hình dạng dữ liệu =====
     await run.run('GET /secondary-position-options — tài khoản KHÔNG có quyền hrSecondaryPositionManage/HR nào -> 403', async () => {
       resetAppData();
       const res = await api('GET', '/api/hr-profile/secondary-position-options?username=emp1', undefined, ADMIN_NO_PERM_AT_ALL);
@@ -126,7 +148,7 @@ async function main() {
       resetAppData();
       const res = await api('GET', '/api/hr-profile/secondary-position-options?username=emp1', undefined, ADMIN_NO_HR_PERM);
       assertEqual(res.status, 200, 'Route đọc/ghi thẳng user.secondaryPositions, không cần hồ sơ Nhân Sự tồn tại');
-      assertEqual(res.body.positions.length, 2);
+      assertEqual(res.body.positions.length, 2, 'Nguồn chọn lấy từ workflowParticipatingPositions (2 cặp đã cấu hình)');
       assertEqual(res.body.current.length, 0);
     });
 
@@ -138,40 +160,81 @@ async function main() {
 
     await run.run('POST /secondary-positions — bị chặn 403 khi KHÔNG có quyền', async () => {
       resetAppData();
-      const res = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_PERM_AT_ALL);
+      const res = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_PERM_AT_ALL);
       assertEqual(res.status, 403);
     });
 
-    await run.run('POST /secondary-positions — vẫn bắt buộc chọn vị trí CÓ THẬT trong Cơ Cấu Tổ Chức (positionKey giả -> 400)', async () => {
+    await run.run('POST /secondary-positions — thiếu jobTitle -> 400, báo lỗi rõ', async () => {
       resetAppData();
-      const res = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-KHONG-TON-TAI' }] }, ADMIN_NO_HR_PERM);
+      const res = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ dept: 'Phòng IT' }] }, ADMIN_NO_HR_PERM);
+      assertEqual(res.status, 400);
+      assertIncludes(res.body.error, 'Chức Danh');
+    });
+
+    await run.run('POST /secondary-positions — trùng lặp 2 dòng CÙNG (jobTitle, dept) trong chính danh sách gửi lên -> chặn', async () => {
+      resetAppData();
+      const res = await api('POST', '/api/hr-profile/secondary-positions', {
+        username: 'emp1',
+        secondaryPositions: [
+          { jobTitle: 'Chuyên Viên IT', dept: 'Phòng IT' },
+          { jobTitle: 'Chuyên Viên IT', dept: 'Phòng IT' }
+        ]
+      }, ADMIN_NO_HR_PERM);
       assertEqual(res.status, 400);
     });
 
-    // ===== PHẦN B: (1) box hiện ĐỦ vị trí kiêm nhiệm cũ đang có + (2) "upline" đúng cho quy trình "Theo vị trí" =====
-    await run.run('GET /secondary-position-options — hiện ĐỦ vị trí kiêm nhiệm CŨ (legacy, gõ tay thẳng trên user.secondaryPositions) ngay trong box, tự khớp về positionKey thật', async () => {
+    // ===== PHẦN B: trọng tâm bản vá — gán được vị trí KHÔNG có node thật trong Cơ Cấu Tổ Chức, miễn đã
+    // có trong Vị Trí Tham Gia Quy Trình — đúng mẫu người dùng báo cáo ("Thẩm định ultrafresh") =====
+    await run.run('POST /secondary-positions — gán ĐƯỢC vị trí KHÔNG có node thật trong Cơ Cấu Tổ Chức (chỉ cần có trong Vị Trí Tham Gia Quy Trình) — TRƯỚC ĐÂY bị chặn 400 "Vị trí không tồn tại trong Cơ Cấu Tổ Chức"', async () => {
+      resetAppData();
+      const res = await api('POST', '/api/hr-profile/secondary-positions', {
+        username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }]
+      }, ADMIN_NO_HR_PERM);
+      assertEqual(res.status, 200, 'Gán thành công dù không có node POSITION nào tên "Thẩm định ultrafresh" trong buildOrgVersion()');
+      const u = APP_DATA.users.find(x => x.username === 'emp1');
+      assertEqual(u.secondaryPositions.length, 1);
+      assertEqual(u.secondaryPositions[0].jobTitle, 'Thẩm định ultrafresh');
+      assertEqual(u.secondaryPositions[0].dept, 'Phòng Mua Hàng Thực Phẩm Tươi Sống');
+    });
+
+    await run.run('GET /secondary-position-options — hiện ĐỦ vị trí kiêm nhiệm CŨ (legacy, gõ tay thẳng trên user.secondaryPositions) ngay trong box, kể cả vị trí không có node thật', async () => {
       resetAppData();
       const res = await api('GET', '/api/hr-profile/secondary-position-options?username=emp2Legacy', undefined, ADMIN_NO_HR_PERM);
       assertEqual(res.status, 200);
       assertEqual(res.body.current.length, 1, 'Vị trí kiêm nhiệm cũ đã có hiện ra NGAY trong box, không cần migrate tay');
-      assertEqual(res.body.current[0].positionKey, 'POS-TD-UF');
-      assertEqual(res.body.legacyUnresolved.length, 0);
+      assertEqual(res.body.current[0].jobTitle, 'Thẩm định ultrafresh');
+      assertEqual(res.body.current[0].dept, 'Phòng Mua Hàng Thực Phẩm Tươi Sống');
     });
 
     await run.run('POST /secondary-positions — sau khi admin gán qua box, resolvePositionApprovers() (luồng "Theo vị trí" THẬT dùng cho MỌI quy trình đã có) nhận diện đúng NGAY', async () => {
       resetAppData();
-      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_HR_PERM);
+      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_HR_PERM);
       const matched = positionApprovers.resolvePositionApprovers(
         [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }], APP_DATA.users
       );
       assertIncludes(matched, 'emp1', 'resolvePositionApprovers() dùng CHUNG cho mọi quy trình "Theo vị trí" hiện có — tìm thấy emp1 ngay sau khi admin gán qua box, không cần chờ gì thêm');
     });
 
-    // ===== PHẦN C: (3) KHÔNG update ngược lại hồ sơ Nhân Sự + (4) HR lưu hồ sơ sau đó KHÔNG xoá mất =====
+    await run.run('GET /secondary-position-options — danh mục Vị Trí Tham Gia Quy Trình RỖNG -> fallback tích chéo jobTitles×depts + storeJobTitles×stores', async () => {
+      resetAppData();
+      APP_DATA.workflowParticipatingPositions = [];
+      APP_DATA.jobTitles = ['Trưởng Phòng', 'Nhân Viên'];
+      APP_DATA.depts = ['Phòng Kinh Doanh'];
+      APP_DATA.storeJobTitles = [{ label: 'Giám Đốc Siêu Thị' }];
+      APP_DATA.stores = ['Siêu thị A'];
+      const res = await api('GET', '/api/hr-profile/secondary-position-options?username=emp1', undefined, ADMIN_NO_HR_PERM);
+      assertEqual(res.status, 200);
+      // 2 jobTitles × 1 dept = 2, + 1 storeJobTitle × 1 store = 1 -> 3 cặp.
+      assertEqual(res.body.positions.length, 3, 'Fallback tích chéo khi danh mục chính rỗng, đúng hành vi wfPositionPairCatalogItems() phía client');
+      assertIncludes(res.body.positions.map(p => p.jobTitle), 'Giám Đốc Siêu Thị');
+    });
+
+    // ===== PHẦN C: (3) KHÔNG update ngược lại hồ sơ Nhân Sự + (4) HR lưu hồ sơ sau đó KHÔNG xoá mất —
+    // PHẦN NÀY KHÔNG đổi gì (vẫn dùng positionKey/node thật qua PATCH /by-code, luồng HR_PROFILE) =====
     await run.run('POST /secondary-positions — lưu thành công KHÔNG đụng tới employeeProfiles (dù hồ sơ đã liên kết tài khoản này) — HR không thấy thay đổi này', async () => {
       resetAppData();
-      const profile = seedProfile({ employeeCode: 'NV300', username: 'emp1' });
-      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_HR_PERM);
+      seedProfile({ employeeCode: 'NV300', username: 'emp1' });
+      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_HR_PERM);
       const freshProfile = APP_DATA.employeeProfiles.find(p => p.employeeCode === 'NV300');
       assertEqual((freshProfile.secondaryPositions || []).length, 0, 'profile.secondaryPositions (field HR thấy ở Chi tiết hồ sơ) không hề bị đụng tới');
       const u = APP_DATA.users.find(x => x.username === 'emp1');
@@ -182,7 +245,7 @@ async function main() {
     await run.run('PATCH /by-code — HR lưu hồ sơ (sửa field KHÁC, secondaryPositions của HR vẫn RỖNG) SAU KHI admin đã gán qua box -> KHÔNG xoá mất gán của admin (bug thật nếu không merge đúng)', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV300', username: 'emp1' });
-      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_HR_PERM);
+      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_HR_PERM);
       // HR lưu hồ sơ của emp1 — chỉ sửa deskLocation, nhưng client luôn gửi kèm secondaryPositions (rỗng,
       // vì HR chưa từng mở khối Kiêm Nhiệm cho hồ sơ này) trong MỌI lần lưu ở scope MANAGE.
       const saveRes = await api('PATCH', '/api/hr-profile/by-code/NV300', { deskLocation: 'Bàn A1', secondaryPositions: [] }, HR_FULL);
@@ -195,7 +258,7 @@ async function main() {
     await run.run('PATCH /by-code — HR gán kiêm nhiệm THẬT ở Hồ Sơ Nhân Sự cho cùng tài khoản -> vẫn đồng bộ xuống đúng (chiều này KHÔNG đổi), cộng dồn với phần admin đã gán qua box', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV300', username: 'emp1' });
-      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_HR_PERM);
+      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_HR_PERM);
       await api('PATCH', '/api/hr-profile/by-code/NV300', { secondaryPositions: [{ positionKey: 'POS-IT-01' }] }, HR_FULL);
       const u = APP_DATA.users.find(x => x.username === 'emp1');
       assertEqual(u.secondaryPositions.length, 2, 'Cộng dồn: 1 dòng admin gán qua box + 1 dòng HR gán ở Hồ Sơ Nhân Sự, không dòng nào bị mất');
@@ -206,7 +269,7 @@ async function main() {
     await run.run('PATCH /by-code — HR sửa lại khối Kiêm Nhiệm của chính họ (bỏ 1 vị trí) -> chỉ đúng phần HR quản lý bị thay, phần admin gán qua box không đổi', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV300', username: 'emp1' });
-      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-TD-UF' }] }, ADMIN_NO_HR_PERM);
+      await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }] }, ADMIN_NO_HR_PERM);
       await api('PATCH', '/api/hr-profile/by-code/NV300', { secondaryPositions: [{ positionKey: 'POS-IT-01' }] }, HR_FULL);
       // HR đổi ý, bỏ hẳn vị trí IT, lưu lại hồ sơ.
       await api('PATCH', '/api/hr-profile/by-code/NV300', { secondaryPositions: [] }, HR_FULL);
@@ -219,7 +282,7 @@ async function main() {
       resetAppData();
       const getRes = await api('GET', '/api/hr-profile/secondary-position-options?username=emp1', undefined, HR_FULL);
       assertEqual(getRes.status, 200);
-      const postRes = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ positionKey: 'POS-IT-01' }] }, HR_FULL);
+      const postRes = await api('POST', '/api/hr-profile/secondary-positions', { username: 'emp1', secondaryPositions: [{ jobTitle: 'Chuyên Viên IT', dept: 'Phòng IT' }] }, HR_FULL);
       assertEqual(postRes.status, 200);
     });
   } finally {

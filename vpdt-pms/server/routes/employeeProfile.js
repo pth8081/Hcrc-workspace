@@ -388,23 +388,55 @@ function canManageSecondaryPositionsOnly(user) {
   return employeeProfile.canEditProfiles(user) || !!user?.perms?.hrSecondaryPositionManage;
 }
 
+// buildWorkflowParticipatingPositionPairs(appData) — mirror CHÍNH XÁC phía server của
+// wfPositionPairPickerItems() (public/js/module-admin-specialperm.js, khối 17 "Vị Trí Tham Gia Quy
+// Trình"): nguồn ƯU TIÊN là appData.workflowParticipatingPositions (danh mục cặp Chức Danh+Phòng Ban
+// admin tự dựng, KHÔNG đòi hỏi phải có node thật trong Cơ Cấu Tổ Chức — cùng danh mục admin đã dùng để
+// cấu hình bước duyệt "Theo vị trí"/Mixed Approval Rules); danh mục rỗng (chưa cấu hình gì) thì fallback
+// về tích chéo DB.jobTitles×DB.depts + DB.storeJobTitles×DB.stores + từng Vị Trí Làm Việc tự thêm, ĐÚNG
+// hành vi wfPositionPairCatalogItems() phía client. Sửa 1 bên PHẢI sửa cả 2 bên.
+function buildWorkflowParticipatingPositionPairs(appData) {
+  const catalog = Array.isArray(appData.workflowParticipatingPositions) ? appData.workflowParticipatingPositions : [];
+  if (catalog.length) {
+    return catalog.filter(p => p && p.jobTitle).map(p => ({ jobTitle: p.jobTitle, dept: p.dept || '' }));
+  }
+  const pairs = [];
+  (appData.jobTitles || []).forEach(jt => {
+    (appData.depts || []).forEach(d => pairs.push({ jobTitle: jt, dept: d }));
+  });
+  (appData.storeJobTitles || []).forEach(t => {
+    if (!t || !t.label) return;
+    (appData.stores || []).forEach(s => pairs.push({ jobTitle: t.label, dept: s }));
+  });
+  (appData.positionTypes || []).filter(t => t && !t.builtin).forEach(t => {
+    (t.jobTitles || []).forEach(jt => {
+      (t.locations || []).forEach(d => pairs.push({ jobTitle: jt, dept: d }));
+    });
+  });
+  return pairs;
+}
 // GET /api/hr-profile/secondary-position-options?username=X (11/2026, theo yêu cầu người dùng — "vị trí
 // kiêm nhiệm bị khoá ở màn Sửa Người Dùng từ khi chuyển sang Hồ Sơ Nhân Sự quản lý, quy trình module
-// khác dùng 'Theo vị trí' bị vô hiệu vì không ai (ngoài HR) gán lại được"): trả về danh sách vị trí CÓ
-// THẬT trong Cơ Cấu Tổ Chức đang áp dụng (để chọn) + Vị Trí Kiêm Nhiệm HIỆN TẠI của tài khoản.
+// khác dùng 'Theo vị trí' bị vô hiệu vì không ai (ngoài HR) gán lại được"): trả về danh sách vị trí để
+// chọn + Vị Trí Kiêm Nhiệm HIỆN TẠI của tài khoản.
 //
 // QUYẾT ĐỊNH THIẾT KẾ (xác nhận lại với người dùng, 11/2026 — "sửa ở đây không được update ngược lại Hồ
 // Sơ Nhân Sự, để HR không thấy/không hoang mang"): route này đọc/ghi THẲNG `user.secondaryPositions[]`,
 // KHÔNG đụng tới `employeeProfiles`/`profile.secondaryPositions` ở BẤT KỲ bước nào — vì vậy KHÔNG đòi hồ
-// sơ Nhân Sự phải tồn tại/liên kết (bỏ hẳn khái niệm hasProfile/employeeCode của bản trước). "current" ở
-// đây là TOÀN BỘ vị trí kiêm nhiệm ĐANG THỰC SỰ ảnh hưởng tới việc duyệt "Theo vị trí" của tài khoản này
-// (dù trước đó được gán kiểu CŨ gõ tay thẳng ở màn Sửa Người Dùng, hay do HR gán qua Hồ Sơ Nhân Sự rồi
-// đồng bộ 1 chiều xuống) — khớp lại với 1 node POSITION THẬT trong Cơ Cấu Tổ Chức theo (jobTitle, dept)
-// để hiện ra positionKey chọn được; cặp KHÔNG khớp được node nào (dept đổi tên/vị trí đã xoá khỏi Cơ Cấu
-// Tổ Chức...) liệt kê riêng ở legacyUnresolved — actor biết cần tạo lại đúng vị trí đó trong Cơ Cấu Tổ
-// Chức trước, KHÔNG bị âm thầm mất (vẫn còn nguyên trên user.secondaryPositions cho tới khi actor chủ
-// động bấm Lưu Ở ĐÂY — bấm Lưu sẽ GHI ĐÈ toàn bộ bằng đúng danh sách đang chọn trên màn, xem route POST
-// ngay dưới).
+// sơ Nhân Sự phải tồn tại/liên kết.
+//
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "ô này chỉ tìm được vị trí CÓ THẬT trong Cơ Cấu Tổ Chức, trong
+// khi ô 'Vị Trí Kiêm Nhiệm (tuỳ chọn)' ở TRÊN lại tìm được chức danh HO/Siêu Thị đã tạo ở phân quyền mà
+// không cần có node — không nhất quán"): TRƯỚC ĐÂY `positions` chỉ lấy node POSITION thật trong Cơ Cấu Tổ
+// Chức đang áp dụng, và `current` phải khớp lại với 1 node mới hiện ra được (cặp không khớp -> liệt kê
+// riêng ở legacyUnresolved, không chọn lại được). Nhưng ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" (màn Sửa Người
+// Dùng, TRƯỚC khi tài khoản liên kết hồ sơ HR) từ trước tới nay vẫn dùng wfPositionPairPickerItems() —
+// nguồn RỘNG HƠN hẳn (DB.workflowParticipatingPositions, KHÔNG đòi hỏi node thật) — và khi lưu chỉ
+// sanitize hình dạng (sanitizeSecondaryPositions(), routes/data.js), KHÔNG đối chiếu Cơ Cấu Tổ Chức. Nay
+// đổi `positions` sang dùng ĐÚNG nguồn đó (buildWorkflowParticipatingPositionPairs() ở trên — mirror
+// server-side của wfPositionPairPickerItems()), và `current` trả thẳng (jobTitle, dept) hiện có — KHÔNG
+// còn khái niệm "khớp node"/legacyUnresolved nữa (vị trí kiêm nhiệm của Loan "Thẩm định ultrafresh" vẫn
+// hiện chọn lại được dù node tương ứng đã không còn trong Cơ Cấu Tổ Chức hiện tại, ĐÚNG NHƯ ô trên).
 router.get('/secondary-position-options', async (req, res) => {
   try {
     if (!canManageSecondaryPositionsOnly(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' });
@@ -413,32 +445,25 @@ router.get('/secondary-position-options', async (req, res) => {
     const appData = await getAllAppData();
     const userRecord = (appData.users || []).find(u => u.username === username);
     if (!userRecord) return res.status(404).json({ error: 'Không tìm thấy tài khoản này' });
-    const applied = orgChart.getAppliedVersion(appData.orgChartVersions || []);
-    const positions = applied
-      ? (applied.nodes || []).filter(n => n.nodeType === 'POSITION')
-          .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
-          .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
-      : [];
-    const existingPairs = (userRecord.secondaryPositions || []).filter(sp => sp && sp.jobTitle);
-    const current = [];
-    const legacyUnresolved = [];
-    existingPairs.forEach(pair => {
-      const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.jobTitle === pair.jobTitle && (
-        !pair.dept || (orgChart.findNearestDeptAncestor(applied, n)?.departmentRef === pair.dept)
-      ));
-      if (node) current.push({ positionKey: node.positionKey, jobTitle: node.jobTitle, dept: pair.dept || null, positionLabel: orgChart.buildNodeDisplayName(applied, node) });
-      else legacyUnresolved.push(pair);
-    });
-    res.json({ positions, current, legacyUnresolved });
+    const positions = buildWorkflowParticipatingPositionPairs(appData);
+    const current = (userRecord.secondaryPositions || [])
+      .filter(sp => sp && sp.jobTitle)
+      .map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' }));
+    res.json({ positions, current });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/secondary-position-options'); }
 });
 
 // POST /api/hr-profile/secondary-positions — ghi Vị Trí Kiêm Nhiệm cho 1 tài khoản, GHI ĐÈ toàn bộ
-// user.secondaryPositions[] bằng đúng danh sách positionKey gửi lên (đã chọn từ GET ở trên — luôn phản
-// ánh TOÀN BỘ trạng thái hiện tại, nên "ghi đè toàn bộ" ở đây tương đương "lưu đúng những gì đang chọn
-// trên màn", không làm mất gì actor không chủ động bỏ chọn). Vẫn bắt buộc mỗi positionKey phải là 1 node
-// POSITION THẬT trong Cơ Cấu Tổ Chức ĐANG áp dụng (không tự nhập tay) — tự tính lại (jobTitle, dept) từ
-// đúng node đó, không tin dữ liệu client gửi lên.
+// user.secondaryPositions[] bằng đúng danh sách (jobTitle, dept) gửi lên (đã chọn từ GET ở trên — luôn
+// phản ánh TOÀN BỘ trạng thái hiện tại, nên "ghi đè toàn bộ" ở đây tương đương "lưu đúng những gì đang
+// chọn trên màn", không làm mất gì actor không chủ động bỏ chọn).
+//
+// LỖI ĐÃ VÁ (11/2026, cùng đợt sửa GET ở trên — xem chú thích đầy đủ tại buildWorkflowParticipatingPositionPairs()):
+// TRƯỚC ĐÂY bắt buộc mỗi dòng phải là 1 `positionKey` khớp 1 node POSITION THẬT trong Cơ Cấu Tổ Chức đang
+// áp dụng — khác hẳn ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" ở màn Sửa Người Dùng (TRƯỚC khi tài khoản liên kết
+// hồ sơ HR), vốn chỉ sanitize HÌNH DẠNG (sanitizeSecondaryPositions(), routes/data.js — jobTitle bắt
+// buộc, dept tuỳ chọn, KHÔNG đối chiếu Cơ Cấu Tổ Chức/danh mục nào). Nay đổi sang ĐÚNG mức kiểm đó cho
+// nhất quán — nhận thẳng {jobTitle, dept} từ client, không còn khái niệm positionKey/node ở route này.
 //
 // KHÔNG đụng tới `employeeProfiles`/`profile.secondaryPositions` (xác nhận với người dùng — sửa ở đây
 // KHÔNG được "update ngược lại" Hồ Sơ Nhân Sự, để HR không thấy thay đổi họ không tự làm, tránh hoang
@@ -453,20 +478,21 @@ router.post('/secondary-positions', async (req, res) => {
     if (!canManageSecondaryPositionsOnly(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' });
     const username = String(req.body?.username || '').trim();
     if (!username) return res.status(400).json({ error: 'Thiếu tài khoản cần gán' });
-    const appData = await getAllAppData();
-    const applied = orgChart.getAppliedVersion(appData.orgChartVersions || []);
     const items = Array.isArray(req.body?.secondaryPositions) ? req.body.secondaryPositions : [];
     const seenKeys = new Set();
-    const resolved = items.map(item => {
-      const key = item && item.positionKey;
-      if (!key) throw new HttpError(400, 'Thiếu positionKey cho 1 dòng Vị Trí Kiêm Nhiệm');
-      if (seenKeys.has(key)) throw new HttpError(400, 'Trùng lặp vị trí trong danh sách gửi lên');
-      seenKeys.add(key);
-      const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.positionKey === key);
-      if (!node) throw new HttpError(400, `Vị trí không tồn tại trong Cơ Cấu Tổ Chức đang áp dụng: ${key}`);
-      const deptNode = orgChart.findNearestDeptAncestor(applied, node);
-      return { jobTitle: node.jobTitle, dept: deptNode ? deptNode.departmentRef : '', source: 'ADMIN_QUICK_EDIT' };
-    });
+    const resolved = [];
+    for (const item of items) {
+      if (!item || typeof item.jobTitle !== 'string' || !item.jobTitle.trim()) {
+        throw new HttpError(400, 'Thiếu Chức Danh cho 1 dòng Vị Trí Kiêm Nhiệm');
+      }
+      const jobTitle = item.jobTitle.trim().slice(0, 200);
+      const dept = typeof item.dept === 'string' ? item.dept.trim().slice(0, 200) : '';
+      const dedupeKey = `${jobTitle}\u0000${dept}`;
+      if (seenKeys.has(dedupeKey)) throw new HttpError(400, 'Trùng lặp vị trí trong danh sách gửi lên');
+      seenKeys.add(dedupeKey);
+      if (resolved.length >= 20) throw new HttpError(400, 'Chỉ được chọn tối đa 20 vị trí kiêm nhiệm');
+      resolved.push({ jobTitle, dept, source: 'ADMIN_QUICK_EDIT' });
+    }
     let found = false;
     await withLockedAppDataValue('users', (list) => (list || []).map(u => {
       if (u.username !== username) return u;

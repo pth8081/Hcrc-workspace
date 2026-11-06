@@ -83,10 +83,18 @@ function renderSecondaryPositionsWidget(existingPositions, locked, username) {
 // user.secondaryPositions[], KHÔNG đụng tới hồ sơ Nhân Sự ở bất kỳ bước nào — vì vậy KHÔNG đòi hồ sơ
 // Nhân Sự phải tồn tại/liên kết (bỏ hẳn nhánh "chưa liên kết hồ sơ" của bản trước). "current" trả về từ
 // GET luôn là TOÀN BỘ vị trí kiêm nhiệm ĐANG thực sự hiệu lực của tài khoản (dù gán kiểu CŨ gõ tay hay
-// do HR đồng bộ xuống) — vẫn bắt buộc chọn từ vị trí CÓ THẬT trong Cơ Cấu Tổ Chức đang áp dụng (không tự
-// nhập tay như ô "Vị Trí Kiêm Nhiệm" chính ở trên). legacyUnresolved là các cặp KHÔNG khớp được node nào
-// (tên chức danh/phòng ban cũ không còn trong Cơ Cấu Tổ Chức) — admin cần tạo lại đúng vị trí đó rồi mới
-// chọn lại được.
+// do HR đồng bộ xuống).
+//
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "ô này chỉ tìm được vị trí CÓ THẬT trong Cơ Cấu Tổ Chức,
+// trong khi ô 'Vị Trí Kiêm Nhiệm (tuỳ chọn)' ở TRÊN lại tìm được chức danh HO/Siêu Thị đã tạo ở phân
+// quyền mà không cần có node — không nhất quán, không gán được 1 vị trí vẫn đang dùng cho quy trình
+// nhưng chưa/không còn đặt thành node trong Cơ Cấu Tổ Chức, VD 'Thẩm định ultrafresh'"): TRƯỚC ĐÂY nguồn
+// chọn + giá trị gửi lên server đều dựa trên `positionKey` (node POSITION thật) — nay đổi sang CÙNG
+// khuôn `encodeWfPositionPair()`/`decodeWfPositionPair()`/`wfPositionPairLabel()` (module-admin-
+// specialperm.js) mà ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" chính đã dùng từ trước — value mã hoá {jobTitle,
+// dept}, KHÔNG còn positionKey. Hết khái niệm legacyUnresolved (không còn gì "không khớp node" nữa, vì
+// không còn đối chiếu node) — mọi vị trí kiêm nhiệm hiện có (dù gán qua Cơ Cấu Tổ Chức, Vị Trí Tham Gia
+// Quy Trình, hay gõ tay kiểu cũ) đều hiện chọn lại được như nhau.
 async function renderSecondaryPositionQuickEditor(username) {
   const pickerEl = document.getElementById('uSecondaryPositionManagePicker');
   const noteEl = document.getElementById('uSecondaryPositionManageNote');
@@ -98,18 +106,16 @@ async function renderSecondaryPositionQuickEditor(username) {
     const res = await fetch(`/api/hr-profile/secondary-position-options?username=${encodeURIComponent(username)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi tải danh sách vị trí');
-    const items = (data.positions || []).map(p => ({ value: p.positionKey, label: p.label }));
+    const items = (data.positions || []).map(p => ({ value: encodeWfPositionPair(p), label: wfPositionPairLabel(p) }));
+    const selected = (data.current || []).map(p => encodeWfPositionPair(p));
     if (pickerEl) pickerEl.innerHTML = '';
-    renderMultiSelectDropdown('uSecondaryPositionManagePicker', items, (data.current || []).map(c => c.positionKey), {
-      placeholder: '🔍 Tìm vị trí (Cơ Cấu Tổ Chức)...',
+    renderMultiSelectDropdown('uSecondaryPositionManagePicker', items, selected, {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban" để gán...',
       emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.',
       chipClass: 'bg-teal-100 text-teal-700',
       hoverClass: 'hover:bg-teal-50'
     });
     if (saveBtn) saveBtn.classList.remove('hidden');
-    if (noteEl && (data.legacyUnresolved || []).length) {
-      noteEl.innerHTML = `<p class="text-[11px] text-amber-700 mt-1">⚠️ ${data.legacyUnresolved.length} vị trí kiêm nhiệm cũ chưa khớp được với Cơ Cấu Tổ Chức hiện tại (có thể do tên chức danh/phòng ban đã đổi) — chọn lại đúng vị trí tương ứng ở trên rồi lưu.</p>`;
-    }
   } catch (err) {
     if (pickerEl) pickerEl.innerHTML = `<p class="text-[11px] text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
   }
@@ -118,11 +124,11 @@ async function renderSecondaryPositionQuickEditor(username) {
 async function saveSecondaryPositionQuickEdit() {
   const username = document.getElementById('uUsername')?.value;
   if (!username) return;
-  const positionKeys = getMultiSelectValues('uSecondaryPositionManagePicker');
+  const secondaryPositions = getMultiSelectValues('uSecondaryPositionManagePicker').map(decodeWfPositionPair).filter(Boolean);
   try {
     const res = await fetch('/api/hr-profile/secondary-positions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, secondaryPositions: positionKeys.map(k => ({ positionKey: k })) })
+      body: JSON.stringify({ username, secondaryPositions })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');

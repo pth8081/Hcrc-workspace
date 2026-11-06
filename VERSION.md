@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**29.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.46 (2026-11): "🏷️ Gán Vị Trí Kiêm Nhiệm" — bỏ yêu cầu phải có node thật trong Cơ Cấu Tổ Chức
+
+**Theo báo cáo người dùng**: ô "🏷️ Gán Vị Trí Kiêm Nhiệm" (quyền riêng `hrSecondaryPositionManage`, màn
+Sửa Người Dùng, v29.43-44) chỉ tìm được vị trí đã thực sự ĐẶT THÀNH NODE trong Cơ Cấu Tổ Chức — trong khi
+ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" chính ở TRÊN (trước khi tài khoản liên kết hồ sơ HR) lại tìm được bất kỳ
+chức danh HO/Siêu Thị nào đã cấu hình ở "🧭 Vị Trí Tham Gia Quy Trình" (Hệ Thống > Quyền Đặc Biệt) mà
+không cần có node — không nhất quán, và không gán lại được 1 vị trí vẫn đang dùng cho quy trình phê duyệt
+nhưng chưa/không còn đặt thành node (trường hợp thật: "Thẩm định ultrafresh").
+
+**Gốc rễ**: `GET /api/hr-profile/secondary-position-options` lấy `positions` từ node POSITION thật trong
+Cơ Cấu Tổ Chức đang áp dụng, và `POST /api/hr-profile/secondary-positions` bắt buộc mỗi dòng gửi lên phải
+là 1 `positionKey` khớp node thật — trong khi cơ chế chấm người duyệt ("Theo vị trí" 14 module lẫn Mixed
+Approval Rules) chỉ so khớp 2 chuỗi (jobTitle, dept) đã lưu sẵn, hoàn toàn không quan tâm có node hay
+không — ràng buộc "phải có node" ở riêng box này là thừa, không khớp với cách ô kiêm nhiệm chính (và cả
+Mixed Approval Rules) đã hoạt động từ trước.
+
+**Sửa** (`routes/employeeProfile.js`): đổi nguồn `positions` sang `buildWorkflowParticipatingPositionPairs()`
+— mirror server-side của `wfPositionPairPickerItems()` (module-admin-specialperm.js, nguồn ô kiêm nhiệm
+chính) — ưu tiên `appData.workflowParticipatingPositions`, rỗng thì fallback tích chéo
+`jobTitles×depts` + `storeJobTitles×stores` + Vị Trí Làm Việc tự thêm. `POST` không còn đòi `positionKey`
+— nhận thẳng `{jobTitle, dept}`, chỉ sanitize hình dạng (giống `sanitizeSecondaryPositions()`, không đối
+chiếu Cơ Cấu Tổ Chức). Hết khái niệm `legacyUnresolved` (không còn gì "không khớp node" để liệt kê riêng).
+Client (`module-admin-userstaging.js`) đổi theo — dùng `encodeWfPositionPair()`/`decodeWfPositionPair()`/
+`wfPositionPairLabel()` (đã có sẵn, cùng hàm ô kiêm nhiệm chính dùng) thay cho `positionKey`.
+
+**Không đổi**: ô "Vị Trí Kiêm Nhiệm (tuỳ chọn)" chính + luồng HR qua Hồ Sơ Nhân Sự (`applyProfileEdit()`
+case `secondaryPositions`, vẫn bắt buộc node thật — không đụng) — chỉ sửa đúng box quyền riêng
+`hrSecondaryPositionManage`. Cơ chế chấm người duyệt ("Theo vị trí"/Mixed Approval Rules) không đổi gì.
+
+**Test**: viết lại `tests/test-hr-secondary-position-manage-perm.js` (15 kịch bản, trong đó có kịch bản
+trọng tâm "gán được vị trí KHÔNG có node thật, chỉ cần có trong Vị Trí Tham Gia Quy Trình") + cập nhật
+mock trong `tests/testHarness.js` + demo Playwright thật `tests/demo-hr-secondary-position-manage.js`
+(dựng lại đúng kịch bản lỗi — org chart KHÔNG có node "Thẩm định ultrafresh" — chứng minh gán thành công).
+Chạy lại `tests/test-hr-profile-secondary-positions.js`, `tests/test-mixed-approval-secondary-jobtitle.js`,
+`tests/test-catalog-rename-server.js` — không regression.
 
 ## v29.45 (2026-11): Vá lỗi cắt mất từ cuối tên "Người đặt" khi đọc PDF Phiếu Đặt Hàng NCC
 

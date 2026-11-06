@@ -8,9 +8,17 @@
 // hrSecondaryPositionManage, v29.43-44) rồi xác nhận nó tự động có hiệu lực ở MỌI quy trình "Theo vị
 // trí" đã cấu hình cho đúng vị trí đó — không cần cấu hình lại kiêm nhiệm riêng cho từng quy trình.
 //
+// CẬP NHẬT (11/2026, báo cáo người dùng — "ô này chỉ tìm được vị trí CÓ THẬT trong Cơ Cấu Tổ Chức, trong
+// khi ô 'Vị Trí Kiêm Nhiệm (tuỳ chọn)' ở TRÊN lại tìm được chức danh HO/Siêu Thị đã tạo ở phân quyền mà
+// không cần có node — không nhất quán"): demo này giờ dựng đúng kịch bản lỗi thật — "Thẩm định
+// ultrafresh" KHÔNG còn là 1 node POSITION trong Cơ Cấu Tổ Chức (buildOrgVersion() dưới đây CHỈ còn
+// node DEPARTMENT, không có node POSITION nào), CHỈ tồn tại ở danh mục 🧭 Vị Trí Tham Gia Quy Trình
+// (appData.workflowParticipatingPositions) — TRƯỚC bản vá, admin2 sẽ gõ "Thẩm định ultrafresh" ở ô "Gán
+// Vị Trí Kiêm Nhiệm" và nhận "Không tìm thấy"; SAU bản vá, ô này tìm thấy và gán được bình thường.
+//
 // Dùng testHarness.js (Chromium thật mở public/index.html thật + toàn bộ public/js/*.js thật, mock
-// GET/POST /api/hr-profile/secondary-position* + /linked-usernames MỚI thêm ở testHarness.js mirror
-// ĐÚNG routes/employeeProfile.js thật):
+// GET/POST /api/hr-profile/secondary-position* + /linked-usernames mirror ĐÚNG routes/employeeProfile.js
+// thật):
 //   PHẦN 1: Admin2 — ĐÃ có quyền "admin" (vào được tab Hệ Thống bình thường — xác nhận lại với người
 //     dùng: "ko ai được vào module hệ thống ngoài admin", KHÔNG đổi gate này) nhưng KHÔNG có
 //     hrProfileManage/hrProfileEdit (không phải HR), CHỈ thêm đúng quyền riêng hrSecondaryPositionManage
@@ -58,15 +66,15 @@ const PROPOSER = {
   perms: { itPriceProposeCreateWholesale: true }, active: true
 };
 
+// CỐ Ý KHÔNG có node POSITION nào tên "Thẩm định ultrafresh" — đúng kịch bản lỗi người dùng báo cáo (vị
+// trí này không/không còn tồn tại trong Cơ Cấu Tổ Chức, chỉ còn trong danh mục Vị Trí Tham Gia Quy
+// Trình bên dưới). Chỉ giữ DEPARTMENT để demo vẫn có đúng tên phòng ban cho các field khác.
 function buildOrgVersion() {
   return {
     id: 1, status: 'APPLIED',
     nodes: [
       { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
-      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', departmentRef: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', jobTitle: null, requiresDept: null, positionKey: null },
-      // "Thẩm định ultrafresh" — vị trí HOÀN TOÀN MỚI, chưa gán cho ai (không trùng/đụng dữ liệu kiêm
-      // nhiệm HR đang quản lý ở bất kỳ tài khoản nào khác trong demo này).
-      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Thẩm định ultrafresh', requiresDept: true, posType: 'HO', positionKey: 'POS-TD-UF' }
+      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', departmentRef: 'Phòng Mua Hàng Thực Phẩm Tươi Sống', jobTitle: null, requiresDept: null, positionKey: null }
     ]
   };
 }
@@ -91,6 +99,10 @@ async function main() {
     // gì cho người này) — mục đích DUY NHẤT: khiến ô kiêm nhiệm CHÍNH bị khoá ở màn Sửa Người Dùng, đúng
     // kịch bản gốc người dùng báo cáo.
     employeeProfiles: [{ employeeCode: 'NV900', username: 'ketoan1', secondaryPositions: [] }],
+    // 🧭 Vị Trí Tham Gia Quy Trình (Hệ Thống > Quyền Đặc Biệt, khối 17) — nguồn DUY NHẤT còn lại cho
+    // "Thẩm định ultrafresh" (không có node POSITION nào trong buildOrgVersion() ở trên). Đây chính là
+    // danh mục admin đã dùng để cấu hình itPriceWholesaleStoreMixedApprovalRules bên dưới.
+    workflowParticipatingPositions: [{ jobTitle: 'Thẩm định ultrafresh', dept: 'Phòng Mua Hàng Thực Phẩm Tươi Sống' }],
     workflows: [{ id: 'WF_1STEP', name: 'Duyệt 1 bước', steps: [{ order: 1, name: 'Người duyệt bước 1' }] }],
     itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
     storeJobTitles: [],
@@ -123,9 +135,15 @@ async function main() {
     if (!mainBoxLocked || !quickEditBoxVisible) throw new Error('❌ Box không hiện đúng như kỳ vọng.');
     await shot(page, '01-truoc-khi-gan-oKiemNhiemChinh-khoa-va-oGanNhanh-xuat-hien');
 
-    // Chọn vị trí "Thẩm định ultrafresh" (MỚI, chưa ai giữ) trong ô Gán Nhanh rồi Lưu.
+    // Gõ tìm "Thẩm định ultrafresh" — vị trí KHÔNG có node thật trong Cơ Cấu Tổ Chức (buildOrgVersion()
+    // ở trên không có node POSITION nào), CHỈ tồn tại ở danh mục Vị Trí Tham Gia Quy Trình. TRƯỚC bản vá
+    // ô này sẽ ra "Không tìm thấy"; SAU bản vá phải tìm thấy đúng 1 gợi ý khớp.
     const picker = await page.$('#uSecondaryPositionManagePicker [data-pms-search]');
     await picker.click(); await picker.type('Thẩm định ultrafresh'); await page.waitForTimeout(150);
+    const dropdownText = await page.evaluate(() => document.getElementById('uSecondaryPositionManagePicker')?.innerText || '');
+    console.log(`\n01b: Gõ "Thẩm định ultrafresh" (KHÔNG có node thật trong Cơ Cấu Tổ Chức) — gợi ý hiện ra: ${dropdownText.includes('Thẩm định ultrafresh') ? '✅ CÓ tìm thấy (đúng bản vá)' : '❌ Không tìm thấy (lỗi cũ)'}`);
+    if (!dropdownText.includes('Thẩm định ultrafresh')) throw new Error('❌ Không tìm thấy gợi ý "Thẩm định ultrafresh" — bản vá chưa hoạt động.');
+    await shot(page, '01b-go-tim-ThamDinhUltrafresh-khong-co-node-van-tim-thay');
     await page.click('#uSecondaryPositionManagePicker [data-op="gmsAdd"]');
     await page.waitForTimeout(100);
     await page.click('#uSecondaryPositionManageSaveBtn');
