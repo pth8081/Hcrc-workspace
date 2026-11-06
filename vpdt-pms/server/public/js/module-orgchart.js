@@ -875,6 +875,17 @@ async function saveOrgChartNodeClick() {
   try {
     if (orgChartNodeModalMode === 'ADD') {
       payload.parentNodeId = orgChartNodeModalParentId;
+      // Thứ tự hiển thị (11/2026, theo yêu cầu người dùng — "add vào mục nào thì hiện NGAY trong mục
+      // đó, đẩy các mục khác xuống"): CHỈ cho đúng luồng thêm 1 node qua modal này (bấm "+ Thêm nhánh
+      // con") — xếp node mới làm con ĐẦU TIÊN của đúng node cha vừa chọn (nhỏ hơn mọi anh/chị em hiện
+      // có), thay vì mặc định addNode() ở server (xếp CUỐI theo tổng số node toàn cây — vẫn giữ nguyên
+      // cho luồng Nhập Excel hàng loạt ở lib/orgChartImport.js, không đụng tới). Trước đây node mới luôn
+      // rơi xuống SAU TOÀN BỘ nhánh con khác đã có của cùng 1 cha (có thể rất dài, VD nhánh "Khối siêu
+      // thị/Cửa hàng"), khiến người dùng tưởng nhầm nó "lọt ra ngoài" folder dù dữ liệu cha-con vẫn đúng.
+      const siblingOrders = (_ocCurrentVersion.nodes || [])
+        .filter(n => n.parentNodeId === orgChartNodeModalParentId)
+        .map(n => n.displayOrder || 0);
+      payload.displayOrder = siblingOrders.length ? Math.min(...siblingOrders) - 1 : 0;
       await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/nodes`, payload);
     } else {
       delete payload.nodeType;

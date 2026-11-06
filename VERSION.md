@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**29.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.48 (2026-11, TẠM/1 PHẦN — còn đang điều tra tiếp): Cơ Cấu Tổ Chức — node mới thêm xếp làm con ĐẦU
+TIÊN của node cha, không xếp cuối
+
+**Theo báo cáo người dùng**: thêm 1 node "Vị Trí" mới (VD "Chủ Tịch") vào 1 phòng ban đã có sẵn nhiều
+nhánh con lớn khác (VD "BAN TỔNG GIÁM ĐỐC") khiến node mới bị xếp hiện RA SAU TOÀN BỘ các nhánh con khác
+(kể cả nhánh ở rất xa/sâu) trong cả màn Cây lẫn Báo Cáo Định Biên — nhìn qua dễ hiểu lầm "node mới nằm lạc
+ra ngoài phòng ban", dù xác nhận bằng cách đối chiếu Báo Cáo Định Biên (độc lập, `lib/headcountReport.js`)
+thì tổng số liệu Định Biên vẫn cộng đúng vào đúng phòng ban cha. Gốc rễ 1 phần: `saveOrgChartNodeClick()`
+(client, `public/js/module-orgchart.js`) trước đây không gửi `displayOrder`, để server
+(`lib/orgChart.js::addNode()`) tự mặc định `displayOrder = tổng số node toàn cây` — luôn xếp node mới
+SAU CÙNG trong danh sách con của ĐÚNG node cha, nên nếu node cha đã có nhiều nhánh con khác (được tạo
+trước, displayOrder nhỏ hơn) thì node mới bị đẩy xuống sau toàn bộ các nhánh đó khi hiển thị theo DFS.
+
+**Đã vá phần hiển thị này**: khi bấm "+ Thêm nhánh con" trên UI (CHỈ luồng này — không đụng tới mặc định
+của `addNode()` dùng chung cho Nhập Excel hàng loạt ở `lib/orgChartImport.js`, giữ nguyên thứ tự theo file
+Excel), client giờ tự tính `displayOrder` = nhỏ hơn displayOrder nhỏ nhất hiện có trong số các con hiện
+tại của đúng node cha vừa chọn — node mới sẽ xếp làm con ĐẦU TIÊN, hiện NGAY dưới node cha, đẩy các nhánh
+con khác xuống dưới.
+
+**LƯU Ý — vẫn đang điều tra tiếp, CHƯA xác nhận đã hết gốc rễ**: người dùng báo cáo cả màn Cây lẫn Báo
+Cáo Định Biên (2 cài đặt độc lập, cùng đọc `node.parentNodeId`) đều cho thấy node mới nằm lồng dưới 1
+node phòng ban khác hẳn (không phải node cha đã chọn khi bấm "+ Thêm nhánh con") — nếu đúng, đây là lỗi
+`parentNodeId` lưu sai, nặng hơn hẳn vấn đề thứ tự hiển thị đã vá ở trên. Đã rà `addNode()`/
+`saveOrgChartNodeClick()`/`cspCollectArgs()` kỹ nhưng chưa tái hiện được lỗi gán sai `parentNodeId`
+qua code — đang chờ người dùng xuất Excel bản đang xem (nút "📊 Xuất Excel (Bản Đang Xem)") để đối chiếu
+dữ liệu thô `Mã Node Cha` thật, xác định chính xác gốc rễ trước khi vá tiếp.
 
 ## v29.47 (2026-11): Đổi tên "Vị Trí Kiêm Nhiệm" → "Kiêm Nhiệm Phê Duyệt Quy Trình" + sửa chữ mô tả sai
 
