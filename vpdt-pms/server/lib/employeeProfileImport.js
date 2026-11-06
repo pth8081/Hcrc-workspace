@@ -16,6 +16,8 @@ const { sanitizeRowForFormulaInjection, applyDropdownValidation } = require('./a
 const { getAppDataValue } = require('./appData');
 const { findAutoLinkableAccount } = require('./employeeProfile');
 
+const MAX_ROWS_PER_IMPORT = 1500;
+
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 
 // LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "ngày trong báo cáo Excel hiện năm-tháng-ngày, phải đổi thành
@@ -204,7 +206,7 @@ async function buildImportTemplateWorkbook() {
     { key: 'specialLaborStatus', options: specialLaborStatuses || [] },
     { key: 'currentWorkStatusDetail', options: currentWorkStatusDetails || [] }
   ];
-  dropdownTargets.forEach((t, idx) => applyDropdownValidation(sheet, t.key, t.options, { helperColIdx: COLUMNS.length + 50 + idx }));
+  dropdownTargets.forEach((t, idx) => applyDropdownValidation(sheet, t.key, t.options, { endRow: MAX_ROWS_PER_IMPORT, helperColIdx: COLUMNS.length + 50 + idx }));
 
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 100;
@@ -430,12 +432,12 @@ async function parseImportExcelBuffer(buffer, existingProfiles, existingUsers) {
     }
     const item = rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCodes, seenUsernames);
     if (item) items.push(item);
-    if (items.length > 500) { overLimit = true; return false; }
+    if (items.length > MAX_ROWS_PER_IMPORT) { overLimit = true; return false; }
     return true;
   }, { raw: true });
 
   if (!sawAnyRow) throw new HttpError(400, 'File Hồ Sơ Nhân Sự trống, không có dữ liệu');
-  if (overLimit) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 hồ sơ/lần)');
+  if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_ROWS_PER_IMPORT} hồ sơ/lần)`);
   if (!items.length) throw new HttpError(400, 'Không đọc được dòng hồ sơ nào hợp lệ từ file (thiếu cột Mã Nhân Viên ở mọi dòng?)');
   return items;
 }
@@ -639,4 +641,4 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
   return wb;
 }
 
-module.exports = { buildImportTemplateWorkbook, parseImportExcelBuffer, buildExportWorkbook };
+module.exports = { buildImportTemplateWorkbook, parseImportExcelBuffer, buildExportWorkbook, MAX_ROWS_PER_IMPORT };

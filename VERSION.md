@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**29.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.41 (2026-11): Nâng giới hạn 4 màn Nhập Excel hàng loạt Nhân Sự lên 1500 dòng/lần
+
+**Yêu cầu người dùng**: "cho tôi phần upload hồ sơ, hđ của nhân sự lên 1500 dòng nhé, hiện tại đang chỉ
+có 500 dòng thôi". Rà soát phát hiện 4 màn "Nhập Excel" khác nhau cho Nhân Sự, giới hạn trước đây KHÔNG
+đồng nhất (500 ở 2 màn, 300 ở 2 màn còn lại) — xác nhận với người dùng áp dụng cho CẢ 4 màn, nâng đồng
+loạt lên 1500 dòng/lần:
+
+1. **Nhập Excel Hồ Sơ Nhân Sự** (tạo hồ sơ cho NV cũ, `lib/employeeProfileImport.js` +
+   `routes/employeeProfile.js` `/bulk-import`) — 500 → 1500.
+2. **Nhập Excel Hợp Đồng — SỬA hàng loạt** (hợp đồng đã có, ACTIVE, `lib/laborContractImport.js`) —
+   300 → 1500.
+3. **Nhập Excel Hợp Đồng — TẠO MỚI hàng loạt** (`lib/laborContractCreateImport.js`) — 300 → 1500.
+4. **Nhập Excel Gán Chức Vụ hàng loạt** (`lib/hrProfilePositionAssignImport.js`) — 500 → 1500.
+
+**Sửa cùng lúc (tránh lệch, cùng 1 bản chất thay đổi)**: 2 màn có cột droplist (Phòng Ban/4 danh mục Hồ
+Sơ Nhân Sự) dùng `applyDropdownValidation()` (`lib/adminExport.js`) với `endRow` mặc định CỐ ĐỊNH là
+500, không tự đồng bộ theo `MAX_ROWS_PER_IMPORT` của từng file — nếu chỉ nâng giới hạn dòng mà không
+truyền `endRow: MAX_ROWS_PER_IMPORT`, các dòng 501-1500 trong file mẫu tải về sẽ KHÔNG có droplist/kiểm
+tra dữ liệu như 500 dòng đầu. Đã truyền `endRow` tường minh ở cả 2 nơi gọi
+(`employeeProfileImport.js`/`laborContractImport.js`).
+
+**Cân nhắc hiệu năng đã kiểm tra**: 3/4 route "áp dụng" (apply-import) xử lý TUẦN TỰ từng dòng, mỗi dòng
+1 lượt khoá-ghi riêng (`withLockedRecordForCollection`/`assignPositionToProfile`) — không giữ nhiều khoá
+đồng thời (an toàn, không deadlock), nhưng ở quy mô 1500 dòng tổng thời gian xử lý 1 request HTTP có thể
+vượt mốc timeout mặc định 60s của Nginx reverse proxy (route `location /` chưa từng đặt
+`proxy_read_timeout` tường minh, chỉ `location /api/upload` có). Đã bổ sung `proxy_read_timeout 300s`/
+`proxy_send_timeout 300s` vào `location /` ở CẢ 2 bản HTTP và HTTPS trong
+`deploy/Huong-dan-trien-khai-PM2-Nginx.md` để an toàn (không ảnh hưởng gì khi batch nhỏ, chỉ nới thêm
+thời gian chờ cho batch lớn). Riêng route Hồ Sơ Nhân Sự (mục 1) dùng 1 khoá DUY NHẤT cho cả lô (không
+phải tuần tự từng dòng) nên không bị ảnh hưởng.
+
+**Test**: chạy lại 10 file test hiện có liên quan cả 4 màn (`test-hr-profile-import-90fields.js`,
+`test-hr-profile-import-autolink-username.js`, `test-hr-profile-import-gd1-fields.js`,
+`test-hr-profile-bulk-import-autoassign.js`, `test-hr-profile-position-assign-import.js`,
+`test-hr-profile-position-assign-export.js`, `test-labor-contract-excel.js`,
+`test-labor-contract-create-import.js`, `test-labor-contract-import-race-active-check.js`,
+`test-labor-contract-employeecode-case-insensitive.js`) — tất cả PASS (bao gồm đúng các test kiểm biên
+"vượt quá MAX_ROWS_PER_IMPORT -> 400", tự động theo đúng giá trị 1500 mới vì đọc hằng số export, không
+hardcode số cũ).
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env.example`/`package.json` dependencies — chỉ copy code +
+`pm2 restart`. Riêng ai đang chạy theo bản **PM2 + Nginx** (không áp dụng cho bản PM2-chỉ, không qua
+Nginx) nên cập nhật thêm khối `location /` trong file cấu hình Nginx của mình (thêm 2 dòng
+`proxy_read_timeout 300s;`/`proxy_send_timeout 300s;`, xem đoạn mẫu mới trong
+`deploy/Huong-dan-trien-khai-PM2-Nginx.md`) rồi `sudo nginx -t && sudo systemctl reload nginx` — để
+tránh lỗi 504 nếu có lần nhập Excel gần tới 1500 dòng trên mạng/DB chậm.
 
 ## v29.40 (2026-11): Ghi chú TUỲ CHỌN khi Duyệt — áp dụng toàn hệ thống (theo yêu cầu người dùng)
 

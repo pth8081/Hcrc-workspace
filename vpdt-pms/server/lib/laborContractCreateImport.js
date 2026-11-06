@@ -24,7 +24,7 @@ const { HttpError } = require('./httpErrors');
 const { markDuplicateItems } = require('./importDedup');
 const laborContract = require('./laborContract');
 
-const MAX_ROWS_PER_IMPORT = 300; // mỗi dòng 1 lượt khoá ghi riêng — cùng giới hạn lib/laborContractImport.js
+const MAX_ROWS_PER_IMPORT = 1500; // mỗi dòng 1 lượt khoá ghi riêng — cùng giới hạn lib/laborContractImport.js
 
 const CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
 const CONTRACT_TYPE_LABEL_TO_CODE = Object.fromEntries(Object.entries(CONTRACT_TYPE_LABELS).map(([code, label]) => [label, code]));

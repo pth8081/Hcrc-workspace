@@ -4202,7 +4202,8 @@ còn tự động xoá được hợp đồng lao động nữa.
     người thực hiện import, giống tạo tay, điền vào cũng bị bỏ qua).
   - Bấm "✅ Xác Nhận Tạo/Ghi Đè" mới thật sự ghi; mỗi dòng xử lý độc lập (1
     dòng lỗi/bị chặn bởi luật nghiệp vụ không chặn các dòng còn lại), giới
-    hạn 300 dòng/lần như Nhập Excel sửa hàng loạt.
+    hạn 1500 dòng/lần như Nhập Excel sửa hàng loạt (nâng từ 300, 11/2026,
+    theo yêu cầu người dùng).
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
   viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
   loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60

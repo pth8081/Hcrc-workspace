@@ -1242,7 +1242,7 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
   try {
     const rows = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!rows.length) return res.status(400).json({ error: 'Không có hồ sơ nào để nhập' });
-    if (rows.length > 500) return res.status(400).json({ error: 'Tối đa 500 hồ sơ/lần nhập' });
+    if (rows.length > employeeProfileImport.MAX_ROWS_PER_IMPORT) return res.status(400).json({ error: `Tối đa ${employeeProfileImport.MAX_ROWS_PER_IMPORT} hồ sơ/lần nhập` });
     const appData = await getAllAppData();
     for (const row of rows) assertActiveAccountIfGiven(row?.username ? String(row.username).trim() : null, appData.users || []);
 

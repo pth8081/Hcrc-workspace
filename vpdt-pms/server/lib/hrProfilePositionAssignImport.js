@@ -13,7 +13,7 @@ const { HttpError } = require('./httpErrors');
 const { markDuplicateItems } = require('./importDedup');
 const orgChart = require('./orgChart');
 
-const MAX_ROWS_PER_IMPORT = 500; // đúng quy mô người dùng nêu (di trú 500 nhân viên).
+const MAX_ROWS_PER_IMPORT = 1500; // nâng theo yêu cầu người dùng (11/2026), cùng giới hạn các màn nhập Excel Nhân Sự khác.
 
 function styleHeaderRow(row) {
   row.font = { bold: true };

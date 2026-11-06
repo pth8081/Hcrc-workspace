@@ -25,7 +25,7 @@ const { sanitizeRowForFormulaInjection, applyDropdownValidation } = require('./a
 const { markDuplicateItems } = require('./importDedup');
 const laborContract = require('./laborContract');
 
-const MAX_ROWS_PER_IMPORT = 300;
+const MAX_ROWS_PER_IMPORT = 1500;
 
 const CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
 // Chấp nhận cả mã (PROBATION/FIXED_TERM/INDEFINITE) lẫn nhãn tiếng Việt khi gõ vào ô "Loại HĐLĐ" — HR
@@ -112,7 +112,7 @@ function buildImportTemplateWorkbook({ depts } = {}) {
   // startRow..endRow (2..500) ngay khi gọi getCell() trên từng dòng đó, nên nếu gọi TRƯỚC addRow(), dòng
   // ví dụ mẫu bị addRow() đẩy xuống tận dòng 501 (nối sau dòng 500 đã "có mặt" dù rỗng) thay vì nằm ở
   // dòng 2 như mong đợi — người dùng mở file thấy ~500 dòng trống rồi mới tới dòng ví dụ.
-  if (depts && depts.length) applyDropdownValidation(sheet, 'dept', depts, { helperColIdx: sheet.columns.length + 50 });
+  if (depts && depts.length) applyDropdownValidation(sheet, 'dept', depts, { endRow: MAX_ROWS_PER_IMPORT, helperColIdx: sheet.columns.length + 50 });
 
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 110;

@@ -699,6 +699,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # Mặc định Nginx chỉ chờ 60s — 1 số API xử lý hàng loạt (VD áp dụng Excel
+        # Hồ Sơ Nhân Sự/Hợp Đồng Lao Động tới 1500 dòng, mỗi dòng 1 lượt khoá ghi
+        # riêng phía server) có thể vượt mốc này với dữ liệu lớn, khiến Nginx trả về
+        # lỗi 504 dù Node vẫn đang xử lý bình thường.
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
     }
 }
 ```
@@ -775,6 +781,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;         # xem chú thích lý do ở bản HTTP phía trên
+        proxy_send_timeout 300s;
     }
 }
 ```
