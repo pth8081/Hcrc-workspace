@@ -28,6 +28,10 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
+// orgChart (11/2026) — dùng cho mock GET/POST /api/hr-profile/secondary-position* ngay dưới, mirror
+// ĐÚNG logic 2 route thật (routes/employeeProfile.js) — demo tính năng "🏷️ Gán Vị Trí Kiêm Nhiệm"
+// (quyền riêng hrSecondaryPositionManage) cần dựng lại UI thật của màn Sửa Người Dùng.
+const orgChart = require('../lib/orgChart');
 const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
@@ -470,6 +474,62 @@ function createDispatcher(state) {
       // bất kỳ field quyền nào trang tự gửi lên (đúng nguyên tắc "server tự xác minh lại" của cả hệ thống).
       const freshUser = state.users.find(u => u.username === username);
       if (!freshUser) return { status: 401, body: { error: 'Chưa đăng nhập' } };
+
+      // ===== "🏷️ Gán Vị Trí Kiêm Nhiệm" (quyền riêng hrSecondaryPositionManage, 11/2026) — mirror ĐÚNG
+      // 3 route thật ở routes/employeeProfile.js, dùng cho demo-hr-secondary-position-manage.js. =====
+      if (method === 'GET' && pathName === '/api/hr-profile/linked-usernames') {
+        const usernames = [...new Set((state.employeeProfiles || []).filter(p => p.username).map(p => p.username))];
+        return { status: 200, body: { usernames } };
+      }
+      function canManageSecondaryPositionsOnlyMock(user) {
+        return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit || user?.perms?.hrSecondaryPositionManage);
+      }
+      if (method === 'GET' && pathName === '/api/hr-profile/secondary-position-options') {
+        if (!canManageSecondaryPositionsOnlyMock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' } };
+        const targetUsername = new URL('http://x' + url).searchParams.get('username') || '';
+        const targetUser = (state.users || []).find(u => u.username === targetUsername);
+        if (!targetUser) return { status: 404, body: { error: 'Không tìm thấy tài khoản này' } };
+        const applied = orgChart.getAppliedVersion(state.orgChartVersions || []);
+        const positions = applied
+          ? (applied.nodes || []).filter(n => n.nodeType === 'POSITION')
+              .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
+              .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
+          : [];
+        const existingPairs = (targetUser.secondaryPositions || []).filter(sp => sp && sp.jobTitle);
+        const current = [], legacyUnresolved = [];
+        existingPairs.forEach(pair => {
+          const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.jobTitle === pair.jobTitle && (
+            !pair.dept || (orgChart.findNearestDeptAncestor(applied, n)?.departmentRef === pair.dept)
+          ));
+          if (node) current.push({ positionKey: node.positionKey, jobTitle: node.jobTitle, dept: pair.dept || null, positionLabel: orgChart.buildNodeDisplayName(applied, node) });
+          else legacyUnresolved.push(pair);
+        });
+        return { status: 200, body: { positions, current, legacyUnresolved } };
+      }
+      if (method === 'POST' && pathName === '/api/hr-profile/secondary-positions') {
+        if (!canManageSecondaryPositionsOnlyMock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền gán Vị Trí Kiêm Nhiệm' } };
+        const targetUsername = String(body?.username || '').trim();
+        const applied = orgChart.getAppliedVersion(state.orgChartVersions || []);
+        const items = Array.isArray(body?.secondaryPositions) ? body.secondaryPositions : [];
+        const seenKeys = new Set();
+        let resolved;
+        try {
+          resolved = items.map(item => {
+            const key = item && item.positionKey;
+            if (!key) throw new HttpError(400, 'Thiếu positionKey');
+            if (seenKeys.has(key)) throw new HttpError(400, 'Trùng lặp vị trí');
+            seenKeys.add(key);
+            const node = applied && (applied.nodes || []).find(n => n.nodeType === 'POSITION' && n.positionKey === key);
+            if (!node) throw new HttpError(400, `Vị trí không tồn tại: ${key}`);
+            const deptNode = orgChart.findNearestDeptAncestor(applied, node);
+            return { jobTitle: node.jobTitle, dept: deptNode ? deptNode.departmentRef : '', source: 'ADMIN_QUICK_EDIT' };
+          });
+        } catch (e) { return { status: e.status || 400, body: { error: e.message } }; }
+        const idx = (state.users || []).findIndex(u => u.username === targetUsername);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy tài khoản này' } };
+        state.users[idx] = { ...state.users[idx], secondaryPositions: resolved };
+        return { status: 200, body: { ok: true, secondaryPositions: resolved } };
+      }
 
       let m;
       if ((m = pathName.match(/^\/api\/create\/([^/]+)$/)) && method === 'POST') {
