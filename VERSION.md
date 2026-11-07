@@ -1,12 +1,37 @@
 # Phiên bản hiện tại
 
-**29.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
 
-## v29.50 (2026-11): Đọc PDF Phiếu Đặt Hàng NCC (DSmart) — vá thêm 2 ký tự mojibake mới + lỗi bỏ sót từ
-dính liền token
+## v29.51 (2026-11): 3 ô Nhập Excel hàng loạt (Hợp Đồng Lao Động + Onboarding) không phản hồi gì khi chọn
+file — thiếu `data-arg-event`
+
+**Theo báo cáo người dùng** (ảnh chụp "chọn file ở modal Nhập Excel TẠO MỚI Hợp Đồng Lao Động hàng loạt
+xong không thấy nút Xác Nhận đâu cả — không có gì xảy ra"): tái hiện bằng Playwright thật, xác nhận hàm
+xử lý `onHrContractCreateImportFileChange()` ném lỗi JS "Cannot read properties of undefined (reading
+'target')" NGAY LẬP TỨC sau khi chọn file, bị nuốt im lặng (không alert, màn hình đứng yên như chưa chọn
+gì) — không phải lỗi logic đọc file.
+
+**Gốc rễ**: cơ chế CSP delegation CHUNG (`bindCspDelegation()`, `core.js`) chỉ truyền Event thật vào hàm
+`data-op-change` khi input có thêm thuộc tính `data-arg-event="N"` — thiếu thuộc tính này, hàm bị gọi
+KHÔNG tham số nào. Rà soát toàn bộ ~45 ô `<input type="file" data-op-change="...">` trong hệ thống phát
+hiện ĐÚNG 3 NGOẠI LỆ thiếu thuộc tính này (mọi ô khác hoặc đã đúng mẫu, hoặc dùng registry riêng của
+`#vanHanhSection`/`#orgChartSection` tự truyền event theo cách khác không cần thuộc tính này):
+- `#hrContractImportFile` (Nhập Excel SỬA hợp đồng ACTIVE — `hrContractSection.html`)
+- `#hrContractCreateImportFile` (Nhập Excel TẠO MỚI hàng loạt — lỗi người dùng BÁO CÁO TRỰC TIẾP)
+- `#hrpOnbCreateImportFile` (Nhập Excel TẠO MỚI Onboarding hàng loạt — `hrLifecycleSection.html`)
+
+**Vá**: thêm ĐÚNG `data-arg-event="0"` vào cả 3 ô — không đổi gì khác, đúng mẫu ~40 ô file input còn lại
+trong hệ thống đã dùng từ trước (VD `itPriceFileInput`, `uImportExcelInput`...).
+
+**Test**: `tests/test-file-input-arg-event-wiring.js` — Playwright thật, chọn file thật trên 2/3 ô (ô thứ
+3 không dựng được kịch bản UI đầy đủ trong harness tĩnh do module không tự nạp qua `switchTab()` với bộ
+dữ liệu giả lập tối thiểu — không liên quan bản vá, xem ghi chú trong test), xác nhận handler chạy thật
+(có gọi đúng route, cập nhật status, không còn lỗi JS). Chạy lại
+`test-khoi0-laborcontractimport-hrprocessimport-gate.js`/`test-hr-process-onboarding-create-import.js` —
+không regression.
 
 **Theo báo cáo người dùng** (kèm 2 file PDF thật "Đơn giao qua Hàng Trống (HO)" và "Cấp Hàng Trống (ST)")
 — "import vào hệ thống đặt hàng siêu thị và HO đang bị sai phông chữ". Soi trực tiếp bằng PDF.js (giống

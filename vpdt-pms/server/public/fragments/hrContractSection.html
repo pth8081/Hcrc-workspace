@@ -51,7 +51,7 @@
           <button type="button" data-op="closeHrContractImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
         <p class="text-[11px] text-gray-500 mb-2">Chỉ SỬA hợp đồng ĐANG HIỆU LỰC (ACTIVE) đã có — không tạo hợp đồng mới. Tải mẫu, điền các cột cần đổi (để trống ô nào = giữ nguyên), rồi tải lên đây.</p>
-        <input type="file" id="hrContractImportFile" accept=".xlsx,.xls" data-op-change="onHrContractImportFileChange" class="w-full border p-1.5 rounded text-xs mb-2">
+        <input type="file" id="hrContractImportFile" accept=".xlsx,.xls" data-op-change="onHrContractImportFileChange" data-arg-event="0" class="w-full border p-1.5 rounded text-xs mb-2">
         <p id="hrContractImportStatus" class="text-xs mb-2"></p>
         <div id="hrContractImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
           <table class="w-full text-[11px]">
@@ -81,7 +81,7 @@
           <button type="button" data-op="closeHrContractCreateImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
         <p class="text-[11px] text-gray-500 mb-2">Dùng khi nhân viên CHƯA có hợp đồng nào trong hệ thống (VD di trú file quản lý cũ). Mã Nhân Viên phải đã có trong Hồ Sơ Nhân Sự. Mã ĐÃ có hợp đồng ĐANG HIỆU LỰC sẽ được đánh dấu TRÙNG — tự chọn Ghi đè hoặc Huỷ cho dòng đó.</p>
-        <input type="file" id="hrContractCreateImportFile" accept=".xlsx,.xls" data-op-change="onHrContractCreateImportFileChange" class="w-full border p-1.5 rounded text-xs mb-2">
+        <input type="file" id="hrContractCreateImportFile" accept=".xlsx,.xls" data-op-change="onHrContractCreateImportFileChange" data-arg-event="0" class="w-full border p-1.5 rounded text-xs mb-2">
         <p id="hrContractCreateImportStatus" class="text-xs mb-2"></p>
         <div id="hrContractCreateImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
           <table class="w-full text-[11px]">
