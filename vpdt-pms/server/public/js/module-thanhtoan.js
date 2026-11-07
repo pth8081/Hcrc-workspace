@@ -857,6 +857,7 @@ function renderPaymentRequests() {
   const list = allRequests.filter(pr => !statusFilter || pr.status === statusFilter);
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có đề nghị thanh toán nào.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('paymentLastUpdated');
     return;
   }
   const canManage = canManagePaymentRequestsClient(currentUser);
@@ -910,6 +911,13 @@ function renderPaymentRequests() {
       </tr>
     `;
   }).join('');
+  moduleRefreshLastUpdatedLabel('paymentLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn Thanh Toán — mirror refreshApprovalHubManually() (core-approvalhub.js).
+async function refreshPaymentRequests() {
+  await refreshModuleScreen(document.getElementById('paymentRefreshBtn'), renderPaymentRequests);
+  moduleRefreshLastUpdatedLabel('paymentLastUpdated');
 }
 
 // Xác nhận ý định TRƯỚC (showConfirmModal), rồi mới tới withApprovalAuth() (xác thực lại mật khẩu/OTP/

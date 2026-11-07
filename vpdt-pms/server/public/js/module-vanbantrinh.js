@@ -502,6 +502,7 @@ function renderSubmissionReqs() {
 
   if (pageSubs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy tờ trình phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('submissionsLastUpdated');
     return;
   }
 
@@ -601,6 +602,17 @@ function renderSubmissionReqs() {
       </tr>
     `;
   }).join('');
+  // "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderSubmissionReqs() (cả đổi
+  // bộ lọc lẫn bấm nút refresh thật), cùng khuôn updateApprovalHubLastUpdatedLabel() (core-approvalhub.js).
+  moduleRefreshLastUpdatedLabel('submissionsLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn Văn Bản Trình (11/2026, "Việc D") — bấm vào CHỈ làm mới đúng dữ liệu/giao diện
+// màn Văn Bản Trình, không điều hướng/không ảnh hưởng màn khác. DB.submissions thuộc payload chính GET
+// /api/data nên KHÔNG truyền opts.lazyGroup.
+async function refreshSubmissions() {
+  await refreshModuleScreen(document.getElementById('submissionsRefreshBtn'), renderSubmissionReqs);
+  moduleRefreshLastUpdatedLabel('submissionsLastUpdated');
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Văn bản trình (xem buildActionCell()).

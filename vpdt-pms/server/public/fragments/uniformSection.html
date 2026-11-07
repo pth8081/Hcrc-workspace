@@ -322,7 +322,16 @@
         </div>
 
         <div id="uniformTransferApprovalWrap" class="hidden space-y-2">
-          <h4 class="font-bold text-sm text-cyan-900">⏳ Chờ Duyệt</h4>
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h4 class="font-bold text-sm text-cyan-900">⏳ Chờ Duyệt</h4>
+            <!-- Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror Hộp Thư Phê Duyệt, xem
+                 refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js) — CHỈ tải lại đúng dữ
+                 liệu/giao diện màn này (nhóm lazy 'uniform'), không điều hướng/không ảnh hưởng màn khác. -->
+            <div class="text-right">
+              <button id="uniTransferApprovalRefreshBtn" type="button" data-op="refreshUniformTransferApprovalQueue" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+              <div id="uniTransferApprovalLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+            </div>
+          </div>
           <div id="uniformTransferApprovalList" class="space-y-2"></div>
           <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
         </div>
@@ -331,7 +340,14 @@
              trên (canApproveUniformClient), cho phép hủy khi ĐANG "vận chuyển" (APPROVED) nhưng CHƯA
              được siêu thị đích xác nhận nhận — xem cancelUniformTransfer() ở lib/recordActions.js. -->
         <div id="uniformTransferCancelWrap" class="hidden space-y-2">
-          <h4 class="font-bold text-sm text-slate-700">🚚 Đang Vận Chuyển — Hủy Nếu Cần</h4>
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h4 class="font-bold text-sm text-slate-700">🚚 Đang Vận Chuyển — Hủy Nếu Cần</h4>
+            <!-- Nút "🔄 Làm Mới" (11/2026) — cùng cơ chế refreshModuleScreen() như trên, riêng cho màn này. -->
+            <div class="text-right">
+              <button id="uniTransferCancelRefreshBtn" type="button" data-op="refreshUniformTransferCancelQueue" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+              <div id="uniTransferCancelLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+            </div>
+          </div>
           <div id="uniformTransferCancelList" class="space-y-2"></div>
           <div id="uniformTransferNoCancelNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có lô hàng nào đang vận chuyển.</div>
         </div>
@@ -340,7 +356,14 @@
              receiveUniformTransfer() ở lib/recordActions.js): kho đích chỉ tăng SAU khi bấm xác nhận ở
              đây, KHÔNG tăng ngay lúc Hành Chính duyệt như kho nguồn. -->
         <div id="uniformTransferReceiveWrap" class="hidden space-y-2">
-          <h4 class="font-bold text-sm text-orange-900">📦 Chờ Xác Nhận Nhận Hàng (Siêu Thị Của Bạn)</h4>
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h4 class="font-bold text-sm text-orange-900">📦 Chờ Xác Nhận Nhận Hàng (Siêu Thị Của Bạn)</h4>
+            <!-- Nút "🔄 Làm Mới" (11/2026) — cùng cơ chế refreshModuleScreen() như trên, riêng cho màn này. -->
+            <div class="text-right">
+              <button id="uniTransferReceiveRefreshBtn" type="button" data-op="refreshUniformTransferReceiveQueue" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+              <div id="uniTransferReceiveLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+            </div>
+          </div>
           <div id="uniformTransferReceiveList" class="space-y-2"></div>
           <div id="uniformTransferNoReceiveNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có lô hàng nào đang chờ siêu thị bạn xác nhận nhận.</div>
         </div>

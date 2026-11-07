@@ -1078,6 +1078,10 @@ function renderMeetings() {
   document.getElementById('paginationContainer_meeting').innerHTML = buildPaginationBoxHTML('meeting', 'renderMeetings');
   const pageMeetings = paginateList('meeting', sortByCreatedAtDesc(visibleMeetings), 'renderMeetings', 'lịch họp');
 
+  // Nút "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderMeetings() (kể cả đổi bộ
+  // lọc/trang), đặt TRƯỚC nhánh rỗng bên dưới để không bỏ sót — xem refreshMeetings() ngay dưới.
+  moduleRefreshLastUpdatedLabel('meetingsLastUpdated');
+
   if (pageMeetings.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy lịch họp phù hợp.</td></tr>`;
     return;
@@ -1118,6 +1122,13 @@ function renderMeetings() {
       </tr>
     `;
   }).join('');
+}
+// Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror ĐÚNG refreshApprovalHubManually(), xem
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js): bấm là tải lại NGAY rồi CHỈ vẽ lại
+// đúng màn Phòng Họp, không điều hướng/không ảnh hưởng màn khác.
+async function refreshMeetings() {
+  await refreshModuleScreen(document.getElementById('meetingsRefreshBtn'), renderMeetings);
+  moduleRefreshLastUpdatedLabel('meetingsLastUpdated');
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Phòng họp (xem buildActionCell()).

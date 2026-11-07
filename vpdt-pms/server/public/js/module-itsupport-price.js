@@ -1301,6 +1301,12 @@ function renderMhItPriceList() {
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
     : `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+  moduleRefreshLastUpdatedLabel('mhItPriceLastUpdated');
+}
+// "🔄 Làm Mới" TAY cho mini-list Bán Lẻ nhúng trong Mua Hàng — mirror refreshApprovalHubManually().
+async function refreshMhItPriceList() {
+  await refreshModuleScreen(document.getElementById('mhItPriceRefreshBtn'), renderMhItPriceList);
+  moduleRefreshLastUpdatedLabel('mhItPriceLastUpdated');
 }
 function onMhItPriceFilterChange() {
   resetListPage('mhItPrice');
@@ -1343,6 +1349,15 @@ function renderVanHanhItPriceList() {
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
     : `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+  moduleRefreshLastUpdatedLabel('vanHanhItPriceLastUpdated');
+}
+// "🔄 Làm Mới" TAY cho mini-list Bán Buôn nhúng trong Vận Hành — mirror refreshApprovalHubManually().
+// Lưu ý: #vanHanhItPriceRefreshBtn nằm trong #vanHanhSection, nhưng data-op vẫn tự hoạt động bình thường
+// qua cơ chế CSP delegation chung (core.js) — bindOperationDelegation() riêng của Vận Hành tự fallback
+// sang đó khi registry riêng của nó không có entry tên "refreshVanHanhItPriceList".
+async function refreshVanHanhItPriceList() {
+  await refreshModuleScreen(document.getElementById('vanHanhItPriceRefreshBtn'), renderVanHanhItPriceList);
+  moduleRefreshLastUpdatedLabel('vanHanhItPriceLastUpdated');
 }
 function onVanHanhItPriceFilterChange() {
   resetListPage('vanHanhItPrice');
@@ -1415,6 +1430,7 @@ function renderItPriceApprovals() {
 
   if (page.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('itPriceLastUpdated');
     return;
   }
 
@@ -1422,6 +1438,13 @@ function renderItPriceApprovals() {
   // Xử Lý), KHÔNG còn Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn Cấp (đã chuyển sang 2 tab Mua Hàng/Vận
   // Hành, xem renderMhItPriceList()/renderVanHanhItPriceList()).
   tbody.innerHTML = page.map(p => buildItPriceRowHtml(p, 'SUPPORT')).join('');
+  moduleRefreshLastUpdatedLabel('itPriceLastUpdated');
+}
+// "🔄 Làm Mới" TAY DUY NHẤT phủ cả 2 sub-tab Bán Lẻ/Bán Buôn (CÙNG hàm renderItPriceApprovals() vẽ cả
+// 2 — xem setItPriceSubTab()) — mirror refreshApprovalHubManually() (core-approvalhub.js).
+async function refreshItPriceApprovals() {
+  await refreshModuleScreen(document.getElementById('itPriceRefreshBtn'), renderItPriceApprovals);
+  moduleRefreshLastUpdatedLabel('itPriceLastUpdated');
 }
 
 function approveItPrice(id) {

@@ -1088,6 +1088,7 @@ function renderContracts() {
 
   if (pageContracts.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Không tìm thấy hợp đồng phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('contractsLastUpdated');
     return;
   }
 
@@ -1101,6 +1102,14 @@ function renderContracts() {
     const childRowsHTML = isExpanded ? addenda.map(a => buildContractRowHTML(a, { isChild: true })).join('') : '';
     return rootRowHTML + childRowsHTML;
   }).join('');
+  moduleRefreshLastUpdatedLabel('contractsLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY DUY NHẤT phủ cả 2 sub-tab Phê Duyệt/Quản Lý HĐ (CÙNG hàm renderContracts() vẽ cả
+// 2 — xem setContractSubTab()) — mirror refreshApprovalHubManually() (core-approvalhub.js).
+async function refreshContracts() {
+  await refreshModuleScreen(document.getElementById('contractsRefreshBtn'), renderContracts);
+  moduleRefreshLastUpdatedLabel('contractsLastUpdated');
 }
 
 // Dựng 1 dòng <tr> trong Danh Sách Hợp Đồng — dùng chung cho cả hợp đồng gốc (có thể kèm nút mở rộng

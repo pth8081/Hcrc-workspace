@@ -127,7 +127,17 @@
     </details>
 
     <div class="space-y-3">
-      <h3 class="font-bold text-gray-800">📋 Danh Sách Phiếu Đăng Ký Xe</h3>
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Phiếu Đăng Ký Xe</h3>
+        <!-- "🔄 Làm Mới" (11/2026, cùng khuôn #approvalHubRefreshBtn — xem refreshModuleScreen()/
+             moduleRefreshLastUpdatedLabel() ở core.js) — CHỈ đặt ở đúng sub-tab "Đăng Ký Xe" (bên trong
+             #carSubReg), không phải header chung của cả 4 sub-tab; bấm vào chỉ làm mới đúng dữ liệu/giao
+             diện màn này, không điều hướng/không ảnh hưởng màn khác. -->
+        <div class="text-right">
+          <button id="carRegsRefreshBtn" type="button" data-op="refreshCarRegs" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="carRegsLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>

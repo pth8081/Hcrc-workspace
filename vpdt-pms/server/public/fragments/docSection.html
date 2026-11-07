@@ -163,8 +163,15 @@
     </details>
 
     <div>
-      <div class="flex justify-between items-center mb-3">
+      <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
         <h3 class="font-bold text-gray-800">Danh Sách Tài Liệu Trong Hệ Thống</h3>
+        <!-- "🔄 Làm Mới" (11/2026, cùng khuôn #approvalHubRefreshBtn — xem refreshModuleScreen()/
+             moduleRefreshLastUpdatedLabel() ở core.js) — chỉ làm mới đúng dữ liệu/giao diện màn Tài Liệu
+             này, không điều hướng/không ảnh hưởng màn khác. -->
+        <div class="text-right">
+          <button id="docsRefreshBtn" type="button" data-op="refreshDocs" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="docsLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-sm">

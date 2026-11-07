@@ -38,7 +38,15 @@
     </div>
 
     <div class="space-y-3">
-      <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc</h3>
+      <!-- Nút "🔄 Làm Mới" (11/2026, cùng khuôn Hộp Thư Phê Duyệt) — xem refreshTasks() ở
+           module-congviec.js. -->
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc</h3>
+        <div class="text-right">
+          <button id="tasksRefreshBtn" type="button" data-op="refreshTasks" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="tasksLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>

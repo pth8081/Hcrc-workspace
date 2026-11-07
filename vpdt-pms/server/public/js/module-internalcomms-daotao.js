@@ -2185,10 +2185,10 @@ function renderTrainingCancelRequestsQueue() {
   const wrap = document.getElementById('trainingCancelRequestsWrap');
   const container = document.getElementById('trainingCancelRequestsContainer');
   if (!wrap || !container) return;
-  if (!currentUser.perms?.admin && !currentUser.perms?.trainingManage) { wrap.classList.add('hidden'); return; }
+  if (!currentUser.perms?.admin && !currentUser.perms?.trainingManage) { wrap.classList.add('hidden'); moduleRefreshLastUpdatedLabel('trainingCancelLastUpdated', 'internalHub'); return; }
   const pending = DB.trainingRegistrations.filter(r => r.pendingCancellation);
   wrap.classList.toggle('hidden', !pending.length);
-  if (!pending.length) { container.innerHTML = ''; return; }
+  if (!pending.length) { container.innerHTML = ''; moduleRefreshLastUpdatedLabel('trainingCancelLastUpdated', 'internalHub'); return; }
   container.innerHTML = pending.map(r => `
     <div class="bg-amber-50 border border-amber-200 rounded p-2 flex justify-between items-center gap-2 text-xs">
       <div>
@@ -2200,6 +2200,16 @@ function renderTrainingCancelRequestsQueue() {
         <button data-op="rejectCancelTrainingRegAction" data-arg0="${r.id}" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">Từ Chối</button>
       </div>
     </div>`).join('');
+  moduleRefreshLastUpdatedLabel('trainingCancelLastUpdated', 'internalHub');
+}
+
+// "🔄 Làm Mới" TAY cho Hàng Chờ Huỷ Đăng Ký Lớp — mirror ĐÚNG refreshApprovalHubManually()
+// (core-approvalhub.js)/refreshVpp() (module-vpp.js): dùng refreshModuleScreen() dùng chung của core.js,
+// PHẢI truyền opts.lazyGroup: 'internalHub' vì trainingRegistrations thuộc nhóm lazy này (LAZY_DATA_GROUPS,
+// routes/data.js) — refreshModuleScreen() tự xoá cache + ép tải lại đúng nhóm qua GET /api/data/lazy/internalHub.
+async function refreshTrainingCancelRequestsQueue() {
+  await refreshModuleScreen(document.getElementById('trainingCancelRefreshBtn'), renderTrainingCancelRequestsQueue, { lazyGroup: 'internalHub' });
+  moduleRefreshLastUpdatedLabel('trainingCancelLastUpdated', 'internalHub');
 }
 
 // Xuất Excel kết quả đào tạo (Đợt 4) — cùng cơ chế chung downloadXlsxFromServer() (POST /api/admin/export-xlsx)
@@ -2946,7 +2956,7 @@ function renderTrainingEssayGradingQueue() {
   if (!section || !container) return;
   const canSeeSection = canManageTrainingLocal(currentUser) || !!currentUser.perms?.trainingInstruct;
   section.classList.toggle('hidden', !canSeeSection);
-  if (!canSeeSection) return;
+  if (!canSeeSection) { moduleRefreshLastUpdatedLabel('trainingEssayLastUpdated', 'internalHub'); return; }
   const pending = (DB.trainingTestSubmissions || []).filter(s => {
     if (s.gradingStatus !== 'PENDING_ESSAY_GRADING') return false;
     const cls = DB.trainingClasses.find(c => c.id === s.classId);
@@ -2954,6 +2964,7 @@ function renderTrainingEssayGradingQueue() {
   }).sort((a, b) => a.id - b.id);
   if (!pending.length) {
     container.innerHTML = `<p class="text-gray-400 italic text-xs">Không có bài nào đang chờ chấm nghị luận.</p>`;
+    moduleRefreshLastUpdatedLabel('trainingEssayLastUpdated', 'internalHub');
     return;
   }
   container.innerHTML = pending.map(s => {
@@ -2966,6 +2977,16 @@ function renderTrainingEssayGradingQueue() {
       <button type="button" data-op="openGradeEssayModal" data-arg0="${s.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold flex-shrink-0">📝 Chấm Bài</button>
     </div>`;
   }).join('');
+  moduleRefreshLastUpdatedLabel('trainingEssayLastUpdated', 'internalHub');
+}
+
+// "🔄 Làm Mới" TAY cho Hàng Chờ Chấm Bài Tự Luận — mirror ĐÚNG refreshApprovalHubManually()
+// (core-approvalhub.js)/refreshVpp() (module-vpp.js): dùng refreshModuleScreen() dùng chung của core.js,
+// PHẢI truyền opts.lazyGroup: 'internalHub' vì trainingTestSubmissions thuộc nhóm lazy này
+// (LAZY_DATA_GROUPS, routes/data.js).
+async function refreshTrainingEssayGradingQueue() {
+  await refreshModuleScreen(document.getElementById('trainingEssayRefreshBtn'), renderTrainingEssayGradingQueue, { lazyGroup: 'internalHub' });
+  moduleRefreshLastUpdatedLabel('trainingEssayLastUpdated', 'internalHub');
 }
 
 let geSubmissionId = null;
@@ -4233,7 +4254,7 @@ function renderCareerPaths() {
   document.getElementById('paginationContainer_careerPaths').innerHTML = buildPaginationBoxHTML('careerPaths', 'renderCareerPaths');
   const pageItems = paginateList('careerPaths', list, 'renderCareerPaths', 'lộ trình');
 
-  if (!pageItems.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; return; }
+  if (!pageItems.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; moduleRefreshLastUpdatedLabel('careerPathsLastUpdated', 'internalHub'); return; }
   const canManage = canManageTrainingLocal(currentUser);
   container.innerHTML = pageItems.map(p => {
     const stages = Array.isArray(p.stages) ? p.stages : [];
@@ -4263,6 +4284,16 @@ function renderCareerPaths() {
         ${manageHTML}
       </div>`;
   }).join('');
+  moduleRefreshLastUpdatedLabel('careerPathsLastUpdated', 'internalHub');
+}
+
+// "🔄 Làm Mới" TAY cho Lộ Trình Công Danh — mirror ĐÚNG refreshApprovalHubManually()
+// (core-approvalhub.js)/refreshVpp() (module-vpp.js): dùng refreshModuleScreen() dùng chung của core.js,
+// PHẢI truyền opts.lazyGroup: 'internalHub' vì careerPaths/careerPathConfirmations thuộc nhóm lazy này
+// (LAZY_DATA_GROUPS, routes/data.js).
+async function refreshCareerPaths() {
+  await refreshModuleScreen(document.getElementById('careerPathsRefreshBtn'), renderCareerPaths, { lazyGroup: 'internalHub' });
+  moduleRefreshLastUpdatedLabel('careerPathsLastUpdated', 'internalHub');
 }
 
 // Khối tra cứu của quản lý (Đợt 7) — gõ username xong hiện NGAY cấp bậc hiện tại của đúng người đó kèm
@@ -4753,7 +4784,7 @@ function renderOnboardingStage3Queue() {
   const canSeeSection = !!(currentUser.perms?.admin || currentUser.perms?.onboardingEvaluate);
   const section = document.getElementById('onboardingStage3Section');
   section.classList.toggle('hidden', !canSeeSection);
-  if (!canSeeSection) return;
+  if (!canSeeSection) { moduleRefreshLastUpdatedLabel('onboardingStage3LastUpdated', 'internalHub'); return; }
   const queue = DB.onboardingProgress.filter(p => {
     if (p.stage3Evaluation != null) return false;
     if (p.stage1Result !== 'CONFIRMED' || p.stage2Result !== 'CONFIRMED') return false;
@@ -4770,7 +4801,7 @@ function renderOnboardingStage3Queue() {
     return canEvaluateOnboardingStage3Local(currentUser, traineeUser);
   });
   const container = document.getElementById('onboardingStage3QueueContainer');
-  if (!queue.length && !failedQueue.length) { container.innerHTML = `<div class="text-xs text-gray-500 italic bg-white rounded border p-3">Không có nhân viên nào đang chờ bạn đánh giá Giai đoạn 3.</div>`; return; }
+  if (!queue.length && !failedQueue.length) { container.innerHTML = `<div class="text-xs text-gray-500 italic bg-white rounded border p-3">Không có nhân viên nào đang chờ bạn đánh giá Giai đoạn 3.</div>`; moduleRefreshLastUpdatedLabel('onboardingStage3LastUpdated', 'internalHub'); return; }
   const failedHTML = failedQueue.map(p => {
     const path = DB.onboardingPaths.find(x => x.id === p.pathId);
     return `<div class="bg-white rounded border border-red-200 p-3 space-y-2">
@@ -4796,6 +4827,16 @@ function renderOnboardingStage3Queue() {
       </div>
     </div>`;
   }).join('') + failedHTML;
+  moduleRefreshLastUpdatedLabel('onboardingStage3LastUpdated', 'internalHub');
+}
+
+// "🔄 Làm Mới" TAY cho Hàng Chờ Giai Đoạn 3 (Onboarding LMS) — mirror ĐÚNG refreshApprovalHubManually()
+// (core-approvalhub.js)/refreshVpp() (module-vpp.js): dùng refreshModuleScreen() dùng chung của core.js,
+// PHẢI truyền opts.lazyGroup: 'internalHub' vì onboardingProgress/onboardingPaths thuộc nhóm lazy này
+// (LAZY_DATA_GROUPS, routes/data.js).
+async function refreshOnboardingStage3Queue() {
+  await refreshModuleScreen(document.getElementById('onboardingStage3RefreshBtn'), renderOnboardingStage3Queue, { lazyGroup: 'internalHub' });
+  moduleRefreshLastUpdatedLabel('onboardingStage3LastUpdated', 'internalHub');
 }
 
 async function submitOnboardingStage3Evaluation(progressId, evaluation) {

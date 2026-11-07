@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**29.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.53 (2026-11): Nút "🔄 Làm Mới" dùng chung cho TOÀN BỘ 29 màn tài liệu phê duyệt/đăng ký (mirror
+Hộp Thư Phê Duyệt) — bấm là tải lại NGAY đúng màn đó, không cần F5, không ảnh hưởng màn khác
+
+**Theo yêu cầu người dùng** ("người dùng vẫn phải ấn F5... làm lại cái nút làm mới giống cái mà bạn đang
+đặt ở trong phần Hộp Thư Phê Duyệt ấy, cho tất cả các cái trang có tài liệu phê duyệt, tài liệu đăng ký,
+để khi người ta ấn thì nó chỉ refresh trên cái trang ấy thôi, không ảnh hưởng đến toàn bộ hệ thống" — đã
+nghiên cứu + gửi phương án + người dùng tự đếm và xác nhận đủ 30 màn trước khi triển khai): thêm nút
+"🔄 Làm Mới" + nhãn "Cập nhật lúc..." (mirror ĐÚNG mẫu đã có ở Hộp Thư Phê Duyệt) vào toàn bộ 29 màn còn
+lại có danh sách tài liệu phê duyệt/đăng ký trong hệ thống — Tài Liệu, Giấy Phép, Văn Bản Trình, Đăng Ký
+Xe, Mua Hàng/Sửa Chữa, VPP, Phê Duyệt Giá IT (cả 2 sub-tab Bán Lẻ/Bán Buôn + 2 mini-list nhúng trong Mua
+Hàng/Vận Hành), Thanh Toán, Hợp Đồng, Vận Hành (Đặt Hàng/Mở Mới Siêu Thị/Sửa Chữa Siêu Thị/Nhận Hàng),
+Phòng Họp, Công Việc, Đồng Phục (3 hàng chờ điều chuyển), Chấm Công (Duyệt Nghỉ Phép/Phân Ca-Đổi Ca),
+Onboarding/Offboarding (Danh Sách Quy Trình/Việc Của Tôi), Đào Tạo (Hàng Chờ Huỷ Đăng Ký/Chấm Bài Tự
+Luận/Onboarding LMS Giai Đoạn 3), Lộ Trình Công Danh, Tuyển Dụng (Quản Lý Ứng Viên Giới Thiệu).
+
+- Xây 1 cơ chế dùng chung mới trong `public/js/core.js`: `refreshModuleScreen(btn, renderFn, opts)` —
+  bấm là tải lại NGAY (bỏ qua 2 lớp "chữ ký không đổi thì khỏi tải lại" của nhịp poll ngầm), rồi CHỈ vẽ
+  lại ĐÚNG màn đang xem qua `renderFn` truyền vào, không điều hướng/không ảnh hưởng màn khác; và
+  `moduleRefreshLastUpdatedLabel(elId, lazyGroup)` cho nhãn "Cập nhật lúc..." (đọc đúng mốc tải — xem mục
+  dưới). Mỗi màn chỉ cần 1 nút HTML (`data-op="refreshXxx"`) + 1 hàm `refreshXxx()` ngắn gọi 2 hàm này.
+- Màn nào đọc dữ liệu từ 1 trong `LAZY_DATA_GROUPS` (`uniform`/`attendance`/`internalHub`) — Đồng Phục,
+  Chấm Công, Đào Tạo/Lộ Trình/Tuyển Dụng — PHẢI xoá cache + ép tải lại đúng nhóm đó (`initDatabase()`
+  một mình KHÔNG đụng tới dữ liệu các nhóm lazy); thêm mốc riêng `_lazyGroupLoadedAt` (tách khỏi
+  `lastDbLoadAt` của payload chính) để nhãn "Cập nhật lúc..." không nói dối thời điểm tải cho đúng màn đó.
+- Vận Hành > Đặt Hàng/Mở Mới Siêu Thị/Sửa Chữa Siêu Thị dùng CHUNG 1 hàm render theo tham số `kind` — để
+  không nhầm lẫn, mỗi màn có 1 hàm refresh RIÊNG khoá cứng đúng 1 kind (không gộp chung 1 hàm nhận tham
+  số kind để tránh lỡ truyền nhầm).
+- Test: viết mới `tests/test-module-refresh-button-generic.js` (13/13 pass, test THẬT qua Chromium/
+  core.js thật) xác nhận đúng hành vi dùng chung cho cả 2 trường hợp (payload chính/nhóm lazy) + phục hồi
+  đúng khi lỗi mạng. Chạy lại ĐẦY ĐỦ các bộ test hiện có của tất cả 16 file module đã chạm tới (không chỉ
+  test mới) — không có regression; CSP sweep sạch trên toàn bộ 32 file đã sửa (16 JS + 16 fragment HTML).
 
 ## v29.52 (2026-11): Nhập Excel Cơ Cấu Tổ Chức — thêm cột "Định Biên Nhân Sự" để nhập hàng loạt luôn,
 không phải sửa từng Vị Trí một sau khi nhập

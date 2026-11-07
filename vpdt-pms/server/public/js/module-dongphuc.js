@@ -1638,6 +1638,15 @@ function renderUniformTransferApprovalQueue() {
       </div>
     </div>
   `).join('');
+  moduleRefreshLastUpdatedLabel('uniTransferApprovalLastUpdated', 'uniform');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "Hàng Chờ Duyệt Điều Chuyển" (11/2026) — dùng chung
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() (core.js, ĐÃ TEST) với lazyGroup 'uniform' (xem
+// LAZY_DATA_GROUPS.uniform, routes/data.js — uniformTransfers thuộc nhóm này). CHỈ vẽ lại đúng màn này.
+async function refreshUniformTransferApprovalQueue() {
+  await refreshModuleScreen(document.getElementById('uniTransferApprovalRefreshBtn'), renderUniformTransferApprovalQueue, { lazyGroup: 'uniform' });
+  moduleRefreshLastUpdatedLabel('uniTransferApprovalLastUpdated', 'uniform');
 }
 
 function approveUniformTransferAction(id) {
@@ -1689,6 +1698,13 @@ function renderUniformTransferCancelQueue() {
       </div>
     </div>
   `).join('');
+  moduleRefreshLastUpdatedLabel('uniTransferCancelLastUpdated', 'uniform');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "Hàng Chờ Hủy Điều Chuyển" (11/2026) — cùng cơ chế như trên.
+async function refreshUniformTransferCancelQueue() {
+  await refreshModuleScreen(document.getElementById('uniTransferCancelRefreshBtn'), renderUniformTransferCancelQueue, { lazyGroup: 'uniform' });
+  moduleRefreshLastUpdatedLabel('uniTransferCancelLastUpdated', 'uniform');
 }
 
 function cancelUniformTransferAction(id) {
@@ -1747,6 +1763,13 @@ function renderUniformTransferReceiveQueue() {
       </div>
     </div>
   `).join('');
+  moduleRefreshLastUpdatedLabel('uniTransferReceiveLastUpdated', 'uniform');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "Hàng Chờ Xác Nhận Đã Nhận" (11/2026) — cùng cơ chế như trên.
+async function refreshUniformTransferReceiveQueue() {
+  await refreshModuleScreen(document.getElementById('uniTransferReceiveRefreshBtn'), renderUniformTransferReceiveQueue, { lazyGroup: 'uniform' });
+  moduleRefreshLastUpdatedLabel('uniTransferReceiveLastUpdated', 'uniform');
 }
 
 function receiveUniformTransferAction(id) {

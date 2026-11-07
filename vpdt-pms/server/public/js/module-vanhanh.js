@@ -27,7 +27,10 @@ const OPERATION_KIND_META = {
     pagKey: 'operationOrder',
     logModule: 'OPERATION_ORDER',
     titleField: (o) => o.title,
-    subLabel: 'Đơn hàng'
+    subLabel: 'Đơn hàng',
+    // lastUpdatedId: id div "Cập nhật lúc..." của ĐÚNG màn này (11/2026, nút "🔄 Làm Mới" — xem
+    // refreshOperationOrderList()/moduleRefreshLastUpdatedLabel() ở cuối renderOperationList()).
+    lastUpdatedId: 'opOrderLastUpdated'
   },
   operationStoreOpenings: {
     list: () => DB.operationStoreOpenings,
@@ -40,7 +43,8 @@ const OPERATION_KIND_META = {
     pagKey: 'operationStoreOpen',
     logModule: 'OPERATION_STORE_OPEN',
     titleField: (o) => o.storeName,
-    subLabel: 'Đề xuất mở mới siêu thị'
+    subLabel: 'Đề xuất mở mới siêu thị',
+    lastUpdatedId: 'opStoreOpenLastUpdated'
   },
   operationRepairs: {
     list: () => DB.operationRepairs,
@@ -60,7 +64,8 @@ const OPERATION_KIND_META = {
     // chỗ này thay vì vá lẻ từng nơi gọi — nhân tiện cũng sửa luôn lỗi tìm kiếm theo tên siêu thị không ra
     // kết quả ở các màn đó (trước đây chỉ khớp theo "Nội Dung", không khớp theo tên siêu thị).
     titleField: (o) => o.storeName ? `${o.storeName} — ${o.title}` : o.title,
-    subLabel: 'Đề xuất sửa chữa siêu thị'
+    subLabel: 'Đề xuất sửa chữa siêu thị',
+    lastUpdatedId: 'opRepairLastUpdated'
   }
 };
 
@@ -3109,6 +3114,11 @@ function renderOperationList(kind) {
   document.getElementById(`paginationContainer_${meta.pagKey}`).innerHTML = buildPaginationBoxHTML(meta.pagKey, `renderOperation${kind === 'operationOrders' ? 'Order' : kind === 'operationStoreOpenings' ? 'StoreOpening' : 'Repair'}List`);
   const pageList = paginateList(meta.pagKey, sortByCreatedAtDesc(list), `renderOperation${kind === 'operationOrders' ? 'Order' : kind === 'operationStoreOpenings' ? 'StoreOpening' : 'Repair'}List`, meta.subLabel.toLowerCase());
 
+  // Nút "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ĐÚNG màn đang render (meta.lastUpdatedId
+  // phân biệt theo kind) ở MỌI lượt gọi hàm này (kể cả lượt chỉ đổi bộ lọc/trang, không tải gì mới — cùng
+  // tinh thần updateApprovalHubLastUpdatedLabel()), nên đặt TRƯỚC nhánh rỗng bên dưới để không bỏ sót.
+  moduleRefreshLastUpdatedLabel(meta.lastUpdatedId);
+
   if (pageList.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có ${meta.subLabel.toLowerCase()} nào.</td></tr>`;
     return;
@@ -3119,6 +3129,23 @@ function renderOperationList(kind) {
 function renderOperationOrderList() { renderOperationList('operationOrders'); }
 function renderOperationStoreOpeningList() { renderOperationList('operationStoreOpenings'); }
 function renderOperationRepairList() { renderOperationList('operationRepairs'); }
+// Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror ĐÚNG refreshApprovalHubManually(), xem
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js): 3 hàm RIÊNG cho 3 kind dù dùng CHUNG
+// 1 renderOperationList(kind) — mỗi nút chỉ gọi đúng renderFn của kind đang đứng (renderOperationOrderList/
+// renderOperationStoreOpeningList/renderOperationRepairList, đã khai ngay trên), không để 1 nút chạy nhầm
+// sang kind khác.
+async function refreshOperationOrderList() {
+  await refreshModuleScreen(document.getElementById('opOrderRefreshBtn'), renderOperationOrderList);
+  moduleRefreshLastUpdatedLabel('opOrderLastUpdated');
+}
+async function refreshOperationStoreOpeningList() {
+  await refreshModuleScreen(document.getElementById('opStoreOpenRefreshBtn'), renderOperationStoreOpeningList);
+  moduleRefreshLastUpdatedLabel('opStoreOpenLastUpdated');
+}
+async function refreshOperationRepairList() {
+  await refreshModuleScreen(document.getElementById('opRepairRefreshBtn'), renderOperationRepairList);
+  moduleRefreshLastUpdatedLabel('opRepairLastUpdated');
+}
 
 function buildOperationRowHTML(kind, o) {
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt — theo phản hồi người dùng
@@ -5878,8 +5905,14 @@ function renderOperationOrderReceiptApprovalTab() {
       </td>
     </tr>
   `).join('') : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đơn hàng nào đang chờ nhập/hủy nhập thuộc phạm vi được cấp cho bạn.</td></tr>`;
+  // Nút "🔄 Làm Mới" (11/2026) — xem refreshOperationOrderReceiptApprovalTab() ngay dưới.
+  moduleRefreshLastUpdatedLabel('opReceiptLastUpdated');
 }
 function onOperationOrderReceiptFilterChange() { renderOperationOrderReceiptApprovalTab(); }
+async function refreshOperationOrderReceiptApprovalTab() {
+  await refreshModuleScreen(document.getElementById('opReceiptRefreshBtn'), renderOperationOrderReceiptApprovalTab);
+  moduleRefreshLastUpdatedLabel('opReceiptLastUpdated');
+}
 
 // ==========================================
 // VẬN HÀNH > ĐƠN HÀNG > "📊 Báo Cáo" — sub-tab bên trong chính màn Đơn Hàng (setOperationOrderSubTab()

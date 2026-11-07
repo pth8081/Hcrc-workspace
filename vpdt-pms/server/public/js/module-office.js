@@ -344,6 +344,7 @@ function renderOfficeReqs() {
     // cột nào ẩn/điều kiện), trước đây dùng colspan=8 khiến dòng "Không có đề xuất..." không căn giữa
     // hết chiều ngang bảng.
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('officeReqsLastUpdated');
     return;
   }
 
@@ -425,6 +426,18 @@ function renderOfficeReqs() {
       </tr>
     `;
   }).join('');
+  // "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderOfficeReqs() (cả đổi bộ
+  // lọc/đổi sub-tab Mua Bán-Sửa Chữa lẫn bấm nút refresh thật), cùng khuôn
+  // updateApprovalHubLastUpdatedLabel() (core-approvalhub.js).
+  moduleRefreshLastUpdatedLabel('officeReqsLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn Mua Hàng/Sửa Chữa (11/2026, "Việc D") — bấm vào CHỈ làm mới đúng dữ liệu/giao
+// diện màn này (phủ CẢ 2 sub-tab Mua Bán/Sửa Chữa, dùng chung 1 hàm render), không điều hướng/không ảnh
+// hưởng màn khác. DB.officeReqs thuộc payload chính GET /api/data nên KHÔNG truyền opts.lazyGroup.
+async function refreshOfficeReqs() {
+  await refreshModuleScreen(document.getElementById('officeReqsRefreshBtn'), renderOfficeReqs);
+  moduleRefreshLastUpdatedLabel('officeReqsLastUpdated');
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Phê duyệt Văn phòng (xem buildActionCell()).

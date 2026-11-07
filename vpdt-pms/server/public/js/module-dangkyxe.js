@@ -975,6 +975,7 @@ function renderCarRegs() {
 
   if (pageCarRegs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy phiếu đăng ký phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('carRegsLastUpdated');
     return;
   }
 
@@ -1113,6 +1114,17 @@ function renderCarRegs() {
       </tr>
     `;
   }).join('');
+  // "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderCarRegs() (cả đổi bộ lọc
+  // lẫn bấm nút refresh thật), cùng khuôn updateApprovalHubLastUpdatedLabel() (core-approvalhub.js).
+  moduleRefreshLastUpdatedLabel('carRegsLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho sub-tab "Đăng Ký Xe" (11/2026, "Việc D") — bấm vào CHỈ làm mới đúng dữ liệu/giao
+// diện danh sách phiếu đăng ký đang chờ duyệt, không điều hướng/không ảnh hưởng sub-tab Lịch Xe/Lái Xe/
+// Báo Cáo hay màn khác. DB.carRegs thuộc payload chính GET /api/data nên KHÔNG truyền opts.lazyGroup.
+async function refreshCarRegs() {
+  await refreshModuleScreen(document.getElementById('carRegsRefreshBtn'), renderCarRegs);
+  moduleRefreshLastUpdatedLabel('carRegsLastUpdated');
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Đăng ký xe (xem buildActionCell()).

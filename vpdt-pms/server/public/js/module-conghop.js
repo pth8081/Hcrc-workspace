@@ -379,6 +379,15 @@ function renderHacApproveView() {
       </td>
     </tr>
   `).join('');
+  moduleRefreshLastUpdatedLabel('hacLeaveLastUpdated', 'attendance');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "Duyệt Nghỉ Phép" (11/2026) — dùng chung
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() (core.js, ĐÃ TEST) với lazyGroup 'attendance' (xem
+// LAZY_DATA_GROUPS.attendance, routes/data.js — leaveRequests thuộc nhóm này). CHỈ vẽ lại đúng màn này.
+async function refreshHacApproveView() {
+  await refreshModuleScreen(document.getElementById('hacLeaveRefreshBtn'), renderHacApproveView, { lazyGroup: 'attendance' });
+  moduleRefreshLastUpdatedLabel('hacLeaveLastUpdated', 'attendance');
 }
 
 function resetHacApproveFilters() {
@@ -471,6 +480,14 @@ function renderHacRosterView() {
       </tr>
     `; }).join('');
   }
+  moduleRefreshLastUpdatedLabel('hacRosterLastUpdated', 'attendance');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "Phân Ca/Đổi Ca Chờ Duyệt" (11/2026) — cùng cơ chế như trên, lazyGroup
+// 'attendance' (shiftRoster/shiftSwapRequests đều thuộc nhóm này).
+async function refreshHacRosterView() {
+  await refreshModuleScreen(document.getElementById('hacRosterRefreshBtn'), renderHacRosterView, { lazyGroup: 'attendance' });
+  moduleRefreshLastUpdatedLabel('hacRosterLastUpdated', 'attendance');
 }
 
 function hacApplyRosterUpdate(item) {

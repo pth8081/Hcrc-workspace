@@ -73,7 +73,16 @@
 
       <!-- ===== "Duyệt Nghỉ Phép" — quản lý trực tiếp có quyền hrLeaveApprove (+ HR/admin) ===== -->
       <div id="hacViewApprove" class="hidden space-y-3">
-        <h3 class="font-bold text-sm text-gray-800">✅ Đơn Nghỉ Phép Chờ Duyệt (nhân viên thuộc quyền quản lý)</h3>
+        <div class="flex justify-between items-center flex-wrap gap-2">
+          <h3 class="font-bold text-sm text-gray-800">✅ Đơn Nghỉ Phép Chờ Duyệt (nhân viên thuộc quyền quản lý)</h3>
+          <!-- Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror Hộp Thư Phê Duyệt, xem
+               refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js) — CHỈ tải lại đúng dữ liệu/
+               giao diện màn này (nhóm lazy 'attendance'), không điều hướng/không ảnh hưởng màn khác. -->
+          <div class="text-right">
+            <button id="hacLeaveRefreshBtn" type="button" data-op="refreshHacApproveView" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="hacLeaveLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="flex items-center gap-2">
           <input type="text" id="hacApproveFilterKeyword" data-multi-paste-search data-op-input="renderHacApproveView" placeholder="🔍 Mã NV, Họ Tên, Lý do..." class="border rounded px-2 py-1 text-xs w-72">
           <button type="button" data-op="resetHacApproveFilters" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button>
@@ -92,6 +101,14 @@
 
       <!-- ===== "Phân Ca Siêu Thị" — hrShiftRosterManage (phân ca) / hrShiftSwapApprove (duyệt đổi ca) ===== -->
       <div id="hacViewRoster" class="hidden space-y-4">
+        <!-- Nút "🔄 Làm Mới" (11/2026) — dùng chung cho CẢ 2 khối bên dưới (cùng 1 hàm renderHacRosterView()
+             vẽ cả 2), nhóm lazy 'attendance' (shiftRoster/shiftSwapRequests). -->
+        <div class="flex justify-end">
+          <div class="text-right">
+            <button id="hacRosterRefreshBtn" type="button" data-op="refreshHacRosterView" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="hacRosterLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div id="hacRosterManageWrap" class="hidden space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="font-bold text-sm text-gray-800">📅 Lịch Phân Ca Siêu Thị</h3>

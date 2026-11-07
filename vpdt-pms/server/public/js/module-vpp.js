@@ -597,6 +597,7 @@ function renderVppRegistrations() {
 
   if (page.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có đăng ký nào.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('vppLastUpdated');
     return;
   }
 
@@ -639,6 +640,15 @@ function renderVppRegistrations() {
       </tr>
     `;
   }).join('');
+  moduleRefreshLastUpdatedLabel('vppLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn VPP — mirror refreshApprovalHubManually() (core-approvalhub.js): dùng
+// refreshModuleScreen() dùng chung của core.js, KHÔNG truyền opts.lazyGroup vì vppRegistrations nằm
+// trong payload chính GET /api/data (không thuộc LAZY_DATA_GROUPS).
+async function refreshVpp() {
+  await refreshModuleScreen(document.getElementById('vppRefreshBtn'), renderVppRegistrations);
+  moduleRefreshLastUpdatedLabel('vppLastUpdated');
 }
 
 // "Sửa Nháp" ở danh sách -> chọn đúng kỳ trong form phía trên rồi nạp lại nội dung NHÁP để sửa tiếp

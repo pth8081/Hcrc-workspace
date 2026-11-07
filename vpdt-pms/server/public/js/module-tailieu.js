@@ -400,6 +400,7 @@ function renderDocs() {
 
   if (pageDocs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tài liệu phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('docsLastUpdated');
     return;
   }
 
@@ -410,6 +411,22 @@ function renderDocs() {
     const childRowsHTML = isExpanded ? versions.map(v => buildDocRowHTML(v, { isChild: true })).join('') : '';
     return rootRowHTML + childRowsHTML;
   }).join('');
+  // "🔄 Làm Mới" (11/2026, cùng khuôn approvalHub — xem refreshModuleScreen() ở core.js): cập nhật mốc
+  // "Cập nhật lúc..." ở MỌI lượt renderDocs() (cả đổi bộ lọc lẫn bấm nút refresh thật), để
+  // nhãn không bao giờ nói dối thời điểm tải dữ liệu gần nhất — xem updateApprovalHubLastUpdatedLabel()
+  // (core-approvalhub.js) cho lý do đầy đủ.
+  moduleRefreshLastUpdatedLabel('docsLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn Tài Liệu (11/2026, "Việc D" — người dùng xác nhận thêm y hệt nút đã có ở Hộp
+// Thư Phê Duyệt vào loạt màn tài liệu phê duyệt/đăng ký) — bấm vào CHỈ làm mới đúng dữ liệu/giao diện màn
+// Tài Liệu (tải lại initDatabase() + vẽ lại renderDocs()), không điều hướng/không ảnh hưởng màn khác. Tái
+// dùng HẲN cơ chế dùng chung refreshModuleScreen() (core.js, đã test ở
+// tests/test-module-refresh-button-generic.js) — DB.docs thuộc payload chính GET /api/data nên KHÔNG
+// truyền opts.lazyGroup.
+async function refreshDocs() {
+  await refreshModuleScreen(document.getElementById('docsRefreshBtn'), renderDocs);
+  moduleRefreshLastUpdatedLabel('docsLastUpdated');
 }
 
 // Bấm nút mở/đóng danh sách version con của 1 tài liệu gốc trong "Danh Sách Tài Liệu Trong Hệ Thống".
@@ -979,6 +996,7 @@ function renderLicenses() {
 
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Không tìm thấy giấy phép phù hợp.</td></tr>`;
+    moduleRefreshLastUpdatedLabel('licensesLastUpdated');
     return;
   }
 
@@ -992,6 +1010,17 @@ function renderLicenses() {
     const childRowsHTML = isExpanded ? versions.map(v => buildLicenseRowHTML(v, { isChild: true, canApprove })).join('') : '';
     return rootRowHTML + childRowsHTML;
   }).join('');
+  // "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderLicenses() (cả đổi bộ lọc
+  // lẫn bấm nút refresh thật), cùng lý do đã nêu ở renderDocs() phía trên.
+  moduleRefreshLastUpdatedLabel('licensesLastUpdated');
+}
+
+// "🔄 Làm Mới" TAY cho màn Giấy Phép (11/2026, "Việc D") — bấm vào CHỈ làm mới đúng dữ liệu/giao diện màn
+// Giấy Phép, không điều hướng/không ảnh hưởng màn khác. DB.licenses thuộc payload chính GET /api/data nên
+// KHÔNG truyền opts.lazyGroup.
+async function refreshLicenses() {
+  await refreshModuleScreen(document.getElementById('licensesRefreshBtn'), renderLicenses);
+  moduleRefreshLastUpdatedLabel('licensesLastUpdated');
 }
 
 function toggleLicenseFamily(rootId) {

@@ -28,6 +28,15 @@
           <button type="button" id="btnHrpOnbCreateImport" data-op="openHrpOnbCreateImportModal" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📤 Nhập Excel (Theo Quy Trình)</button>
           <button type="button" id="btnHrpOnbSkipImport" data-op="goToHrProfileImportForOnboardingSkip" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700" title="Dùng cho nhân viên CŨ đã đang làm việc — tạo hồ sơ ngay, không cần qua checklist Onboarding">👉 Bỏ Qua Quy Trình</button>
           <button type="button" data-op="exportHrProcessExcel" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">📊 Xuất Excel</button>
+          <!-- Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror Hộp Thư Phê Duyệt, xem
+               refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js) — CHỈ tải lại đúng dữ liệu/
+               giao diện màn này. hrProcesses KHÔNG thuộc LAZY_DATA_GROUPS (xem routes/data.js, comment
+               "CỐ Ý KHÔNG đưa vào đây" — canAccessHrLifecycleModule() đọc ngay lúc finishLogin()), vẫn tải
+               cùng GET /api/data chính như trước, nên KHÔNG truyền lazyGroup. -->
+          <div class="text-right">
+            <button id="hrProcessListRefreshBtn" type="button" data-op="refreshHrProcessList" class="border rounded px-3 py-1.5 text-xs bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="hrProcessListLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
         </div>
       </div>
 
@@ -366,6 +375,14 @@
 
     <!-- Việc Của Tôi -->
     <div id="hrpViewMyTasks" class="hidden space-y-2">
+      <div class="flex justify-end">
+        <!-- Nút "🔄 Làm Mới" (11/2026) — cùng cơ chế như "📋 Danh Sách Quy Trình" ở trên, cùng
+             lazyGroup bỏ trống (hrProcesses không thuộc LAZY_DATA_GROUPS). -->
+        <div class="text-right">
+          <button id="hrMyTasksRefreshBtn" type="button" data-op="refreshHrMyTasksList" class="border rounded px-3 py-1.5 text-xs bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="hrMyTasksLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
+      </div>
       <div id="hrpMyTasksContainer" class="space-y-2"></div>
     </div>
 

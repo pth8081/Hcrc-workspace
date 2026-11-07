@@ -7,6 +7,15 @@
 
     <!-- Sub-tab: Phê Duyệt Giá -->
     <div id="itSubPrice" class="space-y-4">
+      <!-- Nút "🔄 Làm Mới" TAY (mirror #approvalHubRefreshBtn, index.html) — 1 nút DUY NHẤT phủ cả 2
+           sub-tab con Bán Lẻ/Bán Buôn (CÙNG 1 hàm renderItPriceApprovals() vẽ cả 2, chỉ khác bộ lọc
+           activeItPriceSubTab) — xem refreshItPriceApprovals() (module-itsupport-price.js). -->
+      <div class="flex justify-end">
+        <div class="text-right">
+          <button id="itPriceRefreshBtn" type="button" data-op="refreshItPriceApprovals" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="itPriceLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
+      </div>
       <!-- 2 sub-tab con "Bán Lẻ"/"Bán Buôn" (mục 1 kế hoạch) — mỗi loại giá có người duyệt phòng ban
            RIÊNG (xem resolveItPriceDeptWorkflowConfigClient()), tự động gắn đúng priceType theo sub-tab
            đang mở lúc gửi đề xuất (KHÔNG có dropdown chọn tay — xem setItPriceSubTab()/

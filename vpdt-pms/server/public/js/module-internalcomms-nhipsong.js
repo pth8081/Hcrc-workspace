@@ -1521,7 +1521,7 @@ function renderRecruitmentManage() {
   document.getElementById('paginationContainer_recruitmentManage').innerHTML = buildPaginationBoxHTML('recruitmentManage', 'renderRecruitmentManage');
   const pageItems = paginateList('recruitmentManage', list, 'renderRecruitmentManage', 'ứng viên');
 
-  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có ứng viên nào được giới thiệu.</td></tr>`; return; }
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có ứng viên nào được giới thiệu.</td></tr>`; moduleRefreshLastUpdatedLabel('recruitmentLastUpdated', 'internalHub'); return; }
   tbody.innerHTML = pageItems.map(r => `
     <tr>
       <td class="border p-2">${escapeHtml(r.candidateName)}</td>
@@ -1536,6 +1536,16 @@ function renderRecruitmentManage() {
         </select>
       </td>
     </tr>`).join('');
+  moduleRefreshLastUpdatedLabel('recruitmentLastUpdated', 'internalHub');
+}
+
+// "🔄 Làm Mới" TAY cho Quản Lý Ứng Viên Giới Thiệu — mirror ĐÚNG refreshApprovalHubManually()
+// (core-approvalhub.js)/refreshVpp() (module-vpp.js): dùng refreshModuleScreen() dùng chung của core.js,
+// PHẢI truyền opts.lazyGroup: 'internalHub' vì recruitmentReferrals thuộc nhóm lazy này (LAZY_DATA_GROUPS,
+// routes/data.js).
+async function refreshRecruitmentManage() {
+  await refreshModuleScreen(document.getElementById('recruitmentRefreshBtn'), renderRecruitmentManage, { lazyGroup: 'internalHub' });
+  moduleRefreshLastUpdatedLabel('recruitmentLastUpdated', 'internalHub');
 }
 
 function setRecruitmentReferralStatusUi(id, status) {

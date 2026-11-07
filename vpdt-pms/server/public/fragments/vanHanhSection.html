@@ -146,7 +146,15 @@
       </details>
 
       <div class="space-y-3">
-        <h3 class="font-bold text-gray-800">📋 Danh Sách Đơn Hàng</h3>
+        <!-- Nút "🔄 Làm Mới" (11/2026, cùng khuôn Hộp Thư Phê Duyệt — chỉ tải lại đúng dữ liệu+giao diện
+             màn Đơn Hàng, xem refreshOperationOrderList()/refreshModuleScreen() ở module-vanhanh.js). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Đơn Hàng</h3>
+          <div class="text-right">
+            <button id="opOrderRefreshBtn" type="button" data-op="refreshOperationOrderList" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="opOrderLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead>
@@ -205,6 +213,14 @@
          (operationOrderReceiptManage, scope HO/Siêu Thị), KHÔNG dùng chung quyền duyệt/từ chối đơn hàng
          ở tab Siêu Thị/HO. Xem renderOperationOrderReceiptApprovalTab() ở module-vanhanh.js. ===== -->
     <div id="opOrderReceiptPanel" class="hidden space-y-4">
+      <!-- Nút "🔄 Làm Mới" (11/2026) — xem refreshOperationOrderReceiptApprovalTab() ở module-vanhanh.js. -->
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-gray-800">🧾 Danh Sách Chờ Nhập/Hủy Nhập</h3>
+        <div class="text-right">
+          <button id="opReceiptRefreshBtn" type="button" data-op="refreshOperationOrderReceiptApprovalTab" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+          <div id="opReceiptLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+        </div>
+      </div>
       <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
         <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Lọc Theo Vị Trí</span></summary>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
@@ -298,7 +314,14 @@
       </details>
 
       <div class="space-y-3">
-        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Mở Mới Siêu Thị</h3>
+        <!-- Nút "🔄 Làm Mới" (11/2026) — xem refreshOperationStoreOpeningList() ở module-vanhanh.js. -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Mở Mới Siêu Thị</h3>
+          <div class="text-right">
+            <button id="opStoreOpenRefreshBtn" type="button" data-op="refreshOperationStoreOpeningList" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="opStoreOpenLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead>
@@ -372,7 +395,14 @@
       </details>
 
       <div class="space-y-3">
-        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Sửa Chữa Siêu Thị</h3>
+        <!-- Nút "🔄 Làm Mới" (11/2026) — xem refreshOperationRepairList() ở module-vanhanh.js. -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Sửa Chữa Siêu Thị</h3>
+          <div class="text-right">
+            <button id="opRepairRefreshBtn" type="button" data-op="refreshOperationRepairList" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="opRepairLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead>
@@ -766,7 +796,13 @@
         </div>
       </details>
       <div class="bg-white p-3 rounded border space-y-2">
-        <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Đề Xuất Bán Buôn</h3>
+        <div class="flex justify-between items-center flex-wrap gap-2">
+          <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Đề Xuất Bán Buôn</h3>
+          <div class="text-right">
+            <button id="vanHanhItPriceRefreshBtn" type="button" data-op="refreshVanHanhItPriceList" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="vanHanhItPriceLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse text-xs">
             <thead class="bg-gray-100 text-left text-gray-700">

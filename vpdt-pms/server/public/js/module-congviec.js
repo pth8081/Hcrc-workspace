@@ -1046,6 +1046,10 @@ function renderTasks() {
   document.getElementById('paginationContainer_task').innerHTML = buildPaginationBoxHTML('task', 'renderTasks');
   const pageItems = paginateList('task', sortByCreatedAtDesc(visible), 'renderTasks', 'công việc');
 
+  // Nút "🔄 Làm Mới" (11/2026) — cập nhật mốc "Cập nhật lúc..." ở MỌI lượt renderTasks() (kể cả đổi bộ
+  // lọc/trang), đặt TRƯỚC nhánh rỗng bên dưới để không bỏ sót — xem refreshTasks() ở cuối file.
+  moduleRefreshLastUpdatedLabel('tasksLastUpdated');
+
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
     return;
@@ -1141,6 +1145,13 @@ function renderTasks() {
       </tr>
     `;
   }).join('');
+}
+// Nút "🔄 Làm Mới" (11/2026, theo yêu cầu người dùng — mirror ĐÚNG refreshApprovalHubManually(), xem
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() ở core.js): bấm là tải lại NGAY rồi CHỈ vẽ lại
+// đúng màn Công Việc, không điều hướng/không ảnh hưởng màn khác.
+async function refreshTasks() {
+  await refreshModuleScreen(document.getElementById('tasksRefreshBtn'), renderTasks);
+  moduleRefreshLastUpdatedLabel('tasksLastUpdated');
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Công việc (xem buildActionCell()) — nhận id công việc + mã

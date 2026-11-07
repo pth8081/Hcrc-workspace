@@ -1,4 +1,13 @@
 
+    <!-- Nút "🔄 Làm Mới" TAY (mirror #approvalHubRefreshBtn, index.html) — 1 nút DUY NHẤT phủ cả 2
+         sub-tab Phê Duyệt/Quản Lý HĐ (CÙNG 1 hàm renderContracts() vẽ cả 2, chỉ khác activeContractSubTab)
+         — xem refreshContracts() (module-hopdong.js). -->
+    <div class="flex justify-end">
+      <div class="text-right">
+        <button id="contractsRefreshBtn" type="button" data-op="refreshContracts" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+        <div id="contractsLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+      </div>
+    </div>
     <div class="flex gap-2">
       <button data-op="setContractSubTab" data-arg0="APPROVAL" id="btnContractSubApproval" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">⏳ Phê Duyệt</button>
       <button data-op="setContractSubTab" data-arg0="MANAGE" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>

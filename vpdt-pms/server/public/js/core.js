@@ -174,6 +174,13 @@ const TAB_DATA_GROUPS = {
 
 const _loadedDataGroups = {}; // groupKey -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
 const _settledDataGroups = new Set(); // groupKey da tai XONG THUC SU (Promise da resolve) - cung khuon _settledModuleGroups
+// _lazyGroupLoadedAt (11/2026, "nút Làm Mới dùng chung cho mọi màn phê duyệt/đăng ký") — mốc THẬT SỰ
+// "nhóm lazy này vừa tải lại từ server lúc nào", set mỗi lần loadDataGroup() tải THẬT (không set khi chỉ
+// trả về Promise cache cũ) — cùng tinh thần lastDbLoadAt ở trên nhưng TÁCH RIÊNG theo từng groupKey, vì
+// lastDbLoadAt (set ở initDatabase()) KHÔNG phản ánh đúng lần tải lại của 1 nhóm lazy cụ thể (initDatabase()
+// không đụng tới dữ liệu các nhóm lazy, xem assignLazyGroupField()) — nhãn "Cập nhật lúc..." của 1 màn
+// thuộc nhóm lazy phải đọc mốc này, không đọc lastDbLoadAt, kẻo nói dối thời điểm tải.
+const _lazyGroupLoadedAt = {};
 
 // Nap 1 nhom du lieu lazy (LAZY_DATA_GROUPS ben server) qua GET /api/data/lazy/:groupKey, gan thang tung
 // field vao DB.* (ghi ĐÈ, khong merge - server da tra dung snapshot moi nhat cho dung phan quyen xem cua
@@ -189,6 +196,7 @@ function loadDataGroup(groupKey) {
     .then(data => {
       Object.keys(data).forEach(key => { DB[key] = data[key] || []; });
       _settledDataGroups.add(groupKey);
+      _lazyGroupLoadedAt[groupKey] = new Date();
       // LỖI ĐÃ VÁ (11/2026, người dùng báo "Tin ưu tiên Tuyển dụng không hiện ở Trang chủ lúc vừa đăng
       // nhập, phải F5 mới thấy"): renderDashboardNews() (core-dashboard.js) đọc DB.recruitmentJobs cho
       // thẻ "🔥 Tin ưu tiên" — field này thuộc nhóm lazy 'internalHub' (xem LAZY_DATA_GROUPS,
@@ -225,6 +233,49 @@ function loadTabData(tabName) {
   const keys = TAB_DATA_GROUPS[tabName];
   if (!keys || !keys.length) return Promise.resolve();
   return Promise.all(keys.map(loadDataGroup)).then(() => {});
+}
+
+// ===== Nút "🔄 Làm Mới" dùng CHUNG cho mọi màn danh sách tài liệu phê duyệt/đăng ký (11/2026, theo yêu
+// cầu người dùng — "làm lại cái nút làm mới giống Hộp Thư Phê Duyệt cho tất cả các trang có tài liệu
+// phê duyệt/đăng ký, bấm vào chỉ refresh đúng trang đó, không ảnh hưởng toàn hệ thống") =====
+//
+// Mirror ĐÚNG refreshApprovalHubManually() (core-approvalhub.js) — bấm là tải lại NGAY (bỏ qua 2 lớp
+// "chữ ký không đổi thì khỏi tải lại" của nhịp poll ngầm), rồi CHỈ vẽ lại ĐÚNG màn đang xem qua renderFn
+// truyền vào — không điều hướng, không ảnh hưởng màn khác.
+//
+// opts.lazyGroup (TUỲ CHỌN): màn nào đọc dữ liệu từ 1 trong LAZY_DATA_GROUPS (uniform/attendance/
+// internalHub...) phải truyền đúng groupKey đó — initDatabase() KHÔNG đụng tới các field thuộc nhóm lazy
+// (xem assignLazyGroupField()), nên riêng nhóm này phải xoá cache (_loadedDataGroups/_settledDataGroups)
+// rồi gọi loadDataGroup() ép tải lại thật, song song với initDatabase() (vẫn cần initDatabase() để
+// DB.users/*DeptWorkflows/*TierWorkflows/... — phần quyết định AI được duyệt — luôn mới, vì các màn này
+// vẫn đọc canApproveStep()/canAccessXxxModule() dựa trên dữ liệu đó, không riêng gì record list).
+async function refreshModuleScreen(btn, renderFn, opts) {
+  const lazyGroup = opts && opts.lazyGroup;
+  const origText = btn ? btn.innerText : null;
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Đang làm mới...'; }
+  try {
+    if (lazyGroup) { delete _loadedDataGroups[lazyGroup]; _settledDataGroups.delete(lazyGroup); }
+    await Promise.all([
+      initDatabase(currentUser, { silent: true }),
+      lazyGroup ? loadDataGroup(lazyGroup) : Promise.resolve()
+    ]);
+    renderFn();
+  } catch (e) {
+    alert('⛔ Không thể làm mới: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = origText || '🔄 Làm Mới'; }
+  }
+}
+
+// Nhãn "Cập nhật lúc..." dùng chung — gọi ở CUỐI hàm render() của màn đó (kể cả lượt render chỉ đổi bộ
+// lọc, KHÔNG tải gì mới — cùng tinh thần updateApprovalHubLastUpdatedLabel(), tránh nói dối thời điểm).
+// lazyGroup bỏ trống -> đọc lastDbLoadAt (màn thuộc payload chính); có truyền -> đọc đúng mốc tải lại của
+// riêng nhóm lazy đó (_lazyGroupLoadedAt), vì lastDbLoadAt không phản ánh đúng lần tải nhóm lazy.
+function moduleRefreshLastUpdatedLabel(elId, lazyGroup) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const at = lazyGroup ? _lazyGroupLoadedAt[lazyGroup] : lastDbLoadAt;
+  el.innerText = at ? `Cập nhật lúc ${at.toLocaleTimeString('vi-VN')}` : '';
 }
 
 // Ha tang: nap lười KHUNG HTML theo tab (v23.10) — mirror đúng cơ chế nap cum module-*.js ở TREN (cùng

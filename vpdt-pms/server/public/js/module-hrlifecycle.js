@@ -609,6 +609,7 @@ function renderHrProcessList() {
 
   if (visible.length === 0) {
     container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có quy trình nào.</div>`;
+    moduleRefreshLastUpdatedLabel('hrProcessListLastUpdated');
     return;
   }
   container.innerHTML = `
@@ -636,6 +637,17 @@ function renderHrProcessList() {
         </tbody>
       </table>
     </div>`;
+  moduleRefreshLastUpdatedLabel('hrProcessListLastUpdated');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "📋 Danh Sách Quy Trình" (11/2026) — dùng chung
+// refreshModuleScreen()/moduleRefreshLastUpdatedLabel() (core.js, ĐÃ TEST). hrProcesses KHÔNG thuộc
+// LAZY_DATA_GROUPS (routes/data.js — canAccessHrLifecycleModule() đọc ngay lúc finishLogin(), xem comment
+// "CỐ Ý KHÔNG đưa vào đây" tại đầu LAZY_DATA_GROUPS), vẫn tải cùng GET /api/data chính như trước, nên
+// KHÔNG truyền opts.lazyGroup. CHỈ vẽ lại đúng màn này.
+async function refreshHrProcessList() {
+  await refreshModuleScreen(document.getElementById('hrProcessListRefreshBtn'), renderHrProcessList, {});
+  moduleRefreshLastUpdatedLabel('hrProcessListLastUpdated');
 }
 
 // ----- Chi tiết quy trình (modal) -----
@@ -963,6 +975,7 @@ function renderHrMyTasksList() {
 
   if (rows.length === 0) {
     container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Không có việc nào cần bạn xử lý.</div>`;
+    moduleRefreshLastUpdatedLabel('hrMyTasksLastUpdated');
     return;
   }
   container.innerHTML = rows.map(({ p, t }) => {
@@ -981,6 +994,14 @@ function renderHrMyTasksList() {
         </div>
       </div>`;
   }).join('');
+  moduleRefreshLastUpdatedLabel('hrMyTasksLastUpdated');
+}
+
+// Nút "🔄 Làm Mới" riêng cho màn "✅ Việc Của Tôi" (11/2026) — cùng cơ chế refreshHrProcessList() ở
+// trên, CÙNG dbKey hrProcesses nên CŨNG không thuộc LAZY_DATA_GROUPS, KHÔNG truyền opts.lazyGroup.
+async function refreshHrMyTasksList() {
+  await refreshModuleScreen(document.getElementById('hrMyTasksRefreshBtn'), renderHrMyTasksList, {});
+  moduleRefreshLastUpdatedLabel('hrMyTasksLastUpdated');
 }
 
 // ----- Quản trị Checklist Mẫu (hrTaskTemplateManage/admin) -----
