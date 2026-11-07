@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**29.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.52 (2026-11): Nhập Excel Cơ Cấu Tổ Chức — thêm cột "Định Biên Nhân Sự" để nhập hàng loạt luôn,
+không phải sửa từng Vị Trí một sau khi nhập
+
+**Theo yêu cầu người dùng** ("cho tôi nhập luôn số lượng định biên từng vị trí đi, không nhập file này
+vào tôi lại phải đi sửa từng người một, hơi bị lâu ấy"): mẫu Excel Nhập/Xuất Cơ Cấu Tổ Chức
+(`lib/orgChartImport.js`) có thêm 1 cột mới **"Định Biên Nhân Sự (Vị Trí, tuỳ chọn)"** — chỉ áp dụng cho
+dòng Loại Node "Vị Trí", để trống hiểu là chưa đặt kế hoạch, chỉ nhận số nguyên không âm (mirror đúng
+validate `normalizeHeadcountQuota()` đã dùng sẵn ở modal "Sửa Vị Trí" — không phải field mới, chỉ thêm
+đường nhập hàng loạt qua Excel cho field `headcountQuota` đã có từ trước).
+
+- Nhập Excel (`/api/org-chart/parse-import` + `/import-confirm`): đọc cột mới, validate, truyền vào
+  `orgChart.addNode()` khi dựng bản Nháp mới — cùng 1 lần nhập file đã có luôn Định Biên cho mọi Vị Trí,
+  không cần mở từng Vị Trí sửa tay sau đó.
+- Xuất Excel (`/api/org-chart/versions/:id/export-xlsx`): xuất kèm Định Biên hiện có của mỗi Vị Trí —
+  giữ đúng "vòng tròn tải-sửa-nhập" sẵn có (xuất cây hiện tại ra Excel, sửa, nhập lại tạo Nháp mới).
+  Màn xem trước Nhập Excel (modal "Nhập Excel") cũng hiện thêm cột Định Biên để soát trước khi xác nhận.
+- Test: bổ sung 5 scenario mới vào `tests/test-orgchart-import-export.js` (đọc đúng giá trị, chặn số âm/
+  không phải số, truyền đúng vào node khi tạo Nháp, sống sót qua vòng xuất-nhập lại) — 24/24 pass. Chạy
+  lại toàn bộ 4 bộ test Cơ Cấu Tổ Chức liên quan khác (v2/headcount-report/selfonly-ui/modal-binding) —
+  không có regression.
 
 ## v29.51 (2026-11): 3 ô Nhập Excel hàng loạt (Hợp Đồng Lao Động + Onboarding) không phản hồi gì khi chọn
 file — thiếu `data-arg-event`

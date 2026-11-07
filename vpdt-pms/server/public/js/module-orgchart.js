@@ -593,6 +593,7 @@ async function onOrgChartImportFileChange(event) {
         <td class="p-1 font-mono">${escapeHtml(it.parentKey || '')}</td>
         <td class="p-1">${escapeHtml(it.nodeTypeLabel || '')}</td>
         <td class="p-1">${escapeHtml(nameOrTitle || '')}</td>
+        <td class="p-1">${it.nodeType === 'POSITION' && it.headcountQuota != null ? escapeHtml(String(it.headcountQuota)) : ''}</td>
         <td class="p-1">${statusCell}</td>
       </tr>`;
     }).join('');

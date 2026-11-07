@@ -32,6 +32,11 @@ const COLUMNS = [
   { header: 'Yêu Cầu Phòng Ban (Vị Trí, Có/Không)', key: 'requiresDeptLabel', width: 24 },
   { header: 'Vị Trí Làm Việc (Vị Trí, HO/STORE, tuỳ chọn)', key: 'posType', width: 24 },
   { header: 'Cấp Bậc (Vị Trí, tuỳ chọn)', key: 'jobGrade', width: 16 },
+  // Định Biên Nhân Sự (11/2026, theo yêu cầu người dùng — "cho tôi nhập luôn số lượng định biên từng vị
+  // trí, không nhập file xong lại phải sửa từng người một"): CHỈ áp dụng cho Vị Trí, mirror ĐÚNG field
+  // headcountQuota đã có sẵn ở lib/orgChart.js::addNode()/normalizeHeadcountQuota() (dùng ở modal "Sửa
+  // Vị Trí" từ trước) — không phải field mới, chỉ thêm đường nhập hàng loạt qua Excel cho field đã có.
+  { header: 'Định Biên Nhân Sự (Vị Trí, tuỳ chọn)', key: 'headcountQuota', width: 22 },
   { header: 'Thứ Tự Hiển Thị (tuỳ chọn)', key: 'displayOrder', width: 14 }
 ];
 
@@ -51,9 +56,9 @@ async function buildImportTemplateWorkbook({ depts, stores, jobTitles, storeJobT
   const sampleRows = [
     { nodeKey: 'CT', parentKey: '', nodeTypeLabel: 'Công Ty', nodeName: 'Công Ty ABC', departmentRef: '', jobTitle: '', requiresDeptLabel: '', posType: '', jobGrade: '', displayOrder: 0 },
     { nodeKey: 'PKD', parentKey: 'CT', nodeTypeLabel: 'Phòng Ban', nodeName: 'Phòng Kinh Doanh', departmentRef: 'Phòng Kinh Doanh', jobTitle: '', requiresDeptLabel: '', posType: '', jobGrade: '', displayOrder: 0 },
-    { nodeKey: 'PKD-TP', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Trưởng Phòng', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: 'L7', displayOrder: 0 },
-    { nodeKey: 'PKD-NV', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Nhân Viên Kinh Doanh', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: '', displayOrder: 1 },
-    { nodeKey: 'TGD', parentKey: 'CT', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Tổng Giám Đốc', requiresDeptLabel: 'Không', posType: '', jobGrade: '', displayOrder: 1 }
+    { nodeKey: 'PKD-TP', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Trưởng Phòng', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: 'L7', headcountQuota: 1, displayOrder: 0 },
+    { nodeKey: 'PKD-NV', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Nhân Viên Kinh Doanh', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: '', headcountQuota: 3, displayOrder: 1 },
+    { nodeKey: 'TGD', parentKey: 'CT', nodeTypeLabel: 'Vị Trí', nodeName: '', departmentRef: '', jobTitle: 'Tổng Giám Đốc', requiresDeptLabel: 'Không', posType: '', jobGrade: '', headcountQuota: 1, displayOrder: 1 }
   ];
   sampleRows.forEach(r => sheet.addRow(r));
   for (let i = 2; i <= sampleRows.length + 1; i++) sheet.getRow(i).font = { italic: true, color: { argb: 'FF6B7280' } };
@@ -82,7 +87,7 @@ async function buildImportTemplateWorkbook({ depts, stores, jobTitles, storeJobT
     'Loại Node "Vị Trí" bắt buộc điền "Chức Danh" — bỏ trống "Tên (Công Ty/Phòng Ban)".',
     'Loại Node "Công Ty"/"Phòng Ban" bắt buộc điền "Tên (Công Ty/Phòng Ban)" — bỏ trống "Chức Danh".',
     '"Yêu Cầu Phòng Ban" chỉ áp dụng cho Vị Trí — để trống hiểu là "Có" (mặc định), chỉ ghi "Không" cho vị trí không thuộc phòng ban nào (VD Tổng Giám Đốc).',
-    '"Vị Trí Làm Việc"/"Cấp Bậc" đều TUỲ CHỌN, chỉ áp dụng cho Vị Trí.',
+    '"Vị Trí Làm Việc"/"Cấp Bậc"/"Định Biên Nhân Sự" đều TUỲ CHỌN, chỉ áp dụng cho Vị Trí — "Định Biên Nhân Sự" để trống hiểu là chưa đặt kế hoạch (khác 0), chỉ nhận số nguyên không âm.',
     'Nhập file này LUÔN tạo 1 bản Nháp (DRAFT) HOÀN TOÀN MỚI dựng lại từ nội dung file — KHÔNG gộp/chèn vào bản nháp đang có sẵn. Còn BẤT KỲ dòng nào lỗi thì KHÔNG tạo bản nháp nào cả, sửa lại file rồi nhập lại.'
   ];
   notes.forEach(n => noteSheet.addRow([n]));
@@ -105,6 +110,7 @@ const HEADER_HINTS = {
   requiresDeptLabel: ['yeu cau phong ban (vi tri, co/khong)', 'yeu cau phong ban'],
   posType: ['vi tri lam viec (vi tri, ho/store, tuy chon)', 'vi tri lam viec'],
   jobGrade: ['cap bac (vi tri, tuy chon)', 'cap bac'],
+  headcountQuota: ['dinh bien nhan su (vi tri, tuy chon)', 'dinh bien nhan su', 'dinh bien'],
   displayOrder: ['thu tu hien thi (tuy chon)', 'thu tu hien thi']
 };
 
@@ -149,6 +155,13 @@ function rowToPreviewItem(cells, cols, rowNumber) {
   else if (posTypeRaw) errors.push('"Vị Trí Làm Việc" không hợp lệ (chỉ nhận HO/STORE, để trống nếu chưa cần dùng)');
 
   const jobGrade = String(get('jobGrade') || '').trim() || null;
+  // headcountQuota (11/2026, "Định Biên Nhân Sự" — theo yêu cầu người dùng, mirror ĐÚNG validate
+  // normalizeHeadcountQuota() ở lib/orgChart.js: số nguyên không âm hoặc để trống, CHỈ có ý nghĩa với Vị
+  // Trí — addNode() tự null hoá cho COMPANY/DEPARTMENT nên không cần chặn thêm ở đây nếu điền nhầm dòng
+  // khác Vị Trí (cùng cách jobGrade/posType đang xử lý, không coi là lỗi cấu trúc).
+  const headcountQuotaRaw = get('headcountQuota');
+  const headcountQuota = headcountQuotaRaw === '' || headcountQuotaRaw == null ? undefined : Number(headcountQuotaRaw);
+  if (headcountQuota !== undefined && (!Number.isFinite(headcountQuota) || headcountQuota < 0)) errors.push('"Định Biên Nhân Sự" phải là số nguyên không âm');
   const displayOrderRaw = get('displayOrder');
   const displayOrder = displayOrderRaw === '' || displayOrderRaw == null ? undefined : Number(displayOrderRaw);
   if (displayOrder !== undefined && !Number.isFinite(displayOrder)) errors.push('"Thứ Tự Hiển Thị" phải là số');
@@ -163,7 +176,7 @@ function rowToPreviewItem(cells, cols, rowNumber) {
 
   return {
     rowNumber, nodeKey, parentKey, nodeType, nodeTypeLabel: nodeTypeLabelRaw,
-    nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, displayOrder,
+    nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, headcountQuota, displayOrder,
     valid: errors.length === 0, errors
   };
 }
@@ -245,6 +258,7 @@ function revalidateItemFields(it) {
   if (!['COMPANY', 'DEPARTMENT', 'POSITION'].includes(it.nodeType)) errors.push(`Loại Node "${it.nodeTypeLabel || it.nodeType || '(trống)'}" không hợp lệ`);
   if (it.posType != null && it.posType !== 'HO' && it.posType !== 'STORE') errors.push('"Vị Trí Làm Việc" không hợp lệ (chỉ nhận HO/STORE)');
   if (it.displayOrder !== undefined && it.displayOrder !== null && !Number.isFinite(Number(it.displayOrder))) errors.push('"Thứ Tự Hiển Thị" phải là số');
+  if (it.headcountQuota !== undefined && it.headcountQuota !== null && (!Number.isFinite(Number(it.headcountQuota)) || Number(it.headcountQuota) < 0)) errors.push('"Định Biên Nhân Sự" phải là số nguyên không âm');
   if (it.nodeType === 'POSITION') {
     if (!it.jobTitle || !String(it.jobTitle).trim()) errors.push('Vị Trí phải điền "Chức Danh"');
   } else if (it.nodeType) {
@@ -290,7 +304,7 @@ function buildDraftVersionFromRows(list, rows, versionName, actorUsername) {
     const node = orgChart.addNode(version, {
       parentNodeId, nodeType: it.nodeType, nodeName: it.nodeName, departmentRef: it.departmentRef,
       jobTitle: it.jobTitle, requiresDept: it.requiresDept, posType: it.posType, jobGrade: it.jobGrade,
-      displayOrder: it.displayOrder
+      headcountQuota: it.headcountQuota, displayOrder: it.displayOrder
     });
     nodeIdByKey.set(it.nodeKey, node.nodeId);
     for (const child of items) {
@@ -318,6 +332,7 @@ function buildExportWorkbook(version) {
     requiresDeptLabel: n.nodeType === 'POSITION' ? (n.requiresDept === false ? 'Không' : 'Có') : '',
     posType: n.posType ? (n.posType === 'HO' ? 'HO' : 'STORE') : '',
     jobGrade: n.jobGrade || '',
+    headcountQuota: n.nodeType === 'POSITION' && Number.isFinite(n.headcountQuota) ? n.headcountQuota : '',
     displayOrder: Number.isFinite(n.displayOrder) ? n.displayOrder : ''
   }));
   return buildGenericWorkbook('Cơ Cấu Tổ Chức', COLUMNS, rows);

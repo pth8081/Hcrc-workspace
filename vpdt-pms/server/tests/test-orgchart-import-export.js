@@ -34,6 +34,7 @@ async function buildBufferWithRows(rows) {
     { header: 'Yêu Cầu Phòng Ban (Vị Trí, Có/Không)', key: 'requiresDeptLabel' },
     { header: 'Vị Trí Làm Việc (Vị Trí, HO/STORE, tuỳ chọn)', key: 'posType' },
     { header: 'Cấp Bậc (Vị Trí, tuỳ chọn)', key: 'jobGrade' },
+    { header: 'Định Biên Nhân Sự (Vị Trí, tuỳ chọn)', key: 'headcountQuota' },
     { header: 'Thứ Tự Hiển Thị (tuỳ chọn)', key: 'displayOrder' }
   ];
   rows.forEach(r => sheet.addRow(r));
@@ -43,8 +44,8 @@ async function buildBufferWithRows(rows) {
 const HAPPY_ROWS = [
   { nodeKey: 'CT', parentKey: '', nodeTypeLabel: 'Công Ty', nodeName: 'Công Ty ABC' },
   { nodeKey: 'PKD', parentKey: 'CT', nodeTypeLabel: 'Phòng Ban', nodeName: 'Phòng Kinh Doanh', departmentRef: 'PKD' },
-  { nodeKey: 'PKD-TP', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', jobTitle: 'Trưởng Phòng', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: 'L7', displayOrder: 0 },
-  { nodeKey: 'PKD-NV', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', jobTitle: 'Nhân Viên Kinh Doanh', displayOrder: 1 },
+  { nodeKey: 'PKD-TP', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', jobTitle: 'Trưởng Phòng', requiresDeptLabel: 'Có', posType: 'HO', jobGrade: 'L7', headcountQuota: 1, displayOrder: 0 },
+  { nodeKey: 'PKD-NV', parentKey: 'PKD', nodeTypeLabel: 'Vị Trí', jobTitle: 'Nhân Viên Kinh Doanh', headcountQuota: 5, displayOrder: 1 },
   { nodeKey: 'TGD', parentKey: 'CT', nodeTypeLabel: 'Vị Trí', jobTitle: 'Tổng Giám Đốc', requiresDeptLabel: 'Không' }
 ];
 
@@ -108,8 +109,30 @@ async function main() {
     assert.strictEqual(tp.requiresDept, true);
     assert.strictEqual(tp.posType, 'HO');
     assert.strictEqual(tp.jobGrade, 'L7');
+    assert.strictEqual(tp.headcountQuota, 1, 'Định Biên Nhân Sự phải đọc đúng');
+    const nv = items.find(it => it.nodeKey === 'PKD-NV');
+    assert.strictEqual(nv.headcountQuota, 5);
     const tgd = items.find(it => it.nodeKey === 'TGD');
     assert.strictEqual(tgd.requiresDept, false);
+    assert.strictEqual(tgd.headcountQuota, undefined, 'để trống Định Biên Nhân Sự -> undefined, không phải 0');
+  });
+
+  await test('LỖI DÒNG: Định Biên Nhân Sự âm -> item.valid=false', async () => {
+    const rows = HAPPY_ROWS.map(r => r.nodeKey === 'PKD-NV' ? { ...r, headcountQuota: -2 } : r);
+    const buffer = await buildBufferWithRows(rows);
+    const { items, valid } = await orgChartImport.parseImportExcelBuffer(buffer);
+    assert.strictEqual(valid, false);
+    const nv = items.find(it => it.nodeKey === 'PKD-NV');
+    assert.ok(nv.errors.some(e => /Định Biên Nhân Sự/.test(e)), nv.errors.join(';'));
+  });
+
+  await test('LỖI DÒNG: Định Biên Nhân Sự không phải số -> item.valid=false', async () => {
+    const rows = HAPPY_ROWS.map(r => r.nodeKey === 'PKD-TP' ? { ...r, headcountQuota: 'abc' } : r);
+    const buffer = await buildBufferWithRows(rows);
+    const { items, valid } = await orgChartImport.parseImportExcelBuffer(buffer);
+    assert.strictEqual(valid, false);
+    const tp = items.find(it => it.nodeKey === 'PKD-TP');
+    assert.ok(tp.errors.some(e => /Định Biên Nhân Sự/.test(e)), tp.errors.join(';'));
   });
 
   await test('LỖI CẤU TRÚC: không có dòng gốc -> fileErrors báo thiếu gốc', async () => {
@@ -223,6 +246,11 @@ async function main() {
     const pkd = version.nodes.find(n => n.nodeType === 'DEPARTMENT');
     const children = version.nodes.filter(n => n.parentNodeId === pkd.nodeId);
     assert.strictEqual(children.length, 2, 'Phòng Kinh Doanh phải có đúng 2 vị trí con');
+    const tp = version.nodes.find(n => n.jobTitle === 'Trưởng Phòng');
+    assert.strictEqual(tp.headcountQuota, 1, 'headcountQuota phải được truyền vào addNode() đúng giá trị từ file');
+    const nv = version.nodes.find(n => n.jobTitle === 'Nhân Viên Kinh Doanh');
+    assert.strictEqual(nv.headcountQuota, 5);
+    assert.strictEqual(root.headcountQuota, null, 'COMPANY không có headcountQuota (luôn null, không phải Vị Trí)');
   });
 
   await test('buildDraftVersionFromRows(): không đụng version khác trong list (chỉ push thêm, không sửa)', async () => {
@@ -265,8 +293,13 @@ async function main() {
     assert.strictEqual(reParsed.items.length, 5);
     const root = reParsed.items.find(it => !it.parentKey);
     assert.strictEqual(root.nodeType, 'COMPANY');
+    const tp = reParsed.items.find(it => it.jobTitle === 'Trưởng Phòng');
+    assert.strictEqual(tp.headcountQuota, 1, 'headcountQuota phải sống sót qua vòng xuất-nhập lại');
+    const nv = reParsed.items.find(it => it.jobTitle === 'Nhân Viên Kinh Doanh');
+    assert.strictEqual(nv.headcountQuota, 5);
     const version2 = orgChartImport.buildDraftVersionFromRows([], reParsed.items, 'RT2', 'tester');
     assert.strictEqual(version2.nodes.length, 5);
+    assert.strictEqual(version2.nodes.find(n => n.jobTitle === 'Trưởng Phòng').headcountQuota, 1);
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

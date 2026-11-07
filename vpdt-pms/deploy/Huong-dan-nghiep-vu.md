@@ -3492,6 +3492,17 @@ theo đúng vị trí trong cây**.
   mẫu nên có thể tải về, sửa, nhập lại thành vòng lặp tải-sửa-nhập. Cả 2 nút
   chỉ hiện với quyền `orgChartManage`/admin (xem, xuất mở rộng hơn theo
   `requireView`), giống các quyền thao tác cây khác ở mục này.
+  - **Cột "Định Biên Nhân Sự" (11/2026, theo yêu cầu người dùng "nhập luôn
+    định biên từng vị trí, khỏi phải sửa từng người một sau khi nhập")** —
+    file mẫu/nhập/xuất có thêm cột này, chỉ áp dụng cho dòng Loại Node "Vị
+    Trí", để trống = chưa đặt kế hoạch, chỉ nhận số nguyên không âm. Điền
+    ngay trong lúc dựng cây bằng Excel là xong Định Biên luôn cho mọi Vị
+    Trí trong 1 lần nhập — không cần mở lại từng Vị Trí ở modal "Sửa Vị
+    Trí" (ô "Định Biên") để gõ tay sau đó. Xuất Excel 1 bản đã có cũng kèm
+    theo Định Biên hiện tại của từng Vị Trí (phục vụ vòng lặp tải-sửa-nhập
+    ở trên). Đây là CÙNG 1 field `headcountQuota` đã dùng cho Báo Cáo Định
+    Biên Nhân Sự (mục bên dưới) — không phải khái niệm mới, chỉ thêm đường
+    nhập hàng loạt qua Excel.
 - **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
   gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
   làm căn cứ so khớp — không bắt buộc), **Vị Trí** (chức danh — tên hiển thị
