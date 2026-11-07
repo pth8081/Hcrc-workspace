@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**29.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.50 (2026-11): Đọc PDF Phiếu Đặt Hàng NCC (DSmart) — vá thêm 2 ký tự mojibake mới + lỗi bỏ sót từ
+dính liền token
+
+**Theo báo cáo người dùng** (kèm 2 file PDF thật "Đơn giao qua Hàng Trống (HO)" và "Cấp Hàng Trống (ST)")
+— "import vào hệ thống đặt hàng siêu thị và HO đang bị sai phông chữ". Soi trực tiếp bằng PDF.js (giống
+hệt engine ứng dụng dùng): file "HO" dùng CÙNG họ phông chữ Việt kiểu cũ (TCVN3/.VnTime) đã biết từ 2 đợt
+vá trước, nhưng xuất hiện 2 ký tự mojibake MỚI CHƯA TỪNG gặp, chỉ nằm trong TÊN SẢN PHẨM (ảnh hưởng trực
+tiếp dữ liệu hạng mục import, không chỉ nhãn tĩnh):
+- `×` → `ì` (VD "Paldo_M×..." đáng lẽ "Paldo_Mì...").
+- `ú` → `ỳ` (VD "Paldo_Mú..." đáng lẽ "Paldo_Mỳ..." — 1 số sản phẩm dùng biến thể chính tả "Mỳ").
+
+Vá bằng cách bổ sung 2 ký tự này vào `PO_CHAR_FIXED_MAP` (`public/js/module-vanhanh.js`) — CHỈ THÊM,
+không đổi 37 ký tự đã có từ 2 đợt vá trước.
+
+**Phát hiện thêm 1 lỗi khác (cùng đợt rà soát)**: `PO_WORD_FIXUPS` (bảng sửa các từ bị MẤT hẳn ký tự "ư"
+do lỗi font) trước đây chỉ so khớp khi 1 TOKEN (tách theo khoảng trắng) bằng CHÍNH XÁC 1 chuỗi trong
+bảng — bỏ sót khi từ lỗi nằm GIỮA 1 token dài hơn, nối liền bằng dấu khác (VD "Pororo_Níc" — tên sản phẩm
+nối bằng dấu `_`, đáng lẽ sửa thành "Pororo_Nước" nhưng giữ nguyên "Pororo_Nớc", thiếu "ư"). Đổi
+`poFixToken()` sang so khớp CHUỖI CON (tìm-và-thay mọi vị trí xuất hiện trong token) thay vì so khớp
+đúng toàn bộ token — vẫn đúng 100% hành vi cũ cho 13 từ đã có (khớp toàn bộ = 1 trường hợp đặc biệt của
+khớp chuỗi con), không đổi gì khác. Thêm `'Níc': 'Nước'` vào bảng.
+
+**Test**: file PDF người dùng gửi lưu làm fixture hồi quy
+`tests/fixtures/operation-order-po-sample-3-ho.pdf`, test mới `tests/test-operation-order-pdf-ho-mifont.js`
+(13 kịch bản, dùng ĐÚNG PDF.js vendor bundle thật + dữ liệu PDF thật, không giả lập) — xác nhận toàn bộ
+12 hạng mục trong phiếu đọc đúng chính tả, các field header khác (Người đặt/NCC/VAT/Tổng tiền) không bị
+ảnh hưởng. Chạy lại đầy đủ 2 bộ test cũ liên quan (`test-operation-order-pdf-hdmuachung.js` 24/24,
+`test-po-orderer-name-multitoken.js` 8/8) — không regression.
+
+**Phát hiện riêng, CHƯA xử lý — cần người dùng xác nhận hướng đi**: file PDF thứ 2 người dùng gửi kèm
+("Cấp Hàng Trống — Đơn hàng ST", loại phiếu đặt hàng SIÊU THỊ) khi soi bằng PDF.js (cùng engine ứng dụng
+dùng) cho ra **0 (không) dòng chữ nào trích xuất được** — không phải lỗi phông chữ/mojibake như file HO,
+mà là PDF này KHÔNG có lớp text nào để đọc (dù mắt thường nhìn thấy đầy đủ chữ — khả năng cao là PDF được
+xuất theo kiểu "in ra nét/đường cong" (outline/vector) thay vì text thật, hoặc dùng loại font nhúng mà
+PDF.js không trích được ký tự nào). Nếu đúng vậy, tính năng tự động điền form từ PDF sẽ **không điền được
+gì cả** cho loại phiếu ST này (khác hẳn file HO — vẫn điền được, chỉ là sai chính tả trước khi vá). Đây là
+vấn đề RIÊNG, nặng hơn, cần xác nhận phạm vi xử lý với người dùng trước khi làm (có thể cần OCR hoặc yêu
+cầu đổi cấu hình xuất PDF phía DSmart) — CHƯA tự ý xử lý trong đợt vá này.
 
 ## v29.49 (2026-11): Xác nhận bản vá v29.48 bằng demo Playwright THẬT end-to-end (Cây + Báo Cáo Định Biên)
 

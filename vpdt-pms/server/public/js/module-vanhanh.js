@@ -2046,6 +2046,11 @@ const PO_CHAR_FIXED_MAP = {
   // "B»ng"->"Bằng"), 'ö':'ử' (vd "Tö"->"Tử" trong "Quốc Tử Giám"), 'Ñ':'ẹ' (vd "kÑp"->"kẹp"), '÷':'ữ'
   // (vd "s÷a"->"sữa"). Không đụng 35 ký tự đã có ở trên — chỉ bổ sung mã MỚI, không đổi mã cũ.
   'í': 'ớ', '»': 'ằ', 'ö': 'ử', 'Ñ': 'ẹ', '÷': 'ữ',
+  // 2 ký tự thêm (11/2026, báo cáo người dùng "phông chữ sai khi import" — mẫu "Đơn giao qua Hàng Trống
+  // (HO)", CÙNG họ phông TCVN3/.VnTime, chỉ xuất hiện ở tên hàng hoá/sản phẩm chưa từng gặp ở 2 mẫu
+  // trước): '×':'ì' (vd "M×"->"Mì" trong "Paldo_Mì trộn tương đen..."), 'ú':'ỳ' (vd "Mú"->"Mỳ" — 1 số
+  // tên sản phẩm dùng biến thể chính tả "Mỳ" thay vì "Mì"). Không đụng các ký tự cũ.
+  '×': 'ì', 'ú': 'ỳ',
 };
 // PO_CHAR_CASE_MAP: ký tự thô mà bản PDF mẫu chỉ thấy xuất hiện ở 1 dạng hoa/thường (không đủ dữ liệu
 // để tách 2 mã riêng như PO_CHAR_FIXED_MAP) — giá trị dưới đây là dạng THƯỜNG, viết hoa theo ngữ cảnh
@@ -2065,15 +2070,28 @@ const PO_WORD_FIXUPS = {
   // 5 từ thêm (10/2026, mẫu "HD mua chung") — CÙNG lỗi "mất hẳn ký tự 'ư'" đã ghi chú ở trên, thêm đúng
   // các từ mới gặp (giữ nguyên 8 từ cũ, không đổi).
   'D¬ng': 'Dương', 'L¬ng': 'Lương', 'h¬ng': 'hương', 'níng': 'nướng', '§êng': 'Đường',
+  // 1 từ thêm (11/2026, mẫu "Đơn giao qua Hàng Trống (HO)") — CÙNG lỗi "mất hẳn ký tự 'ư'", riêng từ
+  // "Nước" trong tên sản phẩm (VD "Pororo_Nước vị dâu...") ghép liền sau dấu "_" nên PHẢI so khớp dạng
+  // CHUỖI CON (xem poFixToken() sửa lại bên dưới — trước đây chỉ so khớp ĐÚNG TOÀN BỘ token, bỏ sót mọi
+  // trường hợp từ nằm GIỮA 1 token dài hơn như "Pororo_Níc").
+  'Níc': 'Nước',
 };
 function poIsAsciiUpperToken(tok) {
   const letters = Array.from(tok).filter(c => /[A-Za-z]/.test(c));
   return letters.length >= 2 && letters.every(c => c === c.toUpperCase());
 }
+// LỖI ĐÃ VÁ (11/2026, cùng đợt thêm 'Níc':'Nước' ở trên): PO_WORD_FIXUPS trước đây CHỈ khớp khi token
+// (tách theo khoảng trắng) bằng CHÍNH XÁC 1 trong các chuỗi của bảng — bỏ sót khi từ bị lỗi nằm GIỮA 1
+// token dài hơn (VD "Pororo_Níc" ghép liền bằng dấu "_", hoặc "lîng," dính dấu phẩy cuối câu). Đổi sang
+// so khớp CHUỖI CON (tìm-và-thay mọi vị trí xuất hiện trong token) — vẫn đúng 100% cho các trường hợp
+// khớp TOÀN BỘ token như trước (chuỗi con = cả chuỗi), không đổi hành vi cũ, chỉ mở rộng thêm.
 function poFixToken(tok) {
-  if (PO_WORD_FIXUPS[tok]) return PO_WORD_FIXUPS[tok];
-  const upper = poIsAsciiUpperToken(tok);
-  return Array.from(tok).map(ch => {
+  let result = tok;
+  for (const raw in PO_WORD_FIXUPS) {
+    if (result.includes(raw)) result = result.split(raw).join(PO_WORD_FIXUPS[raw]);
+  }
+  const upper = poIsAsciiUpperToken(result);
+  return Array.from(result).map(ch => {
     if (PO_CHAR_FIXED_MAP[ch] !== undefined) return PO_CHAR_FIXED_MAP[ch];
     if (PO_CHAR_CASE_MAP[ch] !== undefined) { const v = PO_CHAR_CASE_MAP[ch]; return upper ? v.toUpperCase() : v; }
     return ch;
