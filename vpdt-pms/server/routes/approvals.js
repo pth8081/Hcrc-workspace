@@ -23,6 +23,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAllAppDataWithVersionsCached } = require('../lib/appData');
 const { getAllForCollectionCached } = require('../lib/recordStore');
 const { computeMyPendingApprovalKeys } = require('../lib/approvalAggregator');
+const { canManageItSupport } = require('../lib/recordActions');
 const { sendServerError } = require('../lib/errorResponse');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -68,6 +69,26 @@ function computeMyPendingBudgetSignature(user, budgetLines) {
     .join(',');
 }
 
+// itSupportSignature (MỚI, 11/2026, phản hồi người dùng — "đội Hỗ Trợ IT phải nhìn vào màn Yêu Cầu Hỗ
+// Trợ IT để hỗ trợ, cứ phải tự ấn refresh mới thấy ticket/yêu cầu mới"): itSupportTickets CỐ Ý không nằm
+// trong computeMyPendingApprovalKeys()/'keys' ở trên — đây không phải quy trình phê duyệt nhiều bước có 1
+// người duyệt cụ thể (như itPriceApprovals), mà là 1 hàng đợi ticket MỞ CHO TOÀN BỘ NHÂN VIÊN tạo, chỉ
+// người có canManageItSupport() mới xử lý — không có khái niệm "approver của riêng hồ sơ X" để đưa vào
+// pushDeptWorkflowKeys(). Tính riêng 1 "chữ ký" NHẸ (id+status+người đang nhận+trạng thái xin phê duyệt
+// của MỌI ticket CHƯA đóng — TODO/DOING, bỏ qua DONE/CANCELLED vì không cần theo dõi tiếp) để client
+// (runApprovalPollTick(), core.js) phát hiện có ticket mới/đổi trạng thái (kể cả do 1 nhân viên IT KHÁC
+// vừa nhận xử lý) và tự vẽ lại ĐÚNG màn "🎫 Yêu Cầu Hỗ Trợ IT" NẾU đang đứng đúng đó — cùng khuôn
+// computeMyPendingBudgetSignature() ở trên. Màn "💲 Phê Duyệt Giá" (itSubPrice) KHÔNG cần cơ chế riêng vì
+// itPriceApprovals đã có trong 'keys' (pushDeptWorkflowKeys ở trên) — chỉ cần thêm dòng vẽ lại ở core.js.
+function computeMyPendingItTicketSignature(user, itSupportTickets) {
+  if (!canManageItSupport(user)) return '';
+  return (itSupportTickets || [])
+    .filter((t) => t.status === 'TODO' || t.status === 'DOING')
+    .sort((a, b) => a.id - b.id)
+    .map((t) => `${t.id}:${t.status}:${t.assignee || ''}:${t.approvalStatus || ''}`)
+    .join(',');
+}
+
 // GET /api/approvals/pending-signature -> { count, keys }. "keys" là dữ liệu client THỰC SỰ cần để so
 // sánh (xem chú thích đầu file) — "count" chỉ kèm thêm cho tiện gỡ lỗi/log, không dùng để quyết định gì.
 router.get('/pending-signature', async (req, res) => {
@@ -75,9 +96,10 @@ router.get('/pending-signature', async (req, res) => {
     // Tái sử dụng ĐÚNG 2 lớp cache ngắn hạn (3s, chung APPDATA_CACHE_TTL_MS) mà GET /api/data đang dùng
     // (lib/appData.js + lib/recordStore.js) — không thêm tầng cache mới, cùng mức chặn tải DB dù polling
     // dồn dập từ nhiều người dùng cùng lúc. Đọc SONG SONG (Promise.all), cùng lý do GET /api/data.
-    const [cachedAppData, budgetLines, ...collectionResults] = await Promise.all([
+    const [cachedAppData, budgetLines, itSupportTickets, ...collectionResults] = await Promise.all([
       getAllAppDataWithVersionsCached(),
       getAllForCollectionCached('budgetLines'),
+      getAllForCollectionCached('itSupportTickets'),
       ...RECORD_COLLECTIONS_NEEDED.map(collection => getAllForCollectionCached(collection))
     ]);
     // Shallow-clone giống hệt GET /api/data (routes/data.js) — cachedAppData.data DÙNG CHUNG giữa nhiều
@@ -87,7 +109,8 @@ router.get('/pending-signature', async (req, res) => {
 
     const keys = computeMyPendingApprovalKeys(req.freshUser, appData);
     const budgetSignature = computeMyPendingBudgetSignature(req.freshUser, budgetLines);
-    res.json({ count: keys.length, keys, budgetSignature });
+    const itSupportSignature = computeMyPendingItTicketSignature(req.freshUser, itSupportTickets);
+    res.json({ count: keys.length, keys, budgetSignature, itSupportSignature });
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/approvals/pending-signature', 'Không thể tải danh sách hồ sơ chờ bạn duyệt');
   }

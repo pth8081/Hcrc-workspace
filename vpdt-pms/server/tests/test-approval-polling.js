@@ -62,6 +62,17 @@ function buildFixtureAppData() {
       { id: 502, dept: 'Kế Toán', stage: 'APPROVED', status: 'SUBMITTED' }
     ],
 
+    // itSupportTickets (MỚI, 11/2026, phản hồi người dùng — "đội Hỗ Trợ IT phải tự ấn refresh mới thấy
+    // ticket mới"): cùng tinh thần budgetLines ở trên — KHÔNG đi qua computeMyPendingApprovalKeys()/'keys'
+    // (ticket helpdesk mở cho toàn công ty tạo, không có "approver riêng cho hồ sơ X" — xem
+    // computeMyPendingItTicketSignature(), routes/approvals.js), chỉ cần 1 ticket CÒN MỞ (601, TODO) + 1
+    // ticket ĐÃ ĐÓNG (602, DONE, phải bị loại khỏi chữ ký) để Phần B kiểm tra đúng filter + gate quyền
+    // itManage/admin.
+    itSupportTickets: [
+      { id: 601, dept: 'Kế Toán', status: 'TODO' },
+      { id: 602, dept: 'Kế Toán', status: 'DONE', assignee: 'duyet1' }
+    ],
+
     // ----- Collection hồ sơ (đã migrate sang dbo.Records — ở đây chỉ là mảng JS thuần, hàm test không
     // quan tâm nguồn lưu trữ thật) — mỗi module: 1 bản ghi duyet1 ĐƯỢC duyệt + 1 bản ghi PHẢI bị loại
     // (khác phòng ban/đã xử lý xong/thiếu quyền) để phép thử thật sự kiểm tra được bộ lọc, không chỉ
@@ -157,7 +168,7 @@ const DUYET1 = {
   username: 'duyet1', name: 'Người Duyệt Một', dept: 'Kế Toán',
   perms: {
     admin: false, meetingApprove: true, internalPostApprove: true, licenseApprove: true,
-    paymentManage: true, itPriceEmergencyRejectApproveRetail: true, budgetManage: true,
+    paymentManage: true, itPriceEmergencyRejectApproveRetail: true, budgetManage: true, itManage: true,
     // operationOrderReceiptManage: quyền RIÊNG (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung"), KHÔNG còn mirror
     // quần thể duyệt/từ chối dept-workflow của đơn hàng nữa — xem isApproverForOperationOrderReceipt()
     // (lib/recordActions.js). Chỉ cấp scope 'HO' (KHÔNG all:true) để bài test dưới còn phân biệt được
@@ -576,6 +587,48 @@ async function runPartB(run) {
       const r1 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
       assert(r1.body.budgetSignature !== r0.body.budgetSignature, 'thêm 1 dòng Đề Xuất mới phải đổi budgetSignature');
       assert(r1.body.budgetSignature.includes('503'), 'chữ ký mới phải gồm id dòng vừa thêm (503): ' + r1.body.budgetSignature);
+    });
+
+    // ==========================================================================
+    // itSupportSignature (MỚI, 11/2026, phản hồi người dùng — "đội Hỗ Trợ IT phải nhìn vào màn Phê Duyệt
+    // Giá/Yêu Cầu Hỗ Trợ IT để hỗ trợ, cứ phải tự ấn refresh mới thấy ticket/yêu cầu mới"): cùng khuôn
+    // budgetSignature ở trên — KHÔNG gộp vào 'keys'/'count' (itSupportTickets không phải quy trình phê
+    // duyệt có 1 approver riêng cho từng hồ sơ), nhưng PHẢI có mặt trong body để client (core.js
+    // runApprovalPollTick()) phát hiện ticket mới/đổi trạng thái và tự vẽ lại màn "🎫 Yêu Cầu Hỗ Trợ IT".
+    // ==========================================================================
+    await run.run('itSupportSignature: duyet1 (có itManage) nhận chữ ký KHÔNG RỖNG, chỉ gồm ticket CÒN MỞ (601, TODO), KHÔNG gồm ticket ĐÃ ĐÓNG (602, DONE)', async () => {
+      resetAppDataState();
+      const res = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      assertEqual(res.status, 200);
+      assert(typeof res.body.itSupportSignature === 'string', 'body.itSupportSignature phải là chuỗi');
+      assert(res.body.itSupportSignature.includes('601'), 'chữ ký phải gồm id ticket còn mở (601): ' + res.body.itSupportSignature);
+      assert(!res.body.itSupportSignature.includes('602'), 'chữ ký KHÔNG được gồm id ticket đã đóng (602, DONE): ' + res.body.itSupportSignature);
+      assert(!res.body.keys.some(k => k.startsWith('itTicket')), 'itSupportSignature KHÔNG được gộp vào keys/count của Hộp Thư Phê Duyệt (ticket helpdesk không đi qua đó)');
+    });
+
+    await run.run('itSupportSignature: outsider (KHÔNG itManage/admin) nhận chữ ký RỖNG dù CÓ ticket đang mở', async () => {
+      resetAppDataState();
+      const res = await api('GET', '/api/approvals/pending-signature', 'khong.duyet');
+      assertEqual(res.status, 200);
+      assertEqual(res.body.itSupportSignature, '', 'outsider không có quyền itManage/admin -> itSupportSignature phải rỗng');
+    });
+
+    await run.run('itSupportSignature: thêm 1 ticket TODO mới -> chữ ký đổi (nhân viên khác vừa gửi yêu cầu)', async () => {
+      resetAppDataState();
+      const r0 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      APP_DATA_STATE.itSupportTickets.push({ id: 603, dept: 'Nhân Sự', status: 'TODO' });
+      const r1 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      assert(r1.body.itSupportSignature !== r0.body.itSupportSignature, 'thêm 1 ticket mới phải đổi itSupportSignature');
+      assert(r1.body.itSupportSignature.includes('603'), 'chữ ký mới phải gồm id ticket vừa thêm (603): ' + r1.body.itSupportSignature);
+    });
+
+    await run.run('itSupportSignature: 1 nhân viên IT KHÁC nhận xử lý ticket 601 (TODO -> DOING) -> chữ ký đổi dù vẫn CÙNG 1 ticket, không có ticket mới nào', async () => {
+      resetAppDataState();
+      const r0 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      const t = APP_DATA_STATE.itSupportTickets.find(x => x.id === 601);
+      t.status = 'DOING'; t.assignee = 'it.staff.khac';
+      const r1 = await api('GET', '/api/approvals/pending-signature', 'duyet1');
+      assert(r1.body.itSupportSignature !== r0.body.itSupportSignature, 'người KHÁC nhận xử lý ticket phải đổi itSupportSignature (để màn Yêu Cầu Hỗ Trợ IT của mọi nhân viên IT tự cập nhật "đã có người nhận")');
     });
 
     // ==========================================================================

@@ -11056,6 +11056,7 @@ async function runApprovalPollTick() {
   if (!currentUser) return;
   let keys;
   let budgetSignature = '';
+  let itSupportSignature = '';
   try {
     const res = await fetch('/api/approvals/pending-signature');
     // 401 (hết phiên) — startSessionKeepAlive() đã lo việc PHÁT HIỆN hết phiên + đăng xuất (ping riêng,
@@ -11064,6 +11065,7 @@ async function runApprovalPollTick() {
     const data = await res.json();
     keys = Array.isArray(data.keys) ? data.keys : [];
     budgetSignature = typeof data.budgetSignature === 'string' ? data.budgetSignature : '';
+    itSupportSignature = typeof data.itSupportSignature === 'string' ? data.itSupportSignature : '';
   } catch (e) {
     return; // mất mạng tạm thời — bỏ qua, thử lại ở lượt poll kế tiếp (cùng cách startSessionKeepAlive() xử lý)
   }
@@ -11073,7 +11075,10 @@ async function runApprovalPollTick() {
   // bước (a) ngay dưới (hubLabel vẫn chỉ đọc keys.length, không đụng gì). Có đổi dòng Đề Xuất đang
   // PROPOSED nào đó (routes/approvals.js computeMyPendingBudgetSignature()) thì chữ ký tổng đổi theo,
   // kích đúng pha "tải lại DB + vẽ lại" ở bước (c) bên dưới (xem nhánh budgetSection cuối hàm này).
-  const signature = keys.join('|') + '§' + budgetSignature;
+  // itSupportSignature (MỚI, 11/2026, phản hồi người dùng — "đội Hỗ Trợ IT phải nhìn vào màn Yêu Cầu Hỗ
+  // Trợ IT để hỗ trợ, cứ phải tự ấn refresh mới thấy ticket mới") — cùng khuôn budgetSignature, xem
+  // computeMyPendingItTicketSignature() (routes/approvals.js) + nhánh itSupportSection cuối hàm này.
+  const signature = keys.join('|') + '§' + budgetSignature + '§' + itSupportSignature;
 
   // (a) Cập nhật NGAY nhãn số đếm trên nav — CỐ TÌNH lấy số từ CHÍNH kết quả poll (keys.length, server đã
   // tính đúng bằng computeMyPendingApprovalKeys()) thay vì gọi lại updateApprovalHubBadge() (hàm đó tự
@@ -11186,6 +11191,35 @@ async function runApprovalPollTick() {
   if (!document.getElementById('budgetSection').classList.contains('hidden')
       && (activeBudgetLineTab === 'PROPOSE' || activeBudgetLineTab === 'APPROVE')) {
     renderBudgetLineList(activeBudgetLineTab === 'PROPOSE' ? 'PROPOSED' : 'APPROVED');
+  }
+
+  // "Hỗ Trợ IT" (MỚI, 11/2026, phản hồi người dùng — "đội IT phải nhìn vào màn Phê Duyệt Giá/Yêu Cầu Hỗ
+  // Trợ IT để hỗ trợ, cứ phải tự ấn refresh mới thấy ticket/yêu cầu mới, làm luôn auto refresh cho phần
+  // này"): tự vẽ lại ĐÚNG sub-tab đang đứng, NẾU đang đứng đúng màn Hỗ Trợ IT — cùng khuôn 9 module ở (d).
+  //   - "💲 Phê Duyệt Giá" (itSubPrice): itPriceApprovals vốn ĐÃ nằm trong 'keys' ở trên (xem
+  //     pushDeptWorkflowKeys(..., 'itPriceApprovals', ...), lib/approvalAggregator.js) — initDatabase() ở
+  //     bước (c) đã tải lại dữ liệu mới, chỉ cần thêm dòng vẽ lại, không cần chữ ký riêng.
+  //   - "🎫 Yêu Cầu Hỗ Trợ IT" (itSubTicket): itSupportTickets KHÔNG nằm trong payload chính (thuộc nhóm
+  //     lazy 'itSupport', xem LAZY_DATA_GROUPS/routes/data.js) nên initDatabase() ở bước (c) KHÔNG đụng
+  //     tới — PHẢI tự xoá cache rồi ép loadDataGroup('itSupport') tải lại thật ở đây (cùng cơ chế
+  //     refreshModuleScreen() dùng cho nút "🔄 Làm Mới" thủ công, core.js), trước khi renderItTickets().
+  //     Đổi chỗ/đổi trạng thái ticket qua itSupportSignature (computeMyPendingItTicketSignature(),
+  //     routes/approvals.js) mới kích được nhánh này — không đụng gì khi đang đứng màn KHÁC.
+  if (!document.getElementById('itSupportSection').classList.contains('hidden')) {
+    if (activeItSupportSubTab === 'PRICE') renderItPriceApprovals();
+    else if (activeItSupportSubTab === 'TICKET') {
+      // try/catch RIÊNG (khác initDatabase() ở bước (c) — lỗi mạng thoáng qua ở ĐÚNG lượt poll này chỉ
+      // nên bỏ lỡ 1 lượt vẽ lại màn Hỗ Trợ IT, không được làm rớt luôn cả lượt poll (hàm này không có
+      // try/catch bao quanh toàn thân, 1 Promise bị reject ở đây sẽ trôi thành unhandled rejection).
+      try {
+        delete _loadedDataGroups['itSupport'];
+        _settledDataGroups.delete('itSupport');
+        await loadDataGroup('itSupport');
+        renderItTickets();
+      } catch (e) {
+        console.error('runApprovalPollTick: loadDataGroup(\'itSupport\') thất bại, giữ nguyên danh sách ticket cũ tới lượt poll kế tiếp', e);
+      }
+    }
   }
 }
 

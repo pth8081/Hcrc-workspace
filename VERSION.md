@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**29.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.54 (2026-11): Auto Refresh (ngầm, không cần bấm nút) cho màn "🛠️ Hỗ Trợ IT" — Phê Duyệt Giá +
+Yêu Cầu Hỗ Trợ IT
+
+**Theo yêu cầu người dùng** ("đội IT nhà tôi họ phải nhìn vào đấy là họ hỗ trợ mà... để có ticket người
+ta biết ngay. Và có yêu cầu người ta biết ngay" — phân biệt rõ với nút "🔄 Làm Mới" thủ công đã làm ở
+v29.53: đây là tự động, không cần bấm gì): mở rộng đúng cơ chế "poll ngắn 3s" đã dùng cho Hộp Thư Phê
+Duyệt/9 module/Ngân Sách sang 2 sub-tab của màn Hỗ Trợ IT — đang đứng đúng màn nào thì nhịp poll tự tải
+lại + vẽ lại ĐÚNG màn đó, không cần F5/chuyển tab ra vào.
+
+- **"💲 Phê Duyệt Giá"** (Bán Lẻ/Bán Buôn): itPriceApprovals vốn đã nằm trong cơ chế "Hộp Thư Phê Duyệt"
+  (`pushDeptWorkflowKeys()`, `lib/approvalAggregator.js`) nên chỉ cần thêm 1 dòng vẽ lại
+  `renderItPriceApprovals()` ở `runApprovalPollTick()` (core.js), không cần chữ ký riêng.
+- **"🎫 Yêu Cầu Hỗ Trợ IT"**: `itSupportTickets` là hàng đợi ticket mở cho toàn công ty tạo (không có
+  "approver riêng cho từng hồ sơ" như itPriceApprovals) nên KHÔNG đi qua cơ chế trên — thêm 1 "chữ ký"
+  riêng `itSupportSignature` (`GET /api/approvals/pending-signature`, chỉ tính cho người có quyền
+  `itManage`/admin, gồm id+trạng thái+người đang nhận của mọi ticket CÒN MỞ) để phát hiện ticket mới/đổi
+  trạng thái (kể cả do 1 nhân viên IT khác vừa nhận xử lý) và tự ép tải lại nhóm dữ liệu lười `itSupport`
+  (itSupportTickets thuộc `LAZY_DATA_GROUPS`, không nằm trong payload chính) rồi vẽ lại `renderItTickets()`.
+- Test: mở rộng `tests/test-approval-polling.js` (4 kịch bản mới cho `itSupportSignature`: gate quyền,
+  ticket mới, người khác nhận xử lý) + file mới `tests/test-approval-poll-itsupport.js` (5 kịch bản —
+  đúng dây nối sub-tab/render, ép tải lại thật không dùng cache cũ, tự phục hồi khi lỗi mạng không văng
+  lỗi/không unhandled rejection) — tổng 9 kịch bản mới, đều pass. Chạy lại toàn bộ test hiện có của cơ chế
+  poll (`test-approval-poll-subtabs.js`, 19/19) + Phê Duyệt Giá IT (3 bộ liên quan) + nút Làm Mới thủ công
+  (`test-module-refresh-button-generic.js`, 13/13) — không có regression.
+
 
 ## v29.53 (2026-11): Nút "🔄 Làm Mới" dùng chung cho TOÀN BỘ 29 màn tài liệu phê duyệt/đăng ký (mirror
 Hộp Thư Phê Duyệt) — bấm là tải lại NGAY đúng màn đó, không cần F5, không ảnh hưởng màn khác
