@@ -47,6 +47,8 @@ const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const trainingTestImportRoutes = require('./routes/trainingTestImport');
 const adminExportRoutes = require('./routes/adminExport');
 const workflowAuditRoutes = require('./routes/workflowAudit');
+const userAuditRoutes = require('./routes/userAudit');
+const systemAuditRoutes = require('./routes/systemAudit');
 const adminTlsCertRoutes = require('./routes/adminTlsCert');
 const adminTrustedCaRoutes = require('./routes/adminTrustedCa');
 const orgChartRoutes = require('./routes/orgChart');
@@ -86,6 +88,8 @@ const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpir
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { checkWorkflowApproverGaps } = require('./jobs/workflowApproverGapAudit');
+const { checkUserAccountGaps } = require('./jobs/userAccountGapAudit');
+const { checkSystemHealthGaps } = require('./jobs/systemHealthAudit');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
@@ -209,6 +213,8 @@ app.use('/api/admin', adminExportRoutes);
 app.use('/api/admin/tls-cert', adminTlsCertRoutes);
 app.use('/api/admin/trusted-ca', adminTrustedCaRoutes);
 app.use('/api/admin/workflow-audit', workflowAuditRoutes);
+app.use('/api/admin/user-audit', userAuditRoutes);
+app.use('/api/admin/system-audit', systemAuditRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
@@ -593,6 +599,12 @@ async function start() {
       // màn Audit dù có gửi email hay không.
       checkWorkflowApproverGaps();
       setInterval(checkWorkflowApproverGaps, 24 * 60 * 60 * 1000);
+      // "🔍 Audit Người Dùng"/"🔍 Audit Hệ Thống" (11/2026, mở rộng từ Audit Quy Trình) — CÙNG khuôn
+      // quét 1 lần/24h, chỉ gửi email khi chữ ký phát hiện đổi.
+      checkUserAccountGaps();
+      setInterval(checkUserAccountGaps, 24 * 60 * 60 * 1000);
+      checkSystemHealthGaps();
+      setInterval(checkSystemHealthGaps, 24 * 60 * 60 * 1000);
       // Dọn file mồ côi trong uploads/ (đã tải lên nhưng không hồ sơ nào tham chiếu, VD bỏ dở form sau
       // khi tải file) — chạy mỗi 6h, đủ thưa để không tốn tài nguyên quét toàn bộ thư mục liên tục, đủ
       // dày để không tích tụ quá nhiều trước khi được dọn (job tự có graceHours=48h bảo vệ file đang dở

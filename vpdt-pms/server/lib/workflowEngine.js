@@ -1711,6 +1711,11 @@ module.exports = {
   SUBMISSION_TYPES,
   OPERATION_ORDER_STORE_TIERS,
   OPERATION_ORDER_HO_TIERS,
+  // DEPT_OR_TIER_WORKFLOW_MAP_KEYS/NESTED_DEPT_WORKFLOW_MAP_KEYS (11/2026, "Audit Người Dùng" —
+  // canBeApprover dư thừa) — export THÊM để lib/userAccountAudit.js liệt kê đúng mọi map cấu hình duyệt
+  // cần quét usernames/position-pair, không tự chép lại 1 bản riêng dễ lệch khi sau này thêm module.
+  DEPT_OR_TIER_WORKFLOW_MAP_KEYS,
+  NESTED_DEPT_WORKFLOW_MAP_KEYS,
   resolveWorkflowStepApprovers,
   findMissingApproverStep,
   WorkflowError,

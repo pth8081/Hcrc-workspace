@@ -192,6 +192,8 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
   document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
   document.getElementById('adminSubShelfDigest').classList.toggle('hidden', subTab !== 'SHELFDIGEST');
+  document.getElementById('adminSubAuditUser').classList.toggle('hidden', subTab !== 'AUDITUSER');
+  document.getElementById('adminSubAuditSystem').classList.toggle('hidden', subTab !== 'AUDITSYSTEM');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -204,12 +206,16 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubShelfDigest').className = subTab === 'SHELFDIGEST' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubAuditUser').className = subTab === 'AUDITUSER' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubAuditSystem').className = subTab === 'AUDITSYSTEM' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'PARTNERAPI') setPartnerApiSubTab(activePartnerApiSubTab);
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
   if (subTab === 'SHELFDIGEST') { loadShelfThresholdDigestScheduleToForm(); loadShelfReconDigestScheduleToForm(); loadShelfReconRecipientsOverview(); }
+  if (subTab === 'AUDITUSER') renderUserAuditPanel();
+  if (subTab === 'AUDITSYSTEM') renderSystemAuditPanel();
 }
 
 // "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 tab cấp 1 có tab con riêng —
@@ -965,6 +971,254 @@ async function deleteTrustedCaAction(id) {
     loadTrustedCaList();
   } catch (err) {
     alert(`⛔ Lỗi xoá chứng chỉ CA: ${err.message}`);
+  }
+}
+
+// Badge màu/nhãn dùng chung cho CẢ "🔍 Audit Người Dùng" lẫn "🔍 Audit Hệ Thống" — 3 mức (khác "🔍 Audit
+// Quy Trình" ở module-workflow.js chỉ có 2 mức CRITICAL/WARNING) vì 2 audit mới thêm mức INFO (rà soát
+// chủ động, không phải lỗ hổng — VD danh sách tài khoản admin/quyền duyệt dư thừa).
+const AUDIT_SEVERITY_STYLE = {
+  CRITICAL: { border: 'border-rose-600', bg: 'bg-rose-50', badgeBg: 'bg-rose-600', label: 'NGHIÊM TRỌNG' },
+  WARNING: { border: 'border-amber-500', bg: 'bg-amber-50', badgeBg: 'bg-amber-500', label: 'CẢNH BÁO' },
+  INFO: { border: 'border-sky-400', bg: 'bg-sky-50', badgeBg: 'bg-sky-500', label: 'THÔNG TIN' }
+};
+function sortFindingsBySeverity(findings) {
+  const order = { CRITICAL: 0, WARNING: 1, INFO: 2 };
+  return [...findings].sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
+}
+
+// ===== "🔍 Audit Người Dùng" (11/2026) ===== Gọi route RIÊNG /api/admin/user-audit* (routes/userAudit.js)
+// — CÙNG khuôn "🔍 Audit Quy Trình" (module-workflow.js) nhưng findings có field username/name thay vì
+// scopeLabel/stepName. Gọi khi vào sub-tab AUDITUSER (setAdminSubTab()) — CHỈ đọc cache tóm tắt + cấu
+// hình (rẻ); quét THẬT chỉ xảy ra khi admin bấm "🔄 Quét Ngay" (runUserAuditScan()).
+async function renderUserAuditPanel() {
+  const panelEl = document.getElementById('adminSubAuditUser');
+  const lastScanEl = document.getElementById('userAuditLastScan');
+  const toggleEl = document.getElementById('userAuditAutoScanToggle');
+  const dormantEl = document.getElementById('userAuditDormantDays');
+  if (!panelEl) return;
+  try {
+    const [summaryRes, cfgRes] = await Promise.all([
+      fetch('/api/admin/user-audit/summary'),
+      fetch('/api/admin/user-audit/config')
+    ]);
+    if (summaryRes.status === 403) { panelEl.classList.add('hidden'); return; }
+    if (summaryRes.ok) {
+      const summary = await summaryRes.json();
+      renderUserAuditSummary(summary);
+      if (lastScanEl) {
+        lastScanEl.innerText = summary.at
+          ? `Lần quét gần nhất: ${new Date(summary.at).toLocaleString('vi-VN')} (tự động hằng ngày)`
+          : 'Chưa quét lần nào — bấm "🔄 Quét Ngay" để bắt đầu.';
+      }
+    }
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (toggleEl) toggleEl.checked = cfg.autoScanEmailEnabled !== false;
+      if (dormantEl) dormantEl.value = cfg.dormantDaysThreshold || 90;
+    }
+  } catch (err) {
+    console.error('renderUserAuditPanel() lỗi:', err);
+  }
+}
+
+function renderUserAuditSummary(summary) {
+  const row = document.getElementById('userAuditSummaryRow');
+  if (!row) return;
+  row.classList.toggle('hidden', !summary.at);
+  const totalEl = document.getElementById('userAuditTotalCount');
+  const critEl = document.getElementById('userAuditCriticalCount');
+  const warnEl = document.getElementById('userAuditWarningCount');
+  if (totalEl) totalEl.innerText = summary.total || 0;
+  if (critEl) critEl.innerText = summary.critical || 0;
+  if (warnEl) warnEl.innerText = summary.warning || 0;
+}
+
+function renderUserAuditFindingsList(findings) {
+  const listEl = document.getElementById('userAuditFindingsList');
+  if (!listEl) return;
+  if (!findings.length) {
+    listEl.innerHTML = '<p class="text-xs text-emerald-700 font-semibold">✅ Không phát hiện nào.</p>';
+    return;
+  }
+  listEl.innerHTML = sortFindingsBySeverity(findings).map(f => {
+    const style = AUDIT_SEVERITY_STYLE[f.severity] || AUDIT_SEVERITY_STYLE.INFO;
+    return `
+    <div class="border-l-4 ${style.border} ${style.bg} rounded p-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-xs font-bold">${escapeHtml(f.username)} ${f.name && f.name !== f.username ? `<span class="font-normal text-gray-500">(${escapeHtml(f.name)})</span>` : ''}</div>
+        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${style.badgeBg} text-white">${style.label}</span>
+      </div>
+      <div class="text-[11px] text-gray-600 mt-0.5">${escapeHtml(f.reason)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function runUserAuditScan() {
+  const btn = document.querySelector('[data-op="runUserAuditScan"]');
+  const lastScanEl = document.getElementById('userAuditLastScan');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Đang quét...'; }
+  try {
+    const res = await fetch('/api/admin/user-audit');
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Lỗi máy chủ (${res.status})`);
+    }
+    const { at, findings } = await res.json();
+    renderUserAuditSummary({
+      at, total: findings.length,
+      critical: findings.filter(f => f.severity === 'CRITICAL').length,
+      warning: findings.filter(f => f.severity === 'WARNING').length
+    });
+    if (lastScanEl) lastScanEl.innerText = `Lần quét gần nhất: ${new Date(at).toLocaleString('vi-VN')} (vừa quét tay)`;
+    renderUserAuditFindingsList(findings);
+  } catch (err) {
+    alert(`⛔ Quét Audit Người Dùng thất bại: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '🔄 Quét Ngay'; }
+  }
+}
+
+// toggleUserAuditAutoScan()/saveUserAuditDormantDays() — cùng đọc lại cấu hình hiện có TRƯỚC khi ghi đè
+// (giữ nguyên field không có ô nhập ở UI này — ccEmails) để không vô tình xoá mất.
+async function toggleUserAuditAutoScan() {
+  const toggleEl = document.getElementById('userAuditAutoScanToggle');
+  if (!toggleEl) return;
+  const desired = toggleEl.checked;
+  try {
+    const cfgRes = await fetch('/api/admin/user-audit/config');
+    const currentCfg = cfgRes.ok ? await cfgRes.json() : { ccEmails: [], dormantDaysThreshold: 90 };
+    const res = await fetch('/api/admin/user-audit/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoScanEmailEnabled: desired, ccEmails: currentCfg.ccEmails || [], dormantDaysThreshold: currentCfg.dormantDaysThreshold || 90 })
+    });
+    if (!res.ok) throw new Error('Lưu cấu hình thất bại');
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+    toggleEl.checked = !desired;
+  }
+}
+async function saveUserAuditDormantDays() {
+  const dormantEl = document.getElementById('userAuditDormantDays');
+  if (!dormantEl) return;
+  const desired = Number(dormantEl.value);
+  try {
+    const cfgRes = await fetch('/api/admin/user-audit/config');
+    const currentCfg = cfgRes.ok ? await cfgRes.json() : { autoScanEmailEnabled: true, ccEmails: [] };
+    const res = await fetch('/api/admin/user-audit/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoScanEmailEnabled: currentCfg.autoScanEmailEnabled !== false, ccEmails: currentCfg.ccEmails || [], dormantDaysThreshold: desired })
+    });
+    if (!res.ok) throw new Error('Lưu cấu hình thất bại');
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
+}
+
+// ===== "🔍 Audit Hệ Thống" (11/2026) ===== Gọi route RIÊNG /api/admin/system-audit* (routes/systemAudit.js)
+// — CÙNG khuôn Audit Người Dùng ở trên, findings có field scopeLabel/reason (không có username — không
+// phải phát hiện gắn với 1 tài khoản cụ thể).
+async function renderSystemAuditPanel() {
+  const panelEl = document.getElementById('adminSubAuditSystem');
+  const lastScanEl = document.getElementById('systemAuditLastScan');
+  const toggleEl = document.getElementById('systemAuditAutoScanToggle');
+  if (!panelEl) return;
+  try {
+    const [summaryRes, cfgRes] = await Promise.all([
+      fetch('/api/admin/system-audit/summary'),
+      fetch('/api/admin/system-audit/config')
+    ]);
+    if (summaryRes.status === 403) { panelEl.classList.add('hidden'); return; }
+    if (summaryRes.ok) {
+      const summary = await summaryRes.json();
+      renderSystemAuditSummary(summary);
+      if (lastScanEl) {
+        lastScanEl.innerText = summary.at
+          ? `Lần quét gần nhất: ${new Date(summary.at).toLocaleString('vi-VN')} (tự động hằng ngày)`
+          : 'Chưa quét lần nào — bấm "🔄 Quét Ngay" để bắt đầu.';
+      }
+    }
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (toggleEl) toggleEl.checked = cfg.autoScanEmailEnabled !== false;
+    }
+  } catch (err) {
+    console.error('renderSystemAuditPanel() lỗi:', err);
+  }
+}
+
+function renderSystemAuditSummary(summary) {
+  const row = document.getElementById('systemAuditSummaryRow');
+  if (!row) return;
+  row.classList.toggle('hidden', !summary.at);
+  const totalEl = document.getElementById('systemAuditTotalCount');
+  const critEl = document.getElementById('systemAuditCriticalCount');
+  const warnEl = document.getElementById('systemAuditWarningCount');
+  if (totalEl) totalEl.innerText = summary.total || 0;
+  if (critEl) critEl.innerText = summary.critical || 0;
+  if (warnEl) warnEl.innerText = summary.warning || 0;
+}
+
+function renderSystemAuditFindingsList(findings) {
+  const listEl = document.getElementById('systemAuditFindingsList');
+  if (!listEl) return;
+  if (!findings.length) {
+    listEl.innerHTML = '<p class="text-xs text-emerald-700 font-semibold">✅ Không phát hiện nào.</p>';
+    return;
+  }
+  listEl.innerHTML = sortFindingsBySeverity(findings).map(f => {
+    const style = AUDIT_SEVERITY_STYLE[f.severity] || AUDIT_SEVERITY_STYLE.INFO;
+    return `
+    <div class="border-l-4 ${style.border} ${style.bg} rounded p-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-xs font-bold">${escapeHtml(f.scopeLabel)}</div>
+        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${style.badgeBg} text-white">${style.label}</span>
+      </div>
+      <div class="text-[11px] text-gray-600 mt-0.5">${escapeHtml(f.reason)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function runSystemAuditScan() {
+  const btn = document.querySelector('[data-op="runSystemAuditScan"]');
+  const lastScanEl = document.getElementById('systemAuditLastScan');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Đang quét...'; }
+  try {
+    const res = await fetch('/api/admin/system-audit');
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Lỗi máy chủ (${res.status})`);
+    }
+    const { at, findings } = await res.json();
+    renderSystemAuditSummary({
+      at, total: findings.length,
+      critical: findings.filter(f => f.severity === 'CRITICAL').length,
+      warning: findings.filter(f => f.severity === 'WARNING').length
+    });
+    if (lastScanEl) lastScanEl.innerText = `Lần quét gần nhất: ${new Date(at).toLocaleString('vi-VN')} (vừa quét tay)`;
+    renderSystemAuditFindingsList(findings);
+  } catch (err) {
+    alert(`⛔ Quét Audit Hệ Thống thất bại: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '🔄 Quét Ngay'; }
+  }
+}
+
+async function toggleSystemAuditAutoScan() {
+  const toggleEl = document.getElementById('systemAuditAutoScanToggle');
+  if (!toggleEl) return;
+  const desired = toggleEl.checked;
+  try {
+    const cfgRes = await fetch('/api/admin/system-audit/config');
+    const currentCfg = cfgRes.ok ? await cfgRes.json() : { ccEmails: [] };
+    const res = await fetch('/api/admin/system-audit/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoScanEmailEnabled: desired, ccEmails: currentCfg.ccEmails || [] })
+    });
+    if (!res.ok) throw new Error('Lưu cấu hình thất bại');
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+    toggleEl.checked = !desired;
   }
 }
 

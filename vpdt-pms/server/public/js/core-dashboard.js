@@ -95,6 +95,12 @@ let dashboardCardActions = {};
 // _hrLinkedUsernamesCache ở module-admin-userstaging.js.
 let _workflowAuditSummaryCache = null;
 let _workflowAuditSummaryFetchInFlight = false;
+// userAuditSummaryCache/systemAuditSummaryCache (11/2026, "🔍 Audit Người Dùng"/"🔍 Audit Hệ Thống") —
+// CÙNG khuôn prefetch _workflowAuditSummaryCache ở trên, route riêng /api/admin/user-audit//system-audit.
+let _userAuditSummaryCache = null;
+let _userAuditSummaryFetchInFlight = false;
+let _systemAuditSummaryCache = null;
+let _systemAuditSummaryFetchInFlight = false;
 
 // Đặt sẵn bộ lọc Trạng Thái = "Đang Chờ Duyệt" của module rồi kích hoạt lại render — dùng cho các thẻ
 // Dashboard mà module đích ĐÃ CÓ SẴN ô lọc trạng thái (không phải mọi module đều có, xem ghi chú từng
@@ -203,6 +209,32 @@ function buildDashboardCards(user) {
     const auditTotal = _workflowAuditSummaryCache?.total || 0;
     addCard({ key: 'workflowAudit', icon: '⚠️', label: 'Quy trình có lỗ hổng duyệt', count: auditTotal, show: auditTotal > 0,
       action: async () => { await switchTab('system'); setSystemSubTab('WORKFLOW'); } });
+
+    // "🔍 Audit Người Dùng"/"🔍 Audit Hệ Thống" (11/2026) — CÙNG khuôn thẻ Audit Quy Trình ngay trên,
+    // chỉ khác điểm đến (setAdminSubTab() bên trong tab ADMIN, không phải setSystemSubTab('WORKFLOW')).
+    if (_userAuditSummaryCache === null && !_userAuditSummaryFetchInFlight) {
+      _userAuditSummaryFetchInFlight = true;
+      fetch('/api/admin/user-audit/summary')
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => { _userAuditSummaryCache = data || { total: 0 }; })
+        .catch(() => { _userAuditSummaryCache = { total: 0 }; })
+        .finally(() => { _userAuditSummaryFetchInFlight = false; renderDashboard(); });
+    }
+    const userAuditTotal = _userAuditSummaryCache?.total || 0;
+    addCard({ key: 'userAudit', icon: '👤', label: 'Audit Người Dùng có phát hiện', count: userAuditTotal, show: userAuditTotal > 0,
+      action: async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('AUDITUSER'); } });
+
+    if (_systemAuditSummaryCache === null && !_systemAuditSummaryFetchInFlight) {
+      _systemAuditSummaryFetchInFlight = true;
+      fetch('/api/admin/system-audit/summary')
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => { _systemAuditSummaryCache = data || { total: 0 }; })
+        .catch(() => { _systemAuditSummaryCache = { total: 0 }; })
+        .finally(() => { _systemAuditSummaryFetchInFlight = false; renderDashboard(); });
+    }
+    const systemAuditTotal = _systemAuditSummaryCache?.total || 0;
+    addCard({ key: 'systemAudit', icon: '🖥️', label: 'Audit Hệ Thống có phát hiện', count: systemAuditTotal, show: systemAuditTotal > 0,
+      action: async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('AUDITSYSTEM'); } });
   }
 
   return cards;

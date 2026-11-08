@@ -6643,6 +6643,42 @@ bất kể đang chọn module nào).
   không lẫn vào luồng tải dữ liệu chung (`GET /api/data`, nơi mọi tài khoản
   đã đăng nhập đều đọc được) vì tiết lộ cấu trúc phòng ban/quy trình nội bộ.
 
+### 7.1c. Audit Người Dùng + Audit Hệ Thống (từ v29.59)
+
+Theo yêu cầu người dùng, mở rộng từ "Audit Quy Trình" ở mục 7.1b sang 2
+hướng khác: tài khoản và hạ tầng/dữ liệu. Cả 2 đặt ở **Hệ Thống → ⚙️ Quản
+Trị** (2 nút mới, không đặt cùng tab "🔄 Quy Trình & Phê Duyệt" vì không
+liên quan quy trình duyệt) — cùng 3 kênh cảnh báo (quét tay/thẻ Dashboard/
+email hằng ngày khi có thay đổi) như Audit Quy Trình.
+
+**🔍 Audit Người Dùng** — 4 mục:
+- **A1 (NGHIÊM TRỌNG)**: tài khoản vẫn **active** dù hồ sơ Nhân Sự đã ghi
+  **NGHỈ VIỆC** (`employeeProfile.status === 'INACTIVE'`). Hoàn tất Offboarding
+  chỉ đổi trạng thái hồ sơ, KHÔNG tự khoá tài khoản đăng nhập — rà soát và
+  khoá tài khoản ngay nếu đúng là đã nghỉ việc thật.
+- **A2 (CẢNH BÁO)**: tài khoản active lâu không đăng nhập. Ngưỡng ngày tự
+  cấu hình ngay trên màn (mặc định 90 ngày).
+- **A3 (THÔNG TIN)**: liệt kê mọi tài khoản đang có quyền **admin** để rà
+  soát định kỳ ai đang giữ "siêu quyền".
+- **A4 (THÔNG TIN)**: có quyền "Người Duyệt" (canBeApprover) nhưng không
+  khớp bất kỳ bước/nhóm phê duyệt nào đang cấu hình (cả theo người lẫn theo
+  vị trí, kể cả kiêm nhiệm) — quyền thừa, có thể thu hồi, KHÔNG phải lỗ hổng.
+
+**🔍 Audit Hệ Thống** — 2 mục:
+- **Tỷ lệ lỗi kỹ thuật bất thường**: so số dòng Nhật Ký Lỗi Hệ Thống
+  (ErrorLogs) hôm nay với trung bình 7 ngày trước — NGHIÊM TRỌNG nếu tăng
+  ≥5 lần (hoặc ≥200 lỗi tuyệt đối), CẢNH BÁO nếu ≥2,5 lần (hoặc ≥50 lỗi).
+- **Record tham chiếu file đã mất trên đĩa**: quét mọi module tìm hồ sơ
+  đang tham chiếu 1 file đính kèm (`/uploads/...`) nhưng file đó không còn
+  tồn tại thật trên đĩa — CHIỀU NGƯỢC của job dọn "file mồ côi" (job đó dọn
+  file không ai tham chiếu; mục này tìm tham chiếu trỏ tới chỗ trống). Dừng
+  ở 200 dòng/lượt quét để tránh email/màn hình quá tải.
+- Không làm ở đợt này (đã nghiên cứu, người dùng chưa chọn): nhắc hạn
+  chứng chỉ TLS/CA sắp hết hạn — có thể bổ sung sau nếu cần.
+
+Không làm: "hết hạn mật khẩu" theo thời gian (hệ thống không lưu thời điểm
+đổi mật khẩu gần nhất, cần thêm nghiệp vụ mới, ngoài phạm vi audit thuần).
+
 ### 7.2. Quản Lý Danh Mục
 
 Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Phòng ban,

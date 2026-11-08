@@ -91,6 +91,7 @@ const SYSTEM_NAV = [
     { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
     { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
     { key: 'sysPermMatrix', icon: '🧮', label: 'Ma Trận Phân Quyền' },
+    { key: 'sysAuditUser', icon: '🔍', label: 'Audit Người Dùng' },
   ]},
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
@@ -107,6 +108,7 @@ const SYSTEM_NAV = [
     { key: 'sysFiles', icon: '📁', label: 'Quản Lý Tệp File' },
     { key: 'sysTrash', icon: '🗑️', label: 'Thùng Rác' },
     { key: 'sysLog', icon: '📜', label: 'Nhật Ký Hệ Thống' },
+    { key: 'sysAuditSystem', icon: '🔍', label: 'Audit Hệ Thống' },
   ]},
   // 3 màn API là 3 thứ TÁCH BIỆT hoàn toàn, đừng gộp nhầm: "🔑 API Xác Thực Ngoài" (tab con của ⚙️ Quản
   // Trị, cấp API key cho ứng dụng NGOÀI gọi VÀO hệ thống), "🔌 Cấu Hình API Đơn Hàng" (tab con khác, đẩy
@@ -1595,6 +1597,29 @@ const SYSTEM_DOCS = {
       { label: 'Cột "BaoCao_MucBoSung"', text: 'ứng với các tab Báo Cáo được mở THÊM ngoài quyền vận hành thông thường (VD người không có quyền Vận Hành nhưng vẫn cần xem tab Báo Cáo Vận Hành) — gõ đúng danh sách tab cách nhau bằng dấu ";", để trống nghĩa là không mở thêm tab nào.' },
     ] },
   },
+  sysAuditUser: {
+    icon: '🔍', title: 'Audit Người Dùng', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Từ 11/2026, mở rộng từ "🔍 Audit Quy Trình" (quét lỗ hổng phê duyệt) theo yêu cầu người dùng — quét chủ động 4 điểm liên quan TÀI KHOẢN: tài khoản còn hoạt động dù hồ sơ Nhân Sự đã ghi nghỉ việc (lỗ hổng bảo mật thật), tài khoản lâu không đăng nhập, danh sách tài khoản admin, và quyền "Người Duyệt" (canBeApprover) đang KHÔNG được dùng ở đâu cả — rà soát chủ động thay vì chờ phát hiện lỗi.',
+    flow: { ariaLabel: 'Quy trình quét + xử lý', chain: [
+      { label: 'Quét (tự bấm hoặc tự động hằng ngày)', sub: 'Đọc Hồ Sơ Nhân Sự + Người Dùng + cấu hình duyệt' },
+      { label: 'Liệt kê từng phát hiện', sub: 'NGHIÊM TRỌNG / CẢNH BÁO / THÔNG TIN' },
+      { label: '3 kênh báo: màn quét + thẻ Dashboard + Email', sub: 'Chỉ khi có thay đổi thật', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị</b> → bấm nút <b>"🔍 Audit Người Dùng"</b> ở thanh tab con.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"🔄 Quét Ngay"</b> — danh sách phát hiện hiện ngay dưới, sắp xếp NGHIÊM TRỌNG lên đầu.' },
+      { role: 'Quản trị viên', text: '<b>NGHIÊM TRỌNG</b> (đỏ) = tài khoản vẫn ACTIVE dù hồ sơ Nhân Sự đã ghi NGHỈ VIỆC — rà soát và khoá tài khoản ngay nếu đúng là đã nghỉ thật (Offboarding hoàn tất KHÔNG tự khoá tài khoản, phải làm tay). <b>CẢNH BÁO</b> (vàng) = tài khoản lâu không đăng nhập. <b>THÔNG TIN</b> (xanh) = danh sách admin/quyền duyệt dư thừa, chỉ để rà soát chủ động, không phải lỗi.' },
+      { role: 'Quản trị viên', text: 'đổi <b>"Ngưỡng lâu không đăng nhập"</b> (mặc định 90 ngày) ngay trên màn — đổi xong tự lưu, áp dụng từ lần quét kế tiếp.' },
+      { role: 'Quản trị viên', text: 'tick <b>"📧 Tự động quét hằng ngày + gửi email khi có thay đổi"</b> — CHỈ gửi email cho admin có email khi danh sách phát hiện THỰC SỰ thay đổi, không spam lặp lại.' },
+      { role: 'Quản trị viên', text: 'ngoài màn này, Dashboard tự hiện thẻ <b>"👤 Audit Người Dùng có phát hiện"</b> kèm số lượng khi lần quét gần nhất còn phát hiện — bấm vào nhảy thẳng tới đúng màn này.' },
+    ],
+    footer: { left: [
+      { label: 'A4 khớp CẢ 2 cách gán người duyệt', text: 'quyền "Người Duyệt" chỉ bị coi là dư thừa khi KHÔNG khớp cả theo "Theo Người" (PEOPLE mode, chọn tay) lẫn "Theo Vị Trí" (POSITION mode, kể cả qua Vị Trí Kiêm Nhiệm) — tránh báo nhầm người đang duyệt thật qua vị trí.' },
+      { label: 'Không có "hết hạn mật khẩu"', text: 'hệ thống hiện chỉ có "bắt đổi mật khẩu 1 lần" (mustChangePassword), không lưu thời điểm đổi mật khẩu gần nhất — audit không làm được mục này, cần thêm nghiệp vụ mới nếu người dùng muốn.' },
+    ], right: [
+      { label: 'Dữ liệu audit không lộ qua đồng bộ dữ liệu chung', text: 'kết quả quét/cấu hình lưu qua route riêng, gác quyền admin cho CẢ đọc lẫn ghi — nhạy cảm hơn mức thường vì hé lộ trạng thái tài khoản/quyền của toàn hệ thống.' },
+    ] },
+  },
   sysUsers: {
     icon: '👥', title: 'Người Dùng', badge: 'Chỉ Quản Trị Viên',
     desc: 'Tạo/sửa/khoá tài khoản đăng nhập — hỗ trợ tạo hàng loạt (điền nhiều người vào 1 danh sách tạm rồi lưu 1 lần) tiện khi nhận nhiều nhân viên mới cùng đợt.',
@@ -1828,6 +1853,28 @@ const SYSTEM_DOCS = {
       { label: 'Không tự dọn theo thời gian', text: 'hồ sơ nằm mãi trong Thùng Rác cho tới khi có người chủ động khôi phục hoặc xoá vĩnh viễn — không có cơ chế tự xoá sau X ngày.' },
     ], right: [
       { label: 'Gác quyền cả 2 lớp', text: 'CHỈ admin vào được, và được kiểm tra lại THẬT ở server (không chỉ ẩn nút giao diện) — gọi thẳng API cũng không xem/khôi phục được nếu không phải admin.' },
+    ] },
+  },
+  sysAuditSystem: {
+    icon: '🔍', title: 'Audit Hệ Thống', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Từ 11/2026, mở rộng từ "🔍 Audit Quy Trình"/"🔍 Audit Người Dùng" — quét 2 điểm liên quan HẠ TẦNG/DỮ LIỆU: tỷ lệ lỗi kỹ thuật bất thường theo ngày (đọc Nhật Ký Lỗi Hệ Thống) và record tham chiếu file đính kèm đã mất trên đĩa (chiều NGƯỢC của dọn file mồ côi — ở đây tìm tham chiếu "trỏ tới chỗ trống" thay vì file "không ai tham chiếu").',
+    flow: { ariaLabel: 'Quy trình quét + xử lý', chain: [
+      { label: 'Quét (tự bấm hoặc tự động hằng ngày)', sub: 'Đọc Nhật Ký Lỗi + đối chiếu file trên đĩa' },
+      { label: 'Liệt kê từng phát hiện', sub: 'NGHIÊM TRỌNG / CẢNH BÁO' },
+      { label: '3 kênh báo: màn quét + thẻ Dashboard + Email', sub: 'Chỉ khi có thay đổi thật', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị</b> → bấm nút <b>"🔍 Audit Hệ Thống"</b> ở thanh tab con.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"🔄 Quét Ngay"</b> — CÓ THỂ MẤT VÀI GIÂY (đọc toàn bộ Nhật Ký Lỗi + đối chiếu file đính kèm trên đĩa của mọi module) — không đóng trang trong lúc quét.' },
+      { role: 'Quản trị viên', text: '<b>NGHIÊM TRỌNG</b> (đỏ) = số lỗi kỹ thuật hôm nay tăng bất thường so với trung bình 7 ngày trước (≥5 lần hoặc ≥200 lỗi) — nên xem ngay "🖥️ Nhật Ký Lỗi Hệ Thống" (Hệ Thống → 📊 Log) để tìm nguyên nhân. <b>CẢNH BÁO</b> (vàng) = 1 hồ sơ đang tham chiếu 1 file đính kèm nhưng file đó KHÔNG CÒN trên đĩa (có thể đã bị xoá tay/mất trong lúc backup-restore) — người dùng mở hồ sơ đó sẽ gặp lỗi tải file.' },
+      { role: 'Quản trị viên', text: 'tick <b>"📧 Tự động quét hằng ngày + gửi email khi có thay đổi"</b> — CHỈ gửi email cho admin có email khi danh sách phát hiện THỰC SỰ thay đổi.' },
+      { role: 'Quản trị viên', text: 'ngoài màn này, Dashboard tự hiện thẻ <b>"🖥️ Audit Hệ Thống có phát hiện"</b> kèm số lượng khi lần quét gần nhất còn phát hiện.' },
+    ],
+    footer: { left: [
+      { label: 'Dừng ở 200 dòng/lượt quét (mục file mất)', text: 'nếu phát hiện vượt 200 dòng, màn chỉ hiện đúng 200 dòng đầu + 1 dòng ghi chú "còn nhiều hơn" — xử lý đợt này trước rồi quét lại, tránh email/màn hình quá tải khi có sự cố mất file quy mô lớn.' },
+      { label: 'KHÔNG tự xoá/sửa gì', text: 'cả 2 mục CHỈ liệt kê để admin tự quyết — không tự xoá tham chiếu file mất, không tự làm gì với log lỗi, khác hẳn job dọn file mồ côi (jobs/orphanedUploadsCleanup.js, CHIỀU NGƯỢC LẠI, có tự xoá file thật sau 48h).' },
+    ], right: [
+      { label: 'Bỏ qua chủ đích: cert TLS/CA sắp hết hạn', text: 'đã nghiên cứu nhưng người dùng chưa chọn làm ở đợt này — nếu cần, có thể bổ sung thêm 1 mục audit riêng sau.' },
     ] },
   },
   sysLog: {

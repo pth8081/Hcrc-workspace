@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**29.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.59 (2026-11): Audit Người Dùng + Audit Hệ Thống — mở rộng từ Audit Quy Trình
+
+Theo yêu cầu người dùng ("xem ngoài phần audit quy trình thì nên có audit về người dùng, về hệ thống
+để chủ động hỗ trợ tốt hơn") — nghiên cứu + xác nhận phạm vi trước khi code (AskUserQuestion), sau đó
+triển khai 2 màn audit mới, cùng khuôn Audit Quy Trình (routes/job/UI đều admin-only, cache riêng ngoài
+`GET /api/data` chung). Cả 2 đặt ở **Hệ Thống → ⚙️ Quản Trị** (2 nút mới "🔍 Audit Người Dùng"/"🔍 Audit
+Hệ Thống", cạnh các mục rà soát/cấu hình hệ thống khác — không liên quan quy trình duyệt nên không đặt
+cùng tab "🔄 Quy Trình & Phê Duyệt").
+
+**🔍 Audit Người Dùng** (`lib/userAccountAudit.js`, route `/api/admin/user-audit*`, job
+`jobs/userAccountGapAudit.js`) — 4 mục:
+- **A1 (CRITICAL)** — tài khoản vẫn `active` dù hồ sơ Nhân Sự đã ghi NGHỈ VIỆC (`employeeProfile.status
+  === 'INACTIVE'`). Offboarding hoàn tất chỉ đổi `employeeProfile.status`, KHÔNG tự khoá tài khoản —
+  lỗ hổng bảo mật thật, không phải audit lý thuyết.
+- **A2 (WARNING)** — tài khoản active lâu không đăng nhập (`users.lastLoginAt`), ngưỡng ngày tự cấu
+  hình (mặc định 90 ngày, ô nhập riêng trên UI).
+- **A3 (INFO)** — liệt kê mọi tài khoản đang có quyền `admin` để rà soát định kỳ (302 chỗ/39 file coi
+  `admin:true` là bỏ qua mọi kiểm tra khác).
+- **A4 (INFO)** — có quyền `canBeApprover` nhưng không khớp (PEOPLE lẫn POSITION mode, kể cả kiêm
+  nhiệm) bất kỳ bước/nhóm phê duyệt nào đang cấu hình — quyền thừa, không phải lỗ hổng.
+- Không làm: hết hạn mật khẩu theo thời gian (không có field `passwordChangedAt`, cần thêm nghiệp vụ
+  mới — ngoài phạm vi audit).
+
+**🔍 Audit Hệ Thống** (`lib/systemHealthAudit.js`, route `/api/admin/system-audit*`, job
+`jobs/systemHealthAudit.js`) — 2 mục (B2/B3; B1 "cert TLS/CA sắp hết hạn" người dùng không chọn làm ở
+đợt này):
+- **B2** — tỷ lệ lỗi kỹ thuật (`dbo.ErrorLogs`) hôm nay so với trung bình 7 ngày trước, digest đơn
+  giản (CRITICAL nếu ≥5x hoặc ≥200 lỗi, WARNING nếu ≥2.5x hoặc ≥50 lỗi, có ngưỡng tối thiểu 10 lỗi
+  tuyệt đối để tránh báo động giả khi baseline gần 0).
+- **B3** — record ở bất kỳ collection nào tham chiếu file `/uploads/...` nhưng file đã mất trên đĩa
+  (chiều NGƯỢC của `jobs/orphanedUploadsCleanup.js` — chiều đó dọn file không ai tham chiếu, B3 tìm
+  tham chiếu trỏ tới file không còn) — dừng ở 200 dòng/lượt quét để tránh email/UI phình to.
+- Cả 2 async (đọc CSDL/đĩa), chấp nhận chậm hơn 2 audit kia vì chỉ chạy khi bấm "Quét Ngay"/job hằng ngày.
+
+**Tái dùng engine**: `lib/workflowEngine.js` export thêm `DEPT_OR_TIER_WORKFLOW_MAP_KEYS`/
+`NESTED_DEPT_WORKFLOW_MAP_KEYS` cho A4; `lib/errorLogStore.js` thêm `getDailyErrorCounts()`;
+`lib/recordStore.js` (`DEDICATED_TABLES`/`getAllDedicatedRecords`/`collectRecordFileUrls`, đã có sẵn)
+tái dùng cho B3 — không viết lại logic quét file nào mới.
+
+Test mới: `tests/test-user-account-audit.js` (21 kịch bản), `tests/test-system-health-audit.js` (9 kịch
+bản, mock DB + thao tác file thật trên `uploads/`), `tests/test-user-system-audit-ui.js` (10 kịch bản
+Playwright thật). Chạy lại test liên quan hiện có (Audit Quy Trình, cascade rename, dashboard stat
+cards, TLS cert/CA, Cấu Hình API Đối Tác, Lịch Báo Cáo Ngưỡng Tồn) — không regression.
 
 ## v29.58 (2026-11): Vá cascade rename thiếu cho 3 collection Kiểm Soát Hàng Hóa
 

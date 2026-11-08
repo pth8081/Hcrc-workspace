@@ -65,6 +65,32 @@ async function getRecentErrorLogs(limit) {
   return result.recordset.map(toEntry);
 }
 
+// getDailyErrorCounts() (11/2026, "Audit Hệ Thống" — B2 tỷ lệ lỗi bất thường): đếm số dòng ErrorLogs
+// theo NGÀY (giờ VN, dùng CreatedAt — cột ghi theo giờ server, hệ thống chạy VPS VN nên trùng giờ VN)
+// cho `days` ngày gần nhất, TÍNH LUÔN cả ngày không có lỗi nào (trả 0, không bỏ qua) để bên gọi tính
+// trung bình chính xác, không bị lệch vì thiếu ngày "sạch" trong kết quả SQL (GROUP BY chỉ trả ngày CÓ
+// ít nhất 1 dòng).
+async function getDailyErrorCounts(days) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('days', sql.Int, days)
+    .query(`
+      SELECT CAST(CreatedAt AS DATE) AS Day, COUNT(*) AS Cnt
+      FROM dbo.ErrorLogs
+      WHERE CreatedAt >= DATEADD(DAY, -@days, CAST(GETDATE() AS DATE))
+      GROUP BY CAST(CreatedAt AS DATE)
+    `);
+  const byDay = new Map(result.recordset.map(r => [new Date(r.Day).toISOString().slice(0, 10), r.Cnt]));
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    out.push({ date: key, count: byDay.get(key) || 0 });
+  }
+  return out;
+}
+
 async function clearAllErrorLogs() {
   const pool = await getPool();
   await pool.request().query('DELETE FROM dbo.ErrorLogs');
@@ -82,5 +108,5 @@ async function pruneOldErrorLogs(keep = RETENTION_KEEP) {
 
 module.exports = {
   RETENTION_KEEP,
-  insertErrorLog, getRecentErrorLogs, clearAllErrorLogs, pruneOldErrorLogs
+  insertErrorLog, getRecentErrorLogs, clearAllErrorLogs, pruneOldErrorLogs, getDailyErrorCounts
 };

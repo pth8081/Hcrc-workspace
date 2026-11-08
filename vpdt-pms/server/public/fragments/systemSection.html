@@ -696,6 +696,12 @@
       <button type="button" data-op="setAdminSubTab" data-arg0="TLSCERT" id="btnAdminSubTlsCert" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔒 Chứng Chỉ TLS/HTTPS</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="TRUSTEDCA" id="btnAdminSubTrustedCa" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔗 Chứng Chỉ Tin Cậy (CA Ngoài)</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="SHELFDIGEST" id="btnAdminSubShelfDigest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Lịch Báo Cáo Ngưỡng Tồn</button>
+      <!-- "Audit Người Dùng/Hệ Thống" (11/2026, mở rộng từ "Audit Quy Trình" ở tab Quy Trình & Phê Duyệt
+           — 2 audit MỚI này KHÔNG liên quan quy trình duyệt nên đặt ở đây, cùng khu "Quản Trị" với các
+           mục rà soát/cấu hình hệ thống khác). 2 nút RIÊNG (không gộp sub-tab con) — đơn giản hơn vì chỉ
+           2 mục, mỗi mục đã có nội dung đủ dài. -->
+      <button type="button" data-op="setAdminSubTab" data-arg0="AUDITUSER" id="btnAdminSubAuditUser" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Người Dùng</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="AUDITSYSTEM" id="btnAdminSubAuditSystem" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Hệ Thống</button>
     </div>
 
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
@@ -1335,6 +1341,62 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- "🔍 Audit Người Dùng" (11/2026) — mở rộng từ "Audit Quy Trình" (tab Quy Trình & Phê Duyệt),
+         CÙNG khuôn hiển thị (stat box 3 cột + nút Quét Ngay + toggle tự động quét hằng ngày + danh sách
+         phát hiện) nhưng đọc route riêng /api/admin/user-audit*. 4 mục: tài khoản active dù HR đã nghỉ
+         việc (CRITICAL), tài khoản lâu không đăng nhập (WARNING, ngưỡng ngày tự cấu hình), danh sách
+         tài khoản admin + quyền canBeApprover dư thừa (cả 2 INFO — rà soát chủ động, không phải lỗ
+         hổng). Xem renderUserAuditPanel() ở module-hethong-tabs.js. -->
+    <div id="adminSubAuditUser" class="hidden bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🔍 Audit Người Dùng — Rà Soát Tài Khoản</h3>
+          <p id="userAuditLastScan" class="text-[11px] text-gray-500 italic mt-0.5">Chưa quét lần nào.</p>
+        </div>
+        <button type="button" data-op="runUserAuditScan" id="userAuditScanBtn" class="btn-primary text-xs">🔄 Quét Ngay</button>
+      </div>
+      <div id="userAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
+        <div class="bg-gray-50 border rounded p-2 text-center"><div id="userAuditTotalCount" class="text-lg font-bold text-gray-700">0</div><div class="text-[10px] text-gray-500">Tổng phát hiện</div></div>
+        <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="userAuditCriticalCount" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">Nghiêm trọng</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="userAuditWarningCount" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">Cảnh báo</div></div>
+      </div>
+      <div class="bg-gray-50 border rounded p-3 flex items-center gap-3 flex-wrap text-xs">
+        <label class="flex items-center gap-1.5 font-semibold text-gray-700">
+          <input type="checkbox" id="userAuditAutoScanToggle" data-op-change="toggleUserAuditAutoScan"> 📧 Tự động quét hằng ngày + gửi email khi có thay đổi
+        </label>
+        <label class="flex items-center gap-1.5 text-gray-600 ml-auto">
+          Ngưỡng "lâu không đăng nhập":
+          <input type="number" id="userAuditDormantDays" min="1" max="3650" class="w-16 border rounded px-1.5 py-1 text-xs" data-op-change="saveUserAuditDormantDays"> ngày
+        </label>
+      </div>
+      <div id="userAuditFindingsList" class="space-y-1.5"></div>
+    </div>
+
+    <!-- "🔍 Audit Hệ Thống" (11/2026) — CÙNG khuôn Audit Người Dùng ở trên, đọc route riêng
+         /api/admin/system-audit*. 2 mục: tỷ lệ lỗi kỹ thuật bất thường theo ngày (ErrorLogs) và record
+         tham chiếu file đã mất trên đĩa uploads/ — cả 2 cần quét CSDL/đĩa nên có thể chậm hơn Audit Quy
+         Trình/Người Dùng (đọc appData có sẵn), chấp nhận được vì chỉ chạy khi bấm "Quét Ngay"/job hằng
+         ngày. Xem renderSystemAuditPanel() ở module-hethong-tabs.js. -->
+    <div id="adminSubAuditSystem" class="hidden bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🔍 Audit Hệ Thống — Rà Soát Hạ Tầng/Dữ Liệu</h3>
+          <p id="systemAuditLastScan" class="text-[11px] text-gray-500 italic mt-0.5">Chưa quét lần nào.</p>
+        </div>
+        <button type="button" data-op="runSystemAuditScan" id="systemAuditScanBtn" class="btn-primary text-xs">🔄 Quét Ngay</button>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">⏳ Quét có thể mất vài giây (đọc Nhật Ký Lỗi + đối chiếu file đính kèm trên đĩa) — không đóng trang trong lúc quét.</p>
+      <div id="systemAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
+        <div class="bg-gray-50 border rounded p-2 text-center"><div id="systemAuditTotalCount" class="text-lg font-bold text-gray-700">0</div><div class="text-[10px] text-gray-500">Tổng phát hiện</div></div>
+        <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="systemAuditCriticalCount" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">Nghiêm trọng</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="systemAuditWarningCount" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">Cảnh báo</div></div>
+      </div>
+      <label class="flex items-center gap-1.5 font-semibold text-gray-700 bg-gray-50 border rounded p-3 text-xs">
+        <input type="checkbox" id="systemAuditAutoScanToggle" data-op-change="toggleSystemAuditAutoScan"> 📧 Tự động quét hằng ngày + gửi email khi có thay đổi
+      </label>
+      <div id="systemAuditFindingsList" class="space-y-1.5"></div>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
