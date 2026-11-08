@@ -1879,7 +1879,7 @@ async function deleteNganhHangCatalogItem(id) {
 // tab WORKFLOW (renderWorkflowTab(), module-hethong-tabs.js) — CHỈ đọc cache tóm tắt + cấu hình (rẻ,
 // không tự quét lại); quét THẬT chỉ xảy ra khi admin bấm "🔄 Quét Ngay" (runWorkflowAuditScan()).
 async function renderWorkflowAuditPanel() {
-  const panelEl = document.getElementById('workflowAuditPanel');
+  const panelEl = document.getElementById('adminSubAuditWorkflow');
   const lastScanEl = document.getElementById('workflowAuditLastScan');
   const toggleEl = document.getElementById('workflowAuditAutoScanToggle');
   if (!panelEl) return;

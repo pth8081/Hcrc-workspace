@@ -91,11 +91,20 @@ const SYSTEM_NAV = [
     { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
     { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
     { key: 'sysPermMatrix', icon: '🧮', label: 'Ma Trận Phân Quyền' },
+  ]},
+  // 3 màn Audit GOM VỀ 1 NHÓM (11/2026, theo yêu cầu người dùng "cho đồng bộ") — CẢ 3 đều là 3 nút LIỀN
+  // KỀ thật trên màn (Hệ Thống → ⚙️ Quản Trị → "🔍 Audit Quy Trình"/"Audit Người Dùng"/"Audit Hệ Thống",
+  // xem #adminSubTabBar systemSection.html) dù nội dung quét khác nhau (quy trình duyệt/tài khoản/hạ
+  // tầng) — trước đây sysWorkflowAudit nằm ở nhóm "Cấu Hình Quy Trình" (khi còn ở tab riêng "🔄 Quy
+  // Trình & Phê Duyệt"), sysAuditUser/sysAuditSystem nằm rải ở "Phân Quyền & Tài Khoản"/"Vận Hành Hệ
+  // Thống" — nay gom lại đúng 1 nhóm cho khớp vị trí thật trên UI.
+  { group: 'Audit', items: [
+    { key: 'sysWorkflowAudit', icon: '🔍', label: 'Audit Quy Trình' },
     { key: 'sysAuditUser', icon: '🔍', label: 'Audit Người Dùng' },
+    { key: 'sysAuditSystem', icon: '🔍', label: 'Audit Hệ Thống' },
   ]},
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
-    { key: 'sysWorkflowAudit', icon: '🔍', label: 'Audit Quy Trình' },
     { key: 'sysAdvWorkflow', icon: '🔀', label: 'Nghiệp Vụ Nâng Cao' },
     { key: 'sysBizConfig', icon: '⚙️', label: 'Cấu Hình Nghiệp Vụ' },
     { key: 'sysDeptViewScope', icon: '🔒', label: 'Phạm Vi Xem Theo Phòng Ban' },
@@ -108,7 +117,6 @@ const SYSTEM_NAV = [
     { key: 'sysFiles', icon: '📁', label: 'Quản Lý Tệp File' },
     { key: 'sysTrash', icon: '🗑️', label: 'Thùng Rác' },
     { key: 'sysLog', icon: '📜', label: 'Nhật Ký Hệ Thống' },
-    { key: 'sysAuditSystem', icon: '🔍', label: 'Audit Hệ Thống' },
   ]},
   // 3 màn API là 3 thứ TÁCH BIỆT hoàn toàn, đừng gộp nhầm: "🔑 API Xác Thực Ngoài" (tab con của ⚙️ Quản
   // Trị, cấp API key cho ứng dụng NGOÀI gọi VÀO hệ thống), "🔌 Cấu Hình API Đơn Hàng" (tab con khác, đẩy
@@ -1685,7 +1693,7 @@ const SYSTEM_DOCS = {
       { label: '3 kênh báo: màn quét + thẻ Dashboard + Email', sub: 'Chỉ khi có thay đổi thật', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔄 Quy Trình & Phê Duyệt</b> — khối <b>"🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt"</b> luôn hiện ở ĐẦU trang (trước thanh chọn module), không phụ thuộc module đang chọn.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị</b> → bấm nút <b>"🔍 Audit Quy Trình"</b> ở thanh tab con (từ 11/2026 dời về đây, ngay cạnh "🔍 Audit Người Dùng"/"🔍 Audit Hệ Thống" — cả 3 audit gom về 1 chỗ cho dễ tìm, không còn nằm ở đầu tab "🔄 Quy Trình & Phê Duyệt" như trước).' },
       { role: 'Quản trị viên', text: 'bấm <b>"🔄 Quét Ngay"</b> để quét thật ngay lúc đó — danh sách lỗ hổng hiện ngay dưới, sắp xếp CRITICAL lên đầu, mỗi dòng ghi rõ module + phòng ban/tier/bước + lý do.' },
       { role: 'Quản trị viên', text: '<b>CRITICAL</b> (đỏ) = bước/nhóm BẮT BUỘC (khoá cứng ở Cấp) đang không có người duyệt nào — hồ sơ mới sẽ KHÔNG gửi được, cần xử lý ngay. <b>WARNING</b> (vàng) = bước/nhóm chỉ tuỳ chọn hiển thị, không chặn gửi hồ sơ nhưng vẫn nên rà soát.' },
       { role: 'Quản trị viên', text: 'tick/bỏ tick <b>"📧 Tự động quét hằng ngày + gửi email khi có thay đổi"</b> — bật thì mỗi ngày hệ thống tự quét, CHỈ gửi email cho mọi admin có email (+ CC thêm nếu cấu hình) khi danh sách lỗ hổng THỰC SỰ thay đổi (thêm lỗ hổng mới hoặc hết lỗ hổng cũ) — không spam lặp lại khi không có gì đổi.' },

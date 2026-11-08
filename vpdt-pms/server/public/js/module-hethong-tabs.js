@@ -89,9 +89,6 @@ function setSystemSubTab(subTab) {
     // giá trị (đang Sửa 1 mẫu cũ, hoặc vừa tạo mã nháp cho mẫu mới) thì giữ nguyên, không ghi đè mỗi lần
     // chuyển qua lại giữa các tab con của Hệ Thống.
     if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
-    // "🔍 Audit Quy Trình" (11/2026) — CHỈ đọc cache tóm tắt (rẻ), không tự quét lại mỗi lần vào tab, xem
-    // chú thích đầy đủ ở renderWorkflowAuditPanel() (module-workflow.js).
-    renderWorkflowAuditPanel();
   }
   // ADVWORKFLOW: "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
   if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }
@@ -192,6 +189,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
   document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
   document.getElementById('adminSubShelfDigest').classList.toggle('hidden', subTab !== 'SHELFDIGEST');
+  document.getElementById('adminSubAuditWorkflow').classList.toggle('hidden', subTab !== 'AUDITWORKFLOW');
   document.getElementById('adminSubAuditUser').classList.toggle('hidden', subTab !== 'AUDITUSER');
   document.getElementById('adminSubAuditSystem').classList.toggle('hidden', subTab !== 'AUDITSYSTEM');
 
@@ -206,6 +204,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubShelfDigest').className = subTab === 'SHELFDIGEST' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubAuditWorkflow').className = subTab === 'AUDITWORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubAuditUser').className = subTab === 'AUDITUSER' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubAuditSystem').className = subTab === 'AUDITSYSTEM' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
@@ -214,6 +213,9 @@ function setAdminSubTab(subTab) {
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
   if (subTab === 'SHELFDIGEST') { loadShelfThresholdDigestScheduleToForm(); loadShelfReconDigestScheduleToForm(); loadShelfReconRecipientsOverview(); }
+  // "🔍 Audit Quy Trình" (11/2026, dời từ tab WORKFLOW về đây "cho đồng bộ" với 2 audit mới) — CHỈ đọc
+  // cache tóm tắt (rẻ), không tự quét lại mỗi lần vào tab, xem renderWorkflowAuditPanel() (module-workflow.js).
+  if (subTab === 'AUDITWORKFLOW') renderWorkflowAuditPanel();
   if (subTab === 'AUDITUSER') renderUserAuditPanel();
   if (subTab === 'AUDITSYSTEM') renderSystemAuditPanel();
 }

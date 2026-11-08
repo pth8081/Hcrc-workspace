@@ -6600,13 +6600,14 @@ Xem đầy đủ ở mục 3 — đây chỉ là đường dẫn màn hình
 (**Hệ Thống → 🔄 Quy Trình & Phê Duyệt**), cấu hình người duyệt cho từng bước
 của hơn 15 module dùng chung engine phê duyệt.
 
-### 7.1b. Audit Quy Trình — quét lỗ hổng "chưa gắn người duyệt" (từ v29.57)
+### 7.1b. Audit Quy Trình — quét lỗ hổng "chưa gắn người duyệt" (từ v29.57, dời vị trí ở v29.60)
 
 Theo yêu cầu người dùng ("hệ thống đã go live rồi, cần kiểm soát chặt chẽ —
 nếu 1 nhân viên nghỉ bị disable thì quy trình mất người duyệt mà không biết
-trước"): khối **"🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt"** nằm ở ĐẦU màn
-**Hệ Thống → 🔄 Quy Trình & Phê Duyệt** (trên cả thanh chọn module, luôn hiện
-bất kể đang chọn module nào).
+trước"): khối **"🔍 Audit Quy Trình"** nằm ở **Hệ Thống → ⚙️ Quản Trị**
+(nút riêng ở thanh tab con, từ v29.60 — cạnh "🔍 Audit Người Dùng"/"🔍 Audit
+Hệ Thống" ở mục 7.1c ngay dưới, cả 3 audit gom về 1 chỗ cho đồng bộ; trước
+đó nằm ở đầu tab "🔄 Quy Trình & Phê Duyệt").
 
 - **Cách quét**: bấm **"🔄 Quét Ngay"** để quét thật ngay lúc đó. Engine dùng
   lại ĐÚNG hàm `findMissingApproverStep()` — hàm thật hệ thống dùng để chặn
@@ -6646,10 +6647,11 @@ bất kể đang chọn module nào).
 ### 7.1c. Audit Người Dùng + Audit Hệ Thống (từ v29.59)
 
 Theo yêu cầu người dùng, mở rộng từ "Audit Quy Trình" ở mục 7.1b sang 2
-hướng khác: tài khoản và hạ tầng/dữ liệu. Cả 2 đặt ở **Hệ Thống → ⚙️ Quản
-Trị** (2 nút mới, không đặt cùng tab "🔄 Quy Trình & Phê Duyệt" vì không
-liên quan quy trình duyệt) — cùng 3 kênh cảnh báo (quét tay/thẻ Dashboard/
-email hằng ngày khi có thay đổi) như Audit Quy Trình.
+hướng khác: tài khoản và hạ tầng/dữ liệu. Cả 3 đặt CHUNG ở **Hệ Thống →
+⚙️ Quản Trị** (3 nút liền kề: 🔍 Audit Quy Trình/Người Dùng/Hệ Thống, từ
+v29.60 — trước đó Audit Quy Trình nằm riêng ở tab "🔄 Quy Trình & Phê
+Duyệt", nay gom về 1 chỗ cho đồng bộ) — cùng 3 kênh cảnh báo (quét tay/thẻ
+Dashboard/email hằng ngày khi có thay đổi) và CÙNG khuôn hiển thị.
 
 **🔍 Audit Người Dùng** — 4 mục:
 - **A1 (NGHIÊM TRỌNG)**: tài khoản vẫn **active** dù hồ sơ Nhân Sự đã ghi

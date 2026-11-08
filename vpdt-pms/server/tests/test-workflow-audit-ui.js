@@ -1,8 +1,11 @@
 // server/tests/test-workflow-audit-ui.js
 //
-// Regression UI (Playwright thật) cho màn "🔍 Audit Quy Trình" (Hệ Thống > Quản Trị > 🔄 Quy Trình & Phê
-// Duyệt) — renderWorkflowAuditPanel()/runWorkflowAuditScan()/toggleWorkflowAuditAutoScan()
-// (module-workflow.js). testHarness.js's createDispatcher() KHÔNG xử lý 3 route mới
+// Regression UI (Playwright thật) cho màn "🔍 Audit Quy Trình" — DỜI (11/2026, theo yêu cầu người dùng
+// "cho đồng bộ" với 2 audit mới Người Dùng/Hệ Thống) từ đầu tab "🔄 Quy Trình & Phê Duyệt" sang
+// Hệ Thống > ⚙️ Quản Trị > "🔍 Audit Quy Trình" (#adminSubAuditWorkflow) — renderWorkflowAuditPanel()/
+// runWorkflowAuditScan()/toggleWorkflowAuditAutoScan() (module-workflow.js) GIỮ NGUYÊN logic, chỉ đổi
+// nơi gắn vào DOM + cách vào (setSystemSubTab('ADMIN') + setAdminSubTab('AUDITWORKFLOW') thay vì
+// setSystemSubTab('WORKFLOW')). testHarness.js's createDispatcher() KHÔNG xử lý 3 route mới
 // (/api/admin/workflow-audit*, routes/workflowAudit.js) — test này BỌC THÊM window.fetch ngay sau
 // launchPage() để tự trả lời ĐÚNG 3 route đó bằng dữ liệu giả lập có kiểm soát, giữ nguyên fetch gốc
 // (đi qua dispatcher thật) cho MỌI url khác — không đụng gì tới testHarness.js dùng chung.
@@ -59,12 +62,12 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => { switchTab('system'); setSystemSubTab('WORKFLOW'); });
+    await page.evaluate(() => { switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('AUDITWORKFLOW'); });
     await page.waitForTimeout(150);
 
-    await run.run('Vào tab WORKFLOW -> tự load cache tóm tắt (chưa quét lần nào) + đọc đúng cấu hình auto-scan', async () => {
+    await run.run('Vào sub-tab AUDITWORKFLOW -> tự load cache tóm tắt (chưa quét lần nào) + đọc đúng cấu hình auto-scan', async () => {
       const result = await page.evaluate(() => ({
-        panelHidden: document.getElementById('workflowAuditPanel').classList.contains('hidden'),
+        panelHidden: document.getElementById('adminSubAuditWorkflow').classList.contains('hidden'),
         lastScanText: document.getElementById('workflowAuditLastScan').innerText,
         summaryRowHidden: document.getElementById('workflowAuditSummaryRow').classList.contains('hidden'),
         toggleChecked: document.getElementById('workflowAuditAutoScanToggle').checked
@@ -139,7 +142,7 @@ async function main() {
     await run.run('Không phải admin (route trả 403) -> ẩn HẲN panel, không hiện UI vỡ', async () => {
       await page.evaluate(() => { window.__workflowAuditMock.forbidden = true; });
       await page.evaluate(() => renderWorkflowAuditPanel());
-      const hidden = await page.evaluate(() => document.getElementById('workflowAuditPanel').classList.contains('hidden'));
+      const hidden = await page.evaluate(() => document.getElementById('adminSubAuditWorkflow').classList.contains('hidden'));
       assertEqual(hidden, true, 'Panel phải tự ẩn khi route báo 403 (không phải admin)');
       await page.evaluate(() => { window.__workflowAuditMock.forbidden = false; });
     });

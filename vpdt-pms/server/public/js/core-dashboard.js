@@ -207,8 +207,11 @@ function buildDashboardCards(user) {
         .finally(() => { _workflowAuditSummaryFetchInFlight = false; renderDashboard(); });
     }
     const auditTotal = _workflowAuditSummaryCache?.total || 0;
+    // Điểm đến đã đổi (11/2026, dời "🔍 Audit Quy Trình" từ tab WORKFLOW sang tab ADMIN "cho đồng bộ"
+    // với 2 audit mới Người Dùng/Hệ Thống) — route/cache tóm tắt vẫn y hệt, chỉ đổi setSystemSubTab/
+    // setAdminSubTab đích.
     addCard({ key: 'workflowAudit', icon: '⚠️', label: 'Quy trình có lỗ hổng duyệt', count: auditTotal, show: auditTotal > 0,
-      action: async () => { await switchTab('system'); setSystemSubTab('WORKFLOW'); } });
+      action: async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('AUDITWORKFLOW'); } });
 
     // "🔍 Audit Người Dùng"/"🔍 Audit Hệ Thống" (11/2026) — CÙNG khuôn thẻ Audit Quy Trình ngay trên,
     // chỉ khác điểm đến (setAdminSubTab() bên trong tab ADMIN, không phải setSystemSubTab('WORKFLOW')).

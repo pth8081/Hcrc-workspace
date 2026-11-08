@@ -127,44 +127,9 @@
 
   <!-- Màn hình 3: Tab Quản Lý Quy Trình & Phê Duyệt Đồng Cấp -->
   <div id="workflowSection" class="hidden space-y-6">
-    <!-- "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" (11/2026, theo yêu cầu người dùng — quét TOÀN BỘ quy
-         trình tìm bước chưa gắn người duyệt, hoặc người được gắn đã bị khoá/nghỉ việc, trước khi đọng
-         thành hồ sơ kẹt không ai biết). LUÔN hiện ở ĐẦU tab này (không phụ thuộc module đang chọn bên
-         dưới) — xem renderWorkflowAuditPanel()/runWorkflowAuditScan() (module-workflow.js). -->
-    <div id="workflowAuditPanel" class="bg-white border rounded-lg p-4 space-y-3">
-      <div class="flex items-center justify-between gap-2 flex-wrap">
-        <div>
-          <h3 class="font-bold text-base flex items-center gap-2">🔍 Audit Quy Trình — Lỗ Hổng Phê Duyệt</h3>
-          <p id="workflowAuditLastScan" class="text-[11px] text-gray-500">Chưa quét lần nào trong phiên này.</p>
-        </div>
-        <div class="flex gap-2">
-          <button data-op="runWorkflowAuditScan" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">🔄 Quét Ngay</button>
-        </div>
-      </div>
-      <div id="workflowAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
-        <div class="bg-indigo-50 text-indigo-800 rounded p-2 text-center">
-          <div id="workflowAuditTotalCount" class="text-xl font-extrabold">0</div>
-          <div class="text-[10px] font-bold">TỔNG LỖ HỔNG</div>
-        </div>
-        <div class="bg-rose-50 text-rose-800 rounded p-2 text-center">
-          <div id="workflowAuditCriticalCount" class="text-xl font-extrabold">0</div>
-          <div class="text-[10px] font-bold">⛔ NGHIÊM TRỌNG</div>
-        </div>
-        <div class="bg-amber-50 text-amber-800 rounded p-2 text-center">
-          <div id="workflowAuditWarningCount" class="text-xl font-extrabold">0</div>
-          <div class="text-[10px] font-bold">⚠️ CẢNH BÁO</div>
-        </div>
-      </div>
-      <label class="flex items-center justify-between gap-2 text-xs border-t pt-2">
-        <span>
-          <span class="font-semibold">📅 Tự động quét hằng ngày + gửi email</span>
-          <span class="block text-[10.5px] text-gray-500">Gửi tới toàn bộ tài khoản Quản Trị Viên có email, chỉ khi danh sách lỗ hổng thay đổi so với lần gửi gần nhất.</span>
-        </span>
-        <input type="checkbox" id="workflowAuditAutoScanToggle" data-op-change="toggleWorkflowAuditAutoScan">
-      </label>
-      <div id="workflowAuditFindingsList" class="space-y-2"></div>
-    </div>
-
+    <!-- "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" ĐÃ DỜI (11/2026, theo yêu cầu người dùng "cho đồng bộ")
+         sang Hệ Thống → ⚙️ Quản Trị → "🔍 Audit Quy Trình" (#adminSubAuditWorkflow, systemSection.html,
+         cạnh 2 audit mới Người Dùng/Hệ Thống) — KHÔNG còn ở đây, logic/route giữ nguyên 100%. -->
     <div class="flex gap-2 border-b pb-2 flex-wrap">
       <button data-op="switchWfModule" data-arg0="DOC" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
       <button data-op="switchWfModule" data-arg0="SUBMISSION" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>
@@ -700,6 +665,13 @@
            — 2 audit MỚI này KHÔNG liên quan quy trình duyệt nên đặt ở đây, cùng khu "Quản Trị" với các
            mục rà soát/cấu hình hệ thống khác). 2 nút RIÊNG (không gộp sub-tab con) — đơn giản hơn vì chỉ
            2 mục, mỗi mục đã có nội dung đủ dài. -->
+      <!-- 3 nút Audit GOM VỀ 1 CHỖ (11/2026, theo yêu cầu người dùng "đưa audit quy trình luôn vào nhé,
+           cho đồng bộ") — "🔍 Audit Quy Trình" trước đây nằm RIÊNG ở đầu tab "🔄 Quy Trình & Phê Duyệt"
+           (#workflowSection), nay dời về đây cùng 2 audit mới, CÙNG khuôn hiển thị (stat box 3 cột +
+           nút Quét Ngay + toggle tự động quét hằng ngày + danh sách phát hiện). Đổi vị trí hiển thị +
+           khuôn giao diện, KHÔNG đổi logic quét/route (/api/admin/workflow-audit* giữ nguyên) — xem
+           renderWorkflowAuditPanel()/runWorkflowAuditScan() (module-workflow.js). -->
+      <button type="button" data-op="setAdminSubTab" data-arg0="AUDITWORKFLOW" id="btnAdminSubAuditWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Quy Trình</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="AUDITUSER" id="btnAdminSubAuditUser" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Người Dùng</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="AUDITSYSTEM" id="btnAdminSubAuditSystem" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Hệ Thống</button>
     </div>
@@ -1349,6 +1321,32 @@
          việc (CRITICAL), tài khoản lâu không đăng nhập (WARNING, ngưỡng ngày tự cấu hình), danh sách
          tài khoản admin + quyền canBeApprover dư thừa (cả 2 INFO — rà soát chủ động, không phải lỗ
          hổng). Xem renderUserAuditPanel() ở module-hethong-tabs.js. -->
+    <!-- "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" — DỜI VỀ ĐÂY (11/2026, theo yêu cầu người dùng, "cho
+         đồng bộ" với 2 audit mới) từ vị trí cũ (đầu tab "🔄 Quy Trình & Phê Duyệt", #workflowSection) —
+         CÙNG khuôn hiển thị y hệt adminSubAuditUser/adminSubAuditSystem ngay dưới (trước đây dùng khuôn
+         cũ riêng: stat box màu indigo/rose/amber, nhãn "TỔNG LỖ HỔNG"). Giữ NGUYÊN mọi id bên trong
+         (workflowAuditLastScan/SummaryRow/TotalCount/CriticalCount/WarningCount/AutoScanToggle/
+         FindingsList) + logic renderWorkflowAuditPanel()/runWorkflowAuditScan()/toggleWorkflowAuditAutoScan()
+         (module-workflow.js) — CHỈ đổi vị trí + khuôn CSS hiển thị, không đổi route/dữ liệu. -->
+    <div id="adminSubAuditWorkflow" class="hidden bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🔍 Audit Quy Trình — Lỗ Hổng Phê Duyệt</h3>
+          <p id="workflowAuditLastScan" class="text-[11px] text-gray-500 italic mt-0.5">Chưa quét lần nào trong phiên này.</p>
+        </div>
+        <button type="button" data-op="runWorkflowAuditScan" class="btn-primary text-xs">🔄 Quét Ngay</button>
+      </div>
+      <div id="workflowAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
+        <div class="bg-gray-50 border rounded p-2 text-center"><div id="workflowAuditTotalCount" class="text-lg font-bold text-gray-700">0</div><div class="text-[10px] text-gray-500">Tổng phát hiện</div></div>
+        <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="workflowAuditCriticalCount" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">Nghiêm trọng</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="workflowAuditWarningCount" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">Cảnh báo</div></div>
+      </div>
+      <label class="flex items-center gap-1.5 font-semibold text-gray-700 bg-gray-50 border rounded p-3 text-xs">
+        <input type="checkbox" id="workflowAuditAutoScanToggle" data-op-change="toggleWorkflowAuditAutoScan"> 📧 Tự động quét hằng ngày + gửi email khi có thay đổi
+      </label>
+      <div id="workflowAuditFindingsList" class="space-y-1.5"></div>
+    </div>
+
     <div id="adminSubAuditUser" class="hidden bg-white border rounded-lg p-4 space-y-3">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>

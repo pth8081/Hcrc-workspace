@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**29.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.60 (2026-11): Dời "Audit Quy Trình" về chung 1 chỗ với 2 audit mới, cho đồng bộ
+
+Theo yêu cầu người dùng ("làm theo màn hình audit hệ thống thì đưa cái phần audit quy trình luôn vào
+nhé, cho đồng bộ") — thuần CHUYỂN VỊ TRÍ + đồng bộ khuôn giao diện, KHÔNG đổi logic/route/dữ liệu quét:
+
+- **"🔍 Audit Quy Trình"** dời từ đầu tab "🔄 Quy Trình & Phê Duyệt" (`#workflowSection`) sang
+  **Hệ Thống → ⚙️ Quản Trị**, đứng CẠNH 2 audit mới (3 nút liền kề: 🔍 Audit Quy Trình / 🔍 Audit Người
+  Dùng / 🔍 Audit Hệ Thống). Đổi khuôn hiển thị từ kiểu cũ (box màu indigo/rose/amber, nhãn "TỔNG LỖ
+  HỔNG") sang ĐÚNG khuôn 2 audit mới (stat box gray/red/amber, nhãn "Tổng phát hiện"/"Nghiêm trọng"/
+  "Cảnh báo", nút `btn-primary`) — đồng bộ 3 màn audit nhìn giống nhau hoàn toàn.
+- Mọi id bên trong giữ nguyên 100% (`workflowAuditLastScan`/`SummaryRow`/`TotalCount`/`CriticalCount`/
+  `WarningCount`/`AutoScanToggle`/`FindingsList`) — chỉ đổi id khung bọc ngoài
+  (`workflowAuditPanel` → `adminSubAuditWorkflow`) và vị trí trong DOM. Route `/api/admin/workflow-audit*`
+  và toàn bộ logic quét (`lib/workflowApproverAudit.js`) giữ nguyên tuyệt đối.
+- Thẻ Dashboard "⚠️ Quy trình có lỗ hổng duyệt" đổi điểm đến (`setSystemSubTab('ADMIN')` +
+  `setAdminSubTab('AUDITWORKFLOW')` thay vì `setSystemSubTab('WORKFLOW')`).
+- `📘 Hướng Dẫn` (tab ⚙️ Hệ Thống): 3 entry audit gom về 1 nhóm `Audit` duy nhất trong `SYSTEM_NAV`
+  (trước đây rải ở 3 nhóm khác nhau), cập nhật bước hướng dẫn vị trí mới cho `sysWorkflowAudit`.
+- Cập nhật `tests/test-workflow-audit-ui.js` (đổi điểm vào + id khung bọc) — 5/5 kịch bản vẫn pass.
+  Chạy lại test liên quan hiện có (Audit Người Dùng/Hệ Thống, dashboard stat cards, nghiệp vụ nav/CSP,
+  Nghiệp Vụ Nâng Cao, điều hướng workflow module) — không regression.
 
 ## v29.59 (2026-11): Audit Người Dùng + Audit Hệ Thống — mở rộng từ Audit Quy Trình
 
