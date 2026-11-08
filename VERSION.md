@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**29.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.55 (2026-11): Vá tận gốc lỗi phông chữ khi đọc PDF phiếu đặt hàng NCC (Đặt Hàng Siêu Thị/HO)
+
+**Theo người dùng tự xác định + kiểm chứng THẬT gốc rễ lỗi** (toàn bộ ký tự lỗi "phông chữ sai khi
+import" đã vá rải rác qua nhiều đợt trước đều khớp 100% quy luật "byte TCVN3 (TCVN5712-1:1993, dân gian
+gọi 'font ABC') bị hệ thống đọc nhầm sang CP1252/Latin-1" — xác nhận lại bằng `iconv` thật, không đoán):
+
+- `module-vanhanh.js` (`PO_CHAR_FIXED_MAP`): dựng THÊM 36 ký tự còn thiếu trong dải byte 0xA0-0xFF (trước
+  đây chỉ có 55 ký tự, vá dần mỗi khi gặp lỗi mới) — tạo bằng chính `iconv` (không tự viết bảng giải mã
+  tay), đối chiếu THẬT với 1 file PDF "Đơn giao qua Hàng Trống (HO)" mới người dùng cung cấp (khác hẳn 2
+  file mẫu cũ — số đơn/NCC/khách hàng/hạng mục khác, đủ nội dung hơn: địa chỉ, tên khách hàng, ghi chú
+  cuối phiếu). Xác nhận đúng 100% cho MỌI field dữ liệu thật trên phiếu, không chỉ tên hàng hoá như các
+  đợt vá trước.
+- Thêm fixture mới `tests/fixtures/operation-order-po-sample-4-ho.pdf` (file PDF thật, đã xin phép dùng
+  làm fixture hồi quy) + test mới `tests/test-operation-order-pdf-ho-fullfont.js` (55 kịch bản — kiểm
+  toàn bộ field + toàn văn trang, không chỉ vài ký tự lẻ tẻ như các bài test cũ). Chạy lại 3 bộ test PDF
+  hiện có (hdmuachung/ho-mifont/orderer-name-multitoken) — không có regression, tổng 100/100 kịch bản pass.
+- **Phát hiện riêng (chưa vá, cần theo dõi thêm)**: 5 byte TCVN3 giải mã ra DẤU THANH RỜI (combining
+  mark Unicode) và byte 0xAD (giải mã ra 'ư' nhưng CP1252 coi là "soft hyphen" vô hình, PDF.js thường
+  không trả ra byte này) — CỐ Ý CHƯA thêm vào bảng (chưa gặp trong bất kỳ PDF thật nào, tự suy đoán cách
+  xử lý khi chưa có dữ liệu thật dễ sai hơn lợi ích) — đây cũng chính là lý do chữ "ư" đôi khi "biến mất
+  hẳn" (không hiện sai ký tự) ở 1 số cụm từ, vẫn phải tiếp tục vá theo từ (`PO_WORD_FIXUPS`) như cũ nếu
+  gặp cụm từ MỚI bị rớt.
+- **Vấn đề RIÊNG, KHÔNG sửa được bằng cách này**: 1 file PDF "Đặt Hàng Siêu Thị" người dùng gửi kèm hoàn
+  toàn KHÔNG có lớp chữ/hình ảnh nào (xuất qua "Microsoft: Print To PDF", chỉ vẽ đường nét/outline — xác
+  nhận bằng `pdffonts`/`pdftotext`/`pdfimages` đều trả về rỗng) — không thể đọc được bằng bất kỳ cách sửa
+  phông chữ nào, cần đổi cách xuất PDF từ DSmart (dùng cùng cách xuất như file HO, có lớp chữ thật) hoặc
+  xây tính năng OCR riêng (phạm vi lớn hơn nhiều, chưa làm ở đợt này).
+
 
 ## v29.54 (2026-11): Auto Refresh (ngầm, không cần bấm nút) cho màn "🛠️ Hỗ Trợ IT" — Phê Duyệt Giá +
 Yêu Cầu Hỗ Trợ IT

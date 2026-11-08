@@ -2056,6 +2056,34 @@ const PO_CHAR_FIXED_MAP = {
   // trước): '×':'ì' (vd "M×"->"Mì" trong "Paldo_Mì trộn tương đen..."), 'ú':'ỳ' (vd "Mú"->"Mỳ" — 1 số
   // tên sản phẩm dùng biến thể chính tả "Mỳ" thay vì "Mì"). Không đụng các ký tự cũ.
   '×': 'ì', 'ú': 'ỳ',
+  // 36 ký tự thêm (11/2026, người dùng tự xác định + kiểm chứng THẬT gốc rễ lỗi: toàn bộ các ký tự lỗi
+  // đã ghi nhận ở trên ĐỀU khớp 100% với quy luật "byte TCVN3 (TCVN5712-1:1993, dân gian gọi 'font ABC')
+  // bị hệ thống đọc nhầm sang CP1252/Latin-1" — xác nhận lại bằng cách mã hoá từng ký tự ĐÚNG sang
+  // TCVN5712-1 (qua `iconv -f UTF-8 -t TCVN5712-1`) rồi đọc ngược lại bằng CP1252, khớp khít 54/55 ký tự
+  // đã có ở 3 bảng PO_CHAR_FIXED_MAP/PO_CHAR_CASE_MAP (54/55 — có đúng 1 ngoại lệ 'μ':'à' không theo quy
+  // luật byte đơn thuần, PDF.js tự đoán font theo cách khác, giữ nguyên trong PO_CHAR_CASE_MAP không
+  // đụng). Từ đó DỰNG TRỌN dải byte 0xA0-0xFF còn lại (không chỉ đợi gặp lỗi mới mới vá từng ký tự một)
+  // bằng CHÍNH `iconv` (KHÔNG tự viết bảng giải mã tay — rủi ro sai sót, đã xác nhận với người dùng), rồi
+  // ĐỐI CHIẾU THẬT với 1 file PDF "Đơn giao qua Hàng Trống (HO)" MỚI người dùng cung cấp (khác bản đã có
+  // ở tests/fixtures/operation-order-po-sample-3-ho.pdf, đủ nội dung HƠN NHIỀU — địa chỉ/tên khách hàng/
+  // ghi chú cuối phiếu, không chỉ tên hàng hoá) — xác nhận ĐÚNG 100% cho MỌI field dữ liệu thật trên
+  // phiếu (không chỉ 1-2 ký tự lẻ tẻ như các đợt trước), xem tests/test-operation-order-pdf-ho-fullfont.js
+  // và tests/fixtures/operation-order-po-sample-4-ho.pdf (fixture MỚI). CỐ Ý LOẠI TRỪ 6 byte sau, KHÔNG
+  // thêm vào bảng này dù `iconv` giải mã "đúng chuẩn" TCVN3: 5 byte giải mã ra DẤU THANH RỜI (combining
+  // mark Unicode, VD U+0300/U+0309 — không phải 1 ký tự chữ cái hoàn chỉnh, ghép thẳng vào bảng này sẽ
+  // chèn 1 dấu vô hình đứng SAU ký tự gốc thay vì ghép ĐÚNG vào đúng nguyên âm đứng trước — CHƯA gặp
+  // trong bất kỳ mẫu PDF thật nào nên chưa viết xử lý ghép dấu riêng, cứ để nguyên hiện ký tự lạ còn hơn
+  // tự suy đoán sai cách ghép khi chưa có PDF thật để đối chiếu) và byte 0xAD (giải mã ra 'ư' nhưng
+  // CP1252 coi là "soft hyphen" — ký tự định dạng vô hình, PDF.js thường KHÔNG trả ra byte này ở
+  // `item.str` dù có thật trong PDF nguồn — đây CHÍNH LÀ lý do 'ư' hay "biến mất hẳn" chứ không hiện sai
+  // ký tự, khớp đúng PO_WORD_FIXUPS bên dưới; thêm vào CHAR_FIXED_MAP không giải quyết được gì vì ký tự
+  // không bao giờ tới được đây, vẫn phải tiếp tục vá theo CỤM TỪ như cũ nếu gặp từ MỚI chứa 'ư' bị rớt).
+  '¡': 'Ă', '¢': 'Â', '£': 'Ê', '¤': 'Ô', '¥': 'Ơ', '¯': 'Ằ',
+  'º': 'Ẳ', '¼': 'ẳ', '½': 'ẵ', '¿': 'Ẵ', 'À': 'Ắ', 'Á': 'Ầ',
+  'Â': 'Ẩ', 'Ã': 'Ẫ', 'Ä': 'Ấ', 'Å': 'Ề', 'É': 'ẫ', 'Í': 'Ể',
+  'Ð': 'é', 'Ù': 'Ễ', 'Ú': 'Ế', 'Û': 'Ồ', 'Ü': 'ĩ', 'à': 'Ổ',
+  'â': 'õ', 'ä': 'ọ', 'ç': 'ỗ', 'ì': 'ỡ', 'î': 'ợ', 'ð': 'Ỗ',
+  'û': 'ỷ', 'ü': 'ỹ', 'þ': 'ỵ', 'ÿ': 'Ố',
 };
 // PO_CHAR_CASE_MAP: ký tự thô mà bản PDF mẫu chỉ thấy xuất hiện ở 1 dạng hoa/thường (không đủ dữ liệu
 // để tách 2 mã riêng như PO_CHAR_FIXED_MAP) — giá trị dưới đây là dạng THƯỜNG, viết hoa theo ngữ cảnh
