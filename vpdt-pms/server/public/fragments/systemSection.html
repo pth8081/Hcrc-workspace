@@ -127,6 +127,44 @@
 
   <!-- Màn hình 3: Tab Quản Lý Quy Trình & Phê Duyệt Đồng Cấp -->
   <div id="workflowSection" class="hidden space-y-6">
+    <!-- "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" (11/2026, theo yêu cầu người dùng — quét TOÀN BỘ quy
+         trình tìm bước chưa gắn người duyệt, hoặc người được gắn đã bị khoá/nghỉ việc, trước khi đọng
+         thành hồ sơ kẹt không ai biết). LUÔN hiện ở ĐẦU tab này (không phụ thuộc module đang chọn bên
+         dưới) — xem renderWorkflowAuditPanel()/runWorkflowAuditScan() (module-workflow.js). -->
+    <div id="workflowAuditPanel" class="bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="font-bold text-base flex items-center gap-2">🔍 Audit Quy Trình — Lỗ Hổng Phê Duyệt</h3>
+          <p id="workflowAuditLastScan" class="text-[11px] text-gray-500">Chưa quét lần nào trong phiên này.</p>
+        </div>
+        <div class="flex gap-2">
+          <button data-op="runWorkflowAuditScan" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">🔄 Quét Ngay</button>
+        </div>
+      </div>
+      <div id="workflowAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
+        <div class="bg-indigo-50 text-indigo-800 rounded p-2 text-center">
+          <div id="workflowAuditTotalCount" class="text-xl font-extrabold">0</div>
+          <div class="text-[10px] font-bold">TỔNG LỖ HỔNG</div>
+        </div>
+        <div class="bg-rose-50 text-rose-800 rounded p-2 text-center">
+          <div id="workflowAuditCriticalCount" class="text-xl font-extrabold">0</div>
+          <div class="text-[10px] font-bold">⛔ NGHIÊM TRỌNG</div>
+        </div>
+        <div class="bg-amber-50 text-amber-800 rounded p-2 text-center">
+          <div id="workflowAuditWarningCount" class="text-xl font-extrabold">0</div>
+          <div class="text-[10px] font-bold">⚠️ CẢNH BÁO</div>
+        </div>
+      </div>
+      <label class="flex items-center justify-between gap-2 text-xs border-t pt-2">
+        <span>
+          <span class="font-semibold">📅 Tự động quét hằng ngày + gửi email</span>
+          <span class="block text-[10.5px] text-gray-500">Gửi tới toàn bộ tài khoản Quản Trị Viên có email, chỉ khi danh sách lỗ hổng thay đổi so với lần gửi gần nhất.</span>
+        </span>
+        <input type="checkbox" id="workflowAuditAutoScanToggle" data-op-change="toggleWorkflowAuditAutoScan">
+      </label>
+      <div id="workflowAuditFindingsList" class="space-y-2"></div>
+    </div>
+
     <div class="flex gap-2 border-b pb-2 flex-wrap">
       <button data-op="switchWfModule" data-arg0="DOC" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
       <button data-op="switchWfModule" data-arg0="SUBMISSION" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>

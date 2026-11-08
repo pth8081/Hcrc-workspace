@@ -89,6 +89,9 @@ function setSystemSubTab(subTab) {
     // giá trị (đang Sửa 1 mẫu cũ, hoặc vừa tạo mã nháp cho mẫu mới) thì giữ nguyên, không ghi đè mỗi lần
     // chuyển qua lại giữa các tab con của Hệ Thống.
     if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
+    // "🔍 Audit Quy Trình" (11/2026) — CHỈ đọc cache tóm tắt (rẻ), không tự quét lại mỗi lần vào tab, xem
+    // chú thích đầy đủ ở renderWorkflowAuditPanel() (module-workflow.js).
+    renderWorkflowAuditPanel();
   }
   // ADVWORKFLOW: "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
   if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }

@@ -1704,6 +1704,13 @@ function findMissingApproverStep(moduleKey, item, appData) {
 module.exports = {
   MODULE_CONFIGS,
   OFFICE_FIX_TECH_TYPE_PERM,
+  OFFICE_SUBTYPE_TO_DBKEY,
+  // SUBMISSION_TYPES/OPERATION_ORDER_*_TIERS (11/2026, audit "Lỗ Hổng Phê Duyệt") — export THÊM (không
+  // đổi gì ở trên) để lib/workflowApproverAudit.js tổng hợp tổ hợp cần quét (loại Văn Bản Trình/mức giá
+  // trị Đặt Hàng) mà KHÔNG phải tự chép lại 1 bản riêng dễ lệch dữ liệu khi sau này sửa ở đây.
+  SUBMISSION_TYPES,
+  OPERATION_ORDER_STORE_TIERS,
+  OPERATION_ORDER_HO_TIERS,
   resolveWorkflowStepApprovers,
   findMissingApproverStep,
   WorkflowError,

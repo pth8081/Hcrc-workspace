@@ -6600,6 +6600,49 @@ Xem đầy đủ ở mục 3 — đây chỉ là đường dẫn màn hình
 (**Hệ Thống → 🔄 Quy Trình & Phê Duyệt**), cấu hình người duyệt cho từng bước
 của hơn 15 module dùng chung engine phê duyệt.
 
+### 7.1b. Audit Quy Trình — quét lỗ hổng "chưa gắn người duyệt" (từ v29.57)
+
+Theo yêu cầu người dùng ("hệ thống đã go live rồi, cần kiểm soát chặt chẽ —
+nếu 1 nhân viên nghỉ bị disable thì quy trình mất người duyệt mà không biết
+trước"): khối **"🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt"** nằm ở ĐẦU màn
+**Hệ Thống → 🔄 Quy Trình & Phê Duyệt** (trên cả thanh chọn module, luôn hiện
+bất kể đang chọn module nào).
+
+- **Cách quét**: bấm **"🔄 Quét Ngay"** để quét thật ngay lúc đó. Engine dùng
+  lại ĐÚNG hàm `findMissingApproverStep()` — hàm thật hệ thống dùng để chặn
+  gửi hồ sơ vào quy trình không có người duyệt — không tự suy luận riêng,
+  nên kết quả khớp 100% với hành vi thật (tổ hợp nào audit báo "sạch" thì
+  gửi hồ sơ thật chắc chắn không bị chặn).
+- **2 mức độ**: **CRITICAL** (đỏ) = bước/Nhóm Phê Duyệt BẮT BUỘC (khoá cứng ở
+  Cấp) đang không còn người duyệt active nào — hồ sơ mới KHÔNG gửi được, cần
+  xử lý ngay. **WARNING** (vàng) = bước/Nhóm chỉ tuỳ chọn hiển thị (không
+  khoá cứng), không chặn gửi hồ sơ nhưng nên rà soát.
+- **Phạm vi quét (phase 1, 11/2026)**: 11 module dùng chung approval-engine
+  (Tài Liệu, Văn Bản Trình, Đăng Ký Xe, VP Mua Bán/Sửa Chữa, VPP, Hợp Đồng x2,
+  Phê Duyệt Giá Bán Lẻ/Bán Buôn, Vận Hành Đặt Hàng Siêu Thị/HO, Thanh Toán,
+  Ngân Sách) + Nhóm Phê Duyệt Trình/HĐ + 10 cặp Nhóm Phê Duyệt Cuối.
+  **KHÔNG bao gồm**: luồng Nhân Sự/Nghỉ Phép/Đào Tạo/Phòng Họp (chưa dùng
+  engine này) và `budgetApprovedDeptWorkflows` (phòng ban chưa cấu hình ở đây
+  là THIẾT KẾ có chủ đích — người có quyền `budgetManage` xử lý thay, không
+  phải lỗ hổng). Quy Trình Hỗn Hợp Bán Buôn còn có chiều lọc "Ngành Hàng" —
+  audit chỉ quét quy tắc KHÔNG giới hạn Ngành Hàng để tránh nổ tổ hợp, nên có
+  thể bỏ sót lỗ hổng ở 1 quy tắc giới hạn riêng 1 Ngành Hàng cụ thể.
+- **3 kênh cảnh báo** (đúng yêu cầu "tự scan hoặc đặt lịch scan + email hoặc
+  cảnh báo màn hình"):
+  1. Quét tay ngay trên màn này (trên).
+  2. **Thẻ Dashboard** — mọi admin tự thấy thẻ "⚠️ Quy trình có lỗ hổng
+     duyệt" kèm số lượng nếu lần quét gần nhất (của bất kỳ admin nào) còn lỗ
+     hổng; bấm thẳng vào thẻ để nhảy tới đúng màn Audit này.
+  3. **Email tự động hằng ngày** — tick **"📧 Tự động quét hằng ngày + gửi
+     email khi có thay đổi"** ngay trên khối Audit. Hệ thống tự quét 1
+     lần/ngày, CHỈ gửi email cho mọi admin có email (+ địa chỉ CC cấu hình
+     thêm nếu có) khi danh sách lỗ hổng THỰC SỰ thay đổi (thêm lỗ hổng mới
+     hoặc hết lỗ hổng cũ) — không gửi lặp lại mỗi ngày nếu không có gì đổi.
+- Dữ liệu quét (chi tiết lỗ hổng theo phòng ban/quy trình) lưu qua route
+  riêng (`/api/admin/workflow-audit*`), gác quyền admin cho CẢ đọc lẫn ghi —
+  không lẫn vào luồng tải dữ liệu chung (`GET /api/data`, nơi mọi tài khoản
+  đã đăng nhập đều đọc được) vì tiết lộ cấu trúc phòng ban/quy trình nội bộ.
+
 ### 7.2. Quản Lý Danh Mục
 
 Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Phòng ban,

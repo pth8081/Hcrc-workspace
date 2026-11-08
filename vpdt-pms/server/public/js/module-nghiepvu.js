@@ -94,6 +94,7 @@ const SYSTEM_NAV = [
   ]},
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
+    { key: 'sysWorkflowAudit', icon: '🔍', label: 'Audit Quy Trình' },
     { key: 'sysAdvWorkflow', icon: '🔀', label: 'Nghiệp Vụ Nâng Cao' },
     { key: 'sysBizConfig', icon: '⚙️', label: 'Cấu Hình Nghiệp Vụ' },
     { key: 'sysDeptViewScope', icon: '🔒', label: 'Phạm Vi Xem Theo Phòng Ban' },
@@ -1648,6 +1649,29 @@ const SYSTEM_DOCS = {
       { label: '🏢 Tự động khớp phòng ban (từ 10/2026, chỉ Bước 1)', text: 'trước đây "Theo Chức Danh" ở Áp Dụng Nhanh dùng CHUNG 1 danh sách chức danh cho MỌI phòng ban/mức được chọn — để trống phòng ban thì khớp chức danh đó CẢ CÔNG TY (VD Trưởng Phòng A duyệt được cả hồ sơ Phòng B). Bật "Tự động khớp đúng phòng ban của từng mục" giải quyết đúng lỗi này — chỉ dùng được ở Bước 1 (các bước sau thường là cấp cao hơn, không theo phòng ban của người đăng ký).' },
     ], right: [
       { label: 'Áp Dụng Nhanh không ghi đè', text: 'phòng ban/mức nào ĐÃ được cấu hình từ trước (kể cả chỉ mới chọn số bước) luôn được giữ nguyên — Áp Dụng Nhanh chỉ điền vào chỗ đang trống, không đụng cấu hình đã có.' },
+    ] },
+  },
+  sysWorkflowAudit: {
+    icon: '🔍', title: 'Audit Quy Trình', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Từ 11/2026 — quét toàn hệ thống tìm "lỗ hổng phê duyệt": bước/phòng ban/mức nào đang cấu hình nhưng KHÔNG CÒN người duyệt nào active (VD người duyệt bị disable/đổi phòng ban, hoặc cấu hình theo vị trí nhưng chưa gắn ai). Dùng ĐÚNG hàm thật hệ thống dùng để chặn gửi hồ sơ (<code>findMissingApproverStep()</code>) — không tự suy luận riêng, đảm bảo không lệch với hành vi thật. Phạm vi: 11 module engine chính (Tài Liệu/Văn Bản Trình/Đăng Ký Xe/VP Mua-Sửa/VPP/Hợp Đồng x2/Phê Duyệt Giá x2/Vận Hành x2/Thanh Toán/Ngân Sách) + Nhóm Phê Duyệt (Trình/HĐ) + 10 Nhóm Phê Duyệt Cuối. KHÔNG bao gồm: luồng Nhân Sự/Nghỉ Phép/Đào Tạo/Phòng Họp (chưa dùng engine này) và <code>budgetApprovedDeptWorkflows</code> (rỗng là THIẾT KẾ, có người budgetManage xử lý thay — không phải lỗ hổng).',
+    flow: { ariaLabel: 'Quy trình quét + nhận cảnh báo', chain: [
+      { label: 'Quét (tự bấm hoặc tự động hằng ngày)', sub: 'Dùng lại logic duyệt thật' },
+      { label: 'Liệt kê từng lỗ hổng', sub: 'CRITICAL (bắt buộc) / WARNING (tuỳ chọn)' },
+      { label: '3 kênh báo: màn quét + thẻ Dashboard + Email', sub: 'Chỉ khi có thay đổi thật', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔄 Quy Trình & Phê Duyệt</b> — khối <b>"🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt"</b> luôn hiện ở ĐẦU trang (trước thanh chọn module), không phụ thuộc module đang chọn.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"🔄 Quét Ngay"</b> để quét thật ngay lúc đó — danh sách lỗ hổng hiện ngay dưới, sắp xếp CRITICAL lên đầu, mỗi dòng ghi rõ module + phòng ban/tier/bước + lý do.' },
+      { role: 'Quản trị viên', text: '<b>CRITICAL</b> (đỏ) = bước/nhóm BẮT BUỘC (khoá cứng ở Cấp) đang không có người duyệt nào — hồ sơ mới sẽ KHÔNG gửi được, cần xử lý ngay. <b>WARNING</b> (vàng) = bước/nhóm chỉ tuỳ chọn hiển thị, không chặn gửi hồ sơ nhưng vẫn nên rà soát.' },
+      { role: 'Quản trị viên', text: 'tick/bỏ tick <b>"📧 Tự động quét hằng ngày + gửi email khi có thay đổi"</b> — bật thì mỗi ngày hệ thống tự quét, CHỈ gửi email cho mọi admin có email (+ CC thêm nếu cấu hình) khi danh sách lỗ hổng THỰC SỰ thay đổi (thêm lỗ hổng mới hoặc hết lỗ hổng cũ) — không spam lặp lại khi không có gì đổi.' },
+      { role: 'Quản trị viên', text: 'ngoài màn này, Dashboard (mọi admin) tự hiện thẻ cảnh báo <b>"⚠️ Quy trình có lỗ hổng duyệt"</b> kèm số lượng khi lần quét gần nhất (của bất kỳ ai) còn lỗ hổng — bấm thẳng vào thẻ để nhảy tới đúng màn này.' },
+    ],
+    footer: { left: [
+      { label: 'Không tự đoán logic duyệt riêng', text: 'engine audit tái dùng ĐÚNG hàm <code>findMissingApproverStep()</code> mà hệ thống dùng để chặn gửi hồ sơ thật — tổ hợp phòng ban/tier nào audit báo "không lỗ hổng" thì chắc chắn gửi hồ sơ thật cũng không bị chặn, không có khoảng lệch giữa audit và hành vi thật.' },
+      { label: 'Submissions/Hợp Đồng — phòng ban CHƯA cấu hình KHÔNG bị báo lỗi', text: '2 module này có cơ chế dự phòng tự về tài khoản "admin" khi phòng ban chưa cấu hình gì — chỉ báo lỗ hổng khi chính tài khoản admin đó bị khoá (các module khác không có dự phòng này nên phòng ban trống luôn bị báo).' },
+    ], right: [
+      { label: 'QT Giá Bán Buôn — bỏ qua chiều "Ngành Hàng"', text: 'quy trình hỗn hợp theo Siêu Thị của Giá Bán Buôn còn có thêm lọc theo Ngành Hàng cho từng quy tắc — audit CHỈ quét các quy tắc KHÔNG giới hạn Ngành Hàng (mặc định) để tránh quét quá nhiều tổ hợp, 1 quy tắc chỉ áp dụng cho 1 Ngành Hàng cụ thể có thể có lỗ hổng mà audit chưa phát hiện được.' },
+      { label: 'Dữ liệu audit không lộ qua đồng bộ dữ liệu chung', text: 'kết quả quét/cấu hình lưu qua route riêng, gác quyền admin cho CẢ đọc lẫn ghi — không lẫn vào luồng tải dữ liệu chung (nơi mọi tài khoản đã đăng nhập đều đọc được) vì tiết lộ cấu trúc phòng ban/quy trình nội bộ.' },
     ] },
   },
   sysAdvWorkflow: {

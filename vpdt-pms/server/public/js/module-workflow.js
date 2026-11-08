@@ -1872,3 +1872,124 @@ async function deleteNganhHangCatalogItem(id) {
   renderNganhHangCatalogList();
 }
 
+// ===== "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" (11/2026) =====
+// Gọi route RIÊNG /api/admin/workflow-audit* (routes/workflowAudit.js) — KHÔNG đi qua DB.*/syncStorage()
+// như phần còn lại của file này, vì dữ liệu (chi tiết phòng ban/bước thiếu người duyệt) chỉ admin được
+// xem, cache lưu RIÊNG ngoài dbo.AppData's VALID_KEYS thường (xem chú thích đầy đủ ở route). Gọi khi vào
+// tab WORKFLOW (renderWorkflowTab(), module-hethong-tabs.js) — CHỈ đọc cache tóm tắt + cấu hình (rẻ,
+// không tự quét lại); quét THẬT chỉ xảy ra khi admin bấm "🔄 Quét Ngay" (runWorkflowAuditScan()).
+async function renderWorkflowAuditPanel() {
+  const panelEl = document.getElementById('workflowAuditPanel');
+  const lastScanEl = document.getElementById('workflowAuditLastScan');
+  const toggleEl = document.getElementById('workflowAuditAutoScanToggle');
+  if (!panelEl) return;
+  try {
+    const [summaryRes, cfgRes] = await Promise.all([
+      fetch('/api/admin/workflow-audit/summary'),
+      fetch('/api/admin/workflow-audit/config')
+    ]);
+    // 403 (không phải admin) -> ẩn hẳn khối này thay vì hiện UI vỡ/báo lỗi khó hiểu — màn Hệ Thống hiện
+    // không ẩn hẳn tab WORKFLOW với non-admin, nên vẫn cần tự xử lý ở đây.
+    if (summaryRes.status === 403) { panelEl.classList.add('hidden'); return; }
+    panelEl.classList.remove('hidden');
+    if (summaryRes.ok) {
+      const summary = await summaryRes.json();
+      renderWorkflowAuditSummary(summary);
+      if (lastScanEl) {
+        lastScanEl.innerText = summary.at
+          ? `Lần quét gần nhất: ${new Date(summary.at).toLocaleString('vi-VN')} (tự động hằng ngày)`
+          : 'Chưa quét lần nào — bấm "🔄 Quét Ngay" để bắt đầu.';
+      }
+    }
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (toggleEl) toggleEl.checked = cfg.autoScanEmailEnabled !== false;
+    }
+  } catch (err) {
+    console.error('renderWorkflowAuditPanel() lỗi:', err);
+  }
+}
+
+function renderWorkflowAuditSummary(summary) {
+  const row = document.getElementById('workflowAuditSummaryRow');
+  if (!row) return;
+  row.classList.toggle('hidden', !summary.at);
+  const totalEl = document.getElementById('workflowAuditTotalCount');
+  const critEl = document.getElementById('workflowAuditCriticalCount');
+  const warnEl = document.getElementById('workflowAuditWarningCount');
+  if (totalEl) totalEl.innerText = summary.total || 0;
+  if (critEl) critEl.innerText = summary.critical || 0;
+  if (warnEl) warnEl.innerText = summary.warning || 0;
+}
+
+function renderWorkflowAuditFindingsList(findings) {
+  const listEl = document.getElementById('workflowAuditFindingsList');
+  if (!listEl) return;
+  if (!findings.length) {
+    listEl.innerHTML = '<p class="text-xs text-emerald-700 font-semibold">✅ Không phát hiện lỗ hổng nào.</p>';
+    return;
+  }
+  const sorted = [...findings].sort((a, b) => {
+    if (a.severity === b.severity) return 0;
+    return a.severity === 'CRITICAL' ? -1 : 1;
+  });
+  listEl.innerHTML = sorted.map(f => {
+    const isCrit = f.severity === 'CRITICAL';
+    return `
+    <div class="border-l-4 ${isCrit ? 'border-rose-600 bg-rose-50' : 'border-amber-500 bg-amber-50'} rounded p-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-xs font-bold">${escapeHtml(f.scopeLabel)}</div>
+        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${isCrit ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'}">${isCrit ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO'}</span>
+      </div>
+      <div class="text-[11px] text-gray-600 mt-0.5">${escapeHtml(f.stepName || '')}: ${escapeHtml(f.reason)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function runWorkflowAuditScan() {
+  const btn = document.querySelector('[data-op="runWorkflowAuditScan"]');
+  const lastScanEl = document.getElementById('workflowAuditLastScan');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Đang quét...'; }
+  try {
+    const res = await fetch('/api/admin/workflow-audit');
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Lỗi máy chủ (${res.status})`);
+    }
+    const { at, findings } = await res.json();
+    renderWorkflowAuditSummary({
+      at, total: findings.length,
+      critical: findings.filter(f => f.severity === 'CRITICAL').length,
+      warning: findings.filter(f => f.severity === 'WARNING').length
+    });
+    if (lastScanEl) lastScanEl.innerText = `Lần quét gần nhất: ${new Date(at).toLocaleString('vi-VN')} (vừa quét tay)`;
+    renderWorkflowAuditFindingsList(findings);
+  } catch (err) {
+    alert(`⛔ Quét Audit Quy Trình thất bại: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '🔄 Quét Ngay'; }
+  }
+}
+
+// toggleWorkflowAuditAutoScan() — đọc lại cấu hình hiện có TRƯỚC khi ghi đè (giữ nguyên ccEmails, dù màn
+// này chưa có ô nhập riêng cho mục đó — tránh vô tình xoá mất nếu sau này thêm UI cho field đó mà quên
+// sửa hàm này) — chỉ đổi đúng autoScanEmailEnabled theo trạng thái checkbox vừa bấm.
+async function toggleWorkflowAuditAutoScan() {
+  const toggleEl = document.getElementById('workflowAuditAutoScanToggle');
+  if (!toggleEl) return;
+  const desired = toggleEl.checked;
+  try {
+    const cfgRes = await fetch('/api/admin/workflow-audit/config');
+    const currentCfg = cfgRes.ok ? await cfgRes.json() : { ccEmails: [] };
+    const res = await fetch('/api/admin/workflow-audit/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoScanEmailEnabled: desired, ccEmails: currentCfg.ccEmails || [] })
+    });
+    if (!res.ok) throw new Error('Lưu cấu hình thất bại');
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+    toggleEl.checked = !desired;
+  }
+}
+

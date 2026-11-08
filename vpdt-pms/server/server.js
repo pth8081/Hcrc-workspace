@@ -46,6 +46,7 @@ const trainingRosterRoutes = require('./routes/trainingRoster');
 const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const trainingTestImportRoutes = require('./routes/trainingTestImport');
 const adminExportRoutes = require('./routes/adminExport');
+const workflowAuditRoutes = require('./routes/workflowAudit');
 const adminTlsCertRoutes = require('./routes/adminTlsCert');
 const adminTrustedCaRoutes = require('./routes/adminTrustedCa');
 const orgChartRoutes = require('./routes/orgChart');
@@ -84,6 +85,7 @@ const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
 const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpiryReminder');
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
+const { checkWorkflowApproverGaps } = require('./jobs/workflowApproverGapAudit');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
@@ -206,6 +208,7 @@ app.use('/api/training', trainingTestImportRoutes);
 app.use('/api/admin', adminExportRoutes);
 app.use('/api/admin/tls-cert', adminTlsCertRoutes);
 app.use('/api/admin/trusted-ca', adminTrustedCaRoutes);
+app.use('/api/admin/workflow-audit', workflowAuditRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
@@ -584,6 +587,12 @@ async function start() {
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.
       checkDiskSpace();
       setInterval(checkDiskSpace, 60 * 60 * 1000);
+      // "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" (11/2026) — quét 1 lần/24h (quy trình hiếm khi đổi trong
+      // ngày, khác ổ đĩa có thể đầy nhanh), chỉ gửi email khi DANH SÁCH lỗ hổng thực sự thay đổi (xem
+      // chú thích đầy đủ ở jobs/workflowApproverGapAudit.js) — LUÔN cập nhật cache tóm tắt cho Dashboard/
+      // màn Audit dù có gửi email hay không.
+      checkWorkflowApproverGaps();
+      setInterval(checkWorkflowApproverGaps, 24 * 60 * 60 * 1000);
       // Dọn file mồ côi trong uploads/ (đã tải lên nhưng không hồ sơ nào tham chiếu, VD bỏ dở form sau
       // khi tải file) — chạy mỗi 6h, đủ thưa để không tốn tài nguyên quét toàn bộ thư mục liên tục, đủ
       // dày để không tích tụ quá nhiều trước khi được dọn (job tự có graceHours=48h bảo vệ file đang dở

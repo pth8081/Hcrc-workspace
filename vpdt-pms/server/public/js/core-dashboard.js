@@ -88,6 +88,14 @@ function countDeptWorkflowPending(records, wfConfigFor, user, statusField, match
 // (không thể stringify closure có biến bắt giữ như subType), build lại mỗi lần renderDashboard().
 let dashboardCardActions = {};
 
+// workflowAuditSummaryCache (11/2026, "🔍 Audit Quy Trình") — KHÔNG nằm trong DB.* (route riêng, admin-
+// only, xem routes/workflowAudit.js) nên buildDashboardCards() (đồng bộ, đọc thẳng DB.* có sẵn) không
+// tính được ngay trong lượt gọi đầu — prefetch 1 lần/phiên (cờ InFlight chặn gọi trùng khi renderDashboard()
+// chạy dồn dập), rồi tự renderDashboard() lại đúng 1 lần khi có dữ liệu — cùng khuôn prefetch
+// _hrLinkedUsernamesCache ở module-admin-userstaging.js.
+let _workflowAuditSummaryCache = null;
+let _workflowAuditSummaryFetchInFlight = false;
+
 // Đặt sẵn bộ lọc Trạng Thái = "Đang Chờ Duyệt" của module rồi kích hoạt lại render — dùng cho các thẻ
 // Dashboard mà module đích ĐÃ CÓ SẴN ô lọc trạng thái (không phải mọi module đều có, xem ghi chú từng
 // addCard bên dưới) để bấm vào thẳng đúng danh sách cần xử lý, không phải tự lọc tay thêm 1 bước.
@@ -179,6 +187,23 @@ function buildDashboardCards(user) {
   const forwardInboxCount = collectForwardInboxEntries().filter(e => !e.node.reply).length;
   addCard({ key: 'forwardInbox', icon: '📨', label: 'Được nhờ cho ý kiến', count: forwardInboxCount, show: forwardInboxCount > 0,
     action: () => openForwardInboxModal() });
+
+  // "🔍 Audit Quy Trình: Lỗ Hổng Phê Duyệt" (11/2026) — CHỈ admin (route /api/admin/workflow-audit/summary
+  // tự chặn 403 non-admin, không gọi phí công nếu chắc chắn bị từ chối). Đếm lấy từ cache quét gần nhất
+  // (job hằng ngày + lần "🔄 Quét Ngay" gần nhất) — xem renderWorkflowAuditPanel()/module-workflow.js.
+  if (user?.perms?.admin) {
+    if (_workflowAuditSummaryCache === null && !_workflowAuditSummaryFetchInFlight) {
+      _workflowAuditSummaryFetchInFlight = true;
+      fetch('/api/admin/workflow-audit/summary')
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => { _workflowAuditSummaryCache = data || { total: 0 }; })
+        .catch(() => { _workflowAuditSummaryCache = { total: 0 }; })
+        .finally(() => { _workflowAuditSummaryFetchInFlight = false; renderDashboard(); });
+    }
+    const auditTotal = _workflowAuditSummaryCache?.total || 0;
+    addCard({ key: 'workflowAudit', icon: '⚠️', label: 'Quy trình có lỗ hổng duyệt', count: auditTotal, show: auditTotal > 0,
+      action: async () => { await switchTab('system'); setSystemSubTab('WORKFLOW'); } });
+  }
 
   return cards;
 }

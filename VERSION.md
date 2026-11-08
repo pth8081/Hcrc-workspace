@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**29.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.57 (2026-11): Audit Quy Trình — quét lỗ hổng "chưa gắn người duyệt" trong toàn hệ thống
+
+Theo yêu cầu người dùng ("hệ thống đã go live rồi, cần phải có những cái kiểm soát chặt chẽ" — demo-first,
+xác nhận ảnh demo + logic trước khi code thật):
+
+- **Engine mới** `lib/workflowApproverAudit.js` (`auditWorkflowApproverGaps(appData)`) — quét TOÀN BỘ tổ
+  hợp phòng ban/loại/tier của 11 module dùng chung approval-engine (Tài Liệu, Văn Bản Trình, Đăng Ký Xe,
+  VP Mua/Sửa, VPP, Hợp Đồng x2, Phê Duyệt Giá Bán Lẻ/Bán Buôn, Vận Hành Siêu Thị/HO, Thanh Toán, Ngân
+  Sách) + Nhóm Phê Duyệt (Trình/HĐ) + 10 cặp Nhóm Phê Duyệt Cuối, tìm bước nào đang cấu hình nhưng KHÔNG
+  còn người duyệt active nào. **Tái dùng ĐÚNG** `findMissingApproverStep()` (hàm thật hệ thống dùng để
+  chặn gửi hồ sơ) — không tự viết lại logic duyệt riêng, tránh lệch với hành vi thật. Mỗi lỗ hổng có
+  `severity` CRITICAL (bước/nhóm bắt buộc) hoặc WARNING (bước/nhóm chỉ tuỳ chọn).
+  - **Loại trừ có chủ đích**: luồng Nhân Sự/Nghỉ Phép/Đào Tạo/Phòng Họp (chưa dùng engine này — phase 1),
+    và `budgetApprovedDeptWorkflows` (phòng ban chưa cấu hình = THIẾT KẾ, người có quyền budgetManage xử
+    lý thay — không phải lỗ hổng, xem comment tại `canDecideBudgetLineFinal()`).
+  - **Đơn giản hoá có ghi chú**: Quy Trình Hỗn Hợp của Phê Duyệt Giá Bán Buôn còn có chiều lọc "Ngành
+    Hàng" — audit CHỈ quét quy tắc KHÔNG giới hạn Ngành Hàng để tránh nổ tổ hợp, biết trước có thể bỏ sót
+    lỗ hổng ở quy tắc giới hạn riêng 1 Ngành Hàng.
+- **3 kênh cảnh báo** theo đúng yêu cầu ("tự scan hoặc đặt lịch scan + email hoặc cảnh báo màn hình"):
+  1. **Quét tay** — khối "🔍 Audit Quy Trình" mới ở đầu Hệ Thống → 🔄 Quy Trình & Phê Duyệt
+     (`systemSection.html` + `module-workflow.js`), bấm "🔄 Quét Ngay" hiện danh sách lỗ hổng ngay.
+  2. **Thẻ Dashboard** — mọi admin tự thấy thẻ "⚠️ Quy trình có lỗ hổng duyệt" kèm số lượng khi có lỗ
+     hổng từ lần quét gần nhất (đọc cache, không tự quét lại mỗi lần tải trang), bấm vào nhảy thẳng tới
+     màn Audit.
+  3. **Email hằng ngày** (`jobs/workflowApproverGapAudit.js`, mô phỏng đúng khuôn `jobs/diskSpaceMonitor.js`)
+     — tự quét 1 lần/ngày, CHỈ gửi email cho mọi admin có email (+ CC cấu hình thêm) khi danh sách lỗ
+     hổng THỰC SỰ thay đổi (so sánh chữ ký `computeFindingsSignature()`, không spam lặp khi không đổi gì).
+     Tick tắt/mở ở đúng khối Audit trên UI.
+- **3 route mới** `routes/workflowAudit.js` (`GET /api/admin/workflow-audit` quét thật + ghi cache, `GET
+  .../summary` chỉ đọc cache cho thẻ Dashboard, `GET`/`POST .../config` đọc/sửa cấu hình auto-scan) — gác
+  `isCurrentlyAdmin()` cho CẢ ĐỌC lẫn GHI (nghiêm hơn chuẩn `ADMIN_ONLY_KEYS` chỉ gác ghi, vì dữ liệu audit
+  tiết lộ cấu trúc phòng ban/quy trình nội bộ). 2 khoá cache/cấu hình (`workflowAuditSummaryCache`,
+  `workflowAuditJobConfig`) CỐ Ý không thêm vào `defaults.js`/`VALID_KEYS` — không lẫn vào `GET /api/data`
+  chung (mọi tài khoản đã đăng nhập đọc được).
+- Test mới `tests/test-workflow-approver-audit.js` (20 kịch bản logic thuần, bao gồm xác nhận riêng:
+  submissions/contracts có dự phòng "admin" nên phòng ban chưa cấu hình KHÔNG bị báo lỗi trừ khi chính
+  admin bị khoá; operationOrders HO đúng 2 lỗ hổng không nhân theo phòng ban; budgetApprovedDeptWorkflows
+  loại trừ hoàn toàn) + `tests/test-workflow-audit-ui.js` (5 kịch bản Playwright thật qua `testHarness.js`).
+  Chạy lại bộ test liên quan hiện có (dashboard cards, workflow tab, quick-apply, reset config, structure
+  validation, module-access gating) — không regression; 2 lỗi còn lại ở `test-preview-workflow-buttons.js`
+  đã xác nhận RIÊNG (qua `git stash` so sánh) là lỗi CŨ có từ trước, không liên quan đợt việc này.
+- Cập nhật `Huong-dan-nghiep-vu.md` (entry `sysWorkflowAudit`, tab ⚙️ Hệ Thống) — không cần migrate dữ
+  liệu/biến môi trường mới, chỉ copy code + `pm2 restart`.
 
 ## v29.56 (2026-11): Hệ Thống > Quản Trị > Danh Sách Người Dùng — 2 bộ lọc mới (rà soát hồ sơ thiếu thông tin + Chức Danh Kiêm Nhiệm)
 
