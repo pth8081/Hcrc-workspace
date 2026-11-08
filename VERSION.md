@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**29.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.56 (2026-11): Hệ Thống > Quản Trị > Danh Sách Người Dùng — 2 bộ lọc mới (rà soát hồ sơ thiếu thông tin + Chức Danh Kiêm Nhiệm)
+
+Theo yêu cầu người dùng (demo-first, xác nhận ảnh demo trước khi code thật):
+
+- **"🔍 Lọc hồ sơ thiếu thông tin"** — 4 checkbox mới (`filterUserMissingDept`/`MissingJobTitle`/
+  `MissingEmail`/`MissingPosType`, `systemSection.html` + `renderUsers()` ở `module-admin-userstaging.js`)
+  — tick NHIỀU ô cùng lúc gộp kiểu OR (hiện người dùng thiếu BẤT KỲ mục nào đã tick), mỗi dòng khớp hiện
+  badge đỏ ghi rõ đang thiếu đúng mục gì. **Xác nhận riêng của người dùng**: "Chưa gắn Chức Danh" áp dụng
+  CHO CẢ tài khoản Siêu Thị (posType=STORE) — không miễn trừ dù nơi khác trong hệ thống coi Siêu Thị
+  thiếu Chức Danh là chuyện bình thường.
+- **"🏷️ Chỉ hiện tài khoản ĐANG có Chức Danh Kiêm Nhiệm"** (`filterUserHasSecondaryPositions`) — checkbox
+  đơn (KHÔNG phải ô gõ tìm kiếm — người dùng đã từ chối phương án ô tìm kiếm ở demo đầu, chỉ muốn tick
+  nhanh để rà soát/sửa), tick là hiện NGAY tài khoản có `secondaryPositions.length>0`. Badge trên mỗi
+  dòng còn ghi rõ nguồn gốc ("Hồ Sơ Nhân Sự" nếu tài khoản đã liên kết hồ sơ, hay "gán thủ công" nếu
+  chưa) dựa vào `_hrLinkedUsernamesCache` sẵn có (tái dùng, không gọi API riêng — tự prefetch 1 lần/phiên
+  nếu cache chưa tải, rồi tự `renderUsers()` lại đúng 1 lần).
+- Test mới `tests/test-user-list-filters.js` (10 kịch bản, Playwright thật qua `testHarness.js`) — bao
+  gồm đúng kịch bản xác nhận riêng ở trên (Siêu Thị vẫn bị tính "thiếu Chức Danh"), kịch bản gộp OR, và
+  badge nguồn gốc đúng cho cả 2 trường hợp liên kết/chưa liên kết Hồ Sơ Nhân Sự. Chạy lại test liên quan
+  hiện có (`test-summarize-user-perms.js`, `test-action-menu-admin-users.js`,
+  `test-user-import-permgroups.js`, `test-user-save-autolink-profile.js`) — không có regression.
 
 ## v29.55 (2026-11): Vá tận gốc lỗi phông chữ khi đọc PDF phiếu đặt hàng NCC (Đặt Hàng Siêu Thị/HO)
 

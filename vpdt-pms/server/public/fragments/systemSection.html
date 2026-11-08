@@ -3422,6 +3422,43 @@
         🔑 Chỉ hiện tài khoản CHƯA đổi mật khẩu tạm (chưa từng đăng nhập)
       </label>
 
+      <!-- Bộ lọc "đang có Chức Danh Kiêm Nhiệm" (11/2026, theo yêu cầu người dùng: "chỉ cần cái checkbox
+           để hiện thị những user nào đang có chức danh kiêm nhiệm để tôi sửa cho nhanh") — tick là hiện
+           NGAY những tài khoản có secondaryPositions (dù đồng bộ từ Hồ Sơ Nhân Sự hay gán thủ công, cùng
+           đổ chung 1 field — xem renderUsers()), không cần gõ tìm gì. -->
+      <label class="flex items-center gap-1.5 text-xs font-semibold text-blue-700 mb-2">
+        <input type="checkbox" id="filterUserHasSecondaryPositions" data-op-change="onUserFilterChange">
+        🏷️ Chỉ hiện tài khoản ĐANG có Chức Danh Kiêm Nhiệm
+      </label>
+
+      <!-- Bộ lọc "hồ sơ thiếu thông tin" (11/2026, theo yêu cầu người dùng: rà soát nhanh tài khoản thiếu
+           Phòng Ban/Chức Danh/Email/Vị Trí để tự sửa) — tick NHIỀU ô cùng lúc gộp kiểu OR (hiện người
+           dùng thiếu BẤT KỲ mục nào đã tick), xem renderUsers(). Áp dụng CHO CẢ tài khoản Siêu Thị với
+           "Chưa gắn Chức Danh" (người dùng xác nhận: không miễn trừ dù Siêu Thị thường để trống field
+           này) — khác với applyOperationOrderPoLock()/các chỗ khác coi Siêu Thị thiếu Chức Danh là bình
+           thường, ở ĐÂY cố ý vẫn tính là "thiếu" để admin rà soát/bổ sung nếu muốn. -->
+      <div class="border rounded p-2 mb-2 bg-gray-50">
+        <div class="text-[11px] font-bold text-gray-500 mb-1.5">🔍 Lọc hồ sơ thiếu thông tin (tick nhiều ô = gộp OR)</div>
+        <div class="grid grid-cols-1 gap-1 text-xs font-semibold text-gray-700">
+          <label class="flex items-center gap-1.5">
+            <input type="checkbox" id="filterUserMissingDept" data-op-change="onUserFilterChange">
+            🏢 Chưa gắn Phòng Ban / Siêu Thị
+          </label>
+          <label class="flex items-center gap-1.5">
+            <input type="checkbox" id="filterUserMissingJobTitle" data-op-change="onUserFilterChange">
+            💼 Chưa gắn Chức Danh
+          </label>
+          <label class="flex items-center gap-1.5">
+            <input type="checkbox" id="filterUserMissingEmail" data-op-change="onUserFilterChange">
+            ✉️ Chưa gắn Email
+          </label>
+          <label class="flex items-center gap-1.5">
+            <input type="checkbox" id="filterUserMissingPosType" data-op-change="onUserFilterChange">
+            📍 Chưa gắn Vị Trí (HO / Siêu Thị)
+          </label>
+        </div>
+      </div>
+
       <!-- Gán/Gỡ Nhóm Phân Quyền hàng loạt (10/2026, theo yêu cầu người dùng "chọn nhiều người rồi gán
            nhóm 1 lần") — chọn người qua Ô TÌM-KIẾM-GÕ-CHỌN-NHIỀU-NGƯỜI bên dưới (renderUserBulkPeoplePicker(),
            module-admin-permgroups.js — cùng widget renderMultiSelectDropdown() dùng cho Khối/Chức Danh/Vị

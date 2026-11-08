@@ -577,6 +577,12 @@ function onUserFilterChange() {
   renderUsers();
 }
 
+// _hrLinkedUsernamesPrefetchInFlight (11/2026, cùng đợt bộ lọc "Chức Danh Kiêm Nhiệm") — chặn gọi
+// ensureHrLinkedUsernamesLoaded() NHIỀU LẦN song song khi renderUsers() được gọi dồn dập (mỗi
+// keystroke ở ô tìm kiếm) trong lúc cache còn null (chưa tải xong lần đầu) — chỉ cache (_hrLinkedUsernamesCache,
+// đã có sẵn ở trên) không đủ vì nó vẫn null suốt quá trình tải, phải có cờ RIÊNG đánh dấu "đang tải".
+let _hrLinkedUsernamesPrefetchInFlight = false;
+
 function renderUsers() {
   const tbody = document.getElementById('userTableBody');
   if (!tbody) return;
@@ -584,8 +590,39 @@ function renderUsers() {
   const keywordInputEl = document.getElementById('filterUserKeyword');
   const keyword = (keywordInputEl?.value || '').trim();
   const mustChangeOnly = !!document.getElementById('filterUserMustChangeOnly')?.checked;
+  // "Chức Danh Kiêm Nhiệm" (11/2026) — xem chú thích đầy đủ tại checkbox tương ứng ở systemSection.html.
+  const hasSecondaryOnly = !!document.getElementById('filterUserHasSecondaryPositions')?.checked;
+  // "Lọc hồ sơ thiếu thông tin" (11/2026) — 4 ô gộp kiểu OR (tick nhiều ô = hiện người dùng thiếu BẤT KỲ
+  // mục nào đã tick), xem chú thích đầy đủ tại khối checkbox tương ứng ở systemSection.html.
+  const missingDept = !!document.getElementById('filterUserMissingDept')?.checked;
+  const missingJobTitle = !!document.getElementById('filterUserMissingJobTitle')?.checked;
+  const missingEmail = !!document.getElementById('filterUserMissingEmail')?.checked;
+  const missingPosType = !!document.getElementById('filterUserMissingPosType')?.checked;
+  const anyMissingFilterActive = missingDept || missingJobTitle || missingEmail || missingPosType;
+  const userMatchesMissingFilter = (u) => {
+    if (!anyMissingFilterActive) return true;
+    if (missingDept && !String(u.dept || '').trim()) return true;
+    if (missingJobTitle && !String(u.jobTitle || '').trim()) return true;
+    if (missingEmail && !String(u.email || '').trim()) return true;
+    if (missingPosType && !u.posType) return true;
+    return false;
+  };
   const filtered = DB.users.filter(u => matchesAnyKeyword([u.username, u.name, u.dept], keywordInputEl?._multiKeywords, keyword) &&
-    (!mustChangeOnly || u.mustChangePassword));
+    (!mustChangeOnly || u.mustChangePassword) &&
+    (!hasSecondaryOnly || (u.secondaryPositions || []).length > 0) &&
+    userMatchesMissingFilter(u));
+
+  // Prefetch _hrLinkedUsernamesCache (đã khai báo ở đầu file, dùng cho modal Sửa Người Dùng từ trước) —
+  // TÁI DÙNG ở đây để hiện nhãn "nguồn: Hồ Sơ Nhân Sự"/"gán thủ công" trên badge Chức Danh Kiêm Nhiệm bên
+  // dưới, KHÔNG gọi API riêng. Cache null (chưa tải lần nào trong phiên) -> render tạm KHÔNG có nhãn
+  // nguồn, rồi tự renderUsers() lại đúng 1 lần khi tải xong (đủ nhanh, không cần chặn render ban đầu).
+  if (_hrLinkedUsernamesCache === null && !_hrLinkedUsernamesPrefetchInFlight) {
+    _hrLinkedUsernamesPrefetchInFlight = true;
+    ensureHrLinkedUsernamesLoaded().finally(() => {
+      _hrLinkedUsernamesPrefetchInFlight = false;
+      renderUsers();
+    });
+  }
 
   const paginationEl = document.getElementById('paginationContainer_user');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('user', 'renderUsers');
@@ -595,12 +632,40 @@ function renderUsers() {
     const groups = (u.groupIds || []).map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
     const hasOverrides = groups.length && u.permOverrides && Object.keys(u.permOverrides).length > 0;
     const isInactive = u.active === false;
+
+    // Badge "thiếu thông tin" — CHỈ hiện đúng mục đang được tick lọc (không làm ồn bảng khi không ai lọc
+    // gì cả), xem chú thích đầy đủ ở khối checkbox tương ứng.
+    const missingBadges = [];
+    if (missingDept && !String(u.dept || '').trim()) missingBadges.push('🏢 Thiếu Phòng Ban/Siêu Thị');
+    if (missingJobTitle && !String(u.jobTitle || '').trim()) missingBadges.push('💼 Thiếu Chức Danh');
+    if (missingEmail && !String(u.email || '').trim()) missingBadges.push('✉️ Thiếu Email');
+    if (missingPosType && !u.posType) missingBadges.push('📍 Thiếu Vị Trí (HO/Siêu Thị)');
+    const missingBadgesHtml = missingBadges.map(b =>
+      `<span class="ml-1 inline-block bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">⚠️ ${escapeHtml(b)}</span>`
+    ).join('');
+
+    // Badge "Chức Danh Kiêm Nhiệm" — LUÔN hiện khi có (không phụ thuộc checkbox lọc đang bật hay không,
+    // giống badge "Chưa đổi mật khẩu tạm"/"Đã khóa" ở trên) để admin thấy ngay cả khi đang xem danh sách
+    // không lọc gì. Nguồn gốc: username có trong _hrLinkedUsernamesCache (đã liên kết Hồ Sơ Nhân Sự) thì
+    // secondaryPositions đồng bộ 1 chiều TỪ hồ sơ xuống (khoá sửa ở đây); ngược lại là admin gán thủ công
+    // qua "🔀 Kiêm Nhiệm Phê Duyệt Quy Trình" — xem renderSecondaryPositionsWidget() ở trên.
+    const secondaryPositions = u.secondaryPositions || [];
+    const isHrLinked = !!(_hrLinkedUsernamesCache && _hrLinkedUsernamesCache.has(u.username));
+    const secondaryBadgesHtml = secondaryPositions.length ? (
+      secondaryPositions.map(sp =>
+        `<span class="ml-1 inline-block bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🏷️ Kiêm nhiệm: ${escapeHtml(sp.jobTitle || '')}${sp.dept ? ' (' + escapeHtml(sp.dept) + ')' : ''}</span>`
+      ).join('') +
+      `<span class="ml-1 inline-block bg-gray-200 text-gray-600 text-[9px] font-semibold px-1 py-0.5 rounded align-middle">nguồn: ${isHrLinked ? 'Hồ Sơ Nhân Sự' : 'gán thủ công'}</span>`
+    ) : '';
+
     return `
     <tr id="userRow_${u.id}" class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
         ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔒 Đã khóa</span>' : ''}
         ${u.mustChangePassword ? '<span class="ml-1 inline-block bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔑 Chưa đổi mật khẩu tạm</span>' : ''}
+        ${missingBadgesHtml}
+        ${secondaryBadgesHtml}
       </td>
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
