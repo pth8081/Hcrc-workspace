@@ -57,6 +57,7 @@ const NGHIEP_VU_NAV = [
     { key: 'hrProfile', icon: '👤', label: 'Hồ Sơ Nhân Sự' },
     { key: 'hrContract', icon: '📝', label: 'Hợp Đồng Lao Động' },
     { key: 'hrReport', icon: '📊', label: 'Báo Cáo' },
+    { key: 'hrAudit', icon: '🔍', label: 'Audit Nhân Sự' },
     { key: 'hrAttendance', icon: '⏱️', label: 'Công / Phép' },
     { key: 'hrPayroll', icon: '💰', label: 'Lương' },
     { key: 'hr', icon: '🤝', label: 'Phản Hồi Ý Kiến (HCRC Đồng Hành)' },
@@ -1299,6 +1300,28 @@ const NGHIEP_VU_DOCS = {
       { label: 'Điều Chỉnh Lương chưa tách từng khoản', text: 'hệ thống ghi mỗi lần điều chỉnh dạng "1 loại thay đổi + giá trị cũ/mới" (qua Phụ Lục Hợp Đồng) — KHÔNG tách riêng lương CB/thưởng/phụ cấp như file Excel quản lý tay cũ.' },
     ] },
   },
+  hrAudit: {
+    icon: '🔍', title: 'Audit Nhân Sự', badge: 'Nhân Sự',
+    desc: 'Từ 11/2026, theo yêu cầu người dùng — quét chủ động 4 nhóm điểm cần rà soát trong Hồ Sơ Nhân Sự + Hợp Đồng Lao Động: hồ sơ còn ở trạng thái Nháp tồn đọng quá lâu, hồ sơ đang ACTIVE nhưng thiếu/chưa kích hoạt hợp đồng tương ứng, hợp đồng đã hết hạn nhưng chưa xử lý (hoặc sắp hết hạn), và hồ sơ ACTIVE còn thiếu thông tin quan trọng (CCCD, SĐT, địa chỉ, số tài khoản ngân hàng...). KHÁC 3 audit ở Hệ Thống → Quản Trị (Quy Trình/Người Dùng/Hệ Thống, chỉ admin xem được): màn này sống ngay trong module Nhân Sự, mở cho người có quyền quản lý/xem Hồ Sơ hoặc Hợp Đồng hoặc Báo Cáo Nhân Sự, không bắt buộc phải là Quản Trị Viên.',
+    flow: { ariaLabel: 'Quy trình quét + xử lý', chain: [
+      { label: 'Quét (tự bấm hoặc tự động hằng ngày)', sub: 'Đọc Hồ Sơ Nhân Sự + Hợp Đồng Lao Động' },
+      { label: 'Liệt kê từng phát hiện', sub: 'NGHIÊM TRỌNG / CẢNH BÁO' },
+      { label: '3 kênh báo: màn quét + thẻ Dashboard + Email', sub: 'Chỉ khi có thay đổi thật', kind: 'approved' },
+    ] },
+    steps: [
+      { text: 'Vào <b>💼 Nhân Sự ▾ → 🔍 Audit Nhân Sự</b> (sidebar).' },
+      { text: 'Bấm <b>"🔄 Quét Ngay"</b> — danh sách phát hiện hiện ngay dưới, sắp xếp NGHIÊM TRỌNG lên đầu.' },
+      { text: '<b>NGHIÊM TRỌNG</b> (đỏ) = hồ sơ ACTIVE thiếu hẳn hợp đồng/không có hợp đồng nào đang hiệu lực, hợp đồng đã hết hạn (endDate đã qua) nhưng vẫn ghi ACTIVE, hoặc hồ sơ ACTIVE thiếu CCCD/CMND. <b>CẢNH BÁO</b> (vàng) = hồ sơ Nháp tồn đọng quá lâu, hợp đồng gần nhất còn Nháp chưa kích hoạt, hợp đồng sắp hết hạn, hoặc hồ sơ thiếu các thông tin khác (SĐT, địa chỉ, số tài khoản ngân hàng, mã số thuế, số BHXH).' },
+      { text: 'Đổi ngưỡng <b>"hồ sơ Nháp tồn đọng"</b>/<b>"hợp đồng sắp hết hạn"</b> (mặc định 30 ngày mỗi ngưỡng) ngay trên màn — đổi xong tự lưu, áp dụng từ lần quét kế tiếp.' },
+      { text: 'Tick <b>"📧 Tự động quét hằng ngày + gửi email khi có thay đổi"</b> — CHỈ gửi email cho người có quyền quản lý Hồ Sơ/Hợp Đồng (+ admin) khi danh sách phát hiện THỰC SỰ thay đổi, không spam lặp lại.' },
+    ],
+    footer: { left: [
+      { label: 'Song song với nhắc hạn hợp đồng đã có', text: 'mục "hợp đồng sắp hết hạn" ở đây cho xem TRỰC TIẾP danh sách, không thay thế job nhắc email trước hạn đã có sẵn (jobs/laborContractExpiryReminder.js, 60/45/30 ngày) — 2 cơ chế bổ sung cho nhau.' },
+      { label: 'Hồ sơ Nháp bị Hủy KHÔNG bị báo nhầm', text: 'hồ sơ ứng viên đã chủ động "Hủy" ở hàng đợi Onboarding (coi như không nhận việc) cố ý giữ Nháp mãi để phục vụ báo cáo sau này — không tính vào mục "Nháp tồn đọng".' },
+    ], right: [
+      { label: 'Không bắt buộc admin', text: 'khác 3 audit ở Hệ Thống → Quản Trị — bất kỳ ai có quyền quản lý/xem Hồ Sơ hoặc Hợp Đồng hoặc Báo Cáo Nhân Sự đều xem được, admin vẫn luôn xem được như mọi màn khác.' },
+    ] },
+  },
   hrAttendance: {
     icon: '⏱️', title: 'Công / Phép', badge: 'Nhân Sự',
     desc: 'Đăng ký nghỉ phép theo loại phép — duyệt theo quản lý trực tiếp (hoặc bất kỳ cấp quản lý cao hơn theo Cơ Cấu Tổ Chức) hoặc Nhân Sự, tự trừ vào quỹ phép năm còn lại.',
@@ -2302,7 +2325,7 @@ const NV_KEY_ACCESS_FN = {
   // cũ), không tự nghĩ ra điều kiện mới.
   vanHanhShelf: 'canViewShelfReportClient',
   orgChart: 'canAccessOrgChartModule', hrLifecycle: 'canAccessHrLifecycleModule', hrProfile: 'canAccessHrProfileModule',
-  hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAttendance: 'canAccessHrAttendanceModule',
+  hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAudit: 'canAccessHrAuditModule', hrAttendance: 'canAccessHrAttendanceModule',
   hrPayroll: 'canAccessHrPayrollModule', hr: 'canAccessHrModule',
   // itPriceApproval: KHÔNG còn dùng thẳng canAccessItSupportModule() — form tạo đề xuất đã chuyển sang
   // Mua Hàng (Bán Lẻ)/Vận Hành (Bán Buôn) (10/2026, "Item 2" golive), xem canViewItPriceApprovalNVDoc()

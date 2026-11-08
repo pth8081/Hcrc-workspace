@@ -49,6 +49,7 @@ const adminExportRoutes = require('./routes/adminExport');
 const workflowAuditRoutes = require('./routes/workflowAudit');
 const userAuditRoutes = require('./routes/userAudit');
 const systemAuditRoutes = require('./routes/systemAudit');
+const hrProfileAuditRoutes = require('./routes/hrProfileAudit');
 const adminTlsCertRoutes = require('./routes/adminTlsCert');
 const adminTrustedCaRoutes = require('./routes/adminTrustedCa');
 const orgChartRoutes = require('./routes/orgChart');
@@ -90,6 +91,7 @@ const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { checkWorkflowApproverGaps } = require('./jobs/workflowApproverGapAudit');
 const { checkUserAccountGaps } = require('./jobs/userAccountGapAudit');
 const { checkSystemHealthGaps } = require('./jobs/systemHealthAudit');
+const { checkHrProfileGaps } = require('./jobs/hrProfileGapAudit');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
@@ -215,6 +217,7 @@ app.use('/api/admin/trusted-ca', adminTrustedCaRoutes);
 app.use('/api/admin/workflow-audit', workflowAuditRoutes);
 app.use('/api/admin/user-audit', userAuditRoutes);
 app.use('/api/admin/system-audit', systemAuditRoutes);
+app.use('/api/hr/profile-audit', hrProfileAuditRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
@@ -605,6 +608,10 @@ async function start() {
       setInterval(checkUserAccountGaps, 24 * 60 * 60 * 1000);
       checkSystemHealthGaps();
       setInterval(checkSystemHealthGaps, 24 * 60 * 60 * 1000);
+      // "🔍 Audit Nhân Sự" (11/2026) — KHÁC 3 audit trên (sống ở module Nhân Sự, không phải Hệ Thống >
+      // Quản Trị, xem routes/hrProfileAudit.js) nhưng CÙNG khuôn quét 1 lần/24h.
+      checkHrProfileGaps();
+      setInterval(checkHrProfileGaps, 24 * 60 * 60 * 1000);
       // Dọn file mồ côi trong uploads/ (đã tải lên nhưng không hồ sơ nào tham chiếu, VD bỏ dở form sau
       // khi tải file) — chạy mỗi 6h, đủ thưa để không tốn tài nguyên quét toàn bộ thư mục liên tục, đủ
       // dày để không tích tụ quá nhiều trước khi được dọn (job tự có graceHours=48h bảo vệ file đang dở

@@ -4240,6 +4240,46 @@ Hồ Sơ Nhân Sự" **VÀ** "📝 Quản Lý Hợp Đồng Lao Động" (hoặc
 chặt như Lịch Sử Nhân Sự (mục 4.5.3), vì employeeProfiles/laborContracts là
 nhóm dữ liệu cực nhạy cảm KHÔNG đi qua màn Báo Cáo dùng chung (mục 4.9).
 
+#### 4.5.5b. Audit Nhân Sự (từ v29.61)
+
+**Nhân Sự → 🔍 Audit Nhân Sự** (11/2026, theo yêu cầu người dùng — ngang hàng
+"📊 Báo Cáo" trong menu sidebar) — **vai trò**: quét chủ động 4 nhóm điểm cần
+rà soát trong Hồ Sơ Nhân Sự + Hợp Đồng Lao Động, **KHÁC HẲN** 3 audit ở
+**Hệ Thống → ⚙️ Quản Trị** (Audit Quy Trình/Người Dùng/Hệ Thống — mục 7.1b/
+7.1c, tất cả admin-only) ở 2 điểm: (1) sống **trong module Nhân Sự**, không
+phải Hệ Thống; (2) **KHÔNG bắt buộc admin** — mở cho bất kỳ ai có quyền
+"🗂️ Quản Lý Hồ Sơ Nhân Sự"/"👁️ Xem Toàn Bộ Hồ Sơ"/"✏️ Sửa Hồ Sơ"/"📝 Quản Lý
+Hợp Đồng Lao Động"/"📊 Xem Báo Cáo Nhân Sự" (admin vẫn luôn xem được như mọi
+màn khác).
+
+- **4 nhóm phát hiện** (bấm "🔄 Quét Ngay" để quét thật, kết quả hiện ngay,
+  sắp NGHIÊM TRỌNG lên đầu):
+  - Hồ sơ còn ở trạng thái **Nháp** tồn đọng quá ngưỡng cấu hình (mặc định
+    30 ngày) — hồ sơ ứng viên đã chủ động "Hủy" ở hàng đợi Onboarding (không
+    nhận việc) KHÔNG bị báo (cố ý giữ Nháp để phục vụ báo cáo, không phải bị
+    bỏ quên).
+  - Hồ sơ đang **ACTIVE** (đang làm việc) nhưng **thiếu hẳn hợp đồng** nào
+    trong hệ thống (NGHIÊM TRỌNG), hoặc hợp đồng gần nhất **vẫn ở Nháp** chưa
+    kích hoạt (CẢNH BÁO), hoặc hợp đồng gần nhất đã chấm dứt/hết hạn/bị thay
+    thế mà **chưa có hợp đồng ACTIVE kế tiếp** (NGHIÊM TRỌNG).
+  - Hợp đồng đang **ACTIVE** nhưng **đã hết hạn** (ngày hết hạn đã qua) mà
+    **chưa được xử lý** (NGHIÊM TRỌNG — hệ thống không tự chuyển trạng thái
+    khi hết hạn, chỉ có job nhắc email trước hạn), hoặc **sắp hết hạn** trong
+    ngưỡng cấu hình (mặc định 30 ngày, CẢNH BÁO) — bổ sung cho job nhắc email
+    đã có (xem mục 4.5.4), không thay thế.
+  - Hồ sơ đang ACTIVE **thiếu thông tin quan trọng**: thiếu CCCD/CMND báo
+    riêng NGHIÊM TRỌNG (định danh pháp lý cốt lõi); thiếu 1 hoặc nhiều trong
+    SĐT liên hệ/địa chỉ thường trú/số tài khoản ngân hàng/mã số thuế/số BHXH
+    gộp chung 1 dòng CẢNH BÁO, nêu rõ đúng những trường còn thiếu.
+- **2 ngưỡng chỉnh được ngay trên màn** ("hồ sơ Nháp tồn đọng"/"hợp đồng sắp
+  hết hạn", mặc định 30 ngày mỗi ngưỡng) — đổi xong tự lưu.
+- **Tự động quét hằng ngày + gửi email khi có thay đổi** (tick ô tương ứng) —
+  người XEM màn rộng hơn người NHẬN email: người chỉ có "📊 Xem Báo Cáo Nhân
+  Sự" xem được màn nhưng KHÔNG nhận email cảnh báo (chỉ người quản lý thật —
+  Quản Lý/Sửa Hồ Sơ hoặc Quản Lý Hợp Đồng — và admin mới nhận).
+- **Không có quyền mới nào** — chỉ tái dùng 5 quyền Nhân Sự đã có sẵn, không
+  cần sửa Ma Trận Phân Quyền.
+
 #### 4.5.6. Công & Phép
 
 **Nhân Sự → Công & Phép** — **vai trò**: chấm công (qua máy chấm công vật lý)

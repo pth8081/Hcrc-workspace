@@ -337,6 +337,9 @@
                hồi người dùng); đợt sau dời tiếp xuống CUỐI danh sách (cũng theo phản hồi người dùng) — xem
                hrpfCanViewReports() ở core.js. -->
           <button id="btnHrReportNav" data-op-seq="closeHrDropdown()|switchTab(hrReport)" class="hidden sidebar-subitem">📊 Báo Cáo</button>
+          <!-- "Audit Nhân Sự" (11/2026, theo yêu cầu người dùng) — module con MỚI, mở cho người quản
+               lý/xem Hồ Sơ/Hợp Đồng/Báo Cáo HR, KHÔNG riêng admin, xem canAccessHrAuditModule() (core.js). -->
+          <button id="btnHrAuditNav" data-op-seq="closeHrDropdown()|switchTab(hrAudit)" class="hidden sidebar-subitem">🔍 Audit Nhân Sự</button>
         </div>
       </div>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
@@ -1559,6 +1562,12 @@
        cần CẢ hrProfileManage LẪN hrContractManage/admin, xem hrpfCanViewReports() ở core.js. Nội dung
        render ĐỘNG bằng JS (module-hrprofile.js::renderHrReportModule()) vào container rỗng bên dưới. -->
   <div id="hrReportSection" class="hidden space-y-4"></div>
+
+  <!-- Nhân Sự > Audit Nhân Sự (11/2026, theo yêu cầu người dùng) — module con RIÊNG, ngang hàng Báo
+       Cáo. KHÁC 3 audit Hệ Thống > Quản Trị (admin-only): mở cho người quản lý/xem Hồ Sơ/Hợp Đồng/Báo
+       Cáo HR, xem canAccessHrAuditModule() ở core.js. Nội dung render ĐỘNG bằng JS (module-hraudit.js)
+       vào container rỗng bên dưới. -->
+  <div id="hrAuditSection" class="hidden space-y-4"></div>
 
   <!-- "Công & Phép" (Đợt 3/4 module Nhân Sự, Phần E tài liệu thiết kế gốc) — xem lib/attendance.js đầu
        file phía server cho toàn bộ điều chỉnh so với tài liệu gốc. MỞ CHO MỌI NGƯỜI có quyền vào module

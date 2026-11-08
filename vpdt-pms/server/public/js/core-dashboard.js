@@ -101,6 +101,10 @@ let _userAuditSummaryCache = null;
 let _userAuditSummaryFetchInFlight = false;
 let _systemAuditSummaryCache = null;
 let _systemAuditSummaryFetchInFlight = false;
+// hrProfileAuditSummaryCache (11/2026, "🔍 Audit Nhân Sự") — CÙNG khuôn prefetch 3 cache ngay trên,
+// nhưng route /api/hr/profile-audit KHÔNG chặn theo admin — gate theo canAccessHrAuditModule() (core.js).
+let _hrProfileAuditSummaryCache = null;
+let _hrProfileAuditSummaryFetchInFlight = false;
 
 // Đặt sẵn bộ lọc Trạng Thái = "Đang Chờ Duyệt" của module rồi kích hoạt lại render — dùng cho các thẻ
 // Dashboard mà module đích ĐÃ CÓ SẴN ô lọc trạng thái (không phải mọi module đều có, xem ghi chú từng
@@ -238,6 +242,22 @@ function buildDashboardCards(user) {
     const systemAuditTotal = _systemAuditSummaryCache?.total || 0;
     addCard({ key: 'systemAudit', icon: '🖥️', label: 'Audit Hệ Thống có phát hiện', count: systemAuditTotal, show: systemAuditTotal > 0,
       action: async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('AUDITSYSTEM'); } });
+  }
+
+  // "🔍 Audit Nhân Sự" (11/2026) — KHÁC 3 thẻ Audit trên (admin-only): gate theo canAccessHrAuditModule()
+  // — mở cho người có quyền quản lý/xem Hồ Sơ/Hợp Đồng/Báo Cáo HR, không bắt buộc admin.
+  if (canAccessHrAuditModule(user)) {
+    if (_hrProfileAuditSummaryCache === null && !_hrProfileAuditSummaryFetchInFlight) {
+      _hrProfileAuditSummaryFetchInFlight = true;
+      fetch('/api/hr/profile-audit/summary')
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => { _hrProfileAuditSummaryCache = data || { total: 0 }; })
+        .catch(() => { _hrProfileAuditSummaryCache = { total: 0 }; })
+        .finally(() => { _hrProfileAuditSummaryFetchInFlight = false; renderDashboard(); });
+    }
+    const hrProfileAuditTotal = _hrProfileAuditSummaryCache?.total || 0;
+    addCard({ key: 'hrProfileAudit', icon: '🔍', label: 'Audit Nhân Sự có phát hiện', count: hrProfileAuditTotal, show: hrProfileAuditTotal > 0,
+      action: () => switchTab('hrAudit') });
   }
 
   return cards;

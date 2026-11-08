@@ -1,9 +1,52 @@
 # Phiên bản hiện tại
 
-**29.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.61 (2026-11): "🔍 Audit Nhân Sự" — audit thứ 4, sống trong module Nhân Sự (không phải admin-only)
+
+Theo yêu cầu người dùng ("làm cái phần audit nhanh cho việc rà soát hồ sơ chưa active hoặc là hợp đồng
+chưa active, hợp đồng hết hạn, sau hết hạn hoặc là hồ sơ thiếu thông tin ... để trong phần module nhân
+sự, nhân sự sẽ được phân quyền chứ admin không phân quyền đâu") — audit thứ 4 sau Quy Trình/Người
+Dùng/Hệ Thống, nhưng KHÁC HẲN 3 audit đó ở 2 điểm: (1) sống trong module Nhân Sự (tab riêng, không phải
+Hệ Thống → Quản Trị), (2) KHÔNG bắt buộc admin — mở cho bất kỳ ai có quyền quản lý/xem Hồ Sơ hoặc Hợp
+Đồng hoặc Báo Cáo Nhân Sự.
+
+- **4 nhóm kiểm tra** (`lib/hrProfileAudit.js`, đọc `employeeProfiles` + `laborContracts`):
+  - **H1** hồ sơ còn ở Nháp tồn đọng quá ngưỡng (mặc định 30 ngày) — loại trừ hồ sơ đã chủ động "Hủy"
+    ở hàng đợi Onboarding (cố ý giữ Nháp mãi để phục vụ báo cáo, không phải bị bỏ quên).
+  - **H2** hồ sơ ACTIVE thiếu hẳn hợp đồng (CRITICAL), hoặc hợp đồng gần nhất còn Nháp chưa kích hoạt
+    (WARNING), hoặc hợp đồng gần nhất đã chấm dứt/hết hạn/bị thay thế mà chưa có hợp đồng ACTIVE kế
+    tiếp (CRITICAL).
+  - **H3** hợp đồng ACTIVE đã hết hạn (`endDate` đã qua) nhưng chưa được chuyển trạng thái (CRITICAL —
+    hệ thống KHÔNG tự chuyển EXPIRED, chỉ có job nhắc email) + hợp đồng sắp hết hạn trong ngưỡng cấu
+    hình (mặc định 30 ngày, WARNING) — song song, không thay thế `jobs/laborContractExpiryReminder.js`.
+  - **H4** hồ sơ ACTIVE thiếu CCCD/CMND (CRITICAL — định danh pháp lý cốt lõi) hoặc thiếu SĐT/địa
+    chỉ/số TK ngân hàng/MST/số BHXH (gộp 1 WARNING/hồ sơ, nêu đúng tên field thiếu).
+- **Route mới** `/api/hr/profile-audit*` (`routes/hrProfileAudit.js`) — gác 2 lớp đúng khuôn mọi route
+  Nhân Sự khác: Khối 0 (`hasModuleAccessServer(user,'hrAudit')`) + quyền chi tiết
+  (`canFullViewProfiles`/`canManageContracts`/`hrReportView`, admin luôn qua được) — KHÔNG gọi
+  `isCurrentlyAdmin()` như 3 route audit trước.
+- **Job hằng ngày** `jobs/hrProfileGapAudit.js` — cùng khuôn 3 job audit trước (chỉ gửi email khi chữ ký
+  phát hiện đổi), nhưng người NHẬN email hẹp hơn người XEM màn: chỉ người quản lý thật
+  (`hrProfileManage`/`hrProfileEdit`/`hrContractManage`) + admin, không gửi cho người chỉ có
+  `hrReportView` (xem được nhưng không xử lý được).
+- **UI**: tab mới "🔍 Audit Nhân Sự" ngang hàng "📊 Báo Cáo" trong dropdown Nhân Sự (sidebar) — fragment
+  `public/fragments/hrAuditSection.html` + `public/js/module-hraudit.js`, CÙNG khuôn hiển thị 3 audit
+  Hệ Thống (stat box, nút "🔄 Quét Ngay", toggle tự động quét + 2 ngưỡng ngày riêng) nhưng tự viết
+  `HR_AUDIT_SEVERITY_STYLE` riêng (không require `module-hethong-tabs.js`, module đó chỉ nạp cho admin).
+  Thẻ Dashboard mới "🔍 Audit Nhân Sự có phát hiện" — gate theo `canAccessHrAuditModule()`, không theo
+  `perms.admin` như 3 thẻ Audit kia.
+- `moduleAccess` — thêm `hrAudit` (parent `hr`) vào `BUSINESS_MODULES` (core.js, client) +
+  `MODULE_ACCESS_PARENTS` (lib/recordViewScope.js, server) — tự xuất hiện trên cây "Mục 0" (không cần
+  sửa gì thêm, cây vẽ tự động từ `BUSINESS_MODULES`).
+- `📘 Hướng Dẫn` (tab 📘 Nghiệp Vụ, nhóm "Nhân Sự" — KHÔNG phải tab ⚙️ Hệ Thống, vì không giới hạn
+  admin): entry mới `hrAudit`.
+- Không có quyền (permission key) MỚI nào được thêm — chỉ tái dùng 4 quyền đã có sẵn
+  (`hrProfileManage`/`hrProfileFullView`/`hrProfileEdit`/`hrContractManage`/`hrReportView`), nên không
+  cần sửa Ma Trận Phân Quyền/cây phân quyền.
 
 ## v29.60 (2026-11): Dời "Audit Quy Trình" về chung 1 chỗ với 2 audit mới, cho đồng bộ
 

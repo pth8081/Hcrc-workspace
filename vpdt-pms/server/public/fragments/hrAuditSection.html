@@ -1,0 +1,35 @@
+
+    <!-- Nhân Sự > Audit Nhân Sự (11/2026, theo yêu cầu người dùng: "rà soát hồ sơ chưa active/hợp đồng
+         chưa active, hợp đồng hết hạn/sau hết hạn, hồ sơ thiếu thông tin"). CÙNG khuôn hiển thị 3 audit
+         Hệ Thống > Quản Trị (xem systemSection.html adminSubAuditUser) nhưng sống RIÊNG ở module Nhân
+         Sự — route /api/hr/profile-audit (routes/hrProfileAudit.js), gác theo quyền HR
+         (canAccessHrAuditModule() ở core.js), KHÔNG cần admin. Logic render/scan/toggle ở
+         module-hraudit.js. -->
+    <div class="bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🔍 Audit Nhân Sự — Hồ Sơ &amp; Hợp Đồng Lao Động</h3>
+          <p id="hrAuditLastScan" class="text-[11px] text-gray-500 italic mt-0.5">Chưa quét lần nào.</p>
+        </div>
+        <button type="button" data-op="runHrProfileAuditScan" id="hrAuditScanBtn" class="btn-primary text-xs">🔄 Quét Ngay</button>
+      </div>
+      <div id="hrAuditSummaryRow" class="hidden grid grid-cols-3 gap-2">
+        <div class="bg-gray-50 border rounded p-2 text-center"><div id="hrAuditTotalCount" class="text-lg font-bold text-gray-700">0</div><div class="text-[10px] text-gray-500">Tổng phát hiện</div></div>
+        <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="hrAuditCriticalCount" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">Nghiêm trọng</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="hrAuditWarningCount" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">Cảnh báo</div></div>
+      </div>
+      <div class="bg-gray-50 border rounded p-3 flex items-center gap-3 flex-wrap text-xs">
+        <label class="flex items-center gap-1.5 font-semibold text-gray-700">
+          <input type="checkbox" id="hrAuditAutoScanToggle" data-op-change="toggleHrProfileAuditAutoScan"> 📧 Tự động quét hằng ngày + gửi email khi có thay đổi
+        </label>
+        <label class="flex items-center gap-1.5 text-gray-600">
+          Ngưỡng "hồ sơ Nháp tồn đọng":
+          <input type="number" id="hrAuditDraftStaleDays" min="1" max="3650" class="w-16 border rounded px-1.5 py-1 text-xs" data-op-change="saveHrProfileAuditThresholds"> ngày
+        </label>
+        <label class="flex items-center gap-1.5 text-gray-600">
+          Ngưỡng "hợp đồng sắp hết hạn":
+          <input type="number" id="hrAuditExpirySoonDays" min="1" max="3650" class="w-16 border rounded px-1.5 py-1 text-xs" data-op-change="saveHrProfileAuditThresholds"> ngày
+        </label>
+      </div>
+      <div id="hrAuditFindingsList" class="space-y-1.5"></div>
+    </div>

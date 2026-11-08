@@ -1838,7 +1838,7 @@ const MODULE_ACCESS_PARENTS = {
   hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr', hrLifecycle: 'hr',
   car: 'hanhchinh', meeting: 'hanhchinh', vpp: 'hanhchinh', license: 'hanhchinh', uniform: 'hanhchinh',
   budget: 'office', payment: 'office',
-  orgChart: 'hr'
+  orgChart: 'hr', hrAudit: 'hr'
 };
 function hasModuleAccessServer(user, moduleKey) {
   if (!user) return false;
