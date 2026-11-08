@@ -98,7 +98,19 @@ const DEPT_FIELD_COLLECTIONS = [
   // lớp lỗi đã vá nhiều lần ở file này (reportEntries/budgetPeriods/operationOrders.dept...). Đổi tên 1
   // phòng ban mà không cascade sẽ làm các ticket CŨ của phòng ban đó "biến mất" khỏi màn hình của đồng
   // nghiệp (trừ chính người tạo/approver — canViewItSupportTicket() vẫn cho xem ticket của chính mình).
-  { collection: 'itSupportTickets', fields: ['dept'] }
+  { collection: 'itSupportTickets', fields: ['dept'] },
+  // shelfLocations/shelfRecords/shelfStockThresholds (Kiểm Soát Hàng Hóa, 11/2026): PHÁT HIỆN THIẾU ở
+  // đợt nghiên cứu mở rộng Audit (11/2026) — cả 3 đều forceOwnDept (record.dept luôn = user.dept = tên
+  // Siêu Thị, xem lib/createValidation.js shelfLocations/shelfRecords/shelfStockThresholds) nhưng bị bỏ
+  // sót khỏi danh sách này, cùng lớp lỗi đã vá nhiều lần ở file này (checklistSubmissions/shiftRoster.
+  // storeCode, operationOrders.dept...). canViewShelfLocation()/canViewShelfRecord()/
+  // canViewShelfStockThreshold() (lib/recordViewScope.js) xét quyền xem bằng so khớp thô
+  // `item.dept === user.dept` — đổi tên 1 Siêu Thị mà không cascade 3 field này sẽ làm TOÀN BỘ dữ liệu
+  // Kiểm Soát Hàng Hóa (danh mục quầy kệ/số liệu ghi nhận hằng ngày/ngưỡng tồn) của siêu thị đó "biến
+  // mất" khỏi màn hình nhân viên siêu thị (tên cũ không còn khớp user.dept mới).
+  { collection: 'shelfLocations', fields: ['dept'] },
+  { collection: 'shelfRecords', fields: ['dept'] },
+  { collection: 'shelfStockThresholds', fields: ['dept'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
@@ -163,7 +175,15 @@ async function cascadeDeptWorkflowMaps(oldValue, newValue) {
 // 1 siêu thị KHÔNG cascade map này — phân loại ST/CH/Kho đã gán ÂM THẦM MẤT sau khi đổi tên (tên siêu thị
 // MỚI không còn khớp key cũ trong storeTypes), ảnh hưởng Dashboard "🥗 Đánh Giá VSATTP" (tách Top 5/tỷ lệ
 // vi phạm theo ST/CH, xem splitChecklistVsattpStoresByType() ở module-checklist.js).
-const DEPT_KEYED_APPDATA_MAP_KEYS = ['contractExpiryDeptContacts', 'storeTypes'];
+// shelfReconExtraRecipients ({[storeName]: [username,...]}, Kiểm Soát Hàng Hóa > "📊 Đối Chiếu",
+// 11/2026): PHÁT HIỆN THIẾU ở đợt nghiên cứu mở rộng Audit (11/2026) — cùng hình dạng {tên: value} như
+// storeTypes ở trên (khoá TẦNG NGOÀI CÙNG = tên Siêu Thị) nhưng bị bỏ sót khỏi danh sách này. Khác hẳn
+// cascadeUsernameChangesToShelfReconExtraRecipients() (đã có từ trước — cascade USERNAME bên TRONG mỗi
+// mảng khi đổi tên/xoá tài khoản): thiếu dòng này nghĩa là đổi tên 1 Siêu Thị không dời được chính KHOÁ
+// của map — danh sách người nhận email "Đối Chiếu Tồn Kho" đã cấu hình cho siêu thị đó bị "treo" dưới
+// tên CŨ, siêu thị sau khi đổi tên không còn ai nhận email nhắc đối chiếu (jobs/shelfStockReconDigestAlert.js
+// đọc map này đúng theo tên MỚI, tra không thấy -> coi như chưa cấu hình).
+const DEPT_KEYED_APPDATA_MAP_KEYS = ['contractExpiryDeptContacts', 'storeTypes', 'shelfReconExtraRecipients'];
 
 async function cascadeDeptKeyedAppDataMaps(oldValue, newValue) {
   for (const mapKey of DEPT_KEYED_APPDATA_MAP_KEYS) {

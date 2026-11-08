@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**29.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.58 (2026-11): Vá cascade rename thiếu cho 3 collection Kiểm Soát Hàng Hóa
+
+Phát hiện trong lúc nghiên cứu mở rộng tính năng Audit (không phải audit mới — là 1 lỗ hổng dữ liệu
+thật tìm được khi khảo sát): `shelfLocations`/`shelfRecords`/`shelfStockThresholds` (module "Kiểm Soát
+Hàng Hóa", 11/2026) đều lưu `dept` = tên Siêu Thị (forceOwnDept) nhưng chưa có trong
+`DEPT_FIELD_COLLECTIONS` (`lib/catalogRename.js`) — đổi tên 1 Siêu Thị làm TOÀN BỘ dữ liệu quầy kệ/ghi
+nhận hằng ngày/ngưỡng tồn của siêu thị đó "biến mất" khỏi màn hình nhân viên (tên cũ không còn khớp
+`user.dept` mới), cùng lớp lỗi đã vá lặp lại nhiều lần cho các module khác ở file này.
+
+- Thêm 3 collection trên vào `DEPT_FIELD_COLLECTIONS` + `shelfReconExtraRecipients` (map
+  `{[tên Siêu Thị]: [username,...]}`, người nhận email "📊 Đối Chiếu") vào `DEPT_KEYED_APPDATA_MAP_KEYS`
+  — cả 2 đường cascade đã có sẵn hạ tầng (`cascadeStoreRename()`), chỉ cần khai thêm đúng dòng.
+  (`shelfStockThresholds[].extraRecipientUsernames` và cascade USERNAME bên trong
+  `shelfReconExtraRecipients` đã có từ trước, không phải phần vá của đợt này.)
+- Test mới `tests/test-shelfmodule-dept-rename-cascade.js` (5 kịch bản, gọi thẳng route thật
+  `POST /api/admin/renameCatalogEntry`) — chạy lại các test cascade liên quan hiện có
+  (`test-itsupportticket-dept-rename-cascade.js`, `test-reportentries-dept-rename-cascade.js`,
+  `test-budgetperiods-dept-rename-cascade.js`, `test-catalog-rename-server.js`,
+  `test-catalog-rename-round2-extras.js`) — không có regression.
 
 ## v29.57 (2026-11): Audit Quy Trình — quét lỗ hổng "chưa gắn người duyệt" trong toàn hệ thống
 
