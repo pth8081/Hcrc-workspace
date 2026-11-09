@@ -42,7 +42,11 @@ function buildOrgVersion() {
       { nodeId: 4, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên', requiresDept: true, posType: 'STORE', positionKey: 'POS-NV-KD' },
       { nodeId: 5, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng IT', departmentRef: 'Phòng IT', jobTitle: null, requiresDept: null, positionKey: null },
       { nodeId: 6, parentNodeId: 5, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Chuyên Viên IT', requiresDept: true, posType: 'HO', positionKey: 'POS-IT-01' },
-      { nodeId: 7, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Tổng Giám Đốc', requiresDept: false, posType: null, positionKey: 'POS-TGD' }
+      { nodeId: 7, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Tổng Giám Đốc', requiresDept: false, posType: null, positionKey: 'POS-TGD' },
+      // POS-NO-DEPT (11/2026, fixture cho lỗi đã vá): vị trí requiresDept=true (mặc định) nhưng nằm
+      // THẲNG dưới COMPANY, KHÔNG có node cha DEPARTMENT nào — mô phỏng lỗi cấu hình Cơ Cấu Tổ Chức thật
+      // (node vị trí quên gắn đúng chỗ dưới 1 phòng ban), xem findNearestDeptAncestor() trả về null.
+      { nodeId: 8, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên Thiếu Phòng', requiresDept: true, posType: 'HO', positionKey: 'POS-NO-DEPT' }
     ]
   };
 }
@@ -71,6 +75,24 @@ async function main() {
     employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS-TGD' }] },
       employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR', { orgChartAppliedVersion: version });
     assertEqual(profile.secondaryPositions[0].dept, null);
+  });
+
+  // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026): vị trí requiresDept=true nhưng KHÔNG có node cha DEPARTMENT
+  // nào (lỗi cấu hình Cơ Cấu Tổ Chức) TRƯỚC ĐÂY âm thầm lưu dept=null — dòng kiêm nhiệm lưu "thành công"
+  // nhưng không bao giờ khớp được bước duyệt "Theo vị trí" có yêu cầu đúng Phòng Ban, không ai biết vì
+  // sao. Nay phải THROW rõ ràng, cùng khuôn applyPositionAssignment() (vị trí chính thức).
+  await run.run('applyProfileEdit(): kiêm nhiệm vị trí requiresDept=true nhưng THIẾU node cha DEPARTMENT -> chặn lưu, báo lỗi rõ (không còn âm thầm dept=null)', () => {
+    const version = buildOrgVersion();
+    const profile = employeeProfile.defaultProfile('NV005');
+    let threw = null;
+    try {
+      employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS-NO-DEPT' }] },
+        employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR', { orgChartAppliedVersion: version });
+    } catch (e) { threw = e; }
+    assertEqual(!!threw, true, 'phải throw, không được lưu lặng lẽ');
+    assertEqual(threw.status, 400);
+    assertIncludes(threw.message, 'Phòng Ban chuẩn');
+    assertEqual(profile.secondaryPositions.length, 0, 'KHÔNG được lưu dòng kiêm nhiệm nào khi throw');
   });
 
   await run.run('applyProfileEdit(): kiêm nhiệm ĐÚNG vị trí CHÍNH THỨC hiện tại -> chặn, báo lỗi rõ', () => {

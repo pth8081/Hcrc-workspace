@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**29.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.63 (2026-11): [KHẨN] Vá kiêm nhiệm "Phòng Ban" bị âm thầm null khi Cơ Cấu Tổ Chức thiếu cấu hình
+
+Báo cáo người dùng (11/2026, tiếp nối v29.62): 2 tài khoản đã được gán "Vị Trí Kiêm Nhiệm" để lọt vào quy
+trình duyệt "Theo vị trí" nhưng bấm Duyệt vẫn báo "không nằm trong luồng phê duyệt của bất kỳ hồ sơ nào"
+— đổi sang cấu hình Theo Người (PERSON mode) thì lại được. Người dùng nghi ngờ việc thêm chức danh kiêm
+nhiệm tự làm mất Phòng Ban của tài khoản, yêu cầu kiểm tra và chặn nếu đúng là lỗi.
+
+**Nguyên nhân xác định được**: `applyProfileEdit()` case `'secondaryPositions'` (`lib/employeeProfile.js`)
+— khi gán 1 vị trí kiêm nhiệm yêu cầu Phòng Ban (`node.requiresDept !== false`) nhưng node đó KHÔNG có
+node cha kiểu `DEPARTMENT` nào gắn `departmentRef` chuẩn trong Cơ Cấu Tổ Chức (lỗi cấu hình, VD vị trí bị
+gắn nhầm thẳng dưới node Công Ty), hàm này **lặng lẽ lưu `dept: null`** cho dòng kiêm nhiệm đó — KHÁC HẲN
+`applyPositionAssignment()` (gán vị trí CHÍNH THỨC) đứng ngay phía trên, vốn THROW lỗi rõ ràng bắt sửa Cơ
+Cấu Tổ Chức trước. Vì khớp "Theo vị trí" đòi `sp.dept === pair.dept` tuyệt đối, dòng kiêm nhiệm `dept:
+null` không bao giờ khớp được bước duyệt nào yêu cầu đúng Phòng Ban — HR tưởng đã gán xong (lưu thành
+công, không báo lỗi gì) nhưng người được gán vĩnh viễn không vào được luồng duyệt, không ai biết tại sao.
+
+**Đã vá**: nhánh kiêm nhiệm nay THROW cùng lỗi rõ ràng như vị trí chính thức ("... chưa gắn đúng Phòng
+Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí
+này trước khi gán kiêm nhiệm") — chặn lưu ngay từ lúc gán thay vì âm thầm tạo ra 1 dòng kiêm nhiệm không
+bao giờ khớp được gì. **Lưu ý triển khai**: fix này chỉ chặn các lượt gán MỚI — dòng kiêm nhiệm cũ đã lỡ
+lưu với `dept: null` từ trước (như 2 tài khoản trong báo cáo) cần HR vào Hồ Sơ Nhân Sự gán lại đúng vị
+trí đó (sau khi đã sửa Cơ Cấu Tổ Chức gắn đúng Phòng Ban) để tạo lại dòng kiêm nhiệm có `dept` đúng.
+
+Thêm 1 scenario mới vào `tests/test-hr-profile-secondary-positions.js` khoá đúng hành vi throw, chạy lại
+toàn bộ regression Kiêm Nhiệm/Gán Chức Vụ/Phân quyền theo chức danh liên quan — không có hồi quy.
 
 ## v29.62 (2026-11): [KHẨN] Vá lỗi Nhập Excel Hồ Sơ Nhân Sự âm thầm đổi chức danh/phân quyền tài khoản
 

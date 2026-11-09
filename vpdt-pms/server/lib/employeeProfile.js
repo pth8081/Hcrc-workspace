@@ -1539,10 +1539,24 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
           if (positionKey === profile.positionKey) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: trùng với chức vụ CHÍNH THỨC hiện tại — không cần thêm kiêm nhiệm`);
           if (seenKeys.has(positionKey)) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: trùng với 1 dòng kiêm nhiệm khác đã chọn`);
           seenKeys.add(positionKey);
+          // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026: gán kiêm nhiệm xong vẫn báo "không nằm trong luồng
+          // phê duyệt" dù đã khớp chức danh — kiểm lại thấy dept của dòng kiêm nhiệm bị null): KHÁC hẳn
+          // applyPositionAssignment() (vị trí CHÍNH THỨC) ngay phía trên — hàm đó THROW lỗi rõ ràng nếu
+          // node.requiresDept!==false mà không tìm được node cha DEPARTMENT có departmentRef, buộc
+          // người gán phải vào Cơ Cấu Tổ Chức sửa trước. Nhánh kiêm nhiệm này TRƯỚC ĐÂY chỉ lặng lẽ gán
+          // dept=null trong đúng tình huống đó — lưu được bình thường, KHÔNG báo gì, nhưng dòng kiêm
+          // nhiệm vừa lưu sẽ KHÔNG BAO GIỜ khớp được bất kỳ bước duyệt "Theo vị trí" nào có yêu cầu đúng
+          // Phòng Ban (matchesPositionPair()/clientMatchesPositionPair() so sp.dept===pair.dept, null
+          // không khớp với chuỗi phòng ban thật) — người gán tưởng đã xong, không hề biết vị trí vừa
+          // chọn thiếu Phòng Ban chuẩn trong Cơ Cấu Tổ Chức. Nay THROW cùng lỗi như vị trí chính thức,
+          // chặn lưu ngay để người gán biết phải vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node đó trước.
           let dept = null;
           if (node.requiresDept !== false) {
             const deptNode = findNearestDeptAncestor(orgChartVersion, node);
-            dept = deptNode?.departmentRef || null;
+            if (!deptNode?.departmentRef) {
+              throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán kiêm nhiệm`);
+            }
+            dept = deptNode.departmentRef;
           }
           return {
             id: item.id || randomUUID(),
