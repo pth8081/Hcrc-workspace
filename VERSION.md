@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**29.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.64 (2026-11): Khoá regression — Sửa Hồ Sơ Nhân Sự không được đè vị trí/phòng ban (ST/HO)/chức danh lên Phân Quyền
+
+Yêu cầu người dùng (11/2026, tiếp nối v29.62/v29.63, nguyên văn): "yêu cầu khi bên nhân sự cập nhật hồ sơ
+nhân sự không được cập nhật đè vị trí phòng ban ST, HO và chức danh lên Phân Quyền".
+
+**Đã rà soát kỹ, kết luận**: yêu cầu này **đã được đảm bảo sẵn** trong thiết kế hiện tại, không cần sửa
+code — rà soát toàn bộ 6 điểm ghi `users[]` trong `routes/employeeProfile.js` + `lib/hrProfilePositionAssign.js`
+xác nhận: `jobTitle`/`dept`/`posType`/`positionKey` HOÀN TOÀN không có mặt trong `SELF_EDITABLE_FIELDS`
+lẫn `HR_ONLY_EDITABLE_FIELDS` (`lib/employeeProfile.js`) — vòng lặp `applyProfileEdit()` chỉ xử lý field
+có trong 2 danh sách này nên PATCH Sửa Hồ Sơ Nhân Sự (`/by-code`) dù payload cố gửi kèm các field này vẫn
+bị bỏ qua hoàn toàn, không đổi được vị trí/phòng ban/chức danh của hồ sơ. Việc đồng bộ dept/jobTitle/
+posType xuống tài khoản Phân Quyền liên kết (`users[]`) CHỈ xảy ra khi hồ sơ ĐÃ có `positionKey` (gán
+qua hành động chủ đích riêng "Gán Chức Vụ"/"Gán Chức Vụ Hàng Loạt" — KHÔNG phải side-effect của Sửa Hồ
+Sơ) — cùng nguyên tắc đã áp dụng khi vá v29.62 (bỏ hẳn auto-trigger ở Nhập Excel).
+
+**Việc đã làm**: thêm test regression THẬT (HTTP, `tests/test-hr-profile-edit-no-position-override.js`) —
+gọi `PATCH /api/hr-profile/by-code/:employeeCode` với payload CỐ TÌNH gửi kèm `jobTitle`/`dept`/`posType`/
+`positionKey` lạ, xác nhận (1) hồ sơ KHÔNG đổi 4 field này, chỉ field hợp lệ khác (vd `hrNote`) được ghi,
+và (2) tài khoản Phân Quyền liên kết giữ nguyên 100% (deep-equality trước/sau, đặc biệt `perms`) — khoá
+lại hành vi đúng này để không bị phá vỡ bởi thay đổi sau này. Chạy lại 5 bộ test liên quan khác (position-
+history, secondary-positions, secondary-position-manage-perm, jobtitle-match, position-assign-import) —
+tất cả pass, không có regression.
 
 ## v29.63 (2026-11): [KHẨN] Vá kiêm nhiệm "Phòng Ban" bị âm thầm null khi Cơ Cấu Tổ Chức thiếu cấu hình
 
