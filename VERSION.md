@@ -1,9 +1,26 @@
 # Phiên bản hiện tại
 
-**29.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.70 (2026-11): "🔍 Audit Nhân Sự" — thu hẹp thêm 1 bậc, CHỈ còn gửi cho đúng người có quyền "Quản Lý Hồ Sơ Nhân Sự"
+
+Tiếp nối v29.68 (gửi theo đúng `canAccessHrProfileAudit()` trừ admin-bypass — vẫn còn RỘNG, gồm cả
+`hrProfileEdit`/`hrContractManage`/`hrReportView`), người dùng xác nhận lại rõ hơn (11/2026): "audit hồ
+sơ nhân sự ko gửi cho admin mà chỉ gửi cho người quản lý nhân sự thôi nhé" — hỏi lại cụ thể và người dùng
+chọn **thu hẹp chỉ còn ĐÚNG 1 quyền `hrProfileManage`** ("Quản Lý Hồ Sơ Nhân Sự" thật sự), bỏ hẳn
+`hrProfileEdit`/`hrContractManage`/`hrReportView` ra khỏi danh sách nhận email tự động (các quyền này
+vẫn xem được màn Audit Nhân Sự qua UI bình thường, chỉ không còn tự động nhận email cảnh báo nữa).
+
+**Đã sửa**: `jobs/hrProfileGapAudit.js` — điều kiện `actionable` nay chỉ còn
+`hasModuleAccessServer(u, 'hrAudit') && u.perms?.hrProfileManage && u.active !== false`.
+
+Test: viết lại `tests/test-hr-profile-audit-email-recipients.js` (9 kịch bản) — thêm 2 kịch bản MỚI xác
+nhận `hrContractManage`/`hrProfileEdit` ĐƠN LẺ (không có `hrProfileManage`) không còn nhận email nữa.
+Chạy lại `test-hr-profile-audit.js` (19 kịch bản) + `test-hr-profile-audit-ui.js` (7 kịch bản) — pass,
+không regression.
 
 ## v29.69 (2026-11): [QUYẾT ĐỊNH ĐẢO NGƯỢC THIẾT KẾ] "Gán Chức Vụ" ở Hồ Sơ Nhân Sự KHÔNG còn tự động đồng bộ xuống Phân Quyền nữa
 

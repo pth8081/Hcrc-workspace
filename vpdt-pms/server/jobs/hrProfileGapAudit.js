@@ -1,22 +1,24 @@
 // jobs/hrProfileGapAudit.js — quét hằng ngày "🔍 Audit Nhân Sự" (11/2026), CÙNG KHUÔN
 // jobs/userAccountGapAudit.js (đọc chú thích đầy đủ ở đó) — chỉ gửi email khi chữ ký phát hiện đổi so
 // với lần gửi gần nhất, luôn cập nhật hrProfileAuditSummaryCache (đọc bởi thẻ Dashboard) mỗi lần chạy.
-// LỖI ĐÃ VÁ (báo cáo người dùng 11/2026, "bỏ gửi email đến admin, chỉ gửi đến người nào có quyền audit
-// nhân sự thôi"): trước đây gửi cho BẤT KỲ ai có `perms.admin` HOẶC 1 trong 3 quyền Hồ Sơ Nhân Sự/Hợp
-// Đồng — không đối chiếu Khối 0 module `hrAudit`, và LUÔN gửi cho admin dù admin không hề bật quyền Hồ
-// Sơ Nhân Sự nào (nhiễu hộp thư admin không liên quan). Nay đối chiếu ĐÚNG cùng điều kiện màn hình thật
-// cho xem ("quyền audit nhân sự" — canAccessHrProfileAudit(), routes/hrProfileAudit.js) NHƯNG CỐ Ý BỎ
-// nhánh admin-bypass của hàm đó (người dùng yêu cầu rõ "bỏ gửi email đến admin") — chỉ còn Khối 0
-// hrAudit VÀ (canFullViewProfiles/canManageContracts/hrReportView), loại hẳn `perms.admin` đơn thuần
-// (admin KHÔNG tự động nhận email nữa trừ khi CHÍNH tài khoản đó cũng được cấp 1 trong 3 quyền trên).
+// LỖI ĐÃ VÁ, ĐỢT 1 (báo cáo người dùng 11/2026, "bỏ gửi email đến admin, chỉ gửi đến người nào có quyền
+// audit nhân sự thôi"): trước đây gửi cho BẤT KỲ ai có `perms.admin` HOẶC 1 trong 3 quyền Hồ Sơ Nhân Sự/
+// Hợp Đồng — không đối chiếu Khối 0 module `hrAudit`, và LUÔN gửi cho admin dù admin không hề bật quyền
+// Hồ Sơ Nhân Sự nào. Đợt 1 đối chiếu ĐÚNG điều kiện màn hình thật cho xem (canAccessHrProfileAudit(),
+// routes/hrProfileAudit.js) NHƯNG BỎ nhánh admin-bypass — còn Khối 0 hrAudit VÀ (canFullViewProfiles/
+// canManageContracts/hrReportView).
+// LỖI ĐÃ VÁ, ĐỢT 2 (cùng đợt báo cáo, người dùng xác nhận lại rõ hơn: "chỉ gửi cho người quản lý nhân sự
+// thôi"): đợt 1 còn RỘNG — gửi cho cả hrProfileEdit/hrReportView/hrContractManage, không chỉ đúng người
+// "QUẢN LÝ" (hrProfileManage). Nay THU HẸP LẠI chỉ còn ĐÚNG 1 quyền `hrProfileManage` (bỏ hẳn
+// canFullViewProfiles() dạng rộng/canManageContracts()/hrReportView) — khớp đúng nghĩa "người quản lý
+// nhân sự" người dùng muốn, dù các quyền kia vẫn xem được màn Audit Nhân Sự qua UI (chỉ không còn nằm
+// trong danh sách nhận email tự động).
 const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAppDataValue, setAppDataValue, getAllAppData } = require('../lib/appData');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { auditHrProfileGaps, computeFindingsSignature } = require('../lib/hrProfileAudit');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
-const { canFullViewProfiles } = require('../lib/employeeProfile');
-const { canManageContracts } = require('../lib/laborContract');
 
 const SUMMARY_CACHE_KEY = 'hrProfileAuditSummaryCache';
 const CONFIG_KEY = 'hrProfileAuditJobConfig';
@@ -49,11 +51,10 @@ async function checkHrProfileGaps() {
     if (state.lastEmailedSignature === signature) return;
 
     const emailConfig = (await getAppDataValue('emailConfig')) || {};
-    // actionable: y hệt điều kiện canAccessHrProfileAudit() (routes/hrProfileAudit.js) TRỪ nhánh admin-
-    // bypass — xem chú thích đầu file. active!==false: không gửi cho tài khoản đã khoá/nghỉ việc.
+    // actionable: CHỈ người có ĐÚNG quyền "Quản Lý Hồ Sơ Nhân Sự" (hrProfileManage) + Khối 0 hrAudit —
+    // xem chú thích đầy đủ ở đầu file (đợt 2). active!==false: không gửi cho tài khoản đã khoá/nghỉ việc.
     const actionable = (appData.users || []).filter(u =>
-      u && u.email && u.active !== false && hasModuleAccessServer(u, 'hrAudit') &&
-      (canFullViewProfiles(u) || canManageContracts(u) || !!u.perms?.hrReportView));
+      u && u.email && u.active !== false && hasModuleAccessServer(u, 'hrAudit') && !!u.perms?.hrProfileManage);
     const ccEmails = Array.isArray(cfg.ccEmails) ? cfg.ccEmails : [];
     const rawRecipients = [
       ...actionable.map(u => ({ email: u.email, name: u.name || u.username })),

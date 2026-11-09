@@ -1,11 +1,15 @@
 // tests/test-hr-profile-audit-email-recipients.js — "🔍 Audit Nhân Sự" (jobs/hrProfileGapAudit.js):
-// khoá đúng danh sách người nhận email cảnh báo theo yêu cầu người dùng (11/2026, nguyên văn): "Audit
-// nhân sự bạn bỏ gửi email đến admin cho tôi nhé, chỉ gửi đến người nào có quyền audit nhân sự thôi".
+// khoá đúng danh sách người nhận email cảnh báo theo yêu cầu người dùng (11/2026, nguyên văn đợt 1):
+// "Audit nhân sự bạn bỏ gửi email đến admin cho tôi nhé, chỉ gửi đến người nào có quyền audit nhân sự
+// thôi" — rồi xác nhận lại rõ hơn (đợt 2): "audit hồ sơ nhân sự ko gửi cho admin mà chỉ gửi cho người
+// quản lý nhân sự thôi nhé" (chọn rõ: thu hẹp chỉ còn ĐÚNG quyền hrProfileManage).
 //
-// TRƯỚC: gửi cho BẤT KỲ ai có perms.admin HOẶC hrProfileManage/hrProfileEdit/hrContractManage — kể cả
-// admin không hề bật quyền Hồ Sơ Nhân Sự nào, không đối chiếu Khối 0 module `hrAudit`.
-// NAY: CHỈ gửi cho người thật sự có "quyền audit nhân sự" — ĐÚNG điều kiện canAccessHrProfileAudit()
-// (routes/hrProfileAudit.js) NHƯNG BỎ nhánh admin-bypass (đúng yêu cầu "bỏ gửi email đến admin").
+// TRƯỚC (bản gốc): gửi cho BẤT KỲ ai có perms.admin HOẶC hrProfileManage/hrProfileEdit/hrContractManage
+// — kể cả admin không hề bật quyền Hồ Sơ Nhân Sự nào, không đối chiếu Khối 0 module `hrAudit`.
+// ĐỢT 1 (đã thay bằng đợt 2): gửi theo đúng canAccessHrProfileAudit() trừ admin-bypass (còn rộng, gồm cả
+// hrProfileEdit/hrContractManage/hrReportView).
+// NAY (đợt 2, bản cuối): CHỈ gửi cho tài khoản có ĐÚNG quyền "Quản Lý Hồ Sơ Nhân Sự" (hrProfileManage) +
+// Khối 0 module hrAudit + còn active — không còn hrProfileEdit/hrContractManage/hrReportView/admin nào.
 //
 // Chạy: node tests/test-hr-profile-audit-email-recipients.js
 'use strict';
@@ -55,14 +59,14 @@ async function main() {
     APP_DATA = { users, emailConfig: {}, hrProfileAuditJobConfig: { autoScanEmailEnabled: true, ccEmails: [] } };
   }
 
-  await check('Admin THUẦN (chỉ perms.admin=true, không có quyền Hồ Sơ Nhân Sự/Hợp Đồng nào khác) -> KHÔNG nhận email nữa', async () => {
+  await check('Admin THUẦN (chỉ perms.admin=true) -> KHÔNG nhận email', async () => {
     findingsEmployeeCode = 'NV101';
     resetAppData([
       { username: 'admin1', email: 'admin1@hcrc.vn', active: true, perms: { admin: true } }
     ]);
     capturedTo = null;
     await checkHrProfileGaps();
-    assert.strictEqual(capturedTo, null, 'admin thuần không còn tự động nhận email audit nhân sự (0 người nhận -> sendMail không được gọi)');
+    assert.strictEqual(capturedTo, null, 'admin thuần không nhận email audit nhân sự (0 người nhận -> sendMail không được gọi)');
   });
 
   await check('User có hrProfileManage + module hrAudit bật -> CÓ nhận email', async () => {
@@ -75,7 +79,7 @@ async function main() {
     assert.deepStrictEqual(capturedTo, ['hr1@hcrc.vn']);
   });
 
-  await check('User có hrProfileManage NHƯNG module hrAudit bị TẮT (moduleAccess.hrAudit=false) -> KHÔNG nhận (Khối 0 chặn, cùng điều kiện màn hình thật)', async () => {
+  await check('User có hrProfileManage NHƯNG module hrAudit bị TẮT (moduleAccess.hrAudit=false) -> KHÔNG nhận (Khối 0 chặn)', async () => {
     findingsEmployeeCode = 'NV103';
     resetAppData([
       { username: 'hr2', email: 'hr2@hcrc.vn', active: true, perms: { hrProfileManage: true, moduleAccess: { hrAudit: false } } }
@@ -85,24 +89,34 @@ async function main() {
     assert.strictEqual(capturedTo, null);
   });
 
-  await check('User có hrContractManage -> CÓ nhận (canManageContracts, không cần admin)', async () => {
+  await check('User có hrContractManage (KHÔNG có hrProfileManage) -> KHÔNG nhận (đợt 2: thu hẹp chỉ còn hrProfileManage)', async () => {
     findingsEmployeeCode = 'NV104';
     resetAppData([
       { username: 'ct1', email: 'ct1@hcrc.vn', active: true, perms: { hrContractManage: true } }
     ]);
     capturedTo = null;
     await checkHrProfileGaps();
-    assert.deepStrictEqual(capturedTo, ['ct1@hcrc.vn']);
+    assert.strictEqual(capturedTo, null);
   });
 
-  await check('User có hrReportView (chỉ xem báo cáo) -> CÓ nhận (đúng khuôn canAccessHrProfileAudit, trừ admin)', async () => {
+  await check('User có hrReportView (chỉ xem báo cáo, KHÔNG có hrProfileManage) -> KHÔNG nhận', async () => {
     findingsEmployeeCode = 'NV105';
     resetAppData([
       { username: 'rv1', email: 'rv1@hcrc.vn', active: true, perms: { hrReportView: true } }
     ]);
     capturedTo = null;
     await checkHrProfileGaps();
-    assert.deepStrictEqual(capturedTo, ['rv1@hcrc.vn']);
+    assert.strictEqual(capturedTo, null);
+  });
+
+  await check('User có hrProfileEdit (KHÔNG có hrProfileManage) -> KHÔNG nhận (đợt 2: hrProfileEdit không còn đủ)', async () => {
+    findingsEmployeeCode = 'NV109';
+    resetAppData([
+      { username: 'hr5', email: 'hr5@hcrc.vn', active: true, perms: { hrProfileEdit: true } }
+    ]);
+    capturedTo = null;
+    await checkHrProfileGaps();
+    assert.strictEqual(capturedTo, null);
   });
 
   await check('Tài khoản ĐÃ KHOÁ (active:false) dù có hrProfileManage -> KHÔNG nhận', async () => {
@@ -115,7 +129,7 @@ async function main() {
     assert.strictEqual(capturedTo, null);
   });
 
-  await check('Admin ĐỒNG THỜI có hrProfileManage riêng -> VẪN nhận (không phải vì admin, mà vì có quyền Hồ Sơ Nhân Sự thật)', async () => {
+  await check('Admin ĐỒNG THỜI có hrProfileManage riêng -> VẪN nhận (không phải vì admin, mà vì có đúng quyền Quản Lý Hồ Sơ Nhân Sự)', async () => {
     findingsEmployeeCode = 'NV107';
     resetAppData([
       { username: 'adminhr', email: 'adminhr@hcrc.vn', active: true, perms: { admin: true, hrProfileManage: true } }
@@ -125,12 +139,13 @@ async function main() {
     assert.deepStrictEqual(capturedTo, ['adminhr@hcrc.vn']);
   });
 
-  await check('3 user trộn (1 admin thuần bị loại, 1 hrProfileManage được nhận, 1 không quyền gì bị loại) -> chỉ đúng 1 địa chỉ', async () => {
+  await check('4 user trộn (admin thuần/hrProfileEdit/hrContractManage đều bị loại, chỉ hrProfileManage được nhận) -> chỉ đúng 1 địa chỉ', async () => {
     findingsEmployeeCode = 'NV108';
     resetAppData([
       { username: 'admin2', email: 'admin2@hcrc.vn', active: true, perms: { admin: true } },
-      { username: 'hr4', email: 'hr4@hcrc.vn', active: true, perms: { hrProfileEdit: true } },
-      { username: 'plain', email: 'plain@hcrc.vn', active: true, perms: {} }
+      { username: 'hr4', email: 'hr4@hcrc.vn', active: true, perms: { hrProfileManage: true } },
+      { username: 'edit1', email: 'edit1@hcrc.vn', active: true, perms: { hrProfileEdit: true } },
+      { username: 'ct2', email: 'ct2@hcrc.vn', active: true, perms: { hrContractManage: true } }
     ]);
     capturedTo = null;
     await checkHrProfileGaps();
