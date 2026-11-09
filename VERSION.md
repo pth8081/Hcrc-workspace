@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**29.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.71 (2026-11): QT Giá Bán Lẻ/Bán Buôn — vị trí KIÊM NHIỆM khớp đúng vị trí duyệt nay DUYỆT được thật, không chỉ hiện tên
+
+Báo cáo người dùng (11/2026, kèm ảnh chụp Cấu Hình Nâng Cao với nhiều dòng "Thẩm định fresh/ultrafresh/
+FMCG..." gán theo Chức Danh KIÊM NHIỆM — nguồn: Hồ Sơ Nhân Sự): "Các vị trí kiêm nhiệm cho vào trong quy
+trình đang chập chờn, hiển thị tên trong quy trình như ấn vào phê duyệt báo ko có quyền".
+
+**Nguyên nhân xác định được**: 2 lớp kiểm tra ĐỘC LẬP không khớp nhau khi duyệt QT Giá Bán Lẻ/Bán Buôn
+(itPriceApprovals) — (1) khớp LÀM NGƯỜI DUYỆT bước đó (`userHasMixedApprovalPosition()`,
+`lib/workflowEngine.js`) chỉ cần khớp đúng Chức Danh/Phòng Ban CHÍNH THỨC hoặc KIÊM NHIỆM, không đòi
+thêm quyền gì — nên tên hiện đúng ở Cấu Hình Nâng Cao ("N người"); (2) cổng Khối 0 module access
+(`assertWorkflowModuleAccess()`/`canAccessItPriceApprovalModuleServer()`) lại ĐÒI RIÊNG tài khoản phải
+bật Khối 0 `muaHang`/`vanHanh`/`itSupport`, HOÀN TOÀN ĐỘC LẬP với việc có khớp đúng vị trí duyệt hay
+không. 1 người chỉ được gán KIÊM NHIỆM đúng 1 vai trò thẩm định (không có Khối 0 Mua Hàng/Vận Hành) hiện
+tên đúng ở Cấu Hình Nâng Cao nhưng bấm Duyệt luôn bị 403 "Module đã bị khoá" TRƯỚC KHI kịp chạm tới
+`applyWorkflowAction()` (nơi mới thật sự xác minh approversList).
+
+**Đã hỏi lại người dùng rõ ràng hướng xử lý** — chọn "tự động miễn Khối 0 khi khớp đúng vị trí": khớp
+đúng vị trí duyệt LÀ ĐỦ quyền, không cần bật thêm module nào khác.
+
+**Đã sửa**: `routes/workflow.js` — trước khi áp cổng Khối 0 cho `itPriceApprovals`, kiểm tài khoản gọi
+có nằm trong danh sách approver của ĐÚNG bước hiện tại hay không (`resolveWorkflowStepApprovers()`, cùng
+điểm tra cứu `applyWorkflowAction()` dùng). Nếu ĐÃ khớp, bỏ qua hẳn cổng Khối 0; người KHÔNG khớp vị trí
+nào vẫn phải qua đúng cổng Khối 0 như cũ (không nới lỏng bảo mật chung).
+
+Test: thêm `tests/test-itprice-kiemnhiem-approve-waiver.js` (3 kịch bản — khớp kiêm nhiệm không Khối 0
+vẫn duyệt được, người không khớp vị trí nào vẫn bị chặn 403 như cũ, áp dụng cho cả REJECT). Chạy lại 8
+bộ test liên quan (itPrice forward/mixed-approval/operationOrders mixed-approval/approval-extension) —
+tất cả pass, không regression.
 
 ## v29.70 (2026-11): "🔍 Audit Nhân Sự" — thu hẹp thêm 1 bậc, CHỈ còn gửi cho đúng người có quyền "Quản Lý Hồ Sơ Nhân Sự"
 

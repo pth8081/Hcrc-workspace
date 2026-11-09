@@ -720,7 +720,23 @@ router.post('/:module/:id/:action', async (req, res) => {
     const runApprove = async () => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
-        if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData);
+        // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026, "vị trí kiêm nhiệm cho vào quy trình đang chập chờn —
+        // hiện tên trong quy trình nhưng ấn vào phê duyệt báo ko có quyền"): Cấu Hình Nâng Cao (QT Giá
+        // Bán Lẻ/Bán Buôn) gán người duyệt THEO CHỨC DANH/KIÊM NHIỆM (userHasMixedApprovalPosition(),
+        // KHÔNG đòi thêm quyền gì khác) — nhưng assertWorkflowModuleAccess() bên dưới LẠI đòi RIÊNG tài
+        // khoản phải có Khối 0 'muaHang'/'vanHanh'/'itSupport' mới được vào module, HOÀN TOÀN ĐỘC LẬP với
+        // việc có khớp đúng vị trí duyệt hay không — 1 người chỉ được gán "kiêm nhiệm" đúng 1 vai trò
+        // thẩm định (không có Khối 0 Mua Hàng/Vận Hành) vẫn hiện tên đúng ở Cấu Hình Nâng Cao (đã khớp
+        // vị trí) nhưng bấm Duyệt luôn bị 403 "Module đã bị khoá" trước khi kịp chạm tới
+        // applyWorkflowAction() (nơi mới thật sự xác minh approversList). Theo yêu cầu người dùng ("tự
+        // động miễn Khối 0 khi khớp đúng vị trí"): nếu tài khoản ĐÃ được khớp là approver của ĐÚNG bước
+        // hiện tại (qua resolveWorkflowStepApprovers(), cùng điểm tra cứu applyWorkflowAction() dùng),
+        // bỏ qua hẳn cổng Khối 0 — khớp đúng vị trí LÀ ĐỦ quyền, không cần bật thêm module nào khác. Ai
+        // KHÔNG khớp vị trí vẫn phải qua đúng cổng Khối 0 như cũ (hành vi gốc không đổi).
+        if (moduleKey === 'itPriceApprovals') {
+          const isMatchedStepApprover = resolveWorkflowStepApprovers(moduleKey, item, appData, item.currentStep).includes(freshUser.username);
+          if (!isMatchedStepApprover) assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData);
+        }
         const outcome = applyWorkflowAction({
           moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection, users: req.allUsers
         });
