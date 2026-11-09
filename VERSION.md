@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**29.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.72 (2026-11): Fix "Phòng Ban Tham Gia VPP" mất cấu hình sau F5 — initDatabase() chưa từng đọc field này từ GET /api/data
+
+Báo cáo người dùng (11/2026, kèm ảnh chụp màn "Phòng Ban Tham Gia VPP"): lưu danh sách phòng ban tham
+gia VPP xong, bấm F5 (hoặc đăng nhập lại) thì cấu hình biến mất, ô chọn lại rỗng — dù server vẫn lưu
+đúng dữ liệu.
+
+**Nguyên nhân**: `saveVppParticipatingDepts()` (`public/js/module-admin-specialperm.js`) chỉ tự gán
+`DB.vppParticipatingDepts` NGAY TRONG PHIÊN lúc bấm Lưu — `initDatabase()` (`public/js/core.js`) CHƯA
+TỪNG có dòng đọc lại `data.vppParticipatingDepts` từ response `GET /api/data` để gán vào
+`DB.vppParticipatingDepts`. Server vẫn lưu và trả về đúng (`routes/data.js`), chỉ riêng client chưa từng
+đọc vào — **CÙNG LỚP LỖI** đã từng phát hiện ở `quickApplyConfigs`/`carVehicleTypes`/
+`workflowParticipatingPositions` (các đợt vá trước).
+
+**Đã sửa**: thêm `DB.vppParticipatingDepts = data.vppParticipatingDepts || [];` vào `initDatabase()`,
+cùng vị trí với `vppExcludedJobTitles` (field cùng nhóm "Quyền Đặc Biệt").
+
+Test: thêm `tests/test-vpp-participating-depts-initdatabase-load.js` — xác nhận trực tiếp bằng cách tắt
+bản vá (git stash) rồi chạy lại: test FAIL đúng với triệu chứng báo cáo (`DB.vppParticipatingDepts` rỗng
+sau khi đăng nhập dù server có sẵn dữ liệu), bật lại bản vá thì PASS. Chạy lại các test cùng lớp lỗi
+(`test-quickapply-configs-initdatabase-load.js`, `test-checklist-initdatabase-load.js`,
+`test-initdatabase-key-coverage.js`, `test-login-cache-first-render.js`,
+`test-initdatabase-lazy-field-preserve.js`, `test-dashboard-news-first-login.js`,
+`test-prefetch-after-login.js`, `test-vpp-participating-depts.js`, `test-vpp.js`) — tất cả pass, không
+regression (1 lỗi FAIL trong `test-vpp.js` xác nhận ĐÃ CÓ TỪ TRƯỚC, không liên quan bản vá này, qua
+`git stash` đối chiếu).
 
 ## v29.71 (2026-11): QT Giá Bán Lẻ/Bán Buôn — vị trí KIÊM NHIỆM khớp đúng vị trí duyệt nay DUYỆT được thật, không chỉ hiện tên
 

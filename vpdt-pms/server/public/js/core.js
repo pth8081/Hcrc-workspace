@@ -5667,6 +5667,13 @@ async function initDatabase(loggingInUser, opts) {
     DB.formTemplates = migrateOfficeFormTemplatesKeys(migrateInternalPostFormTemplatesKeys(migrateItPriceFormTemplatesKeys(data.formTemplates || {})));
     DB.permGroups = data.permGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
+    // vppParticipatingDepts ("Phòng Ban Tham Gia VPP"): BUG THẬT (báo cáo người dùng — "lưu xong và F5
+    // thì mất cấu hình") — CÙNG LỚP LỖI quickApplyConfigs/carVehicleTypes/workflowParticipatingPositions ở
+    // trên: saveVppParticipatingDepts() (module-admin-specialperm.js) chỉ tự gán DB.vppParticipatingDepts
+    // NGAY TRONG PHIÊN lúc lưu, chưa từng có dòng nào đọc lại từ response GET /api/data — dòng gán này
+    // CHƯA TỪNG tồn tại kể từ khi tính năng ra đời. Server đã lưu và trả về đúng (routes/data.js), chỉ
+    // riêng client chưa từng đọc vào, nên F5/đăng nhập lại luôn thấy rỗng dù server vẫn giữ đúng dữ liệu.
+    DB.vppParticipatingDepts = data.vppParticipatingDepts || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
     // workflowParticipatingDeptGroups (10/2026) — bản THAY THẾ nhiều-nhóm của workflowParticipatingDepts
     // ngay trên (xem defaults.js + getWorkflowParticipatingDepts(moduleKey) ở module-admin-specialperm.js).
