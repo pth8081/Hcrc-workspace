@@ -2054,6 +2054,31 @@ function renderItPriceModalControls(p) {
   const canApply = p.status === 'APPROVED' && !p.applied && canSupportItPriceClient(currentUser);
   let html = '';
 
+  // "🔧 Thông Tin Kỹ Thuật (Debug)" (11/2026, báo cáo người dùng — "vị trí kiêm nhiệm hiện đúng tên ở
+  // Xem Trước Quy Trình [dùng bản nháp mô phỏng CÙNG hàm resolveItPriceWorkflowConfigForItemClient()]
+  // nhưng hồ sơ THẬT lại không áp dụng được"): CHỈ admin thấy, THUẦN HIỂN THỊ (không đổi bất kỳ logic
+  // khớp/duyệt nào) — đối chiếu TRỰC TIẾP trên đúng hồ sơ thật đang xem, để admin tự so dữ liệu RAW đang
+  // lưu (priceTier/storeScope.stores/nganhHang/currentStep) với những gì màn Xem Trước Quy Trình mô
+  // phỏng, không cần mở F12/Console (admin thao tác trên điện thoại). currentStepApprovers đã tính sẵn ở
+  // trên — chỉ việc tra tên hiển thị cho từng username, cùng khuôn resolveApprovalHubSubmitter()
+  // (core-approvalhub.js).
+  if (currentUser?.perms?.admin) {
+    const approverNames = currentStepApprovers.map(username => {
+      const u = (DB.users || []).find(x => x.username === username);
+      return `${escapeHtml(u ? u.name : username)} (${escapeHtml(username)})`;
+    });
+    html += `<details class="bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 p-2">
+      <summary class="cursor-pointer font-bold text-slate-700">🔧 Thông Tin Kỹ Thuật (chỉ Admin thấy)</summary>
+      <div class="mt-1.5 space-y-0.5">
+        <div>Mức giá (priceTier): <b>${escapeHtml(p.priceTier || '(trống)')}</b></div>
+        <div>Siêu Thị Đề Xuất (storeScope.stores): <b>${p.storeScope?.stores?.length ? escapeHtml(p.storeScope.stores.join(', ')) : '(trống — áp dụng mọi siêu thị)'}</b></div>
+        <div>Ngành Hàng (nganhHang): <b>${p.nganhHang?.length ? escapeHtml(p.nganhHang.join(', ')) : '(trống — áp dụng mọi ngành hàng)'}</b></div>
+        <div>Bước hiện tại (currentStep): <b>${escapeHtml(String(p.currentStep ?? '(trống)'))}</b></div>
+        <div>Người duyệt bước này hệ thống đang tính ra (currentStepApprovers): <b>${approverNames.length ? approverNames.join(', ') : '⚠️ KHÔNG CÓ AI (rỗng)'}</b></div>
+      </div>
+    </details>`;
+  }
+
   // Băng thông báo hiển thị cho MỌI người xem hồ sơ (người đề xuất, người duyệt, đội IT) khi đang có 1
   // yêu cầu "Từ chối khẩn cấp" chờ xử lý — đúng yêu cầu nghiệp vụ minh bạch, không chỉ riêng người có
   // quyền quyết định mới thấy.

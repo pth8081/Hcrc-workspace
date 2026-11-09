@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**29.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.73 (2026-11): Thêm "🔧 Thông Tin Kỹ Thuật" (chỉ Admin) trong chi tiết Phê Duyệt Giá — hỗ trợ điều tra "vị trí kiêm nhiệm hiện đúng tên ở Xem Trước nhưng hồ sơ thật không áp dụng"
+
+Đang điều tra tiếp báo cáo người dùng (11/2026): 1 chức danh kiêm nhiệm gắn cố định phòng ban (qua "Vị
+Trí Tham Gia Quy Trình") đúng tên khi dùng ở các quy trình khác, và ngay cả màn "🔍 Xem Trước Quy Trình
+Phê Duyệt Giá Bán Buôn" (mô phỏng bằng ĐÚNG hàm `resolveItPriceWorkflowConfigForItemClient()` mà luồng
+duyệt thật dùng) cũng hiện đúng tên — nhưng hồ sơ THẬT đang kẹt thì vị trí này lại không được tính là
+người duyệt. Nghi vấn: dữ liệu RAW đang lưu trên đúng hồ sơ đó (`priceTier`/`storeScope.stores`/
+`nganhHang`/`currentStep`) có thể khác với những gì người dùng đang đối chiếu bằng mắt trên màn hình.
+
+Chưa xác định được nguyên nhân gốc do người dùng thao tác trên điện thoại, không tiện mở F12/Console để
+lấy dữ liệu thô. **Đã thêm** (an toàn, THUẦN HIỂN THỊ, không đổi bất kỳ logic khớp/duyệt nào): khối
+"🔧 Thông Tin Kỹ Thuật (chỉ Admin thấy)" dạng `<details>` gấp gọn, hiện ngay trong modal chi tiết của MỌI
+hồ sơ Phê Duyệt Giá (`renderItPriceModalControls()`, `public/js/module-itsupport-price.js`) — liệt kê
+đúng `priceTier`/`storeScope.stores`/`nganhHang`/`currentStep` RAW đang lưu trên bản ghi, VÀ danh sách
+tên người hệ thống đang tính ra là approver của bước hiện tại (`currentStepApprovers`, cùng biến mà nút
+Duyệt/Từ chối đang dùng để quyết định hiện/ẩn) — admin tự mở trực tiếp trên hồ sơ thật qua điện thoại,
+không cần kỹ thuật hỗ trợ.
+
+Test: chạy lại `test-itprice-wholesale-mixed-approval.js` (20 kịch bản), `test-itprice-approval-and-
+emergency.js` (17 kịch bản), `test-itprice-emergency-reject-button-visibility.js`,
+`test-vanhanh-itprice-chitiet-csp.js` — tất cả pass, không regression (modal vẫn mở/hoạt động đúng, chỉ
+thêm 1 khối ẩn/hiện mới).
 
 ## v29.72 (2026-11): Fix "Phòng Ban Tham Gia VPP" mất cấu hình sau F5 — initDatabase() chưa từng đọc field này từ GET /api/data
 
