@@ -242,6 +242,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // cùng độ mở, chỉ sửa được ở màn Phân Quyền (admin).
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
   'workflowParticipatingDeptGroups',
+  // vppParticipatingDepts ("Phòng Ban Tham Gia VPP", 11/2026 — xem defaults.js): cùng độ mở với
+  // vppExcludedJobTitles ngay trên, chỉ sửa được ở màn Phân Quyền (admin).
+  'vppParticipatingDepts',
   // workflowParticipatingDeptGroupsMigrated: cờ nội bộ 1-lần cho migrateWorkflowParticipatingDeptGroups()
   // (seedDefaults.js) — không có màn hình nào cần client ghi tay, cùng khuôn diskSpaceMonitorState ở dưới.
   'workflowParticipatingDeptGroupsMigrated',
@@ -383,6 +386,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   // Tích hợp/bí mật + nhóm quyền đặc biệt
   'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'inventoryApiConfig', 'shelfThresholdDigestSchedule', 'shelfReconDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
+  'vppParticipatingDepts',
   // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
   'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
 ]);

@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**29.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.66 (2026-11): Thêm "🏢 Phòng Ban Tham Gia VPP" — lọc bớt Phòng Ban hiện ở bảng "Nhân sự theo phòng ban" khi Tạo Kỳ Đăng Ký
+
+Yêu cầu người dùng (11/2026, kèm ảnh chụp): bảng "Nhân sự theo phòng ban" ở màn Văn Phòng Phẩm → Kỳ Đăng
+Ký → Tạo Kỳ Đăng Ký Mới hiện TOÀN BỘ Danh Mục Phòng Ban, kể cả phòng không bao giờ phát sinh đăng ký VPP
+(VD "Ban Tổng Giám Đốc"/"Ban Cung ứng" luôn 0 nhân sự trong ảnh chụp) — gây rác, khó chọn khi Danh Mục
+Phòng Ban có nhiều mục. Hỏi có thể chọn phòng nào tham gia VPP được không, đề nghị đưa phương án xử lý
+ngay.
+
+**Đã thêm**: khối cấu hình mới **"🧩 Nhóm Quyền Đặc Biệt" → "🏢 Phòng Ban Tham Gia VPP"** (Hệ Thống → 🔀
+Nghiệp Vụ Nâng Cao) — admin gõ tìm rồi chọn 1-nhiều Phòng Ban, bấm "💾 Lưu". Cùng khuôn đơn giản với khối
+"🚫 Nhóm Không Cấp Văn Phòng Phẩm" đã có sẵn ngay cạnh (mảng chuỗi phẳng, không dùng "nhiều nhóm" như
+"Đơn Vị Tham Gia Quy Trình" vì VPP chỉ cần 1 danh sách CHUNG, không có khái niệm nhiều nhóm áp dụng
+module khác nhau).
+
+**Hành vi**: để trống (mặc định, CHƯA ai cấu hình) = giữ NGUYÊN 100% như trước, bảng vẫn hiện đủ toàn bộ
+Danh Mục Phòng Ban. Khi đã chọn danh sách cụ thể, bảng "Nhân sự theo phòng ban" (và ô chọn phòng ban của
+"Nhóm mức riêng") lúc Tạo Kỳ Đăng Ký Mới CHỈ còn hiện đúng các Phòng Ban đã chọn — không ảnh hưởng tới
+các Kỳ Đăng Ký ĐÃ tạo trước đó (dữ liệu đã lưu của kỳ cũ giữ nguyên, chỉ đổi màn tạo kỳ MỚI).
+
+**Đã làm đủ phần "nợ kỹ thuật" đi kèm 1 danh mục mới** (theo đúng checklist CLAUDE.md): validate cấu
+trúc (chặn ghi giá trị không phải mảng, tránh crash giữa lượt đổi tên phòng ban), cascade đổi tên Phòng
+Ban/Siêu Thị (đổi tên không để lại tên "ma" trong danh sách đã chọn), dọn dẹp khi xoá hẳn 1 Phòng Ban
+khỏi Danh Mục, log hệ thống khi admin sửa, cập nhật mục "Hướng Dẫn" (Hệ Thống → 🧩 Nhóm Quyền Đặc Biệt).
+
+Test: thêm `tests/test-vpp-participating-depts.js` (7/7 pass — hành vi mặc định không đổi, lọc đúng danh
+sách đã chọn, tự lọc tên "ma", validate cấu trúc, cascade đổi tên). Chạy lại 4 bộ test liên quan: `test-
+congphep-checklist-structure-validate.js` (17/17), `test-formtemplates-structure-validate.js` (7/7),
+`test-catalog-rename-server.js` (32/32), `test-vppperiods-dept-rename-cascade.js` (4/4),
+`test-admin-users-permgroups.js` (127/127, bao gồm cascade xoá Phòng Ban/Siêu Thị) — tất cả pass, không
+regression. `test-vpp.js` (Playwright, 29 kịch bản) 28/29 pass — 1 fail ("VPP-exclude: admin removes...")
+đã xác nhận là lỗi CŨ có sẵn trên `main` TRƯỚC khi có đợt sửa này (tái hiện y hệt khi `git stash` tạm bỏ
+toàn bộ thay đổi), không liên quan tới tính năng mới.
 
 ## v29.65 (2026-11): Fix responsive màn "Thêm Người Dùng & Phân Quyền" — ô Phòng Ban/Siêu Thị/Chức Danh bị thu hẹp trên máy tính
 

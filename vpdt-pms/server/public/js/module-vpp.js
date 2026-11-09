@@ -116,7 +116,7 @@ function renderVppRateGroupsList() {
   vppRateGroups.forEach((g, idx) => {
     const c = vppRateGroupColor(idx);
     const excluded = vppRateGroupAssignedDepts(g.id);
-    const availableDepts = DB.depts.filter(d => !excluded.has(d));
+    const availableDepts = vppParticipatingDeptsList().filter(d => !excluded.has(d));
     renderMultiSelectDropdown(`vppRateGroupDeptSelect_${g.id}`, availableDepts, g.depts, {
       placeholder: 'Tìm phòng ban để thêm...', emptyText: 'Chưa chọn phòng ban nào.',
       chipClass: c.chip, hoverClass: c.hover,
@@ -136,6 +136,21 @@ function vppEffectiveDeptRate(dept) {
   return { rate: defaultRate, groupIdx: -1 };
 }
 
+// "Phòng Ban Tham Gia VPP" (vppParticipatingDepts, 11/2026 — theo yêu cầu người dùng, báo cáo kèm ảnh
+// chụp: bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký hiện TOÀN BỘ DB.depts, kể cả phòng không bao
+// giờ phát sinh đăng ký VPP, gây rác khi Danh Mục Phòng Ban có nhiều mục). Rỗng (mặc định, CHƯA ai cấu
+// hình ở "🧩 Nhóm Quyền Đặc Biệt") -> giữ NGUYÊN hành vi cũ 100%, trả về ĐỦ DB.depts. Admin chọn 1 danh
+// sách cụ thể -> CHỈ trả về đúng các phòng đã chọn (lọc thêm bớt nếu phòng đã bị xoá khỏi DB.depts, tránh
+// hiện "ma"). Dùng CHUNG cho cả bảng chính (renderVppDeptHeadcountTable()) lẫn ô chọn phòng ban của
+// "Nhóm mức riêng" (renderVppRateGroupsList()) — nhất quán, admin không chọn nhầm 1 phòng KHÔNG tham gia
+// VPP vào nhóm mức riêng.
+function vppParticipatingDeptsList() {
+  const chosen = DB.vppParticipatingDepts || [];
+  if (!chosen.length) return DB.depts;
+  const deptSet = new Set(DB.depts);
+  return chosen.filter(d => deptSet.has(d));
+}
+
 // Dựng bảng "Nhân sự theo phòng ban" — gọi lại mỗi khi đổi chế độ/mức mặc định/nhóm (không còn ô Mức/
 // Người sửa tay ngay trong bảng như trước v22.8 nên render lại toàn bộ không lo mất focus đang gõ dở ở
 // CHỖ KHÁC — chỉ giữ lại đúng giá trị Số Nhân Sự đã sửa tay trước đó, không reset về gợi ý ban đầu).
@@ -148,7 +163,7 @@ function renderVppDeptHeadcountTable() {
     const hc = tr.querySelector('.vpp-headcount-input')?.value;
     if (dept !== undefined) prevHeadcounts[dept] = hc;
   });
-  tbody.innerHTML = DB.depts.map(dept => {
+  tbody.innerHTML = vppParticipatingDeptsList().map(dept => {
     const headcount = dept in prevHeadcounts ? Math.max(0, Math.round(Number(prevHeadcounts[dept]) || 0)) : vppActiveHeadcountForDept(dept);
     const { rate, groupIdx } = vppEffectiveDeptRate(dept);
     const deptBudget = rate * headcount;

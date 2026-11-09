@@ -301,6 +301,34 @@ async function saveVppExcludedJobTitles() {
   alert('✅ Đã lưu danh sách chức danh.');
 }
 
+// ============ Phòng Ban Tham Gia VPP (vppParticipatingDepts, 11/2026) ============
+// Báo cáo người dùng (kèm ảnh chụp): bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký Mới hiện TOÀN BỘ
+// DB.depts, kể cả phòng không bao giờ phát sinh đăng ký VPP (VD "Ban Tổng Giám Đốc" luôn 0 nhân sự) —
+// gây rác/khó chọn khi danh mục Phòng Ban có nhiều mục. CÙNG KHUÔN vppExcludedJobTitles ngay trên (mảng
+// chuỗi phẳng, KHÔNG dùng "nhiều nhóm" như workflowParticipatingDeptGroups vì VPP chỉ cần ĐÚNG 1 danh
+// sách CHUNG, không có khái niệm "mỗi nhóm áp dụng 1 module khác nhau"). Rỗng (mặc định) = hiện đủ toàn
+// bộ DB.depts như hành vi cũ — xem vppParticipatingDeptsList() ở module-vpp.js.
+function renderVppParticipatingDeptsWidget() {
+  renderMultiSelectDropdown('vppParticipatingDeptsMultiSelect', DB.depts, DB.vppParticipatingDepts || [], {
+    placeholder: '🔍 Tìm phòng ban để thêm...',
+    emptyText: 'Chưa chọn phòng ban nào — để trống thì bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký vẫn hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước.'
+  });
+}
+
+async function saveVppParticipatingDepts() {
+  const next = getMultiSelectValues('vppParticipatingDeptsMultiSelect');
+  const snapshot = [...(DB.vppParticipatingDepts || [])];
+  DB.vppParticipatingDepts = next;
+  const saved = await syncStorage('vppParticipatingDepts', { baseline: snapshot });
+  if (!saved) {
+    DB.vppParticipatingDepts = snapshot;
+    renderVppParticipatingDeptsWidget();
+    return;
+  }
+  logSystemAction('USER_MGM', 'SAVE_VPP_PARTICIPATING_DEPTS', `Cập nhật danh sách Phòng Ban Tham Gia VPP (${next.length} phòng ban)`, 'SUCCESS');
+  alert('✅ Đã lưu danh sách phòng ban.');
+}
+
 // ============ Vị Trí Tham Gia Quy Trình (workflowParticipatingPositions, MỚI) ============
 // "items" của Ô SỬA DANH MỤC (renderWorkflowParticipatingPositionsWidget() ngay dưới, khối 17) = TÍCH
 // CHÉO TOÀN BỘ DB.jobTitles × DB.depts (mỗi tổ hợp 1 dòng "<jobTitle> — <dept>") — đây là nơi admin

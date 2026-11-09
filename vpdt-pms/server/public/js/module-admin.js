@@ -54,6 +54,9 @@ async function deleteDept(name) {
   // vẫn hiện trên UI cấu hình, gây nhầm lẫn cho admin.
   const prevWfDeptGroups = (DB.workflowParticipatingDeptGroups || []).map(g => ({ ...g, depts: [...g.depts] }));
   const prevWfPositions = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
+  // vppParticipatingDepts ("Phòng Ban Tham Gia VPP", 11/2026) — CÙNG LỚP LỖI đã vá ở
+  // workflowParticipatingDeptGroups ngay trên (xoá Phòng Ban để lại tên "ma" trong danh mục cấu hình).
+  const prevVppParticipatingDepts = [...(DB.vppParticipatingDepts || [])];
   DB.depts = DB.depts.filter(d => d !== name);
   delete DB.deptAbbrs[name];
   // Khối/Ban (10/2026) — dọn luôn tên Phòng Ban vừa xoá khỏi mọi deptGroups[].depts[] đang gán, tránh
@@ -64,14 +67,18 @@ async function deleteDept(name) {
   if (affectedWfGroups.length) affectedWfGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
-  const [savedDepts, savedAbbrs, savedGroups, savedWfGroups, savedWfPositions] = await Promise.all([
+  const vppParticipatingDeptsChanged = (DB.vppParticipatingDepts || []).includes(name);
+  if (vppParticipatingDeptsChanged) DB.vppParticipatingDepts = (DB.vppParticipatingDepts || []).filter(d => d !== name);
+  const [savedDepts, savedAbbrs, savedGroups, savedWfGroups, savedWfPositions, savedVppParticipatingDepts] = await Promise.all([
     syncStorage('depts', { baseline: prevDepts }), syncStorage('deptAbbrs', { baseline: prevDeptAbbrs }), affectedGroups.length ? syncStorage('deptGroups', { baseline: prevDeptGroups }) : Promise.resolve(true),
     affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups', { baseline: prevWfDeptGroups }) : Promise.resolve(true),
-    wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true)
+    wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true),
+    vppParticipatingDeptsChanged ? syncStorage('vppParticipatingDepts', { baseline: prevVppParticipatingDepts }) : Promise.resolve(true)
   ]);
-  if (!savedDepts || !savedAbbrs || !savedGroups || !savedWfGroups || !savedWfPositions) {
+  if (!savedDepts || !savedAbbrs || !savedGroups || !savedWfGroups || !savedWfPositions || !savedVppParticipatingDepts) {
     DB.depts = prevDepts; DB.deptAbbrs = prevDeptAbbrs; DB.deptGroups = prevDeptGroups;
     DB.workflowParticipatingDeptGroups = prevWfDeptGroups; DB.workflowParticipatingPositions = prevWfPositions;
+    DB.vppParticipatingDepts = prevVppParticipatingDepts;
     renderDeptList(); renderDeptGroupList();
     return;
   }

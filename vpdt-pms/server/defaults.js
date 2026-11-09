@@ -581,6 +581,18 @@ const DEFAULTS = {
   // nào nữa, so khớp thẳng theo chức danh.
   vppExcludedJobTitles: [],
 
+  // "Phòng Ban Tham Gia VPP" (11/2026, theo yêu cầu người dùng — ảnh chụp "Nhân sự theo phòng ban" lúc
+  // tạo Kỳ Đăng Ký hiện TOÀN BỘ DB.depts, kể cả phòng không bao giờ phát sinh đăng ký VPP (VD "Ban Tổng
+  // Giám Đốc" số nhân sự = 0), gây rác khi danh mục Phòng Ban có nhiều mục): mảng chuỗi tên phòng ban
+  // PHẲNG, cùng khuôn vppExcludedJobTitles ngay trên (KHÔNG dùng khuôn "nhiều nhóm" như
+  // workflowParticipatingDeptGroups vì VPP chỉ cần ĐÚNG 1 danh sách CHUNG áp dụng cho mọi kỳ, không có
+  // khái niệm "nhiều nhóm mỗi nhóm áp dụng module khác nhau" như Quy Trình & Phê Duyệt). Mảng RỖNG (mặc
+  // định, CHƯA ai cấu hình) = giữ NGUYÊN hành vi cũ 100%, hiện đủ toàn bộ DB.depts — chỉ khi admin chủ
+  // động chọn danh sách ở màn Phân Quyền ("🧩 Nhóm Quyền Đặc Biệt") thì bảng "Nhân sự theo phòng ban" lúc
+  // Tạo Kỳ Đăng Ký Mới mới CHỈ còn hiện đúng các phòng đã chọn — xem renderVppDeptHeadcountTable()/
+  // vppParticipatingDeptsList() ở module-vpp.js.
+  vppParticipatingDepts: [],
+
   // PWA — danh sách module (key khớp đúng tên tab dùng ở switchTab()/BUSINESS_MODULES) admin chọn làm
   // "phím tắt" khi nhấn giữ icon app đã cài trên màn hình chính (Android/Chrome — xem routes/pwaManifest.js
   // build shortcuts[] động từ đây, và khối "Phím Tắt PWA" ở admin panel). Mặc định RỖNG = chưa cấu hình

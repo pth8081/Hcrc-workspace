@@ -167,7 +167,7 @@ function setAdvWorkflowSubTab(subTab) {
   // vẽ CẢ bảng Nhóm lẫn bảng Cấp của đúng module đó (Văn Bản Trình + Hợp Đồng, dùng chung 1 engine).
   if (subTab === 'GROUPS') { renderSubmissionApprovalGroups(); renderContractApprovalGroups(); }
   // SPECIALPERM: 3 widget module-admin-specialperm.js — cấu hình CHUNG toàn hệ thống, không gắn user nào.
-  if (subTab === 'SPECIALPERM') { renderWorkflowParticipatingDeptGroupsWidget(); renderVppExcludedJobTitlesWidget(); renderWorkflowParticipatingPositionsWidget(); }
+  if (subTab === 'SPECIALPERM') { renderWorkflowParticipatingDeptGroupsWidget(); renderVppExcludedJobTitlesWidget(); renderVppParticipatingDeptsWidget(); renderWorkflowParticipatingPositionsWidget(); }
   // EXTRAAPPROVAL: renderExtraApprovalAdminSection() (module-admin-submissiongroups.js) — dropdown chọn
   // 1 trong 10 quy trình rồi vẽ bảng Nhóm/Cấp của ĐÚNG quy trình đó (mỗi quy trình 1 bộ dữ liệu riêng).
   if (subTab === 'EXTRAAPPROVAL') { renderExtraApprovalAdminSection(); }

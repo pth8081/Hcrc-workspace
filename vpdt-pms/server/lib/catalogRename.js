@@ -244,6 +244,14 @@ async function cascadeWorkflowParticipatingDepts(oldValue, newValue) {
       : g) : groups));
 }
 
+// vppParticipatingDepts ("Phòng Ban Tham Gia VPP", 11/2026 — xem defaults.js): mảng chuỗi tên phòng ban
+// PHẲNG, CÙNG KHUÔN workflowParticipatingDepts ở trên (không phải nhiều-nhóm) — cascade y hệt, tránh
+// lặp lại đúng lớp lỗi "đổi tên phòng ban để lại tên CŨ trong danh mục đã vá ở workflowParticipatingDepts.
+async function cascadeVppParticipatingDepts(oldValue, newValue) {
+  await withLockedAppDataValue('vppParticipatingDepts', (list) =>
+    (Array.isArray(list) ? list.map(d => (d === oldValue ? newValue : d)) : list));
+}
+
 // ===== CẶP (jobTitle, dept) LỒNG BÊN TRONG cấu hình quy trình — "Theo vị trí" (POSITION mode) =====
 // PHÁT HIỆN mức Cao ở đợt audit chuyên sâu 12 cụm: cascadeDeptWorkflowMaps() ở trên CHỈ đổi KEY NGOÀI
 // CÙNG của các map {[dept]: <cấu hình>} — hoàn toàn KHÔNG đi vào BÊN TRONG cấu hình, nơi bước "Theo vị
@@ -657,6 +665,7 @@ async function cascadeStoreRename(oldValue, newValue) {
   await cascadeNestedDeptWorkflowMaps(oldValue, newValue);
   await cascadeDeptKeyedAppDataMaps(oldValue, newValue);
   await cascadeWorkflowParticipatingDepts(oldValue, newValue);
+  await cascadeVppParticipatingDepts(oldValue, newValue);
   await cascadePositionPairs('dept', oldValue, newValue);
   for (const { collection, fields } of DEPT_FIELD_COLLECTIONS) {
     await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldValue, newValue));

@@ -964,7 +964,10 @@ function assertPlainObjectArrayShape(key, value) {
 // SAU vppExcludedJobTitles trong cùng hàm chưa kịp chạy) — chỉ cần Array.isArray (phần tử KHÔNG ép
 // phải là string, cùng triết lý "chỉ chặn ở mức đủ để .map()/.includes() không crash", không validate
 // sâu từng phần tử).
-const PLAIN_ARRAY_KEYS = new Set(['vppExcludedJobTitles']);
+// vppParticipatingDepts (11/2026, "Phòng Ban Tham Gia VPP" — mảng chuỗi phẳng cùng khuôn
+// vppExcludedJobTitles ngay trên, xem defaults.js) — cùng lý do cần validate: cascadeStoreRename()
+// (lib/catalogRename.js) chạy `.map()` trên key này mỗi khi đổi tên Phòng Ban/Siêu Thị.
+const PLAIN_ARRAY_KEYS = new Set(['vppExcludedJobTitles', 'vppParticipatingDepts']);
 function assertPlainArrayShape(key, value) {
   if (!PLAIN_ARRAY_KEYS.has(key)) return;
   if (!Array.isArray(value)) {
