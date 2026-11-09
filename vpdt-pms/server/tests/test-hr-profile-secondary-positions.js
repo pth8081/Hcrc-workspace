@@ -95,6 +95,58 @@ async function main() {
     assertEqual(profile.secondaryPositions.length, 0, 'KHÔNG được lưu dòng kiêm nhiệm nào khi throw');
   });
 
+  // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026, NGAY SAU đợt vá throw ở trên): "tôi đã bỏ 1 dòng kiêm nhiệm ra
+  // nhưng lúc sau vẫn thấy có lại" — throw phía trên áp dụng cho MỌI phần tử gửi lên (route luôn nhận
+  // nguyên mảng TRẠNG THÁI ĐÍCH), kể cả dòng ĐÃ LƯU TỪ TRƯỚC (từ lúc còn lỗi âm thầm dept=null) mà actor
+  // không hề đụng tới — nếu mảng còn 1 dòng CŨ lỗi, MỌI lần lưu sau (kể cả chỉ để BỎ 1 dòng KHÁC) đều bị
+  // chặn, actor không có cách nào gỡ dòng khác ra được, dòng tưởng đã bỏ thực ra chưa bao giờ lưu thành
+  // công. Nay CHỈ throw cho dòng MỚI THÊM — dòng ĐÃ CÓ TỪ TRƯỚC (dù đang lỗi) vẫn giữ nguyên/lưu lại được.
+  await run.run('applyProfileEdit(): mảng gửi lên GIỮ NGUYÊN 1 dòng kiêm nhiệm CŨ đã lỗi (dept=null từ trước) + thêm 1 dòng MỚI hợp lệ -> KHÔNG throw (dòng cũ được "cho qua", không chặn thao tác khác)', () => {
+    const version = buildOrgVersion();
+    const profile = employeeProfile.defaultProfile('NV006');
+    // Giả lập dữ liệu CŨ đã lưu (dept=null) TRƯỚC khi có throw — gán thẳng, không qua applyProfileEdit().
+    profile.secondaryPositions = [{
+      id: 'old-1', positionKey: 'POS-NO-DEPT', jobTitle: 'Nhân Viên Thiếu Phòng', dept: null,
+      positionLabel: 'Nhân Viên Thiếu Phòng', note: null, decidedBy: 'hr0', decidedByName: 'HR Cũ', createdAt: '01/01/2026'
+    }];
+    let threw = null;
+    try {
+      employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS-NO-DEPT' }, { positionKey: 'POS-IT-01' }] },
+        employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR', { orgChartAppliedVersion: version });
+    } catch (e) { threw = e; }
+    assertEqual(threw, null, 'KHÔNG được throw chỉ vì mảng còn chứa 1 dòng cũ đã lỗi sẵn từ trước');
+    assertEqual(profile.secondaryPositions.length, 2, 'Lưu đủ cả dòng cũ (giữ nguyên) lẫn dòng mới thêm');
+    assertEqual(profile.secondaryPositions[0].dept, null, 'Dòng CŨ vẫn giữ dept=null như trước (không bị ép resolve lại/throw)');
+    assertEqual(profile.secondaryPositions[1].dept, 'Phòng IT', 'Dòng MỚI vẫn snapshot đúng dept bình thường');
+  });
+
+  await run.run('applyProfileEdit(): BỎ hẳn dòng kiêm nhiệm CŨ đã lỗi (không đưa positionKey đó vào mảng gửi lên nữa) -> lưu thành công, dòng cũ biến mất hẳn', () => {
+    const version = buildOrgVersion();
+    const profile = employeeProfile.defaultProfile('NV007');
+    profile.secondaryPositions = [{
+      id: 'old-2', positionKey: 'POS-NO-DEPT', jobTitle: 'Nhân Viên Thiếu Phòng', dept: null,
+      positionLabel: 'Nhân Viên Thiếu Phòng', note: null, decidedBy: 'hr0', decidedByName: 'HR Cũ', createdAt: '01/01/2026'
+    }];
+    employeeProfile.applyProfileEdit(profile, { secondaryPositions: [] },
+      employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR', { orgChartAppliedVersion: version });
+    assertEqual(profile.secondaryPositions.length, 0, 'Dòng cũ đã lỗi phải bỏ được hoàn toàn, không bị kẹt lại');
+  });
+
+  await run.run('applyProfileEdit(): dòng kiêm nhiệm CŨ đã lỗi (dept=null) nhưng Cơ Cấu Tổ Chức ĐÃ ĐƯỢC SỬA ĐÚNG (gắn lại Phòng Ban) -> lưu lại tự khớp dept MỚI, không còn kẹt null', () => {
+    const fixedVersion = buildOrgVersion();
+    // Gắn lại POS-NO-DEPT đúng dưới 1 DEPARTMENT thật (mô phỏng admin vào Cơ Cấu Tổ Chức sửa lỗi cấu hình).
+    const fixedNode = fixedVersion.nodes.find(n => n.positionKey === 'POS-NO-DEPT');
+    fixedNode.parentNodeId = 2; // dưới "Phòng Kinh Doanh" (nodeId 2, departmentRef đã có)
+    const profile = employeeProfile.defaultProfile('NV008');
+    profile.secondaryPositions = [{
+      id: 'old-3', positionKey: 'POS-NO-DEPT', jobTitle: 'Nhân Viên Thiếu Phòng', dept: null,
+      positionLabel: 'Nhân Viên Thiếu Phòng', note: null, decidedBy: 'hr0', decidedByName: 'HR Cũ', createdAt: '01/01/2026'
+    }];
+    employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS-NO-DEPT' }] },
+      employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR', { orgChartAppliedVersion: fixedVersion });
+    assertEqual(profile.secondaryPositions[0].dept, 'Phòng Kinh Doanh', 'Lưu lại tự khớp dept mới ngay khi Cơ Cấu Tổ Chức đã sửa đúng, tự "lành" không cần thao tác gì thêm');
+  });
+
   await run.run('applyProfileEdit(): kiêm nhiệm ĐÚNG vị trí CHÍNH THỨC hiện tại -> chặn, báo lỗi rõ', () => {
     const version = buildOrgVersion();
     const profile = employeeProfile.defaultProfile('NV003');

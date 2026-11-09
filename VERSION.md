@@ -1,9 +1,60 @@
 # Phiên bản hiện tại
 
-**29.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.68 (2026-11): "🔍 Audit Nhân Sự" — bỏ gửi email cảnh báo cho admin, chỉ gửi đúng người có quyền audit nhân sự
+
+Yêu cầu người dùng (11/2026, nguyên văn): "Audit nhân sự bạn bỏ gửi email đến admin cho tôi nhé, chỉ gửi
+đến người nào có quyền audit nhân sự thôi bạn ơi".
+
+**Trước đây**: job quét hằng ngày (`jobs/hrProfileGapAudit.js`) gửi email cảnh báo cho BẤT KỲ ai có
+`perms.admin` HOẶC 1 trong 3 quyền Hồ Sơ Nhân Sự/Hợp Đồng (`hrProfileManage`/`hrProfileEdit`/
+`hrContractManage`) — không đối chiếu Khối 0 module `hrAudit` (admin có thể đã bị tắt quyền truy cập màn
+Audit Nhân Sự nhưng vẫn nhận email), và LUÔN gửi cho mọi admin dù admin đó không hề bật bất kỳ quyền Hồ
+Sơ Nhân Sự nào — gây nhiễu hộp thư admin không liên quan tới nghiệp vụ Nhân Sự.
+
+**Đã sửa**: danh sách người nhận nay đối chiếu ĐÚNG cùng điều kiện màn hình thật cho xem email này
+("quyền audit nhân sự" — `canAccessHrProfileAudit()`, `routes/hrProfileAudit.js`) NHƯNG CỐ Ý BỎ nhánh
+admin-bypass của hàm đó (đúng yêu cầu "bỏ gửi email đến admin") — chỉ còn: Khối 0 module `hrAudit` VÀ
+(`canFullViewProfiles()` hoặc `canManageContracts()` hoặc `hrReportView`), cộng thêm lọc `active!==false`
+(không gửi cho tài khoản đã khoá/nghỉ việc, lỗ hổng phụ phát hiện cùng lúc). Admin thuần (chỉ có
+`perms.admin`, không có quyền Hồ Sơ Nhân Sự/Hợp Đồng/Báo Cáo nào khác) KHÔNG còn tự động nhận email audit
+nhân sự nữa; admin ĐỒNG THỜI có 1 trong các quyền trên vẫn nhận — không phải vì admin, mà vì có quyền
+Hồ Sơ Nhân Sự thật.
+
+Test: thêm `tests/test-hr-profile-audit-email-recipients.js` (8 kịch bản, stub `sendMail`/`appData`/
+`insertSystemLog`/`auditHrProfileGaps`, bắt đúng danh sách `to` thật gửi đi) — admin thuần bị loại,
+module `hrAudit` bị tắt bị loại, tài khoản khoá bị loại, 3 nhóm quyền hợp lệ (hrProfileManage/
+hrContractManage/hrReportView) đều được nhận, admin có thêm quyền vẫn được nhận, trộn nhiều user cùng
+lúc chỉ đúng 1 địa chỉ hợp lệ. Chạy lại `test-hr-profile-audit.js` (19 kịch bản) +
+`test-hr-profile-audit-ui.js` (7 kịch bản) — tất cả pass, không regression.
+
+## v29.67 (2026-11): [KHẨN] Vá kiêm nhiệm cũ đã lỗi làm KẸT mọi thao tác sau (không bỏ được dòng khác) — tác dụng phụ của v29.63
+
+Báo cáo người dùng (11/2026, ngay sau v29.63): "tôi đã bỏ 1 dòng kiêm nhiệm ra nhưng lúc sau vẫn thấy có
+lại" — nghi ngờ code mới làm mất/hoàn tác thao tác đã lưu.
+
+**Nguyên nhân xác định được**: v29.63 thêm throw lỗi "chưa gắn đúng Phòng Ban chuẩn" khi lưu 1 dòng kiêm
+nhiệm thiếu node cha DEPARTMENT trong Cơ Cấu Tổ Chức — nhưng throw này áp dụng cho **MỌI phần tử trong
+mảng gửi lên** (route luôn nhận nguyên mảng trạng thái đích, không phải diff), kể cả dòng **ĐÃ LƯU TỪ
+TRƯỚC** (từ lúc còn lỗi âm thầm `dept=null`, trước v29.63) mà actor hoàn toàn không đụng tới. Hậu quả:
+nếu 1 hồ sơ có sẵn 1 dòng kiêm nhiệm cũ bị lỗi, **MỌI lần lưu sau đó** (kể cả chỉ để BỎ 1 dòng KHÁC, hay
+sửa field không liên quan) đều bị chặn — HR tưởng đã bỏ dòng lỗi thành công (vì không thấy báo lỗi rõ
+hoặc không để ý), nhưng thực ra thao tác lưu chưa bao giờ thành công, dòng cũ vẫn còn nguyên trong CSDL.
+
+**Đã sửa**: throw CHỈ áp dụng cho dòng **MỚI THÊM** (positionKey chưa có trong hồ sơ trước đó) — dòng
+ĐÃ CÓ TỪ TRƯỚC (dù đang lỗi `dept=null`) được lưu lại bình thường như hành vi TRƯỚC v29.63, không chặn
+thao tác khác trong cùng lần lưu. Actor vẫn BỎ được dòng lỗi bất cứ lúc nào (chỉ cần không đưa
+positionKey đó vào mảng gửi lên nữa). Nếu Cơ Cấu Tổ Chức được sửa đúng sau đó (gắn lại Phòng Ban cho
+node), lần lưu kế tiếp tự khớp lại dept mới — không cần thao tác gì thêm, tự "lành".
+
+Test: thêm 3 kịch bản mới vào `tests/test-hr-profile-secondary-positions.js` (19/19 pass) — giữ nguyên
+dòng cũ lỗi + thêm dòng mới (không throw), bỏ hẳn dòng cũ lỗi (lưu thành công), dòng cũ tự khớp lại dept
+khi Cơ Cấu Tổ Chức được sửa đúng. Chạy lại 6 bộ test liên quan (65 kịch bản) — tất cả pass, không
+regression.
 
 ## v29.66 (2026-11): Thêm "🏢 Phòng Ban Tham Gia VPP" — lọc bớt Phòng Ban hiện ở bảng "Nhân sự theo phòng ban" khi Tạo Kỳ Đăng Ký
 

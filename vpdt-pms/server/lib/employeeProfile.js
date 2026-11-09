@@ -1529,6 +1529,18 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách Vị trí kiêm nhiệm không hợp lệ');
         const orgChartVersion = options && options.orgChartAppliedVersion;
         const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart'); // require trễ — tránh vòng lặp require (cùng khuôn applyPositionAssignment())
+        // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026, ngay sau khi THROW phía dưới được thêm vào: "tôi đã bỏ
+        // 1 dòng kiêm nhiệm ra nhưng lúc sau vẫn thấy có lại"): throw "chưa gắn đúng Phòng Ban chuẩn" áp
+        // dụng cho MỌI phần tử trong mảng gửi lên, kể cả dòng ĐÃ LƯU TỪ TRƯỚC mà actor không hề đụng tới
+        // (route này luôn nhận nguyên mảng TRẠNG THÁI ĐÍCH, không phải diff) — nếu 1 trong các dòng CŨ đã
+        // lỡ lưu dept=null (đúng lỗi gốc đang vá), MỌI lần lưu sau (kể cả chỉ để BỎ 1 dòng KHÁC) đều bị
+        // chặn vì dòng cũ đó vẫn còn trong mảng, actor không có cách nào gỡ dòng khác ra được nữa — dòng
+        // tưởng đã bỏ thực ra chưa bao giờ lưu thành công, rồi lại "hiện lại" ở lần xem sau. Chỉ áp dụng
+        // throw cho dòng MỚI THÊM (positionKey chưa có trong profile.secondaryPositions trước đó) — dòng
+        // ĐÃ CÓ TỪ TRƯỚC (dù đang lỗi) vẫn được giữ nguyên/lưu lại bình thường như hành vi TRƯỚC v29.63,
+        // không bị chặn chỉ vì "đứng chung mảng" với 1 thao tác khác — actor vẫn BỎ được dòng lỗi đó bất
+        // cứ lúc nào (đơn giản là không đưa positionKey đó vào mảng gửi lên nữa).
+        const existingPositionKeys = new Set((profile.secondaryPositions || []).map(sp => sp && sp.positionKey).filter(Boolean));
         const seenKeys = new Set();
         const cleaned = val.slice(0, 20).map((item, i) => {
           const positionKey = item && String(item.positionKey || '').trim();
@@ -1554,9 +1566,15 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
           if (node.requiresDept !== false) {
             const deptNode = findNearestDeptAncestor(orgChartVersion, node);
             if (!deptNode?.departmentRef) {
-              throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán kiêm nhiệm`);
+              // Dòng MỚI thêm -> chặn ngay (lý do xem chú thích ở assertNotSelfAssigningPosition() phía
+              // trên). Dòng ĐÃ CÓ TỪ TRƯỚC -> KHÔNG chặn (xem chú thích existingPositionKeys phía trên),
+              // giữ nguyên hành vi cũ: lặng lẽ gán dept=null, actor vẫn lưu/bỏ dòng khác bình thường.
+              if (!existingPositionKeys.has(positionKey)) {
+                throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán kiêm nhiệm`);
+              }
+            } else {
+              dept = deptNode.departmentRef;
             }
-            dept = deptNode.departmentRef;
           }
           return {
             id: item.id || randomUUID(),
