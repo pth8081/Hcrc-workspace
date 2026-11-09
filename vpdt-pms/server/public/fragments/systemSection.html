@@ -2138,13 +2138,23 @@
                sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateUserDeptOptions()/populateDropdowns() ở core.js.
                KHÁC hrpOnbDept/blProposeDept (server không đối chiếu catalog cho 2 field này) — thêm chặn
                RIÊNG ở client (readUserFormState(), module-admin-submissiongroups.js) để giữ nguyên bảo
-               đảm "chỉ chọn đúng tên có thật trong danh mục" mà <select> cũ vốn có sẵn. -->
-          <div id="uDeptFieldWrap">
+               đảm "chỉ chọn đúng tên có thật trong danh mục" mà <select> cũ vốn có sẵn.
+               LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp — "trên mobile nó mở rộng ra, trên máy
+               tính nó thu bé lại, bị ẩn chuỗi ký tự"): grid #userIdentityFields xl:grid-cols-9 chia ĐỀU
+               9 cột cho MỌI field (kể cả field tên dài như Phòng Ban/Siêu Thị/Chức Danh) — ở màn hình
+               rộng (xl, nơi cả 9 cột cùng hiện 1 hàng) 1 cột chỉ còn ~11% bề ngang, không đủ chỗ hiện hết
+               tên phòng ban/siêu thị/chức danh dài, phải cuộn ngang bên trong ô mới đọc hết. Mobile không
+               bị (grid-cols-1, mỗi field chiếm trọn hàng). Nay cho 4 field "tên dài" (Phòng Ban/Siêu Thị/
+               Địa Điểm tự thêm/Chức Danh — ĐÚNG module người dùng báo lỗi, áp dụng NHẤT QUÁN cho cả
+               nhánh HO lẫn Siêu Thị) chiếm gấp đôi độ rộng (lg:col-span-2 xl:col-span-2) so với field
+               ngắn (username/email/SĐT...) — vẫn đúng 1 cột ở mobile/tablet hẹp (chưa bật lg), không đổi
+               gì hành vi/validate, chỉ đổi độ rộng hiển thị. -->
+          <div id="uDeptFieldWrap" class="lg:col-span-2 xl:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
             <input id="uDept" data-sdd-list="uDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban (để trống nếu không chọn)..." class="w-full border p-1.5 rounded text-xs">
             <div id="uDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
-          <div id="uStoreFieldWrap" class="hidden">
+          <div id="uStoreFieldWrap" class="hidden lg:col-span-2 xl:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
             <div class="flex gap-1">
               <div class="flex-1 min-w-0">
@@ -2156,14 +2166,14 @@
           </div>
           <!-- Địa Điểm — chỉ hiện khi chọn 1 Vị Trí Làm Việc TỰ THÊM (không phải HO/Siêu Thị builtin),
                nguồn options = locations[] riêng của Vị Trí đó (xem onUserPosTypeChange()). -->
-          <div id="uCustomLocationFieldWrap" class="hidden">
+          <div id="uCustomLocationFieldWrap" class="hidden lg:col-span-2 xl:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Địa Điểm</label>
             <select id="uCustomLocation" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
           <!-- uJobTitle (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài, cùng đợt
                uDept/uStore) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateUserJobTitleOptions()
                ở core.js. -->
-          <div>
+          <div class="lg:col-span-2 xl:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
             <input id="uJobTitle" data-sdd-list="uJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh (để trống nếu chưa gán)..." class="w-full border p-1.5 rounded text-xs">
             <div id="uJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>

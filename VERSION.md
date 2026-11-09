@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**29.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.65 (2026-11): Fix responsive màn "Thêm Người Dùng & Phân Quyền" — ô Phòng Ban/Siêu Thị/Chức Danh bị thu hẹp trên máy tính
+
+Báo cáo người dùng (11/2026, kèm ảnh chụp mobile vs desktop): trên mobile ô "Siêu Thị"/"Chức Danh" hiện
+đủ rộng (mỗi field chiếm trọn 1 hàng), nhưng trên máy tính lại bị thu bé lại, chuỗi ký tự dài (tên siêu
+thị/chức danh) bị ẩn/cắt, gây khó chọn cho admin.
+
+**Nguyên nhân**: grid `#userIdentityFields` (`public/fragments/systemSection.html`) dùng
+`xl:grid-cols-9` — chia ĐỀU 9 cột cho mọi field ở màn hình rộng (≥1280px, nơi cả 9 cột cùng hiện 1
+hàng), kể cả field có giá trị dài như Phòng Ban/Siêu Thị/Chức Danh — mỗi cột chỉ còn ~11% bề ngang.
+Mobile không bị (grid 1 cột, mỗi field chiếm trọn hàng) nên không lộ ra.
+
+**Đã sửa**: cho 4 field "tên dài" — Phòng Ban (nhánh HO), Siêu Thị, Địa Điểm (Vị Trí tự thêm), Chức Danh
+— chiếm gấp đôi độ rộng cột (`lg:col-span-2 xl:col-span-2`) so với các field ngắn (username/email/SĐT...),
+áp dụng NHẤT QUÁN cho cả nhánh HO lẫn Siêu Thị như người dùng yêu cầu. Mobile/tablet hẹp (chưa bật `lg`)
+không đổi gì, vẫn đúng 1 cột/hàng như cũ. Rebuild `public/tailwind.css` để utility class responsive mới
+có hiệu lực (trước đó CSS compiled chưa có `lg:col-span-2`/`xl:col-span-2` do Tailwind chỉ sinh class nào
+thực sự xuất hiện trong HTML lúc build). Đã xác nhận bằng ảnh chụp Playwright thật (không chỉ suy luận):
+desktop 1600px hiện đủ chuỗi dài không bị cắt, mobile 390px không đổi so với trước. Không đổi hành vi/
+validate gì khác, chỉ đổi độ rộng hiển thị.
 
 ## v29.64 (2026-11): Khoá regression — Sửa Hồ Sơ Nhân Sự không được đè vị trí/phòng ban (ST/HO)/chức danh lên Phân Quyền
 
