@@ -1309,10 +1309,10 @@ async function confirmHrpfImport() {
   try {
     const data = await hrProfileApiCall('POST', '/api/hr-profile/bulk-import', { items: submitItems });
     let msg = `✅ Đã thêm mới ${data.created.length} + ghi đè ${data.updated.length}/${submitItems.length} hồ sơ.`;
-    // Tự động Gán Chức Vụ (11/2026) — hồ sơ vừa liên kết tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh
-    // khớp đúng 1 vị trí thật trong Cơ Cấu Tổ Chức đang áp dụng được tự điền Cấp Bậc + Quản Lý Trực Tiếp
-    // luôn, không cần chạy riêng "Gán Chức Vụ Hàng Loạt" cho các dòng này nữa.
-    if (data.autoAssignedCount) msg += `\n🏷️ Đã tự động Gán Chức Vụ cho ${data.autoAssignedCount} hồ sơ (tài khoản liên kết đã khớp sẵn vị trí trong Cơ Cấu Tổ Chức).`;
+    // LỖI ĐÃ VÁ (11/2026): bỏ thông báo "Đã tự động Gán Chức Vụ" — route bulk-import không còn tự động
+    // gán chức vụ/đồng bộ phân quyền cho hồ sơ vừa liên kết tài khoản nữa (xem chú thích đầy đủ ở
+    // routes/employeeProfile.js POST /bulk-import). Cần gán chức vụ hàng loạt thì dùng đúng tính năng
+    // "Gán Chức Vụ Hàng Loạt" (chủ đích, HR tự bấm).
     if (data.skipped.length) {
       msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
     }

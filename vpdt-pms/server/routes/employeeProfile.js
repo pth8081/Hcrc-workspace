@@ -1406,12 +1406,6 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
 
     const canOverwrite = employeeProfile.canEditProfiles(req.freshUser);
     const results = { created: [], updated: [], skipped: [] };
-    // Hồ sơ MỚI TẠO (không phải ghi đè) có liên kết tài khoản VPDT (tự động hoặc HR tự chọn tay ở bước
-    // xem trước) — thu lại để, SAU KHI đã nhả khoá employeeProfiles, thử tự Gán Chức Vụ nếu Phòng Ban/
-    // Chức Danh của chính tài khoản đó khớp ĐÚNG 1 vị trí có thật trong Cơ Cấu Tổ Chức đang áp dụng (xem
-    // khối "tự động Gán Chức Vụ" ngay dưới — theo câu hỏi người dùng 11/2026: "hồ sơ tự động liên kết
-    // tài khoản mà tài khoản đã có chức vụ/phòng ban rồi thì có tự update không").
-    const newlyLinked = [];
     await withLockedAppDataValue('employeeProfiles', (list) => {
       for (const row of rows) {
         try {
@@ -1441,7 +1435,6 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
               canViewFull: employeeProfile.canFullViewProfiles(req.freshUser) || canOverwrite
             });
             results.created.push(created.employeeCode);
-            if (created.username) newlyLinked.push({ employeeCode: created.employeeCode, username: created.username });
           }
         } catch (rowErr) {
           results.skipped.push({ employeeCode: row?.employeeCode || '(thiếu Mã NV)', reason: rowErr.message });
@@ -1449,39 +1442,25 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
       }
       return list;
     });
-    // Tự động Gán Chức Vụ cho hồ sơ vừa liên kết tài khoản (11/2026) — CHỈ khi người thực hiện import
-    // CŨNG có quyền "Sửa Hồ Sơ Nhân Sự" (hrProfileEdit, đúng quyền route gán tay/Gán Chức Vụ Hàng Loạt
-    // yêu cầu — xem requireProfileEdit) để KHÔNG mở lối tắt cho người chỉ có hrProfileCreate thực hiện
-    // được 1 hành động lẽ ra cần hrProfileEdit. CHẠY NGOÀI khối withLockedAppDataValue('employeeProfiles')
-    // ở trên — assignPositionToProfile() tự khoá lại employeeProfiles rồi users, lồng khoá cùng khoá bên
-    // trong 1 lượt withLockedAppDataValue khác sẽ treo (deadlock). Chỉ gán khi Phòng Ban+Chức Danh của
-    // CHÍNH tài khoản vừa liên kết khớp ĐÚNG 1 vị trí thật trong cây — không khớp/khớp nhiều vị trí/chưa
-    // có bản Cơ Cấu Tổ Chức nào áp dụng thì bỏ qua lặng lẽ (hồ sơ vẫn tạo xong, HR tự dùng "Gán Chức Vụ
-    // Hàng Loạt" sau cho các trường hợp này — KHÔNG thay thế hẳn tính năng đó, chỉ giảm thao tác lặp lại
-    // cho những dòng đã khớp sẵn).
-    let autoAssignedCount = 0;
-    if (newlyLinked.length && canOverwrite) {
-      const appliedVersion = orgChart.getAppliedVersion(appData.orgChartVersions || []);
-      if (appliedVersion) {
-        for (const { employeeCode, username } of newlyLinked) {
-          try {
-            const account = (appData.users || []).find(u => u.username === username);
-            if (!account || !account.dept || !account.jobTitle) continue;
-            const node = orgChart.findPositionNodeForUser(appliedVersion, account);
-            if (!node) continue;
-            await assignPositionToProfile(employeeCode, node.positionKey, req.freshUser, {
-              note: 'Tự động gán khi Nhập Excel Hồ Sơ Nhân Sự liên kết tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh khớp Cơ Cấu Tổ Chức'
-            });
-            autoAssignedCount++;
-          } catch (e) { /* bỏ qua lặng lẽ — hồ sơ vẫn tạo xong, HR tự Gán Chức Vụ tay/hàng loạt sau */ }
-        }
-      }
-    }
+    // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng: "nhân sự up hồ sơ nhân sự, nó update lại tất cả cái phần
+    // user trong phần quyền của tôi, chuyển hết sang chức danh khác — 2 việc này không liên quan đến
+    // nhau"): TRƯỚC ĐÂY ở đây có bước "tự động Gán Chức Vụ cho hồ sơ vừa liên kết tài khoản" — bất kỳ hồ
+    // sơ MỚI nào trong file Excel vừa liên kết 1 tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh khớp đúng 1
+    // vị trí thật trong Cơ Cấu Tổ Chức sẽ bị TỰ ĐỘNG gán chức vụ đó (gọi assignPositionToProfile()) —
+    // hàm này KHÔNG chỉ ghi dept/jobTitle xuống users mà còn gọi recomputeEffectivePerms() tính lại TOÀN
+    // BỘ groupIds/perms theo "Phân quyền theo chức danh" (xem lib/hrProfilePositionAssign.js). Với 1 lần
+    // Nhập Excel hàng loạt (có thể hàng trăm dòng), bất kỳ dòng nào được hệ thống xem là "tạo hồ sơ mới"
+    // (VD lệch định dạng Mã NV khiến không nhận ra là hồ sơ đã có) và tự liên kết được tài khoản đều kéo
+    // theo ghi đè LẶNG LẼ cả chức danh LẪN phân quyền của tài khoản đó — một thao tác Nhập Excel Hồ Sơ
+    // Nhân Sự (nghiệp vụ Nhân Sự) không nên có khả năng tự ý đổi Phân Quyền của người dùng mà không ai
+    // chủ động làm ở màn Phân Quyền. Bỏ hẳn bước tự động này — Nhập Excel giờ CHỈ tạo/ghi đè đúng hồ sơ
+    // Nhân Sự như trước, KHÔNG còn đụng tới users/chức vụ/phân quyền. Gán chức vụ (và đồng bộ phân quyền
+    // đi kèm) vẫn làm được bình thường qua "Gán Chức Vụ"/"Gán Chức Vụ Hàng Loạt" — 2 thao tác CHỦ ĐÍCH,
+    // HR tự bấm khi thật sự muốn đổi chức vụ, không còn là tác dụng phụ ẩn của việc nhập hồ sơ.
     if (results.created.length || results.updated.length) {
-      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Hồ Sơ Nhân Sự: tạo mới ${results.created.length}, ghi đè ${results.updated.length}, bỏ qua ${results.skipped.length} hồ sơ` +
-        (autoAssignedCount ? `, tự động Gán Chức Vụ ${autoAssignedCount} hồ sơ (tài khoản liên kết đã khớp vị trí có thật)` : ''));
+      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Hồ Sơ Nhân Sự: tạo mới ${results.created.length}, ghi đè ${results.updated.length}, bỏ qua ${results.skipped.length} hồ sơ`);
     }
-    res.json({ ok: true, ...results, autoAssignedCount });
+    res.json({ ok: true, ...results });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile/bulk-import'); }
 });
 

@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**29.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.62 (2026-11): [KHẨN] Vá lỗi Nhập Excel Hồ Sơ Nhân Sự âm thầm đổi chức danh/phân quyền tài khoản
+
+Báo cáo người dùng (11/2026): *"Hôm qua nhân sự up hồ sơ nhân sự, nó update lại tất cả cái phần user
+trong phần quyền của tôi, chuyển hết sang chức danh khác. Hai cái này không liên quan đến nhau, bạn phải
+chặn ngay cho tôi."*
+
+**Nguyên nhân xác định được**: tính năng "tự động Gán Chức Vụ khi Nhập Excel Hồ Sơ Nhân Sự" (thêm
+10/2026, bên trong `POST /api/hr-profile/bulk-import` — `routes/employeeProfile.js`) — mỗi khi 1 dòng
+Excel được hệ thống xem là "hồ sơ MỚI" và tự liên kết được 1 tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh
+khớp đúng 1 vị trí thật trong Cơ Cấu Tổ Chức, hệ thống sẽ TỰ ĐỘNG gọi `assignPositionToProfile()` —
+hàm này không chỉ ghi `dept`/`jobTitle` xuống tài khoản mà còn gọi `recomputeEffectivePerms()` tính lại
+**toàn bộ `groupIds`/`perms`** theo "Phân quyền theo chức danh" (`lib/hrProfilePositionAssign.js`). Với
+1 lần Nhập Excel hàng loạt (có thể hàng trăm dòng), bất kỳ dòng nào bị nhận nhầm là "hồ sơ mới" (VD lệch
+định dạng Mã Nhân Viên khiến hệ thống không nhận ra hồ sơ đã có) và tự liên kết được tài khoản đều kéo
+theo ghi đè LẶNG LẼ cả chức danh LẪN phân quyền của tài khoản đó — một thao tác thuần nghiệp vụ Nhân Sự
+(nhập hồ sơ) không nên có khả năng tự ý đổi Phân Quyền mà không ai chủ động làm ở màn Phân Quyền.
+
+**Đã vá**: bỏ HẲN bước tự động nói trên khỏi `POST /api/hr-profile/bulk-import`. Nhập Excel Hồ Sơ Nhân
+Sự giờ CHỈ tạo/ghi đè đúng hồ sơ Nhân Sự như trước — KHÔNG còn đụng tới collection `users`/chức vụ/phân
+quyền dưới bất kỳ hình thức nào. "Gán Chức Vụ"/"Gán Chức Vụ Hàng Loạt" (2 thao tác CHỦ ĐÍCH, HR tự bấm
+khi thật sự muốn đổi chức vụ — kéo theo đồng bộ phân quyền theo đúng thiết kế ban đầu) vẫn hoạt động bình
+thường, không đổi gì.
+
+Đã viết lại `tests/test-hr-profile-bulk-import-autoassign.js` thành bộ khoá hành vi MỚI (xác nhận Nhập
+Excel không còn đụng tới `users`/perms dưới mọi kịch bản), chạy lại toàn bộ regression Nhân Sự/Gán Chức
+Vụ/Phân Quyền theo chức danh liên quan — không có hồi quy.
 
 ## v29.61 (2026-11): "🔍 Audit Nhân Sự" — audit thứ 4, sống trong module Nhân Sự (không phải admin-only)
 
