@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**29.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.69 (2026-11): [QUYẾT ĐỊNH ĐẢO NGƯỢC THIẾT KẾ] "Gán Chức Vụ" ở Hồ Sơ Nhân Sự KHÔNG còn tự động đồng bộ xuống Phân Quyền nữa
+
+Báo cáo người dùng trực tiếp (11/2026): "Tôi vừa thấy anh.dp đã đổi trưởng phòng và phòng cntt, sau khi
+hr cập nhật thì chuyển chức dang sang trưởng phòng công nghệ thông tin, bạn xử lý chặn đừng cập nhật từ
+hr sang nhé". Rà soát xác nhận: mọi thay đổi `jobTitle`/`dept` của 1 TÀI KHOẢN chỉ có thể đến từ 3 nơi —
+"Gán Chức Vụ" đơn lẻ, "Gán Chức Vụ hàng loạt qua Excel", và tạo hồ sơ kèm chức vụ ban đầu — KHÔNG phải từ
+"Sửa Hồ Sơ Nhân Sự" thông thường (đã xác nhận riêng, vẫn đúng như v29.64). Cả 3 nơi trên đều TỰ ĐỘNG ghi
+đè `dept`/`jobTitle`/`posType` của tài khoản liên kết NGAY sau khi HR Gán Chức Vụ, và còn tự động tính
+lại TOÀN BỘ `perms` nếu chức danh mới khớp 1 nhóm "Phân quyền theo chức danh" (`permGroup.jobTitles[]`,
+tính năng người dùng từng yêu cầu 11/2026) — nghĩa là 1 thao tác Gán Chức Vụ của HR có thể ÂM THẦM đổi cả
+quyền thao tác thật của tài khoản đó, đúng lúc người dùng đang tự cấu hình riêng ở Phân Quyền/quy trình.
+
+**Đã hỏi lại người dùng rõ ràng 2 vòng** (mức độ chặn cụ thể, vì cơ chế này CHÍNH LÀ "Phân quyền theo
+chức danh" từng được yêu cầu) — người dùng xác nhận **chặn TOÀN BỘ** (dept+jobTitle+posType+perms), chấp
+nhận đánh đổi.
+
+**Đã sửa**: `assignPositionToProfile()` (`lib/hrProfilePositionAssign.js`, dùng chung bởi route
+`set-position` đơn lẻ VÀ `position-assign-apply` hàng loạt Excel) và `POST /api/hr-profile` (tạo hồ sơ
+kèm `positionKey` ban đầu) nay CHỈ còn ghi vào `employeeProfiles` (hồ sơ/lịch sử chức vụ cho mục đích
+Nhân Sự thuần) — KHÔNG đụng tới collection `users` (Phân Quyền) dưới bất kỳ hình thức nào nữa. Hồ Sơ Nhân
+Sự và Phân Quyền từ nay là **2 nguồn ĐỘC LẬP**, không còn đồng bộ 1 chiều như thiết kế cũ.
+
+**HỆ QUẢ VẬN HÀNH CẦN BIẾT** (đã nêu rõ với người dùng):
+- "Phân quyền theo chức danh" KHÔNG còn tự kích hoạt qua Gán Chức Vụ/Nhập Excel hàng loạt nữa — chỉ còn
+  áp dụng khi admin tự lưu lại tài khoản qua đúng màn Phân Quyền (`POST /api/data/users`).
+- Phê duyệt "Theo vị trí" và module Công & Phép (dựa vào `posType` tài khoản để chọn mô hình chấm công)
+  KHÔNG còn tự bám theo chức vụ mới nhất ghi trong Hồ Sơ Nhân Sự nữa — đổi chức vụ ở Hồ Sơ Nhân Sự xong
+  vẫn cần tự vào Phân Quyền cập nhật tay nếu muốn các luồng đó phản ánh đúng vị trí mới.
+- "Vị Trí Kiêm Nhiệm" (secondaryPositions) — tính năng KHÁC, KHÔNG bị ảnh hưởng, vẫn đồng bộ như cũ (đây
+  là cơ chế người dùng vẫn đang chủ động dựa vào để áp vào quy trình phê duyệt).
+
+Test: đảo ngược 4 kịch bản cũ từng khoá hành vi đồng bộ (`test-hr-profile-position-history.js`,
+`test-permgroup-jobtitle-match.js`) sang khoá đúng hành vi MỚI (không đồng bộ). Chạy lại 13 bộ test liên
+quan tới Gán Chức Vụ/Phân quyền theo chức danh/Kiêm Nhiệm/phê duyệt Theo Vị Trí/cascade rename — tất cả
+pass, không phát sinh regression nào khác (1 lỗi `GET /employee-directory` lộ username trong
+`test-hr-profile.js` đã xác nhận là lỗi CŨ có sẵn từ trước, không liên quan đợt vá này).
 
 ## v29.68 (2026-11): "🔍 Audit Nhân Sự" — bỏ gửi email cảnh báo cho admin, chỉ gửi đúng người có quyền audit nhân sự
 

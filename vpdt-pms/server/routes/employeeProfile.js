@@ -530,16 +530,18 @@ router.get('/position-options', requireProfileEdit, async (req, res) => {
 });
 
 // POST /api/hr-profile/by-code/:employeeCode/set-position — HR/admin gán/đổi chức vụ, LUÔN chọn từ 1
-// node POSITION có thật trong bản Cơ Cấu Tổ Chức đang áp dụng (xem applyPositionAssignment()). Nếu hồ
-// sơ đã liên kết tài khoản VPDT, đồng bộ GHI ĐÈ luôn dept/jobTitle của tài khoản đó ngay sau khi ghi
-// xong hồ sơ (2 lệnh khoá TUẦN TỰ trên 2 collection khác nhau — employeeProfiles rồi users — không phải
-// 1 giao dịch chéo collection, cùng cách catalogRename.js xử lý cascade nhiều collection) — đã xác nhận
-// với người dùng: Hồ Sơ Nhân Sự là nguồn CHÍNH THỨC cho chức vụ/phòng ban, tài khoản chỉ còn ý nghĩa
-// liên hệ đăng nhập/tra cứu chéo module, nhưng CẦN khớp đúng để Cơ Cấu Tổ Chức + phân quyền theo phòng
-// ban ở các module khác không bị lệch. posType chỉ đồng bộ nếu node có gán (result.posType khác null) —
-// vị trí CHƯA cấu hình posType thì giữ nguyên posType hiện có của tài khoản (không ghi đè bằng null), vì
-// module Công & Phép (lib/attendance.js) dựa vào posType để xác định mô hình chấm công OFFICE_HOURS/
-// SHIFT_BASED — xem chú thích tại lib/orgChart.js mục 5.
+// node POSITION có thật trong bản Cơ Cấu Tổ Chức đang áp dụng (xem applyPositionAssignment()).
+//
+// ĐẢO NGƯỢC THIẾT KẾ CŨ (11/2026, báo cáo người dùng trực tiếp — xem chú thích đầy đủ ở đầu
+// lib/hrProfilePositionAssign.js): TRƯỚC ĐÂY route này đồng bộ GHI ĐÈ dept/jobTitle/posType + tự tính
+// lại perms (permGroup.jobTitles khớp) xuống tài khoản VPDT liên kết NGAY sau khi ghi hồ sơ. Người dùng
+// báo cáo việc này âm thầm đổi chức danh/quyền của tài khoản đang được tự cấu hình riêng ở Phân Quyền
+// (case "anh.dp" tự đổi thành "Trưởng Phòng Công Nghệ Thông Tin" chỉ vì HR gán chức vụ trong Hồ Sơ Nhân
+// Sự) — yêu cầu RÕ RÀNG chặn TOÀN BỘ. Nay route này CHỈ còn ghi vào employeeProfiles (hồ sơ/lịch sử chức
+// vụ) — KHÔNG đụng gì đến "users" (Phân Quyền) nữa. LƯU Ý VẬN HÀNH: vì posType không còn tự đồng bộ,
+// module Công & Phép (lib/attendance.js, dựa vào posType tài khoản để chọn mô hình chấm công
+// OFFICE_HOURS/SHIFT_BASED) và phê duyệt "Theo vị trí" sẽ KHÔNG còn tự bám theo Hồ Sơ Nhân Sự nữa — cần
+// admin tự cập nhật tay ở Phân Quyền nếu muốn các module đó phản ánh đúng chức vụ mới.
 router.post('/by-code/:employeeCode/set-position', async (req, res) => {
   try {
     if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới gán chức vụ' });
@@ -1267,7 +1269,7 @@ router.post('/', requireProfileCreate, async (req, res) => {
     const appData = await getAllAppData();
     assertActiveAccountIfGiven(username, appData.users || []);
     const applied = positionKey ? orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []) : null;
-    let created, syncTarget = null;
+    let created;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name, {
         employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
@@ -1280,17 +1282,14 @@ router.post('/', requireProfileCreate, async (req, res) => {
         // khác qua lỗi 409 trùng CCCD — xem assertNationalIdNotDuplicated() ở lib/employeeProfile.js.
         canViewFull: employeeProfile.canFullViewProfiles(req.freshUser) || employeeProfile.canEditProfiles(req.freshUser)
       });
+      // KHÔNG còn đồng bộ jobTitle/dept/posType xuống "users" ở đây nữa (11/2026, cùng quyết định "chặn
+      // TOÀN BỘ" ở assignPositionToProfile(), lib/hrProfilePositionAssign.js — đọc chú thích đầy đủ ở
+      // đầu file đó). applyPositionAssignment() chỉ còn ghi vào employeeProfiles.
       if (positionKey) {
-        const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
-        if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
+        employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
       }
       return list;
     });
-    if (syncTarget) {
-      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
-      ));
-    }
     logHrProfileAction(req, 'CREATE', created.employeeCode, `Tạo mới hồ sơ nhân sự [${created.employeeCode}]`);
     res.json({ ok: true, profile: created });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile'); }

@@ -252,9 +252,14 @@ async function main() {
       assertEqual(JSON.stringify(APP_DATA.permGroups[0].jobTitles), JSON.stringify(['Giám Đốc']), 'phải được sanitize gọn, khử trùng lặp');
     });
 
-    // ===== 4) assignPositionToProfile() (lib/hrProfilePositionAssign.js) — điểm ghi TRỰC TIẾP "users"
-    // bỏ qua prepareUsersForSave(), phải tự gọi recomputeEffectivePerms() =====
-    await run.run('assignPositionToProfile(): gán Chức Vụ mới (đổi jobTitle) khớp permGroup.jobTitles -> user nhận quyền NGAY dù route này bỏ qua prepareUsersForSave()', async () => {
+    // ===== 4) assignPositionToProfile() (lib/hrProfilePositionAssign.js) — LỖI ĐÃ VÁ (11/2026, báo cáo
+    // người dùng trực tiếp, case "anh.dp"): hàm này TRƯỚC ĐÂY ghi TRỰC TIẾP xuống "users" + tự gọi
+    // recomputeEffectivePerms() để "Phân quyền theo chức danh" tự khớp ngay khi Gán Chức Vụ — nay đã
+    // NGỪNG HẲN (chặn TOÀN BỘ dept/jobTitle/posType/perms, xem chú thích đầy đủ ở đầu
+    // lib/hrProfilePositionAssign.js). Test này đảo NGƯỢC kỳ vọng cũ: xác nhận KHÔNG CÒN đồng bộ/khớp
+    // quyền nào xảy ra qua đường Gán Chức Vụ nữa — "Phân quyền theo chức danh" giờ chỉ còn áp dụng khi
+    // admin tự lưu lại tài khoản qua đúng màn Phân Quyền (POST /api/data/users, đã test ở mục 1-3 trên). =====
+    await run.run('assignPositionToProfile(): gán Chức Vụ mới (đổi jobTitle) KHÔNG còn đồng bộ/khớp permGroup.jobTitles xuống "users" nữa (chặn TOÀN BỘ theo yêu cầu người dùng 11/2026)', async () => {
       resetData();
       APP_DATA.permGroups = [{ id: 'G_GD3', perms: { hrAttendanceManage: true }, jobTitles: ['Giám Đốc'] }];
       APP_DATA.users.push({ id: 2, username: 'nv.moi', name: 'Nhân Viên Mới', dept: 'Phòng A', jobTitle: 'Nhân Viên', perms: {}, active: true });
@@ -263,7 +268,7 @@ async function main() {
 
       const { assignPositionToProfile } = require('../lib/hrProfilePositionAssign');
       // Stub tối giản employeeProfile.applyPositionAssignment() — không cần logic thật của module đó,
-      // chỉ cần trả đúng {jobTitle,dept,posType} để assignPositionToProfile() đồng bộ xuống "users".
+      // chỉ cần mutate đúng profile (hàm hiện nay KHÔNG còn đọc return value để đồng bộ "users" nữa).
       const employeeProfileLib = require('../lib/employeeProfile');
       const origApply = employeeProfileLib.applyPositionAssignment;
       const origFind = employeeProfileLib.findProfile;
@@ -277,15 +282,16 @@ async function main() {
       const origGetApplied = orgChartLib.getAppliedVersion;
       orgChartLib.getAppliedVersion = () => null;
       try {
-        await assignPositionToProfile('NV001', 'posKey1', ADMIN, {});
+        const updated = await assignPositionToProfile('NV001', 'posKey1', ADMIN, {});
+        assertEqual(updated.jobTitle, 'Giám Đốc', 'hồ sơ (employeeProfiles) VẪN phải được cập nhật đúng chức vụ mới');
       } finally {
         employeeProfileLib.applyPositionAssignment = origApply;
         employeeProfileLib.findProfile = origFind;
         orgChartLib.getAppliedVersion = origGetApplied;
       }
       const saved = APP_DATA.users.find(u => u.username === 'nv.moi');
-      assertEqual(saved.jobTitle, 'Giám Đốc', 'jobTitle phải được đồng bộ xuống users');
-      assertEqual(saved.perms.hrAttendanceManage, true, 'phải TỰ nhận quyền nhóm khớp chức danh "Giám Đốc" ngay sau khi Gán Chức Vụ, không cần thao tác gì thêm');
+      assertEqual(saved.jobTitle, 'Nhân Viên', 'jobTitle của TÀI KHOẢN (Phân Quyền) phải giữ NGUYÊN, KHÔNG bị Gán Chức Vụ ghi đè nữa');
+      assertEqual(JSON.stringify(saved.perms || {}), JSON.stringify({}), 'perms của TÀI KHOẢN phải giữ NGUYÊN — "Phân quyền theo chức danh" KHÔNG còn tự kích hoạt qua Gán Chức Vụ nữa');
     });
 
     run.summary();

@@ -231,25 +231,32 @@ async function main() {
       assertEqual(res.body.profile.positionHistory.length, 1, 'Có 1 dòng lịch sử');
     });
 
-    await run.run('POST /by-code/:code/set-position — hồ sơ ĐÃ liên kết tài khoản -> đồng bộ GHI ĐÈ dept/jobTitle/posType của tài khoản đó', async () => {
+    // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng trực tiếp — case "anh.dp" tự đổi chức danh tài khoản chỉ vì
+    // HR Gán Chức Vụ trong Hồ Sơ Nhân Sự, ảnh hưởng tới Phân Quyền đang tự cấu hình riêng): ĐẢO NGƯỢC 2
+    // kỳ vọng cũ bên dưới — Gán Chức Vụ giờ CHỈ ghi vào employeeProfiles, KHÔNG còn đồng bộ bất kỳ field
+    // nào (dept/jobTitle/posType/perms) xuống "users" nữa, dù hồ sơ đã liên kết tài khoản thật. Xem chú
+    // thích đầy đủ ở đầu lib/hrProfilePositionAssign.js.
+    await run.run('POST /by-code/:code/set-position — hồ sơ ĐÃ liên kết tài khoản -> KHÔNG còn đồng bộ dept/jobTitle/posType xuống tài khoản nữa (chặn TOÀN BỘ theo yêu cầu người dùng)', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV100', username: 'emp1' });
       const res = await api('POST', '/api/hr-profile/by-code/NV100/set-position', { positionKey: 'POS-NV-KD' }, HR_FULL);
       assertEqual(res.status, 200, 'Gán thành công');
+      assertEqual(res.body.profile.jobTitle, 'Nhân Viên', 'Hồ Sơ Nhân Sự VẪN phải cập nhật đúng chức vụ mới');
       const syncedUser = APP_DATA.users.find(u => u.username === 'emp1');
-      assertEqual(syncedUser.jobTitle, 'Nhân Viên', 'Tài khoản emp1 phải được đồng bộ jobTitle mới');
-      assertEqual(syncedUser.dept, 'Phòng Kinh Doanh', 'Tài khoản emp1 phải được đồng bộ dept mới');
-      assertEqual(syncedUser.posType, 'STORE', 'Tài khoản emp1 phải được đồng bộ posType mới (node POS-NV-KD gắn STORE)');
+      assertEqual(syncedUser.jobTitle, 'Chức Cũ', 'Tài khoản emp1 PHẢI giữ NGUYÊN jobTitle cũ, không bị Gán Chức Vụ ghi đè nữa');
+      assertEqual(syncedUser.dept, 'Cũ', 'Tài khoản emp1 PHẢI giữ NGUYÊN dept cũ');
+      assertEqual(syncedUser.posType, 'HO', 'Tài khoản emp1 PHẢI giữ NGUYÊN posType cũ (node POS-NV-KD gắn STORE nhưng không còn đồng bộ)');
     });
 
-    await run.run('POST /by-code/:code/set-position — vị trí CHƯA gán posType (POS-TGD) -> KHÔNG ghi đè posType hiện có của tài khoản', async () => {
+    await run.run('POST /by-code/:code/set-position — mọi vị trí (kể cả CHƯA gán posType như POS-TGD) đều KHÔNG đụng gì tới tài khoản', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV100', username: 'emp1' });
       const res = await api('POST', '/api/hr-profile/by-code/NV100/set-position', { positionKey: 'POS-TGD' }, HR_FULL);
       assertEqual(res.status, 200, 'Gán thành công');
+      assertEqual(res.body.profile.jobTitle, 'Tổng Giám Đốc', 'Hồ Sơ Nhân Sự vẫn cập nhật đúng');
       const syncedUser = APP_DATA.users.find(u => u.username === 'emp1');
-      assertEqual(syncedUser.jobTitle, 'Tổng Giám Đốc', 'jobTitle vẫn đồng bộ đúng');
-      assertEqual(syncedUser.posType, 'HO', 'posType giữ nguyên giá trị cũ (HO) — KHÔNG bị ghi đè thành null');
+      assertEqual(syncedUser.jobTitle, 'Chức Cũ', 'Tài khoản giữ nguyên jobTitle cũ — không đồng bộ');
+      assertEqual(syncedUser.posType, 'HO', 'posType giữ nguyên giá trị cũ (HO) — không đồng bộ');
     });
 
     await run.run('POST /by-code/:code/set-position — người không có hrProfileManage bị chặn 403', async () => {
@@ -259,14 +266,14 @@ async function main() {
       assertEqual(res.status, 403, 'Phải bị chặn 403');
     });
 
-    await run.run('POST / (tạo hồ sơ) — kèm positionKey ban đầu -> áp dụng NGAY trong cùng giao dịch, đồng bộ users luôn nếu có username', async () => {
+    await run.run('POST / (tạo hồ sơ) — kèm positionKey ban đầu -> áp dụng NGAY trong hồ sơ, nhưng KHÔNG còn đồng bộ xuống users nữa', async () => {
       resetAppData();
       const res = await api('POST', '/api/hr-profile', { employeeCode: 'NV100', username: 'emp1', positionKey: 'POS-TGD' }, HR_FULL);
       assertEqual(res.status, 200, 'Tạo thành công');
-      assertEqual(res.body.profile.jobTitle, 'Tổng Giám Đốc', 'Chức vụ ban đầu áp dụng ngay lúc tạo');
+      assertEqual(res.body.profile.jobTitle, 'Tổng Giám Đốc', 'Chức vụ ban đầu áp dụng ngay lúc tạo (Hồ Sơ Nhân Sự)');
       assertEqual(res.body.profile.positionHistory.length, 1, 'Có đúng 1 dòng lịch sử (mốc bổ nhiệm đầu tiên)');
       const syncedUser = APP_DATA.users.find(u => u.username === 'emp1');
-      assertEqual(syncedUser.jobTitle, 'Tổng Giám Đốc', 'Tài khoản liên kết cũng được đồng bộ ngay lúc tạo');
+      assertEqual(syncedUser.jobTitle, 'Chức Cũ', 'Tài khoản liên kết PHẢI giữ NGUYÊN jobTitle cũ — không còn đồng bộ lúc tạo hồ sơ nữa');
     });
 
     await run.run('GET /by-code/:code/history — CẦN CẢ hrProfileManage LẪN hrContractManage (hoặc admin), chỉ 1 trong 2 -> 403', async () => {
