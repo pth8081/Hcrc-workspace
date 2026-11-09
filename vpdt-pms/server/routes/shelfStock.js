@@ -28,6 +28,7 @@ const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
 const { parseVNDateTime } = require('../lib/recordActions');
+const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
@@ -234,6 +235,10 @@ router.get('/system-inventory', async (req, res) => {
       }
       scannedTodayCount = scannedMaHangToday.size;
       rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+      // CỘNG GỘP theo maHang (11/2026, báo cáo người dùng kèm ảnh chụp — 1 mã hàng hiện 2 DÒNG với "Tồn
+      // Kho Hệ Thống" KHÁC NHAU, VD "0" và "8", khiến người kiểm đếm không biết tin số nào) — xem chú
+      // thích đầy đủ tại lib/shelfInventoryAggregate.js.
+      rows = aggregateSystemInventoryRowsByMaHang(rows);
     }
     // maDiem trả kèm (11/2026, theo yêu cầu người dùng: "đối chiếu sai tôi không biết được") — để client
     // hiện rõ ĐANG đối chiếu với Mã Điểm nào ngay trên màn Đối Chiếu, người dùng tự so lại với cột "Mã

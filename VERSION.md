@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**29.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.76 (2026-11): Fix "Kiểm Soát Hàng Hóa" — Đối Chiếu gộp trùng mã hàng (API Tồn Kho trả nhiều dòng cho cùng 1 mã)
+
+Tiếp nối v29.75: ảnh chụp người dùng gửi cũng cho thấy 1 mã hàng ("2005332610") xuất hiện 2 DÒNG trong
+bảng "📊 Đối Chiếu" với "Tồn Kho Hệ Thống" KHÁC NHAU (0 và 8) — người kiểm đếm không biết tin số nào, và
+"Khớp"/"Lệch" tính sai vì chỉ so với đúng 1 trong 2 dòng. Đã hỏi lại người dùng: dữ liệu thô từ API Tồn
+Kho BRGMART (`lib/inventoryApiClient.js`) có thể trả nhiều dòng cho CÙNG 1 mã hàng (VD theo lô/kho con
+khác nhau) — người dùng xác nhận **cộng gộp lại thành 1 dòng duy nhất** trước khi so sánh.
+
+**Đã vá**: thêm `lib/shelfInventoryAggregate.js` (hàm thuần `aggregateSystemInventoryRowsByMaHang()`) —
+cộng dồn `soLuongTon` của mọi dòng trùng `maHang` thành 1 dòng, giữ `tenHang` không rỗng đầu tiên gặp
+được. Áp dụng ngay sau bước lọc "chỉ mã đã scan hôm nay" ở `routes/shelfStock.js` GET
+`/system-inventory?scope=recon` (đúng nhánh màn Đối Chiếu dùng — picker Ghi Nhận và màn Hạn Sử Dụng nhận
+nguyên mảng đầy đủ, không qua nhánh này nên không đổi).
+
+Test mới `tests/test-shelf-inventory-aggregate.js` (7 kịch bản: gộp đúng tổng, không gộp nhầm mã khác
+nhau, gộp ≥3 dòng, tenHang rỗng, giá trị rác không phải số, mảng rỗng, dòng thiếu mã hàng). Demo
+Playwright thật mới `tests/demo-shelf-recon-duplicate-mahang.js` mô phỏng ĐÚNG kịch bản ảnh chụp người
+dùng gửi (mã SP002 có 2 dòng tồn kho 0 và 8) — ảnh chụp sau khi vá xác nhận chỉ còn 1 dòng SP002, Tồn
+Kho Hệ Thống = 8 (tổng), Kết Quả = Khớp. Chạy lại toàn bộ test Kiểm Soát Hàng Hóa liên quan
+(`test-shelf-kehang`, `test-shelf-recon-digest`, `demo-shelf-recon-scanned-only`) — PASS 100%, không
+regression.
 
 ## v29.75 (2026-11): Fix "Kiểm Soát Hàng Hóa" — Đối Chiếu/Ngưỡng Tồn luôn hiện "Trên Kệ Hôm Nay" = 0 dù vừa scan kệ
 

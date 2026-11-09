@@ -29,6 +29,7 @@ const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
 const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
+const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -989,6 +990,9 @@ function createDispatcher(state) {
           }
           scannedTodayCount = scannedMaHangToday.size;
           rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+          // Cộng gộp trùng mã hàng (11/2026) — mirror ĐÚNG routes/shelfStock.js thật, xem
+          // lib/shelfInventoryAggregate.js.
+          rows = aggregateSystemInventoryRowsByMaHang(rows);
         }
         return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount } };
       }
