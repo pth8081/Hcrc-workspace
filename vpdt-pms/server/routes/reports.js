@@ -132,8 +132,12 @@ const REPORT_QUERY_CONFIGS = {
   // động khác của itPriceApprovals đã có — admin tắt module Mua Hàng/Vận Hành cho 1 tài khoản vẫn export
   // được báo cáo đầy đủ hồ sơ Mẫu Giá qua route này.
   itPriceApprovals: {
+    // `p` (tham số thứ 4, 11/2026): cùng waiver "khớp đúng vị trí kiêm nhiệm LÀ ĐỦ, không cần Khối 0" đã
+    // áp dụng cho route Duyệt/Tải tệp — người CHỈ kiêm nhiệm 1 vai trò duyệt giá (không có moduleAccess.
+    // muaHang/vanHanh/itSupport) vẫn cần thấy đúng hồ sơ mình đã duyệt ở Báo Cáo. Xem chú thích đầy đủ ở
+    // canAccessItPriceApprovalModuleServer() (lib/recordViewScope.js).
     filterFn: (items, user, appData) => (items || [])
-      .filter(p => canAccessItPriceApprovalModuleServer(user, p.priceType, appData) && canViewItPriceApproval(user, p, appData)),
+      .filter(p => canAccessItPriceApprovalModuleServer(user, p.priceType, appData, p) && canViewItPriceApproval(user, p, appData)),
     needsAppData: true
   },
   itServiceRenewals: { filterFn: filterItServiceRenewalsForUser, needsAppData: false },

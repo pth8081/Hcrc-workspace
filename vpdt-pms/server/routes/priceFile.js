@@ -209,7 +209,11 @@ router.post('/:id/download-marked', uploadRateLimiter, async (req, res) => {
     if (!(await canViewItPriceApproval(req.freshUser, item, appData))) {
       return res.status(403).json({ error: 'Bạn không có quyền tải tệp của đề xuất này' });
     }
-    if (!canAccessItPriceApprovalModuleServer(req.freshUser, item.priceType, appData)) {
+    // `item` (tham số thứ 4, 11/2026): cùng waiver "khớp đúng vị trí kiêm nhiệm LÀ ĐỦ, không cần Khối 0"
+    // đã áp dụng cho route Duyệt (routes/workflow.js runApprove()) — người CHỈ kiêm nhiệm 1 vai trò duyệt
+    // giá (không có moduleAccess.muaHang/vanHanh/itSupport) vẫn cần tải được đúng tệp bảng giá đã duyệt
+    // của bước mình, không riêng gì bước Duyệt. Xem chú thích đầy đủ ở canAccessItPriceApprovalModuleServer().
+    if (!canAccessItPriceApprovalModuleServer(req.freshUser, item.priceType, appData, item)) {
       return res.status(403).json({ error: 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
     }
 

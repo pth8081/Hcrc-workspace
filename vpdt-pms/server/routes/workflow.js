@@ -65,9 +65,13 @@ const WORKFLOW_MODULE_ACCESS_KEYS = {
 // tách Item2) — mirror ĐÚNG canAccessItPriceApprovalModuleServer() (lib/recordViewScope.js). `priceType`
 // chỉ có khi đã tải được bản ghi (item.priceType) — nơi gọi cho module này PHẢI gọi lại hàm này SAU KHI
 // đã khoá+đọc được item (xem runApprove() bên dưới), không gọi ở đầu route như các module khác.
-function assertWorkflowModuleAccess(user, moduleKey, priceType, appData) {
+// `item` (tham số thứ 5, optional, 11/2026): cùng waiver "khớp đúng vị trí kiêm nhiệm LÀ ĐỦ, không cần
+// Khối 0" đã áp dụng ở route Duyệt (xem runApprove() bên dưới) — mirror cho route Chuyển Tiếp Xin Ý
+// Kiến (forward route gọi thẳng hàm này, không có waiver riêng như runApprove()). Xem chú thích đầy đủ ở
+// canAccessItPriceApprovalModuleServer() (lib/recordViewScope.js).
+function assertWorkflowModuleAccess(user, moduleKey, priceType, appData, item) {
   if (moduleKey === 'itPriceApprovals') {
-    if (!canAccessItPriceApprovalModuleServer(user, priceType, appData)) {
+    if (!canAccessItPriceApprovalModuleServer(user, priceType, appData, item)) {
       throw new WorkflowError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
     }
     return;
@@ -237,7 +241,7 @@ router.post('/:module/:id/forward', async (req, res) => {
       }
       // itPriceApprovals: lượt kiểm module access ĐÚNG priceType, hoãn tới đây (đã có item.priceType) —
       // xem chú thích đầy đủ ở nhánh "if (moduleKey !== 'itPriceApprovals')" phía trên.
-      if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData);
+      if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData, item);
       if (!Array.isArray(item.forwardThreads)) item.forwardThreads = [];
       let step;
       if (parentId) {

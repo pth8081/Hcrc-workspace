@@ -1971,7 +1971,7 @@ router.get('/', async (req, res) => {
         if (col === 'itPriceApprovals') {
           if (Array.isArray(data.itPriceApprovals)) {
             data.itPriceApprovals = data.itPriceApprovals.filter(p =>
-              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, data) || isForwardThreadParticipant(req.freshUser, p));
+              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, data, p) || isForwardThreadParticipant(req.freshUser, p));
           }
           continue;
         }
@@ -2181,7 +2181,7 @@ router.get('/lazy/:groupKey', async (req, res) => {
         if (col === 'itPriceApprovals') {
           if (Array.isArray(result.itPriceApprovals)) {
             result.itPriceApprovals = result.itPriceApprovals.filter(p =>
-              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, groupAppData) || isForwardThreadParticipant(req.freshUser, p));
+              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, groupAppData, p) || isForwardThreadParticipant(req.freshUser, p));
           }
           continue;
         }

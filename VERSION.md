@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**29.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.74 (2026-11): TÌM RA + VÁ nguyên nhân gốc "vị trí kiêm nhiệm hiện đúng tên nhưng hồ sơ thật không hiện/không có nút Duyệt" — "Khối 0" (quyền module) xoá hồ sơ TRƯỚC khi kịp tính người duyệt
+
+Tiếp nối điều tra ở v29.73 (khối "🔧 Thông Tin Kỹ Thuật"): khối debug xác nhận hệ thống đã tính ĐÚNG
+người kiêm nhiệm vào `currentStepApprovers` của đúng hồ sơ thật — nhưng người đó vẫn không thấy hồ sơ ở
+Hộp Thư Phê Duyệt, mở chi tiết cũng không có nút Duyệt/Từ chối/Yêu Cầu Bổ Sung. Tìm ra nguyên nhân gốc:
+
+**"Khối 0" (quyền truy cập module, `canAccessItPriceApprovalModuleServer()` ở `lib/recordViewScope.js`)
+là 1 LỚP LỌC RIÊNG, CHẠY TRƯỚC khi hệ thống tính người duyệt theo "Cấu Hình Nâng Cao"** (chức danh/kiêm
+nhiệm + `itPriceWholesaleStoreMixedApprovalRules`). v29.71 đã vá waiver "khớp đúng vị trí LÀ ĐỦ, không
+cần Khối 0" cho đúng 1 chỗ — route bấm Duyệt (`routes/workflow.js`) — nhưng `canAccessItPriceApprovalModuleServer()`
+tự nó vẫn CHƯA biết gì về nhánh kiêm nhiệm này (chỉ biết "có quyền module Hỗ Trợ IT/Mua Hàng/Vận Hành"
+hoặc "thuộc Nhóm Phê Duyệt Cuối"). Hậu quả: vòng lặp "Khối 0" ở **`GET /api/data`** (2 vị trí trong
+`routes/data.js`) — nơi quyết định hồ sơ nào được GỬI VỀ cho trình duyệt người dùng — vẫn XOÁ SẠCH hồ sơ
+Bán Buôn/Bán Lẻ khỏi dữ liệu của 1 người CHỈ kiêm nhiệm đúng 1 vai trò duyệt giá (công việc chính ở
+phòng ban/module hoàn toàn khác, không có lý do gì phải mở `moduleAccess.vanHanh`/`muaHang`/`itSupport`
+cho họ) — hồ sơ "biến mất" NGAY TỪ BƯỚC ĐỌC DỮ LIỆU, trước khi trình duyệt kịp tính `currentStepApprovers`
+để hiện nút. Cùng lỗ hổng này còn ảnh hưởng tới route Chuyển Tiếp Xin Ý Kiến, route tải tệp bảng giá đã
+duyệt (`routes/priceFile.js`) và route Báo Cáo (`routes/reports.js`).
+
+**Đã vá**: `canAccessItPriceApprovalModuleServer(user, priceType, data, item)` nhận thêm tham số `item`
+(tuỳ chọn) — khi có, thêm 1 nhánh OR thứ 3: người đó có khớp làm người duyệt bước hiện tại của ĐÚNG hồ sơ
+này không (dùng lại chính hàm tính người duyệt `MODULE_CONFIGS.itPriceApprovals.resolveWfConfig()`, không
+dựng logic khớp mới) — mirror đúng waiver đã áp dụng ở route Duyệt. Đã cập nhật MỌI nơi gọi hàm này đang
+có sẵn hồ sơ trong tay để truyền thêm `item`: `routes/data.js` (2 vị trí, vòng lặp "Khối 0" chính + nhóm
+tải lười), `routes/workflow.js` (route Chuyển Tiếp Xin Ý Kiến), `routes/priceFile.js` (tải tệp đã duyệt),
+`routes/reports.js` (Báo Cáo). Nơi KHÔNG có sẵn hồ sơ cụ thể (VD lúc TẠO mới, `routes/create.js`) giữ
+nguyên hành vi cũ — không mở rộng quyền ngoài phạm vi cần.
+
+Test mới `tests/test-itprice-khoi0-mixed-approver-waiver.js` (7 kịch bản) chứng minh RÕ cả lỗi CŨ (gọi
+không kèm `item` vẫn chặn sai người kiêm nhiệm hợp lệ) và bản VÁ (kèm `item` thì đúng), đồng thời xác
+nhận KHÔNG mở rộng quyền cho người không khớp, và 2 nhánh cũ (moduleAccess/Nhóm Phê Duyệt Cuối) không bị
+ảnh hưởng. Toàn bộ test liên quan khác (extraApprovalGroups, phạm vi xem itPriceApprovals, mixed-approval
+Bán Buôn, Approval Hub, Khối 0...) đã chạy lại — PASS 100%, không có regression.
 
 ## v29.73 (2026-11): Thêm "🔧 Thông Tin Kỹ Thuật" (chỉ Admin) trong chi tiết Phê Duyệt Giá — hỗ trợ điều tra "vị trí kiêm nhiệm hiện đúng tên ở Xem Trước nhưng hồ sơ thật không áp dụng"
 

@@ -2063,9 +2063,31 @@ function renderItPriceModalControls(p) {
   // trên — chỉ việc tra tên hiển thị cho từng username, cùng khuôn resolveApprovalHubSubmitter()
   // (core-approvalhub.js).
   if (currentUser?.perms?.admin) {
+    // "Khối 0" (quyền truy cập module) là 1 LỚP LỌC RIÊNG, CHẠY TRƯỚC khi filterItPriceApprovalsForUser()
+    // tính đúng người duyệt theo quy trình (xem canAccessItPriceApprovalModuleServer(), lib/recordViewScope.js)
+    // — 1 người ĐÃ được tính đúng vào currentStepApprovers (vị trí kiêm nhiệm khớp đúng quy trình) vẫn có
+    // thể bị vòng lặp Khối 0 ở routes/data.js XOÁ SẠCH hồ sơ WHOLESALE/RETAIL khỏi GET /api/data của họ
+    // TRƯỚC KHI currentStepApprovers kịp áp dụng, nếu tài khoản đó KHÔNG có quyền module Hỗ Trợ IT/Vận
+    // Hành(Bán Buôn)/Mua Hàng(Bán Lẻ) và cũng không thuộc Nhóm Phê Duyệt Cuối đúng priceType — mirror ĐÚNG
+    // điều kiện canAccessItPriceApprovalModuleServer() để admin tự phát hiện ngay tại đây (không cần F12),
+    // thay vì chỉ tin "có tên đúng trong currentStepApprovers là chắc chắn thấy được hồ sơ".
+    const groupsKey = p.priceType === 'WHOLESALE' ? 'extraApprovalGroups_ITPRICE_WHOLESALE' : 'extraApprovalGroups_ITPRICE_RETAIL';
+    const extraGroups = DB[groupsKey] || [];
+    function debugKhoi0Check(username) {
+      const u = (DB.users || []).find(x => x.username === username);
+      if (!u) return { ok: false, reason: 'Không tìm thấy tài khoản trong DB.users' };
+      if (hasModuleAccess(u, 'itSupport')) return { ok: true, reason: 'có quyền module Hỗ Trợ IT' };
+      const secondModuleKey = p.priceType === 'WHOLESALE' ? 'vanHanh' : 'muaHang';
+      const secondModuleLabel = p.priceType === 'WHOLESALE' ? 'Vận Hành' : 'Mua Hàng';
+      if (hasModuleAccess(u, secondModuleKey)) return { ok: true, reason: `có quyền module ${secondModuleLabel}` };
+      if (extraGroups.some(g => (g.members || []).includes(username))) return { ok: true, reason: 'thuộc Nhóm Phê Duyệt Cuối' };
+      return { ok: false, reason: `KHÔNG có quyền module Hỗ Trợ IT/${secondModuleLabel}, cũng không thuộc Nhóm Phê Duyệt Cuối` };
+    }
     const approverNames = currentStepApprovers.map(username => {
       const u = (DB.users || []).find(x => x.username === username);
-      return `${escapeHtml(u ? u.name : username)} (${escapeHtml(username)})`;
+      const khoi0 = debugKhoi0Check(username);
+      const khoi0Badge = khoi0.ok ? '' : ` <span class="text-red-600 font-bold">⚠️ BỊ "KHỐI 0" ẨN KHỎI HỒ SƠ (${escapeHtml(khoi0.reason)})</span>`;
+      return `${escapeHtml(u ? u.name : username)} (${escapeHtml(username)})${khoi0Badge}`;
     });
     html += `<details class="bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 p-2">
       <summary class="cursor-pointer font-bold text-slate-700">🔧 Thông Tin Kỹ Thuật (chỉ Admin thấy)</summary>

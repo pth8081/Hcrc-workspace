@@ -1888,7 +1888,21 @@ function canAccessHrFeedbackModuleServer(user) {
 // approver DUY NHẤT của lớp đó — mirror ĐÚNG khuôn docs (isExtraApprovalLayerApprover 'DOC') đã vá cùng
 // đợt. Tham số `data` optional (không phải mọi nơi gọi hàm này đều có appData sẵn) — bỏ qua nhánh này
 // nếu không truyền, giữ nguyên hành vi cũ.
-function canAccessItPriceApprovalModuleServer(user, priceType, data) {
+// `item` (tham số thứ 4, optional, 11/2026 — điều tra báo cáo người dùng "vị trí kiêm nhiệm hiện đúng
+// tên ở debug panel/Xem Trước Quy Trình nhưng hồ sơ THẬT lại không duyệt được"): CÙNG LỚP LỖI với nhánh
+// extraApprovalGroups ngay trên — người được gán làm approver qua "Cấu Hình Nâng Cao" (Chuyên Viên Kiêm
+// Nhiệm, itPriceWholesaleStoreMixedApprovalRules + user.secondaryPositions, xem
+// userHasMixedApprovalPosition()/resolveItPriceWholesaleStoreMixedApprovers() ở lib/workflowEngine.js)
+// hoàn toàn không có lý do nghiệp vụ gì phải có moduleAccess.vanHanh/muaHang/itSupport hay nằm trong
+// Nhóm Phê Duyệt Cuối — họ chỉ KIÊM NHIỆM đúng 1 vai trò duyệt giá, công việc chính ở phòng ban/module
+// khác hẳn. Trước đây "Khối 0" (vòng lặp zero-out ở routes/data.js VÀ assertWorkflowModuleAccess() ở
+// routes/workflow.js) chỉ biết tới 2 nhánh module access + extraApprovalGroups, hoàn toàn không biết tới
+// nhánh "Cấu Hình Nâng Cao" này — xoá sạch hồ sơ khỏi GET /api/data của họ (không thấy hồ sơ, không thấy
+// nút) VÀ chặn 403 nếu họ cố gọi thẳng API duyệt, dù filterItPriceApprovalsForUser()/canApproveStep() đã
+// tính ĐÚNG họ là approver bước hiện tại. Tham số `item` optional + CHỈ xét khi có `data` kèm (cần
+// appData đầy đủ để resolveWfConfig() tính lại approvers) — nơi gọi KHÔNG có sẵn item cụ thể (VD lúc TẠO
+// mới, routes/create.js) bỏ qua nhánh này, giữ nguyên hành vi cũ.
+function canAccessItPriceApprovalModuleServer(user, priceType, data, item) {
   if (!user) return false;
   if (hasModuleAccessServer(user, 'itSupport')) return true;
   if (priceType === 'WHOLESALE') {
@@ -1899,7 +1913,9 @@ function canAccessItPriceApprovalModuleServer(user, priceType, data) {
   if (!data || !user.username) return false;
   const groupsKey = priceType === 'WHOLESALE' ? 'extraApprovalGroups_ITPRICE_WHOLESALE' : 'extraApprovalGroups_ITPRICE_RETAIL';
   const groups = data[groupsKey];
-  return Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username));
+  if (Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username))) return true;
+  if (item && isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, data).approvers, user.username)) return true;
+  return false;
 }
 
 module.exports = {
