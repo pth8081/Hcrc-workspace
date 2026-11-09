@@ -25,6 +25,7 @@ const { decryptSecret } = require('../lib/emailCrypto');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { isUserOptedOutOfEmailModule } = require('../lib/notifyEmailModulesGate');
 const { buildShelfThresholdDigestExcelBuffer, classifyThresholdStatus, DATA_SCOPE_DISCLAIMER } = require('../lib/shelfThresholdDigestExcel');
+const { parseVNDateTime } = require('../lib/recordActions');
 
 async function getCollection(pool, key, fallback) {
   const result = await pool.request()
@@ -51,8 +52,14 @@ async function setCollection(pool, key, value) {
   `);
 }
 
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp — "mới scan kệ hôm nay mà Trên Kệ Hôm Nay/tổng
+// ngưỡng vẫn luôn bằng 0"): createdAt/lastScannedAt của shelfRecords lưu dạng chuỗi "HH:MM:SS D/M/YYYY"
+// (formatCreatedAt(), lib/shelfRecordUpsert.js — THỨ TỰ GIỜ TRƯỚC NGÀY, không phải ISO) — `new Date(dateStr)`
+// KHÔNG tự parse đúng định dạng này (hiểu nhầm "D/M/YYYY" theo kiểu Mỹ M/D/YYYY), khiến MỌI bản ghi dù
+// vừa quét giây trước cũng luôn bị coi là "không phải hôm nay" -> tổng "hôm nay" luôn ra 0, y hệt
+// jobs/shelfStockReconDigestAlert.js đã dùng đúng parseVNDateTime() từ trước (mirror ĐÚNG ở đây).
 function isToday(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseVNDateTime(dateStr) || new Date(dateStr);
   if (isNaN(d.getTime())) return false;
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();

@@ -425,9 +425,17 @@ function resetShelfRecordForm() {
   document.getElementById('srShelfLocationId').value = '';
   setShelfMaHangMatchNote('', false);
 }
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp — "vừa scan kệ hôm nay mà Trên Kệ Hôm Nay vẫn
+// bằng 0"): r.createdAt/lastScannedAt lưu dạng chuỗi "HH:MM:SS D/M/YYYY" (formatCreatedAt(), lib/
+// shelfRecordUpsert.js — GIỜ TRƯỚC NGÀY, không phải ISO) — `new Date(createdAt)` hiểu nhầm "D/M/YYYY"
+// theo kiểu Mỹ M/D/YYYY (VD "09/11/2026" ngỡ là tháng 9 ngày 11, không phải ngày 9 tháng 11), khiến MỌI
+// bản ghi dù vừa ghi nhận giây trước cũng luôn bị coi là "không phải hôm nay" — dùng parseVNDateTime()
+// (core.js, parse đúng định dạng này) thay vì new Date() thô, cùng pattern đã dùng ở sortByCreatedAtDesc
+// chỗ khác trong chính file này (dòng ~3844/4721).
 function isShelfRecordCreatedToday(createdAt) {
   if (!createdAt) return false;
-  const d = new Date(createdAt);
+  const d = parseVNDateTime(createdAt) || new Date(createdAt);
+  if (isNaN(d.getTime())) return false;
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
@@ -1494,8 +1502,11 @@ async function saveShelfStockThresholdEdit(id) {
 // và server jobs/*.js, nên đây là BẢN SAO có chủ đích tính NGAY trên dữ liệu đã có sẵn ở DB (không gọi
 // API riêng) để bảng Ngưỡng Tồn tô màu ngay khi mở màn, không cần đợi email định kỳ. SỬA 1 BÊN NHỚ SỬA
 // CẢ 2 BÊN.
+// LỖI ĐÃ VÁ (11/2026, cùng lỗi với bản ở trên dòng ~435 — chuỗi "HH:MM:SS D/M/YYYY" bị new Date() hiểu
+// nhầm kiểu Mỹ M/D/YYYY, khiến tổng "hôm nay" ở Ngưỡng Tồn luôn ra 0): dùng parseVNDateTime() thay vì
+// new Date() thô — mirror ĐÚNG bản vá vừa áp dụng cho jobs/shelfStockThresholdAlert.js::isToday().
 function isShelfRecordCreatedToday(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseVNDateTime(dateStr) || new Date(dateStr);
   if (isNaN(d.getTime())) return false;
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();

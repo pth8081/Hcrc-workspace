@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**29.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.75 (2026-11): Fix "Kiểm Soát Hàng Hóa" — Đối Chiếu/Ngưỡng Tồn luôn hiện "Trên Kệ Hôm Nay" = 0 dù vừa scan kệ
+
+Báo cáo người dùng kèm 3 ảnh chụp màn hình thật (Ghi Nhận/Đối Chiếu/Hạn Sử Dụng): vừa scan 2 mã hàng lên
+kệ (có đúng thời gian ghi nhận hôm nay), nhưng tab "📊 Đối Chiếu" vẫn hiện "Trên Kệ Hôm Nay" = 0 cho MỌI
+dòng, khiến mọi mã hàng đều báo "Lệch" dù vừa kiểm đúng.
+
+**Nguyên nhân gốc**: `createdAt`/`lastScannedAt` của `shelfRecords` lưu dạng chuỗi tiếng Việt
+`"HH:MM:SS D/M/YYYY"` (`formatCreatedAt()`, `lib/shelfRecordUpsert.js` — GIỜ TRƯỚC NGÀY, không phải
+ISO). Hàm kiểm "có phải ghi nhận hôm nay không" ở CẢ 3 nơi dùng thẳng `new Date(chuỗi đó)` — JavaScript
+hiểu nhầm `"09/11/2026"` theo kiểu Mỹ (tháng/ngày) thành "tháng 9, ngày 11" thay vì đúng "ngày 9, tháng
+11", nên MỌI bản ghi — dù vừa tạo giây trước — cũng luôn bị coi là "không phải hôm nay". Đã dựng lại
+đúng lỗi bằng Node (`new Date("19:18:54 09/11/2026")` ra ngày 11/09, không phải 09/11) trước khi vá, và
+xác nhận hệ thống ĐÃ CÓ sẵn `parseVNDateTime()` (cả client `core.js` lẫn server `lib/recordActions.js`)
+parse đúng định dạng này — chỉ 3 chỗ sau chưa dùng tới:
+
+- `public/js/module-vanhanh.js` — 2 bản `isShelfRecordCreatedToday()` trùng tên (1 dùng cho tab Đối
+  Chiếu, 1 dùng cho bảng xem trước Ngưỡng Tồn — JS chỉ chạy đúng bản khai báo SAU do trùng tên, nhưng cả
+  2 đều sửa cho chắc).
+- `jobs/shelfStockThresholdAlert.js` — `isToday()`, dùng để tính tổng "hôm nay" cho báo cáo Ngưỡng Tồn
+  gửi email định kỳ (ảnh hưởng tới việc bôi màu đỏ/vàng đúng sai trong file Excel đính kèm email thật).
+
+`jobs/shelfStockReconDigestAlert.js` (báo cáo Đối Chiếu gửi email) ĐÃ dùng đúng `parseVNDateTime()` từ
+trước — không cần sửa.
+
+Chạy lại toàn bộ test Kiểm Soát Hàng Hóa liên quan (`test-shelf-kehang`, `test-shelf-recon-digest`,
+`test-shelf-threshold-ui-real-click`, `test-shelf-threshold-digest-ui-real-click`) — PASS 100%. Chạy lại
+`demo-shelf-recon-scanned-only.js` (Playwright THẬT, không phải test logic đơn thuần) — ảnh chụp màn hình
+sau khi vá xác nhận "Trên Kệ Hôm Nay" hiện đúng số (48/25) thay vì 0, "Kết Quả" hiện đúng Khớp/Lệch.
+
+**Lưu ý còn lại (đã nêu với người dùng, CHƯA vá do cần xác nhận nghiệp vụ)**: ảnh chụp người dùng gửi
+cũng cho thấy 1 mã hàng ("2005332610") xuất hiện 2 DÒNG trong bảng Đối Chiếu với "Tồn Kho Hệ Thống" khác
+nhau (0 và 8) — dữ liệu thô từ API Tồn Kho BRGMART (`lib/inventoryApiClient.js`) có thể trả nhiều dòng
+cho CÙNG 1 mã hàng (VD theo lô/kho con) mà hệ thống hiện CHƯA gộp lại trước khi hiện — cần hỏi lại người
+dùng có đúng là 2 dòng tồn kho thật khác nhau (cần giữ riêng) hay nên cộng gộp theo mã hàng trước khi so
+sánh, trước khi sửa tiếp.
 
 ## v29.74 (2026-11): TÌM RA + VÁ nguyên nhân gốc "vị trí kiêm nhiệm hiện đúng tên nhưng hồ sơ thật không hiện/không có nút Duyệt" — "Khối 0" (quyền module) xoá hồ sơ TRƯỚC khi kịp tính người duyệt
 
