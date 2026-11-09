@@ -1057,10 +1057,18 @@ function classifyShelfSystemStockDiscrepancy(systemStock, trackedTotal) {
 // Tra tồn kho hệ thống theo mã hàng/mã vạch (khớp 1 trong 2 — cùng dung nạp như mọi nơi khác). null nếu
 // chưa tải được dữ liệu API đối tác (chưa cấu hình/chưa có Mã Điểm) — KHÔNG phải 0 (0 nghĩa là CÓ dữ
 // liệu và tồn kho thật = 0, khác hẳn ý nghĩa "không biết").
+//
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp — cùng 1 mã hàng hiện "0" ở tab Hạn Sử Dụng nhưng
+// hiện "8" ở tab Đối Chiếu): dữ liệu thô từ API Tồn Kho BRGMART có thể trả NHIỀU dòng cho CÙNG 1 mã hàng
+// (VD theo lô/kho con khác nhau, xem lib/shelfInventoryAggregate.js — đã vá cho tab Đối Chiếu) — hàm này
+// trước đây dùng `.find()` chỉ lấy đúng DÒNG ĐẦU TIÊN khớp, bỏ qua các dòng còn lại, nên 2 tab hiện 2 số
+// khác nhau cho cùng 1 mã hàng dù cùng 1 nguồn dữ liệu. Đổi sang CỘNG DỒN mọi dòng khớp — cùng bản chất
+// "tồn kho hệ thống của mã hàng này = tổng mọi dòng con" đã áp dụng cho Đối Chiếu.
 function findSystemInventoryQtyForProduct(maHang, maVach) {
   if (!shelfSystemInventoryCache || !shelfSystemInventoryCache.length) return null;
-  const row = shelfSystemInventoryCache.find(r => (maHang && r.maHang === maHang) || (maVach && r.maVach === maVach));
-  return row ? Number(row.soLuongTon) || 0 : null;
+  const matches = shelfSystemInventoryCache.filter(r => (maHang && r.maHang === maHang) || (maVach && r.maVach === maVach));
+  if (!matches.length) return null;
+  return matches.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0);
 }
 async function ensureShelfSystemInventoryForExpiry() {
   if (shelfSystemInventoryCache && shelfSystemInventoryCache.length) return;

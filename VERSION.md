@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**29.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.77 (2026-11): Fix "Kiểm Soát Hàng Hóa" — tab "⏰ Hạn Sử Dụng" lệch số với tab "📊 Đối Chiếu" cho cùng 1 mã hàng
+
+Người dùng gửi tiếp 2 ảnh chụp: tab Hạn Sử Dụng hiện "Tồn Kho Hệ Thống" = 0 cho 1 mã hàng, trong khi tab
+Đối Chiếu hiện 8 cho ĐÚNG mã đó — 2 tab lệch số dù cùng 1 nguồn dữ liệu, gây hoang mang không biết tin số
+nào (ảnh chụp lúc đó còn ở bản v29.71, trước khi v29.75/v29.76 kịp triển khai lên server thật).
+
+**Nguyên nhân (cùng gốc với v29.76, 1 nơi khác chưa vá tới)**: `findSystemInventoryQtyForProduct()`
+(`public/js/module-vanhanh.js`, dùng cho cột "Tồn Kho Hệ Thống" ở tab Hạn Sử Dụng) dùng `.find()` — chỉ
+lấy ĐÚNG dòng đầu tiên khớp mã hàng, bỏ qua các dòng trùng còn lại. v29.76 đã vá CỘNG GỘP cho tab Đối
+Chiếu (`lib/shelfInventoryAggregate.js`, phía server) nhưng tab Hạn Sử Dụng đọc dữ liệu qua đường KHÁC
+(nhận nguyên mảng đầy đủ, không qua nhánh `scope=recon`) nên vẫn còn `.find()` chưa được vá.
+
+**Đã vá**: đổi `findSystemInventoryQtyForProduct()` từ `.find()` sang `.filter()` + cộng dồn toàn bộ
+`soLuongTon` của mọi dòng khớp mã hàng/mã vạch — cùng bản chất "tồn kho hệ thống = tổng mọi dòng con" đã
+áp dụng cho Đối Chiếu, nay NHẤT QUÁN ở CẢ 2 tab.
+
+Demo Playwright thật mới `tests/demo-shelf-expiry-duplicate-mahang.js` — mô phỏng đúng kịch bản ảnh chụp
+(mã hàng có 2 dòng tồn kho 0 và 8), xác nhận sau khi vá CẢ 2 tab (Hạn Sử Dụng + Đối Chiếu) hiện CÙNG 1
+số (8), không còn lệch nhau. Chạy lại `test-shelf-kehang`/demo Đối Chiếu liên quan — PASS 100%.
 
 ## v29.76 (2026-11): Fix "Kiểm Soát Hàng Hóa" — Đối Chiếu gộp trùng mã hàng (API Tồn Kho trả nhiều dòng cho cùng 1 mã)
 
