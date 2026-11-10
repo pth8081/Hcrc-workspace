@@ -84,6 +84,18 @@ async function openReportTab(page) {
     assert.strictEqual(info1.headerText, '📍 Siêu Thị: Siêu thị Quận 1', 'LỖI: nhân viên 1 siêu thị phải thấy header đúng tên siêu thị mình, không phải "báo cáo tổng hợp"');
     assert.strictEqual(info1.filterHidden, true, 'LỖI: nhân viên 1 siêu thị KHÔNG được thấy bộ lọc "Siêu Thị" (lộ khả năng xem siêu thị khác)');
     assert.strictEqual(info1.rowCount, 3, 'LỖI: nhân viên phải thấy đúng 3 dòng của ĐÚNG siêu thị mình (không thiếu/thừa)');
+
+    // "📥 Xuất Excel" THẬT (bấm nút thật, không gọi thẳng hàm) — xác nhận gửi đúng cột + đủ 3 dòng, không
+    // có cột "Siêu Thị" (1 siêu thị thì không cần).
+    await page.click('[data-op="exportShelfReportExcel"]');
+    await page.waitForTimeout(150);
+    assert.strictEqual((state.__xlsxExports || []).length, 1, 'LỖI: bấm "📥 Xuất Excel" phải gửi đúng 1 lần gọi POST /api/admin/export-xlsx');
+    const export1 = state.__xlsxExports[0];
+    assert.strictEqual(export1.rows.length, 3, 'LỖI: file Excel của nhân viên phải có đủ 3 dòng');
+    assert.ok(export1.columns.some(c => c.key === 'maHang'), 'LỖI: thiếu cột Mã Hàng trong file Excel');
+    assert.ok(!export1.columns.some(c => c.key === 'dept'), 'LỖI: nhân viên 1 siêu thị không cần cột "Siêu Thị" trong Excel');
+    console.log('[Kịch bản 1 - Xuất Excel]', { rows: export1.rows.length, columns: export1.columns.map(c => c.key) });
+
     await browser.close();
   }
 
@@ -108,6 +120,16 @@ async function openReportTab(page) {
     assert.strictEqual(info2.rowCount, 5, 'LỖI: quản lý vùng phải thấy ĐỦ 5 dòng của CẢ 2 siêu thị (báo cáo tổng hợp)');
     assert.strictEqual(info2.hasStoreColumn, true, 'LỖI: bảng tổng hợp phải tự thêm cột "Siêu Thị" ở đầu khi xem nhiều siêu thị');
 
+    // "📥 Xuất Excel" THẬT ở báo cáo tổng hợp (chưa lọc) — phải có đủ 5 dòng + cột "Siêu Thị".
+    await page.click('[data-op="exportShelfReportExcel"]');
+    await page.waitForTimeout(150);
+    assert.strictEqual((state.__xlsxExports || []).length, 1, 'LỖI: bấm "📥 Xuất Excel" ở báo cáo tổng hợp phải gửi đúng 1 lần gọi');
+    const export2 = state.__xlsxExports[0];
+    assert.strictEqual(export2.rows.length, 5, 'LỖI: file Excel báo cáo tổng hợp (chưa lọc) phải có đủ 5 dòng của CẢ 2 siêu thị');
+    assert.ok(export2.columns.some(c => c.key === 'dept'), 'LỖI: báo cáo tổng hợp PHẢI có cột "Siêu Thị" trong Excel (phân biệt được dòng của siêu thị nào)');
+    console.log('[Kịch bản 2 - Xuất Excel chưa lọc]', { rows: export2.rows.length, columns: export2.columns.map(c => c.key) });
+    state.__xlsxExports.length = 0;
+
     // Lọc riêng "Siêu thị Quận 3" — xác nhận bộ lọc hoạt động thật.
     await page.selectOption('#shelfReportStoreFilter', 'Siêu thị Quận 3');
     await page.waitForTimeout(150);
@@ -119,6 +141,17 @@ async function openReportTab(page) {
     console.log('[Kịch bản 2 - Lọc riêng Q3]', info3);
     assert.strictEqual(info3.rowCount, 2, 'LỖI: lọc riêng "Siêu thị Quận 3" phải chỉ còn đúng 2 dòng của siêu thị đó');
     assert.strictEqual(info3.allRowsAreQ3, true, 'LỖI: lọc riêng "Siêu thị Quận 3" nhưng vẫn lẫn dòng của siêu thị khác');
+
+    // "📥 Xuất Excel" SAU KHI lọc riêng 1 siêu thị — file xuất ra cũng phải CHỈ còn đúng 2 dòng đã lọc
+    // (xác nhận exportShelfReportExcel() đọc đúng filter hiện tại, không xuất nhầm toàn bộ dữ liệu gốc).
+    await page.click('[data-op="exportShelfReportExcel"]');
+    await page.waitForTimeout(150);
+    assert.strictEqual(state.__xlsxExports.length, 1, 'LỖI: bấm "📥 Xuất Excel" sau khi lọc phải gửi đúng 1 lần gọi');
+    const export3 = state.__xlsxExports[0];
+    assert.strictEqual(export3.rows.length, 2, 'LỖI: file Excel SAU KHI lọc "Siêu thị Quận 3" phải chỉ còn đúng 2 dòng, không xuất nhầm toàn bộ 5 dòng gốc');
+    assert.ok(export3.rows.every(r => r.dept === 'Siêu thị Quận 3'), 'LỖI: file Excel sau khi lọc lẫn dòng của siêu thị khác');
+    console.log('[Kịch bản 2 - Xuất Excel đã lọc]', { rows: export3.rows.length });
+
     console.log('✅ Tất cả assertion đều PASS.');
     await browser.close();
   }

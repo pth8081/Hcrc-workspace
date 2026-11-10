@@ -1075,6 +1075,17 @@ function createDispatcher(state) {
         return { status: 200, body: { ok: true } };
       }
 
+      // POST /api/admin/export-xlsx (11/2026, cần để test THẬT nút "📥 Xuất Excel" ở Báo Cáo Kiểm Soát
+      // Hàng Hóa) — mirror tinh thần __xlsxExports của tests/_mock-backend.js (harness KHÁC), nhưng ghi
+      // vào state.__xlsxExports (không phải window toàn cục) — ĐÚNG khuôn dữ liệu test ở file này: state
+      // sống bên Node (createDispatcher(state)), test đọc lại thẳng state.__xlsxExports sau khi click,
+      // không cần page.evaluate() đọc window. KHÔNG tạo file .xlsx thật (đủ để xác nhận payload gửi đúng).
+      if (pathName === '/api/admin/export-xlsx' && method === 'POST') {
+        state.__xlsxExports = state.__xlsxExports || [];
+        state.__xlsxExports.push(body);
+        return { status: 200, body: {} };
+      }
+
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
     } catch (err) {
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
@@ -1155,7 +1166,12 @@ async function launchPage(port, state) {
       return {
         ok: result.status >= 200 && result.status < 300,
         status: result.status,
-        json: async () => result.body
+        json: async () => result.body,
+        // blob() (11/2026, cần cho downloadXlsxFromServer()/core.js gọi res.blob() sau POST
+        // /api/admin/export-xlsx) — mock không tạo file .xlsx thật, trả Blob rỗng là đủ để hàm gọi
+        // URL.createObjectURL()/link.click() không throw; nội dung thật của payload export đã được
+        // dispatcher lưu lại ở state.__xlsxExports (xem createDispatcher()) để test đọc lại kiểm tra.
+        blob: async () => new Blob([])
       };
     };
 
