@@ -681,10 +681,11 @@ async function applyOrgChartVersionClick(keepEffectiveDate) {
   try {
     result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, { keepEffectiveDate: !!keepEffectiveDate });
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  // Yêu cầu nghiệp vụ (10/2026): Áp Dụng xong tự chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" để thấy ngay
-  // sơ đồ cấp Phòng Ban vừa cập nhật, không phải tự bấm qua — đặt TRƯỚC renderOrgChartModule() vì hàm đó
-  // tự gọi setOrgChartSubTab(activeOrgChartSubTab) ở bước cuối.
-  activeOrgChartSubTab = 'DIAGRAM';
+  // Yêu cầu nghiệp vụ (11/2026, ĐẢO LẠI quyết định 10/2026): Áp Dụng cơ cấu + định biên KHÔNG còn tự
+  // chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" nữa — người dùng phản hồi việc tự nhảy sang sơ đồ ngay sau
+  // khi Áp Dụng khiến 2 việc "làm cơ cấu/định biên" và "tạo sơ đồ" bị dính liền, muốn tách hẳn: Áp Dụng
+  // xong vẫn ở ĐÚNG sub-tab đang xem (giữ nguyên activeOrgChartSubTab), chỉ khi người dùng TỰ bấm qua tab
+  // Sơ Đồ Trực Quan thì mới xem/tạo sơ đồ (tab đó vẫn CHỈ vẽ tới cấp Phòng Ban/Công Ty, không đổi).
   await renderOrgChartModule();
   openOrgChartApplyResultModal(result);
 }
