@@ -3337,6 +3337,21 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     lập tức. Sub-tab "⏰ Hạn Sử Dụng" cũng hiện thêm badge ngay trên từng dòng:
     🟢 "Đã kiểm hôm nay" hoặc 🕗 "Lần cuối: [ngày]" — biết ngay dòng nào mới,
     dòng nào cũ mà không cần mở sang tab Đối Chiếu.
+  - **Vá lỗi lộ dữ liệu chéo siêu thị ở 4 tab thao tác hằng ngày (11/2026,
+    theo báo cáo người dùng: "vào siêu thị nào chỉ nên thấy đúng siêu thị đó,
+    hiện tại đổi siêu thị vẫn còn thấy thông tin siêu thị cũ")**: 4 sub-tab
+    "📷 Ghi Nhận"/"🗄️ Quầy Kệ"/"⏰ Hạn Sử Dụng"/"🔔 Ngưỡng Tồn" trước đây lấy
+    thẳng dữ liệu đã tải về mà không lọc lại theo đúng siêu thị đang đứng —
+    tài khoản nào có thêm quyền "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" (nhiều
+    siêu thị) hoặc là Quản Trị Viên sẽ vô tình thấy LẪN dữ liệu (ô chọn Quầy
+    Kệ, danh sách ghi nhận gần nhất, danh mục Quầy Kệ, bảng Hạn Sử Dụng, bảng
+    Ngưỡng Tồn) của TẤT CẢ siêu thị mình được xem, dù tiêu đề vẫn ghi đúng
+    tên 1 siêu thị. Nay cả 4 tab này CHỈ hiện đúng siêu thị đang đăng nhập
+    (`currentUser.dept`) — khớp đúng nguyên tắc server đã áp dụng khi GHI
+    (chỉnh sửa Quầy Kệ/Ngưỡng Tồn vốn đã chỉ cho đúng siêu thị mình từ
+    trước). Tab "📊 Đối Chiếu" và "📑 Báo Cáo" KHÔNG bị ảnh hưởng — 2 tab đó
+    vẫn CỐ Ý cho xem nhiều siêu thị theo đúng quyền báo cáo như thiết kế ban
+    đầu.
   - **Tự động cập nhật ngay khi mở tab, không chờ đủ chu kỳ (MỚI, 11/2026,
     theo yêu cầu người dùng "phải tự động, không phải bấm mới ra")**: mỗi
     lần mở "📊 Đối Chiếu", hệ thống TỰ kiểm tra "đã tới chu kỳ đồng bộ
