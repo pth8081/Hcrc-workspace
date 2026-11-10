@@ -128,14 +128,20 @@ function collectReferencedApprovers(appData) {
   return { usernames, positionPairs };
 }
 
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — xem chú thích đầy đủ ở lib/positionApprovers.js::
+// matchesPositionPair()/lib/workflowEngine.js::userHasMixedApprovalPosition()): loại trừ vị trí kiêm
+// nhiệm source 'HR_PROFILE' khỏi phép khớp — audit A4 (canBeApprover dư thừa) phải tính NHẤT QUÁN với
+// đúng những gì 2 điểm tra cứu approver thật đang tính, nếu không sẽ báo "còn khớp" cho 1 người thực ra
+// KHÔNG còn là approver thật (chỉ vì giữ đúng Vị Trí Kiêm Nhiệm đồng bộ từ Hồ Sơ Nhân Sự).
 function userMatchesAnyPositionPair(user, positionPairs) {
+  const eligibleSecondary = (user.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE');
   return positionPairs.some(pair => {
     if (!pair.dept) {
       if (user.jobTitle === pair.jobTitle) return true;
-      return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle);
+      return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle);
     }
     if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
-    return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
+    return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
   });
 }
 

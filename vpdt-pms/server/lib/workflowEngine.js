@@ -320,8 +320,13 @@ function computeOperationOrderTier(locationType, amount) {
 // operationOrders STORE lẫn itPriceWholesale (2 hàm resolve*RuleUsernames* đều gọi hàm này, chỉ khác cách
 // tính `deptInScope`) — mirror ĐÚNG bản client userHasMixedApprovalPositionClient() (public/js/core.js),
 // sửa 1 bên PHẢI sửa cả 2 bên.
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — cùng chú thích/lý do ở
+// lib/positionApprovers.js::matchesPositionPair()): vị trí kiêm nhiệm ĐỒNG BỘ từ Hồ Sơ Nhân Sự
+// (source: 'HR_PROFILE') cũng không được tính ở điểm tra cứu "Mixed Approval" (Đặt Hàng Siêu Thị/QT Giá
+// Bán Buôn) này — chỉ còn vị trí kiêm nhiệm gán qua "Gán Nhanh" (ADMIN_QUICK_EDIT) hoặc dòng cũ không có
+// field `source` mới được tính là 1 "vị trí" để khớp rule.
 function userHasMixedApprovalPosition(u, rule, isStoreFlatJobTitle, deptInScope) {
-  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || [])];
+  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE')];
   return positions.some(p => {
     if (p.jobTitle !== rule.jobTitle) return false;
     if (rule.jobTitleDept) return p.dept === rule.jobTitleDept;

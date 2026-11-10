@@ -171,6 +171,37 @@ function main() {
       return !findings.some(f => f.type === 'UNUSED_APPROVER_PERM' && f.username === 'kiemnhiem1');
     })());
 
+  // LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026): vị trí kiêm nhiệm source 'HR_PROFILE' không còn được
+  // tính là "khớp" ở audit A4 nữa — phải nhất quán với lib/positionApprovers.js/lib/workflowEngine.js.
+  check('A4: canBeApprover=true, chỉ khớp qua secondaryPositions source HR_PROFILE -> VẪN báo dư thừa (đã vá)',
+    (() => {
+      const appData = baseAppData({
+        users: [{
+          username: 'kiemnhiemHr1', name: 'K-HR', active: true, perms: { canBeApprover: true },
+          jobTitle: 'Nhân Viên', dept: 'Phòng B',
+          secondaryPositions: [{ jobTitle: 'Thẩm Định', dept: 'Phòng A', source: 'HR_PROFILE' }]
+        }],
+        deptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approverMode: { 1: 'POSITION' }, approversByPosition: { 1: [{ jobTitle: 'Thẩm Định', dept: 'Phòng A' }] } } }
+      });
+      const findings = auditUserAccountGaps(appData, {});
+      const f = findings.find(f => f.type === 'UNUSED_APPROVER_PERM' && f.username === 'kiemnhiemHr1');
+      return f && f.severity === 'INFO';
+    })());
+
+  check('A4: canBeApprover=true, khớp qua secondaryPositions source ADMIN_QUICK_EDIT (Gán Nhanh) -> KHÔNG báo',
+    (() => {
+      const appData = baseAppData({
+        users: [{
+          username: 'kiemnhiemQe1', name: 'K-QE', active: true, perms: { canBeApprover: true },
+          jobTitle: 'Nhân Viên', dept: 'Phòng B',
+          secondaryPositions: [{ jobTitle: 'Thẩm Định', dept: 'Phòng A', source: 'ADMIN_QUICK_EDIT' }]
+        }],
+        deptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approverMode: { 1: 'POSITION' }, approversByPosition: { 1: [{ jobTitle: 'Thẩm Định', dept: 'Phòng A' }] } } }
+      });
+      const findings = auditUserAccountGaps(appData, {});
+      return !findings.some(f => f.type === 'UNUSED_APPROVER_PERM' && f.username === 'kiemnhiemQe1');
+    })());
+
   check('A4: canBeApprover=true, khớp qua members[] của Nhóm Phê Duyệt -> KHÔNG báo',
     (() => {
       const appData = baseAppData({

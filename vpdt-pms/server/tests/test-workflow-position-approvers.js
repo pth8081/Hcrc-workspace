@@ -120,6 +120,59 @@ async function main() {
     assertEqual(JSON.stringify(result), JSON.stringify(['both1']), 'Khớp cả 2 cặp (chính + kiêm nhiệm) nhưng chỉ liệt kê username 1 lần');
   });
 
+  // ===== 1b-bis) LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — "tôi ko muốn vị trí kiêm nhiệm ở trên
+  // [đồng bộ từ Hồ Sơ Nhân Sự] tham gia quy trình phê duyệt, tôi chỉ cần vị trí kiêm nhiệm màu xanh bên
+  // dưới [Gán Nhanh] được tham gia"): user.secondaryPositions[] có field `source` phân biệt nguồn —
+  // 'HR_PROFILE' (đồng bộ tự động, KHÔNG được tính) khác 'ADMIN_QUICK_EDIT' (Gán Nhanh, VẪN được tính)
+  // khác dòng CŨ không có field source (tương thích ngược, VẪN được tính như trước). =====
+  await run.run('resolvePositionApprovers(): vị trí kiêm nhiệm source HR_PROFILE KHÔNG được tính là approver "Theo vị trí"', () => {
+    const hrSynced = makeUser({
+      username: 'hr1', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT', source: 'HR_PROFILE' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [hrSynced]);
+    assertEqual(result.length, 0, 'Vị trí kiêm nhiệm đồng bộ từ Hồ Sơ Nhân Sự (source HR_PROFILE) không còn được tính là approver');
+  });
+
+  await run.run('resolvePositionApprovers(): vị trí kiêm nhiệm source ADMIN_QUICK_EDIT (Gán Nhanh) VẪN được tính là approver', () => {
+    const quickAssigned = makeUser({
+      username: 'qe1', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT', source: 'ADMIN_QUICK_EDIT' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [quickAssigned]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['qe1']), 'Vị trí gán qua Gán Nhanh (source ADMIN_QUICK_EDIT) vẫn được tính là approver như trước');
+  });
+
+  await run.run('resolvePositionApprovers(): vị trí kiêm nhiệm CŨ không có field source (tương thích ngược) VẪN được tính', () => {
+    const legacy = makeUser({
+      username: 'legacy1', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }] // không có field source
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [legacy]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['legacy1']), 'Dòng cũ không có source -> vẫn được tính như trước (không đổi hành vi dữ liệu cũ)');
+  });
+
+  await run.run('resolvePositionApprovers(): 1 user có CẢ 2 dòng kiêm nhiệm (1 HR_PROFILE bị loại + 1 ADMIN_QUICK_EDIT được tính) cho CÙNG 1 cặp -> vẫn khớp nhờ dòng Gán Nhanh', () => {
+    const mixedSource = makeUser({
+      username: 'mix1', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: { canBeApprover: true },
+      secondaryPositions: [
+        { jobTitle: 'Trưởng phòng', dept: 'Phòng IT', source: 'HR_PROFILE' },
+        { jobTitle: 'Trưởng phòng', dept: 'Phòng IT', source: 'ADMIN_QUICK_EDIT' }
+      ]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [mixedSource]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['mix1']), 'Dòng ADMIN_QUICK_EDIT vẫn khớp dù dòng HR_PROFILE cùng cặp bị loại');
+  });
+
+  await run.run('resolvePositionApprovers(): cặp dept RỖNG cũng loại trừ đúng source HR_PROFILE (chỉ khớp theo jobTitle)', () => {
+    const hrSyncedTgd = makeUser({
+      username: 'hrtgd1', jobTitle: 'Nhân viên', dept: 'Phòng Bất Kỳ', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc', source: 'HR_PROFILE' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], [hrSyncedTgd]);
+    assertEqual(result.length, 0, 'source HR_PROFILE vẫn bị loại ở nhánh dept rỗng (chỉ khớp theo chức danh)');
+  });
+
   await run.run('resolvePositionApprovers(): không cấu hình cặp nào (rỗng/thiếu jobTitle,dept) -> trả về mảng rỗng, không throw', () => {
     assertEqual(resolvePositionApprovers([], [makeUser({ username: 'a1', perms: { canBeApprover: true } })]).length, 0, 'Mảng cặp rỗng -> không ai');
     assertEqual(resolvePositionApprovers(null, []).length, 0, 'null -> không throw, trả về rỗng');

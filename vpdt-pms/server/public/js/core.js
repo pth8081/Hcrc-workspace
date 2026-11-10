@@ -3460,13 +3460,18 @@ function applyOwnDeptAutoSelect(selectEl, scopedDepts) {
 // resolvePositionApproverUsernamesClient() bên dưới) — không cách nào cấu hình 1 chức danh áp dụng cho
 // MỌI phòng ban/đơn vị (VD "Tổng Giám Đốc"). pair.dept RỖNG giờ khớp CHỈ theo chức danh, bất kể phòng
 // ban của user là gì — mirror ĐÚNG lib/positionApprovers.js::matchesPositionPair() bản server.
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — xem chú thích đầy đủ tại
+// lib/positionApprovers.js::matchesPositionPair() bản server, PHẢI khớp đúng cùng logic 2 bên): CHỈ
+// tính dòng u.secondaryPositions[] KHÔNG PHẢI source:'HR_PROFILE' (đồng bộ tự động từ Hồ Sơ Nhân Sự) —
+// dòng 'ADMIN_QUICK_EDIT' (Gán Nhanh) và dòng cũ không có field source vẫn tính như trước.
 function clientMatchesPositionPair(user, pair) {
+  const eligibleSecondary = (user.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE');
   if (!pair.dept) {
     if (user.jobTitle === pair.jobTitle) return true;
-    return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle);
+    return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle);
   }
   if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
-  return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
+  return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
 }
 // LỖI ĐÃ VÁ (báo cáo người dùng 10/2026, "Phê Duyệt Giá Bán Lẻ đã cấu hình Theo Vị Trí nhưng khi xem vẫn
 // báo không ai phê duyệt"): sanitizeUsersPermsForViewer() (server, lib/recordViewScope.js) xoá hẳn field
@@ -3715,8 +3720,11 @@ function operationOrderTierLabel(locationType, tier) {
 // giữa các vị trí khác nhau của cùng 1 người). Dùng CHUNG cho cả operationOrders STORE lẫn itPriceWholesale
 // — mirror ĐÚNG bản server userHasMixedApprovalPosition() (lib/workflowEngine.js), sửa 1 bên PHẢI sửa cả
 // 2 bên.
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — xem chú thích đầy đủ ở lib/workflowEngine.js::
+// userHasMixedApprovalPosition() bản server, PHẢI khớp đúng cùng logic 2 bên): loại trừ vị trí kiêm
+// nhiệm có source: 'HR_PROFILE'.
 function userHasMixedApprovalPositionClient(u, rule, isStoreFlatJobTitle, deptInScope) {
-  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || [])];
+  const positions = [{ jobTitle: u.jobTitle, dept: u.dept }, ...(u.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE')];
   return positions.some(p => {
     if (p.jobTitle !== rule.jobTitle) return false;
     if (rule.jobTitleDept) return p.dept === rule.jobTitleDept;

@@ -4012,15 +4012,27 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   Phòng Ban/Chức Danh "chính"). **Không tính vào biên chế (headcount)** của
   vị trí được kiêm nhiệm — chỉ phục vụ xem/xuất Excel ở "📊 Báo Cáo → 🏷️ Kiêm
   Nhiệm" (snapshot hiện tại, không có khoảng ngày để lọc, cùng khuôn Người
-  Phụ Thuộc) và **tự động đồng bộ 1 CHIỀU** sang ô "🏷️ Vị Trí Kiêm Nhiệm" ở
-  Hệ Thống → Quản Lý Người Dùng (dùng để tính người duyệt "Theo vị trí" ở các
-  quy trình phê duyệt khác — xem lib/positionApprovers.js) ngay khi hồ sơ đã
-  liên kết tài khoản VPDT (kể cả lúc liên kết sau nếu kiêm nhiệm đã gán
-  trước). **TRƯỚC ĐÂY (10/2026)** "Vị Trí Kiêm Nhiệm" chỉ nhập tay ở màn
-  Người Dùng, không liên quan gì tới Cơ Cấu Tổ Chức/Hồ Sơ Nhân Sự — ô đó
-  **từ nay chỉ đọc** cho tài khoản đã liên kết hồ sơ (hiện ghi chú trỏ về
-  Chi tiết hồ sơ), vẫn gõ tay được như cũ cho tài khoản KHÔNG liên kết hồ sơ
-  nào (VD tài khoản kỹ thuật/admin hệ thống).
+  Phụ Thuộc) và **tự động đồng bộ 1 CHIỀU** sang khối "🔀 Kiêm Nhiệm Phê
+  Duyệt Quy Trình" (phần TRÊN, chỉ xem) ở Hệ Thống → Quản Lý Người Dùng →
+  Sửa Người Dùng, ngay khi hồ sơ đã liên kết tài khoản VPDT (kể cả lúc liên
+  kết sau nếu kiêm nhiệm đã gán trước). **TRƯỚC ĐÂY (10/2026)** "Vị Trí Kiêm
+  Nhiệm" chỉ nhập tay ở màn Người Dùng, không liên quan gì tới Cơ Cấu Tổ
+  Chức/Hồ Sơ Nhân Sự — ô đó **từ nay chỉ đọc** cho tài khoản đã liên kết hồ
+  sơ (hiện ghi chú trỏ về Chi tiết hồ sơ), vẫn gõ tay được như cũ cho tài
+  khoản KHÔNG liên kết hồ sơ nào (VD tài khoản kỹ thuật/admin hệ thống).
+  - **KHÔNG tham gia quy trình phê duyệt (11/2026, theo yêu cầu người
+    dùng)**: khối "🔀 Kiêm Nhiệm Phê Duyệt Quy Trình" ở Sửa Người Dùng có 2
+    phần RIÊNG BIỆT — phần TRÊN (đồng bộ tự động từ Hồ Sơ Nhân Sự như mô tả
+    ở trên, chỉ xem) và phần DƯỚI **"Gán Nhanh"** (admin tự gán tay, cần
+    quyền quản lý Vị Trí Kiêm Nhiệm riêng). **CHỈ các vị trí gán qua "Gán
+    Nhanh" (phần DƯỚI) mới được tính là người duyệt "Theo vị trí"/"Quy
+    Trình Hỗn Hợp" ở các module khác** — vị trí đồng bộ từ Hồ Sơ Nhân Sự
+    (phần TRÊN) KHÔNG còn được tính nữa, dù vẫn hiển thị đầy đủ ở đây để
+    tham khảo. Lý do: tránh HR vô tình biến 1 người thành approver ở module
+    khác chỉ vì gán cho họ 1 Vị Trí Kiêm Nhiệm phục vụ mục đích khác (báo
+    cáo nhân sự), không ai chủ động gán cho mục đích phê duyệt. Muốn 1 người
+    kiêm nhiệm tham gia phê duyệt thì admin phải tự gán lại qua "Gán Nhanh"
+    cho đúng cặp Chức Danh/Phòng Ban đó.
 - **"🏷️ Gán Chức Vụ Hàng Loạt" (10/2026, theo yêu cầu người dùng — di trú 500
   nhân viên)**: ở "Quản Lý Hồ Sơ", đủ cả 3 nút **Tải Mẫu/Nhập Excel/Xuất
   Excel** (quyền "✏️ Sửa" hồ sơ, cùng quyền nút "🏷️ Gán/Đổi Chức Vụ" tay ở

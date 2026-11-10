@@ -1,9 +1,66 @@
 # Phiên bản hiện tại
 
-**29.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.80 (2026-11): "Vị Trí Kiêm Nhiệm" đồng bộ từ Hồ Sơ Nhân Sự KHÔNG còn tham gia quy trình phê duyệt
+
+Người dùng gửi ảnh chụp màn "Sửa Người Dùng" (khối "🔀 Kiêm Nhiệm Phê Duyệt Quy Trình", có 2 phần: phần
+TRÊN đồng bộ tự động từ Hồ Sơ Nhân Sự — chỉ xem, phần DƯỚI "Gán Nhanh" do admin tự gán tay) và yêu cầu
+rõ: "Tôi không muốn vị trí kiêm nhiệm ở trên tham gia quy trình phê duyệt, tôi chỉ cần vị trí kiêm nhiệm
+màu xanh bên dưới được tham gia quy trình phê duyệt."
+
+**Nguyên nhân**: `user.secondaryPositions[]` gồm 2 nguồn trộn chung — dòng `source: 'HR_PROFILE'` (đồng
+bộ 1 chiều TỰ ĐỘNG từ Hồ Sơ Nhân Sự mỗi khi HR lưu hồ sơ) và dòng `source: 'ADMIN_QUICK_EDIT'` (admin tự
+gán tay qua "Gán Nhanh"). TRƯỚC ĐÂY, mọi điểm tra cứu approver "Theo vị trí"/"Mixed Approval" đều khớp
+CẢ 2 nguồn như nhau — khiến HR chỉ cần gán 1 Vị Trí Kiêm Nhiệm ở hồ sơ là VÔ TÌNH biến người đó thành
+approver ở module khác dù không ai chủ động gán cho mục đích duyệt.
+
+**Đã làm**: loại trừ hẳn dòng `source: 'HR_PROFILE'` khỏi MỌI điểm khớp "vị trí" dùng cho phê duyệt —
+dòng `ADMIN_QUICK_EDIT` (Gán Nhanh) và dòng CŨ không có field `source` (dữ liệu nhập tay trước khi có
+đồng bộ HR_PROFILE) vẫn tiếp tục được tính như trước, không đổi gì. Rà soát toàn bộ 5 điểm đọc trực tiếp
+`secondaryPositions` để khớp approver (không chỉ 1 điểm người dùng chỉ ra):
+
+1. `lib/positionApprovers.js::matchesPositionPair()` — điểm tra cứu TRUNG TÂM "Theo vị trí" (POSITION
+   mode, `workflowParticipatingPositions`), dùng chung bởi `lib/workflowEngine.js` (mọi module động) và
+   `lib/createValidation.js` (Văn Bản Trình/Phê Duyệt Hợp Đồng, snapshot lúc tạo).
+2. `public/js/core.js::clientMatchesPositionPair()` — bản mirror client (chỉ ảnh hưởng hiện/ẩn nút
+   Duyệt ở UI, server luôn tự xác minh lại nên không phải điểm bảo mật, nhưng vẫn phải sửa để không hiện
+   sai).
+3. `lib/workflowEngine.js::userHasMixedApprovalPosition()` — điểm tra cứu "Quy Trình Hỗn Hợp" (Mixed
+   Approval, Đặt Hàng Siêu Thị + QT Giá Bán Buôn), MỘT CƠ CHẾ KHÁC cũng đọc `secondaryPositions` nhưng
+   không nằm trong "Theo vị trí" — người dùng không nhắc tới riêng cơ chế này, nhưng cùng bản chất "tham
+   gia quy trình phê duyệt" nên áp cùng quy tắc để nhất quán toàn hệ thống.
+4. `public/js/core.js::userHasMixedApprovalPositionClient()` — bản mirror client của mục 3.
+5. `lib/userAccountAudit.js::userMatchesAnyPositionPair()` — điểm tính audit "A4: canBeApprover dư
+   thừa" (🔍 Audit Người Dùng), gộp cả 2 cơ chế trên — phải loại trừ y hệt, nếu không audit sẽ báo SAI
+   "còn khớp" cho người thực ra không còn là approver thật nữa.
+
+Riêng `public/js/module-workflow.js::mixedApprovalRuleMatchCount()` (con số "N người" XEM TRƯỚC ở màn
+Cấu Hình Nâng Cao — chỉ hiển thị, không phải điểm phê duyệt thật) cũng được sửa để khớp đúng con số thật
+sau khi vá, tránh gây hiểu nhầm "cấu hình đúng nhưng số người không khớp thực tế".
+
+**KHÔNG đụng tới** 2 cơ chế khác cũng đọc `secondaryPositions` nhưng bản chất KHÁC "tham gia quy trình
+phê duyệt": `lib/headcountReport.js` (Báo Cáo Định Biên — đếm đầu người theo node Cơ Cấu Tổ Chức, không
+liên quan phê duyệt) và `lib/permGroupMerge.js::userMatchesPermGroupJobTitles()` (gán quyền theo Nhóm
+Phân Quyền tự động theo Chức Danh — cấp QUYỀN/PERMS nói chung, không riêng gì approver) — nếu cần mở
+rộng quy tắc này sang `permGroupMerge.js` thì cần người dùng xác nhận thêm (ảnh hưởng rộng tới toàn bộ
+perms tự động theo chức danh, không chỉ phê duyệt).
+
+**Test**: thêm 11 kịch bản mới (5 ở `test-workflow-position-approvers.js`, 2 ở `test-mixed-approval-
+secondary-jobtitle.js` + 2 client mirror, 2 ở `test-user-account-audit.js`) xác nhận dòng HR_PROFILE bị
+loại, dòng ADMIN_QUICK_EDIT/dòng cũ không đổi, 1 user có cả 2 dòng cùng cặp vẫn khớp nhờ dòng hợp lệ.
+Phát hiện 1 test SẴN CÓ (`test-itprice-kiemnhiem-approve-waiver.js`) có fixture dựng ĐÚNG kịch bản
+HR_PROFILE (viết cho 1 lỗi khác trước đây) — cập nhật fixture sang `ADMIN_QUICK_EDIT` để tiếp tục xác
+nhận đúng tính năng gốc (miễn Khối 0 cho người đã khớp vị trí duyệt) + thêm 1 kịch bản mới xác nhận
+riêng HR_PROFILE giờ bị chặn 403. Chạy lại toàn bộ ~20 test/demo liên quan `secondaryPositions`/Mixed
+Approval/Audit Người Dùng — PASS 100%, không regression.
+
+**Deploy**: thuần sửa logic JS (server `lib/`, client `public/js/`) — KHÔNG đổi `schema.sql`, KHÔNG
+thêm biến môi trường, KHÔNG thêm dependency `package.json` nào khác ngoài version. Chỉ cần copy code +
+`pm2 restart`, không cần thao tác thủ công nào khác.
 
 ## v29.79 (2026-11): Cây Sơ Đồ Tổ Chức — thêm chiều vẽ khối "↔️ Ngang / ↕️ Dọc"
 

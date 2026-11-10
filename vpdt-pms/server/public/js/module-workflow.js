@@ -1216,14 +1216,19 @@ async function addMixedApprovalRule() {
 // — đúng hàm cả đơn hàng/phê duyệt giá bán buôn đều dùng) đã lọc đúng phòng ban từ trước, không hề sai —
 // chỉ RIÊNG con số xem trước ở bảng cấu hình bị sai, gây hiểu nhầm. Nay lọc thêm đúng phòng ban đã gán
 // khi dòng CÓ `jobTitleDept` (mirror chính xác nhánh dept-match của hàm server/client ở trên).
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — xem chú thích đầy đủ ở lib/workflowEngine.js::
+// userHasMixedApprovalPosition()): vị trí kiêm nhiệm source 'HR_PROFILE' không còn được tính là approver
+// thật ở resolveOperationOrderStoreMixedApprovalRuleUsernames()/resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()
+// — con số XEM TRƯỚC ở đây phải loại trừ y hệt, nếu không sẽ đếm dư người so với thực tế sẽ duyệt được.
 function mixedApprovalRuleMatchCount(rule) {
   if (rule.mode === 'PERSON') {
     return (DB.users || []).some(u => u && u.username === rule.username && u.active !== false) ? 1 : 0;
   }
+  const eligibleSecondary = (u) => (u.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE');
   return (DB.users || []).filter(u => u && u.active !== false && (
-    u.jobTitle === rule.jobTitle || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle)
+    u.jobTitle === rule.jobTitle || eligibleSecondary(u).some(sp => sp.jobTitle === rule.jobTitle)
   ) && (
-    !rule.jobTitleDept || u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept)
+    !rule.jobTitleDept || u.dept === rule.jobTitleDept || eligibleSecondary(u).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept)
   )).length;
 }
 

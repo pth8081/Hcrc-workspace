@@ -22,6 +22,14 @@
 // resolveWorkflowStepApprovers(), cùng điểm tra cứu applyWorkflowAction() dùng), bỏ qua hẳn cổng Khối 0.
 // Mirror HTTP thật — mount routes/workflow.js, stub lib/auth + lib/appData + lib/recordStore.
 //
+// CẬP NHẬT (xác nhận với người dùng, 11/2026 — "tôi không muốn vị trí kiêm nhiệm đồng bộ từ Hồ Sơ Nhân
+// Sự tham gia quy trình phê duyệt, chỉ muốn vị trí gán qua Gán Nhanh"): fixture KIEM_NHIEM_APPROVER ở
+// dưới ĐÚNG kịch bản người dùng mô tả lúc báo lỗi gốc (source: 'HR_PROFILE'), nhưng giờ HR_PROFILE không
+// còn được tính là approver nữa (xem lib/workflowEngine.js::userHasMixedApprovalPosition()) — đổi
+// source fixture này sang 'ADMIN_QUICK_EDIT' (Gán Nhanh) để tiếp tục xác nhận ĐÚNG tính năng "miễn Khối 0
+// cho người ĐÃ khớp vị trí duyệt" (mục đích gốc của file này) còn hiệu lực cho nguồn hợp lệ, và thêm 1
+// kịch bản MỚI xác nhận riêng source HR_PROFILE giờ bị chặn 403 giống OUTSIDER.
+//
 // Chạy: node server/tests/test-itprice-kiemnhiem-approve-waiver.js
 'use strict';
 const http = require('http');
@@ -44,19 +52,29 @@ const WHOLESALE_TIER = 'MARGIN_LT5';
 const KIEM_NHIEM_JOBTITLE = 'Thẩm định ultrafresh';
 const KIEM_NHIEM_DEPT = 'Phòng Mua hàng Thực phẩm Tươi sống';
 
-// Tài khoản CHỈ được gán KIÊM NHIỆM đúng 1 vai trò thẩm định ở Hồ Sơ Nhân Sự — jobTitle/dept CHÍNH THỨC
-// hoàn toàn KHÁC (không khớp rule nào), và KHÔNG có bất kỳ Khối 0 module access itPriceApprovals nào —
-// đúng mô tả thực tế trong ảnh chụp người dùng gửi kèm.
+// Tài khoản CHỈ được gán KIÊM NHIỆM đúng 1 vai trò thẩm định qua "Gán Nhanh" (ADMIN_QUICK_EDIT) —
+// jobTitle/dept CHÍNH THỨC hoàn toàn KHÁC (không khớp rule nào), và KHÔNG có bất kỳ Khối 0 module access
+// itPriceApprovals nào — đúng mô tả thực tế trong ảnh chụp người dùng gửi kèm lúc báo lỗi gốc (lúc đó
+// dòng kiêm nhiệm có source 'HR_PROFILE' — nay đổi sang 'ADMIN_QUICK_EDIT' vì HR_PROFILE không còn được
+// tính là approver nữa, xem chú thích đầu file).
 const KIEM_NHIEM_APPROVER = {
   username: 'bl0890', name: 'Đào Phan Anh', dept: 'Phòng Hành Chính', jobTitle: 'Nhân Viên Hành Chính',
-  secondaryPositions: [{ jobTitle: KIEM_NHIEM_JOBTITLE, dept: KIEM_NHIEM_DEPT, source: 'HR_PROFILE' }],
+  secondaryPositions: [{ jobTitle: KIEM_NHIEM_JOBTITLE, dept: KIEM_NHIEM_DEPT, source: 'ADMIN_QUICK_EDIT' }],
   perms: { moduleAccess: { itSupport: false, muaHang: false, vanHanh: false } }, active: true
 };
 // Người KHÔNG khớp vị trí duyệt NÀO và cũng không có Khối 0 — vẫn phải bị chặn như cũ (xác nhận miễn
 // Khối 0 chỉ áp dụng cho ĐÚNG người đã khớp, không phải miễn chung cho mọi người).
 const OUTSIDER = { username: 'nv_ngoai', name: 'Người Ngoài Cuộc', dept: 'Phòng Kế Toán', jobTitle: 'Nhân Viên Kế Toán', perms: { moduleAccess: { itSupport: false, muaHang: false, vanHanh: false } }, active: true };
+// LỖI ĐÃ VÁ (11/2026) — cùng chức danh kiêm nhiệm/phòng ban ĐÚNG hệt KIEM_NHIEM_APPROVER, nhưng nguồn là
+// 'HR_PROFILE' (đồng bộ tự động từ Hồ Sơ Nhân Sự, KHÔNG qua Gán Nhanh) — giờ KHÔNG còn được tính là
+// approver nữa, phải bị chặn 403 giống OUTSIDER dù "nhìn" giống kiêm nhiệm hợp lệ.
+const HR_SYNCED_NOT_APPROVER = {
+  username: 'bl0891', name: 'HR Sync Only', dept: 'Phòng Hành Chính', jobTitle: 'Nhân Viên Hành Chính',
+  secondaryPositions: [{ jobTitle: KIEM_NHIEM_JOBTITLE, dept: KIEM_NHIEM_DEPT, source: 'HR_PROFILE' }],
+  perms: { moduleAccess: { itSupport: false, muaHang: false, vanHanh: false } }, active: true
+};
 const CREATOR = { username: 'nv1', name: 'Người Đề Xuất', dept: 'Phòng Vận Hành (HO)', perms: {}, active: true };
-const USERS = [KIEM_NHIEM_APPROVER, OUTSIDER, CREATOR];
+const USERS = [KIEM_NHIEM_APPROVER, OUTSIDER, HR_SYNCED_NOT_APPROVER, CREATOR];
 
 let CURRENT_USERNAME = KIEM_NHIEM_APPROVER.username;
 stubModule('lib/auth', {
@@ -156,6 +174,13 @@ async function main() {
     await test('Người KHÔNG khớp vị trí duyệt nào (và cũng không có Khối 0) -> VẪN bị chặn 403 như cũ (miễn Khối 0 chỉ áp dụng cho người ĐÃ khớp)', async () => {
       resetRecords();
       const r = await api('POST', '/api/workflow/itPriceApprovals/1/approve', { comment: 'Đồng ý giá' }, OUTSIDER);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+      assert.ok(/Module này đã bị khoá/.test(r.body?.error || ''), `message phải nêu đúng lý do Khối 0, nhận: ${JSON.stringify(r.body)}`);
+    });
+
+    await test('LỖI ĐÃ VÁ: vị trí kiêm nhiệm source HR_PROFILE (đồng bộ từ Hồ Sơ Nhân Sự, KHÔNG qua Gán Nhanh) KHÔNG còn được miễn Khối 0 -> vẫn bị chặn 403 giống OUTSIDER', async () => {
+      resetRecords();
+      const r = await api('POST', '/api/workflow/itPriceApprovals/1/approve', { comment: 'Đồng ý giá' }, HR_SYNCED_NOT_APPROVER);
       assert.strictEqual(r.status, 403, JSON.stringify(r.body));
       assert.ok(/Module này đã bị khoá/.test(r.body?.error || ''), `message phải nêu đúng lý do Khối 0, nhận: ${JSON.stringify(r.body)}`);
     });

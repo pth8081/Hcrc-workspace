@@ -155,6 +155,37 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
   });
 }
 
+// ===================== 13-14) LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026): vị trí kiêm nhiệm source
+// 'HR_PROFILE' (đồng bộ tự động từ Hồ Sơ Nhân Sự) KHÔNG được tính ở "Mixed Approval" nữa — chỉ dòng
+// 'ADMIN_QUICK_EDIT' (Gán Nhanh) hoặc dòng cũ không có field source mới được tính =====================
+{
+  const hrSynced = {
+    username: 'hr.loan', name: 'Loan (HR sync)', dept: 'Phòng Mua Hàng', jobTitle: 'Nhân Viên Mua Hàng', perms: {}, active: true,
+    secondaryPositions: [{ jobTitle: 'Thẩm Định Ngành Hàng', dept: 'HO', source: 'HR_PROFILE' }]
+  };
+  const quickAssigned = {
+    username: 'qe.loan', name: 'Loan (Gán Nhanh)', dept: 'Phòng Mua Hàng', jobTitle: 'Nhân Viên Mua Hàng', perms: {}, active: true,
+    secondaryPositions: [{ jobTitle: 'Thẩm Định Ngành Hàng', dept: 'HO', source: 'ADMIN_QUICK_EDIT' }]
+  };
+  const appData = {
+    workflows: [WF_1STEP], users: [hrSynced, quickAssigned],
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    operationOrderStoreMixedApprovalRules: [
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Thẩm Định Ngành Hàng', stores: [] }
+    ],
+    storeJobTitles: []
+  };
+  test('operationOrders STORE: vị trí kiêm nhiệm source HR_PROFILE KHÔNG khớp rule Mixed Approval nữa', () => {
+    const r = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, 'Siêu Thị A', [hrSynced], [1], undefined);
+    assert.deepStrictEqual(r[1], [], 'source HR_PROFILE phải bị loại khỏi Mixed Approval');
+  });
+  test('operationOrders STORE: vị trí kiêm nhiệm source ADMIN_QUICK_EDIT (Gán Nhanh) VẪN khớp rule Mixed Approval', () => {
+    const r = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, 'Siêu Thị A', [quickAssigned], [1], undefined);
+    assert.deepStrictEqual(r[1], ['qe.loan']);
+  });
+}
+
 // ===================== 9-12) Client mirror (public/js/core.js) =====================
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORT = 8993;
@@ -234,6 +265,25 @@ async function clientMirrorMain() {
         new Set(ip1[1]).size === 2 && ip1[1].includes('gdst') && ip1[1].includes('loan'), JSON.stringify(ip1));
       check('Client mirror — itPriceWholesale: Loan KHÔNG lên approver khi ngành hàng khác (chỉ còn GĐST)',
         JSON.stringify(ip2[1]) === '["gdst"]', JSON.stringify(ip2));
+
+      // ----- LỖI ĐÃ VÁ: vị trí kiêm nhiệm source HR_PROFILE không khớp Mixed Approval client mirror -----
+      DB.users = [{
+        username: 'hr.loan', name: 'Loan (HR sync)', dept: 'Phòng Mua Hàng', jobTitle: 'Nhân Viên Mua Hàng', active: true,
+        secondaryPositions: [{ jobTitle: 'Thẩm Định Ngành Hàng', dept: 'HO', source: 'HR_PROFILE' }]
+      }];
+      DB.storeJobTitles = [];
+      DB.operationOrderStoreMixedApprovalRules = [
+        { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Thẩm Định Ngành Hàng', stores: [] }
+      ];
+      const ooHr = computeOperationOrderStoreMixedApproversClient('Siêu Thị A', [1], undefined);
+      check('Client mirror — operationOrders: source HR_PROFILE KHÔNG khớp (đã vá)', JSON.stringify(ooHr[1]) === '[]', JSON.stringify(ooHr));
+
+      DB.users = [{
+        username: 'qe.loan', name: 'Loan (Gán Nhanh)', dept: 'Phòng Mua Hàng', jobTitle: 'Nhân Viên Mua Hàng', active: true,
+        secondaryPositions: [{ jobTitle: 'Thẩm Định Ngành Hàng', dept: 'HO', source: 'ADMIN_QUICK_EDIT' }]
+      }];
+      const ooQe = computeOperationOrderStoreMixedApproversClient('Siêu Thị A', [1], undefined);
+      check('Client mirror — operationOrders: source ADMIN_QUICK_EDIT VẪN khớp', JSON.stringify(ooQe[1]) === '["qe.loan"]', JSON.stringify(ooQe));
 
       return { results };
     });

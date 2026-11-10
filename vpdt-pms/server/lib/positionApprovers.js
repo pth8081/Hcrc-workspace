@@ -43,13 +43,25 @@
 // dụng cho MỌI phòng ban/đơn vị. pair.dept RỖNG giờ khớp CHỈ theo chức danh, bất kể phòng ban của user
 // là gì — mirror ĐÚNG public/js/core.js::clientMatchesPositionPair() bản client, sửa 1 bên PHẢI sửa cả
 // 2 bên (xem chú thích đầu file).
+// LỖI ĐÃ VÁ (xác nhận với người dùng, 11/2026 — "tôi không muốn vị trí kiêm nhiệm đồng bộ từ Hồ Sơ Nhân
+// Sự tham gia quy trình phê duyệt, chỉ muốn vị trí gán qua Gán Nhanh"): u.secondaryPositions[] gồm 2
+// nguồn trộn chung — dòng `source: 'HR_PROFILE'` (đồng bộ 1 chiều TỰ ĐỘNG từ Chi tiết hồ sơ → 🏷️ Vị Trí
+// Kiêm Nhiệm mỗi khi HR lưu hồ sơ, xem PATCH /by-code+link-account+relink-account ở
+// routes/employeeProfile.js) và dòng `source: 'ADMIN_QUICK_EDIT'` (admin tự gán tay qua khối "🔀 Kiêm
+// Nhiệm Phê Duyệt Quy Trình — Gán Nhanh", POST /secondary-positions) — TRƯỚC ĐÂY khớp approver "Theo vị
+// trí" không phân biệt nguồn, khiến HR chỉ cần gán 1 Vị Trí Kiêm Nhiệm ở hồ sơ là VÔ TÌNH biến người đó
+// thành approver ở module khác dù không ai chủ động gán cho mục đích đó. Nay CHỈ tính dòng KHÔNG PHẢI
+// 'HR_PROFILE' (gồm cả dòng gán tay kiểu CŨ không có field `source` — giữ nguyên hành vi cho dữ liệu cũ
+// trước khi có đồng bộ HR_PROFILE). KHÔNG đổi gì khác — dòng HR_PROFILE vẫn hiển thị bình thường ở màn
+// Sửa Người Dùng/Hồ Sơ Nhân Sự, chỉ không còn được TÍNH LÀ approver "Theo vị trí" nữa.
 function matchesPositionPair(user, pair) {
+  const eligibleSecondary = (user.secondaryPositions || []).filter(sp => sp && sp.source !== 'HR_PROFILE');
   if (!pair.dept) {
     if (user.jobTitle === pair.jobTitle) return true;
-    return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle);
+    return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle);
   }
   if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
-  return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
+  return eligibleSecondary.some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
 }
 
 function resolvePositionApprovers(positionPairs, users) {
