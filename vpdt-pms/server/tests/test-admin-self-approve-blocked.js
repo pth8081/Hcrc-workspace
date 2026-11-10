@@ -231,5 +231,116 @@ test('approveItPriceEmergencyReject(): KHÔNG có quyền tương ứng -> vẫn
   expectThrows403(() => approveItPriceEmergencyReject(SELF_NO_BYPASS, item), /tự phê duyệt/);
 });
 
+// ===== 7) docAllowSelfApprove/submissionAllowSelfApprove/carAllowSelfApprove/officeAllowSelfApprove/
+// vppAllowSelfApprove/contractAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — ảnh
+// chụp lỗi "Bạn không thể tự xử lý..." khi duyệt Đăng Ký Xe, đúng cơ cấu tổ chức công ty nhỏ, trưởng
+// phòng vừa tạo vừa là người phê duyệt duy nhất). Mở rộng ĐÚNG khuôn itPriceAllowSelfApprove*/
+// operationOrderAllowSelfApprove* đã có ở mục 6, cho 6 module còn lại dùng chung lib/workflowEngine.js:
+// docs/submissions/carRegs/officeReqs/vppRegistrations/contracts(+contractsSignedFile). budgetEntries
+// CHỦ Ý KHÔNG đưa vào (người dùng xác nhận bỏ qua — đã bị thay thế hoàn toàn bởi budgetLines "Ngân Sách
+// 2.0" từ v23.0, không còn màn nào ở UI tạo/duyệt qua collection này nữa). =====
+
+test('assertNotSelfDecidingWorkflowItem("docs"): docAllowSelfApprove=true -> KHÔNG throw dù chính người upload', () => {
+  const item = { uploader: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { docAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('docs', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("submissions"): mặc định (không quyền) -> 403 cho chính người trình', () => {
+  const item = { creator: 'nv1' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('submissions', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("submissions"): submissionAllowSelfApprove=true -> KHÔNG throw dù chính người trình', () => {
+  const item = { creator: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { submissionAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('submissions', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("carRegs"): mặc định (không quyền) -> 403 — ĐÚNG module từ ảnh lỗi người dùng gửi', () => {
+  const item = { creator: 'truongphong' };
+  const SELF_NO_BYPASS = { username: 'truongphong', name: 'Trưởng Phòng', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('carRegs', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("carRegs"): carAllowSelfApprove=true -> KHÔNG throw (đúng kịch bản người dùng mô tả: trưởng phòng vừa tạo vừa duyệt)', () => {
+  const item = { creator: 'truongphong' };
+  const SELF = { username: 'truongphong', name: 'Trưởng Phòng', perms: { carAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('carRegs', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("carRegs"): carAllowSelfApprove=true NHƯNG không phải người tạo/trình hồ sơ -> không ảnh hưởng (vẫn là approver bình thường)', () => {
+  const item = { creator: 'nv_khac' };
+  const SELF = { username: 'truongphong', name: 'Trưởng Phòng', perms: { carAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('carRegs', item, SELF); // không throw vì không phải creator — vốn đã không bị chặn
+});
+
+test('assertNotSelfDecidingWorkflowItem("officeReqs"): mặc định (không quyền) -> 403', () => {
+  const item = { creator: 'nv1' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('officeReqs', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("officeReqs"): officeAllowSelfApprove=true -> KHÔNG throw (áp dụng chung cho cả Mua Bán/Sửa Chữa)', () => {
+  const item = { creator: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { officeAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('officeReqs', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("vppRegistrations"): mặc định (không quyền) -> 403', () => {
+  const item = { creator: 'nv1' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('vppRegistrations', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("vppRegistrations"): vppAllowSelfApprove=true -> KHÔNG throw', () => {
+  const item = { creator: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { vppAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('vppRegistrations', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contracts"): mặc định (không quyền) -> 403 cho chính người tạo hợp đồng gốc', () => {
+  const item = { creator: 'nv1' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('contracts', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contracts"): contractAllowSelfApprove=true -> KHÔNG throw cho hợp đồng gốc', () => {
+  const item = { creator: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { contractAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('contracts', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contractsSignedFile"): mặc định (không quyền) -> 403 cho người VỪA TẢI Tài liệu ký lên (signedUploadedBy), dù KHÔNG phải người tạo hợp đồng gốc', () => {
+  const item = { creator: 'nv_khac_phong', signedUploadedBy: 'nv1' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('contractsSignedFile', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contractsSignedFile"): contractAllowSelfApprove=true -> KHÔNG throw cho người vừa tải Tài liệu ký (dùng CHUNG 1 quyền với hợp đồng gốc)', () => {
+  const item = { creator: 'nv_khac_phong', signedUploadedBy: 'nv1' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { contractAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('contractsSignedFile', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contractsSignedFile"): contractAllowSelfApprove=true -> KHÔNG throw cho chính người tạo hợp đồng gốc (creatorField vẫn áp dụng song song extraSelfDecidingField)', () => {
+  const item = { creator: 'nv1', signedUploadedBy: 'nv_khac_phong' };
+  const SELF = { username: 'nv1', name: 'NV1', perms: { contractAllowSelfApprove: true } };
+  assertNotSelfDecidingWorkflowItem('contractsSignedFile', item, SELF);
+});
+
+test('assertNotSelfDecidingWorkflowItem("contractsSignedFile"): KHÔNG có quyền -> vẫn 403 cho người tạo hợp đồng gốc (creatorField áp dụng dù đang xử lý luồng Tài liệu ký)', () => {
+  const item = { creator: 'nv1', signedUploadedBy: 'nv_khac_phong' };
+  const SELF_NO_BYPASS = { username: 'nv1', name: 'NV1', perms: {} };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('contractsSignedFile', item, SELF_NO_BYPASS), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("budgetEntries"): KHÔNG có allowSelfDeciding nào (đã xác nhận bỏ qua) -> LUÔN 403 cho creator, bất kể quyền gì', () => {
+  const item = { creator: 'nv1' };
+  const SELF_WITH_UNRELATED_PERMS = { username: 'nv1', name: 'NV1', perms: { admin: true, budgetManage: true, budgetCreate: true } };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('budgetEntries', item, SELF_WITH_UNRELATED_PERMS), /tự xử lý/);
+});
+
 console.log(`\n${passed}/${passed + failed} scenario(s) passed.`);
 if (failed) process.exitCode = 1;
