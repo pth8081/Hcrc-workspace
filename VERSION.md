@@ -1,9 +1,24 @@
 # Phiên bản hiện tại
 
-**29.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.83 (2026-11): Cây Sơ Đồ Tổ Chức — "Chiều khối" Ngang/Dọc áp dụng RIÊNG từng Phòng Ban
+
+Lỗi người dùng báo lại: "Chiều khối" (↔️ Ngang / ↕️ Dọc) ở tab "🖼️ Cây Sơ Đồ Tổ Chức" trước đây là 1 công
+tắc DUY NHẤT ở toolbar, đổi là đổi NGUYÊN cả sơ đồ — không đúng ý muốn ban đầu chỉ đổi đúng 1 Phòng Ban
+đang thêm/sửa.
+
+**Đã sửa**: orientation giờ lưu THEO TỪNG Phòng Ban (`node.orientation`,
+`lib/orgChartDiagramTree.js`), không còn biến toàn cục. 2 cách đổi chiều: (1) chọn ngay ở form "➕ Thêm
+Phòng Ban / Siêu Thị" lúc tạo mới — chỉ áp dụng cho Phòng Ban đó; (2) nút ↔️/↕️ nhỏ cạnh mỗi dòng trong
+danh sách để đổi chiều 1 Phòng Ban ĐÃ CÓ sẵn (PATCH lưu ngay, không ảnh hưởng Phòng Ban khác). Logic vẽ
+sơ đồ (`module-orgchart.js`) tính lại khoảng cách giữa các cấp để không đè khung khi 1 cấp có cả node
+Ngang lẫn Dọc trộn lẫn. Demo Playwright xác nhận: đổi 1 node sang Dọc không làm các node khác đổi theo;
+thêm node mới chọn Dọc ngay lúc tạo lưu đúng. Đã chạy lại toàn bộ test/demo liên quan đến Cây Sơ Đồ Tổ
+Chức, không có regression.
 
 ## v29.82 (2026-11): "Yêu Cầu Bổ Sung" (Phê Duyệt Giá) cho phép sửa lại TOÀN BỘ thông tin, không chỉ tệp
 
