@@ -3530,6 +3530,13 @@ theo đúng vị trí trong cây**.
   (Vector)"** để tải về máy (vẽ bằng SVG thuần phía trình duyệt, không qua
   server). Vì tách biệt hoàn toàn khỏi cây Định Biên, sơ đồ chắc chắn không
   bao giờ lẫn Vị Trí/định biên vào hình.
+- **"↔️ Ngang / ↕️ Dọc" (từ 11/2026, theo yêu cầu người dùng)** — chọn chiều
+  vẽ khối Phòng Ban ngay trên toolbar sơ đồ. Mặc định **"↔️ Ngang"** (hành vi
+  gốc, khung rộng, chữ đọc xuôi). Bấm **"↕️ Dọc"** khi 1 cấp có quá nhiều
+  Phòng Ban con khiến sơ đồ ngang quá rộng — mọi khung thu hẹp lại, chữ bên
+  trong XOAY 90° đọc từ dưới lên, chiều cao khung tự co giãn theo đúng độ dài
+  tên (cắt "…" nếu tên quá dài). Đổi chiều vẽ lại NGAY. Tải PNG/SVG hoạt động
+  bình thường ở cả 2 chiều.
 - **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức

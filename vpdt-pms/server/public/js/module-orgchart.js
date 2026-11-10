@@ -280,11 +280,37 @@ function ocBuildDiagramForest(nodesFlat) {
   return roots;
 }
 
-const OC_DIAGRAM_SLOT_W = 196, OC_DIAGRAM_LEVEL_H = 118, OC_DIAGRAM_MARGIN = 40;
-const OC_DIAGRAM_BOX_W = { COMPANY: 240, DEPARTMENT: 178 };
-const OC_DIAGRAM_BOX_H = { COMPANY: 62, DEPARTMENT: 50 };
+const OC_DIAGRAM_MARGIN = 40;
 const OC_DIAGRAM_FONT = "Arial, 'Helvetica Neue', Helvetica, sans-serif"; // KHÔNG dùng web font — canvas
 // rasterize SVG lúc xuất PNG không chắc tải được font ngoài (xem downloadOrgChartDiagramPng()).
+
+// _ocDiagramOrientation (11/2026, theo yêu cầu người dùng "nhiều sơ đồ cần quay dọc mới đủ chỗ") —
+// 'horizontal' (mặc định, khối nằm ngang, chữ đọc xuôi — hành vi gốc) hoặc 'vertical' (khối hẹp lại xếp
+// được nhiều Phòng Ban cạnh nhau hơn trên cùng 1 hàng, CHỮ XOAY 90° đọc dọc theo chiều cao khối — dùng
+// khi 1 cấp có quá nhiều Phòng Ban con khiến sơ đồ ngang quá rộng). Đổi qua nút "↔️ Ngang"/"↕️ Dọc" ở
+// toolbar — xem setOrgChartDiagramOrientation(). Hằng số kích thước TÁCH RIÊNG 2 bộ (ngang/dọc) thay vì
+// cố tính chung 1 công thức — 2 chiều có logic co giãn khung hoàn toàn khác nhau (ngang: khung RỘNG cố
+// định, co chiều CAO theo số dòng xuống dòng; dọc: khung CAO co theo độ dài tên — không xuống dòng vì
+// chữ đã xoay dọc theo đúng chiều "dài" của khung).
+let _ocDiagramOrientation = 'horizontal';
+function ocIsVerticalDiagram() { return _ocDiagramOrientation === 'vertical'; }
+
+// Bộ hằng số NGANG (giữ nguyên hành vi gốc trước 11/2026).
+const OC_DIAGRAM_H_SLOT_W = 196, OC_DIAGRAM_H_LEVEL_H = 118;
+const OC_DIAGRAM_H_BOX_W = 178, OC_DIAGRAM_H_BOX_H = 50;
+const OC_DIAGRAM_H_EXTRA_LINE_H = 16, OC_DIAGRAM_H_TEXT_PAD_X = 12, OC_DIAGRAM_H_ICON_CHARS = 2.5;
+
+// Bộ hằng số DỌC (MỚI) — khung hẹp (OC_DIAGRAM_V_BOX_W) + CAO tối đa OC_DIAGRAM_V_MAX_H, chữ LUÔN 1
+// dòng (xoay 90°, không xuống dòng — chiều cao khung co giãn thay cho việc xuống dòng), cắt "…" nếu tên
+// vẫn dài hơn ngân sách ký tự ở chiều cao tối đa. Khoảng cách cấp (LEVEL_H) phải đủ lớn chứa khung cao
+// nhất + đường nối, khoảng cách anh em (SLOT_W) hẹp lại nhiều so với ngang — đúng mục đích "xếp được
+// nhiều Phòng Ban hơn trên 1 hàng".
+const OC_DIAGRAM_V_SLOT_W = 66, OC_DIAGRAM_V_LEVEL_H = 300;
+const OC_DIAGRAM_V_BOX_W = 46, OC_DIAGRAM_V_MIN_H = 80, OC_DIAGRAM_V_MAX_H = 260, OC_DIAGRAM_V_PAD_Y = 16;
+
+function ocDiagramSlotW() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_SLOT_W : OC_DIAGRAM_H_SLOT_W; }
+function ocDiagramLevelH() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_LEVEL_H : OC_DIAGRAM_H_LEVEL_H; }
+function ocDiagramBoxWidth() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_BOX_W : OC_DIAGRAM_H_BOX_W; }
 
 // LỖI ĐÃ VÁ (người dùng báo "chữ tràn ra ngoài ô" — tên Phòng Ban dài như "BAN VẬN HÀNH KINH DOANH"
 // tràn hẳn ra ngoài khung `rect` vì trước đây tên luôn vẽ 1 dòng `text-anchor="middle"` không kiểm tra
@@ -321,11 +347,12 @@ function ocEstimateMaxChars(boxWidth, fontSize, paddingX) {
 }
 
 function ocDiagramAssignXY(node, depth, cursorRef) {
+  const slotW = ocDiagramSlotW(), levelH = ocDiagramLevelH();
   node._depth = depth;
-  node._y = OC_DIAGRAM_MARGIN + depth * OC_DIAGRAM_LEVEL_H;
+  node._y = OC_DIAGRAM_MARGIN + depth * levelH;
   if (!node.children.length) {
-    node._x = cursorRef.x + OC_DIAGRAM_SLOT_W / 2;
-    cursorRef.x += OC_DIAGRAM_SLOT_W;
+    node._x = cursorRef.x + slotW / 2;
+    cursorRef.x += slotW;
     return;
   }
   node.children.forEach(c => ocDiagramAssignXY(c, depth + 1, cursorRef));
@@ -333,29 +360,41 @@ function ocDiagramAssignXY(node, depth, cursorRef) {
   node._x = (first._x + last._x) / 2;
 }
 
-// Chiều cao THÊM cho mỗi dòng tên vượt quá 1 dòng (dòng 2 trở đi) — 1 dòng vẫn giữ NGUYÊN
-// OC_DIAGRAM_BOX_H[node.type] như trước (không đổi hành vi cho tên ngắn, đa số trường hợp thật tế).
-const OC_DIAGRAM_EXTRA_LINE_H = 16;
-// Padding ngang trong khung + số ký tự coi như "chiếm chỗ" bởi icon 🏢/📁 đứng đầu dòng 1 (emoji rộng
-// hơn ký tự thường ~1.5-2 lần) — trừ vào ngân sách ký tự ước lượng cho AN TOÀN thay vì tính riêng từng
-// dòng (đơn giản hoá, chấp nhận dòng 2 hơi rộng rãi hơn cần thiết một chút).
-const OC_DIAGRAM_TEXT_PAD_X = 12;
-const OC_DIAGRAM_ICON_CHARS = 2.5;
-
+// Tính node._nameLines + node._h — NHÁNH NGANG: xuống dòng tối đa 2 dòng theo khung rộng cố định (hành
+// vi gốc). NHÁNH DỌC (MỚI): LUÔN 1 dòng (chữ xoay 90° đọc dọc theo chiều cao khung, "xuống dòng" không
+// còn ý nghĩa vì chữ không còn nằm ngang) — chiều cao khung co giãn theo ĐÚNG độ dài tên (ước lượng cùng
+// công thức ký tự trung bình như nhánh ngang, chỉ đổi vai trò "khung rộng cố định, đo xem mấy dòng" ->
+// "khung cao co giãn theo đúng 1 dòng dài bao nhiêu"), cắt "…" nếu vượt quá OC_DIAGRAM_V_MAX_H.
 function ocPrepareNodeLines(node) {
-  const isCompany = node.type === 'COMPANY';
-  const fontSize = isCompany ? 15 : 12.5;
-  const maxChars = ocEstimateMaxChars(OC_DIAGRAM_BOX_W[node.type], fontSize, OC_DIAGRAM_TEXT_PAD_X) - OC_DIAGRAM_ICON_CHARS;
-  node._nameLines = ocWrapLines(node.name, maxChars);
-  node._h = OC_DIAGRAM_BOX_H[node.type] + Math.max(0, node._nameLines.length - 1) * OC_DIAGRAM_EXTRA_LINE_H;
+  if (ocIsVerticalDiagram()) {
+    const fontSize = 12.5;
+    const avgCharH = fontSize * 0.67;
+    const maxChars = Math.max(3, Math.floor((OC_DIAGRAM_V_MAX_H - OC_DIAGRAM_V_PAD_Y) / avgCharH));
+    // LỖI ĐÃ VÁ (phát hiện qua demo thật): .length đếm NHẦM dài hơn hẳn độ dài hiển thị thật cho vài tên
+    // Phòng Ban tiếng Việt (VD "BAN VẬN HÀNH KINH DOANH") tuỳ theo chuỗi đó đang ở dạng Unicode TỔ HỢP
+    // (NFD — nguyên âm + dấu tách rời, VD "Ậ" = "A" + 2 dấu phụ, .length đếm thành 3 ký tự dù chỉ hiện
+    // 1 chữ) hay DỰNG SẴN (NFC — "Ậ" là 1 ký tự duy nhất) — tuỳ nguồn nhập liệu, không kiểm soát được.
+    // .normalize('NFC') ép về dạng dựng sẵn trước khi đếm, cho kết quả khớp đúng số ký tự NHÌN THẤY.
+    const name = String(node.name || '').normalize('NFC');
+    const label = name.length > maxChars ? name.slice(0, maxChars - 1).replace(/\s+\S*$/, '') + '…' : name;
+    node._nameLines = [label];
+    node._h = Math.round(Math.min(OC_DIAGRAM_V_MAX_H, Math.max(OC_DIAGRAM_V_MIN_H, label.length * avgCharH + OC_DIAGRAM_V_PAD_Y)));
+  } else {
+    const maxChars = ocEstimateMaxChars(OC_DIAGRAM_H_BOX_W, 12.5, OC_DIAGRAM_H_TEXT_PAD_X) - OC_DIAGRAM_H_ICON_CHARS;
+    node._nameLines = ocWrapLines(node.name, maxChars);
+    node._h = OC_DIAGRAM_H_BOX_H + Math.max(0, node._nameLines.length - 1) * OC_DIAGRAM_H_EXTRA_LINE_H;
+  }
 }
 
 // Vẽ RỪNG CÂY (1 hoặc nhiều node gốc song song, xem ocBuildDiagramForest()) — mirror layout/vẽ của
 // ocRenderDepartmentDiagram() bản cũ (đã xoá), chỉ khác: (1) nhận MẢNG root thay vì 1 root, cursor X
 // chạy chung xuyên suốt mọi cây để các cây gốc không đè lên nhau; (2) MỌI node đều vẽ kiểu DEPARTMENT
-// (📁, không còn khái niệm COMPANY/"Trụ sở chính" vì cây này không có node Công Ty).
+// (📁, không còn khái niệm COMPANY/"Trụ sở chính" vì cây này không có node Công Ty); (3) hỗ trợ 2 chiều
+// vẽ (ocIsVerticalDiagram()) — chiều dọc xoay cả khung LẪN chữ, chiều ngang giữ nguyên hành vi gốc.
 function ocRenderDiagramForest(roots) {
   if (!roots || !roots.length) return { svgHTML: '', width: 0, height: 0 };
+  const vertical = ocIsVerticalDiagram();
+  const levelH = ocDiagramLevelH(), boxW = ocDiagramBoxWidth();
   const cursor = { x: OC_DIAGRAM_MARGIN };
   roots.forEach(root => ocDiagramAssignXY(root, 0, cursor));
   let maxDepth = 0, maxX = 0;
@@ -363,26 +402,33 @@ function ocRenderDiagramForest(roots) {
     (function scan(n) {
       ocPrepareNodeLines(n);
       maxDepth = Math.max(maxDepth, n._depth);
-      maxX = Math.max(maxX, n._x + OC_DIAGRAM_BOX_W[n.type] / 2);
+      maxX = Math.max(maxX, n._x + boxW / 2);
       n.children.forEach(scan);
     })(root);
   });
   const width = Math.round(maxX + OC_DIAGRAM_MARGIN);
-  const extraHByDepth = new Array(maxDepth + 1).fill(0);
-  roots.forEach(root => {
-    (function scanExtra(n) {
-      extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_BOX_H[n.type]);
-      n.children.forEach(scanExtra);
-    })(root);
-  });
-  const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
-  const height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * OC_DIAGRAM_LEVEL_H + totalExtraH + 16);
+  let height;
+  if (vertical) {
+    // OC_DIAGRAM_V_LEVEL_H đã đủ rộng rãi chứa khung cao nhất (OC_DIAGRAM_V_MAX_H) + đường nối — không
+    // cần cộng dồn "phần vượt chuẩn" như nhánh ngang (khung ngang có thể xuống dòng không giới hạn trên).
+    height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * levelH + 16);
+  } else {
+    const extraHByDepth = new Array(maxDepth + 1).fill(0);
+    roots.forEach(root => {
+      (function scanExtra(n) {
+        extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_H_BOX_H);
+        n.children.forEach(scanExtra);
+      })(root);
+    });
+    const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
+    height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * levelH + totalExtraH + 16);
+  }
 
   let linesSvg = '', nodesSvg = '';
   function drawConnectors(node) {
     if (!node.children.length) return;
     const pBottom = node._y + node._h / 2;
-    const busY = pBottom + (OC_DIAGRAM_LEVEL_H - node._h / 2 - node.children[0]._h / 2) / 2;
+    const busY = pBottom + (levelH - node._h / 2 - node.children[0]._h / 2) / 2;
     linesSvg += `<line x1="${node._x}" y1="${pBottom}" x2="${node._x}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
     if (node.children.length > 1) {
       const firstX = node.children[0]._x, lastX = node.children[node.children.length - 1]._x;
@@ -395,21 +441,41 @@ function ocRenderDiagramForest(roots) {
     });
   }
   function drawNode(node) {
-    const w = OC_DIAGRAM_BOX_W[node.type], h = node._h;
+    const w = boxW, h = node._h;
     const x = node._x - w / 2, y = node._y - h / 2;
-    const nameLines = node._nameLines;
     nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
-    const blockTop = node._y - (nameLines.length - 1) * 8 + 5;
-    nameLines.forEach((line, i) => {
-      const icon = i === 0 ? '📁 ' : '';
-      nodesSvg += `<text x="${node._x}" y="${blockTop + i * 16}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">${icon}${escapeHtml(line)}</text>`;
-    });
+    if (vertical) {
+      // Chữ xoay -90° quanh đúng tâm khung (đọc từ dưới lên — quy ước phổ biến cho nhãn xoay dọc, VD
+      // trục hoành biểu đồ) — dominant-baseline="middle" để canh giữa chữ theo trục đã xoay, giống hệt
+      // text-anchor="middle" vốn canh giữa theo trục ngang bình thường.
+      const label = node._nameLines[0] || '';
+      nodesSvg += `<text x="${node._x}" y="${node._y}" text-anchor="middle" dominant-baseline="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a" transform="rotate(-90 ${node._x} ${node._y})">📁 ${escapeHtml(label)}</text>`;
+    } else {
+      const nameLines = node._nameLines;
+      const blockTop = node._y - (nameLines.length - 1) * 8 + 5;
+      nameLines.forEach((line, i) => {
+        const icon = i === 0 ? '📁 ' : '';
+        nodesSvg += `<text x="${node._x}" y="${blockTop + i * 16}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">${icon}${escapeHtml(line)}</text>`;
+      });
+    }
     node.children.forEach(drawNode);
   }
   roots.forEach(root => { drawConnectors(root); drawNode(root); });
 
   const svgHTML = `<svg id="orgChartDiagramSvg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Sơ đồ tổ chức theo Phòng Ban/Siêu Thị">${linesSvg}${nodesSvg}</svg>`;
   return { svgHTML, width, height };
+}
+
+// Đổi chiều vẽ sơ đồ (nút "↔️ Ngang"/"↕️ Dọc" ở toolbar) — vẽ lại NGAY, không cần gọi lại API.
+function setOrgChartDiagramOrientation(mode) {
+  _ocDiagramOrientation = mode === 'vertical' ? 'vertical' : 'horizontal';
+  const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
+  const hBtn = document.getElementById('btnOrgChartDiagramOrientH');
+  const vBtn = document.getElementById('btnOrgChartDiagramOrientV');
+  if (hBtn) hBtn.className = !ocIsVerticalDiagram() ? activeCls : inactiveCls;
+  if (vBtn) vBtn.className = ocIsVerticalDiagram() ? activeCls : inactiveCls;
+  renderOrgChartDiagramSvgOnly();
 }
 
 // Tải lại cây Phòng Ban/Siêu Thị RIÊNG từ server — gọi mỗi khi vào tab, hoặc sau khi thêm/sửa/xoá.
@@ -479,7 +545,7 @@ async function renderOrgChartDiagramTab() {
   if (statusEl) statusEl.innerText = '';
   renderOrgChartDiagramNodeParentSelect();
   renderOrgChartDiagramNodeList();
-  renderOrgChartDiagramSvgOnly();
+  setOrgChartDiagramOrientation(_ocDiagramOrientation);
 }
 
 // Chỉ vẽ lại SVG (không gọi lại API) — dùng sau mỗi lần thêm/xoá Phòng Ban để sơ đồ cập nhật NGAY.

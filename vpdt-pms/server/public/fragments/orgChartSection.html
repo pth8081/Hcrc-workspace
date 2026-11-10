@@ -82,9 +82,19 @@
           <div id="orgChartDiagramNodeList" class="pt-2 border-t space-y-1 text-xs max-h-[360px] overflow-y-auto"></div>
         </div>
         <div class="bg-white border rounded p-3 space-y-2">
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" id="btnOrgChartDiagramPng" data-op="downloadOrgChartDiagramPng" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">🖼️ Tải Ảnh (PNG)</button>
-            <button type="button" id="btnOrgChartDiagramSvg" data-op="downloadOrgChartDiagramSvg" class="bg-white border border-teal-700 text-teal-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-50">⬇️ Tải SVG (Vector)</button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <!-- "↔️ Ngang"/"↕️ Dọc" (11/2026, theo yêu cầu người dùng "nhiều sơ đồ cần quay dọc mới đủ
+                 chỗ") — đổi chiều vẽ khối (khung hẹp lại, chữ xoay 90°), xem setOrgChartDiagramOrientation()
+                 ở module-orgchart.js. Class khởi tạo khớp đúng mặc định 'horizontal' (Ngang đang chọn). -->
+            <div class="flex items-center gap-1">
+              <span class="text-[11px] font-semibold text-gray-500 mr-1">Chiều khối:</span>
+              <button type="button" id="btnOrgChartDiagramOrientH" data-op="setOrgChartDiagramOrientation" data-arg0="horizontal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">↔️ Ngang</button>
+              <button type="button" id="btnOrgChartDiagramOrientV" data-op="setOrgChartDiagramOrientation" data-arg0="vertical" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">↕️ Dọc</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="btnOrgChartDiagramPng" data-op="downloadOrgChartDiagramPng" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">🖼️ Tải Ảnh (PNG)</button>
+              <button type="button" id="btnOrgChartDiagramSvg" data-op="downloadOrgChartDiagramSvg" class="bg-white border border-teal-700 text-teal-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-50">⬇️ Tải SVG (Vector)</button>
+            </div>
           </div>
           <p id="orgChartDiagramStatus" class="text-[11px] text-gray-500 min-h-[14px]"></p>
           <div class="overflow-x-auto p-2">

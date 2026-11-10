@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**29.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.79 (2026-11): Cây Sơ Đồ Tổ Chức — thêm chiều vẽ khối "↔️ Ngang / ↕️ Dọc"
+
+Tiếp nối v29.78: người dùng yêu cầu thêm 1 tiện ích ở tab "🖼️ Cây Sơ Đồ Tổ Chức" — 1 sơ đồ có nhiều Phòng
+Ban cạnh nhau khiến khung hình quá rộng, cần chọn được "quay khối ngang/dọc", quay dọc thì chữ cũng xoay
+theo.
+
+**Đã làm**: thêm nút "↔️ Ngang" (mặc định, giữ nguyên hành vi cũ) / "↕️ Dọc" (MỚI) ở toolbar sơ đồ — bấm
+"↕️ Dọc" thì MỌI khối Phòng Ban thu hẹp lại (46px, trước đó 178px) để xếp được nhiều Phòng Ban hơn trên
+cùng 1 hàng, chữ bên trong XOAY 90° (đọc từ dưới lên) để vẫn đọc được trong khung hẹp, chiều cao khung co
+giãn theo đúng độ dài tên (không xuống dòng như chiều ngang — cắt "…" nếu tên vượt quá ngân sách ký tự ở
+chiều cao tối đa 260px). Đổi chiều vẽ lại NGAY, không cần tải lại gì. Nút "🖼️ Tải Ảnh (PNG)"/"⬇️ Tải SVG
+(Vector)" hoạt động bình thường ở cả 2 chiều (chụp đúng trạng thái SVG đang hiện).
+
+**Kỹ thuật**: tách `OC_DIAGRAM_H_*`/`OC_DIAGRAM_V_*` thành 2 bộ hằng số kích thước riêng (khoảng cách
+anh em/cấp, kích thước khung) — `ocPrepareNodeLines()`/`ocDiagramAssignXY()`/`ocRenderDiagramForest()`
+(`module-orgchart.js`) đọc đúng bộ theo `_ocDiagramOrientation` hiện tại. Phát hiện qua demo thật: đếm độ
+dài tên bằng `.length` thô có thể bị LỆCH với vài tên tiếng Việt tuỳ dạng Unicode TỔ HỢP (NFD) hay DỰNG
+SẴN (NFC) của chuỗi nguồn — đã thêm `.normalize('NFC')` trước khi đếm ở nhánh Dọc để tránh cắt chữ sai.
+
+Demo Playwright thật mới `tests/demo-orgchart-diagram-orientation.js` (mô phỏng 1 Phòng Ban có 6 Phòng
+Ban con — đúng kịch bản "nhiều sơ đồ cần quay dọc" người dùng mô tả) — xác nhận: khung Dọc hẹp hơn hẳn
+Ngang (466px so với 1247px cùng dữ liệu), chữ có `transform="rotate(-90...)"`, bấm lại Ngang trả về đúng
+như cũ. Chạy lại toàn bộ test/demo Cơ Cấu Tổ Chức khác (`test-orgchart-diagram-tab` 19 kịch bản,
+`demo-orgchart-diagram-textfit`, `demo-orgchart-diagram-tree-separated`) — PASS 100%, không regression.
 
 ## v29.78 (2026-11): Cơ Cấu Tổ Chức — tách "🧩 Định Biên Nhân Sự" khỏi "🖼️ Cây Sơ Đồ Tổ Chức"
 
