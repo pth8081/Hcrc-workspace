@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**29.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.90 (2026-11): Kiểm Soát Hàng Hóa — vá lỗi lộ dữ liệu chéo siêu thị (Nghiêm Trọng)
+
+Yêu cầu người dùng: "Nếu khi tôi đăng nhập mà tôi đổi siêu thị ấy, thì sẽ không được nhìn thấy cái thông
+tin mà tôi đứng ở siêu thị khác... Hiện tại là nó vẫn có thông tin nếu mà tôi chuyển sang siêu thị khác.
+Cái này là bug ấy."
+
+**Root cause**: 4 sub-tab thao tác hằng ngày trong "📋 Kiểm Soát Hàng Hóa" — "📷 Ghi Nhận" (cả ô chọn
+Quầy Kệ lẫn bảng "20 ghi nhận gần nhất"), "🗄️ Quầy Kệ", "⏰ Hạn Sử Dụng", "🔔 Ngưỡng Tồn" — lấy thẳng
+`DB.shelfLocations`/`shelfRecords`/`shelfStockThresholds` không lọc lại theo đúng siêu thị đang đứng.
+Dữ liệu client có thể chứa NHIỀU siêu thị nếu tài khoản có thêm quyền "👁️ Xem Báo Cáo Kiểm Soát Hàng
+Hóa" (nhiều siêu thị) hoặc là Quản Trị Viên — server CỐ Ý gửi về nhiều siêu thị như vậy để phục vụ 2 tab
+"📊 Đối Chiếu"/"📑 Báo Cáo" (`filterShelfRecordsForUser()`, `lib/recordViewScope.js`) — 4 tab thao tác
+còn lại vô tình lộ hết dữ liệu nhiều siêu thị ra, dù tiêu đề vẫn ghi đúng tên 1 siêu thị.
+
+**Đã làm**:
+1. `public/js/module-vanhanh.js`: thêm `shelfItemsForOwnStore(arr)` — lọc `item.dept === currentUser.dept`
+   — áp dụng ở ĐỦ 6 điểm đọc: `effectiveShelfLocations()` (ô chọn Quầy Kệ + offline cache),
+   `renderShelfRecordRecentList()`, `renderShelfLocationsList()`, `exportShelfLocationsExcel()`,
+   `renderShelfExpiryGroups()` (2 nhánh), `renderShelfStockThresholdsList()`. Khớp đúng nguyên tắc server
+   ĐÃ áp dụng cho GHI (`applyShelfLocationEdit()`/`applyShelfStockThresholdEdit()`, `lib/shelfStockEdit.js`:
+   non-admin chỉ sửa được đúng `item.dept === user.dept`) — đây là lọc HIỂN THỊ phía client cho khớp,
+   không đụng gì phía server. KHÔNG áp dụng cho "📊 Đối Chiếu"/"📑 Báo Cáo" (2 tab đó CỐ Ý cho xem nhiều
+   siêu thị theo quyền, giữ nguyên).
+2. `tests/test-shelf-threshold-digest-ui-real-click.js`: sửa fixture `ADMIN.dept` từ `'HO'` thành đúng
+   `'Siêu thị Quận 1'` (khớp dữ liệu test) — đây chính là test cũ bị lộ ra do đã ngầm dựa vào lỗ hổng
+   (admin xem được Ngưỡng Tồn của siêu thị khác dept mình), nay phải sửa fixture cho đúng ngữ cảnh thật
+   thay vì nới lỏng bản vá mới.
+
+**Test**: `tests/test-shelf-ownstore-scope-regression.js` (mới, 8/8 pass) — mô phỏng đúng kịch bản người
+dùng báo cáo (dữ liệu client có 2 siêu thị), xác nhận cả 4 tab chỉ hiện đúng 1 siêu thị VÀ tab Báo Cáo
+vẫn hiện đủ 2 siêu thị (không bị vá quá tay). Đã XÁC MINH test bắt đúng lỗi bằng cách tạm revert code vá
+— test fail đúng 5/8 scenario khi chưa vá, pass lại đủ 8/8 sau khi khôi phục. Chạy lại toàn bộ 22 file
+`test-shelf-*.js` + `test-shelfmodule-dept-rename-cascade.js` + 7 file `demo-shelf-*.js` — không
+regression. CSP grep sạch.
 
 ## v29.89 (2026-11): Kiểm Soát Hàng Hóa — vá lỗi "Cập Nhật" số lượng không tính vào "Trên Kệ Hôm Nay"
 

@@ -283,13 +283,29 @@ function setVanHanhShelfSubTab(tab) {
   }
 }
 
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh: "đổi siêu thị vẫn còn thấy thông tin siêu thị cũ") —
+// 4 tab thao tác hằng ngày (Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn) PHẢI chỉ thấy đúng siêu thị đang
+// đứng (currentUser.dept). DB.shelfLocations/shelfRecords/shelfStockThresholds có thể chứa NHIỀU siêu
+// thị cùng lúc nếu tài khoản có thêm quyền shelfReportView (nhiều siêu thị) hoặc admin — server CỐ Ý gửi
+// về nhiều siêu thị như vậy để phục vụ 2 tab "📊 Đối Chiếu"/"📑 Báo Cáo" (filterShelfRecordsForUser(),
+// lib/recordViewScope.js) — 4 tab thao tác còn lại trước đây lấy thẳng DB.* không lọc lại, vô tình lộ
+// hết dữ liệu nhiều siêu thị ra, dù tiêu đề vẫn ghi đúng tên 1 siêu thị. Khớp đúng nguyên tắc server ĐÃ
+// áp dụng cho GHI (applyShelfLocationEdit()/applyShelfStockThresholdEdit(), lib/shelfStockEdit.js:
+// non-admin chỉ sửa được đúng item.dept === user.dept) — đây là lọc HIỂN THỊ phía client cho khớp, không
+// thay đổi gì phía server. KHÔNG áp dụng cho "📊 Đối Chiếu"/"📑 Báo Cáo" (2 tab đó CỐ Ý cho xem nhiều
+// siêu thị theo quyền, đã tự lọc/gắn nhãn riêng — xem loadShelfReconciliation()/loadShelfReportTab()).
+function shelfItemsForOwnStore(arr) {
+  return (arr || []).filter(x => x && x.dept === currentUser.dept);
+}
 // sdd* picker (xem CLAUDE.md "Ô tìm-kiếm-gõ-chọn") — CHỈ chọn từ DB.shelfLocations ĐÃ khai báo (không
 // ghi tay tên quầy mới ở màn Ghi Nhận), để báo cáo tiến độ kiểm hằng ngày (pha sau) đếm đúng trên tổng
 // số quầy cố định. Offline-first (Phần E, 11/2026): khi KHÔNG có DB.shelfLocations trong tay (mở lại
 // app lúc mất mạng, trước khi tải được dữ liệu online) thì lấy bản đã cache trong IndexedDB (xem
 // shelfOfflineGetCachedLocations() bên dưới) — vẫn chỉ chọn được quầy ĐÃ khai báo, không gõ tay được.
+// shelfItemsForOwnStore() áp dụng CẢ 2 nhánh (online lẫn offline cache) — cache offline cũng có thể dính
+// nhiều siêu thị (cacheShelfLocationsOffline() cache nguyên DB.shelfLocations lúc còn online).
 function effectiveShelfLocations() {
-  return (DB.shelfLocations && DB.shelfLocations.length) ? DB.shelfLocations : (shelfOfflineLocationsCache || []);
+  return shelfItemsForOwnStore((DB.shelfLocations && DB.shelfLocations.length) ? DB.shelfLocations : (shelfOfflineLocationsCache || []));
 }
 function populateShelfLocationPicker() {
   sddSetOptions('vhShelfLocationDropdown', effectiveShelfLocations()
@@ -1027,7 +1043,7 @@ function renderShelfRecordRecentList() {
       <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
       <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
-  const items = [...(DB.shelfRecords || [])].sort((a, b) => b.id - a.id).slice(0, 20);
+  const items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id).slice(0, 20);
   const rows = items.map(r => {
     if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 2, 'recent');
     const soldOutBadge = Number(r.quantity) <= 0 ? ' <span class="text-[10px] text-gray-400 italic">(đã bán hết)</span>' : '';
@@ -1117,7 +1133,7 @@ function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
   if (!tbody) return;
   const canManage = canManageShelfLocationsClient(currentUser);
-  const items = [...(DB.shelfLocations || [])].sort((a, b) => a.code.localeCompare(b.code));
+  const items = shelfItemsForOwnStore(DB.shelfLocations).sort((a, b) => a.code.localeCompare(b.code));
   tbody.innerHTML = items.length ? items.map(s => {
     if (canManage && editingShelfLocationId === s.id) {
       return `
@@ -1146,7 +1162,7 @@ function renderShelfLocationsList() {
   }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
 }
 function exportShelfLocationsExcel() {
-  const items = [...(DB.shelfLocations || [])].sort((a, b) => a.code.localeCompare(b.code));
+  const items = shelfItemsForOwnStore(DB.shelfLocations).sort((a, b) => a.code.localeCompare(b.code));
   if (!items.length) return alert('Chưa có quầy kệ nào để xuất.');
   const columns = [
     { header: 'Mã Quầy Kệ', key: 'code', width: 20 }, { header: 'Tên Quầy Kệ', key: 'name', width: 32 },
@@ -1263,7 +1279,7 @@ function renderShelfExpiryGroups() {
   if (!tbody) return;
   const showSoldOut = !!document.getElementById('vhShelfExpiryShowSoldOut')?.checked;
   const now = new Date(); now.setHours(0, 0, 0, 0);
-  const allTracked = (DB.shelfRecords || []).filter(r => r.expiryDate && Number(r.quantity) > 0);
+  const allTracked = shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate && Number(r.quantity) > 0);
   // Tổng theo NHÓM mã hàng — dùng để so với tồn kho hệ thống Ở MỨC SẢN PHẨM, không phải từng dòng lô
   // riêng lẻ (xem chú thích đầu khối). "CÙNG sản phẩm" phải khớp ĐÚNG quy tắc "maHang HOẶC maVach" dùng
   // xuyên suốt tính năng này (lib/shelfRecordUpsert.js::findMatchingActiveShelfRecord(),
@@ -1293,7 +1309,7 @@ function renderShelfExpiryGroups() {
     groupTotals.set(root, (groupTotals.get(root) || 0) + (Number(r.quantity) || 0));
   });
   const groupTotalOf = (r) => groupTotals.get(dsuFind(recordNodeKey(r))) ?? (Number(r.quantity) || 0);
-  const items = showSoldOut ? (DB.shelfRecords || []).filter(r => r.expiryDate) : allTracked;
+  const items = showSoldOut ? shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate) : allTracked;
   const rows = items.map(r => {
     const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
     const diffDays = Math.round((exp - now) / 86400000);
@@ -1741,7 +1757,7 @@ const SHELF_THRESHOLD_SEVERITY = { RED: 2, YELLOW: 1, GREEN: 0 };
 function renderShelfStockThresholdsList() {
   const tbody = document.getElementById('vhShelfThresholdBody');
   if (!tbody) return;
-  const items = [...(DB.shelfStockThresholds || [])].sort((a, b) => b.id - a.id);
+  const items = shelfItemsForOwnStore(DB.shelfStockThresholds).sort((a, b) => b.id - a.id);
   const idLabel = (t) => [t.maHang ? `Mã Hàng: ${t.maHang}` : null, t.maVach ? `Mã Vạch: ${t.maVach}` : null, t.category ? `Ngành Hàng: ${t.category}` : null].filter(Boolean).join(' / ') || '(thiếu dữ liệu)';
   tbody.innerHTML = items.length ? items.map(t => {
     if (editingShelfStockThresholdId === t.id) {

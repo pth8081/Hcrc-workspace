@@ -10,8 +10,11 @@ const { createRunner, assert, assertEqual } = require('./testHarness');
 async function main() {
   const { startStaticServer, createMockState, launchPage } = require('./testHarness');
   const PORT = 8982;
+  // dept PHẢI khớp đúng siêu thị của dữ liệu test (11/2026, LỖI ĐÃ VÁ ở module-vanhanh.js:
+  // shelfItemsForOwnStore() — các tab Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn nay CHỈ hiện đúng
+  // currentUser.dept, không còn hiện lẫn siêu thị khác dù tài khoản là admin/có shelfReportView).
   const ADMIN = {
-    username: 'admin1', name: 'Quản Trị Viên', dept: 'HO',
+    username: 'admin1', name: 'Quản Trị Viên', dept: 'Siêu thị Quận 1',
     perms: { admin: true, vanHanhShelfTab: true, shelfRecordCreate: true, shelfLocationManage: true }, active: true, totpEnabled: true, email: 'admin1@hcrc.vn'
   };
   const today = new Date().toISOString();
