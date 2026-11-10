@@ -78,6 +78,7 @@ async function renderOrgChartModule() {
   // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
   const canManageTree = !!(currentUser.perms?.orgChartManage);
   document.getElementById('btnOrgChartCreateDraft').classList.toggle('hidden', !canManageTree);
+  document.getElementById('btnOrgChartCreateBlank').classList.toggle('hidden', !canManageTree);
   // "🗑️ Xoá Tất Cả Bản Nháp" (11/2026) — hiện khi có >=1 bản Nháp BẤT KỲ trong toàn danh sách (không
   // phụ thuộc bản đang xem như nút "Xoá Bản Nháp Này" ở loadOrgChartCurrentVersion()).
   document.getElementById('btnOrgChartDeleteAllDrafts').classList.toggle('hidden', !(canManageTree && _ocVersions.some(v => v.status === 'DRAFT')));
@@ -717,6 +718,23 @@ async function cloneOrgChartVersionClick() {
   let result;
   try {
     result = await orgChartApiCall('POST', `/api/org-chart/versions/${sourceId}/clone`, { versionName: name.trim() });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  await renderOrgChartModule();
+  document.getElementById('orgChartVersionSelect').value = String(result.version.id);
+  await onOrgChartVersionSelectChange();
+}
+// Nút "✨ Tạo Bản Mới (Trống)" (11/2026, theo yêu cầu người dùng: "chỉ tạo được bản nháp, tức là lấy
+// nguyên cái bản mà cuối cùng... thêm một tính năng tạo bản mới mà sạch luôn để mình có thể làm lại
+// đầu") — KHÁC cloneOrgChartVersionClick() ở trên (LUÔN sao chép toàn bộ cây từ bản đang áp dụng): tạo 1
+// bản Nháp HOÀN TOÀN TRỐNG (chỉ gốc "Công Ty", server tự dựng — xem lib/orgChart.js::createBlankVersion()).
+// KHÔNG đụng/xoá bất kỳ version nào khác đang có — chỉ THÊM 1 bản Nháp mới vào danh sách.
+async function createBlankOrgChartVersionClick() {
+  if (!confirm('Tạo 1 bản Nháp HOÀN TOÀN TRỐNG (chỉ có gốc "Công Ty", KHÔNG sao chép dữ liệu từ bất kỳ bản nào) để xây lại cây từ đầu?\n\nCác bản/phiên bản khác đang có vẫn giữ nguyên, không bị ảnh hưởng.')) return;
+  const name = prompt('Tên bản mới:', 'Cơ cấu tổ chức (bản mới)');
+  if (name === null) return;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', '/api/org-chart/versions/blank', { versionName: name.trim() });
   } catch (err) { return alert(`⛔ ${err.message}`); }
   await renderOrgChartModule();
   document.getElementById('orgChartVersionSelect').value = String(result.version.id);

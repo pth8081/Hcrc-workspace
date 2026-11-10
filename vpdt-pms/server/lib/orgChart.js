@@ -480,6 +480,23 @@ function bootstrapFirstVersion(list, versionName, actingUsername) {
   return version;
 }
 
+// Tạo bản HOÀN TOÀN MỚI/TRỐNG (11/2026, theo yêu cầu người dùng: "thêm một tính năng tạo bản mới mà
+// sạch luôn để mình có thể làm lại đầu") — khác cloneVersion() ngay dưới (sao chép TOÀN BỘ cây từ 1
+// version có sẵn): bản này CHỈ có đúng 1 node gốc "Công Ty", giống hệt bootstrapFirstVersion() ở trên,
+// nhưng KHÔNG bị chặn khi ĐÃ có version khác (bootstrapFirstVersion() CHỈ dùng đúng 1 lần duy nhất lúc
+// chưa có version nào) — cho phép xây lại từ đầu bất cứ lúc nào mà KHÔNG đụng/xoá bất kỳ version nào
+// khác đang có (APPLIED/ARCHIVED/DRAFT khác vẫn nguyên vẹn, đây chỉ là THÊM 1 bản DRAFT mới vào danh
+// sách — người dùng tự xoá các bản Nháp cũ không cần nữa bằng "🗑️ Xoá Tất Cả Bản Nháp"/"🗑️ Xoá Bản
+// Nháp Này" đã có sẵn).
+function createBlankVersion(list, versionName, actingUsername) {
+  return {
+    id: nextIdFor(list), versionName: versionName || 'Cơ cấu tổ chức (bản mới)', status: 'DRAFT',
+    effectiveDate: null, clonedFromVersionId: null,
+    nodes: [{ nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, posType: null, positionKey: null, displayOrder: 0 }],
+    kpiFlow: [], createdBy: actingUsername, createdAt: new Date().toISOString(), appliedBy: null, appliedAt: null
+  };
+}
+
 function cloneVersion(list, sourceVersionId, versionName, actingUsername) {
   const source = requireVersion(list, sourceVersionId);
   return {
@@ -711,7 +728,7 @@ module.exports = {
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
-  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteAllDraftVersions, deleteArchivedVersion,
+  bootstrapFirstVersion, createBlankVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteAllDraftVersions, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
   addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,
   renameDepartmentRefInAllVersions, renameJobTitleInAllVersions

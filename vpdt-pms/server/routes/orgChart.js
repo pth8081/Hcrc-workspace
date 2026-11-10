@@ -130,6 +130,26 @@ router.post('/bootstrap', async (req, res) => {
   }
 });
 
+// POST /api/org-chart/versions/blank (11/2026, theo yêu cầu người dùng: "thêm một tính năng tạo bản
+// mới mà sạch luôn để mình có thể làm lại đầu") — khác /bootstrap ở trên (CHỈ dùng đúng 1 lần lúc chưa
+// có version nào) và /versions/:id/clone ngay dưới (sao chép TOÀN BỘ cây từ 1 version có sẵn): route
+// này tạo 1 bản Nháp HOÀN TOÀN TRỐNG (chỉ có gốc "Công Ty"), DÙNG ĐƯỢC BẤT CỨ LÚC NÀO kể cả đã có version
+// khác — KHÔNG đụng/xoá bất kỳ version nào đang có, chỉ THÊM 1 bản DRAFT mới vào danh sách.
+router.post('/versions/blank', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let created;
+    await withLockedAppDataValue('orgChartVersions', (list) => {
+      created = orgChart.createBlankVersion(list, req.body?.versionName, req.freshUser.username);
+      return [...(list || []), created];
+    });
+    res.json({ ok: true, version: created });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/blank', 'Không thể tạo bản mới');
+  }
+});
+
 // POST /api/org-chart/versions/:id/clone — tạo bản nháp mới từ 1 version có sẵn (thường là APPLIED).
 router.post('/versions/:id/clone', async (req, res) => {
   if (!requireManageTree(req, res)) return;
