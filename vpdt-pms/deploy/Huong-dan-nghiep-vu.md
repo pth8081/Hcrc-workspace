@@ -3318,6 +3318,16 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     quyền vào tab. Nếu siêu thị chưa cấu hình "Mã Điểm" hoặc hệ thống chưa
     cấu hình kết nối API, màn này báo lỗi rõ ràng thay vì hiện trống/lỗi vỡ
     giao diện.
+  - **Cột "Trên Kệ Quá Khứ" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm
+    cột trên kệ quá khứ để hiện các mã đã đưa lên kệ trước đây để theo dõi/
+    báo cáo sau này, nếu chỉ hôm nay sẽ không hiện kệ đã scan trước")**:
+    trước đây bảng Đối Chiếu CHỈ hiện mã hàng đã scan lên kệ HÔM NAY — mã
+    chỉ scan trong quá khứ (chưa scan lại hôm nay) hoàn toàn không có dòng
+    nào, mất dấu theo dõi. Nay bảng hiện CẢ các mã đã TỪNG scan (hôm nay
+    hoặc trước đây), với 1 cột mới "Trên Kệ Quá Khứ" = tổng số lượng ghi
+    nhận KHÔNG phải hôm nay của cùng mã hàng — CHỈ để xem/theo dõi, KHÔNG
+    tính vào cột "Kết Quả" (Khớp/Lệch vẫn CHỈ so "Trên Kệ Hôm Nay" vs "Tồn
+    Kho Hệ Thống" như trước, không gộp thêm Quá Khứ).
   - **Tự động cập nhật ngay khi mở tab, không chờ đủ chu kỳ (MỚI, 11/2026,
     theo yêu cầu người dùng "phải tự động, không phải bấm mới ra")**: mỗi
     lần mở "📊 Đối Chiếu", hệ thống TỰ kiểm tra "đã tới chu kỳ đồng bộ
@@ -3336,6 +3346,30 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     ngay giá trị Mã Điểm ở đây với cột "Mã Điểm" cấu hình ở Danh Mục Siêu
     Thị (mục ngay dưới). Siêu thị chưa cấu hình Mã Điểm thì header chuyển
     đỏ, nêu rõ tên siêu thị đang thiếu cấu hình.
+  - **"📑 Báo Cáo" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm 1 mục báo
+    cáo để các siêu thị tự báo cáo danh sách những mặt hàng đã được đưa lên
+    kệ")**: liệt kê TỪNG ghi nhận trên kệ (không gộp theo mã hàng như "📊
+    Đối Chiếu") — Mã Hàng, Tên Hàng, Quầy Kệ, Số Lượng, Trạng Thái (🟢 Đang
+    theo dõi / ⚪ Đã bán hết), Hạn Sử Dụng, Tồn Kho Hệ Thống, Người Ghi
+    Nhận, Cập Nhật Lúc. Có nút "📥 Xuất Excel".
+    - **Phạm vi xem TỰ ĐỘNG theo đúng quyền đang có — 1 bảng DUY NHẤT, tự
+      "nở" thay vì 2 màn riêng**: nhân viên siêu thị bình thường chỉ xem
+      được đúng siêu thị mình (không có bộ lọc/cột "Siêu Thị"); người có
+      quyền "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" (Quản lý vùng/Ban điều
+      hành, cùng quyền `shelfReportView` đã dùng cho Đối Chiếu/Ngưỡng Tồn)
+      thấy NHIỀU/TẤT CẢ siêu thị cùng lúc — bảng tự thêm cột "Siêu Thị" +
+      ô chọn lọc riêng từng siêu thị — đây chính là "báo cáo tổng hợp" cho
+      người quản lý.
+    - **Cột "Tồn Kho Hệ Thống" chỉ có số liệu cho ĐÚNG siêu thị của người
+      đang đăng nhập** — dòng của siêu thị KHÁC (khi xem báo cáo tổng hợp)
+      hiện "—" (không gọi thêm API cho từng siêu thị, giữ màn tải nhanh;
+      cần xem đủ số liệu 1 siêu thị cụ thể thì vào "📊 Đối Chiếu" của đúng
+      siêu thị đó).
+    - **Cũng xem được từ "📊 Báo Cáo" (module Báo Cáo chung)**: mục "📋
+      Kiểm Soát Hàng Hóa" ở đó (gác cùng quyền) hiện đủ các trường trên
+      (nhãn tiếng Việt đã thêm riêng cho mã hàng/tên hàng/quầy kệ...),
+      dành cho người chỉ cần xem báo cáo mà không cần vào hẳn tab Kiểm
+      Soát Hàng Hóa.
   - **"📊 Báo Cáo Đối Chiếu" — đặt lịch gửi email, thêm 1 kênh nhận thông tin
     ngoài xem trên app (MỚI, 11/2026, theo yêu cầu người dùng)**: cùng
     khuôn email tổng hợp của "🔔 Ngưỡng Tồn" ở trên nhưng **lịch gửi TÁCH

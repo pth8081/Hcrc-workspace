@@ -973,28 +973,32 @@ function createDispatcher(state) {
         // maDiem (11/2026) — mirror ĐÚNG field mới routes/shelfStock.js trả thêm (xem chú thích ở đó);
         // test tự seed state.__mockSystemInventoryMaDiem khi cần kiểm riêng header "Đang đối chiếu...".
         let rows = state.__mockSystemInventoryRows;
-        let totalSystemSkuCount, scannedTodayCount;
-        // scope=recon (11/2026) — mirror ĐÚNG logic lọc server thật (chỉ trả mã đã scan HÔM NAY của ĐÚNG
-        // siêu thị mình, xem routes/shelfStock.js) để demo/test Đối Chiếu thấy đúng hành vi mới.
+        let totalSystemSkuCount, scannedTodayCount, scannedEverCount;
+        // scope=recon (11/2026, mở rộng cùng tháng theo yêu cầu "thêm cột trên kệ quá khứ") — mirror ĐÚNG
+        // logic lọc server thật: trả về mã ĐÃ TỪNG scan (hôm nay hoặc trước đây) của ĐÚNG siêu thị mình,
+        // không chỉ "hôm nay" như bản cũ, xem routes/shelfStock.js.
         if (new URL(url, 'http://x').searchParams.get('scope') === 'recon') {
           const freshUser = state.users.find(u => u.username === username);
           totalSystemSkuCount = rows.length;
           const now = new Date();
           const scannedMaHangToday = new Set();
+          const scannedMaHangEver = new Set();
           for (const r of (state.shelfRecords || [])) {
             if (!r || r.dept !== freshUser.dept || !r.maHang) continue;
+            scannedMaHangEver.add(String(r.maHang));
             const d = new Date(r.lastScannedAt || r.createdAt);
             if (!isNaN(d.getTime()) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
               scannedMaHangToday.add(String(r.maHang));
             }
           }
           scannedTodayCount = scannedMaHangToday.size;
-          rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+          scannedEverCount = scannedMaHangEver.size;
+          rows = rows.filter(r => r.maHang && scannedMaHangEver.has(String(r.maHang)));
           // Cộng gộp trùng mã hàng (11/2026) — mirror ĐÚNG routes/shelfStock.js thật, xem
           // lib/shelfInventoryAggregate.js.
           rows = aggregateSystemInventoryRowsByMaHang(rows);
         }
-        return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount } };
+        return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount, scannedEverCount } };
       }
       // GET/PUT /api/shelf-stock/recon-recipients (11/2026) — mirror ĐƠN GIẢN HOÁ routes/shelfStock.js
       // thật: map state.shelfReconExtraRecipients {dept: [username,...]}, CHỈ đọc/sửa ĐÚNG key = dept
@@ -1069,6 +1073,17 @@ function createDispatcher(state) {
           return { status: 400, body: { error: 'source không hợp lệ' } };
         }
         return { status: 200, body: { ok: true } };
+      }
+
+      // POST /api/admin/export-xlsx (11/2026, cần để test THẬT nút "📥 Xuất Excel" ở Báo Cáo Kiểm Soát
+      // Hàng Hóa) — mirror tinh thần __xlsxExports của tests/_mock-backend.js (harness KHÁC), nhưng ghi
+      // vào state.__xlsxExports (không phải window toàn cục) — ĐÚNG khuôn dữ liệu test ở file này: state
+      // sống bên Node (createDispatcher(state)), test đọc lại thẳng state.__xlsxExports sau khi click,
+      // không cần page.evaluate() đọc window. KHÔNG tạo file .xlsx thật (đủ để xác nhận payload gửi đúng).
+      if (pathName === '/api/admin/export-xlsx' && method === 'POST') {
+        state.__xlsxExports = state.__xlsxExports || [];
+        state.__xlsxExports.push(body);
+        return { status: 200, body: {} };
       }
 
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
@@ -1151,7 +1166,12 @@ async function launchPage(port, state) {
       return {
         ok: result.status >= 200 && result.status < 300,
         status: result.status,
-        json: async () => result.body
+        json: async () => result.body,
+        // blob() (11/2026, cần cho downloadXlsxFromServer()/core.js gọi res.blob() sau POST
+        // /api/admin/export-xlsx) — mock không tạo file .xlsx thật, trả Blob rỗng là đủ để hàm gọi
+        // URL.createObjectURL()/link.click() không throw; nội dung thật của payload export đã được
+        // dispatcher lưu lại ở state.__xlsxExports (xem createDispatcher()) để test đọc lại kiểm tra.
+        blob: async () => new Blob([])
       };
     };
 

@@ -60,7 +60,9 @@ async function shot(page, selector, file) {
       rowCount: document.querySelectorAll('#vhShelfReconBody tr').length,
       maHangList: Array.from(document.querySelectorAll('#vhShelfReconBody tr td:first-child')).map(td => td.textContent.trim()),
       sp002SystemStock: Array.from(document.querySelectorAll('#vhShelfReconBody tr')).find(tr => tr.children[0].textContent.trim() === 'SP002')?.children[2]?.textContent.trim(),
-      sp002Result: Array.from(document.querySelectorAll('#vhShelfReconBody tr')).find(tr => tr.children[0].textContent.trim() === 'SP002')?.children[4]?.textContent.trim()
+      // children[5] (không phải [4]) — 11/2026, bảng Đối Chiếu thêm cột "Trên Kệ Quá Khứ" ở vị trí [4]
+      // giữa "Trên Kệ Hôm Nay" và "Kết Quả", đẩy "Kết Quả" từ cột thứ 5 (index 4) sang cột thứ 6 (index 5).
+      sp002Result: Array.from(document.querySelectorAll('#vhShelfReconBody tr')).find(tr => tr.children[0].textContent.trim() === 'SP002')?.children[5]?.textContent.trim()
     }));
     console.log('Số dòng hiện trên màn Đối Chiếu:', result.rowCount);
     console.log('Mã hàng hiện ra:', result.maHangList);

@@ -906,7 +906,14 @@ const REPORT_FIELD_LABELS = {
   startDate: 'Ngày bắt đầu', endDate: 'Ngày kết thúc', deadline: 'Hạn hoàn thành', room: 'Phòng họp',
   driverName: 'Người lái xe', plateNumber: 'Biển số xe', destination: 'Điểm đến', purpose: 'Mục đích',
   assignee: 'Người phụ trách', reason: 'Lý do', note: 'Ghi chú', content: 'Nội dung', qty: 'Số lượng',
-  quantity: 'Số lượng', price: 'Đơn giá', jobTitle: 'Chức danh', username: 'Tài khoản', fullName: 'Họ tên'
+  quantity: 'Số lượng', price: 'Đơn giá', jobTitle: 'Chức danh', username: 'Tài khoản', fullName: 'Họ tên',
+  // Kiểm Soát Hàng Hóa (shelfRecords, 11/2026, theo yêu cầu người dùng: nhãn cột ở mục "📋 Kiểm Soát Hàng
+  // Hóa" trong Báo Cáo chưa đẹp tiếng Việt — ví dụ "productName" tự tách thành "Product name") — xem
+  // renderShelfReportTable()/module-vanhanh.js cho bảng chi tiết tương tự ở ngay trong tab Kiểm Soát Hàng
+  // Hóa (cùng nhãn, 2 nơi nên khớp nhau).
+  productName: 'Tên hàng', maHang: 'Mã hàng', maVach: 'Mã vạch', shelfLocationCode: 'Mã quầy kệ',
+  shelfLocationName: 'Tên quầy kệ', expiryDate: 'Hạn sử dụng', creatorName: 'Người ghi nhận',
+  lastScannedAt: 'Lần quét gần nhất'
 };
 
 function humanizeReportFieldKey(key) {
@@ -918,7 +925,13 @@ function humanizeReportFieldKey(key) {
 // hàng...) không phải kiểu dữ liệu đơn (scalar) nên tự động bị loại ở buildReportDetailColumns() (chỉ
 // nhận string/number/boolean), danh sách dưới đây chỉ để loại thêm vài trường scalar nhưng không có ý
 // nghĩa lọc/hiển thị (id nội bộ, url file...).
-const REPORT_FIELD_EXCLUDE_KEYS = new Set(['id', 'password', 'passwordHash', 'fileUrl', 'pdfFileUrl', 'avatarUrl', 'photoUrl', 'signatureUrl']);
+// shelfLocationId (số nội bộ, đã có shelfLocationCode/shelfLocationName đủ đọc), clientRecordId (chỉ
+// phục vụ chống trùng lúc đồng bộ offline, không có ý nghĩa báo cáo) — 2 trường bổ sung riêng cho
+// shelfRecords (11/2026). KHÔNG loại "creator" (username thô) dù shelfRecords đã có creatorName — field
+// này dùng CHUNG tên cho ~45 module khác (creatorField:'creator', lib/createValidation.js), loại bỏ ở
+// đây sẽ ẩn mất "người tạo" ở các module KHÔNG có creatorNameField riêng (VD contracts) — ngoài phạm vi
+// yêu cầu (chỉ sửa nhãn cho shelfRecords), không tự ý mở rộng.
+const REPORT_FIELD_EXCLUDE_KEYS = new Set(['id', 'password', 'passwordHash', 'fileUrl', 'pdfFileUrl', 'avatarUrl', 'photoUrl', 'signatureUrl', 'shelfLocationId', 'clientRecordId']);
 
 function inferReportFieldType(key, values) {
   const nonNull = values.filter(v => v !== null && v !== undefined && v !== '');
