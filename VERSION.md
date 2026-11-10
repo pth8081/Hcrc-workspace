@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**29.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.91 (2026-11): Kiểm Soát Hàng Hóa — thêm sub-tab "💲 Kiểm Tra Giá"
+
+Yêu cầu người dùng: "Trong phần kiểm soát hàng hóa tôi muốn có một tab kiểm tra giá để siêu thị có thể kt
+nhanh giá của mặt hàng. Tôi đã có api bên đối tác gửi... Ok tôi sẽ yêu cầu đối tác gửi api check giá và
+bạn lên gọi khi scan giá bằng chức năng kiểm tra giá. Và chỉ hiện giá và ấn quét lại hoặc hủy nhé ko có
+lưu bất kỳ già nào." — sau đó người dùng gửi tài liệu API thật của đối tác BRGMART (bản 1.1, chấp nhận tra
+theo `maHang` HOẶC `maVach`).
+
+**Đã làm**:
+1. `lib/priceCheckApiClient.js` (mới) — client gọi `GET /api/v1/reports/gia-ban/run` (CÙNG đối tác/CÙNG
+   X-API-Key với API Tồn Kho, `resolveInventoryApiCreds()` dùng lại nguyên, không cần cấu hình riêng).
+   Nhận `maHang` HOẶC `maVach` (ưu tiên `maHang` nếu cả 2 cùng có — đúng quy tắc đối tác công bố), cùng cơ
+   chế retry 429 (tôn trọng `Retry-After`)/5xx (backoff) như `lib/inventoryApiClient.js`.
+2. `routes/shelfStock.js`: route mới `POST /api/shelf-stock/price-check` — quyền `canManageShelfRecords`
+   (CÙNG "📷 Ghi Nhận", không cần checkbox phân quyền mới), server TỰ tra `maDiem` theo
+   `req.freshUser.dept` (CÙNG cơ chế chống store-spoofing với `GET /system-inventory`, không bao giờ nhận
+   `maDiem` từ client), gọi `checkPrice()` rồi trả thẳng kết quả — KHÔNG lưu gì vào AppData/DB.
+3. `public/fragments/vanHanhSection.html`: sub-tab thứ 6 "💲 Kiểm Tra Giá" — ô nhập Mã Hàng/Mã Vạch + nút
+   "📷 Quét Mã" (dùng lại modal camera sẵn có) + nút "💲 Kiểm Tra Giá" → kết quả (Tên Hàng/Giá Áp Dụng, tự
+   chọn giá khuyến mại nếu có + giá thường gạch ngang) → "🔄 Quét Lại"/"✖️ Hủy".
+4. `public/js/module-vanhanh.js`:
+   - `setVanHanhShelfSubTab()`: thêm tab `PRICECHECK`, gate bằng `canCreateShelfRecordClient` (CÙNG
+     "Ghi Nhận").
+   - Tổng quát hoá modal quét camera (biến `shelfBarcodeModalMode`, mặc định `'RECORD'`) —
+     `openShelfBarcodeModalForPriceCheck()` đổi mode trước khi gọi lõi dùng chung, `onShelfBarcodeDecoded()`
+     rẽ nhánh theo mode — GIỮ NGUYÊN 100% hành vi cũ của "Ghi Nhận" (không đụng luồng đang chạy ổn định).
+   - `resolveShelfPriceCheckLookupCode(rawInput)`: thử khớp Tồn Kho Hệ Thống (cache sẵn có,
+     `matchShelfSystemInventoryByMaVach()`) trước để lấy đúng `maHang`; không khớp thì tự nhận diện theo
+     ĐỊNH DẠNG (đúng 10 chữ số → `maHang`, còn lại → `maVach`) — không đoán nhầm mã vạch thành mã hàng.
+   - `submitPriceCheck()`/`resetPriceCheck()`/`cancelPriceCheck()`/`renderPriceCheckResult()`.
+5. `tests/testHarness.js`: mirror route `POST /api/shelf-stock/price-check` (mock
+   `state.__mockPriceCheckConfigured`/`state.__mockPriceCheckResults`/`state.storeExternalCodes`).
+
+**Test**: `tests/test-shelf-pricecheck-real-click.js` (mới, 8/8 pass) — gate quyền (ẩn/hiện đúng theo
+`shelfRecordCreate`), tra giá thành công (có/không khuyến mại), tra bằng mã vạch EAN-13 (bản 1.1 API),
+"🔄 Quét Lại"/"✖️ Hủy" xoá sạch kết quả, lỗi 404. Chạy lại toàn bộ 22 file `test-shelf-*.js` — không
+regression. CSP grep sạch.
+
+**Lưu ý triển khai**: không cần `npm install`/schema.sql/biến môi trường mới — dùng lại nguyên cấu hình
+API Tồn Kho (Base URL/API Key) đã có; chỉ copy code + `pm2 restart`.
 
 ## v29.90 (2026-11): Kiểm Soát Hàng Hóa — vá lỗi lộ dữ liệu chéo siêu thị (Nghiêm Trọng)
 

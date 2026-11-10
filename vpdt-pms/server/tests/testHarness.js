@@ -1000,6 +1000,31 @@ function createDispatcher(state) {
         }
         return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount, scannedEverCount } };
       }
+      // POST /api/shelf-stock/price-check (11/2026, "💲 Kiểm Tra Giá") — mirror ĐƠN GIẢN HOÁ routes/
+      // shelfStock.js thật: quyền canManageShelfRecords (CÙNG "Ghi Nhận") -> state.__mockPriceCheckConfigured
+      // (giả lập resolveInventoryApiCreds() null/có cấu hình) -> storeExternalCodes[dept] -> maDiem (giống
+      // HỆT system-inventory ở trên) -> tra state.__mockPriceCheckResults (map KEY -> {giaThuong,...} hoặc
+      // {__error:{status,error}} để giả lập lỗi 404/503 từ API đối tác) — KEY là maHang NẾU body có maHang
+      // (ưu tiên, đúng quy tắc API đối tác bản 1.1), còn không thì là maVach — test tự seed đúng key tương
+      // ứng với mã client thật sự gửi. KHÔNG gọi HTTP thật ra ngoài (đúng tinh thần mirror).
+      if (pathName === '/api/shelf-stock/price-check' && method === 'POST') {
+        const { canManageShelfRecords } = require('../lib/shelfStockEdit');
+        const freshUser = state.users.find(u => u.username === username);
+        if (!canManageShelfRecords(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền kiểm tra giá trên Kiểm Soát Hàng Hóa' } };
+        const maHang = String(body?.maHang || '').trim();
+        const maVach = String(body?.maVach || '').trim();
+        if (!maHang && !maVach) return { status: 400, body: { error: 'Vui lòng nhập/quét Mã Hàng hoặc Mã Vạch cần kiểm tra giá' } };
+        if (!state.__mockPriceCheckConfigured) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API đối tác (liên hệ quản trị hệ thống)' } };
+        const storeExternalCodes = state.storeExternalCodes || {};
+        const maDiem = storeExternalCodes[freshUser.dept];
+        if (!maDiem) return { status: 404, body: { error: `Siêu thị "${freshUser.dept || ''}" chưa cấu hình Mã Điểm API — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` } };
+        const results = state.__mockPriceCheckResults || {};
+        const lookupKey = maHang || maVach;
+        const hit = results[lookupKey];
+        if (!hit) return { status: 404, body: { error: `Không tìm thấy giá cho mã "${lookupKey}" tại siêu thị của bạn` } };
+        if (hit.__error) return { status: hit.__error.status || 500, body: { error: hit.__error.error || 'Lỗi không xác định' } };
+        return { status: 200, body: { ...hit, maDiem } };
+      }
       // GET/PUT /api/shelf-stock/recon-recipients (11/2026) — mirror ĐƠN GIẢN HOÁ routes/shelfStock.js
       // thật: map state.shelfReconExtraRecipients {dept: [username,...]}, CHỈ đọc/sửa ĐÚNG key = dept
       // người gọi — đủ để test UI picker ở màn "📊 Đối Chiếu" (gate quyền thật/validate username đã có

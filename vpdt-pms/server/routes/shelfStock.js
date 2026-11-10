@@ -26,7 +26,8 @@ const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
+const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory, resolveInventoryApiCreds } = require('../jobs/inventorySync');
+const { checkPrice, PriceCheckApiAuthError, PriceCheckApiNotFoundError } = require('../lib/priceCheckApiClient');
 const { parseVNDateTime } = require('../lib/recordActions');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
@@ -256,6 +257,54 @@ router.get('/system-inventory', async (req, res) => {
     res.json({ rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
+  }
+});
+
+// ===================== KIỂM TRA GIÁ: tra giá 1 mã hàng ĐÚNG siêu thị người gọi, KHÔNG LƯU GÌ =====================
+// Theo yêu cầu người dùng (11/2026): tab "💲 Kiểm Tra Giá" để siêu thị quét/gõ 1 mã hàng ra giá NGAY —
+// khác hẳn /system-inventory ở trên (đọc snapshot đã đồng bộ sẵn), route này gọi TRỰC TIẾP API đối tác
+// mỗi lần người dùng quét (lib/priceCheckApiClient.js, API "Giá bán theo mã hàng", CÙNG đối tác/CÙNG
+// X-API-Key với API Tồn Kho — resolveInventoryApiCreds() dùng lại nguyên, không cần cấu hình riêng) — vì
+// bản chất nghiệp vụ là tra cứu tức thời theo từng lượt quét, không phải đồng bộ hàng loạt. Kết quả
+// KHÔNG được lưu vào bất kỳ đâu (không AppData, không DB, không log có giá) — chỉ trả thẳng về client rồi
+// thôi, đúng yêu cầu "chỉ hiện giá và ấn quét lại hoặc hủy, ko có lưu bất kỳ giá nào".
+// Server TỰ tra maDiem theo req.freshUser.dept (CÙNG cơ chế chống store-spoofing với /system-inventory ở
+// trên) — route này KHÔNG BAO GIỜ nhận maDiem từ query/body client.
+// Quyền: dùng chung canManageShelfRecords() (= admin || shelfRecordCreate) — giống hệt quyền "Ghi Nhận",
+// vì đây cũng là thao tác tra cứu hằng ngày của nhân viên quét hàng trên kệ, không phải hành động quản lý
+// (không cần quyền riêng/checkbox phân quyền mới).
+// maHang/maVach (bản 1.1 tài liệu đối tác, 11/2026) — nhận ĐÚNG 1 TRONG 2 từ client (client tự quyết định
+// gửi cái nào theo định dạng mã quét/gõ được — xem resolveShelfPriceCheckLookupCode()/module-vanhanh.js),
+// ưu tiên maHang nếu cả 2 cùng có mặt (đúng quy tắc API đối tác công bố).
+router.post('/price-check', async (req, res) => {
+  try {
+    if (!canManageShelfRecords(req.freshUser)) {
+      throw new HttpError(403, 'Bạn không có quyền kiểm tra giá trên Kiểm Soát Hàng Hóa');
+    }
+    const maHang = String(req.body?.maHang || '').trim();
+    const maVach = String(req.body?.maVach || '').trim();
+    if (!maHang && !maVach) throw new HttpError(400, 'Vui lòng nhập/quét Mã Hàng hoặc Mã Vạch cần kiểm tra giá');
+
+    const creds = await resolveInventoryApiCreds();
+    if (!creds) {
+      return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API đối tác (liên hệ quản trị hệ thống)' });
+    }
+    const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
+    const maDiem = storeExternalCodes[req.freshUser.dept];
+    if (!maDiem) {
+      return res.status(404).json({ error: `Siêu thị "${req.freshUser.dept || ''}" chưa cấu hình Mã Điểm API — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
+    }
+
+    const result = await checkPrice({ baseUrl: creds.baseUrl, apiKey: creds.apiKey, maHang: maHang || undefined, maVach: maHang ? undefined : (maVach || undefined), maDiem });
+    res.json({ ...result, maDiem });
+  } catch (err) {
+    if (err instanceof PriceCheckApiNotFoundError) {
+      return res.status(404).json({ error: err.message || 'Không tìm thấy giá cho mã hàng này tại siêu thị của bạn' });
+    }
+    if (err instanceof PriceCheckApiAuthError) {
+      return res.status(502).json({ error: 'Hệ thống không xác thực được với API đối tác (liên hệ quản trị hệ thống kiểm tra lại API Key)' });
+    }
+    sendCatchError(res, err, 'POST /api/shelf-stock/price-check');
   }
 });
 

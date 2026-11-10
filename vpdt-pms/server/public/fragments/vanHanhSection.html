@@ -844,6 +844,12 @@
         <!-- "📑 Báo Cáo" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm 1 mục báo cáo để các siêu thị tự
              báo cáo danh sách những mặt hàng đã được đưa lên kệ") — xem vanHanhShelfReportWrap bên dưới. -->
         <button data-op="setVanHanhShelfSubTab" data-tab="REPORT" id="btnVhShelfSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📑 Báo Cáo</button>
+        <!-- "💲 Kiểm Tra Giá" (MỚI, 11/2026, theo yêu cầu người dùng: "siêu thị có thể kt nhanh giá của
+             mặt hàng") — tra cứu TRỰC TIẾP qua API đối tác mỗi lần quét (KHÁC "📊 Đối Chiếu"/"🔎 Chọn Từ
+             Tồn Kho Hệ Thống" ở trên vốn đọc snapshot đã đồng bộ sẵn) — xem vanHanhShelfPriceCheckWrap bên
+             dưới + routes/shelfStock.js POST /price-check. KHÔNG LƯU giá vào bất kỳ đâu. Mở cho ai có
+             quyền "Ghi Nhận" (shelfRecordCreate/admin) — xem canCreateShelfRecordClient()/module-vanhanh.js. -->
+        <button data-op="setVanHanhShelfSubTab" data-tab="PRICECHECK" id="btnVhShelfSubPriceCheck" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💲 Kiểm Tra Giá</button>
       </div>
 
       <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
@@ -1183,6 +1189,55 @@
           </table>
         </div>
         <p class="text-gray-400 text-[11px]">Liệt kê TỪNG mã hàng đã ghi nhận lên kệ (không gộp theo mã như "📊 Đối Chiếu"). "Đã bán hết" = đã bấm "✅ Bán Hết" ở Ghi Nhận (Số Lượng về 0), vẫn giữ trong lịch sử. Cột "Tồn Kho Hệ Thống" chỉ có dữ liệu cho ĐÚNG siêu thị của bạn (đã cấu hình Mã Điểm) — dòng của siêu thị khác hiện "—".</p>
+      </div>
+
+      <!-- Sub-tab MỚI: "💲 Kiểm Tra Giá" (11/2026, theo yêu cầu người dùng) — gõ/quét ĐÚNG 1 mã hàng, gọi
+           API đối tác NGAY (routes/shelfStock.js POST /price-check), chỉ hiện giá rồi "🔄 Quét Lại"/
+           "✖️ Hủy" — TUYỆT ĐỐI KHÔNG LƯU giá vào đâu (không AppData/DB/localStorage), đúng nguyên văn yêu
+           cầu "chỉ hiện giá và ấn quét lại hoặc hủy nhé ko có lưu bất kỳ giá nào". 3 trạng thái loại trừ
+           nhau (xem renderPriceCheckState()/module-vanhanh.js): form nhập (mặc định) → đang tra (loading)
+           → kết quả HOẶC lỗi (đều có nút quay lại form). -->
+      <div id="vanHanhShelfPriceCheckWrap" class="hidden space-y-4">
+        <form id="priceCheckForm" data-op-submit="submitPriceCheck" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Hàng (nội bộ) hoặc Mã Vạch *</label>
+            <div class="flex gap-2">
+              <input id="pcMaHang" autocomplete="off" placeholder="Quét camera hoặc gõ tay..." class="w-full border p-1.5 rounded" required>
+              <button type="button" data-op="openShelfBarcodeModalForPriceCheck" title="Quét mã vạch bằng camera" class="shrink-0 min-h-[44px] px-3 flex items-center justify-center gap-1.5 bg-white border rounded hover:bg-gray-50 text-xs font-bold whitespace-nowrap">📷 Quét Mã</button>
+            </div>
+            <p class="text-gray-400 text-[11px] mt-1">Gõ/dán được cả Mã Hàng nội bộ lẫn Mã Vạch (EAN-13) — hệ thống tự nhận diện qua Tồn Kho Hệ Thống nếu đã có, hoặc tự đoán theo định dạng (đúng 10 chữ số = Mã Hàng, còn lại gửi làm Mã Vạch) rồi tra giá đúng API đối tác.</p>
+          </div>
+          <button type="submit" class="w-full min-h-[44px] bg-cyan-700 text-white rounded text-xs font-bold hover:bg-cyan-800">💲 Kiểm Tra Giá</button>
+        </form>
+
+        <div id="priceCheckLoadingWrap" class="hidden bg-white p-4 rounded border text-xs text-center text-gray-500">⏳ Đang tra giá...</div>
+
+        <div id="priceCheckErrorWrap" class="hidden bg-red-50 border border-red-200 rounded p-3 text-xs space-y-2">
+          <p id="priceCheckErrorText" class="text-red-700 font-semibold"></p>
+          <div class="flex gap-2">
+            <button type="button" data-op="resetPriceCheck" class="flex-1 min-h-[44px] bg-cyan-700 text-white rounded text-xs font-bold hover:bg-cyan-800">🔄 Quét Lại</button>
+            <button type="button" data-op="cancelPriceCheck" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50 text-xs font-bold">✖️ Hủy</button>
+          </div>
+        </div>
+
+        <div id="priceCheckResultWrap" class="hidden bg-white border rounded p-4 text-xs space-y-3">
+          <div>
+            <p id="pcResultTenHang" class="font-bold text-sm text-gray-800"></p>
+            <p id="pcResultMaHang" class="text-gray-500"></p>
+          </div>
+          <div id="pcResultPriceBlock" class="bg-cyan-50 border border-cyan-200 rounded p-3 text-center space-y-1">
+            <p class="text-gray-500 text-[11px]">Giá áp dụng</p>
+            <p id="pcResultGiaApDung" class="text-2xl font-extrabold text-cyan-800"></p>
+            <p id="pcResultGiaThuongStrike" class="hidden text-gray-400 line-through"></p>
+            <p id="pcResultKhuyenMaiBadge" class="hidden text-amber-600 font-bold">🏷️ Đang khuyến mại</p>
+          </div>
+          <p id="pcResultCapNhat" class="text-gray-400 text-[11px]"></p>
+          <div class="flex gap-2">
+            <button type="button" data-op="resetPriceCheck" class="flex-1 min-h-[44px] bg-cyan-700 text-white rounded text-xs font-bold hover:bg-cyan-800">🔄 Quét Lại</button>
+            <button type="button" data-op="cancelPriceCheck" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50 text-xs font-bold">✖️ Hủy</button>
+          </div>
+        </div>
+        <p class="text-gray-400 text-[11px]">Tra giá trực tiếp từ hệ thống giá trung tâm (đồng bộ mỗi 15 phút phía đối tác) — KHÔNG lưu lại giá đã tra ở bất kỳ đâu trong hệ thống.</p>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
