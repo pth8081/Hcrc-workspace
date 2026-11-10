@@ -3328,6 +3328,15 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     nhận KHÔNG phải hôm nay của cùng mã hàng — CHỈ để xem/theo dõi, KHÔNG
     tính vào cột "Kết Quả" (Khớp/Lệch vẫn CHỈ so "Trên Kệ Hôm Nay" vs "Tồn
     Kho Hệ Thống" như trước, không gộp thêm Quá Khứ).
+  - **Vá lỗi "Cập Nhật" số lượng không tính vào "Hôm Nay" (11/2026, theo báo
+    cáo người dùng kèm ảnh)**: trước đây bấm "✏️ Sửa"/"💾 Cập Nhật"/"✅ Bán
+    Hết" ở sub-tab "⏰ Hạn Sử Dụng" để chỉnh lại số lượng chỉ đổi đúng con số,
+    KHÔNG tính là "vừa kiểm lại hôm nay" — dòng đó vẫn bị Đối Chiếu coi là
+    "Trên Kệ Quá Khứ" dù vừa cập nhật xong. Nay cả 3 nút trên đều tính là
+    "vừa kiểm/đếm lại lô này" — Đối Chiếu đưa đúng vào "Trên Kệ Hôm Nay" ngay
+    lập tức. Sub-tab "⏰ Hạn Sử Dụng" cũng hiện thêm badge ngay trên từng dòng:
+    🟢 "Đã kiểm hôm nay" hoặc 🕗 "Lần cuối: [ngày]" — biết ngay dòng nào mới,
+    dòng nào cũ mà không cần mở sang tab Đối Chiếu.
   - **Tự động cập nhật ngay khi mở tab, không chờ đủ chu kỳ (MỚI, 11/2026,
     theo yêu cầu người dùng "phải tự động, không phải bấm mới ra")**: mỗi
     lần mở "📊 Đối Chiếu", hệ thống TỰ kiểm tra "đã tới chu kỳ đồng bộ

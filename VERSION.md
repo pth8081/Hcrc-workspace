@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**29.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.89 (2026-11): Kiểm Soát Hàng Hóa — vá lỗi "Cập Nhật" số lượng không tính vào "Trên Kệ Hôm Nay"
+
+Yêu cầu người dùng (kèm ảnh): cập nhật lại số lượng qua "💾 Cập Nhật" ở tab Hạn Sử Dụng ngay hôm nay,
+nhưng Đối Chiếu vẫn coi dòng đó là "Trên Kệ Quá Khứ" thay vì "Trên Kệ Hôm Nay".
+
+**Root cause**: `applyShelfRecordEdit()` (dùng chung cho "✏️ Sửa"/"💾 Cập Nhật"/"✅ Bán Hết") chỉ đổi
+`quantity`, quên cập nhật `lastScannedAt` — trong khi cột "Trên Kệ Hôm Nay"/"Trên Kệ Quá Khứ" ở Đối
+Chiếu (và Ngưỡng Tồn) đều xét "hôm nay" theo đúng field này (luồng Ghi Nhận theo lô đã bump sẵn, luồng
+sửa ở tab Hạn Sử Dụng thì chưa).
+
+**Đã làm**:
+1. `lib/shelfStockEdit.js::applyShelfRecordEdit()`: bump `lastScannedAt` mỗi khi `quantity` đổi qua route
+   sửa — đúng ngữ nghĩa "vừa kiểm/đếm lại lô này", cùng công thức `formatCreatedAt()` dùng ở route Ghi
+   Nhận theo lô.
+2. `public/js/module-vanhanh.js`: thêm badge **🟢 "Đã kiểm hôm nay"** / 🕗 **"Lần cuối: [ngày]"** ngay
+   trên từng dòng tab Hạn Sử Dụng — thấy ngay dòng nào vừa kiểm hôm nay, không cần qua tab Đối Chiếu.
+
+**Test**: `tests/demo-shelf-expiry-update-today-recon.js` (Playwright thật, demo ảnh trước/sau đã gửi
+người dùng xác nhận). Chạy lại toàn bộ 22 file `test-shelf-*.js` — không regression. CSP grep sạch.
 
 ## v29.88 (2026-11): Cơ Cấu Tổ Chức — nút "🗑️ Xoá Tất Cả Bản Nháp"
 
