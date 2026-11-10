@@ -231,7 +231,9 @@ function setVanHanhShelfSubTab(tab) {
     // có quyền vào tab (vanHanhShelfTab, đã gác ở setVanHanhSubTab() cấp cha), KHÔNG cần quyền riêng
     // (chỉ XEM, không sửa gì) — xem canManageShelfLocationsClient() dùng cho LOCATIONS/THRESHOLD khác hẳn
     // vì 2 tab đó CÓ form ghi.
-    ['RECON', 'vanHanhShelfReconWrap', 'btnVhShelfSubRecon', () => true]
+    ['RECON', 'vanHanhShelfReconWrap', 'btnVhShelfSubRecon', () => true],
+    // "📑 Báo Cáo" (MỚI, 11/2026) — cùng điều kiện mở như RECON (chỉ xem, mọi người có quyền vào tab).
+    ['REPORT', 'vanHanhShelfReportWrap', 'btnVhShelfSubReport', () => true]
   ];
   const found = tabs.find(([key]) => key === tab);
   const stillAllowed = found && found[3](currentUser);
@@ -276,6 +278,8 @@ function setVanHanhShelfSubTab(tab) {
   } else if (tab === 'RECON') {
     loadShelfReconciliation();
     renderShelfReconExtraRecipientsSection();
+  } else if (tab === 'REPORT') {
+    loadShelfReportTab();
   }
 }
 
@@ -589,6 +593,146 @@ async function saveShelfReconExtraRecipients() {
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ để lưu người nhận');
   }
+}
+
+// ===== "📑 Báo Cáo" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm 1 mục báo cáo để các siêu thị tự báo
+// cáo danh sách những mặt hàng đã được đưa lên kệ") — liệt kê TỪNG ghi nhận (không gộp theo mã như Đối
+// Chiếu), kèm Trạng Thái (Đang theo dõi/Đã bán hết) + Tồn Kho Hệ Thống. Phạm vi xem TỰ ĐỘNG qua
+// DB.shelfRecords (đã lọc sẵn server-side qua filterShelfRecordsForUser(), routes/data.js) — nhân viên
+// siêu thị thường chỉ CÓ dữ liệu đúng siêu thị mình trong tay nên tự nhiên chỉ thấy đúng siêu thị mình
+// (đúng yêu cầu "siêu thị login vào chỉ xem báo cáo siêu thị đấy thôi"); người có quyền shelfReportView
+// (Quản lý vùng/Ban điều hành) có NHIỀU dept trong DB.shelfRecords nên bảng tự "nở" thêm cột + bộ lọc
+// Siêu Thị — ĐÂY CHÍNH LÀ "báo cáo tổng hợp" người quản lý xem, không cần dựng 2 màn UI riêng.
+let shelfReportSystemInventoryCache = null; // { maDiem, dept, rows: Map(maHang -> soLuongTon) }
+
+async function loadShelfReportTab() {
+  // Tồn Kho Hệ Thống CHỈ tra được cho ĐÚNG siêu thị của currentUser (server tự resolve maDiem theo
+  // req.freshUser.dept, xem routes/shelfStock.js) — dòng của SIÊU THỊ KHÁC (chỉ xuất hiện khi đang xem
+  // qua shelfReportView) sẽ hiện "—", KHÔNG gọi thêm route nào khác cho từng siêu thị (tránh N lần gọi
+  // cho N siêu thị, giữ màn tải nhanh — cùng tinh thần giới hạn hiệu năng đã áp dụng ở Đối Chiếu).
+  try {
+    const res = await fetch('/api/shelf-stock/system-inventory?scope=recon');
+    if (res.status === 401) return handleSessionExpired();
+    if (res.ok) {
+      const body = await res.json();
+      const rows = new Map();
+      (Array.isArray(body.rows) ? body.rows : []).forEach(r => { if (r.maHang) rows.set(String(r.maHang), r.soLuongTon); });
+      shelfReportSystemInventoryCache = { maDiem: body.maDiem, dept: currentUser.dept, rows };
+    } else {
+      shelfReportSystemInventoryCache = null;
+    }
+  } catch (err) {
+    shelfReportSystemInventoryCache = null;
+  }
+  populateShelfReportStoreFilter();
+  renderShelfReportTable();
+}
+
+function populateShelfReportStoreFilter() {
+  const wrap = document.getElementById('shelfReportStoreFilterWrap');
+  const sel = document.getElementById('shelfReportStoreFilter');
+  const headerEl = document.getElementById('shelfReportHeader');
+  if (!wrap || !sel) return;
+  const depts = [...new Set((DB.shelfRecords || []).map(r => r.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  // Chỉ hiện bộ lọc/cột Siêu Thị khi dữ liệu THỰC SỰ có nhiều hơn 1 siêu thị — nhân viên 1 siêu thị bình
+  // thường sẽ luôn chỉ có đúng 1 dept trong DB.shelfRecords (đã lọc sẵn server-side), bộ lọc tự ẩn, KHÔNG
+  // cần kiểm tra riêng quyền shelfReportView ở phía client (suy ra thẳng từ dữ liệu thật đang có).
+  const isMulti = depts.length > 1;
+  wrap.classList.toggle('hidden', !isMulti);
+  if (headerEl) {
+    headerEl.textContent = isMulti
+      ? `📍 Đang xem báo cáo tổng hợp: ${depts.length} siêu thị (theo quyền "Xem Báo Cáo Kiểm Soát Hàng Hóa").`
+      : `📍 Siêu Thị: ${currentUser.dept}`;
+  }
+  if (!isMulti) return;
+  const prevValue = sel.value;
+  sel.innerHTML = '<option value="">-- Tất cả siêu thị --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  if (depts.includes(prevValue)) sel.value = prevValue;
+}
+
+function shelfReportIsMultiStore() {
+  const wrap = document.getElementById('shelfReportStoreFilterWrap');
+  return !!(wrap && !wrap.classList.contains('hidden'));
+}
+function shelfReportSysStockFor(r) {
+  return (shelfReportSystemInventoryCache && r.dept === shelfReportSystemInventoryCache.dept && r.maHang && shelfReportSystemInventoryCache.rows.has(String(r.maHang)))
+    ? shelfReportSystemInventoryCache.rows.get(String(r.maHang))
+    : null;
+}
+function shelfReportFilteredItems() {
+  const isMulti = shelfReportIsMultiStore();
+  const storeFilter = isMulti ? (document.getElementById('shelfReportStoreFilter').value || '') : '';
+  return [...(DB.shelfRecords || [])].filter(r => !storeFilter || r.dept === storeFilter).sort((a, b) => b.id - a.id);
+}
+
+function renderShelfReportTable() {
+  const tbody = document.getElementById('shelfReportBody');
+  const thead = document.getElementById('shelfReportTableHead');
+  if (!tbody || !thead) return;
+  const isMulti = shelfReportIsMultiStore();
+  const storeTh = isMulti ? '<th class="border p-2">Siêu Thị</th>' : '';
+  thead.innerHTML = storeTh + `
+    <th class="border p-2">Mã Hàng</th>
+    <th class="border p-2">Tên Hàng</th>
+    <th class="border p-2">Quầy Kệ</th>
+    <th class="border p-2">Số Lượng</th>
+    <th class="border p-2">Trạng Thái</th>
+    <th class="border p-2">Hạn Sử Dụng</th>
+    <th class="border p-2">Tồn Kho Hệ Thống</th>
+    <th class="border p-2">Người Ghi Nhận</th>
+    <th class="border p-2">Cập Nhật Lúc</th>`;
+  const items = shelfReportFilteredItems();
+  const colCount = (isMulti ? 1 : 0) + 9;
+  tbody.innerHTML = items.length ? items.map(r => {
+    const soldOut = Number(r.quantity) <= 0;
+    const statusBadge = soldOut
+      ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">🟢 Đang theo dõi</span>`;
+    const sysStock = shelfReportSysStockFor(r);
+    return `
+    <tr class="border-b ${soldOut ? 'opacity-60' : ''}">
+      ${isMulti ? `<td class="p-2">${escapeHtml(r.dept || '')}</td>` : ''}
+      <td class="p-2">${escapeHtml(r.maHang || '')}</td>
+      <td class="p-2">${escapeHtml(r.productName || '')}</td>
+      <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
+      <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
+      <td class="p-2">${statusBadge}</td>
+      <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
+      <td class="p-2 text-right">${sysStock === null ? '—' : escapeHtml(String(sysStock))}</td>
+      <td class="p-2">${escapeHtml(r.creatorName || '')}</td>
+      <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+}
+
+function exportShelfReportExcel() {
+  const isMulti = shelfReportIsMultiStore();
+  const items = shelfReportFilteredItems();
+  const columns = [
+    ...(isMulti ? [{ header: 'Siêu Thị', key: 'dept', width: 20 }] : []),
+    { header: 'Mã Hàng', key: 'maHang', width: 14 },
+    { header: 'Tên Hàng', key: 'productName', width: 30 },
+    { header: 'Quầy Kệ', key: 'shelfLocation', width: 22 },
+    { header: 'Số Lượng', key: 'quantity', width: 10 },
+    { header: 'Trạng Thái', key: 'status', width: 16 },
+    { header: 'Hạn Sử Dụng', key: 'expiryDate', width: 14 },
+    { header: 'Tồn Kho Hệ Thống', key: 'sysStock', width: 16 },
+    { header: 'Người Ghi Nhận', key: 'creatorName', width: 20 },
+    { header: 'Cập Nhật Lúc', key: 'createdAt', width: 18 }
+  ];
+  const dataRows = items.map(r => {
+    const sysStock = shelfReportSysStockFor(r);
+    return {
+      dept: r.dept || '', maHang: r.maHang || '', productName: r.productName || '',
+      shelfLocation: `${r.shelfLocationCode || ''} — ${r.shelfLocationName || ''}`,
+      quantity: Number(r.quantity) || 0,
+      status: Number(r.quantity) <= 0 ? 'Đã bán hết' : 'Đang theo dõi',
+      expiryDate: r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '',
+      sysStock: sysStock === null ? '' : sysStock,
+      creatorName: r.creatorName || '', createdAt: r.createdAt || ''
+    };
+  });
+  downloadXlsxFromServer(`BaoCaoKiemSoatHangHoa_${new Date().toISOString().slice(0, 10)}.xlsx`, 'BaoCao', columns, dataRows);
 }
 // previewShelfRecordQuantityIncrease(payload) — CHỈ dùng để CẢNH BÁO TRƯỚC khi gửi (11/2026, theo yêu
 // cầu người dùng: "SL mới CAO HƠN lần ghi nhận trước của ĐÚNG lô này" thường là do GÕ NHẦM giữ nguyên Hạn

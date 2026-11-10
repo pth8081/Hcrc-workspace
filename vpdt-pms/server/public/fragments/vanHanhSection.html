@@ -841,6 +841,9 @@
         <button data-op="setVanHanhShelfSubTab" data-tab="EXPIRY" id="btnVhShelfSubExpiry" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Hạn Sử Dụng</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="THRESHOLD" id="btnVhShelfSubThreshold" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Ngưỡng Tồn</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="RECON" id="btnVhShelfSubRecon" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Đối Chiếu</button>
+        <!-- "📑 Báo Cáo" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm 1 mục báo cáo để các siêu thị tự
+             báo cáo danh sách những mặt hàng đã được đưa lên kệ") — xem vanHanhShelfReportWrap bên dưới. -->
+        <button data-op="setVanHanhShelfSubTab" data-tab="REPORT" id="btnVhShelfSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📑 Báo Cáo</button>
       </div>
 
       <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
@@ -1139,6 +1142,47 @@
           <div id="shelfReconRecipientsPicker" class="border rounded p-2 bg-white"></div>
           <button type="button" data-op="saveShelfReconExtraRecipients" class="bg-cyan-700 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-cyan-800">Lưu Người Nhận</button>
         </div>
+      </div>
+
+      <!-- Sub-tab MỚI: "📑 Báo Cáo" (11/2026, theo yêu cầu người dùng) — danh sách CHI TIẾT từng mã hàng
+           đã đưa lên kệ (không gộp như Đối Chiếu), kèm trạng thái Đang theo dõi/Đã bán hết + Tồn Kho Hệ
+           Thống. Mở cho MỌI người có quyền vào tab (vanHanhShelfTab) — CHỈ XEM, không có form ghi gì ở
+           đây. Phạm vi xem TỰ ĐỘNG theo DB.shelfRecords đã được server lọc sẵn (filterShelfRecordsForUser(),
+           routes/data.js) — nhân viên siêu thị thường CHỈ thấy đúng siêu thị mình (báo cáo 1), người có
+           quyền shelfReportView (Quản lý vùng/Ban điều hành) thấy ĐƯỢC NHIỀU/TẤT CẢ siêu thị (báo cáo tổng
+           hợp) — KHÔNG cần phân biệt 2 màn riêng, chỉ 1 bảng tự "nở" theo đúng quyền đang có, xem
+           renderShelfReportTable()/module-vanhanh.js. -->
+      <div id="vanHanhShelfReportWrap" class="hidden space-y-4">
+        <div id="shelfReportHeader" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800"></div>
+        <!-- Bộ lọc "Siêu Thị" (CHỈ hiện khi đang xem NHIỀU siêu thị qua shelfReportView — 1 siêu thị thì ẩn
+             hẳn, không cần chọn gì, giống mọi sub-tab khác của Kiểm Soát Hàng Hóa). -->
+        <div id="shelfReportStoreFilterWrap" class="hidden flex items-center gap-2 text-xs">
+          <label class="font-semibold text-gray-600">Siêu Thị:</label>
+          <select id="shelfReportStoreFilter" data-op-change="renderShelfReportTable" class="border p-1.5 rounded"></select>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" data-op="exportShelfReportExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr id="shelfReportTableHead">
+                <!-- Cột "Siêu Thị" chèn ĐỘNG ở đầu khi đang xem nhiều siêu thị — xem renderShelfReportTable(). -->
+                <th class="border p-2">Mã Hàng</th>
+                <th class="border p-2">Tên Hàng</th>
+                <th class="border p-2">Quầy Kệ</th>
+                <th class="border p-2">Số Lượng</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Hạn Sử Dụng</th>
+                <th class="border p-2">Tồn Kho Hệ Thống</th>
+                <th class="border p-2">Người Ghi Nhận</th>
+                <th class="border p-2">Cập Nhật Lúc</th>
+              </tr>
+            </thead>
+            <tbody id="shelfReportBody"></tbody>
+          </table>
+        </div>
+        <p class="text-gray-400 text-[11px]">Liệt kê TỪNG mã hàng đã ghi nhận lên kệ (không gộp theo mã như "📊 Đối Chiếu"). "Đã bán hết" = đã bấm "✅ Bán Hết" ở Ghi Nhận (Số Lượng về 0), vẫn giữ trong lịch sử. Cột "Tồn Kho Hệ Thống" chỉ có dữ liệu cho ĐÚNG siêu thị của bạn (đã cấu hình Mã Điểm) — dòng của siêu thị khác hiện "—".</p>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem

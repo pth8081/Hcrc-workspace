@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**29.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.86 (2026-11): Kiểm Soát Hàng Hóa — thêm sub-tab "📑 Báo Cáo" (siêu thị tự báo cáo + tổng hợp quản lý)
+
+Yêu cầu người dùng: "thêm 1 mục báo cáo để các siêu thị tự báo cáo danh sách những mặt hàng đã được đưa
+lên kệ... siêu thị login vào thì chỉ xem báo cáo siêu thị đấy thôi... và có 1 báo cáo tổng hợp người
+quản lý xem... đồng thời đưa báo cáo tổng hợp này vào mô báo cáo".
+
+**Đã làm**:
+1. `public/fragments/vanHanhSection.html` + `public/js/module-vanhanh.js`: thêm sub-tab mới "📑 Báo Cáo"
+   trong "📊 Kiểm Soát Hàng Hóa" — liệt kê TỪNG ghi nhận (Mã Hàng/Tên Hàng/Quầy Kệ/Số Lượng/Trạng Thái
+   Đang theo dõi-Đã bán hết/Hạn Sử Dụng/Tồn Kho Hệ Thống/Người Ghi Nhận/Cập Nhật Lúc), có Xuất Excel.
+2. **1 bảng DUY NHẤT tự "nở" theo quyền** (không dựng 2 màn riêng): tái dùng ĐÚNG cơ chế quyền
+   `shelfReportView` đã có (Đối Chiếu/Ngưỡng Tồn) — `DB.shelfRecords` phía client đã được server lọc sẵn
+   theo đúng phạm vi (`filterShelfRecordsForUser()`, `routes/data.js`), nên nhân viên thường tự nhiên chỉ
+   thấy siêu thị mình; người có quyền "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" thấy nhiều/tất cả siêu thị, bảng
+   tự thêm cột "Siêu Thị" + bộ lọc — đây chính là báo cáo tổng hợp, không cần permission/route mới.
+3. Cột "Tồn Kho Hệ Thống" CHỈ có số liệu cho đúng siêu thị người đăng nhập (tái dùng route Đối Chiếu sẵn
+   có) — dòng siêu thị khác hiện "—" (quyết định cùng người dùng: không cần thêm route riêng cho N siêu
+   thị, đã có đủ số liệu ở tab Đối Chiếu của từng siêu thị).
+4. `public/js/module-baocaoquantri.js`: mục "📋 Kiểm Soát Hàng Hóa" đã có sẵn trong module Báo Cáo chung
+   (tự sinh cột từ dữ liệu thật) — thêm nhãn tiếng Việt cho các trường maHang/productName/maVach/
+   shelfLocationCode/shelfLocationName/expiryDate/creatorName/lastScannedAt (trước đó auto-tách chữ hoa
+   kiểu "Product name"), loại 2 trường nội bộ không có ý nghĩa báo cáo (shelfLocationId/clientRecordId).
+5. Test mới `tests/test-shelf-report-tab.js` (Playwright, assert thật) — xác nhận cả 3 kịch bản: nhân
+   viên 1 siêu thị, quản lý vùng xem tổng hợp nhiều siêu thị, lọc riêng 1 siêu thị trong báo cáo tổng hợp.
+   Đã demo ảnh + xác nhận với người dùng trước khi hoàn thiện.
+
+**Không cần thao tác gì thêm khi deploy** — chỉ copy code + `pm2 restart`, không đổi schema/`.env`/
+dependency nào.
 
 ## v29.85 (2026-11): Đối Chiếu Kệ & Tồn Kho — thêm cột "Trên Kệ Quá Khứ"
 
