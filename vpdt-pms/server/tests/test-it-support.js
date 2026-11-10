@@ -223,6 +223,12 @@ async function main() {
       // thay thế bản gốc (append-only).
       await loginAs(page, STAFF_KD);
       const step2 = await page.evaluate(async (id) => {
+        // (11/2026) Phản hồi Yêu Cầu Bổ Sung giờ là 1 form đầy đủ (renderItPriceSupplementEditForm(),
+        // điền sẵn giá trị hiện có) — phải MỞ MODAL để form này được dựng + điền sẵn trước khi gọi
+        // submitItPriceSupplementAction() (hàm đọc input THẬT trên DOM, không chỉ đọc 1 biến global
+        // file như bản cũ trước khi vá). Không sửa gì thêm trên form -> payload gửi lên y hệt giá trị
+        // hiện có của hồ sơ (prefill), CHỈ thêm tệp bổ sung mới — đúng kỳ vọng append-only của test này.
+        openItPriceModal(id);
         itPriceSupplementPendingFile = {
           fileUrl: '/uploads/gia-bo-sung.xlsx', fileName: 'gia-bo-sung.xlsx',
           items: [{ values: { code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: '5000', newPrice: '5500' } }],

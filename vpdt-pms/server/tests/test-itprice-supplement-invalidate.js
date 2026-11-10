@@ -48,8 +48,12 @@ function makeItem() {
   };
 }
 
+// (11/2026) submitPriceSupplementFile() giờ SỬA LẠI TOÀN BỘ thông tin (không chỉ tệp) — payload test
+// phải đủ field bắt buộc chung (effectiveDate) giống hệt nhánh TẠO, xem validateItPriceCoreFields().
 function supplementPayload() {
   return {
+    effectiveDate: '2024-01-01',
+    reason: 'Bổ sung theo yêu cầu',
     file: {
       fileUrl: '/uploads/bo-sung.xlsx', fileName: 'bo-sung.xlsx',
       items: [{ values: { c0: 'SKU001', c1: '15000' } }],
@@ -85,7 +89,7 @@ console.log('\n[1/2] Bước 1 duyệt xong -> Bước 2 Yêu Cầu Bổ Sung ->
   });
 
   // Người đề xuất tải lên tệp bảng giá BỔ SUNG (số liệu có thể đã đổi).
-  item = submitPriceSupplementFile(CREATOR, item, supplementPayload());
+  item = submitPriceSupplementFile(CREATOR, item, supplementPayload(), appData);
   test('Sau khi tải tệp bổ sung: dòng APPROVED của Bước 1 bị đánh dấu invalidated=true', () => {
     const approvedEntries = item.history.filter(h => h.action === 'APPROVED');
     assert.strictEqual(approvedEntries.length, 1, 'Vẫn giữ nguyên dòng lịch sử cũ để tra cứu, không xoá');
@@ -108,7 +112,7 @@ console.log('\n[2/2] Bước 1 (chưa ai duyệt) Yêu Cầu Bổ Sung -> tải 
 {
   let item = makeItem();
   ({ item } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'REQUEST_INFO', user: STEP1, comment: 'Cần thêm tài liệu', appData }));
-  item = submitPriceSupplementFile(CREATOR, item, supplementPayload());
+  item = submitPriceSupplementFile(CREATOR, item, supplementPayload(), appData);
   test('Chưa có bước nào APPROVED trước đó -> không có dòng SUPPLEMENT_RESTART, currentStep vẫn = 1 (không đổi)', () => {
     assert.ok(!item.history.some(h => h.action === 'SUPPLEMENT_RESTART'));
     assert.strictEqual(item.currentStep, 1);

@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**29.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.82 (2026-11): "Yêu Cầu Bổ Sung" (Phê Duyệt Giá) cho phép sửa lại TOÀN BỘ thông tin, không chỉ tệp
+
+Yêu cầu người dùng: khi người duyệt bước 1 (hồ sơ còn PENDING) hoặc đội Hỗ Trợ IT (hồ sơ đã APPROVED,
+trước khi áp giá) bấm "✉️ Yêu Cầu Bổ Sung", người đề xuất TRƯỚC ĐÂY chỉ được tải thêm 1 tệp bảng giá mới
+(append-only) — mọi field khác (mức áp dụng/vùng giá, siêu thị-ngành hàng áp dụng, ngày áp dụng/hết hiệu
+lực, Mẫu Giá, lý do, Trường Bổ Sung, và quan trọng nhất — **"Nhóm Phê Duyệt Cuối" (người phê duyệt bổ
+sung)**) đều khoá cứng, không sửa lại được dù chính những thông tin đó là lý do bị yêu cầu bổ sung. Áp
+dụng CẢ 2 kênh "QT Giá Bán Lẻ" (Mua Hàng) và "QT Giá Bán Buôn" (Vận Hành).
+
+**Đã làm**:
+1. Trích xuất `validateItPriceCoreFields()` (mới, `lib/createValidation.js`) — DÙNG CHUNG đúng 1 bộ luật
+   validate/chuẩn hoá field cho cả nhánh TẠO MỚI (`itPriceApprovals.extraValidate`) và nhánh SỬA LẠI khi
+   phản hồi Yêu Cầu Bổ Sung, tránh lặp logic 2 nơi dễ lệch nhau. `priceType` luôn KHOÁ CỨNG theo hồ sơ
+   hiện có khi sửa (không cho đổi Bán Lẻ↔Bán Buôn giữa chừng — 2 quy trình phê duyệt khác hẳn nhau); tệp
+   bảng giá (`requireFile`) bắt buộc lúc tạo, TUỲ CHỌN lúc sửa (không chọn lại thì giữ nguyên tệp cũ).
+2. Mở rộng `submitPriceSupplementFile()` (`lib/recordActions.js`) — nhận TOÀN BỘ field như lúc tạo, cập
+   nhật thẳng vào hồ sơ (priceTier/wholesaleApplyUnit/priceZone/storeScope/nganhHang/effectiveDate/
+   expiryMode-Date/masterListId/reason/extraFiles/customData/extraApprovalLevel-Layers), rồi mới tới
+   phần tệp bảng giá (nếu có gửi kèm, vẫn append-only như cũ) — **GIỮ NGUYÊN KHÔNG ĐỔI** cơ chế
+   invalidate+reset-về-Bước-1 (vá cho ticket ITPG-BL-023, 11/2026) cho CẢ 2 nguồn `byRole:'approver'`
+   (còn PENDING) và `byRole:'it'` (đã APPROVED) — an toàn production không bị ảnh hưởng.
+3. `routes/records.js` route `POST /itPriceApprovals/:id/submit-supplement` — truyền `appData` qua
+   (trước đây không cần vì chỉ xử lý tệp), mở rộng `assertPayloadFileUrlsOwnedByUser()` soát luôn
+   `extraFiles`/`customData` (không chỉ `files`), với `exemptFileUrls` bắt TRƯỚC khi mutate để field giữ
+   nguyên không bị soát lại quyền sở hữu thừa.
+4. Client (`public/js/module-itsupport-price.js`) — widget "📤 Tải Lên Tệp Bổ Sung" cũ (1 ô chọn tệp)
+   thay bằng form đầy đủ **điền sẵn giá trị hiện có của hồ sơ**, các field khác đúng như lúc tạo (mức áp
+   dụng/siêu thị-ngành hàng/ngày áp dụng cho Bán Buôn, vùng giá cho Bán Lẻ, Mẫu Giá, lý do, Trường Bổ
+   Sung, tệp bảng giá mới TUỲ CHỌN, tài liệu bổ sung) — cộng 1 khối "🧭 Cấp Phê Duyệt Cuối Cùng"/"✅ Phê
+   Duyệt Thêm" tự dựng riêng (id `itPriceSupp*`, KHÔNG dùng chung mount `renderExtraApprovalMount()` của
+   2 form Tạo để tránh trùng id DOM khi modal mở cùng lúc 2 form đó còn tồn tại ẩn trong trang).
+5. Test: cập nhật `test-itprice-supplement-invalidate.js`/`test-audit-round2-cluster2.js`/
+   `test-audit-round2-cluster3.js`/`test-edit-file-ownership-batch2.js`/`test-it-support.js`/
+   `testHarness.js` cho khuôn payload mới; chạy lại ~35 file test liên quan itPriceApprovals/CSP/
+   extraApproval/Approval Hub — tất cả pass (1 fail tiền-tồn tại ở `test-preview-workflow-buttons.js`,
+   thuộc module Hợp Đồng, xác nhận KHÔNG liên quan qua `git stash`).
+
+**Tác động triển khai**: chỉ copy code + `pm2 restart` — không đổi `schema.sql`/`.env.example`/
+`package.json` dependencies.
 
 ## v29.81 (2026-11): Fix "Cây Sơ Đồ Tổ Chức" không thêm được Phòng Ban + ô KPI đổi sang dropdown tìm-kiếm-gõ-chọn
 

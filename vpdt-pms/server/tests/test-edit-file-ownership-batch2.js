@@ -318,11 +318,13 @@ async function main() {
 
     // ===== 9. itPriceApprovals/:id/submit-supplement =====
     reset();
-    r = await api('POST', '/api/records/itPriceApprovals/70/submit-supplement', { file: { fileUrl: '/uploads/u2-secret-file.pdf', fileName: 'bo-sung.xlsx', items: [{ values: { c0: 'Sản phẩm A', c1: '10000' } }] } }, U1);
+    // (11/2026) submitPriceSupplementFile() giờ sửa lại TOÀN BỘ thông tin — payload cần đủ field bắt
+    // buộc chung (effectiveDate) giống hệt nhánh TẠO, xem validateItPriceCoreFields().
+    r = await api('POST', '/api/records/itPriceApprovals/70/submit-supplement', { effectiveDate: '2024-01-01', file: { fileUrl: '/uploads/u2-secret-file.pdf', fileName: 'bo-sung.xlsx', items: [{ values: { c0: 'Sản phẩm A', c1: '10000' } }] } }, U1);
     check('itPriceApprovals/submit-supplement: chặn gắn tệp của người khác (u2) — 403', r.status === 403, r.body);
     check('itPriceApprovals/submit-supplement: KHÔNG thêm tệp nào sau khi chặn', RECORDS.itPriceApprovals[0].files.length === 1, RECORDS.itPriceApprovals[0]);
     reset();
-    r = await api('POST', '/api/records/itPriceApprovals/70/submit-supplement', { file: { fileUrl: '/uploads/u1-owned-file.pdf', fileName: 'bo-sung.xlsx', items: [{ values: { c0: 'Sản phẩm A', c1: '10000' } }] } }, U1);
+    r = await api('POST', '/api/records/itPriceApprovals/70/submit-supplement', { effectiveDate: '2024-01-01', file: { fileUrl: '/uploads/u1-owned-file.pdf', fileName: 'bo-sung.xlsx', items: [{ values: { c0: 'Sản phẩm A', c1: '10000' } }] } }, U1);
     check('itPriceApprovals/submit-supplement: gắn tệp CHÍNH MÌNH -> thành công (200)', r.status === 200, r.body);
     check('itPriceApprovals/submit-supplement: tệp mới được thêm đúng', RECORDS.itPriceApprovals[0].files[1]?.fileUrl === '/uploads/u1-owned-file.pdf', RECORDS.itPriceApprovals[0]);
 

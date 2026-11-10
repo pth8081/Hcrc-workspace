@@ -4193,8 +4193,12 @@ router.post('/itPriceApprovals/:id/request-info', async (req, res) => {
   }
 });
 
-// Người đề xuất tải lên tệp bổ sung để phản hồi 1 yêu cầu bổ sung đang chờ (từ CẢ 2 nguồn approver/IT)
-// — tệp mới được THÊM VÀO, không thay thế tệp trước đó (xem submitPriceSupplementFile()).
+// Người đề xuất SỬA LẠI TOÀN BỘ thông tin đề xuất để phản hồi 1 yêu cầu bổ sung đang chờ (từ CẢ 2
+// nguồn approver/IT) — tệp bảng giá mới (nếu có gửi kèm) được THÊM VÀO, không thay thế tệp trước đó
+// (xem submitPriceSupplementFile()). exemptFileUrls giờ gồm CẢ files/extraFiles/customData hiện có
+// trên hồ sơ (bắt trước khi gọi hàm, vì hàm mutate thẳng `item`) — field nào người đề xuất GIỮ NGUYÊN
+// (không đổi) không bị soát lại quyền sở hữu, chỉ field/tệp MỚI thêm/đổi mới cần soát (mirror đúng
+// khuôn 14+ route "Sửa" khác đã có, xem assertPayloadFileUrlsOwnedByUser()).
 router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -4203,9 +4207,10 @@ router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
     const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('itPriceApprovals', itemId, async (item) => {
       assertItPriceApprovalModuleAccess(freshUser, item, appData);
-      const exemptFileUrls = (item.files || []).map(f => f?.fileUrl).filter(Boolean);
-      const updated = recordActions.submitPriceSupplementFile(freshUser, item, req.body);
-      await assertPayloadFileUrlsOwnedByUser({ files: updated.files }, freshUser, { exemptFileUrls });
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep({ files: item.files, extraFiles: item.extraFiles, customData: item.customData }, exemptFileUrls);
+      const updated = recordActions.submitPriceSupplementFile(freshUser, item, req.body, appData);
+      await assertPayloadFileUrlsOwnedByUser({ files: updated.files, extraFiles: updated.extraFiles, customData: updated.customData }, freshUser, { exemptFileUrls });
       return updated;
     });
     res.json({ ok: true, item: result });

@@ -425,7 +425,9 @@ async function main() {
 
     await run.run('Fix 2b — hồ sơ còn hợp lệ (chưa từ chối) vẫn tải được tệp bổ sung như cũ', async () => {
       const item = makeApprovedPriceItem({ infoRequests: [openInfoRequest()] });
-      recordActions.submitPriceSupplementFile(PROPOSER, item, { file: goodSupplementFile() });
+      // (11/2026) submitPriceSupplementFile() giờ sửa lại TOÀN BỘ thông tin — payload cần đủ field bắt
+      // buộc chung (effectiveDate) giống hệt nhánh TẠO, xem validateItPriceCoreFields().
+      recordActions.submitPriceSupplementFile(PROPOSER, item, { effectiveDate: '2026-08-03', file: goodSupplementFile() });
       assertEqual(item.files.length, 1, 'Tệp bổ sung phải được thêm vào (không chặn quá tay)');
       assert(!!item.infoRequests[0].response, 'Yêu cầu bổ sung được đánh dấu đã phản hồi');
       assert((item.history || []).some(h => h.action === 'SUBMIT_SUPPLEMENT'), 'Có dòng history SUBMIT_SUPPLEMENT');

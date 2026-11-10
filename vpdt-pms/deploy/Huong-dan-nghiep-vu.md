@@ -1915,6 +1915,19 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     áp dụng luật: nộp tệp bổ sung tự mất hiệu lực các bước đã duyệt trước
     đó + hồ sơ quay lại "Chờ Phê Duyệt", Bước 1 — áp giá chỉ thực hiện được
     sau khi duyệt lại xong từ đầu với số liệu mới.
+  - **Phản hồi Yêu Cầu Bổ Sung giờ sửa lại được TOÀN BỘ thông tin đề xuất,
+    không chỉ tệp bảng giá (MỚI 11/2026)**: trước đây khi bị yêu cầu bổ sung
+    (từ người duyệt giữa chừng HOẶC từ đội Hỗ Trợ IT sau khi đã duyệt xong),
+    người đề xuất chỉ tải thêm được 1 tệp bảng giá mới — mọi thông tin khác
+    (mức áp dụng/vùng giá, siêu thị-ngành hàng áp dụng, ngày áp dụng/hết hiệu
+    lực, Mẫu Giá, lý do, Trường Bổ Sung, và **"Nhóm Phê Duyệt Cuối" — tức
+    người phê duyệt bổ sung**) đều khoá cứng, không sửa lại được dù chính
+    những thông tin đó là lý do bị yêu cầu bổ sung. Nay bấm mở lại hồ sơ đang
+    chờ bổ sung sẽ thấy 1 form đầy đủ, điền sẵn toàn bộ giá trị hiện có, sửa
+    được MỌI field (kể cả đổi người phê duyệt bổ sung) rồi gửi lại 1 lần —
+    tệp bảng giá mới vẫn TUỲ CHỌN (không chọn lại thì giữ nguyên tệp cũ). Áp
+    dụng CẢ 2 kênh Bán Lẻ (Mua Hàng)/Bán Buôn (Vận Hành); luật "nộp bổ sung tự
+    quay lại Chờ Phê Duyệt, Bước 1" ở mục ngay trên vẫn giữ nguyên không đổi.
   - **"🎫 Hỗ Trợ Yêu Cầu" (ticket IT chung) tạo xong tự gửi email báo đội Hỗ
     Trợ IT (MỚI 11/2026)**: trước đây tạo ticket mới hoàn toàn không có
     thông báo gì — đội IT chỉ biết bằng cách tự vào danh sách kiểm tra thủ

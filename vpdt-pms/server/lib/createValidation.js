@@ -518,6 +518,167 @@ function prepareExtraApprovalSelectionForCreate(moduleKey, payload, appData) {
   return { extraApprovalLevel: approvalLevel, extraApprovalLayers };
 }
 
+// validateItPriceCoreFields() — toàn bộ phần kiểm tra/chuẩn hoá các trường của 1 đề xuất "Phê Duyệt
+// Giá" (itPriceApprovals) KHÔNG PHỤ THUỘC việc đây là lúc TẠO MỚI hay SỬA LẠI khi phản hồi "Yêu Cầu Bổ
+// Sung" (11/2026, theo yêu cầu người dùng: "khi mà yêu cầu bổ sung thì cho phép sửa lại TẤT CẢ thông
+// tin... cả giá bán lẻ và bán buôn" — người đề xuất phải sửa được NGUYÊN VẸN như lúc tạo, không chỉ tải
+// thêm 1 tệp). Trích XUẤT ĐÚNG NGUYÊN VĂN logic đã có ở itPriceApprovals.extraValidate() (không đổi 1
+// quy tắc nào) để dùng CHUNG cho cả 2 nơi gọi — tránh lặp logic 2 chỗ dễ lệch nhau:
+//   - itPriceApprovals.extraValidate() (dưới đây, nhánh TẠO MỚI) — priceType suy ra từ payload+quyền đề
+//     xuất, requireFile luôn true (phải có đúng 1 tệp bảng giá mới tạo được).
+//   - submitPriceSupplementFile() (lib/recordActions.js, nhánh SỬA KHI PHẢN HỒI Yêu Cầu Bổ Sung) —
+//     priceType LUÔN khoá cứng theo item.priceType có sẵn (KHÔNG cho đổi Bán Lẻ<->Bán Buôn giữa chừng,
+//     đây là 2 quy trình phê duyệt khác hẳn nhau), requireFile=false (được giữ nguyên tệp bảng giá cũ,
+//     không bắt buộc tải lại mới mỗi lần phản hồi).
+// LƯU Ý BẢO TRÌ: hàm này là NGUỒN DUY NHẤT cho 2 nơi gọi — sửa 1 quy tắc ở đây tự áp dụng cho CẢ tạo mới
+// lẫn sửa khi phản hồi, không cần (và không nên) sửa lặp lại ở nơi khác.
+// Trả về 1 object các field ĐÃ chuẩn hoá/kiểm hợp lệ (không mutate payload) — nơi gọi tự quyết định gán
+// vào đâu (payload lúc tạo, hoặc thẳng vào item lúc sửa). `priceType` do NƠI GỌI xác định/khoá sẵn.
+function validateItPriceCoreFields(payload, appData, priceType, { requireFile = true, fileLabel = 'Tệp bảng giá' } = {}) {
+  const out = {};
+  // Bán Buôn: bỏ quy trình theo phòng ban, chuyển sang theo 1 trong 4 mức Margin/Chiết Khấu cố định
+  // (đã chốt với người dùng — danh sách PHẲNG, không lồng nhau). RETAIL không dùng field này — không
+  // tin giá trị lạ client cố tình gửi kèm (null hoá để resolveWfConfig() không đọc nhầm).
+  const PRICE_TIER_VALUES = new Set(['MARGIN_LT5', 'MARGIN_GTE5', 'DISCOUNT_LTE5', 'DISCOUNT_GT5']);
+  if (priceType === 'WHOLESALE') {
+    if (!PRICE_TIER_VALUES.has(payload.priceTier)) {
+      throw new CreateError(400, 'Vui lòng chọn đúng Mức Margin/Chiết Khấu áp dụng cho đề xuất Bán Buôn');
+    }
+    // "Đơn Vị Áp Dụng Giá Bán Buôn" — tên đơn vị/khách hàng mà mức giá này áp dụng CHO, KHÁC
+    // payload.dept (đơn vị NỘI BỘ tạo đề xuất) — nhập tay tự do (không có danh mục hệ thống cho đối
+    // tác/khách hàng ngoài), bắt buộc cho Bán Buôn, không áp dụng cho Bán Lẻ (xem nhánh else bên
+    // dưới). Chặn sớm ở client nhưng đây mới là chốt chặn thật.
+    const wholesaleApplyUnit = String(payload.wholesaleApplyUnit || '').trim();
+    if (!wholesaleApplyUnit) {
+      throw new CreateError(400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
+    }
+    out.priceTier = payload.priceTier;
+    out.wholesaleApplyUnit = wholesaleApplyUnit.slice(0, 300);
+    out.priceZone = null;
+  } else {
+    out.priceTier = null;
+    out.wholesaleApplyUnit = null;
+    // "Vùng Giá Áp Dụng" — CHỈ áp dụng cho Bán Lẻ (đối xứng wholesaleApplyUnit ở nhánh WHOLESALE
+    // trên), chọn từ danh mục hệ thống appData.priceZones (KHÔNG nhập tay tự do như
+    // wholesaleApplyUnit — đối tác/khách hàng ngoài không có danh mục cố định, nhưng vùng giá là
+    // khái niệm NỘI BỘ công ty tự định nghĩa nên dùng danh mục để tránh gõ sai/không nhất quán).
+    // KHÔNG bắt buộc (theo yêu cầu người dùng, đợt 9/2026) — cho phép bỏ trống hoàn toàn, nhưng nếu
+    // CÓ chọn thì vẫn đối chiếu với danh mục hệ thống, không tin nguyên văn giá trị client gửi.
+    const validZones = new Set(appData?.priceZones || []);
+    const priceZone = String(payload.priceZone || '').trim();
+    if (priceZone && !validZones.has(priceZone)) {
+      throw new CreateError(400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng (từ danh mục hệ thống)');
+    }
+    out.priceZone = priceZone || null;
+  }
+
+  // Tài liệu bổ sung liên quan — mirror ĐÚNG khuôn submissions.extraFiles: chỉ kiểm khuôn URL rồi giữ
+  // nguyên danh sách, hoàn toàn TUỲ CHỌN (mảng rỗng hợp lệ). Trần 20 tệp phòng payload khổng lồ.
+  assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung liên quan');
+  out.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles.slice(0, 20) : [];
+
+  // Đề xuất nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc) — client gọi
+  // POST /api/it-price/parse-file trước để server đọc + trả về items có cấu trúc, rồi echo lại NGUYÊN
+  // VĂN vào đây (payload.files[0]), sanitizePriceFileItems()/sanitizeColumnLabels() chặn payload giả
+  // mạo/kiểu dữ liệu lạ trước khi ghi vào DB. requireFile=false (nhánh sửa khi phản hồi Yêu Cầu Bổ
+  // Sung) cho phép KHÔNG gửi kèm tệp mới — giữ nguyên tệp bảng giá đã có, out.file để `undefined`, nơi
+  // gọi (submitPriceSupplementFile()) tự biết không cần thêm tệp mới vào item.files.
+  // Nhánh TẠO gửi payload.files[0] (khớp payload.files[] lưu trên item); nhánh SỬA khi phản hồi Yêu
+  // Cầu Bổ Sung (submitPriceSupplementFile(), lib/recordActions.js) gửi payload.file (số ít, giữ
+  // NGUYÊN khuôn cũ của nhánh đó để không phải đổi lại mọi test/call site hiện có) — chấp nhận CẢ 2
+  // khuôn ở đây, nơi gọi tự biết khuôn nào mình gửi.
+  const file = payload.file || (payload.files && payload.files[0]);
+  if (!file || !file.fileUrl) {
+    if (requireFile) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
+  } else {
+    // TRƯỚC ĐÂY chỉ cắt còn 300 ký tự — không hề kiểm khuôn, nên "javascript:..." hay đường dẫn tệp
+    // của hồ sơ phòng ban khác vẫn lưu được nguyên vẹn. Xem assertUploadedFileUrl().
+    assertUploadedFileUrl(file.fileUrl, fileLabel);
+    out.file = {
+      fileUrl: String(file.fileUrl),
+      fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
+      items: sanitizePriceFileItems(file.items),
+      columnLabels: sanitizeColumnLabels(file.columnLabels)
+    };
+  }
+
+  // Mẫu Giá (tuỳ chọn, payload.masterListId) — người đề xuất tự chọn ĐÚNG mẫu áp dụng cho bảng giá của
+  // mình (không suy luận tự động theo phòng ban, vì thực tế có thể có nhiều mẫu khác nhau — xem
+  // defaults.js). Mẫu Giá giờ CHỈ còn là khuôn cột (columns[], không còn dữ liệu giá thật) — dùng để dò/
+  // hiển thị đúng tên cột lúc nộp (xem routes/priceFile.js), KHÔNG còn dùng để đối chiếu giá trị/tự
+  // động bỏ qua duyệt phòng ban nữa.
+  // Mẫu Giá tách riêng theo priceType (10/2026) — mẫu KHÔNG gắn priceType (tạo trước khi tách kênh) vẫn
+  // coi là hợp lệ cho CẢ 2 kênh (mirror đúng bộ lọc client). "Bắt buộc chọn mẫu" chỉ tính trên các mẫu
+  // THUỘC ĐÚNG kênh đang nộp — nếu kênh này chưa có mẫu nào (dù kênh kia đã có) thì KHÔNG được ép chọn
+  // 1 mẫu của kênh khác.
+  const masterLists = appData?.itPriceMasterLists || [];
+  const masterListsForChannel = masterLists.filter(m => !m.priceType || m.priceType === priceType);
+  const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
+  const masterList = masterListId ? masterListsForChannel.find(m => m.id === masterListId) : null;
+  // Đã có ít nhất 1 Mẫu Giá của ĐÚNG kênh này thì BẮT BUỘC phải chọn đúng 1 mẫu (không còn tuỳ chọn
+  // "Không đối chiếu") — tự soạn request bỏ qua field này, trỏ tới id không tồn tại, hoặc trỏ tới mẫu
+  // của KÊNH KHÁC đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
+  if (masterListsForChannel.length > 0 && !masterList) {
+    throw new CreateError(400, 'Vui lòng chọn đúng Mẫu Giá Phê Duyệt trước khi gửi đề xuất');
+  }
+  out.masterListId = masterList ? masterList.id : null;
+  out.masterListName = masterList ? masterList.name : null;
+
+  out.reason = (payload.reason || '').trim();
+
+  // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — CHỈ mang tính thông tin cho đội Hỗ
+  // Trợ IT biết phạm vi/thời hạn áp giá (không giới hạn ai xem được đề xuất, không có xử lý tự động nào
+  // theo ngày hết hiệu lực — IT tự theo dõi thủ công). Bán Buôn KHÔNG có khái niệm "Toàn bộ" — luôn ép
+  // 'OTHER' + bắt buộc chọn ít nhất 1 siêu thị/cửa hàng ("Siêu Thị Đề Xuất"), KHÔNG tin giá trị mode
+  // client tự gửi.
+  const storeScopeMode = (priceType === 'WHOLESALE' || payload.storeScope?.mode === 'OTHER') ? 'OTHER' : 'ALL';
+  let storeScopeStores = [];
+  if (storeScopeMode === 'OTHER') {
+    const validStores = new Set(appData?.stores || []);
+    storeScopeStores = Array.isArray(payload.storeScope?.stores)
+      ? [...new Set(payload.storeScope.stores.map(s => String(s || '').trim()).filter(Boolean))].filter(s => validStores.has(s)).slice(0, 200)
+      : [];
+    if (!storeScopeStores.length) {
+      throw new CreateError(400, priceType === 'WHOLESALE'
+        ? 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất'
+        : 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng")');
+    }
+  }
+  out.storeScope = { mode: storeScopeMode, stores: storeScopeStores };
+
+  // "🏷️ Ngành Hàng Áp Dụng" — CHỈ áp dụng Bán Buôn, cùng vị trí/cùng mức bắt buộc với storeScope ở trên
+  // nhưng HOÀN TOÀN ĐỘC LẬP (không liên quan gì tới siêu thị đề xuất) — xem chú thích đầy đủ ở
+  // defaults.js::nganhHangCatalog.
+  let nganhHang = [];
+  if (priceType === 'WHOLESALE') {
+    const validCodes = new Set((appData?.nganhHangCatalog || []).map(n => String(n?.code || '')));
+    nganhHang = Array.isArray(payload.nganhHang)
+      ? [...new Set(payload.nganhHang.map(c => String(c || '').trim()).filter(Boolean))].filter(c => validCodes.has(c)).slice(0, 50)
+      : [];
+    if (!nganhHang.length) {
+      throw new CreateError(400, 'Vui lòng chọn ít nhất 1 ngành hàng áp dụng hợp lệ');
+    }
+  }
+  out.nganhHang = nganhHang;
+
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const effectiveDate = String(payload.effectiveDate || '').trim();
+  if (!DATE_RE.test(effectiveDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Áp Dụng hợp lệ');
+  out.effectiveDate = effectiveDate;
+
+  const expiryMode = payload.expiryMode === 'OTHER' ? 'OTHER' : 'PERMANENT';
+  let expiryDate = null;
+  if (expiryMode === 'OTHER') {
+    expiryDate = String(payload.expiryDate || '').trim();
+    if (!DATE_RE.test(expiryDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Hết Hiệu Lực hợp lệ (hoặc chọn lại "Vĩnh viễn")');
+    if (expiryDate < effectiveDate) throw new CreateError(400, 'Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi');
+  }
+  out.expiryMode = expiryMode;
+  out.expiryDate = expiryDate;
+
+  return out;
+}
+
 // Ép "chỉ 1 người" cho BẤT KỲ nhóm nào admin đánh dấu `singleApprover:true` (đợt "Nhóm Phê Duyệt Trình
 // tự cấu hình", 10/2026 — TRƯỚC ĐÂY hardcode CỐ ĐỊNH riêng cho khoá "TGD"/Tổng Giám Đốc, nay là CỜ
 // admin tự gán được cho nhóm bất kỳ, xem defaults.js) khi lưu Nhóm Phê Duyệt Trình (mục 11, key
@@ -2825,148 +2986,26 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá loại này');
       }
       payload.priceType = priceType;
-      // Bán Buôn: bỏ quy trình theo phòng ban, chuyển sang theo 1 trong 4 mức Margin/Chiết Khấu cố định
-      // (đã chốt với người dùng — danh sách PHẲNG, không lồng nhau). RETAIL không dùng field này — không
-      // tin giá trị lạ client cố tình gửi kèm (null hoá để resolveWfConfig() không đọc nhầm).
-      const PRICE_TIER_VALUES = new Set(['MARGIN_LT5', 'MARGIN_GTE5', 'DISCOUNT_LTE5', 'DISCOUNT_GT5']);
-      if (priceType === 'WHOLESALE') {
-        if (!PRICE_TIER_VALUES.has(payload.priceTier)) {
-          throw new CreateError(400, 'Vui lòng chọn đúng Mức Margin/Chiết Khấu áp dụng cho đề xuất Bán Buôn');
-        }
-        // "Đơn Vị Áp Dụng Giá Bán Buôn" — tên đơn vị/khách hàng mà mức giá này áp dụng CHO, KHÁC
-        // payload.dept (đơn vị NỘI BỘ tạo đề xuất) — nhập tay tự do (không có danh mục hệ thống cho đối
-        // tác/khách hàng ngoài), bắt buộc cho Bán Buôn, không áp dụng cho Bán Lẻ (xem nhánh else bên
-        // dưới). Chặn sớm ở client (submitItPriceApproval(), module-itsupport-price.js) nhưng đây mới là
-        // chốt chặn thật.
-        const wholesaleApplyUnit = String(payload.wholesaleApplyUnit || '').trim();
-        if (!wholesaleApplyUnit) {
-          throw new CreateError(400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
-        }
-        payload.wholesaleApplyUnit = wholesaleApplyUnit.slice(0, 300);
-        payload.priceZone = null;
-      } else {
-        payload.priceTier = null;
-        payload.wholesaleApplyUnit = null;
-        // "Vùng Giá Áp Dụng" — CHỈ áp dụng cho Bán Lẻ (đối xứng wholesaleApplyUnit ở nhánh WHOLESALE
-        // trên), chọn từ danh mục hệ thống appData.priceZones (KHÔNG nhập tay tự do như
-        // wholesaleApplyUnit — đối tác/khách hàng ngoài không có danh mục cố định, nhưng vùng giá là
-        // khái niệm NỘI BỘ công ty tự định nghĩa nên dùng danh mục để tránh gõ sai/không nhất quán).
-        // KHÔNG bắt buộc (theo yêu cầu người dùng, đợt 9/2026) — cho phép bỏ trống hoàn toàn, nhưng nếu
-        // CÓ chọn thì vẫn đối chiếu với danh mục hệ thống, không tin nguyên văn giá trị client gửi.
-        const validZones = new Set(appData?.priceZones || []);
-        const priceZone = String(payload.priceZone || '').trim();
-        if (priceZone && !validZones.has(priceZone)) {
-          throw new CreateError(400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng (từ danh mục hệ thống)');
-        }
-        payload.priceZone = priceZone || null;
-      }
-      // Tài liệu bổ sung liên quan (#itPriceExtraFiles ở index.html) — mirror ĐÚNG khuôn
-      // submissions.extraFiles (~380): chỉ kiểm khuôn URL rồi giữ nguyên payload.extraFiles, hoàn toàn
-      // TUỲ CHỌN (mảng rỗng hợp lệ). Trần 20 tệp phòng payload khổng lồ.
-      assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung liên quan');
-      payload.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles.slice(0, 20) : [];
-      // Đề xuất giờ nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc) thay vì
-      // nhập tay 1 mặt hàng — client gọi POST /api/it-price/parse-file trước để server đọc + trả về
-      // items có cấu trúc, rồi echo lại NGUYÊN VĂN vào đây (payload.files[0]) — cùng mức tin cậy với
-      // cách VPP xử lý danh mục (xem lib/vppCatalog.js::validateRegistrationItems), sanitizePriceFileItems()
-      // dưới đây chặn payload giả mạo/kiểu dữ liệu lạ trước khi ghi vào DB.
-      const file = payload.files && payload.files[0];
-      if (!file || !file.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
-      // TRƯỚC ĐÂY chỉ cắt còn 300 ký tự (slice bên dưới) — không hề kiểm khuôn, nên "javascript:..."
-      // hay đường dẫn tệp của hồ sơ phòng ban khác vẫn lưu được nguyên vẹn. Xem assertUploadedFileUrl().
-      assertUploadedFileUrl(file.fileUrl, 'Tệp bảng giá');
-      const items = sanitizePriceFileItems(file.items);
-      const columnLabels = sanitizeColumnLabels(file.columnLabels);
 
-      // Mẫu Giá (tuỳ chọn, payload.masterListId) — người đề xuất tự chọn ĐÚNG mẫu áp dụng cho bảng giá
-      // của mình lúc nộp (không suy luận tự động theo phòng ban, vì thực tế có thể có nhiều mẫu khác
-      // nhau — xem defaults.js). Mẫu Giá giờ CHỈ còn là khuôn cột (columns[], không còn dữ liệu giá thật)
-      // — dùng để dò/hiển thị đúng tên cột lúc nộp (xem routes/priceFile.js), KHÔNG còn dùng để đối
-      // chiếu giá trị/tự động bỏ qua duyệt phòng ban nữa. Mọi đề xuất từ nay LUÔN đi qua đúng quy trình
-      // duyệt theo phòng ban (itPriceDeptWorkflows), không còn nhánh autoApproved.
-      // Mẫu Giá giờ tách riêng theo priceType (mục 1 kế hoạch 10/2026) — mẫu KHÔNG gắn priceType (tạo
-      // trước khi tách kênh) vẫn coi là hợp lệ cho CẢ 2 kênh (mirror đúng bộ lọc client). "Bắt buộc chọn
-      // mẫu" chỉ tính trên các mẫu THUỘC ĐÚNG kênh đang nộp — nếu kênh này chưa có mẫu nào (dù kênh kia
-      // đã có) thì KHÔNG được ép chọn 1 mẫu của kênh khác.
-      const masterLists = appData?.itPriceMasterLists || [];
-      const masterListsForChannel = masterLists.filter(m => !m.priceType || m.priceType === priceType);
-      const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
-      const masterList = masterListId ? masterListsForChannel.find(m => m.id === masterListId) : null;
-      // Đã có ít nhất 1 Mẫu Giá của ĐÚNG kênh này thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu (không
-      // còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này, trỏ tới id không tồn tại,
-      // hoặc trỏ tới mẫu của KÊNH KHÁC đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
-      if (masterListsForChannel.length > 0 && !masterList) {
-        throw new CreateError(400, 'Vui lòng chọn đúng Mẫu Giá Phê Duyệt trước khi gửi đề xuất');
-      }
-      payload.masterListId = masterList ? masterList.id : null;
-      payload.masterListName = masterList ? masterList.name : null;
-
+      // Mọi field còn lại (mức áp dụng/vùng giá/tệp bảng giá/tài liệu bổ sung/Mẫu Giá/lý do/siêu thị-
+      // ngành hàng áp dụng/ngày áp dụng-hết hiệu lực) — DÙNG CHUNG đúng 1 hàm với nhánh "sửa lại TOÀN BỘ
+      // thông tin khi phản hồi Yêu Cầu Bổ Sung" (submitPriceSupplementFile() ở lib/recordActions.js,
+      // 11/2026, theo yêu cầu người dùng "cho phép sửa lại tất cả thông tin... cả giá bán lẻ và bán
+      // buôn") — xem validateItPriceCoreFields() ngay trên MODULE_CONFIGS để tránh lặp logic 2 nơi dễ
+      // lệch nhau (đúng tinh thần CLAUDE.md "LƯU Ý BẢO TRÌ — 2 hàm phải khớp logic").
+      const fields = validateItPriceCoreFields(payload, appData, priceType);
+      const { file, ...restFields } = fields;
+      Object.assign(payload, restFields);
+      // requireFile mặc định true (nhánh TẠO MỚI) nên `file` luôn có — gắn thêm đúng 3 field metadata
+      // (id/uploadedBy*) mà validateItPriceCoreFields() không tự gắn (dùng chung cho cả nhánh sửa, nơi
+      // metadata khác — xem submitPriceSupplementFile()).
       payload.files = [{
-        id: Date.now(),
-        fileUrl: String(file.fileUrl), // đã qua assertUploadedFileUrl() ở trên (khuôn + trần độ dài)
-        fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
+        id: Date.now(), ...file,
         uploadedBy: user.username, uploadedByName: user.name,
-        uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-        items, columnLabels
+        uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
-      payload.reason = (payload.reason || '').trim();
-      // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" (đợt 9/2026) — CHỈ mang tính thông
-      // tin cho đội Hỗ Trợ IT biết phạm vi/thời hạn áp giá (đã xác nhận với người dùng: không giới hạn
-      // ai xem được đề xuất, không có xử lý tự động nào theo ngày hết hiệu lực — IT tự theo dõi thủ
-      // công). Bán Buôn (mục 2 đợt sau) KHÔNG có khái niệm "Toàn bộ" — luôn ép 'OTHER' + bắt buộc chọn
-      // ít nhất 1 siêu thị/cửa hàng ("Siêu Thị Đề Xuất"), KHÔNG tin giá trị mode client tự gửi (client
-      // đã ẩn hẳn lựa chọn "Toàn bộ" khỏi giao diện Bán Buôn, nhưng vẫn tự ép lại ở đây phòng request tự
-      // soạn/DevTools sửa tay — xem applyItPriceStoreScopeUIForSubTab() ở module-itsupport-price.js).
-      const storeScopeMode = (priceType === 'WHOLESALE' || payload.storeScope?.mode === 'OTHER') ? 'OTHER' : 'ALL';
-      let storeScopeStores = [];
-      if (storeScopeMode === 'OTHER') {
-        const validStores = new Set(appData?.stores || []);
-        storeScopeStores = Array.isArray(payload.storeScope?.stores)
-          ? [...new Set(payload.storeScope.stores.map(s => String(s || '').trim()).filter(Boolean))].filter(s => validStores.has(s)).slice(0, 200)
-          : [];
-        if (!storeScopeStores.length) {
-          throw new CreateError(400, priceType === 'WHOLESALE'
-            ? 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất'
-            : 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng")');
-        }
-      }
-      payload.storeScope = { mode: storeScopeMode, stores: storeScopeStores };
 
-      // "🏷️ Ngành Hàng Áp Dụng" (10/2026, theo yêu cầu người dùng) — CHỈ áp dụng Bán Buôn, cùng vị trí/
-      // cùng mức bắt buộc với storeScope ở trên nhưng HOÀN TOÀN ĐỘC LẬP (không liên quan gì tới siêu thị
-      // đề xuất) — xem chú thích đầy đủ ở defaults.js::nganhHangCatalog. Chỉ kiểm code có tồn tại trong
-      // danh mục hay không (KHÔNG ép lại đúng field `dept` của từng mã — `dept` trên danh mục chỉ dùng để
-      // LỌC GỢI Ý hiển thị phía client theo đúng phòng ban người đề xuất, không phải quy tắc chặn cứng
-      // server, vì 1 mã "dùng chung" hợp lệ cho mọi phòng ban và người dùng có thể đổi phòng ban sau khi
-      // danh mục đã gán — không muốn biến 1 đề xuất cũ thành không hợp lệ chỉ vì lý do đó).
-      let nganhHang = [];
-      if (priceType === 'WHOLESALE') {
-        const validCodes = new Set((appData?.nganhHangCatalog || []).map(n => String(n?.code || '')));
-        nganhHang = Array.isArray(payload.nganhHang)
-          ? [...new Set(payload.nganhHang.map(c => String(c || '').trim()).filter(Boolean))].filter(c => validCodes.has(c)).slice(0, 50)
-          : [];
-        if (!nganhHang.length) {
-          throw new CreateError(400, 'Vui lòng chọn ít nhất 1 ngành hàng áp dụng hợp lệ');
-        }
-      }
-      payload.nganhHang = nganhHang;
-
-      const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-      const effectiveDate = String(payload.effectiveDate || '').trim();
-      if (!DATE_RE.test(effectiveDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Áp Dụng hợp lệ');
-      payload.effectiveDate = effectiveDate;
-
-      const expiryMode = payload.expiryMode === 'OTHER' ? 'OTHER' : 'PERMANENT';
-      let expiryDate = null;
-      if (expiryMode === 'OTHER') {
-        expiryDate = String(payload.expiryDate || '').trim();
-        if (!DATE_RE.test(expiryDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Hết Hiệu Lực hợp lệ (hoặc chọn lại "Vĩnh viễn")');
-        if (expiryDate < effectiveDate) throw new CreateError(400, 'Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi');
-      }
-      payload.expiryMode = expiryMode;
-      payload.expiryDate = expiryDate;
-
-      // Lịch sử "Yêu Cầu Bổ Sung" — có thể đến từ người duyệt phòng ban (trong lúc PENDING, qua hành
+      // "Lịch sử Yêu Cầu Bổ Sung" — có thể đến từ người duyệt phòng ban (trong lúc PENDING, qua hành
       // động REQUEST_INFO chung của lib/workflowEngine.js) HOẶC từ đội Hỗ Trợ IT (sau khi đã APPROVED,
       // trước khi áp giá — xem requestPriceInfoFromIt() ở lib/recordActions.js). Cả 2 nguồn dùng CHUNG
       // 1 mảng này để có đúng 1 chỗ kiểm tra "còn yêu cầu bổ sung chưa xử lý" (xem blockApproveIf ở
@@ -5711,6 +5750,10 @@ module.exports = {
   // officeReqs/vppRegistrations/paymentRequests/itPriceApprovals/operationOrders) — xem defaults.js
   // extraApprovalGroups/extraApprovalLevels + appendExtraApprovalLayers() ở lib/workflowEngine.js.
   prepareExtraApprovalSelectionForCreate,
+  // Export cho submitPriceSupplementFile() (lib/recordActions.js) — nhánh "sửa lại TOÀN BỘ thông tin
+  // khi phản hồi Yêu Cầu Bổ Sung" (11/2026) dùng CHUNG đúng 1 hàm với itPriceApprovals.extraValidate()
+  // ở trên, xem chú thích đầy đủ tại định nghĩa hàm.
+  validateItPriceCoreFields,
   // Export cho editSubmissionDraft() (lib/recordActions.js) — nhánh SỬA NHÁP phải áp ĐÚNG luật
   // type/priority/title/content như nhánh TẠO, xem normalizeSubmissionCoreFields() ở đầu file.
   normalizeSubmissionCoreFields, SUBMISSION_TITLE_MAX, SUBMISSION_CONTENT_MAX,

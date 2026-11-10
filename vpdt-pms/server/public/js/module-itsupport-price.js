@@ -2191,17 +2191,17 @@ function renderItPriceModalControls(p) {
     }
   }
 
-  if (blocked && p.creator === currentUser.username) {
+  // "Phản Hồi Yêu Cầu Bổ Sung" (11/2026, theo yêu cầu người dùng: "cho phép người tạo phê duyệt có thể
+  // bổ sung được TẤT CẢ thông tin, từ thông tin chọn người phê duyệt, thông tin up file các thứ... cho
+  // phép sửa lại chỗ phê duyệt giá bán lẻ này và giá bán buôn") — TRƯỚC ĐÂY chỉ có 1 ô chọn tệp bảng
+  // giá bổ sung (append-only), nay mở lại TOÀN BỘ form giống hệt lúc tạo (trừ priceType, khoá cứng —
+  // xem submitPriceSupplementFile() ở lib/recordActions.js), đã điền sẵn giá trị hiện có của hồ sơ.
+  // renderItPriceSupplementEditForm() trả HTML, initItPriceSupplementEditForm() chạy NGAY SAU khi gán
+  // wrap.innerHTML (cần DOM đã tồn tại để populate multi-select/dynamic fields/Nhóm Phê Duyệt Cuối).
+  const needsSupplementForm = blocked && p.creator === currentUser.username;
+  if (needsSupplementForm) {
     const openReq = (p.infoRequests || []).find(r => !r.response);
-    html += `
-      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mt-2">
-        <h4 class="font-bold text-sky-900">📤 Tải Lên Tệp Bổ Sung</h4>
-        <p class="text-amber-700">${escapeHtml(openReq.requestedByName)} yêu cầu: "${escapeHtml(openReq.reason)}"</p>
-        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceSupplementFileChange" data-arg1="${p.masterListId || 'null'}" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
-        <p id="itPriceSupplementFileStatus" class="text-gray-500"></p>
-        <p class="text-gray-400">Tệp bổ sung sẽ được thêm vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
-        <button type="button" id="itPriceSupplementSendBtn" data-op="submitItPriceSupplementAction" data-arg0="${p.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
-      </div>`;
+    html += renderItPriceSupplementEditForm(p, openReq);
   }
 
   // "Phiếu Phê Duyệt Giá Bán Buôn" (11/2026) — CHỈ Bán Buôn, chỉ sau khi đã APPROVED hoàn tất, cho
@@ -2220,6 +2220,241 @@ function renderItPriceModalControls(p) {
 
   if (!html) html = '<p class="text-gray-400 italic">Không có thao tác nào khả dụng cho vai trò hiện tại.</p>';
   wrap.innerHTML = html;
+  // Phải chạy SAU khi DOM trên đã tồn tại (multi-select/Trường Bổ Sung/Nhóm Phê Duyệt Cuối tự dựng cần
+  // querySelector được các mount div vừa gán ở trên) — xem renderItPriceSupplementEditForm().
+  if (needsSupplementForm) initItPriceSupplementEditForm(p);
+}
+
+// ===== "Phản Hồi Yêu Cầu Bổ Sung" — sửa lại TOÀN BỘ thông tin đề xuất (11/2026) =====
+// id các field đều mang tiền tố riêng "itPriceSupp*" (KHÁC hẳn id của 2 form Tạo đang có —
+// itPriceXxx ở module-itsupport-price.js cho Bán Buôn, mhItPriceXxx ở module-muahang.js cho Bán Lẻ) —
+// vì modal Chi Tiết (nơi widget này hiện) có thể đang mở CÙNG LÚC 1 trong 2 form Tạo đó còn tồn tại
+// trong DOM (fragment đã lazy-load từ trước, chỉ đang ẩn), trùng id sẽ phá cả 2 bên. Vì cùng lý do,
+// KHÔNG tái dùng renderExtraApprovalMount()/readSelectedExtraApprovalLayers() (core.js — id sinh ra
+// chỉ phụ thuộc moduleKey, không có cách truyền thêm hậu tố riêng) mà tự dựng 1 bản đơn giản hơn
+// (itPriceSupp*) ở ngay dưới, cùng đọc đúng DB.extraApprovalGroups_<moduleKey>/extraApprovalLevels_<...>.
+function renderItPriceSupplementEditForm(p, openReq) {
+  const isWholesale = p.priceType === 'WHOLESALE';
+  const masterLists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === p.priceType);
+  const masterListOptionsHTML = masterLists.length
+    ? `<div>
+        <label class="block font-semibold text-sky-900 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
+        <select id="itPriceSuppMasterListSelect" class="w-full border p-1.5 rounded bg-white">
+          <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
+          ${masterLists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${(m.columns || []).length} cột)</option>`).join('')}
+        </select>
+      </div>`
+    : '';
+  const wholesaleFieldsHTML = isWholesale ? `
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">Mức Margin / Chiết Khấu <span class="text-red-500">*</span></label>
+        <select id="itPriceSuppTier" class="w-full border p-1.5 rounded bg-white">
+          <option value="">-- Chọn mức áp dụng --</option>
+          <option value="MARGIN_LT5">Margin &lt; 5%</option>
+          <option value="MARGIN_GTE5">Margin ≥ 5%</option>
+          <option value="DISCOUNT_LTE5">Chiết khấu ≤ 5%</option>
+          <option value="DISCOUNT_GT5">Chiết khấu &gt; 5%</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">🏢 Đơn Vị Áp Dụng Giá Bán Buôn <span class="text-red-500">*</span></label>
+        <input id="itPriceSuppWholesaleApplyUnit" type="text" maxlength="300" class="w-full border p-1.5 rounded bg-white">
+      </div>
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">🏬 Siêu Thị Đề Xuất <span class="text-red-500">*</span></label>
+        <div id="itPriceSuppStoreScopeMultiSelect" class="border rounded p-2 bg-white"></div>
+      </div>
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">🏷️ Ngành Hàng Áp Dụng <span class="text-red-500">*</span></label>
+        <div id="itPriceSuppNganhHangMultiSelect" class="border rounded p-2 bg-white"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-semibold text-sky-900 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>
+          <input id="itPriceSuppEffectiveDate" type="date" class="w-full border p-1.5 rounded bg-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-sky-900 mb-1">⏳ Ngày Hết Hiệu Lực</label>
+          <select id="itPriceSuppExpiryMode" data-op-change="onItPriceSuppExpiryModeChange" class="w-full border p-1.5 rounded bg-white">
+            <option value="PERMANENT">Vĩnh viễn</option>
+            <option value="OTHER">Khác</option>
+          </select>
+          <div id="itPriceSuppExpiryDateWrap" class="hidden mt-2">
+            <input id="itPriceSuppExpiryDate" type="date" class="w-full border p-1.5 rounded bg-white">
+          </div>
+        </div>
+      </div>` : `
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">📍 Vùng Giá Áp Dụng</label>
+        <select id="itPriceSuppRetailZone" class="w-full border p-1.5 rounded bg-white">
+          <option value="">-- Không chọn --</option>
+          ${(DB.priceZones || []).map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join('')}
+        </select>
+      </div>`;
+  return `
+    <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-3 mt-2">
+      <h4 class="font-bold text-sky-900">📤 Phản Hồi Yêu Cầu Bổ Sung — sửa lại thông tin đề xuất</h4>
+      <p class="text-amber-700">${escapeHtml(openReq.requestedByName)} yêu cầu: "${escapeHtml(openReq.reason)}"</p>
+      <p class="text-gray-500">Bạn có thể sửa lại TOÀN BỘ thông tin bên dưới (kể cả người phê duyệt/tệp bảng giá) trước khi gửi lại — các giá trị hiện có của đề xuất đã được điền sẵn.</p>
+      ${wholesaleFieldsHTML}
+      ${masterListOptionsHTML}
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">Lý Do Điều Chỉnh Giá</label>
+        <textarea id="itPriceSuppReason" class="w-full border p-1.5 rounded h-16"></textarea>
+      </div>
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">📎 Tệp Bảng Giá Mới (tuỳ chọn — không chọn thì giữ nguyên tệp hiện có)</label>
+        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceSupplementFileChange" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
+        <p id="itPriceSupplementFileStatus" class="text-gray-500 mt-1"></p>
+        <p class="text-gray-400 mt-1">Nếu chọn tệp mới, tệp sẽ được THÊM vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
+      </div>
+      <div>
+        <label class="block font-semibold text-sky-900 mb-1">📎 Tài liệu bổ sung liên quan</label>
+        <input id="itPriceSuppExtraFiles" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="itPriceSuppExtraFilesChip" class="w-full border p-1.5 rounded bg-white">
+        <div id="itPriceSuppExtraFilesChip" class="mt-1 flex flex-wrap gap-1"></div>
+      </div>
+      <div id="itPriceSuppDynamicFields" class="contents"></div>
+      <div id="itPriceSuppExtraApprovalBlock"></div>
+      <button type="button" id="itPriceSupplementSendBtn" data-op="submitItPriceSupplementAction" data-arg0="${p.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Gửi Bổ Sung</button>
+    </div>`;
+}
+
+function onItPriceSuppExpiryModeChange() {
+  const mode = document.getElementById('itPriceSuppExpiryMode').value;
+  document.getElementById('itPriceSuppExpiryDateWrap').classList.toggle('hidden', mode !== 'OTHER');
+}
+
+// Điền sẵn giá trị hiện có của hồ sơ (p) vào form vừa dựng ở renderItPriceSupplementEditForm() — chạy
+// NGAY SAU khi wrap.innerHTML đã gán (DOM đã tồn tại).
+function initItPriceSupplementEditForm(p) {
+  const isWholesale = p.priceType === 'WHOLESALE';
+  if (isWholesale) {
+    document.getElementById('itPriceSuppTier').value = p.priceTier || '';
+    document.getElementById('itPriceSuppWholesaleApplyUnit').value = p.wholesaleApplyUnit || '';
+    renderMultiSelectDropdown('itPriceSuppStoreScopeMultiSelect', DB.stores || [], p.storeScope?.stores || [], {
+      placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...', emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
+    });
+    renderMultiSelectDropdown('itPriceSuppNganhHangMultiSelect', itPriceNganhHangOptionsForCurrentDept(), p.nganhHang || [], {
+      placeholder: '🔍 Tìm ngành hàng để thêm... (từ Danh Mục Ngành Hàng)', emptyText: 'Chưa chọn ngành hàng nào.',
+      chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
+    });
+    document.getElementById('itPriceSuppEffectiveDate').value = p.effectiveDate || '';
+    document.getElementById('itPriceSuppExpiryMode').value = p.expiryMode === 'OTHER' ? 'OTHER' : 'PERMANENT';
+    document.getElementById('itPriceSuppExpiryDateWrap').classList.toggle('hidden', p.expiryMode !== 'OTHER');
+    if (p.expiryMode === 'OTHER') document.getElementById('itPriceSuppExpiryDate').value = p.expiryDate || '';
+  } else {
+    const zoneSel = document.getElementById('itPriceSuppRetailZone');
+    if (zoneSel) zoneSel.value = p.priceZone || '';
+  }
+  const masterListSel = document.getElementById('itPriceSuppMasterListSelect');
+  if (masterListSel && p.masterListId) masterListSel.value = String(p.masterListId);
+  document.getElementById('itPriceSuppReason').value = p.reason || '';
+
+  const modKey = isWholesale ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL';
+  renderDynamicInputsForModule(modKey, 'itPriceSuppDynamicFields');
+  prefillDynamicFieldsData('itPriceSuppDynamicFields', p.customData);
+
+  itPriceSuppRenderExtraApproval(isWholesale ? 'ITPRICE_WHOLESALE' : 'ITPRICE_RETAIL', p);
+}
+
+// ===== "Nhóm Phê Duyệt Cuối" — bản tự dựng riêng cho form này (itPriceSupp*), KHÔNG dùng
+// renderExtraApprovalMount()/readSelectedExtraApprovalLayers() ở core.js (lý do: xem chú thích đầu
+// khối trên) — cùng nguồn dữ liệu (DB.extraApprovalGroups_<moduleKey>/extraApprovalLevels_<moduleKey>)
+// nhưng id/class riêng, không đụng tới 2 mount thật của 2 form Tạo (extraApprovalMount_ITPRICE_*).
+function itPriceSuppRenderExtraApproval(moduleKey, item) {
+  const mount = document.getElementById('itPriceSuppExtraApprovalBlock');
+  if (!mount) return;
+  const levels = DB[`extraApprovalLevels_${moduleKey}`] || [];
+  const groups = DB[`extraApprovalGroups_${moduleKey}`] || [];
+  if (!levels.length || !groups.length) { mount.innerHTML = ''; return; }
+  mount.innerHTML = `
+    <div class="border-t border-sky-200 pt-3">
+      <label class="block font-semibold text-sky-900 mb-1">🧭 Cấp Phê Duyệt Cuối Cùng</label>
+      <select id="itPriceSuppExtraApprovalLevel" class="w-full border rounded p-1.5 bg-white mb-2" data-op-change="itPriceSuppOnExtraApprovalLevelChange" data-arg0="${escapeHtml(moduleKey)}">
+        ${levels.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.label)}</option>`).join('')}
+      </select>
+      <label class="block font-semibold text-sky-900 mb-1">✅ Phê Duyệt Thêm</label>
+      <div id="itPriceSuppExtraApprovalLayers" class="space-y-2"></div>
+    </div>`;
+  const levelSel = document.getElementById('itPriceSuppExtraApprovalLevel');
+  if (item?.extraApprovalLevel && levels.some(l => l.id === item.extraApprovalLevel)) {
+    levelSel.value = item.extraApprovalLevel;
+  }
+  itPriceSuppRenderExtraApprovalLayers(moduleKey, item);
+}
+
+// Cùng khuôn resolveApprovalLevelRuleClient() (core.js)/resolveApprovalLevelRule() (lib/createValidation.js
+// — server đọc ĐÚNG field này) — level.visibleGroupIds/lockedGroupIds, KHÔNG tự đặt tên field khác.
+function itPriceSuppGetLevelRule(moduleKey, levelKey) {
+  const levels = DB[`extraApprovalLevels_${moduleKey}`] || [];
+  const groups = DB[`extraApprovalGroups_${moduleKey}`] || [];
+  const level = levels.find(l => l.id === levelKey) || levels.find(l => l.isSystemDefault) || levels[0];
+  const allGroupIds = groups.map(g => g.id);
+  if (!level) return { visible: [], locked: [] };
+  return {
+    visible: Array.isArray(level.visibleGroupIds) ? level.visibleGroupIds : allGroupIds,
+    locked: Array.isArray(level.lockedGroupIds) ? level.lockedGroupIds : []
+  };
+}
+
+function itPriceSuppRenderExtraApprovalLayers(moduleKey, item) {
+  const container = document.getElementById('itPriceSuppExtraApprovalLayers');
+  if (!container) return;
+  const levelKey = document.getElementById('itPriceSuppExtraApprovalLevel')?.value;
+  const rule = itPriceSuppGetLevelRule(moduleKey, levelKey);
+  const groups = DB[`extraApprovalGroups_${moduleKey}`] || [];
+  const visibleGroups = groups.filter(g => rule.visible.includes(g.id));
+  const prefillLayer = (layerKey) => (item?.extraApprovalLayers || []).find(l => l.layerKey === layerKey);
+  container.innerHTML = visibleGroups.map(g => {
+    const members = (g.members || []).map(un => (DB.users || []).find(u => u.username === un)).filter(Boolean);
+    const locked = rule.locked.includes(g.id);
+    const disabled = locked || members.length === 0;
+    const prev = prefillLayer(g.id);
+    const checked = locked || !!prev;
+    let memberPickerHTML = '';
+    if (!disabled && members.length) {
+      if (members.length === 1) {
+        memberPickerHTML = `<div class="text-[11px] text-emerald-700 ml-5">Người duyệt: ${escapeHtml(members[0].name)} (tự động — chỉ có 1 người được cấu hình).</div>`;
+      } else {
+        const prevUsername = prev?.approvers?.[0] || '';
+        memberPickerHTML = `<div class="ml-5 mt-1">
+          <select class="itPriceSuppExtraLayerSingleApprover w-full border rounded p-1 text-[11px] bg-white" data-layer="${escapeHtml(g.id)}">
+            <option value="">-- Chọn người phê duyệt --</option>
+            ${members.map(u => `<option value="${escapeHtml(u.username)}" ${u.username === prevUsername ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+          </select>
+        </div>`;
+      }
+    } else if (disabled && !locked) {
+      memberPickerHTML = `<div class="text-[11px] text-gray-400 italic ml-5">Admin chưa gán thành viên nào cho nhóm này.</div>`;
+    }
+    return `
+      <label class="flex items-start gap-1.5 text-xs ${disabled ? 'opacity-60' : 'cursor-pointer'}">
+        <input type="checkbox" class="itPriceSuppExtraLayerToggle mt-0.5" value="${escapeHtml(g.id)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+        <span class="font-semibold text-gray-700">${escapeHtml(g.label)}</span>
+        ${locked ? '<span class="text-[10px] text-amber-600 italic ml-1">Bắt buộc</span>' : ''}
+      </label>
+      ${memberPickerHTML}`;
+  }).join('') || '<p class="text-gray-400 italic text-xs">Không có nhóm phê duyệt thêm nào khả dụng ở cấp này.</p>';
+}
+
+function itPriceSuppOnExtraApprovalLevelChange(moduleKey) {
+  itPriceSuppRenderExtraApprovalLayers(moduleKey, null);
+}
+
+// Đọc lại cấp + lớp phê duyệt cuối bổ sung + người đã chọn TỪ FORM HIỆN TẠI — cùng hình dạng trả về với
+// readSelectedExtraApprovalLayers() (core.js) để callRecordAction('submit-supplement', payload) gửi lên
+// đúng khuôn prepareExtraApprovalSelectionForCreate() ở server đọc (lib/createValidation.js).
+function itPriceSuppReadSelectedExtraApproval() {
+  const levelEl = document.getElementById('itPriceSuppExtraApprovalLevel');
+  if (!levelEl) return { approvalLevel: null, selectedLayerKeys: [], selectedLayerMembers: {} };
+  const checked = [...document.querySelectorAll('#itPriceSuppExtraApprovalLayers input.itPriceSuppExtraLayerToggle:checked')];
+  const selectedLayerKeys = checked.map(cb => cb.value);
+  const selectedLayerMembers = {};
+  selectedLayerKeys.forEach(layerKey => {
+    const singleSelect = document.querySelector(`.itPriceSuppExtraLayerSingleApprover[data-layer="${layerKey}"]`);
+    selectedLayerMembers[layerKey] = singleSelect?.value ? [singleSelect.value] : [];
+  });
+  return { approvalLevel: levelEl.value, selectedLayerKeys, selectedLayerMembers };
 }
 
 // Yêu Cầu Bổ Sung từ người duyệt phòng ban (bước hiện tại, đang PENDING) — dùng chung hành động
@@ -2354,18 +2589,19 @@ async function requestItPriceInfoIt(id) {
 
 let itPriceSupplementPendingFile = null;
 
-// masterListId (tuỳ chọn) — dùng lại ĐÚNG Mẫu Giá đã chọn lúc nộp lần đầu (p.masterListId, echo qua
-// onclick lúc render) để tệp bổ sung được dò cột/gắn columnLabels NHẤT QUÁN với các lần nộp trước,
-// không bắt người dùng chọn lại mẫu.
-async function onItPriceSupplementFileChange(event, masterListId) {
+// Tệp bảng giá mới — TUỲ CHỌN từ 11/2026 (xem renderItPriceSupplementEditForm()): không chọn thì giữ
+// nguyên tệp hiện có, submitItPriceSupplementAction() chỉ gửi kèm payload.file khi có. Dùng ĐÚNG Mẫu
+// Giá đang chọn trên form (itPriceSuppMasterListSelect) để tệp bổ sung được dò cột/gắn columnLabels
+// nhất quán — đọc TRỰC TIẾP lúc đổi file (không nhận qua tham số tĩnh như bản cũ) vì giờ người dùng có
+// thể đổi lại Mẫu Giá ngay trên form này trước khi chọn tệp.
+async function onItPriceSupplementFileChange(event) {
   const file = event.target.files[0];
   itPriceSupplementPendingFile = null;
-  const sendBtn = document.getElementById('itPriceSupplementSendBtn');
-  if (sendBtn) sendBtn.disabled = true;
   const statusEl = document.getElementById('itPriceSupplementFileStatus');
   if (!file) { if (statusEl) statusEl.innerText = ''; return; }
 
   if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const masterListId = document.getElementById('itPriceSuppMasterListSelect')?.value || null;
   const formData = new FormData();
   formData.append('file', file);
   if (masterListId) formData.append('masterListId', masterListId);
@@ -2375,27 +2611,100 @@ async function onItPriceSupplementFileChange(event, masterListId) {
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     itPriceSupplementPendingFile = data;
     if (statusEl) statusEl.innerText = `✅ Đọc thành công ${data.items.length} dòng giá từ file "${data.fileName}".`;
-    if (sendBtn) sendBtn.disabled = false;
   } catch (err) {
     if (statusEl) statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
   }
 }
 
-// Tệp bổ sung được THÊM VÀO cuối item.files, KHÔNG thay thế/xoá tệp trước đó — xem
-// submitPriceSupplementFile() ở lib/recordActions.js (yêu cầu nghiệp vụ: giữ đủ mọi phiên bản làm
-// bằng chứng tham chiếu).
+// Phản hồi Yêu Cầu Bổ Sung — SỬA LẠI TOÀN BỘ thông tin đề xuất (11/2026), không chỉ tệp bảng giá. Thu
+// thập ĐÚNG khuôn payload như lúc TẠO (submitItPriceApproval()/submitMhItPriceApproval()) — xem
+// validateItPriceCoreFields() ở lib/createValidation.js, DÙNG CHUNG đúng 1 bộ luật validate với nhánh
+// tạo. Tệp bảng giá mới (payload.file) TUỲ CHỌN — không chọn thì server tự giữ nguyên tệp cũ, chỉ cập
+// nhật các field khác.
 async function submitItPriceSupplementAction(id) {
-  if (!itPriceSupplementPendingFile) return alert('Vui lòng chọn tệp bảng giá bổ sung (.xlsx).');
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  const isWholesale = p.priceType === 'WHOLESALE';
+
+  let priceTier = null, wholesaleApplyUnit = null, priceZone = null;
+  let storeScope = { mode: 'ALL', stores: [] }, nganhHang = [];
+  let effectiveDate = p.effectiveDate || '', expiryMode = 'PERMANENT', expiryDate = null;
+
+  if (isWholesale) {
+    priceTier = document.getElementById('itPriceSuppTier').value;
+    if (!priceTier) return alert('⛔ Vui lòng chọn Mức Margin/Chiết Khấu áp dụng.');
+    wholesaleApplyUnit = document.getElementById('itPriceSuppWholesaleApplyUnit').value.trim();
+    if (!wholesaleApplyUnit) return alert('⛔ Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn.');
+    const stores = getMultiSelectValues('itPriceSuppStoreScopeMultiSelect');
+    if (!stores.length) return alert('⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng đề xuất.');
+    storeScope = { mode: 'OTHER', stores };
+    nganhHang = getMultiSelectValues('itPriceSuppNganhHangMultiSelect');
+    if (!nganhHang.length) return alert('⛔ Vui lòng chọn ít nhất 1 ngành hàng áp dụng.');
+    effectiveDate = document.getElementById('itPriceSuppEffectiveDate').value;
+    if (!effectiveDate) return alert('⛔ Vui lòng chọn Ngày Áp Dụng.');
+    expiryMode = document.getElementById('itPriceSuppExpiryMode').value === 'OTHER' ? 'OTHER' : 'PERMANENT';
+    expiryDate = expiryMode === 'OTHER' ? document.getElementById('itPriceSuppExpiryDate').value : null;
+    if (expiryMode === 'OTHER') {
+      if (!expiryDate) return alert('⛔ Vui lòng chọn Ngày Hết Hiệu Lực (hoặc chọn lại "Vĩnh viễn").');
+      if (expiryDate < effectiveDate) return alert('⛔ Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi.');
+    }
+  } else {
+    priceZone = document.getElementById('itPriceSuppRetailZone')?.value || null;
+    effectiveDate = effectiveDate || new Date().toLocaleDateString('en-CA');
+  }
+
+  const masterLists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === p.priceType);
+  const masterListId = document.getElementById('itPriceSuppMasterListSelect')?.value || null;
+  if (masterLists.length && !masterListId) return alert('⛔ Vui lòng chọn Mẫu Giá Phê Duyệt.');
+
+  const extraFilesInput = document.getElementById('itPriceSuppExtraFiles');
+  let extraFiles = (p.extraFiles || []).slice();
+  if (extraFilesInput && extraFilesInput.files && extraFilesInput.files.length > 0) {
+    try {
+      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f, 'itPrice')));
+    } catch (err) {
+      return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
+    }
+  }
+
+  let customData;
+  try {
+    const modKey = isWholesale ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL';
+    const collected = await collectDynamicFieldsData(modKey, 'itPriceSuppDynamicFields');
+    // collectDynamicFieldsData() không tự gắn key cho trường Tải Tệp/Tải Nhiều Tệp không được chọn lại
+    // (input[type=file] không gán lại được bằng JS) — gộp với customData cũ để giữ nguyên giá trị đó,
+    // mirror đúng cách prefillDynamicFieldsData() đã bỏ qua 2 loại trường này lúc điền sẵn.
+    customData = { ...(p.customData || {}), ...collected };
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const payload = {
+    priceTier, wholesaleApplyUnit, priceZone,
+    masterListId: masterListId ? Number(masterListId) : null,
+    extraFiles,
+    reason: document.getElementById('itPriceSuppReason').value.trim(),
+    storeScope, nganhHang, effectiveDate, expiryMode, expiryDate,
+    customData
+  };
+  if (itPriceSupplementPendingFile) {
+    payload.file = {
+      fileUrl: itPriceSupplementPendingFile.fileUrl, fileName: itPriceSupplementPendingFile.fileName,
+      items: itPriceSupplementPendingFile.items, columnLabels: itPriceSupplementPendingFile.columnLabels
+    };
+  }
+  // "Nhóm Phê Duyệt Cuối" — CHÍNH LÀ "thông tin chọn người phê duyệt" người dùng yêu cầu cho sửa lại.
+  const extraApproval = itPriceSuppReadSelectedExtraApproval();
+  if (extraApproval.approvalLevel !== null) {
+    payload.approvalLevel = extraApproval.approvalLevel;
+    payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let result;
   try {
-    result = await callRecordAction('itPriceApprovals', id, 'submit-supplement', {
-      file: {
-        fileUrl: itPriceSupplementPendingFile.fileUrl, fileName: itPriceSupplementPendingFile.fileName,
-        items: itPriceSupplementPendingFile.items, columnLabels: itPriceSupplementPendingFile.columnLabels
-      }
-    });
+    result = await callRecordAction('itPriceApprovals', id, 'submit-supplement', payload);
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -2403,8 +2712,8 @@ async function submitItPriceSupplementAction(id) {
   const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
   if (idx !== -1) DB.itPriceApprovals[idx] = updated;
   itPriceSupplementPendingFile = null;
-  logSystemAction('IT_SUPPORT', 'SUBMIT_IT_PRICE_SUPPLEMENT', `Tải lên tệp bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
-  showApprovalToast('✅ Đã gửi tệp bổ sung — không thay thế tệp gốc, người duyệt/IT sẽ thấy cả bảng so sánh.');
+  logSystemAction('IT_SUPPORT', 'SUBMIT_IT_PRICE_SUPPLEMENT', `Sửa lại thông tin đề xuất giá theo yêu cầu bổ sung [${updated.code}]`, 'SUCCESS', updated.code);
+  showApprovalToast('✅ Đã gửi bổ sung — thông tin đề xuất đã được cập nhật.');
   renderItPriceApprovals();
   if (currentItPriceModalId === id) closeItPriceModal();
 }

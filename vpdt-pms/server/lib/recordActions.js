@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent, resolveOperationPersonInChargeUsername } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent, resolveOperationPersonInChargeUsername, validateItPriceCoreFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { resolveStepApproverUsernames } = require('./positionApprovers');
@@ -6847,11 +6847,27 @@ function denyItPriceEmergencyReject(user, item, payload) {
   return item;
 }
 
-// Người đề xuất phản hồi yêu cầu bổ sung (từ CẢ 2 nguồn 'approver'/'it') bằng cách tải lên 1 tệp bảng
-// giá MỚI — tệp này được THÊM VÀO cuối item.files, KHÔNG thay thế/xoá các tệp trước đó (yêu cầu nghiệp
-// vụ: giữ đủ mọi phiên bản làm bằng chứng tham chiếu). Người duyệt/IT xem lại sẽ thấy toàn bộ lịch sử
-// tệp + bảng so sánh sai lệch giữa tệp mới nhất và tệp liền trước (dựng ở client từ item.files).
-function submitPriceSupplementFile(user, item, payload) {
+// Người đề xuất phản hồi yêu cầu bổ sung (từ CẢ 2 nguồn 'approver'/'it') bằng cách SỬA LẠI TOÀN BỘ
+// thông tin đề xuất (11/2026, theo yêu cầu người dùng: "cho phép người tạo phê duyệt có thể bổ sung
+// được tất cả thông tin, từ thông tin chọn người phê duyệt, thông tin up file các thứ... cho phép sửa
+// lại chỗ phê duyệt giá bán lẻ này và giá bán buôn" — TRƯỚC ĐÂY chỉ cho phép thêm 1 tệp bảng giá mới,
+// mọi field khác (mức áp dụng/vùng giá/siêu thị-ngành hàng/ngày áp dụng/Mẫu Giá/lý do/Trường Bổ Sung/
+// "Nhóm Phê Duyệt Cuối") đều KHOÁ CỨNG, không sửa lại được dù người duyệt/IT yêu cầu bổ sung đúng những
+// thông tin đó). Client (module-itsupport-price.js) giờ gửi lên NGUYÊN payload giống hệt lúc TẠO (xem
+// submitItPriceApproval()/submitMhItPriceApproval()), CHỈ THIẾU field không đổi được (priceType — xem
+// validateItPriceCoreFields(), lib/createValidation.js) — hàm NÀY dùng CHUNG đúng 1 bộ luật validate
+// với nhánh TẠO (LƯU Ý BẢO TRÌ: sửa 1 bên PHẢI sửa cả 2, xem chú thích đầy đủ ở hàm đó).
+//
+// Tệp bảng giá: payload.file TUỲ CHỌN (requireFile:false, khác nhánh TẠO) — có gửi kèm thì tệp MỚI
+// được THÊM VÀO cuối item.files, KHÔNG thay thế/xoá các tệp trước đó (yêu cầu nghiệp vụ: giữ đủ mọi
+// phiên bản làm bằng chứng tham chiếu, người duyệt/IT xem lại thấy toàn bộ lịch sử tệp + bảng so sánh
+// sai lệch giữa tệp mới nhất và tệp liền trước, dựng ở client từ item.files); không gửi kèm thì giữ
+// nguyên tệp cũ (người đề xuất chỉ cần sửa field khác, không cần đổi lại số liệu giá).
+function submitPriceSupplementFile(user, item, payload, appData) {
+  // appData mặc định {} — route thật (routes/records.js) LUÔN truyền đủ qua getAllAppData(), nhưng 1 số
+  // test/call site cũ chỉ cần kiểm logic trạng thái/bảo mật không liên quan tới "Nhóm Phê Duyệt Cuối"/
+  // danh mục đối chiếu (nganhHang/priceZones/...) vẫn gọi hàm không kèm appData — tránh crash undefined.
+  appData = appData || {};
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người đề xuất mới được tải lên tệp bổ sung');
   // Hồ sơ đã bị TỪ CHỐI (kể cả qua "từ chối khẩn cấp" sau khi đã duyệt xong — xem
   // approveItPriceEmergencyReject() ở trên) thì đã đóng vòng đời: yêu cầu bổ sung còn treo lại từ trước
@@ -6864,24 +6880,59 @@ function submitPriceSupplementFile(user, item, payload) {
   }
   const openReq = (item.infoRequests || []).find(r => !r.response);
   if (!openReq) throw new HttpError(409, 'Đề xuất này hiện không có yêu cầu bổ sung nào đang chờ xử lý');
-  const file = payload?.file;
-  if (!file || !file.fileUrl) throw new HttpError(400, 'Vui lòng tải lên tệp bảng giá bổ sung (.xlsx)');
-  // Cùng luật với nhánh TẠO (createValidation.js itPriceApprovals.extraValidate) — trước đây cả 2 nhánh
-  // chỉ cắt độ dài, không kiểm khuôn. Xem assertUploadedFileUrl().
-  assertUploadedFileUrl(file.fileUrl, 'Tệp bảng giá bổ sung');
-  const items = sanitizePriceFileItems(file.items);
-  const columnLabels = sanitizeColumnLabels(file.columnLabels);
-  const newFile = {
-    id: Date.now(),
-    fileUrl: String(file.fileUrl),
-    fileName: (String(file.fileName || '').trim() || 'bang-gia-bo-sung.xlsx').slice(0, 200),
-    uploadedBy: user.username, uploadedByName: user.name,
-    uploadedAt: nowVN(),
-    items, columnLabels
-  };
-  item.files = item.files || [];
-  item.files.push(newFile);
-  openReq.response = `Đã tải lên tệp bổ sung: ${newFile.fileName}`;
+
+  // priceType KHOÁ CỨNG theo hồ sơ hiện có — KHÔNG cho đổi Bán Lẻ<->Bán Buôn giữa chừng (2 quy trình
+  // phê duyệt hoàn toàn khác nhau, đổi priceType giữa chừng là tạo đề xuất khác, không phải "bổ sung
+  // thông tin"). Không tin payload.priceType client gửi kèm (nếu có).
+  const priceType = item.priceType;
+  const fields = validateItPriceCoreFields(payload, appData, priceType, { requireFile: false, fileLabel: 'Tệp bảng giá bổ sung' });
+  item.priceTier = fields.priceTier;
+  item.wholesaleApplyUnit = fields.wholesaleApplyUnit;
+  item.priceZone = fields.priceZone;
+  item.extraFiles = fields.extraFiles;
+  item.masterListId = fields.masterListId;
+  item.masterListName = fields.masterListName;
+  item.reason = fields.reason;
+  item.storeScope = fields.storeScope;
+  item.nganhHang = fields.nganhHang;
+  item.effectiveDate = fields.effectiveDate;
+  item.expiryMode = fields.expiryMode;
+  item.expiryDate = fields.expiryDate;
+
+  // "Trường Bổ Sung" (customData) — cùng modKey IT_PRICE_RETAIL/IT_PRICE_WHOLESALE dùng lúc tạo (xem
+  // defaults.js/renderDynamicInputsForModule() ở client). Client gộp sẵn giá trị cũ cho trường kiểu Tải
+  // Tệp/Tải Nhiều Tệp không chọn lại (prefillDynamicFieldsData()/collectDynamicFieldsData() không tự
+  // gộp — xem onItPriceSupplementSubmit() ở module-itsupport-price.js), validateRequiredCustomData() ở
+  // đây chỉ còn việc lọc field lạ + chặn thiếu field bắt buộc, giống hệt nhánh TẠO.
+  validateRequiredCustomData(payload.customData, appData?.formTemplates, priceType === 'WHOLESALE' ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL');
+  item.customData = payload.customData || {};
+
+  // "Nhóm Phê Duyệt Cuối" — CHÍNH LÀ "thông tin chọn người phê duyệt" người dùng yêu cầu cho sửa lại.
+  // Module chưa cấu hình đủ groups+levels (tính năng chưa bật) -> trả null, GIỮ NGUYÊN lựa chọn cũ
+  // (không xoá item.extraApprovalLevel/Layers hiện có nếu client không gửi gì — dù thực tế lúc đó
+  // cũng không có gì để client gửi, vì mount rỗng).
+  const extraApprovalModuleKey = priceType === 'WHOLESALE' ? 'ITPRICE_WHOLESALE' : 'ITPRICE_RETAIL';
+  const extraApproval = prepareExtraApprovalSelectionForCreate(extraApprovalModuleKey, payload, appData);
+  if (extraApproval) {
+    item.extraApprovalLevel = extraApproval.extraApprovalLevel;
+    item.extraApprovalLayers = extraApproval.extraApprovalLayers;
+  }
+
+  // Tệp bảng giá mới — TUỲ CHỌN (xem chú thích đầu hàm). fields.file chỉ có khi payload.file hợp lệ
+  // (đã qua assertUploadedFileUrl()/sanitizePriceFileItems()/sanitizeColumnLabels() ở
+  // validateItPriceCoreFields()).
+  let responseNote = 'Đã sửa lại thông tin đề xuất theo yêu cầu bổ sung';
+  if (fields.file) {
+    const newFile = {
+      id: Date.now(), ...fields.file,
+      uploadedBy: user.username, uploadedByName: user.name, uploadedAt: nowVN()
+    };
+    item.files = item.files || [];
+    item.files.push(newFile);
+    responseNote = `Đã sửa lại thông tin đề xuất + tải lên tệp bổ sung: ${newFile.fileName}`;
+  }
+
+  openReq.response = responseNote;
   openReq.respondedAt = nowVN();
   item.history = item.history || [];
   item.history.push({
