@@ -78,6 +78,9 @@ async function renderOrgChartModule() {
   // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
   const canManageTree = !!(currentUser.perms?.orgChartManage);
   document.getElementById('btnOrgChartCreateDraft').classList.toggle('hidden', !canManageTree);
+  // "🗑️ Xoá Tất Cả Bản Nháp" (11/2026) — hiện khi có >=1 bản Nháp BẤT KỲ trong toàn danh sách (không
+  // phụ thuộc bản đang xem như nút "Xoá Bản Nháp Này" ở loadOrgChartCurrentVersion()).
+  document.getElementById('btnOrgChartDeleteAllDrafts').classList.toggle('hidden', !(canManageTree && _ocVersions.some(v => v.status === 'DRAFT')));
 
   populateOrgChartVersionSelect();
   const appliedMeta = _ocVersions.find(v => v.status === 'APPLIED');
@@ -820,6 +823,22 @@ async function deleteOrgChartVersionClick() {
   try {
     await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/delete`, {});
   } catch (err) { return alert(`⛔ ${err.message}`); }
+  document.getElementById('orgChartVersionSelect').value = '';
+  await renderOrgChartModule();
+}
+// "🗑️ Xoá Tất Cả Bản Nháp" (11/2026, theo yêu cầu người dùng "xóa tất cả các cái định biên này đi...
+// làm lại từ đầu") — xoá hẳn TẤT CẢ bản Nháp cùng 1 lượt (tránh bấm "Xoá Bản Nháp Này" lần lượt khi có
+// nhiều Nháp rác). KHÔNG đụng tới bản Đang Áp Dụng/Lưu Trữ — server (deleteAllDraftVersions(),
+// lib/orgChart.js) tự chỉ lọc đúng DRAFT.
+async function deleteAllOrgChartDraftsClick() {
+  const draftCount = _ocVersions.filter(v => v.status === 'DRAFT').length;
+  if (!draftCount) return;
+  if (!confirm(`Xoá hẳn TẤT CẢ ${draftCount} bản Nháp hiện có? Không thể hoàn tác (bản Đang Áp Dụng/Lưu Trữ KHÔNG bị ảnh hưởng).`)) return;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', '/api/org-chart/versions/delete-all-drafts', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  alert(`✅ Đã xoá ${result.deletedCount} bản Nháp.`);
   document.getElementById('orgChartVersionSelect').value = '';
   await renderOrgChartModule();
 }

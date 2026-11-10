@@ -504,6 +504,18 @@ function deleteVersion(list, versionId) {
   return (list || []).filter(v => v.id !== versionId);
 }
 
+// Xoá TẤT CẢ bản Nháp (DRAFT) cùng 1 lượt (11/2026, theo yêu cầu người dùng "xóa tất cả các cái định
+// biên này đi... làm lại từ đầu" — khi có nhiều bản Nháp rác tích lại, tránh phải bấm "Xoá Bản Nháp
+// Này" lần lượt từng bản). CHỈ xoá DRAFT — APPLIED/ARCHIVED giữ nguyên nguyên tắc bất biến y hệt
+// deleteVersion() ở trên. KHÔNG cần quyền riêng (dùng chung orgChartManage — xoá Nháp vốn không cần
+// quyền đặc biệt, kể cả xoá từng bản một). Không có bản Nháp nào -> vẫn trả về bình thường (0 xoá),
+// KHÔNG coi là lỗi.
+function deleteAllDraftVersions(list) {
+  const kept = (list || []).filter(v => v.status !== 'DRAFT');
+  const deletedCount = (list || []).length - kept.length;
+  return { list: kept, deletedCount };
+}
+
 // Xoá VĨNH VIỄN 1 bản LƯU TRỮ (ARCHIVED) — khác hẳn deleteVersion() ở trên (chỉ DRAFT): dùng cho trường
 // hợp người dùng lỡ "Áp Dụng" nhầm 1 bản không mong muốn, bản đúng bị đẩy xuống ARCHIVED rồi lại được
 // áp dụng lại (khôi phục qua "Tạo Bản Nháp Mới" từ chính bản ARCHIVED đó + Áp Dụng lại) — bản ARCHIVED
@@ -699,7 +711,7 @@ module.exports = {
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
-  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteArchivedVersion,
+  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteAllDraftVersions, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
   addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,
   renameDepartmentRefInAllVersions, renameJobTitleInAllVersions
