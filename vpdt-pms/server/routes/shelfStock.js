@@ -212,7 +212,7 @@ router.get('/system-inventory', async (req, res) => {
       return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
     }
     let rows = cached.rows;
-    let totalSystemSkuCount, scannedTodayCount;
+    let totalSystemSkuCount, scannedTodayCount, scannedEverCount;
     // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ, còn
     // không thì bỏ qua... siêu thị ấn cùng một lúc có thể gây treo ứng dụng") — CHỈ màn "📊 Đối Chiếu" gửi
     // query này. Tồn kho hệ thống có thể lên tới hàng chục nghìn mã/siêu thị trong khi 1 siêu thị thường
@@ -225,8 +225,16 @@ router.get('/system-inventory', async (req, res) => {
       const allShelfRecords = await getAllForCollection('shelfRecords');
       const now = new Date();
       const scannedMaHangToday = new Set();
+      // scannedMaHangEver (11/2026, theo yêu cầu người dùng: "thêm cột trên kệ quá khứ... nếu chỉ hôm
+      // nay sẽ không hiện kệ đã scan trước") — MỞ RỘNG tập mã hàng được trả về từ "chỉ scan hôm nay"
+      // sang "đã TỪNG scan ở siêu thị này" (bất kỳ ngày nào), để các mã chỉ scan ở quá khứ (chưa scan
+      // lại hôm nay) vẫn hiện thành 1 dòng cho người quản lý theo dõi/báo cáo — vẫn bị chặn ở đúng tập
+      // mã THẬT SỰ đã ghi nhận (không phải nguyên tồn kho hệ thống hàng chục nghìn mã), nên không lặp
+      // lại rủi ro hiệu năng mà bản vá trước đó (dòng scope=recon gốc) đã né.
+      const scannedMaHangEver = new Set();
       for (const r of allShelfRecords) {
         if (!r || r.dept !== req.freshUser.dept || !r.maHang) continue;
+        scannedMaHangEver.add(String(r.maHang));
         const scannedAt = parseVNDateTime(r.lastScannedAt || r.createdAt);
         if (!scannedAt) continue;
         if (scannedAt.getFullYear() === now.getFullYear() && scannedAt.getMonth() === now.getMonth() && scannedAt.getDate() === now.getDate()) {
@@ -234,7 +242,8 @@ router.get('/system-inventory', async (req, res) => {
         }
       }
       scannedTodayCount = scannedMaHangToday.size;
-      rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+      scannedEverCount = scannedMaHangEver.size;
+      rows = rows.filter(r => r.maHang && scannedMaHangEver.has(String(r.maHang)));
       // CỘNG GỘP theo maHang (11/2026, báo cáo người dùng kèm ảnh chụp — 1 mã hàng hiện 2 DÒNG với "Tồn
       // Kho Hệ Thống" KHÁC NHAU, VD "0" và "8", khiến người kiểm đếm không biết tin số nào) — xem chú
       // thích đầy đủ tại lib/shelfInventoryAggregate.js.
@@ -244,7 +253,7 @@ router.get('/system-inventory', async (req, res) => {
     // hiện rõ ĐANG đối chiếu với Mã Điểm nào ngay trên màn Đối Chiếu, người dùng tự so lại với cột "Mã
     // Điểm" ở Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai — maDiem ở đây LUÔN server tự tra theo
     // req.freshUser.dept (dòng 194 ở trên), không phải giá trị client gửi lên, nên hiện ra an toàn.
-    res.json({ rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem, totalSystemSkuCount, scannedTodayCount });
+    res.json({ rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
   }

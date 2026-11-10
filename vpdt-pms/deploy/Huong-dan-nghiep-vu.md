@@ -3318,6 +3318,16 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     quyền vào tab. Nếu siêu thị chưa cấu hình "Mã Điểm" hoặc hệ thống chưa
     cấu hình kết nối API, màn này báo lỗi rõ ràng thay vì hiện trống/lỗi vỡ
     giao diện.
+  - **Cột "Trên Kệ Quá Khứ" (MỚI, 11/2026, theo yêu cầu người dùng: "thêm
+    cột trên kệ quá khứ để hiện các mã đã đưa lên kệ trước đây để theo dõi/
+    báo cáo sau này, nếu chỉ hôm nay sẽ không hiện kệ đã scan trước")**:
+    trước đây bảng Đối Chiếu CHỈ hiện mã hàng đã scan lên kệ HÔM NAY — mã
+    chỉ scan trong quá khứ (chưa scan lại hôm nay) hoàn toàn không có dòng
+    nào, mất dấu theo dõi. Nay bảng hiện CẢ các mã đã TỪNG scan (hôm nay
+    hoặc trước đây), với 1 cột mới "Trên Kệ Quá Khứ" = tổng số lượng ghi
+    nhận KHÔNG phải hôm nay của cùng mã hàng — CHỈ để xem/theo dõi, KHÔNG
+    tính vào cột "Kết Quả" (Khớp/Lệch vẫn CHỈ so "Trên Kệ Hôm Nay" vs "Tồn
+    Kho Hệ Thống" như trước, không gộp thêm Quá Khứ).
   - **Tự động cập nhật ngay khi mở tab, không chờ đủ chu kỳ (MỚI, 11/2026,
     theo yêu cầu người dùng "phải tự động, không phải bấm mới ra")**: mỗi
     lần mở "📊 Đối Chiếu", hệ thống TỰ kiểm tra "đã tới chu kỳ đồng bộ

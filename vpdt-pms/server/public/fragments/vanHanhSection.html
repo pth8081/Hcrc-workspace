@@ -1113,6 +1113,12 @@
                 <th class="border p-2">Tên Hàng</th>
                 <th class="border p-2">Tồn Kho Hệ Thống</th>
                 <th class="border p-2">Trên Kệ Hôm Nay</th>
+                <!-- "Trên Kệ Quá Khứ" (11/2026, theo yêu cầu người dùng: "thêm cột trên kệ quá khứ để
+                     theo dõi/báo cáo sau này, nếu chỉ hôm nay sẽ không hiện kệ đã scan trước") — tổng
+                     quantity của các ghi nhận KHÔNG phải hôm nay (lần quét gần nhất đã cũ hơn 1 ngày),
+                     CHỈ để xem/tham khảo — KHÔNG tính vào cột "Kết Quả" (vẫn giữ nguyên so Hôm Nay vs
+                     Tồn Kho Hệ Thống như trước, xem renderShelfReconciliationTable()/module-vanhanh.js). -->
+                <th class="border p-2">Trên Kệ Quá Khứ</th>
                 <th class="border p-2">Kết Quả</th>
               </tr>
             </thead>

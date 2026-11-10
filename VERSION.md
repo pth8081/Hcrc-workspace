@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**29.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.85 (2026-11): Đối Chiếu Kệ & Tồn Kho — thêm cột "Trên Kệ Quá Khứ"
+
+Yêu cầu người dùng (ảnh chụp màn "📊 Kiểm Soát Hàng Hóa" → "Đối Chiếu"): "tôi muốn thêm cột trên kệ quá
+khứ để hiện các mã đã đưa lên kệ trước đây để có thể theo dõi/báo cáo sau này, nếu chỉ hôm nay sẽ không
+hiện kệ đã scan trước." Trước đây màn Đối Chiếu CHỈ hiện các mã hàng đã scan lên kệ **HÔM NAY** (tối ưu
+hiệu năng theo yêu cầu trước đó: "siêu thị ấn cùng một lúc có thể gây treo ứng dụng") — mã chỉ scan
+trong quá khứ (chưa scan lại hôm nay) hoàn toàn KHÔNG hiện dòng nào, mất dấu theo dõi.
+
+**Đã làm**:
+1. `routes/shelfStock.js` (`GET /system-inventory?scope=recon`): mở rộng tập mã hàng được trả về từ "chỉ
+   scan hôm nay" (`scannedMaHangToday`) sang "đã TỪNG scan" (`scannedMaHangEver`, bất kỳ ngày nào) — vẫn
+   giữ đúng rào chắn hiệu năng cũ (chỉ trả mã THẬT SỰ đã ghi nhận ở siêu thị đó, không phải nguyên tồn
+   kho hệ thống hàng chục nghìn mã). Trả thêm `scannedEverCount` cùng `scannedTodayCount` cũ.
+2. `public/js/module-vanhanh.js` (`renderShelfReconciliationTable`): thêm `pastByMaHang` (đối xứng với
+   `todayByMaHang` có sẵn, đảo điều kiện ngày) + cột mới "Trên Kệ Quá Khứ" trong bảng. Cột này CHỈ để
+   xem/theo dõi — cột "Kết Quả" (Khớp/Lệch) **giữ nguyên** chỉ so "Trên Kệ Hôm Nay" vs "Tồn Kho Hệ
+   Thống" như trước (xác nhận với người dùng qua câu hỏi lựa chọn, không gộp Quá Khứ vào để không ảnh
+   hưởng logic cảnh báo/báo cáo Lệch hiện có).
+3. `public/fragments/vanHanhSection.html`: thêm `<th>` "Trên Kệ Quá Khứ" vào bảng Đối Chiếu.
+4. Test mới `tests/demo-shelf-recon-past-stock.js` (Playwright, assert thật) — xác nhận đúng 3 kịch bản:
+   mã chỉ scan hôm nay, mã CHỈ scan quá khứ (chính bug người dùng báo — trước đây không hiện dòng nào),
+   mã scan cả 2 thời điểm (2 record/lô riêng) — và xác nhận Kết Quả không bị Quá Khứ ảnh hưởng.
+5. Vá kèm `tests/testHarness.js` (mock `scope=recon`) + `tests/demo-shelf-recon-duplicate-mahang.js`
+   (chỉ số cột `Kết Quả` dịch từ index 4 sang 5 do thêm cột mới) để khớp đúng cấu trúc bảng mới — không
+   ảnh hưởng hành vi test gốc.
+
+**Không cần thao tác gì thêm khi deploy** — chỉ copy code + `pm2 restart`, không đổi schema/`.env`/
+dependency nào.
 
 ## v29.84 (2026-11): Cho phép Tự Duyệt (có cấu hình) ở 6 module phê duyệt chuẩn
 

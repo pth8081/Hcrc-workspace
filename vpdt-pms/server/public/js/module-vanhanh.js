@@ -459,21 +459,32 @@ function setShelfReconHeader(maDiem, isError, errorMessage) {
   headerEl.className = 'bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800';
   headerEl.textContent = `📍 Đang đối chiếu Siêu Thị: ${currentUser.dept} — Mã Điểm: ${maDiem || '(không rõ)'}`;
 }
-function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount) {
+function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount) {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
   setShelfReconHeader(maDiem, false);
   const todayByMaHang = {};
+  // "Trên Kệ Quá Khứ" (11/2026, theo yêu cầu người dùng: "thêm cột trên kệ quá khứ để theo dõi/báo cáo
+  // sau này, nếu chỉ hôm nay sẽ không hiện kệ đã scan trước") — tổng quantity của các ghi nhận KHÔNG
+  // phải hôm nay (lần quét gần nhất đã cũ hơn), CÙNG công thức "cộng dồn theo maHang" như todayByMaHang,
+  // chỉ đảo điều kiện ngày. CHỈ để xem/tham khảo — KHÔNG đưa vào cột "Kết Quả" (xem badge bên dưới, vẫn
+  // giữ nguyên so Hôm Nay vs Tồn Kho Hệ Thống như trước, theo xác nhận của người dùng).
+  const pastByMaHang = {};
   // Vá kèm (11/2026, phát hiện trong lúc xây lại Đối Chiếu theo yêu cầu "chỉ đối chiếu mã đã scan"): lọc
   // THÊM theo r.dept === currentUser.dept — thiếu dòng này thì 1 mã hàng được NHIỀU siêu thị cùng scan
   // trong ngày sẽ bị cộng dồn nhầm số lượng của siêu thị khác vào "Trên Kệ Hôm Nay" của siêu thị mình
   // (giống đúng cách computeShelfThresholdTodayTotals() ở Ngưỡng Tồn đã lọc đúng từ trước).
   (DB.shelfRecords || []).forEach(r => {
-    if (!r.maHang || r.dept !== currentUser.dept || !isShelfRecordCreatedToday(r.lastScannedAt || r.createdAt)) return;
-    todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    if (!r.maHang || r.dept !== currentUser.dept) return;
+    if (isShelfRecordCreatedToday(r.lastScannedAt || r.createdAt)) {
+      todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    } else {
+      pastByMaHang[r.maHang] = (pastByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    }
   });
   tbody.innerHTML = rows.length ? rows.map(r => {
     const shelfTotal = todayByMaHang[r.maHang] || 0;
+    const pastTotal = pastByMaHang[r.maHang] || 0;
     const diff = shelfTotal - Number(r.soLuongTon || 0);
     const badge = diff === 0
       ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Khớp</span>`
@@ -484,32 +495,36 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
       <td class="p-2">${escapeHtml(r.tenHang || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(r.soLuongTon ?? ''))}</td>
       <td class="p-2 text-right">${escapeHtml(String(shelfTotal))}</td>
+      <td class="p-2 text-right text-gray-500">${escapeHtml(String(pastTotal))}</td>
       <td class="p-2">${badge}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có mã hàng nào được scan lên kệ hôm nay — chưa cần đối chiếu</td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có mã hàng nào từng được scan lên kệ — chưa cần đối chiếu</td></tr>`;
   if (noteEl) {
     const asOf = capNhatLuc ? `Tồn kho hệ thống cập nhật lúc ${new Date(capNhatLuc).toLocaleString('vi-VN')}.` : '';
     const offlinePrefix = isOffline ? '🔌 Offline — dữ liệu có thể chưa phải số mới nhất. ' : '';
-    // scannedTodayCount/totalSystemSkuCount (11/2026, theo yêu cầu người dùng "chỉ đối chiếu mã đã scan,
-    // không thì bỏ qua") — minh bạch cho người dùng biết màn này ĐÃ CHỦ ĐỘNG bỏ qua phần lớn tồn kho hệ
-    // thống (các mã chưa scan), không phải lỗi/thiếu dữ liệu.
-    const scopeNote = (typeof scannedTodayCount === 'number' && typeof totalSystemSkuCount === 'number')
-      ? ` Chỉ đối chiếu ${scannedTodayCount}/${totalSystemSkuCount} mã hàng hệ thống — đúng các mã ĐÃ SCAN lên kệ hôm nay (mã chưa scan được bỏ qua để màn tải nhanh, không ảnh hưởng hiệu năng chung).`
+    // scannedEverCount/totalSystemSkuCount (11/2026, mở rộng từ scannedTodayCount cũ sau khi thêm cột
+    // "Trên Kệ Quá Khứ" — bảng giờ hiện CẢ mã chỉ scan trong quá khứ, không chỉ hôm nay) — minh bạch cho
+    // người dùng biết màn này ĐÃ CHỦ ĐỘNG bỏ qua phần lớn tồn kho hệ thống (các mã chưa từng scan lần
+    // nào), không phải lỗi/thiếu dữ liệu.
+    const scopeCount = typeof scannedEverCount === 'number' ? scannedEverCount : scannedTodayCount;
+    const scopeNote = (typeof scopeCount === 'number' && typeof totalSystemSkuCount === 'number')
+      ? ` Chỉ đối chiếu ${scopeCount}/${totalSystemSkuCount} mã hàng hệ thống — đúng các mã ĐÃ TỪNG SCAN lên kệ (hôm nay hoặc trước đây; mã chưa scan lần nào được bỏ qua để màn tải nhanh, không ảnh hưởng hiệu năng chung).`
       : '';
-    noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có điền Mã Hàng (nội bộ) — qua picker, camera tự khớp mã vạch, hoặc gõ tay trực tiếp đều tính; ghi nhận bỏ trống Mã Hàng không tham gia đối chiếu.${scopeNote}`;
+    noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có điền Mã Hàng (nội bộ); "Trên kệ quá khứ" tính các ghi nhận TRƯỚC HÔM NAY của cùng mã hàng (chỉ để xem/theo dõi, không tính vào Kết Quả) — qua picker, camera tự khớp mã vạch, hoặc gõ tay trực tiếp đều tính; ghi nhận bỏ trống Mã Hàng không tham gia đối chiếu.${scopeNote}`;
   }
 }
 async function loadShelfReconciliation() {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
   if (noteEl) noteEl.textContent = '';
   try {
     // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ... không
-    // thì quá nhiều khi siêu thị ấn cùng một lúc có thể gây treo ứng dụng") — server tự lọc CHỈ trả về
-    // các mã đã scan lên kệ HÔM NAY của ĐÚNG siêu thị mình (xem routes/shelfStock.js), thay vì nguyên mảng
-    // tồn kho hệ thống (có thể lên tới hàng chục nghìn dòng/siêu thị) như trước đây.
+    // thì quá nhiều khi siêu thị ấn cùng một lúc có thể gây treo ứng dụng", MỞ RỘNG cùng tháng sang "đã
+    // TỪNG scan" để có dữ liệu cho cột "Trên Kệ Quá Khứ") — server tự lọc CHỈ trả về các mã đã TỪNG scan
+    // lên kệ (hôm nay hoặc trước đây) của ĐÚNG siêu thị mình (xem routes/shelfStock.js), thay vì nguyên
+    // mảng tồn kho hệ thống (có thể lên tới hàng chục nghìn dòng/siêu thị) như trước đây.
     const res = await fetch('/api/shelf-stock/system-inventory?scope=recon');
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
@@ -518,11 +533,11 @@ async function loadShelfReconciliation() {
       // ("đối chiếu sai tôi không biết được"): phải nói rõ NGAY ở header đang thiếu cấu hình cho ĐÚNG
       // siêu thị nào, không chỉ im lặng hiện dòng lỗi nhỏ trong bảng.
       setShelfReconHeader(null, true);
-      tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
       return;
     }
     const rows = Array.isArray(body.rows) ? body.rows : [];
-    renderShelfReconciliationTable(rows, body.capNhatLuc, false, body.maDiem, body.totalSystemSkuCount, body.scannedTodayCount);
+    renderShelfReconciliationTable(rows, body.capNhatLuc, false, body.maDiem, body.totalSystemSkuCount, body.scannedTodayCount, body.scannedEverCount);
     // cacheKey='recon' — cache RIÊNG, không lẫn với cache đầy đủ của picker/Hạn Sử Dụng (xem chú thích
     // shelfOfflineReconCache).
     cacheShelfSystemInventoryOffline(rows, body.capNhatLuc, body.maDiem, 'recon');

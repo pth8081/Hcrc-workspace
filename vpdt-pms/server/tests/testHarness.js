@@ -973,28 +973,32 @@ function createDispatcher(state) {
         // maDiem (11/2026) — mirror ĐÚNG field mới routes/shelfStock.js trả thêm (xem chú thích ở đó);
         // test tự seed state.__mockSystemInventoryMaDiem khi cần kiểm riêng header "Đang đối chiếu...".
         let rows = state.__mockSystemInventoryRows;
-        let totalSystemSkuCount, scannedTodayCount;
-        // scope=recon (11/2026) — mirror ĐÚNG logic lọc server thật (chỉ trả mã đã scan HÔM NAY của ĐÚNG
-        // siêu thị mình, xem routes/shelfStock.js) để demo/test Đối Chiếu thấy đúng hành vi mới.
+        let totalSystemSkuCount, scannedTodayCount, scannedEverCount;
+        // scope=recon (11/2026, mở rộng cùng tháng theo yêu cầu "thêm cột trên kệ quá khứ") — mirror ĐÚNG
+        // logic lọc server thật: trả về mã ĐÃ TỪNG scan (hôm nay hoặc trước đây) của ĐÚNG siêu thị mình,
+        // không chỉ "hôm nay" như bản cũ, xem routes/shelfStock.js.
         if (new URL(url, 'http://x').searchParams.get('scope') === 'recon') {
           const freshUser = state.users.find(u => u.username === username);
           totalSystemSkuCount = rows.length;
           const now = new Date();
           const scannedMaHangToday = new Set();
+          const scannedMaHangEver = new Set();
           for (const r of (state.shelfRecords || [])) {
             if (!r || r.dept !== freshUser.dept || !r.maHang) continue;
+            scannedMaHangEver.add(String(r.maHang));
             const d = new Date(r.lastScannedAt || r.createdAt);
             if (!isNaN(d.getTime()) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
               scannedMaHangToday.add(String(r.maHang));
             }
           }
           scannedTodayCount = scannedMaHangToday.size;
-          rows = rows.filter(r => r.maHang && scannedMaHangToday.has(String(r.maHang)));
+          scannedEverCount = scannedMaHangEver.size;
+          rows = rows.filter(r => r.maHang && scannedMaHangEver.has(String(r.maHang)));
           // Cộng gộp trùng mã hàng (11/2026) — mirror ĐÚNG routes/shelfStock.js thật, xem
           // lib/shelfInventoryAggregate.js.
           rows = aggregateSystemInventoryRowsByMaHang(rows);
         }
-        return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount } };
+        return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount, scannedEverCount } };
       }
       // GET/PUT /api/shelf-stock/recon-recipients (11/2026) — mirror ĐƠN GIẢN HOÁ routes/shelfStock.js
       // thật: map state.shelfReconExtraRecipients {dept: [username,...]}, CHỈ đọc/sửa ĐÚNG key = dept
