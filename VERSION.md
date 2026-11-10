@@ -1,9 +1,52 @@
 # Phiên bản hiện tại
 
-**29.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.81 (2026-11): Fix "Cây Sơ Đồ Tổ Chức" không thêm được Phòng Ban + ô KPI đổi sang dropdown tìm-kiếm-gõ-chọn
+
+Người dùng báo lỗi kèm ảnh chụp: bấm "➕ Thêm Vào Sơ Đồ" ở tab "🖼️ Cây Sơ Đồ Tổ Chức" báo "⛔ Không thể
+thêm Phòng Ban" ngay từ Phòng Ban/Công Ty đầu tiên — không tạo được cơ cấu nào cả. Đồng thời yêu cầu 2 ô
+"Vị Trí Đánh Giá (cấp trên)"/"Vị Trí Được Đánh Giá" ở tab "🎯 Cấu Hình Đánh Giá KPI" đổi sang dropdown
+tìm-kiếm-gõ-chọn (searchable, single choice) cho dễ tìm khi cây lớn.
+
+**Nguyên nhân lỗi "Không thể thêm Phòng Ban"**: khoá AppData `orgChartDiagramNodes` (giới thiệu v29.78)
+bị bỏ sót khỏi `defaults.js` — `seedDefaults()` (chạy mỗi lần khởi động/`pm2 restart`) chỉ tự tạo dòng
+trong `dbo.AppData` cho khoá CÓ MẶT trong `DEFAULTS`, nên server đã triển khai TRƯỚC khi khoá này ra đời
+không bao giờ tự có dòng đó. `GET` vẫn chạy được (đọc có fallback `[]`) nên tab vẫn mở bình thường,
+nhưng MỌI lượt ghi (`POST`/`PATCH`/`DELETE`) đều qua `withLockedAppDataValue()` — hàm này đòi dòng phải
+tồn tại sẵn, thiếu thì luôn sập 500 ngay từ lần ghi đầu tiên.
+
+**Đã làm**:
+1. Thêm `orgChartDiagramNodes: []` vào `defaults.js` — chỉ cần copy code + `pm2 restart` là
+   `seedDefaults()` tự chèn dòng còn thiếu, KHÔNG cần thao tác thủ công nào trên CSDL.
+2. Quét tĩnh toàn bộ `withLockedAppDataValue(...)` trong `routes/`+`lib/` đối chiếu với `DEFAULTS` —
+   xác nhận không còn khoá nào khác bị bỏ sót tương tự.
+3. Viết test mới `test-appdata-defaults-coverage.js` — quét lại đúng cơ chế trên, chặn lớp lỗi này tái
+   phát với BẤT KỲ khoá AppData mới nào sau này (không chỉ riêng `orgChartDiagramNodes`).
+4. Viết test mới `test-orgchart-diagram-missing-appdata-key-fix.js` — tái hiện ĐÚNG lỗi thật qua server
+   thật (mount `routes/orgChart.js` thật, chỉ mock lớp SQL), xác nhận bản vá khắc phục hoàn toàn.
+5. 2 ô "Vị Trí Đánh Giá (cấp trên)"/"Vị Trí Được Đánh Giá" đổi từ `<select>` sang ô tìm-kiếm-gõ-chọn
+   chuẩn (`sdd*`, cùng khuôn toàn hệ thống, CLAUDE.md — không dùng `<datalist>` native): gõ không dấu vẫn
+   ra đúng kết quả có dấu; 2 Vị Trí trùng tên hiển thị thì tự phụ thêm "(#id)" để luôn phân biệt được
+   (trường hợp phổ biến không trùng ai thì nhãn vẫn sạch, không có số); gõ tự do không bấm chọn gợi ý thì
+   bị chặn rõ ràng, không gửi dữ liệu sai lên server.
+
+**Demo xác nhận trước khi merge** (người dùng yêu cầu): demo chạy XUYÊN QUA server thật (không giả lập
+client) — ảnh chụp đúng lỗi "⛔ Không thể thêm Phòng Ban" TRƯỚC khi vá, rồi tạo thành công cây 3 cấp
+"Công Ty HCRC" (gốc) → "Phòng Kinh Doanh"/"Phòng IT" (con) → "Kinh Doanh Khu Vực 1" (cháu) SAU khi vá —
+xác nhận kiến trúc hiện tại đã hỗ trợ đúng mô hình "từ Công ty gốc đến các Phòng Ban" người dùng muốn,
+không cần đổi thiết kế, chỉ cần vá đúng lỗi thiếu khoá dữ liệu.
+
+Chạy lại toàn bộ test/demo liên quan Cơ Cấu Tổ Chức (`test-orgchart-diagram-tab`, `test-orgchart-
+headcount-report`, `test-khoi0-orgchart-gate`, `test-seed-defaults-fresh-install`) + CSP sweep —
+PASS 100%, không regression.
+
+**Deploy**: `defaults.js` có thêm 1 khoá mặc định mới — copy code + `pm2 restart` như bình thường là đủ
+(`seedDefaults()` tự chạy lại lúc khởi động, tự chèn dòng còn thiếu), không cần thao tác thủ công nào
+khác trên CSDL. Không đổi `schema.sql`, không thêm biến môi trường/dependency.
 
 ## v29.80 (2026-11): "Vị Trí Kiêm Nhiệm" đồng bộ từ Hồ Sơ Nhân Sự KHÔNG còn tham gia quy trình phê duyệt
 

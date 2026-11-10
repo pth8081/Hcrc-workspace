@@ -1082,6 +1082,22 @@ const DEFAULTS = {
   // KHÔNG tự ý POST /api/data/orgChartVersions (xem NON_ADMIN_GATED_KEYS, routes/data.js, chỉ để phòng
   // thủ, không phải đường ghi chính thức). Đọc mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin.
   orgChartVersions: [],
+  // orgChartDiagramNodes (11/2026, "🖼️ Cây Sơ Đồ Tổ Chức" RIÊNG, tách biệt hoàn toàn khỏi orgChartVersions
+  // — xem lib/orgChartDiagramTree.js) — mảng phẳng {id, parentNodeId, nodeName}, parentNodeId=null là
+  // node gốc (có thể nhiều node gốc song song).
+  // LỖI ĐÃ VÁ (báo cáo người dùng 11/2026, "bấm Thêm Vào Sơ Đồ báo lỗi ⛔ Không thể thêm Phòng Ban" ngay
+  // lần thêm Phòng Ban ĐẦU TIÊN sau khi nâng cấp lên bản có tính năng này): khoá AppData này BỊ BỎ SÓT
+  // khỏi DEFAULTS lúc tạo tính năng (chỉ có đúng orgChartVersions ở trên) — seedDefaults() (chạy mỗi lần
+  // khởi động server, xem seedDefaults.js) chỉ tự tạo dòng trong dbo.AppData cho KHOÁ CÓ MẶT trong
+  // DEFAULTS, nên "orgChartDiagramNodes" CHƯA BAO GIỜ được tạo dòng trên CSDL thật đã triển khai trước đó.
+  // GET /api/org-chart/diagram-nodes vẫn chạy được (getAppDataValue(...) || [] — tự có giá trị mặc định
+  // khi đọc, không throw) nên tab vẫn MỞ ra bình thường và hiện đúng danh sách rỗng, không ai nhận ra —
+  // nhưng POST/PATCH/DELETE đều gọi withLockedAppDataValue(), hàm này BẮT BUỘC dòng phải tồn tại sẵn
+  // (throw "Key không tồn tại trong AppData" nếu chưa có — xem lib/appData.js) nên mọi lượt SỬA đều sập
+  // 500, rơi vào đúng thông báo chung "Không thể thêm Phòng Ban" (routes/orgChart.js). Thêm dòng NÀY vào
+  // DEFAULTS là ĐỦ để vá — seedDefaults() tự chèn dòng còn thiếu ngay lần khởi động/pm2 restart kế tiếp
+  // sau khi deploy bản vá này, không cần thao tác thủ công nào khác trên CSDL.
+  orgChartDiagramNodes: [],
   employeeProfiles: [],
   // hrProfileManagerVisibleFields (9/2026, theo yêu cầu người dùng) — mảng field NHẠY CẢM (subset
   // lib/employeeProfile.js::SENSITIVE_FIELDS) admin chủ động MỞ THÊM cho "quản lý trực tiếp xem giới
