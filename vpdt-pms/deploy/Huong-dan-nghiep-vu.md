@@ -3513,7 +3513,15 @@ theo đúng vị trí trong cây**.
   không dùng nữa (9/2026)**: tạo thử/nhân bản nhầm 1 bản Nháp muốn dọn đi thì
   chọn đúng bản đó ở dropdown Phiên bản → bấm "🗑️ Xoá Bản Nháp Này" — CHỈ
   xoá được bản đang ở trạng thái Nháp (khôi phục được qua Thùng Rác nếu cần),
-  bản Đã áp dụng không bao giờ xoá được. **Xoá vĩnh viễn bản Lưu Trữ
+  bản Đã áp dụng không bao giờ xoá được. **Xoá TẤT CẢ bản Nháp cùng lúc
+  (11/2026, theo yêu cầu người dùng "xóa tất cả các cái định biên này đi...
+  làm lại từ đầu")**: khi có nhiều bản Nháp rác tích lại (VD tạo thử/nhân bản
+  nhầm nhiều lần), bấm nút **"🗑️ Xoá Tất Cả Bản Nháp"** cạnh nút "Xoá Bản
+  Nháp Này" để xoá hết TOÀN BỘ bản Nháp hiện có trong 1 lượt, không cần chọn
+  và xoá từng bản một — dùng chung quyền Quản Lý Cơ Cấu Tổ Chức (không cần
+  quyền riêng, vì xoá Nháp vốn không có rủi ro mất lịch sử). Bản Đang Áp Dụng
+  và bản Lưu Trữ KHÔNG bị ảnh hưởng gì (vẫn giữ nguyên nguyên tắc bất biến —
+  chỉ Nháp mới xoá được). **Xoá vĩnh viễn bản Lưu Trữ
   (10/2026, theo yêu cầu người dùng "lỡ Áp Dụng nhầm, muốn xoá tránh rác dữ
   liệu")**: lỡ bấm "Áp dụng" nhầm bản không mong muốn thì KHÔNG mất dữ liệu —
   bản đúng chỉ bị đẩy xuống Lưu Trữ, khôi phục bằng cách chọn lại bản đúng đó

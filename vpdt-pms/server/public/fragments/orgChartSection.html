@@ -36,6 +36,10 @@
              "Áp Dụng Phiên Bản Này" ở trên vẫn luôn hiện song song cho trường hợp CỐ Ý áp dụng kỳ mới. -->
         <button type="button" id="btnOrgChartApplyVersionKeepDate" data-op="applyOrgChartVersionClick" data-arg0="1" class="hidden bg-amber-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-amber-800">✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)</button>
         <button type="button" id="btnOrgChartDeleteVersion" data-op="deleteOrgChartVersionClick" class="hidden bg-red-100 text-red-700 px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-red-200">🗑️ Xoá Bản Nháp Này</button>
+        <!-- "🗑️ Xoá Tất Cả Bản Nháp" (11/2026, theo yêu cầu người dùng "xóa tất cả các cái định biên này
+             đi... làm lại từ đầu") — hiện khi có >=1 bản Nháp BẤT KỲ trong danh sách (không phụ thuộc
+             bản đang xem như nút "Xoá Bản Nháp Này" ở trên) — xem toggle ở renderOrgChartModule(). -->
+        <button type="button" id="btnOrgChartDeleteAllDrafts" data-op="deleteAllOrgChartDraftsClick" class="hidden bg-red-200 text-red-800 px-2.5 py-1.5 rounded text-xs font-bold hover:bg-red-300">🗑️ Xoá Tất Cả Bản Nháp</button>
         <button type="button" id="btnOrgChartDeleteArchivedVersion" data-op="deleteArchivedOrgChartVersionClick" class="hidden bg-red-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-red-800">🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này</button>
         <button type="button" id="btnOrgChartCompareVersion" data-op="compareOrgChartVersionClick" class="hidden bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">🔀 So Sánh Với Bản Đang Áp Dụng</button>
         <button type="button" id="btnOrgChartRecomputeManagerUsernames" data-op="recomputeManagerUsernamesClick" class="hidden bg-teal-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-700">🔄 Đồng Bộ Quản Lý Trực Tiếp</button>

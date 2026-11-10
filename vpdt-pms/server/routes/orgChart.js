@@ -159,6 +159,34 @@ router.post('/versions/:id/delete', async (req, res) => {
   }
 });
 
+// POST /api/org-chart/versions/delete-all-drafts (11/2026, theo yêu cầu người dùng "xóa tất cả các cái
+// định biên này đi... làm lại từ đầu") — xoá hẳn TẤT CẢ bản Nháp (DRAFT) cùng 1 lượt, tránh phải bấm
+// "Xoá Bản Nháp Này" lần lượt. Dùng chung quyền orgChartManage (y hệt /versions/:id/delete ở trên) —
+// xoá Nháp vốn không cần quyền riêng. orgChart.deleteAllDraftVersions() tự chỉ lọc đúng DRAFT, không
+// đụng APPLIED/ARCHIVED.
+router.post('/versions/delete-all-drafts', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let deletedCount = 0;
+    await withLockedAppDataValue('orgChartVersions', (list) => {
+      const result = orgChart.deleteAllDraftVersions(list);
+      deletedCount = result.deletedCount;
+      return result.list;
+    });
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_DELETE_ALL_DRAFTS',
+      targetObject: 'orgChartVersions',
+      description: `Xoá tất cả bản Nháp Cơ Cấu Tổ Chức — đã xoá ${deletedCount} bản`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Xoá Tất Cả Bản Nháp Cơ Cấu Tổ Chức):', e.message));
+    res.json({ ok: true, deletedCount });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/delete-all-drafts', 'Không thể xoá tất cả bản nháp');
+  }
+});
+
 // POST /api/org-chart/versions/:id/delete-archived (10/2026, theo yêu cầu người dùng) — xoá VĨNH VIỄN 1
 // bản đang ở trạng thái LƯU TRỮ (ARCHIVED), VD bản bị "Áp Dụng" nhầm rồi bị thay thế lại bởi bản đúng,
 // giờ chỉ còn nằm rác trong danh sách phiên bản. Khác hẳn /delete ở trên (chỉ DRAFT) — gác quyền RIÊNG

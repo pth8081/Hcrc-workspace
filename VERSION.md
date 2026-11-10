@@ -1,9 +1,28 @@
 # Phiên bản hiện tại
 
-**29.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.88 (2026-11): Cơ Cấu Tổ Chức — nút "🗑️ Xoá Tất Cả Bản Nháp"
+
+Yêu cầu người dùng: "Xóa tất cả các bản nháp đi nhá, để tôi làm lại từ đầu nhá. Có quyền đấy, kệ."
+
+**Đã làm**:
+1. `lib/orgChart.js`: thêm `deleteAllDraftVersions(list)` — lọc bỏ TẤT CẢ version có status DRAFT khỏi
+   danh sách trong 1 lượt, giữ nguyên APPLIED/ARCHIVED (nguyên tắc bất biến y hệt `deleteVersion()` đơn
+   lẻ đã có — chỉ Nháp mới xoá được). Không có Nháp nào thì trả về `deletedCount: 0`, không coi là lỗi.
+2. `routes/orgChart.js`: route mới `POST /versions/delete-all-drafts` — dùng CHUNG quyền
+   `orgChartManage` (y hệt route xoá 1 Nháp đơn lẻ), KHÔNG cần tạo quyền riêng vì xoá Nháp vốn không có
+   rủi ro mất lịch sử. Ghi Nhật Ký Hệ Thống (`ORGCHART_DELETE_ALL_DRAFTS`).
+3. `public/js/module-orgchart.js` + `orgChartSection.html`: nút **"🗑️ Xoá Tất Cả Bản Nháp"** cạnh nút
+   "Xoá Bản Nháp Này" — hiện khi có >=1 bản Nháp bất kỳ (không phụ thuộc bản đang xem trên dropdown),
+   xác nhận 1 lớp rồi gọi route mới, báo rõ đã xoá bao nhiêu bản.
+
+**Test**: `tests/test-orgchart-delete-all-drafts.js` (7/7 pass — logic thuần `deleteAllDraftVersions()`
+và HTTP route thật). Chạy lại toàn bộ test Cơ Cấu Tổ Chức hiện có (13 file) — không regression. CSP grep
+sạch.
 
 ## v29.87 (2026-11): Cơ Cấu Tổ Chức — "🔧 Buộc Gỡ & Xoá Vị Trí"
 
