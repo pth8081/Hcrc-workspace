@@ -3797,6 +3797,61 @@ theo đúng vị trí trong cây**.
     (không qua `/api/admin/export-xlsx` dùng chung, vì cần tính Thực Tế từ dữ
     liệu Hồ Sơ Nhân Sự vốn đã bị chặn khỏi API Báo Cáo chung — cùng lý do như
     mục 4.5.3 "Báo Cáo Nhân Sự").
+  - **Layout BẢNG PHẲNG (11/2026, theo yêu cầu người dùng gửi kèm ảnh file
+    Excel định biên thật đang dùng ở công ty)** — cả bảng trên màn hình lẫn
+    file Excel xuất ra đổi từ kiểu "cây thụt lề 1 cột" sang đúng khuôn file
+    mẫu thật của HR: **STT | BAN/PHÒNG | BAN/PHÒNG/BỘ PHẬN | BỘ PHẬN/NHÓM |
+    CHỨC DANH | CẤP BẬC | Mã vị trí | Định Biên | Thực Tế | Chênh Lệch**.
+    - Phòng Ban/Khối nằm **trực tiếp dưới Công Ty** (cấp 1) được đánh số La
+      Mã **I, II, III...**; Phòng Ban con của nó (cấp 2) đánh **I.1, I.2...**.
+      Phòng Ban nằm **sâu hơn cấp 2** (VD Ban → Phòng → Tổ) **không** có số
+      La Mã riêng — tên các cấp đó được GỘP vào cột "BỘ PHẬN/NHÓM" (nối bằng
+      " > "), còn cột STT vẫn đếm liên tục trong ĐÚNG 1 nhóm cấp 2 chứa nó
+      (không tách nhóm riêng cho mỗi cấp sâu).
+    - **STT đếm lại từ 1** ở mỗi nhóm cấp 1 (nếu Phòng Ban đó không có Phòng
+      con nào, chỉ có Vị Trí gắn trực tiếp) hoặc mỗi nhóm cấp 2 — đúng khuôn
+      "mỗi Ban/Phòng tự đếm số thứ tự riêng" của file mẫu thật.
+    - Dòng Ban/Khối **không có Vị Trí trực tiếp, chỉ có Phòng con** vẫn HIỆN
+      tổng Định Biên/Thực Tế/Chênh Lệch cộng dồn từ các Phòng con bên trong
+      (quyết định đã xác nhận với người dùng — khác khuôn file mẫu gốc để
+      trống ô đó, vì người dùng muốn thấy tổng ngay ở cấp Ban/Khối).
+    - **"Mã vị trí"**: mã hiển thị tự sinh (VT1, VT2...) theo đúng thứ tự
+      xuất hiện trong bảng, tính lại mỗi lần xem — **không phải** mã nội bộ
+      thật (positionKey là UUID dài, không hiển thị được), chỉ để tiện tham
+      chiếu qua điện thoại/giấy, không dùng để tra cứu kỹ thuật.
+    - Viết tắt hiện cạnh tên Phòng Ban (dòng La Mã) lấy từ **danh mục viết
+      tắt Phòng Ban đã có sẵn** (Hệ Thống → Quản Lý Danh Mục → Phòng Ban),
+      khớp theo đúng Phòng Ban gắn ở node đó — Phòng Ban nào chưa có viết tắt
+      trong danh mục thì để trống, không báo lỗi.
+    - Vị Trí nằm **thẳng dưới Công Ty, không qua Phòng Ban nào** (hiếm gặp,
+      VD "Tổng Giám Đốc" gắn trực tiếp vào gốc) rơi vào 1 nhóm riêng nhãn
+      "(Trực thuộc &lt;Tên Công Ty&gt;)", vẫn có STT/Mã vị trí như bình
+      thường, không bị bỏ sót khỏi báo cáo.
+  - **📥 Tải Mẫu Định Biên / 📤 Nhập Định Biên (11/2026, theo yêu cầu người
+    dùng "cho mẫu định biên đơn giản hơn, không cần mã node gì đâu")** — 2
+    nút mới ngay trong modal Báo Cáo, dành cho HR cập nhật Định Biên HÀNG
+    LOẠT (nhiều Vị Trí 1 lúc) mà không cần sửa tay từng Vị Trí qua modal Sửa
+    Vị Trí, và KHÁC HẲN "📤 Nhập Excel (Bản Nháp Mới)" của cả cây (mục dựng
+    LẠI toàn bộ cây, bắt buộc tự đặt "Mã Node"/"Mã Node Cha"):
+    - **"📥 Tải Mẫu Định Biên"**: xuất ra file Excel liệt kê ĐÚNG toàn bộ Vị
+      Trí đang có trong bản version đang xem, kèm cột "Phòng Ban"/"Chức
+      Danh"/"Cấp Bậc"/"Định Biên Hiện Tại" (chỉ để xem/đối chiếu) và cột
+      **"Định Biên Mới (\*)"** (pre-fill = Định Biên hiện tại) — HR CHỈ cần
+      sửa đúng cột này, không cần đụng cột nào khác. File có 1 cột "ID" ẨN
+      (hệ thống tự gán, không hiện ra để HR không nhỡ tay sửa) dùng để khớp
+      lại ĐÚNG Vị Trí khi nhập lên — khác hẳn "Mã Node" tự đặt tay của mẫu
+      nhập cả cây.
+    - **"📤 Nhập Định Biên"**: chọn lại file mẫu đã sửa cột "Định Biên Mới",
+      hệ thống chỉ **PATCH** field Định Biên của đúng các Vị Trí khớp ID,
+      KHÔNG đổi tên/cấu trúc/thêm-xoá gì khác. Chỉ áp dụng được lên bản đang
+      ở trạng thái **Nháp** (báo lỗi rõ nếu đang xem bản Đang áp dụng).
+    - **Khoan dung theo dòng** (giống đa số màn Nhập Excel khác trong hệ
+      thống, KHÁC "Nhập Excel" cả cây vốn theo luật "tất-cả-hoặc-không-gì"):
+      dòng có ID không khớp Vị Trí nào còn tồn tại (VD Vị Trí đó đã bị xoá
+      sau khi tải mẫu) hoặc "Định Biên Mới" không hợp lệ (không phải số
+      nguyên ≥ 0) thì CHỈ dòng đó bị bỏ qua (kèm thông báo lý do), các dòng
+      hợp lệ khác vẫn cập nhật bình thường. Để trống "Định Biên Mới" = BỎ
+      Định Biên (coi như chưa đặt kế hoạch cho Vị Trí đó), không phải lỗi.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
   lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
   (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding

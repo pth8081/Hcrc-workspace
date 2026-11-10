@@ -25,9 +25,9 @@ const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 const orgChart = require('../lib/orgChart');
 const orgChartDiagramTree = require('../lib/orgChartDiagramTree');
 const orgChartImport = require('../lib/orgChartImport');
+const orgChartHeadcountImport = require('../lib/orgChartHeadcountImport');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { computeHeadcountReport } = require('../lib/headcountReport');
-const { buildGenericWorkbook } = require('../lib/adminExport');
+const { buildFlatGroupedHeadcountReport, buildFlatHeadcountReportWorkbook } = require('../lib/headcountReport');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAllForCollection } = require('../lib/recordStore');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
@@ -544,17 +544,20 @@ router.get('/versions/:id/export-xlsx', async (req, res) => {
   }
 });
 
-// GET /api/org-chart/versions/:id/headcount-report — Báo Cáo Định Biên Nhân Sự (10/2026): "Thực tế"
-// tính ĐỘNG từ employeeProfiles/hrProcesses/users (xem lib/headcountReport.js), KHÔNG đọc/ghi gì thêm.
+// GET /api/org-chart/versions/:id/headcount-report — Báo Cáo Định Biên Nhân Sự (10/2026, layout bảng
+// phẳng theo mẫu Excel thật của người dùng từ 11/2026 — xem buildFlatGroupedHeadcountReport()):
+// "Thực tế" tính ĐỘNG từ employeeProfiles/hrProcesses/users, KHÔNG đọc/ghi gì thêm. deptAbbrs (danh mục
+// "Mã Viết Tắt Phòng Ban" đã có sẵn, Hệ Thống → Quản Lý Danh Mục) dùng để hiện viết tắt ở dòng nhóm.
 async function loadHeadcountReport(versionId) {
   const list = (await getAppDataValue('orgChartVersions')) || [];
   const version = orgChart.requireVersion(list, Number(versionId));
-  const [employeeProfiles, hrProcesses, users] = await Promise.all([
+  const [employeeProfiles, hrProcesses, users, deptAbbrs] = await Promise.all([
     getAppDataValue('employeeProfiles').then(v => v || []),
     getAllForCollection('hrProcesses'),
-    getAppDataValue('users').then(v => v || [])
+    getAppDataValue('users').then(v => v || []),
+    getAppDataValue('deptAbbrs').then(v => v || {})
   ]);
-  return { version, report: computeHeadcountReport(version, employeeProfiles, hrProcesses, users) };
+  return { version, report: buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs) };
 }
 router.get('/versions/:id/headcount-report', async (req, res) => {
   if (!requireView(req, res)) return;
@@ -568,33 +571,13 @@ router.get('/versions/:id/headcount-report', async (req, res) => {
 });
 
 // GET /api/org-chart/versions/:id/headcount-report/export-xlsx — cùng dữ liệu route JSON trên, xuất
-// thẳng ra Excel (reuse buildGenericWorkbook() — lib/adminExport.js, đúng khuôn 1 sheet {columns, rows}).
+// thẳng ra Excel ĐÚNG layout bảng phẳng (buildFlatHeadcountReportWorkbook() — lib/headcountReport.js),
+// không qua buildGenericWorkbook() dùng chung vì cần tô màu/đậm riêng theo từng loại dòng (nhóm/vị trí).
 router.get('/versions/:id/headcount-report/export-xlsx', async (req, res) => {
   if (!requireView(req, res)) return;
   try {
     const { version, report } = await loadHeadcountReport(req.params.id);
-    const columns = [
-      { header: 'Cấp / Tên', key: 'displayName', width: 40 },
-      { header: 'Chức Danh', key: 'jobTitle', width: 26 },
-      { header: 'Cấp Bậc', key: 'jobGrade', width: 10 },
-      { header: 'Định Biên', key: 'quota', width: 10 },
-      { header: 'Thực Tế', key: 'actualTotal', width: 10 },
-      { header: 'Chênh Lệch', key: 'variance', width: 10 },
-      { header: 'Đang Làm Việc', key: 'active', width: 12 },
-      { header: 'Đang Bàn Giao Nghỉ Việc', key: 'offboarding', width: 16 },
-      { header: 'Thai Sản/Nghỉ Ốm', key: 'onLeave', width: 14 },
-      { header: 'Kiêm Nhiệm', key: 'secondary', width: 10 },
-      { header: 'Mã Vị Trí', key: 'positionKey', width: 28 }
-    ];
-    const rows = report.rows.map(r => ({
-      displayName: `${'　'.repeat(r.level)}${r.displayName || ''}`,
-      jobTitle: r.jobTitle || '', jobGrade: r.jobGrade || '',
-      quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
-      variance: r.variance == null ? '' : r.variance,
-      active: r.active, offboarding: r.offboarding, onLeave: r.onLeave, secondary: r.secondary,
-      positionKey: r.positionKey || ''
-    }));
-    const wb = buildGenericWorkbook('Dinh Bien Nhan Su', columns, rows);
+    const wb = buildFlatHeadcountReportWorkbook(report);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Dinh_Bien_Nhan_Su_${version.id}.xlsx"`);
     await wb.xlsx.write(res);
@@ -604,6 +587,72 @@ router.get('/versions/:id/headcount-report/export-xlsx', async (req, res) => {
     console.error('GET /api/org-chart/versions/:id/headcount-report/export-xlsx lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xuất file' });
   }
+});
+
+// ===== Tải Mẫu / Nhập "Định Biên" HÀNG LOẠT (11/2026, theo yêu cầu người dùng — xem chú thích đầu
+// lib/orgChartHeadcountImport.js) — KHÁC hẳn "Nhập Excel" cả cây ở trên: CHỈ cập nhật headcountQuota của
+// các Vị Trí ĐÃ CÓ SẴN trong ĐÚNG version đang xem, không đổi cấu trúc, không cần "Mã Node" tự đặt tay.
+router.get('/versions/:id/headcount-template/export-xlsx', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    const list = (await getAppDataValue('orgChartVersions')) || [];
+    const version = orgChart.requireVersion(list, Number(req.params.id));
+    const wb = await orgChartHeadcountImport.buildHeadcountTemplateWorkbook(version);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Mau_Dinh_Bien_${version.id}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('GET /api/org-chart/versions/:id/headcount-template/export-xlsx lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+router.post('/versions/:id/headcount-template/import', uploadRateLimiter, (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/org-chart/versions/:id/headcount-template/import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp Định Biên cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const versionId = Number(req.params.id);
+      let updatedCount = 0, parseErrors = [];
+      await withLockedAppDataValue('orgChartVersions', async (list) => {
+        const version = orgChart.requireVersion(list, versionId);
+        orgChart.requireDraft(version);
+        const { updates, errors } = await orgChartHeadcountImport.parseHeadcountTemplateBuffer(buffer, version);
+        parseErrors = errors;
+        for (const u of updates) {
+          try { orgChart.editNode(version, u.nodeId, { headcountQuota: u.headcountQuota }); updatedCount++; }
+          catch (e) { parseErrors.push(`Vị trí ID ${u.nodeId}: ${e.message}`); }
+        }
+        return list;
+      });
+      insertSystemLog({
+        username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+        module: 'SYSTEM', actionType: 'ORGCHART_IMPORT_HEADCOUNT',
+        targetObject: `orgChartVersions#${versionId}`,
+        description: `Nhập Excel Định Biên — cập nhật ${updatedCount} Vị Trí, ${parseErrors.length} dòng bị bỏ qua`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (nhập Excel Định Biên):', e.message));
+      res.json({ ok: true, updatedCount, errors: parseErrors });
+    } catch (parseErr) {
+      if (parseErr instanceof HttpError) return res.status(parseErr.status).json({ error: parseErr.message });
+      sendCatchError(res, parseErr, 'POST /api/org-chart/versions/:id/headcount-template/import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
 });
 
 // POST /api/org-chart/versions/:id/validate — kiểm tra hợp lệ trước khi áp dụng (không ghi gì).

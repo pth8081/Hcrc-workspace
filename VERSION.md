@@ -1,9 +1,67 @@
 # Phiên bản hiện tại
 
-**29.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.93 (2026-11): Cơ Cấu Tổ Chức — Báo Cáo Định Biên đổi sang bảng phẳng + Nhập Định Biên hàng loạt
+
+Yêu cầu người dùng (2 đợt liên tiếp): (1) "Bạn có thể là cho phép mà cái file mẫu liên quan đến biến
+nhân sự nó đơn giản hơn không? Không cần mã nốt gì đâu đúng không?... để nhập thông tin đấy vào nó sẽ
+nhanh" — muốn 1 mẫu Excel ĐƠN GIẢN để cập nhật Định Biên hàng loạt, không cần tự đặt "Mã Node" như mẫu
+"Nhập Excel" cả cây. (2) Gửi kèm ảnh file Excel định biên THẬT đang dùng ở công ty (cột STT/BAN-PHÒNG/
+BAN-PHÒNG-BỘ PHẬN/BỘ PHẬN-NHÓM/CHỨC DANH/CẤP BẬC/Mã vị trí/Định biên, nhóm La Mã I/II/II.1...): "Tôi
+đồng ý với file mẫu bạn gửi. Tuy nhiên báo cáo định biên, bạn có thể làm giống cái ảnh tôi gửi anh ấy
+hay không?... Xong rồi ảnh tôi sẽ xác nhận làm tất cả các việc." — sau khi demo cả 2 phần (mẫu Excel +
+báo cáo) trên phần mềm thật, người dùng xác nhận 2 điểm còn mở ("đồng ý hiện tổng của các phòng bên
+trong" / "vẫn giữ cột và bạn thêm vào nhé") và chốt "Bây giờ mình làm luôn cả phần mẫu file, phần báo
+cáo này nhá."
+
+**Đã làm**:
+1. `lib/headcountReport.js`: thêm `buildFlatGroupedHeadcountReport(version, employeeProfiles,
+   hrProcesses, users, deptAbbrs)` — TÁI DÙNG NGUYÊN `computeHeadcountReport()` hiện có (không tính lại
+   Định Biên/Thực Tế/Chênh Lệch, chỉ xếp lại thành bảng phẳng) để tránh 2 nơi lệch số nhau. Phòng Ban cấp
+   1 (trực thuộc Công Ty) đánh số La Mã I/II..., cấp 2 đánh I.1/I.2..., cấp sâu hơn (Ban → Phòng → Tổ...)
+   KHÔNG đánh số riêng — gộp tên vào cột "BỘ PHẬN/NHÓM" (nối bằng " > "), Vị Trí bên trong vẫn cộng dồn
+   vào ĐÚNG bucket STT của cấp 2 gần nhất (hoặc cấp 1 nếu không có cấp 2). Dòng Ban/Khối không có Vị Trí
+   trực tiếp (chỉ có Phòng con) vẫn hiện TỔNG cộng dồn từ Phòng con (xác nhận với người dùng). "Mã vị
+   trí" (VT1, VT2...) là mã HIỂN THỊ tự sinh theo thứ tự xuất hiện, tính lại mỗi lần xem — không phải mã
+   nội bộ thật (`positionKey` là UUID dài). Viết tắt Phòng Ban lấy từ danh mục có sẵn `AppData.deptAbbrs`
+   (Hệ Thống → Quản Lý Danh Mục → Phòng Ban, trước đây chỉ dùng cho đánh số văn bản) khớp theo
+   `departmentRef`. Thêm `buildFlatHeadcountReportWorkbook(report)` — xuất Excel đúng layout trên (tô màu
+   riêng dòng La Mã/dòng Vị Trí, không qua `buildGenericWorkbook()` dùng chung vì cần tô màu phức tạp
+   hơn khuôn 1-màu của hàm đó).
+2. `lib/orgChartHeadcountImport.js` (MỚI) — mẫu Excel ĐƠN GIẢN chỉ để cập nhật Định Biên hàng loạt, KHÁC
+   HẲN `lib/orgChartImport.js` (mẫu "Mã Node"/"Mã Node Cha" dựng LẠI cả cây): `buildHeadcountTemplateWorkbook(version)`
+   xuất file liệt kê đúng toàn bộ Vị Trí hiện có (Phòng Ban/Chức Danh/Cấp Bậc/Định Biên Hiện Tại) + 1 cột
+   "ID" ẨN (= `nodeId` thật, hệ thống tự khớp, HR không cần đặt mã gì) + cột "Định Biên Mới (*)" pre-fill
+   sẵn giá trị hiện tại. `parseHeadcountTemplateBuffer(buffer, version)` đọc lại file đã sửa — CHỈ
+   patch field `headcountQuota`, không đổi cấu trúc/tên gì khác. **Khoan dung theo dòng** (giống đa số
+   Excel Nhập khác trong hệ thống, KHÁC "Nhập Excel" cả cây vốn tất-cả-hoặc-không-gì): dòng ID không khớp
+   Vị Trí nào còn tồn tại hoặc "Định Biên Mới" không hợp lệ chỉ bị BỎ QUA (kèm lý do), các dòng hợp lệ
+   khác vẫn cập nhật; để trống = bỏ Định Biên (không phải lỗi).
+3. `routes/orgChart.js`: route xuất Excel báo cáo (`GET .../headcount-report/export-xlsx`) đổi sang dùng
+   `buildFlatHeadcountReportWorkbook()`; thêm 2 route mới `GET .../headcount-template/export-xlsx` (tải
+   mẫu) và `POST .../headcount-template/import` (nhập lại, theo đúng khuôn multer+`verifyFileSignature()`
+   dùng chung) — CHỈ áp dụng được lên bản đang ở trạng thái Nháp (`orgChart.requireDraft()` tự chặn), cả
+   2 route cùng quyền `orgChartManage` như các route Cơ Cấu Tổ Chức khác.
+4. `public/js/module-orgchart.js` + `public/index.html`: `renderOrgChartHeadcountTable()` viết lại hoàn
+   toàn theo layout bảng phẳng mới (10 cột, dòng La Mã tô vàng, dòng Vị Trí có Mã vị trí/Định Biên tô
+   xanh); 2 nút mới "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên" + modal nhập mới (chọn file, hiện kết quả
+   số dòng cập nhật/bị bỏ qua ngay trong modal).
+5. `tests/test-orgchart-headcount-flat-report.js` (mới, 9/9 pass) — cây lồng 4 cấp (STT theo bucket, Mã
+   vị trí tự sinh, gộp "BỘ PHẬN/NHÓM", bucket ảo "(Trực thuộc...)"), `headcountSelfOnly` vẫn được tôn
+   trọng, mẫu Excel liệt kê đúng/pre-fill đúng, nhập khoan dung theo dòng (ID không khớp/quota âm/để
+   trống), và route HTTP thật (báo cáo/xuất mẫu/nhập — chặn đúng khi không phải bản Nháp, 403 khi thiếu
+   quyền).
+6. Chạy lại toàn bộ 17 file `test-*orgchart*.js` hiện có + demo Playwright thật
+   `demo-orgchart-add-node-nesting.js` (10/10, phải vá seed data thêm 1 Vị Trí thật vào 1 Phòng Ban trống
+   vì layout mới không còn hiện dòng cho Phòng Ban 0 Vị Trí — hành vi ĐÚNG như thiết kế mới, không phải
+   lỗi) — KHÔNG regression nào khác.
+
+**Lưu ý triển khai**: thuần logic ứng dụng, KHÔNG có `schema.sql` mới, KHÔNG có biến môi trường `.env`
+mới, KHÔNG có gói npm mới (`exceljs` đã có sẵn trong `package.json`) — chỉ cần copy code + `pm2 restart`.
 
 ## v29.92 (2026-11): Cơ Cấu Tổ Chức — nút "✨ Tạo Bản Mới (Trống)"
 
