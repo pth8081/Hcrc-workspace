@@ -443,6 +443,21 @@ function isShelfRecordCreatedToday(createdAt) {
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
+// Badge "Hôm Nay/Quá Khứ" NGAY TRÊN DÒNG tab Hạn Sử Dụng (11/2026, theo yêu cầu người dùng: "cập nhật
+// số lượng hôm nay mà không thấy tính vào Hôm Nay" — vừa vá kèm ở lib/shelfStockEdit.js::
+// applyShelfRecordEdit() để "✏️ Sửa"/"💾 Cập Nhật"/"✅ Bán Hết" đều bump lastScannedAt. Badge này cho
+// người dùng thấy NGAY trên tab Hạn Sử Dụng dòng nào vừa kiểm hôm nay / dòng nào đã lâu chưa đụng tới,
+// không cần qua tab Đối Chiếu mới biết — cùng field lastScannedAt||createdAt, cùng hàm
+// isShelfRecordCreatedToday() đã dùng cho cột "Trên Kệ Hôm Nay"/"Trên Kệ Quá Khứ".
+function renderShelfScanRecencyBadge(r) {
+  const raw = r.lastScannedAt || r.createdAt;
+  if (!raw) return '';
+  const d = parseVNDateTime(raw) || new Date(raw);
+  if (isNaN(d.getTime())) return '';
+  return isShelfRecordCreatedToday(raw)
+    ? `<span class="block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">🟢 Đã kiểm hôm nay</span>`
+    : `<span class="block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">🕗 Lần cuối: ${escapeHtml(d.toLocaleDateString('vi-VN'))}</span>`;
+}
 // QUYẾT ĐỊNH THIẾT KẾ (chưa có đặc tả chính thức): "trên kệ hôm nay" của 1 mã hàng = TỔNG quantity của
 // mọi shelfRecords tạo HÔM NAY có ĐÚNG maHang đó — CÙNG công thức "tổng hôm nay" đã dùng cho Ngưỡng Tồn
 // (jobs/shelfStockThresholdAlert.js), để nhất quán trong toàn tính năng. Mã hàng hệ thống nào không có
@@ -1316,7 +1331,7 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
-      <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge}</td>
+      <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge + renderShelfScanRecencyBadge(r)}</td>
       <td class="p-2">${stockCell}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'expiry')}</td>
     </tr>`;

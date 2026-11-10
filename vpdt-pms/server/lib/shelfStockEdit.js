@@ -5,6 +5,7 @@
 // re-fetch từ session, KHÔNG tin quyền/dept trong JWT) — trả về bản ghi MỚI hoặc throw HttpError. KHÔNG
 // tự đọc/ghi DB — route gọi qua withLockedRecordForCollection() để khoá/ghi thật.
 const { HttpError } = require('./httpErrors');
+const { formatCreatedAt } = require('./shelfRecordUpsert');
 
 function canManageShelfStock(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
@@ -99,6 +100,14 @@ function applyShelfRecordEdit(item, body, user, allRecords) {
       throw new HttpError(400, 'Số lượng không hợp lệ (phải là số không âm)');
     }
     next.quantity = quantity;
+    // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh: "cập nhật còn 7 mà Trên Kệ Hôm Nay vẫn 0"): trước
+    // đây "✏️ Sửa"/"💾 Cập Nhật"/"✅ Bán Hết" (mọi đường đổi quantity qua route này) KHÔNG bump
+    // lastScannedAt — vi phạm đúng ý thiết kế đã ghi ở routes/shelfStock.js (POST /records/upsert): bump
+    // "MỖI LẦN quét/cập nhật tại chỗ", không chỉ lúc tạo/scan lô mới. Hệ quả: Đối Chiếu vẫn coi dòng vừa
+    // đếm lại là "Quá Khứ" (isShelfRecordCreatedToday() đọc lastScannedAt||createdAt, module-vanhanh.js)
+    // dù số lượng vừa được xác nhận lại ngay hôm nay — nay set lại NGAY ĐÂY, đúng ngữ nghĩa "đổi quantity
+    // = vừa kiểm/đếm lại lô này", cùng công thức formatCreatedAt() dùng ở route upsert.
+    next.lastScannedAt = formatCreatedAt(new Date());
   }
   // "Hồi sinh" dòng đã Ngừng theo dõi (quantity 0 -> dương) PHẢI chặn trùng "cùng lô" giống hệt lúc tạo
   // mới/đổi Hạn Sử Dụng — không chỉ check khi expiryDate đổi (dup-check cũ bỏ sót đúng trường hợp này:
