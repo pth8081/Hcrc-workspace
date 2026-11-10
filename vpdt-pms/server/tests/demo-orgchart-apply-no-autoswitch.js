@@ -155,7 +155,7 @@ async function main() {
   // Người dùng TỰ bấm qua tab "🖼️ Sơ Đồ Trực Quan".
   await page.evaluate(() => document.getElementById('btnOrgChartSubDiagram').click());
   await page.waitForTimeout(200);
-  await shot(page, '#orgChartModuleWrap, #orgChartSection, body', '03-tu-bam-qua-tab-so-do-chi-co-phong-ban.png');
+  await shot(page, '#orgChartSection', '03-tu-bam-qua-tab-so-do-chi-co-phong-ban.png');
 
   const diagramSvgText = await page.evaluate(() => document.getElementById('orgChartDiagramContainer').innerHTML.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ''));
   const hasFlat = (name) => diagramSvgText.includes(name.replace(/\s+/g, ''));
