@@ -1174,13 +1174,14 @@ const NGHIEP_VU_DOCS = {
     icon: '🌳', title: 'Cơ Cấu Tổ Chức', badge: 'Nhân Sự',
     desc: 'Sơ đồ tổ chức theo từng phiên bản — tab "🌳 Sơ Đồ Tổ Chức" xem/sửa dạng cây thụt lề (đủ cả Vị Trí), tab "🖼️ Sơ Đồ Trực Quan" tự vẽ sơ đồ khối CHỈ tới cấp Phòng Ban, xem trực tiếp và tải về PNG/SVG — mỗi phiên bản mới LUÔN sao chép từ phiên bản đang áp dụng rồi sửa tiếp, "Áp Dụng" có hiệu lực ngay không qua ai duyệt lần 2.',
     flow: { ariaLabel: 'Quy trình Cơ Cấu Tổ Chức', chain: [
-      { label: '+ Tạo Bản Nháp Mới', sub: 'Luôn clone từ bản đang áp dụng, không có "tạo bản trắng"' },
+      { label: '+ Tạo Bản Nháp Mới', sub: 'Clone từ bản đang áp dụng (hoặc ✨ Tạo Bản Mới (Trống) để làm lại từ đầu)' },
       { label: 'Sửa cây (bản Nháp)', sub: 'Thêm/sửa/xoá vị trí, gắn phòng ban' },
       { label: 'Áp Dụng', sub: 'Có hiệu lực NGAY, không qua ai duyệt lần 2', kind: 'approved' },
     ] },
     steps: [
       { text: 'Lần đầu chưa có sơ đồ nào: vào <b>💼 Nhân Sự → 🌳 Cơ Cấu Tổ Chức</b> (sidebar) → bấm <b>"Khởi Tạo"</b> ở khung "🌱 Khởi Tạo Cơ Cấu Tổ Chức".' },
-      { text: 'Sửa tiếp: bấm <b>"+ Tạo Bản Nháp Mới"</b> (luôn sao chép từ bản đang áp dụng) → sửa cây ngay trên tab "🌳 Sơ Đồ Tổ Chức" (thêm/sửa/xoá vị trí, gắn phòng ban).' },
+      { text: 'Sửa tiếp: bấm <b>"+ Tạo Bản Nháp Mới"</b> (sao chép từ bản đang áp dụng) → sửa cây ngay trên tab "🌳 Sơ Đồ Tổ Chức" (thêm/sửa/xoá vị trí, gắn phòng ban).' },
+      { text: '(11/2026) Muốn làm lại từ đầu, KHÔNG kế thừa dữ liệu bản nào cả: bấm <b>"✨ Tạo Bản Mới (Trống)"</b> (cạnh "+ Tạo Bản Nháp Mới") → đặt tên bản mới → hệ thống tạo 1 bản Nháp CHỈ có đúng gốc "Công Ty", tự thêm Phòng Ban/Vị Trí lại từ đầu. Các bản/phiên bản khác (đang áp dụng, Nháp cũ, Lưu trữ) giữ nguyên, không bị ảnh hưởng — dùng "🗑️ Xoá Bản Nháp Này"/"🗑️ Xoá Tất Cả Bản Nháp" để dọn các bản Nháp không cần nữa.' },
       { text: 'Trước khi áp dụng, có thể bấm "🔍 Kiểm Tra Hợp Lệ" (tuỳ chọn, chỉ cảnh báo lỗi) hoặc "🔀 So Sánh Với Bản Đang Áp Dụng" để đối chiếu.' },
       { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2. Sau khi Áp Dụng xong, hệ thống TỰ chuyển sang tab "🖼️ Sơ Đồ Trực Quan" để xem ngay sơ đồ khối cấp Phòng Ban vừa cập nhật — bấm <b>"🖼️ Tải Ảnh (PNG)"</b> hoặc <b>"⬇️ Tải SVG (Vector)"</b> để tải về.' },
       { text: 'Chỉ vừa đổi phòng ban/chức danh 1-2 người mà chưa muốn áp dụng cả phiên bản mới: bấm riêng "🔄 Đồng Bộ Quản Lý Trực Tiếp" để cập nhật ngay field này.' },
