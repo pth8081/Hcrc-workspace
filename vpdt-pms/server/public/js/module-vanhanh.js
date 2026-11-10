@@ -233,7 +233,11 @@ function setVanHanhShelfSubTab(tab) {
     // vì 2 tab đó CÓ form ghi.
     ['RECON', 'vanHanhShelfReconWrap', 'btnVhShelfSubRecon', () => true],
     // "📑 Báo Cáo" (MỚI, 11/2026) — cùng điều kiện mở như RECON (chỉ xem, mọi người có quyền vào tab).
-    ['REPORT', 'vanHanhShelfReportWrap', 'btnVhShelfSubReport', () => true]
+    ['REPORT', 'vanHanhShelfReportWrap', 'btnVhShelfSubReport', () => true],
+    // "💲 Kiểm Tra Giá" (MỚI, 11/2026, theo yêu cầu người dùng) — CÙNG quyền với "📷 Ghi Nhận"
+    // (shelfRecordCreate/admin, canCreateShelfRecordClient) vì đây cũng là thao tác tra cứu hằng ngày của
+    // nhân viên quét hàng, không phải hành động quản lý như LOCATIONS/THRESHOLD.
+    ['PRICECHECK', 'vanHanhShelfPriceCheckWrap', 'btnVhShelfSubPriceCheck', canCreateShelfRecordClient]
   ];
   const found = tabs.find(([key]) => key === tab);
   const stillAllowed = found && found[3](currentUser);
@@ -280,6 +284,8 @@ function setVanHanhShelfSubTab(tab) {
     renderShelfReconExtraRecipientsSection();
   } else if (tab === 'REPORT') {
     loadShelfReportTab();
+  } else if (tab === 'PRICECHECK') {
+    resetPriceCheck();
   }
 }
 
@@ -1541,7 +1547,20 @@ if (!window.__shelfOfflineOnlineListenerAdded) {
 let shelfBarcodeStream = null;
 let shelfBarcodeRafId = null;
 let shelfBarcodeZxingReader = null;
+// shelfBarcodeModalMode (MỚI, 11/2026, phục vụ "💲 Kiểm Tra Giá") — modal quét camera dùng CHUNG cho cả
+// "📷 Ghi Nhận" (mặc định, điền #srSku + applyShelfBarcodeMatch()) lẫn Kiểm Tra Giá (điền #pcMaHang +
+// submitPriceCheck() luôn) — CHỈ đổi NHÁNH xử lý ở onShelfBarcodeDecoded() theo biến này, giữ NGUYÊN
+// 100% luồng/thứ tự xử lý cũ của 'RECORD' (không đụng tới hành vi Ghi Nhận đang hoạt động ổn định).
+let shelfBarcodeModalMode = 'RECORD';
 async function openShelfBarcodeModal() {
+  shelfBarcodeModalMode = 'RECORD';
+  return openShelfBarcodeModalCore();
+}
+function openShelfBarcodeModalForPriceCheck() {
+  shelfBarcodeModalMode = 'PRICECHECK';
+  return openShelfBarcodeModalCore();
+}
+async function openShelfBarcodeModalCore() {
   document.getElementById('shelfBarcodeModal').classList.remove('hidden');
   const statusEl = document.getElementById('shelfBarcodeStatus');
   statusEl.textContent = 'Đang mở camera...';
@@ -1586,6 +1605,12 @@ function closeShelfBarcodeModal() {
   if (shelfBarcodeStream) { shelfBarcodeStream.getTracks().forEach(t => t.stop()); shelfBarcodeStream = null; }
 }
 function onShelfBarcodeDecoded(text) {
+  if (shelfBarcodeModalMode === 'PRICECHECK') {
+    closeShelfBarcodeModal();
+    document.getElementById('pcMaHang').value = text;
+    submitPriceCheck();
+    return;
+  }
   document.getElementById('srSku').value = text;
   applyShelfBarcodeMatch(text);
   closeShelfBarcodeModal();
@@ -1625,6 +1650,107 @@ function runShelfBarcodeZxingLoop(video, statusEl) {
   } catch (err) {
     statusEl.textContent = `⛔ Không khởi tạo được bộ quét (${err.message}) — vui lòng nhập tay Mã SKU.`;
   }
+}
+
+// ===== "💲 Kiểm Tra Giá" (MỚI, 11/2026, theo yêu cầu người dùng: "siêu thị có thể kt nhanh giá của mặt
+// hàng... đối tác gửi api check giá... chỉ hiện giá và ấn quét lại hoặc hủy nhé ko có lưu bất kỳ giá
+// nào") — tra giá TRỰC TIẾP qua API đối tác (routes/shelfStock.js POST /price-check) mỗi lần quét/gõ.
+// TUYỆT ĐỐI KHÔNG LƯU kết quả vào bất kỳ đâu (không AppData/DB/localStorage/biến toàn cục giữ lại qua
+// lượt sau) — biến duy nhất giữ kết quả là #pcResult* trên DOM, bị XOÁ NGAY khi resetPriceCheck()/
+// cancelPriceCheck() (reset form → gọi lại cả 2 cũng xoá luôn nội dung các p#pcResult*).
+// 3 trạng thái loại trừ nhau: FORM (mặc định) → LOADING (đang gọi API) → ERROR hoặc RESULT (đều có nút
+// quay lại FORM) — xem renderPriceCheckState().
+function renderPriceCheckState(state) {
+  const wrapByState = {
+    FORM: 'priceCheckForm',
+    LOADING: 'priceCheckLoadingWrap',
+    ERROR: 'priceCheckErrorWrap',
+    RESULT: 'priceCheckResultWrap'
+  };
+  Object.entries(wrapByState).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', key !== state);
+  });
+}
+// resetPriceCheck() — "🔄 Quét Lại": xoá sạch kết quả cũ (reset form xoá luôn #pcMaHang, quay về trạng
+// thái FORM xoá luôn nội dung #pcResult* khỏi tầm nhìn) rồi focus lại ô nhập để quét/gõ tiếp ngay mã
+// khác — đúng nhịp "quét tới đâu, hỏi giá tới đó" của tài liệu đối tác.
+function resetPriceCheck() {
+  const form = document.getElementById('priceCheckForm');
+  if (form) form.reset();
+  renderPriceCheckState('FORM');
+  const input = document.getElementById('pcMaHang');
+  if (input) input.focus();
+}
+// cancelPriceCheck() — "✖️ Hủy": CÙNG hành vi xoá sạch kết quả với resetPriceCheck() (không giữ lại gì),
+// tách hàm riêng theo đúng yêu cầu người dùng có 2 nút riêng biệt — chỉ khác Ý NGHĨA với người dùng (dừng
+// hẳn vs. tiếp tục quét ngay), không khác gì về xử lý dữ liệu/trạng thái.
+function cancelPriceCheck() {
+  resetPriceCheck();
+}
+// resolveShelfPriceCheckLookupCode(rawInput) — API Giá Bán bản 1.1 (11/2026, đối tác gửi lại) nhận ĐÚNG
+// 1 TRONG 2: maHang (mã nội bộ, 10 chữ số) HOẶC maVach (mã vạch EAN-13 thật in trên sản phẩm) — khác bản
+// 1.0 CHỈ nhận maHang. Thứ tự ưu tiên xác định mã vừa gõ/quét là loại nào:
+//   1. Thử khớp với Tồn Kho Hệ Thống (CÙNG cache dùng ở Ghi Nhận, matchShelfSystemInventoryByMaVach()/
+//      shelfSystemInventoryCache) — khớp được maVach thì CHẮC CHẮN có maHang nội bộ tương ứng, trả
+//      {maHang} (ưu tiên maHang hơn maVach đúng quy tắc đối tác công bố "gửi cả 2 thì ưu tiên maHang").
+//   2. Không khớp (cache rỗng vì chưa từng mở Ghi Nhận, hoặc mặt hàng chưa khai mã vạch trong hệ thống
+//      nguồn) — tự nhận diện qua ĐỊNH DẠNG: đúng 10 CHỮ SỐ (mã nội bộ BRGMART, xem tài liệu) -> gửi làm
+//      maHang; còn lại (mã vạch EAN-13/EAN-8, hoặc bất kỳ chuỗi nào khác) -> gửi làm maVach, để server tự
+//      tra theo mã vạch thật thay vì đoán sai thành mã nội bộ rồi luôn ra lỗi 404.
+function resolveShelfPriceCheckLookupCode(rawInput) {
+  const matched = matchShelfSystemInventoryByMaVach(rawInput);
+  if (matched && matched.maHang) return { maHang: matched.maHang };
+  if (/^\d{10}$/.test(rawInput)) return { maHang: rawInput };
+  return { maVach: rawInput };
+}
+async function submitPriceCheck(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const rawInput = document.getElementById('pcMaHang').value.trim();
+  if (!rawInput) return;
+  const lookup = resolveShelfPriceCheckLookupCode(rawInput);
+  renderPriceCheckState('LOADING');
+  try {
+    const res = await fetch('/api/shelf-stock/price-check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lookup)
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errEl = document.getElementById('priceCheckErrorText');
+      if (errEl) errEl.textContent = body.error || 'Không tra được giá, vui lòng thử lại';
+      renderPriceCheckState('ERROR');
+      return;
+    }
+    renderPriceCheckResult(body);
+    renderPriceCheckState('RESULT');
+  } catch (err) {
+    const errEl = document.getElementById('priceCheckErrorText');
+    if (errEl) errEl.textContent = '⛔ Không thể kết nối tới máy chủ để tra giá';
+    renderPriceCheckState('ERROR');
+  }
+}
+function renderPriceCheckResult(data) {
+  document.getElementById('pcResultTenHang').textContent = data.tenHang || '(Chưa có tên hàng)';
+  const idParts = [`Mã Hàng: ${data.maHang || ''}`];
+  if (data.maVach) idParts.push(`Mã Vạch: ${data.maVach}`);
+  document.getElementById('pcResultMaHang').textContent = idParts.join(' · ');
+  const coKhuyenMai = !!data.coKhuyenMai && typeof data.giaKhuyenMai === 'number';
+  const giaApDung = coKhuyenMai ? data.giaKhuyenMai : data.giaThuong;
+  document.getElementById('pcResultGiaApDung').textContent = typeof giaApDung === 'number' ? `${giaApDung.toLocaleString('vi-VN')} VNĐ` : '—';
+  const strikeEl = document.getElementById('pcResultGiaThuongStrike');
+  const badgeEl = document.getElementById('pcResultKhuyenMaiBadge');
+  if (coKhuyenMai && typeof data.giaThuong === 'number') {
+    strikeEl.textContent = `${data.giaThuong.toLocaleString('vi-VN')} VNĐ`;
+    strikeEl.classList.remove('hidden');
+    badgeEl.classList.remove('hidden');
+  } else {
+    strikeEl.classList.add('hidden');
+    badgeEl.classList.add('hidden');
+  }
+  const capNhatEl = document.getElementById('pcResultCapNhat');
+  capNhatEl.textContent = data.capNhatLuc ? `Cập nhật giá lúc: ${new Date(data.capNhatLuc).toLocaleString('vi-VN')}` : '';
 }
 
 // ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026), THIẾT KẾ LẠI 11/2026 (xem khối

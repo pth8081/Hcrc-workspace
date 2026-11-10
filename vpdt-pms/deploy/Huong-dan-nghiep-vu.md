@@ -3511,6 +3511,36 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   dữ liệu tồn kho hệ thống lấy lần gần nhất lúc còn mạng được lưu tạm trên
   máy — mất mạng vẫn xem được (có dòng "🔌 Offline — cập nhật lúc..." báo rõ
   không phải số mới nhất), không phải chờ có mạng mới dùng được 2 màn này.
+- **"💲 Kiểm Tra Giá" (sub-tab thứ 6, 11/2026, theo yêu cầu người dùng "siêu
+  thị có thể kt nhanh giá của mặt hàng")**: gõ tay hoặc bấm "📷 Quét Mã" quét
+  Mã Hàng nội bộ HOẶC Mã Vạch (EAN-13) của 1 mặt hàng → bấm "💲 Kiểm Tra Giá"
+  → gọi TRỰC TIẾP API "Giá bán theo mã hàng" đối tác BRGMART (bản 1.1, CÙNG
+  đối tác/CÙNG Base URL/X-API-Key với API Tồn Kho đã cấu hình sẵn ở "🔌 Cấu
+  Hình API Đối Tác" — **không cần cấu hình thêm gì ở hệ thống mình cả**, vì
+  quyền gọi API này được BRGMART bật sẵn phía họ ngay trên CÙNG API Key đang
+  dùng — nếu gọi bị lỗi 403 "chưa được cấp quyền gọi báo cáo này" thì liên hệ
+  IT BRGMART xác nhận lại, không phải lỗi cấu hình ở hệ thống mình) → hiện
+  ngay Tên Hàng + Giá Áp Dụng (tự chọn đúng giá khuyến mại nếu
+  `coKhuyenMai=true`, kèm giá thường gạch ngang để đối chiếu) + thời điểm đối
+  tác đồng bộ giá gần nhất. Sau khi xem xong, bấm "🔄 Quét Lại" để kiểm tiếp
+  mã khác ngay (mở lại camera), hoặc "✖️ Hủy" để quay về form trống.
+  - **KHÁC HẲN "⏰ Hạn Sử Dụng"/"📊 Đối Chiếu"**: 2 tab kia đọc snapshot tồn
+    kho đã đồng bộ sẵn qua job nền (mỗi 20 phút) — "Kiểm Tra Giá" gọi API
+    đối tác TRỰC TIẾP mỗi lần bấm nút (tra giá tức thời theo đúng nhịp "quét
+    tới đâu, hỏi giá tới đó" của API đối tác), không qua bất kỳ job đồng bộ
+    nào.
+  - **TUYỆT ĐỐI KHÔNG LƯU kết quả tra giá vào bất kỳ đâu** trong hệ thống —
+    không AppData, không DB, không log có giá, không cache phía trình duyệt
+    — chỉ hiển thị tạm trên màn hình, rời tab/đóng trình duyệt là mất, đúng
+    yêu cầu gốc của người dùng.
+  - **Quyền**: dùng chung `shelfRecordCreate` (CÙNG quyền "📷 Ghi Nhận") —
+    không có checkbox phân quyền riêng, vì đây cũng là thao tác tra cứu hằng
+    ngày của nhân viên quét hàng, không phải hành động quản lý.
+  - **Mã Điểm** vẫn do server tự tra theo đúng siêu thị người đăng nhập
+    (`storeExternalCodes`, cấu hình ở "🏬 Quản Lý Danh Mục Siêu Thị" — CÙNG
+    cấu hình Mã Điểm đã dùng cho API Tồn Kho, không cần khai thêm) — không
+    bao giờ nhận mã siêu thị từ client, chặn store-spoofing cùng nguyên tắc
+    mọi route khác của Kiểm Soát Hàng Hóa.
 
 ### 4.5. Nhân Sự
 
