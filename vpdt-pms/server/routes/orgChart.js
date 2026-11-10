@@ -63,6 +63,14 @@ function canManageKpiFlow(perms) {
 function canDeleteArchived(perms) {
   return !!(perms?.orgChartDeleteArchived);
 }
+// Quyền RIÊNG (11/2026, theo yêu cầu người dùng: "tự động remove tất cả người ra khỏi vị trí này luôn
+// được không?") — "Buộc Gỡ & Xóa" gỡ thẳng chức vụ CHÍNH THỨC (employeeProfiles[].positionKey) của NHIỀU
+// nhân viên cùng lúc rồi mới xoá node — nặng hơn hẳn xoá node thường (orgChartManage, chỉ chặn khi còn
+// người giữ, không tự gỡ ai) nên KHÔNG gộp chung, cùng tinh thần orgChartDeleteArchived ở trên: mặc định
+// KHÔNG ai có, admin phải tự gán tay.
+function canForceUnassignDelete(perms) {
+  return !!(perms?.orgChartForceUnassignDelete);
+}
 function requireView(req, res) {
   if (!canView(req.freshUser.perms)) { res.status(403).json({ error: 'Bạn không có quyền xem Cơ Cấu Tổ Chức' }); return false; }
   return true;
@@ -77,6 +85,10 @@ function requireManageKpiFlow(req, res) {
 }
 function requireDeleteArchived(req, res) {
   if (!canDeleteArchived(req.freshUser.perms)) { res.status(403).json({ error: 'Chỉ người có quyền Xoá Vĩnh Viễn Phiên Bản Lưu Trữ mới thao tác được' }); return false; }
+  return true;
+}
+function requireForceUnassignDelete(req, res) {
+  if (!canForceUnassignDelete(req.freshUser.perms)) { res.status(403).json({ error: 'Chỉ người có quyền "Buộc Gỡ & Xoá Vị Trí" mới thao tác được' }); return false; }
   return true;
 }
 function stripHeavy(v) {
@@ -251,6 +263,55 @@ router.delete('/versions/:id/nodes/:nodeId', async (req, res) => {
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, 'DELETE /api/org-chart/versions/:id/nodes/:nodeId', 'Không thể xoá node');
+  }
+});
+
+// POST /api/org-chart/versions/:id/nodes/:nodeId/force-delete — "🔧 Buộc Gỡ & Xoá" (11/2026, theo yêu
+// cầu người dùng: xoá 1 Vị Trí/nhánh dù còn nhân viên đang giữ theo Hồ Sơ Nhân Sự — "tự động remove tất
+// cả người ra khỏi vị trí này"). Quyền RIÊNG orgChartForceUnassignDelete (mặc định KHÔNG ai có).
+// 2 BƯỚC TUẦN TỰ, 2 khoá riêng (cùng mẫu POST /versions/:id/apply ở dưới — orgChartVersions + users):
+//   1. Khoá "employeeProfiles" — gỡ chức vụ CHÍNH THỨC của mọi hồ sơ đang giữ vị trí trong nhánh cần
+//      xoá (planForceDeleteNodeCascade() tự CHẶN CỨNG, KHÔNG mutate gì, nếu có occupant chỉ khớp qua
+//      tài khoản VPDT — users.jobTitle/dept — không có hồ sơ để gỡ).
+//   2. Khoá "orgChartVersions" riêng — gọi lại ĐÚNG deleteNodeCascade() như xoá node thường (giờ chắc
+//      chắn thành công vì bước 1 đã gỡ hết occupant có thể gỡ).
+// Race hiếm (ai đó gán lại occupant mới giữa 2 bước) sẽ khiến bước 2 vẫn throw dù bước 1 đã commit — báo
+// rõ cho admin biết đã gỡ chức vụ nhưng CHƯA xoá được node, không âm thầm nuốt lỗi.
+router.post('/versions/:id/nodes/:nodeId/force-delete', async (req, res) => {
+  if (!requireForceUnassignDelete(req, res)) return;
+  const versionId = Number(req.params.id);
+  const nodeId = Number(req.params.nodeId);
+  let clearedProfiles = [];
+  try {
+    const users = (await getAppDataValue('users')) || [];
+    const versionSnapshot = orgChart.requireVersion((await getAppDataValue('orgChartVersions')) || [], versionId);
+    await withLockedAppDataValue('employeeProfiles', (profiles) => {
+      clearedProfiles = orgChart.planForceDeleteNodeCascade(versionSnapshot, nodeId, users, profiles, req.freshUser.username, req.freshUser.name);
+      return profiles;
+    });
+    const freshProfiles = (await getAppDataValue('employeeProfiles')) || [];
+    let deletedIds = [];
+    await withLockedAppDataValue('orgChartVersions', (list) => {
+      const version = orgChart.requireVersion(list, versionId);
+      deletedIds = orgChart.deleteNodeCascade(version, nodeId, users, freshProfiles);
+      return list;
+    });
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_FORCE_DELETE_NODE',
+      targetObject: `orgChartVersions#${versionId}/nodes#${nodeId}`,
+      description: `Buộc Gỡ & Xoá node Cơ Cấu Tổ Chức [${nodeId}] — gỡ chức vụ ${clearedProfiles.length} hồ sơ (${clearedProfiles.map(c => `${c.name} khỏi "${c.positionLabel}"`).join('; ') || 'không ai'}), xoá ${deletedIds.length} node`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Buộc Gỡ & Xoá Cơ Cấu Tổ Chức):', e.message));
+    res.json({ ok: true, deletedNodeIds: deletedIds, clearedProfiles });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      if (clearedProfiles.length) {
+        return res.status(err.status).json({ error: `Đã gỡ chức vụ của ${clearedProfiles.length} hồ sơ nhưng xoá node thất bại (${err.message}) — vui lòng tải lại trang và thử xoá lại.`, clearedProfiles });
+      }
+      return res.status(err.status).json({ error: err.message });
+    }
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/nodes/:nodeId/force-delete', 'Không thể buộc gỡ & xoá');
   }
 });
 

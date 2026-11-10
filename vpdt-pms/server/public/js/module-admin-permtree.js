@@ -266,6 +266,7 @@ function collectPermsFromForm() {
     orgChartManage: document.getElementById('pOrgChartManage').checked,
     kpiFlowConfigManage: document.getElementById('pKpiFlowConfigManage').checked,
     orgChartDeleteArchived: document.getElementById('pOrgChartDeleteArchived').checked,
+    orgChartForceUnassignDelete: document.getElementById('pOrgChartForceUnassignDelete').checked,
     hrOnboardingManage: document.getElementById('pHrOnboardingManage').checked,
     hrOffboardingManage: document.getElementById('pHrOffboardingManage').checked,
     hrTaskTemplateManage: document.getElementById('pHrTaskTemplateManage').checked,
@@ -418,6 +419,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOrgChartManage').checked = !!perms.orgChartManage;
   document.getElementById('pKpiFlowConfigManage').checked = !!perms.kpiFlowConfigManage;
   document.getElementById('pOrgChartDeleteArchived').checked = !!perms.orgChartDeleteArchived;
+  document.getElementById('pOrgChartForceUnassignDelete').checked = !!perms.orgChartForceUnassignDelete;
   document.getElementById('pHrOnboardingManage').checked = !!perms.hrOnboardingManage;
   document.getElementById('pHrOffboardingManage').checked = !!perms.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!perms.hrTaskTemplateManage;

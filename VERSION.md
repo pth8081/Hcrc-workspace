@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**29.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.87 (2026-11): Cơ Cấu Tổ Chức — "🔧 Buộc Gỡ & Xoá Vị Trí"
+
+Yêu cầu người dùng: đổi tên 1 Vị Trí rồi vẫn không xoá được vì hệ thống báo còn người giữ ("này mà tôi
+đổi tên vị trí rồi nó vẫn gắn vào ngoài này nhỉ") — gốc rễ là `positionKey` (mã định danh vị trí) không
+đổi theo việc đổi TÊN hiển thị. Người dùng muốn: "tự động remove tất cả người ra khỏi vị trí này luôn
+được không?" → xác nhận làm nút riêng.
+
+**Đã làm**:
+1. `lib/employeeProfile.js`: thêm `clearPositionAssignmentForce()` — gỡ chức vụ (positionKey/jobTitle/
+   dept/positionLabel/posType/jobGrade) của 1 Hồ Sơ Nhân Sự, ghi 1 dòng `positionHistory`. Giữ đúng
+   quyết định thiết kế cũ (11/2026): KHÔNG đụng tới collection `users` (tài khoản đăng nhập) — tránh lặp
+   lại sự cố cũ ("anh.dp" bị đè Chức Danh tài khoản ngoài ý muốn).
+2. `lib/orgChart.js`: tách `resolvePositionOccupants()` thành `resolvePositionOccupantsDetailed()` (phân
+   loại occupant thành `accountMatches` — khớp qua tài khoản đăng nhập — và `profileMatches` — khớp qua
+   Hồ Sơ Nhân Sự); thêm `planForceDeleteNodeCascade()` — dry-run cả nhánh (node + con), CHẶN CỨNG toàn bộ
+   (không mutate gì) nếu còn BẤT KỲ `accountMatches`, chỉ tự gỡ được occupant thuộc `profileMatches`.
+3. `routes/orgChart.js`: quyền RIÊNG `orgChartForceUnassignDelete` (mặc định KHÔNG ai có) + route mới
+   `POST /versions/:id/nodes/:nodeId/force-delete` — 2 khoá tuần tự (gỡ hồ sơ trước, xoá node sau, cùng
+   mẫu 2-khoá đã dùng ở `POST /versions/:id/apply`), ghi Nhật Ký Hệ Thống (`ORGCHART_FORCE_DELETE_NODE`).
+4. `public/js/module-orgchart.js`: khi bấm "🗑️ Xoá" bị chặn đúng lỗi "còn người giữ vị trí" VÀ có quyền
+   mới, hỏi thêm xác nhận "Buộc Gỡ & Xoá" — gọi route mới, báo rõ đã gỡ chức vụ của ai khỏi vị trí nào.
+5. Checkbox quyền mới ở Hệ Thống → Phân Quyền (`systemSection.html` + `module-admin-permtree.js`) + nhãn
+   tiếng Việt duy nhất trong Ma Trận Phân Quyền (`module-admin-permgroups.js`).
+
+**Giới hạn quan trọng** (nêu rõ cho người dùng): chỉ tự gỡ được chức vụ gán qua Hồ Sơ Nhân Sự. Nếu còn
+TÀI KHOẢN ĐĂNG NHẬP có Chức Danh/Phòng Ban khớp đúng vị trí (không qua Hồ Sơ Nhân Sự), vẫn bị chặn cứng —
+báo rõ đúng tài khoản nào, phải tự đổi Chức Danh/Phòng Ban của tài khoản đó ở Quản Trị Người Dùng trước.
+Hành động KHÔNG hoàn tác được.
+
+**Test**: `tests/test-orgchart-force-unassign-delete.js` (13/13 pass — cả logic thuần
+`planForceDeleteNodeCascade()`/`clearPositionAssignmentForce()` và HTTP route thật qua
+`routes/orgChart.js`). Chạy lại toàn bộ test Cơ Cấu Tổ Chức + Hồ Sơ Nhân Sự + Ma Trận Phân Quyền hiện có
+— không regression (1 fail ở `test-collapse-permform.js` xác nhận lỗi CŨ, có từ trước khi bắt đầu đợt
+này, không liên quan). CSP grep sạch trên mọi file đã sửa.
 
 ## v29.86 (2026-11): Kiểm Soát Hàng Hóa — thêm sub-tab "📑 Báo Cáo" (siêu thị tự báo cáo + tổng hợp quản lý)
 

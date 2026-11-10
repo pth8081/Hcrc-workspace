@@ -975,6 +975,35 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   return { jobTitle, dept, posType };
 }
 
+// clearPositionAssignmentForce() (11/2026, theo yêu cầu người dùng: "buộc gỡ & xóa" 1 Vị Trí trong Cơ Cấu
+// Tổ Chức dù còn nhân viên đang giữ theo Hồ Sơ Nhân Sự) — NGƯỢC LẠI applyPositionAssignment() ở trên:
+// gỡ hẳn chức vụ CHÍNH THỨC của 1 hồ sơ (về rỗng), ghi 1 dòng positionHistory nêu rõ lý do (xoá vị trí),
+// ai làm, lúc nào — để vẫn tra soát lại được sau này (không khác gì 1 lượt đổi chức vụ bình thường, chỉ
+// là "đổi sang rỗng"). KHÔNG đụng gì tới collection "users" (tài khoản VPDT liên kết, nếu có) — cùng
+// ranh giới đã xác nhận với người dùng ở lib/hrProfilePositionAssign.js (Hồ Sơ Nhân Sự và tài khoản/Phân
+// Quyền là 2 nguồn ĐỘC LẬP từ 11/2026, không tự đồng bộ 1 chiều nữa) — nếu occupant bị khớp qua
+// users.jobTitle/dept (không phải qua positionKey của hồ sơ) thì hàm này KHÔNG giải quyết được, caller
+// (lib/orgChart.js::forceDeleteNodeCascade()) PHẢI tự chặn lại và báo rõ cho admin tự xử lý ở Quản Trị
+// Người Dùng — không bao giờ gọi hàm này để "cố" gỡ occupant dạng đó.
+function clearPositionAssignmentForce(profile, actorUsername, actorName, reason) {
+  if (!profile.positionKey) return false; // không có chức vụ chính thức nào để gỡ — vô hại, không throw
+  const nowStr = nowVN();
+  const entry = {
+    id: randomUUID(),
+    effectiveDate: todayISO(),
+    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel, oldPosType: profile.posType, oldJobGrade: profile.jobGrade,
+    newPositionKey: null, newJobTitle: null, newDept: null, newPositionLabel: null, newPosType: null, newJobGrade: null,
+    changedBy: actorUsername, changedByName: actorName || actorUsername,
+    note: reason ? String(reason).trim().slice(0, 500) : null,
+    fileUrl: null, fileName: null,
+    createdAt: nowStr
+  };
+  profile.positionHistory = [...(profile.positionHistory || []), entry];
+  profile.positionKey = null; profile.jobTitle = null; profile.dept = null; profile.positionLabel = null; profile.posType = null; profile.jobGrade = null;
+  profile.updatedAt = nowStr; profile.updatedBy = actorUsername;
+  return true;
+}
+
 // Tra tên hiển thị cho 1 hồ sơ — employeeProfiles KHÔNG lưu fullName (chỉ giữ employeeCode + dữ liệu cá
 // nhân nhạy cảm + chức vụ, xem đầu file), tra theo username đã liên kết (DB.users) hoặc theo processId
 // (DB.hrProcesses, snapshot lúc tạo Onboarding) — mirror ĐÚNG hrpfIdentitySnapshot() phía client
@@ -1986,6 +2015,6 @@ module.exports = {
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
-  applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
+  applyProfileEdit, applyPositionAssignment, clearPositionAssignmentForce, assertValidManualStatusTransition, resolveProfileDisplayName,
   computeHrReportSummary, computeTenureYears
 };

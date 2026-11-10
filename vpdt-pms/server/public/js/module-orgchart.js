@@ -1095,9 +1095,35 @@ async function deleteOrgChartNodeClick(nodeId) {
   if (!confirm('Xoá node này (và toàn bộ nhánh con nếu có)?')) return;
   try {
     await orgChartApiCall('DELETE', `/api/org-chart/versions/${_ocCurrentVersion.id}/nodes/${nodeId}`);
+  } catch (err) {
+    // "🔧 Buộc Gỡ & Xoá" (11/2026, theo yêu cầu người dùng: "tự động remove tất cả người ra khỏi
+    // vị trí này") — chỉ đề xuất khi lỗi ĐÚNG do còn người giữ vị trí (không che các lỗi khác) VÀ
+    // người dùng có quyền riêng orgChartForceUnassignDelete (xem routes/orgChart.js::force-delete).
+    const isBlockedByOccupant = /vẫn còn nhân viên đang giữ vị trí/.test(err.message || '');
+    if (isBlockedByOccupant && currentUser.perms?.orgChartForceUnassignDelete) {
+      const wantForce = confirm(`⛔ ${err.message}\n\nBạn có quyền "Buộc Gỡ & Xoá" — tự động gỡ chức vụ Hồ Sơ Nhân Sự của người đang giữ (nếu có) rồi xoá node này?\n\nLƯU Ý: chỉ gỡ được chức vụ gán qua Hồ Sơ Nhân Sự — nếu còn tài khoản đăng nhập khớp đúng Chức Danh/Phòng Ban thì vẫn bị chặn, hành động KHÔNG hoàn tác được.`);
+      if (!wantForce) return;
+      return forceDeleteOrgChartNodeClick(nodeId);
+    }
+    return alert(`⛔ ${err.message}`);
+  }
+  await loadOrgChartCurrentVersion(_ocCurrentVersion.id);
+  renderOrgChartTree();
+}
+async function forceDeleteOrgChartNodeClick(nodeId) {
+  if (!_ocCurrentVersion) return;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/nodes/${nodeId}/force-delete`);
   } catch (err) { return alert(`⛔ ${err.message}`); }
   await loadOrgChartCurrentVersion(_ocCurrentVersion.id);
   renderOrgChartTree();
+  const cleared = result?.clearedProfiles || [];
+  if (cleared.length) {
+    alert(`✅ Đã xoá node và tự động gỡ chức vụ ${cleared.length} hồ sơ:\n${cleared.map(c => `- ${c.name} khỏi "${c.positionLabel}"`).join('\n')}`);
+  } else {
+    alert('✅ Đã xoá node (không ai đang giữ vị trí nào trong nhánh này qua Hồ Sơ Nhân Sự).');
+  }
 }
 
 // ===== Báo Cáo Định Biên Nhân Sự (10/2026) =====
