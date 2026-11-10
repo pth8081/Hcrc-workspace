@@ -158,6 +158,13 @@ function collectPermsFromForm() {
     docPublish: document.getElementById('pDocPublish').checked,
     docViewPublished: document.getElementById('pDocViewPublished').checked,
     docDownloadPublished: document.getElementById('pDocDownloadPublished').checked,
+    // docAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở
+    // MODULE_CONFIGS.docs.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người tạo/trình không được
+    // tự duyệt/tự xử lý hồ sơ do chính mình tạo" cho ĐÚNG người được admin gán quyền này — cùng khuôn
+    // itPriceAllowSelfApproveWholesale/Retail + operationOrderAllowSelfApproveHO/Store đã có, mở rộng cho
+    // cụm 6 module còn lại dùng chung lib/workflowEngine.js. KHÔNG tự động cấp quyền duyệt — người này
+    // vẫn phải là approver hợp lệ theo cấu hình Nhóm Phê Duyệt hiện có mới tự xử lý được.
+    docAllowSelfApprove: document.getElementById('pDocAllowSelfApprove').checked,
 
     // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem chú thích tại khối
     // 📜 3/📄 4 trong systemSection.html.
@@ -166,6 +173,9 @@ function collectPermsFromForm() {
     // (forceOwnDept, xem lib/createValidation.js), cùng khuôn meetingBook.
     submissionCreate: document.getElementById('pSubCreate').checked,
     submissionDownload: scopeFromForm('pSubDownloadAll', 'pSubDownloadDept'),
+    // submissionAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docAllowSelfApprove ngay trên +
+    // MODULE_CONFIGS.submissions.allowSelfDeciding (lib/workflowEngine.js).
+    submissionAllowSelfApprove: document.getElementById('pSubAllowSelfApprove').checked,
     // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ contractCreate {all,depts},
     // chỉ còn 1 công tắc phẳng pContractCreate — tự khoá đúng phòng ban người tạo hồ sơ (forceOwnDept,
     // xem lib/createValidation.js). RÀ SOÁT KỸ: ảnh hưởng canManageContractPayment() (lib/recordActions.js).
@@ -174,11 +184,18 @@ function collectPermsFromForm() {
     // contractImportSigned — quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tạo hồ sơ APPROVED ngay,
     // bỏ qua quy trình Phê Duyệt). Tách khỏi contractCreate, xem contracts.extraValidate ở lib/createValidation.js.
     contractImportSigned: document.getElementById('pContractImportSigned').checked,
+    // contractAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docAllowSelfApprove phía trên +
+    // MODULE_CONFIGS.contracts.allowSelfDeciding/contractsSignedFile.allowSelfDeciding (lib/workflowEngine.js).
+    // Dùng CHUNG 1 cờ cho cả hồ sơ hợp đồng gốc (tab Phê Duyệt) lẫn Tài liệu ký (tab Quản Lý HĐ).
+    contractAllowSelfApprove: document.getElementById('pContractAllowSelfApprove').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
     paymentConfirm: document.getElementById('pPaymentConfirm').checked,
     vppManage: document.getElementById('pVppManage').checked,
     vppReportView: document.getElementById('pVppReportView').checked,
     vppRegisterCreate: document.getElementById('pVppRegisterCreate').checked,
+    // vppAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docAllowSelfApprove phía trên +
+    // MODULE_CONFIGS.vppRegistrations.allowSelfDeciding (lib/workflowEngine.js).
+    vppAllowSelfApprove: document.getElementById('pVppAllowSelfApprove').checked,
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
     reportEntryCreate: document.getElementById('pReportEntryCreate').checked,
@@ -192,11 +209,19 @@ function collectPermsFromForm() {
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
     carReportView: document.getElementById('pCarReportView').checked,
+    // carAllowSelfApprove (11/2026, chính module gây lỗi "không thể tự xử lý hồ sơ do chính mình tạo"
+    // ban đầu) — xem chú thích đầy đủ ở docAllowSelfApprove phía trên +
+    // MODULE_CONFIGS.carRegs.allowSelfDeciding (lib/workflowEngine.js).
+    carAllowSelfApprove: document.getElementById('pCarAllowSelfApprove').checked,
     // officeView (cột "Xem") ĐÃ BỎ (10/2026, "Việc D" mở rộng) — xem chú thích đầy đủ tại khối
     // 🏢 7. Văn Phòng trong systemSection.html.
     // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
     officeCreate: document.getElementById('pOfficeCreate').checked,
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
+    // officeAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docAllowSelfApprove phía trên +
+    // MODULE_CONFIGS.officeReqs.allowSelfDeciding (lib/workflowEngine.js). Áp dụng chung cho cả 2 phân
+    // hệ Mua Bán/Sửa Chữa.
+    officeAllowSelfApprove: document.getElementById('pOfficeAllowSelfApprove').checked,
     minutesCreate: document.getElementById('pMinutesCreate').checked,
     minutesView: document.getElementById('pMinutesView').checked,
     minutesEdit: document.getElementById('pMinutesEdit').checked,
@@ -457,17 +482,22 @@ function populatePermsForm(permsInput) {
   document.getElementById('pDocPublish').checked = !!perms.docPublish;
   document.getElementById('pDocViewPublished').checked = !!perms.docViewPublished;
   document.getElementById('pDocDownloadPublished').checked = !!perms.docDownloadPublished;
+  // docAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở collectPermsFromForm() phía trên.
+  document.getElementById('pDocAllowSelfApprove').checked = !!perms.docAllowSelfApprove;
 
   document.getElementById('pSubCreate').checked = !!perms.submissionCreate;
   document.getElementById('pSubDownloadAll').checked = !!perms.submissionDownload?.all;
+  document.getElementById('pSubAllowSelfApprove').checked = !!perms.submissionAllowSelfApprove;
   document.getElementById('pContractCreate').checked = !!perms.contractCreate;
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
+  document.getElementById('pContractAllowSelfApprove').checked = !!perms.contractAllowSelfApprove;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pPaymentConfirm').checked = !!perms.paymentConfirm;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
   document.getElementById('pVppReportView').checked = !!perms.vppReportView;
   document.getElementById('pVppRegisterCreate').checked = !!perms.vppRegisterCreate;
+  document.getElementById('pVppAllowSelfApprove').checked = !!perms.vppAllowSelfApprove;
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
@@ -477,9 +507,11 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pCarReportView').checked = !!perms.carReportView;
+  document.getElementById('pCarAllowSelfApprove').checked = !!perms.carAllowSelfApprove;
   // officeCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
   document.getElementById('pOfficeCreate').checked = !!perms.officeCreate;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
+  document.getElementById('pOfficeAllowSelfApprove').checked = !!perms.officeAllowSelfApprove;
 
   populateModuleAccessForm(perms.moduleAccess);
 

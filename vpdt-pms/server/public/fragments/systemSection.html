@@ -2496,6 +2496,14 @@
                 <input type="checkbox" id="pDocDownloadPublished"> ⬇️ Tải tài liệu đã Phát Hành (mọi phòng ban)
               </label>
             </div>
+            <!-- docAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ
+                 tại MODULE_CONFIGS.docs.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người tạo/
+                 trình không được tự duyệt/tự từ chối/tự yêu cầu bổ sung hồ sơ do chính mình tạo" cho ĐÚNG
+                 người được tick quyền này — KHÔNG tự cấp quyền duyệt, người này vẫn phải thật sự là
+                 approver hợp lệ của bước hiện tại. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer border-t pt-2 mt-1">
+              <input type="checkbox" id="pDocAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Tài Liệu Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
@@ -2538,6 +2546,13 @@
               <tbody id="pSubDeptTableBody"></tbody>
             </table>
             </div>
+          </div>
+          <div class="px-3 pb-3">
+            <!-- submissionAllowSelfApprove (11/2026) — xem chú thích đầy đủ tại khối 📂 2. Tài Liệu
+                 (pDocAllowSelfApprove) ngay phía trên, cùng cơ chế MODULE_CONFIGS.submissions.allowSelfDeciding. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pSubAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Bản Trình Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
@@ -2593,6 +2608,12 @@
               <input type="checkbox" id="pContractImportSigned"> 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab "Quản Lý HĐ")
             </label>
             <p class="text-[11px] text-gray-500 italic">Hồ sơ nhập theo cách này được đánh dấu ĐÃ DUYỆT ngay, KHÔNG qua quy trình Phê Duyệt — chỉ cấp cho người thật sự nhập lại hợp đồng đã ký sẵn ngoài hệ thống (HR/kế toán), không cấp mặc định kèm quyền "Tạo hồ sơ hợp đồng".</p>
+            <!-- contractAllowSelfApprove (11/2026) — xem chú thích đầy đủ tại khối 📂 2. Tài Liệu
+                 (pDocAllowSelfApprove) + MODULE_CONFIGS.contracts.allowSelfDeciding (lib/workflowEngine.js).
+                 Dùng CHUNG cho CẢ hồ sơ hợp đồng gốc (tab Phê Duyệt) lẫn Tài liệu ký (tab Quản Lý HĐ). -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer border-t pt-2 mt-1">
+              <input type="checkbox" id="pContractAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Hợp Đồng (kể cả Tài Liệu Ký) Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
@@ -2672,6 +2693,12 @@
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pCarReportView"> 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)
             </label>
+            <!-- carAllowSelfApprove (11/2026) — xem chú thích đầy đủ tại khối 📂 2. Tài Liệu
+                 (pDocAllowSelfApprove) + MODULE_CONFIGS.carRegs.allowSelfDeciding (lib/workflowEngine.js).
+                 Đây chính là module gây lỗi "không thể tự xử lý hồ sơ do chính mình tạo" ban đầu. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer border-t pt-2 mt-1">
+              <input type="checkbox" id="pCarAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đăng Ký Xe Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
@@ -2731,6 +2758,12 @@
                 <tbody id="pOfficeDeptTableBody"></tbody>
               </table>
             </div>
+            <!-- officeAllowSelfApprove (11/2026) — xem chú thích đầy đủ tại khối 📂 2. Tài Liệu
+                 (pDocAllowSelfApprove) + MODULE_CONFIGS.officeReqs.allowSelfDeciding (lib/workflowEngine.js).
+                 Áp dụng chung cho cả 2 phân hệ Mua Bán/Sửa Chữa. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer border-t pt-2 mt-1">
+              <input type="checkbox" id="pOfficeAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Phòng (Mua Bán/Sửa Chữa) Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
@@ -2843,6 +2876,11 @@
                 <input type="checkbox" id="pVppReportView"> 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)
               </label>
             </div>
+            <!-- vppAllowSelfApprove (11/2026) — xem chú thích đầy đủ tại khối 📂 2. Tài Liệu
+                 (pDocAllowSelfApprove) + MODULE_CONFIGS.vppRegistrations.allowSelfDeciding (lib/workflowEngine.js). -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer border-t pt-2 mt-1">
+              <input type="checkbox" id="pVppAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Phòng Phẩm Do Chính Mình Tạo/Trình
+            </label>
           </div>
         </details>
 
