@@ -601,7 +601,15 @@ const MODULE_CONFIGS = {
   docs: {
     dbKey: 'docs',
     resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.deptWorkflows?.[item.dept], appData), item),
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // docAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "công ty không nhiều người,
+    // trưởng phòng tạo và duyệt luôn", xem chú thích đầy đủ ở assertNotSelfDecidingWorkflowItem() phía
+    // dưới + itPriceApprovals/operationOrders — 2 module đã có cơ chế này từ trước, đây là đợt mở rộng
+    // sang 7 module còn lại DÙNG CHUNG engine này): gỡ CHẶN "người tạo/trình không được tự duyệt/tự từ
+    // chối/tự yêu cầu bổ sung hồ sơ của chính mình" cho ĐÚNG người được admin tick quyền này. KHÔNG tự
+    // cấp quyền duyệt: canApproveStep() vẫn phải qua trước đó (người này phải thật sự nằm trong danh
+    // sách approver bước hiện tại theo đúng cấu hình quy trình phòng ban).
+    allowSelfDeciding: (item, user) => !!user?.perms?.docAllowSelfApprove
   },
   submissions: {
     dbKey: 'submissions',
@@ -611,7 +619,9 @@ const MODULE_CONFIGS = {
     // nút "Yêu Cầu Bổ Sung" (REQUEST_CHANGES, đưa về NHÁP để người trình sửa lại toàn bộ nội dung + tệp
     // rồi gửi lại từ bước 1, xem editSubmissionDraft() ở lib/recordActions.js). itPriceApprovals bên
     // dưới vẫn giữ nguyên supportsRequestInfo, không đụng tới.
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // submissionAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docs.allowSelfDeciding ngay trên.
+    allowSelfDeciding: (item, user) => !!user?.perms?.submissionAllowSelfApprove
   },
   carRegs: {
     dbKey: 'carRegs',
@@ -620,7 +630,11 @@ const MODULE_CONFIGS = {
     // thật (xem xử lý riêng ở applyWorkflowAction() bên dưới), server tự tra display name từ user thay
     // vì tin bất kỳ text nào client gửi kèm.
     extraFields: ['assignedVehicleType', 'assignedPlate', 'assignedTaxiCompany'],
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // carAllowSelfApprove (11/2026, ĐÚNG module người dùng phản ánh qua ảnh chụp lỗi "Bạn không thể tự
+    // xử lý... hồ sơ do chính mình tạo hoặc trình" — trưởng phòng tự đăng ký xe VÀ tự duyệt luôn cho
+    // phòng mình) — xem chú thích đầy đủ ở docs.allowSelfDeciding ngay trên.
+    allowSelfDeciding: (item, user) => !!user?.perms?.carAllowSelfApprove
   },
   officeReqs: {
     dbKey: 'officeReqs',
@@ -629,12 +643,18 @@ const MODULE_CONFIGS = {
       const base = flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData);
       return appendExtraApprovalLayers(insertOfficeFixTechStep(base, item), item);
     },
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // officeAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docs.allowSelfDeciding ngay trên. Dùng
+    // CHUNG cho cả 2 phân hệ Mua Bán/Sửa Chữa (không tách theo subType — khác itPriceApprovals/
+    // operationOrders vốn tách vì 2 bộ phận khác nhau phụ trách, Văn Phòng không có đặc thù đó).
+    allowSelfDeciding: (item, user) => !!user?.perms?.officeAllowSelfApprove
   },
   vppRegistrations: {
     dbKey: 'vppRegistrations',
     resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData), item),
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // vppAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docs.allowSelfDeciding ngay trên.
+    allowSelfDeciding: (item, user) => !!user?.perms?.vppAllowSelfApprove
   },
   contracts: {
     dbKey: 'contracts',
@@ -648,7 +668,13 @@ const MODULE_CONFIGS = {
     // vì "Bổ sung" dùng CHUNG trạng thái DRAFT với 1 bản nháp mới chưa từng gửi — không phân biệt được.
     // requestChangesStatus (mặc định 'DRAFT' cho MỌI module khác, xem applyWorkflowAction() bên dưới)
     // CHỈ contracts đổi thành trạng thái riêng NEEDS_SUPPLEMENT để client lọc/hiển thị đúng.
-    requestChangesStatus: 'NEEDS_SUPPLEMENT'
+    requestChangesStatus: 'NEEDS_SUPPLEMENT',
+    // contractAllowSelfApprove (11/2026) — xem chú thích đầy đủ ở docs.allowSelfDeciding ngay trên. Dùng
+    // CHUNG cho CẢ 2 moduleKey "contracts" (duyệt hồ sơ hợp đồng gốc) lẫn "contractsSignedFile" (duyệt
+    // Tài liệu ký, xem entry ngay dưới) — cùng 1 quyền, không tách riêng (khác itPriceApprovals/
+    // operationOrders vốn tách vì 2 bộ phận NGHIỆP VỤ khác nhau phụ trách Bán Buôn/Bán Lẻ hay Siêu Thị/
+    // HO; ở đây hợp đồng gốc và tài liệu ký thường cùng 1 nhóm nghiệp vụ xử lý).
+    allowSelfDeciding: (item, user) => !!user?.perms?.contractAllowSelfApprove
   },
   contractsSignedFile: {
     dbKey: 'contracts',
@@ -669,7 +695,11 @@ const MODULE_CONFIGS = {
     // custodianDept khác) vẫn tự duyệt được tài liệu do chính mình vừa tải, nếu họ cũng nằm trong danh
     // sách approver phòng ban đó. extraSelfDecidingField bổ sung field THỨ 2 cần chặn (CÙNG VỚI creator,
     // không thay thế) — xem assertNotSelfDecidingWorkflowItem() bên dưới.
-    extraSelfDecidingField: 'signedUploadedBy'
+    extraSelfDecidingField: 'signedUploadedBy',
+    // allowSelfDeciding đọc theo ĐÚNG moduleKey đang xử lý ('contractsSignedFile' ở luồng này, không
+    // phải 'contracts') — phải khai lại ở đây, KHÔNG tự kế thừa từ entry 'contracts' phía trên. Dùng
+    // chung quyền contractAllowSelfApprove (xem chú thích đầy đủ ở entry 'contracts').
+    allowSelfDeciding: (item, user) => !!user?.perms?.contractAllowSelfApprove
   },
   // "Phê Duyệt Giá" (Hỗ Trợ IT) — duyệt giá bán mặt hàng siêu thị theo phòng ban, cùng khuôn docs/
   // carRegs/officeReqs ở trên (không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt). Bước "IT áp
@@ -761,6 +791,13 @@ const MODULE_CONFIGS = {
         ? 'Kỳ ngân sách này đã kết thúc, không thể duyệt/từ chối nữa'
         : null;
     }
+    // (11/2026) KHÔNG thêm allowSelfDeciding ở đây: budgetEntries đã bị thay thế hoàn toàn bởi budgetLines
+    // ("Ngân Sách 2.0") từ v23.0 — không còn màn nào ở UI tạo/duyệt được qua collection này nữa (chỉ là
+    // dữ liệu lịch sử, xem chú thích ở public/js/module-ngansach.js đầu file). Người dùng xác nhận bỏ
+    // module này khỏi đợt "cho phép tự duyệt 11/2026" vì thêm checkbox sẽ không có tác dụng thấy được.
+    // Module Ngân Sách 2.0 (budgetLines) THẬT đang dùng có cơ chế chặn tự duyệt RIÊNG
+    // (assertNotSelfDecidingBudgetLine(), lib/recordActions.js) — thuộc nhóm module sẽ xét sau, không
+    // phải đợt này.
   },
   // Vận Hành > Đơn Hàng — ĐỔI HẲN từ quy trình duyệt theo phòng ban (operationOrderDeptWorkflows, đã bị
   // xoá khỏi AppData/admin UI) sang quy trình duyệt theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG hoàn toàn cho

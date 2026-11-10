@@ -2825,6 +2825,37 @@ Ghi Chú luôn sửa được ở mọi giai đoạn.
     tạo/duyệt có thể hợp lý là cùng 1 người do đặc thù nhân sự ít") — các
     module rủi ro cao hơn (lương, kỷ luật, hợp đồng lao động, ngân sách, giấy
     phép...) VẪN giữ nguyên chặn cứng tuyệt đối, không có quyền bypass nào.
+  - **Mở rộng sang 6 module khác (11/2026, theo yêu cầu TRỰC TIẾP của người
+    dùng — ảnh chụp lỗi "Bạn không thể tự xử lý..." khi duyệt Đăng Ký Xe, do
+    cơ cấu tổ chức công ty nhỏ, trưởng phòng vừa tạo vừa là người phê duyệt
+    duy nhất)**: ĐÚNG khuôn 4 quyền ở trên, mở thêm 6 quyền ĐỘC LẬP (tắt mặc
+    định, admin tự tick từng tài khoản cần dùng ở Cây Phân Quyền) cho 6 module
+    còn lại dùng chung cơ chế quy trình duyệt (`lib/workflowEngine.js`):
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Tài Liệu Do Chính Mình Tạo/Trình"**
+      (`docAllowSelfApprove`, mục "2. Tài Liệu").
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Bản Trình Do Chính Mình Tạo/Trình"**
+      (`submissionAllowSelfApprove`, mục "3. Văn Bản Trình").
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đăng Ký Xe Do Chính Mình Tạo/Trình"**
+      (`carAllowSelfApprove`, mục "6. Đăng Ký Xe") — đúng module từ ảnh lỗi
+      gốc của người dùng.
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Phòng (Mua Bán/Sửa Chữa) Do Chính
+      Mình Tạo/Trình"** (`officeAllowSelfApprove`, mục "7. Văn Phòng") — áp
+      dụng chung cho cả 2 phân hệ Mua Bán/Sửa Chữa.
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Phòng Phẩm Do Chính Mình Tạo/Trình"**
+      (`vppAllowSelfApprove`, mục "12. Văn Phòng Phẩm").
+    - **"⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Hợp Đồng (kể cả Tài Liệu Ký) Do Chính
+      Mình Tạo/Trình"** (`contractAllowSelfApprove`, mục "4. Hợp Đồng & Giấy
+      Phép") — DÙNG CHUNG 1 quyền cho cả hồ sơ hợp đồng gốc (tab Phê Duyệt)
+      lẫn Tài liệu ký (tab Quản Lý HĐ, người thực sự trình là người vừa tải
+      tài liệu ký lên, có thể khác người tạo hợp đồng gốc).
+
+    **KHÔNG áp dụng cho Ngân Sách (`budgetEntries`)**: người dùng xác nhận bỏ
+    qua module này — đã bị thay thế hoàn toàn bởi "Ngân Sách 2.0"
+    (`budgetLines`, xem mục 📊 Ngân Sách ở trên) từ v23.0, không còn màn nào ở
+    UI tạo/duyệt qua collection `budgetEntries` nữa nên thêm quyền này sẽ
+    không có tác dụng thấy được. Module Ngân Sách 2.0 thật đang dùng có cơ chế
+    chặn tự duyệt RIÊNG (`assertNotSelfDecidingBudgetLine()`), chưa nằm trong
+    đợt mở quyền này.
 - **Cấu Hình API (đồng bộ đơn hàng ra hệ thống dsmart16)** — Hệ Thống → Quản
   Trị (admin) → **"🔌 Cấu Hình API Đối Tác"** (v28.62, gộp chung 1 màn với
   cấu hình API Tồn Kho BRGMART cho gọn sidebar — xem mục "Cấu hình kết nối

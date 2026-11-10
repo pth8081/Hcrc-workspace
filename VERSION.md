@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**29.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.84 (2026-11): Cho phép Tự Duyệt (có cấu hình) ở 6 module phê duyệt chuẩn
+
+Yêu cầu người dùng (ảnh chụp lỗi "Bạn không thể tự xử lý (duyệt/từ chối/yêu cầu bổ sung) hồ sơ do chính
+mình tạo hoặc trình" khi duyệt Đăng Ký Xe): theo cơ cấu tổ chức công ty nhỏ, người đặt/tạo hồ sơ cũng
+thường là người phê duyệt duy nhất của phòng mình (VD trưởng phòng vừa tạo vừa duyệt). Mở rộng ĐÚNG
+khuôn `itPriceAllowSelfApproveWholesale/Retail` + `operationOrderAllowSelfApproveHO/Store` đã có (từ đợt
+Phê Duyệt Giá/Vận Hành trước) sang 6 module còn lại dùng chung `lib/workflowEngine.js`: **Tài Liệu,
+Văn Bản Trình, Đăng Ký Xe (đúng module từ ảnh lỗi gốc), Văn Phòng (Mua Bán/Sửa Chữa), Văn Phòng Phẩm,
+Hợp Đồng & Giấy Phép (kể cả Tài Liệu Ký)**.
+
+**Đã làm**:
+1. `lib/workflowEngine.js`: thêm `allowSelfDeciding: (item, user) => !!user?.perms?.<key>AllowSelfApprove`
+   cho 6 module (`docs`/`submissions`/`carRegs`/`officeReqs`/`vppRegistrations`/`contracts`+
+   `contractsSignedFile` — 2 entry dùng CHUNG 1 quyền `contractAllowSelfApprove`). Quyền MỚI, mặc định
+   TẮT — admin phải chủ động tick, và KHÔNG tự cấp quyền duyệt (vẫn phải là approver hợp lệ theo cấu
+   hình Nhóm Phê Duyệt hiện có).
+2. **KHÔNG đưa `budgetEntries` vào** (đã xác nhận với người dùng): module này đã bị thay thế hoàn toàn
+   bởi `budgetLines` ("Ngân Sách 2.0") từ v23.0, không còn màn nào ở UI tạo/duyệt qua collection này nữa
+   nên thêm quyền sẽ không có tác dụng thấy được.
+3. `public/fragments/systemSection.html` + `module-admin-permtree.js`: checkbox "⚠️ Cho Phép Tự Duyệt/
+   Tự Xử Lý ... Do Chính Mình Tạo/Trình" cho cả 6 module, wire đủ `collectPermsFromForm()`/
+   `populatePermsForm()`.
+4. `module-admin-permgroups.js`: 6 nhãn tiếng Việt mới vào Ma Trận Phân Quyền (duy nhất, test tự động
+   xác nhận không trùng).
+5. `tests/test-admin-self-approve-blocked.js`: 23 test case mới (39/39 tổng cộng PASS) — xác nhận mặc
+   định vẫn chặn creator tự xử lý ở cả 6 module + `contractsSignedFile`; có quyền thì KHÔNG throw đúng
+   module được cấp (và KHÔNG ảnh hưởng module khác); `budgetEntries` LUÔN chặn bất kể quyền gì (đã xác
+   nhận bỏ qua).
+6. `tests/demo-allow-self-approve-6-modules.js` (demo Playwright mới): chụp ảnh checkbox "⚠️ Cho Phép Tự
+   Duyệt..." ở ĐÚNG module Đăng Ký Xe (từ ảnh lỗi gốc người dùng gửi), xác nhận tick/lưu qua
+   `collectPermsFromForm()` hoạt động đúng.
+
+Đã chạy lại: toàn bộ 39 test case `test-admin-self-approve-blocked.js`, `test-perm-matrix-client.js` (46
+passed, xác nhận nhãn mới không trùng), `test-admin-users-permgroups.js`, `test-diffperms-legacy-
+migration-freeze.js`, cùng 1 loạt test module liên quan (contract/submission/carRegs/officeReqs/
+vppRegistrations/docs — scope + workflow). Không có regression (1 FAIL tiền-tồn-tại ở `test-vpp.js`
+không liên quan, đã xác nhận xảy ra y hệt trên `main` trước khi merge). CSP grep sạch.
 
 ## v29.83 (2026-11): Cây Sơ Đồ Tổ Chức — "Chiều khối" Ngang/Dọc áp dụng RIÊNG từng Phòng Ban
 
