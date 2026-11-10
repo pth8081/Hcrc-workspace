@@ -10,6 +10,14 @@
 // phải có đúng 1 "Công Ty" như cây Định Biên).
 const { HttpError } = require('./httpErrors');
 
+// orientation (11/2026, theo yêu cầu người dùng "nhiều sơ đồ cần quay dọc mới đủ chỗ", sau đó SỬA LẠI
+// theo phản hồi "chỉ áp dụng đúng Phòng Ban đó, không áp dụng cho tất cả" — xem chú thích đầy đủ ở khối
+// orientation trong public/js/module-orgchart.js): 'horizontal' (mặc định) hoặc 'vertical', LƯU RIÊNG
+// cho TỪNG node — không có khái niệm "chiều chung của cả sơ đồ".
+function normalizeOrientation(orientation) {
+  return orientation === 'vertical' ? 'vertical' : 'horizontal';
+}
+
 function nextIdFor(items) {
   let maxId = 0;
   for (const it of items || []) {
@@ -32,14 +40,14 @@ function isDescendant(nodes, nodeId, maybeAncestorId) {
 }
 
 // Thêm 1 Phòng Ban/Siêu Thị — trả { list, node }.
-function addDiagramNode(list, { parentNodeId, nodeName }) {
+function addDiagramNode(list, { parentNodeId, nodeName, orientation }) {
   const nodes = list || [];
   if (!nodeName || !nodeName.trim()) throw new HttpError(400, 'Vui lòng nhập tên Phòng Ban/Siêu Thị');
   const normalizedParentId = (parentNodeId === undefined || parentNodeId === null || parentNodeId === '') ? null : Number(parentNodeId);
   if (normalizedParentId != null && !nodes.some(n => n.id === normalizedParentId)) {
     throw new HttpError(400, 'Không tìm thấy Phòng Ban cha');
   }
-  const node = { id: nextIdFor(nodes), parentNodeId: normalizedParentId, nodeName: nodeName.trim().slice(0, 200) };
+  const node = { id: nextIdFor(nodes), parentNodeId: normalizedParentId, nodeName: nodeName.trim().slice(0, 200), orientation: normalizeOrientation(orientation) };
   return { list: [...nodes, node], node };
 }
 
@@ -63,8 +71,10 @@ function deleteDiagramNodeCascade(list, nodeId) {
   return { list: nodes.filter(n => !toDelete.has(n.id)), deletedIds: [...toDelete] };
 }
 
-// Sửa tên hoặc chuyển Phòng Ban cha — trả { list, node }.
-function renameDiagramNode(list, nodeId, { nodeName, parentNodeId }) {
+// Sửa tên/chuyển Phòng Ban cha/đổi chiều khối — trả { list, node }. orientation (11/2026) sửa RIÊNG đúng
+// node này, dùng cho nút ↔️/↕️ nhỏ cạnh mỗi dòng trong danh sách (xem
+// setOrgChartDiagramNodeOrientationClick() ở module-orgchart.js) — KHÔNG đụng tới node khác.
+function renameDiagramNode(list, nodeId, { nodeName, parentNodeId, orientation }) {
   const nodes = list || [];
   const idx = nodes.findIndex(n => n.id === nodeId);
   if (idx === -1) throw new HttpError(404, 'Không tìm thấy Phòng Ban này');
@@ -72,6 +82,9 @@ function renameDiagramNode(list, nodeId, { nodeName, parentNodeId }) {
   if (nodeName !== undefined) {
     if (!nodeName || !nodeName.trim()) throw new HttpError(400, 'Tên Phòng Ban/Siêu Thị không được để trống');
     updated.nodeName = nodeName.trim().slice(0, 200);
+  }
+  if (orientation !== undefined) {
+    updated.orientation = normalizeOrientation(orientation);
   }
   if (parentNodeId !== undefined) {
     const normalizedParentId = (parentNodeId === null || parentNodeId === '') ? null : Number(parentNodeId);

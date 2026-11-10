@@ -3543,13 +3543,19 @@ theo đúng vị trí trong cây**.
   (Vector)"** để tải về máy (vẽ bằng SVG thuần phía trình duyệt, không qua
   server). Vì tách biệt hoàn toàn khỏi cây Định Biên, sơ đồ chắc chắn không
   bao giờ lẫn Vị Trí/định biên vào hình.
-- **"↔️ Ngang / ↕️ Dọc" (từ 11/2026, theo yêu cầu người dùng)** — chọn chiều
-  vẽ khối Phòng Ban ngay trên toolbar sơ đồ. Mặc định **"↔️ Ngang"** (hành vi
-  gốc, khung rộng, chữ đọc xuôi). Bấm **"↕️ Dọc"** khi 1 cấp có quá nhiều
-  Phòng Ban con khiến sơ đồ ngang quá rộng — mọi khung thu hẹp lại, chữ bên
-  trong XOAY 90° đọc từ dưới lên, chiều cao khung tự co giãn theo đúng độ dài
-  tên (cắt "…" nếu tên quá dài). Đổi chiều vẽ lại NGAY. Tải PNG/SVG hoạt động
-  bình thường ở cả 2 chiều.
+- **"↔️ Ngang / ↕️ Dọc" (từ 11/2026, theo yêu cầu người dùng, SỬA LẠI cùng
+  tháng theo phản hồi)** — chọn chiều vẽ khối cho **TỪNG Phòng Ban RIÊNG**
+  (không phải 1 công tắc chung cho cả sơ đồ như bản đầu tiên). Mặc định
+  **"↔️ Ngang"** (hành vi gốc, khung rộng, chữ đọc xuôi). 2 cách đổi chiều:
+  (1) lúc **thêm mới** — form "➕ Thêm Phòng Ban / Siêu Thị" có khối "Chiều
+  khối (riêng Phòng Ban này)", chọn Ngang/Dọc rồi mới bấm "➕ Thêm Vào Sơ Đồ";
+  (2) với Phòng Ban **đã có sẵn** — bấm nút ↔️/↕️ nhỏ cạnh mỗi dòng trong danh
+  sách khung trái (nút đang tô đậm = chiều hiện tại), lưu ngay. Chọn "↕️ Dọc"
+  khi 1 Phòng Ban cụ thể cần khung hẹp lại để xếp sát nhiều Phòng Ban cùng cấp
+  hơn — khung đó thu hẹp, chữ bên trong XOAY 90° đọc từ dưới lên, chiều cao
+  khung tự co giãn theo đúng độ dài tên (cắt "…" nếu tên quá dài); CÁC Phòng
+  Ban khác trên cùng sơ đồ giữ nguyên chiều của chúng, không bị ảnh hưởng.
+  Tải PNG/SVG hoạt động bình thường với sơ đồ có cả 2 chiều trộn lẫn.
 - **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
