@@ -270,7 +270,7 @@ function ocBuildTreeNodeHtml(nodes, node, depth, canEdit, version) {
 // khớp đúng quy ước SVG duy nhất đã có sẵn trong toàn bộ client.
 function ocBuildDiagramForest(nodesFlat) {
   const list = nodesFlat || [];
-  const byTreeId = new Map(list.map(n => [n.id, { id: n.id, type: 'DEPARTMENT', name: n.nodeName, children: [] }]));
+  const byTreeId = new Map(list.map(n => [n.id, { id: n.id, type: 'DEPARTMENT', name: n.nodeName, orientation: n.orientation === 'vertical' ? 'vertical' : 'horizontal', children: [] }]));
   const roots = [];
   list.forEach(n => {
     const treeNode = byTreeId.get(n.id);
@@ -284,16 +284,20 @@ const OC_DIAGRAM_MARGIN = 40;
 const OC_DIAGRAM_FONT = "Arial, 'Helvetica Neue', Helvetica, sans-serif"; // KHÔNG dùng web font — canvas
 // rasterize SVG lúc xuất PNG không chắc tải được font ngoài (xem downloadOrgChartDiagramPng()).
 
-// _ocDiagramOrientation (11/2026, theo yêu cầu người dùng "nhiều sơ đồ cần quay dọc mới đủ chỗ") —
-// 'horizontal' (mặc định, khối nằm ngang, chữ đọc xuôi — hành vi gốc) hoặc 'vertical' (khối hẹp lại xếp
-// được nhiều Phòng Ban cạnh nhau hơn trên cùng 1 hàng, CHỮ XOAY 90° đọc dọc theo chiều cao khối — dùng
-// khi 1 cấp có quá nhiều Phòng Ban con khiến sơ đồ ngang quá rộng). Đổi qua nút "↔️ Ngang"/"↕️ Dọc" ở
-// toolbar — xem setOrgChartDiagramOrientation(). Hằng số kích thước TÁCH RIÊNG 2 bộ (ngang/dọc) thay vì
-// cố tính chung 1 công thức — 2 chiều có logic co giãn khung hoàn toàn khác nhau (ngang: khung RỘNG cố
-// định, co chiều CAO theo số dòng xuống dòng; dọc: khung CAO co theo độ dài tên — không xuống dòng vì
-// chữ đã xoay dọc theo đúng chiều "dài" của khung).
-let _ocDiagramOrientation = 'horizontal';
-function ocIsVerticalDiagram() { return _ocDiagramOrientation === 'vertical'; }
+// orientation (11/2026, theo yêu cầu người dùng "nhiều sơ đồ cần quay dọc mới đủ chỗ") — 'horizontal'
+// (mặc định, khối nằm ngang, chữ đọc xuôi — hành vi gốc) hoặc 'vertical' (khối hẹp lại xếp được nhiều
+// Phòng Ban cạnh nhau hơn trên cùng 1 hàng, CHỮ XOAY 90° đọc dọc theo chiều cao khối — dùng khi 1 cấp có
+// quá nhiều Phòng Ban con khiến sơ đồ ngang quá rộng). Hằng số kích thước TÁCH RIÊNG 2 bộ (ngang/dọc)
+// thay vì cố tính chung 1 công thức — 2 chiều có logic co giãn khung hoàn toàn khác nhau (ngang: khung
+// RỘNG cố định, co chiều CAO theo số dòng xuống dòng; dọc: khung CAO co theo độ dài tên — không xuống
+// dòng vì chữ đã xoay dọc theo đúng chiều "dài" của khung).
+//
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "chọn Ngang/Dọc đang áp dụng cho CẢ sơ đồ, chỉ muốn áp dụng đúng
+// Phòng Ban đang thêm/sửa"): trước đây có 1 biến `_ocDiagramOrientation` TOÀN CỤC + nút "Chiều khối" duy
+// nhất ở toolbar, đổi là đổi NGUYÊN sơ đồ. Giờ orientation LƯU THEO TỪNG NODE (`node.orientation`, xem
+// lib/orgChartDiagramTree.js) — node tạo trước đợt sửa này chưa có field, coi như Ngang (khớp hành vi
+// gốc). Mọi hàm layout/vẽ bên dưới đọc `node.orientation` thay vì biến global.
+function ocNodeIsVertical(node) { return node?.orientation === 'vertical'; }
 
 // Bộ hằng số NGANG (giữ nguyên hành vi gốc trước 11/2026).
 const OC_DIAGRAM_H_SLOT_W = 196, OC_DIAGRAM_H_LEVEL_H = 118;
@@ -308,9 +312,8 @@ const OC_DIAGRAM_H_EXTRA_LINE_H = 16, OC_DIAGRAM_H_TEXT_PAD_X = 12, OC_DIAGRAM_H
 const OC_DIAGRAM_V_SLOT_W = 66, OC_DIAGRAM_V_LEVEL_H = 300;
 const OC_DIAGRAM_V_BOX_W = 46, OC_DIAGRAM_V_MIN_H = 80, OC_DIAGRAM_V_MAX_H = 260, OC_DIAGRAM_V_PAD_Y = 16;
 
-function ocDiagramSlotW() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_SLOT_W : OC_DIAGRAM_H_SLOT_W; }
-function ocDiagramLevelH() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_LEVEL_H : OC_DIAGRAM_H_LEVEL_H; }
-function ocDiagramBoxWidth() { return ocIsVerticalDiagram() ? OC_DIAGRAM_V_BOX_W : OC_DIAGRAM_H_BOX_W; }
+function ocNodeSlotW(node) { return ocNodeIsVertical(node) ? OC_DIAGRAM_V_SLOT_W : OC_DIAGRAM_H_SLOT_W; }
+function ocNodeBoxWidth(node) { return ocNodeIsVertical(node) ? OC_DIAGRAM_V_BOX_W : OC_DIAGRAM_H_BOX_W; }
 
 // LỖI ĐÃ VÁ (người dùng báo "chữ tràn ra ngoài ô" — tên Phòng Ban dài như "BAN VẬN HÀNH KINH DOANH"
 // tràn hẳn ra ngoài khung `rect` vì trước đây tên luôn vẽ 1 dòng `text-anchor="middle"` không kiểm tra
@@ -346,18 +349,41 @@ function ocEstimateMaxChars(boxWidth, fontSize, paddingX) {
   return Math.max(4, Math.floor((boxWidth - paddingX * 2) / avgCharW));
 }
 
-function ocDiagramAssignXY(node, depth, cursorRef) {
-  const slotW = ocDiagramSlotW(), levelH = ocDiagramLevelH();
+// Gán _depth + _x (post-order: con trước, cha = trung điểm con) — KHÔNG gán _y ở đây nữa (xem
+// ocComputeDepthY() bên dưới, tách riêng vì khoảng cách cấp giờ phụ thuộc chiều Ngang/Dọc của từng node
+// ở 2 cấp liền kề, phải quét HẾT cây mới biết, không gán được ngay lúc duyệt depth-first này).
+function ocDiagramAssignDepthAndX(node, depth, cursorRef) {
   node._depth = depth;
-  node._y = OC_DIAGRAM_MARGIN + depth * levelH;
   if (!node.children.length) {
+    const slotW = ocNodeSlotW(node);
     node._x = cursorRef.x + slotW / 2;
     cursorRef.x += slotW;
     return;
   }
-  node.children.forEach(c => ocDiagramAssignXY(c, depth + 1, cursorRef));
+  node.children.forEach(c => ocDiagramAssignDepthAndX(c, depth + 1, cursorRef));
   const first = node.children[0], last = node.children[node.children.length - 1];
   node._x = (first._x + last._x) / 2;
+}
+
+// depthY[d] = toạ độ Y chung cho MỌI node ở cấp d. Khoảng cách cấp d-1→d phải đủ RỘNG cho chiều "khó"
+// nhất trong 2 cấp liền kề — chỉ cần 1 node Dọc ở cấp d-1 HOẶC d là phải dùng khoảng cách kiểu Dọc
+// (OC_DIAGRAM_V_LEVEL_H, rộng hơn hẳn Ngang) để khung Dọc (cao hơn) không đè lên hàng kế — xem
+// verticalAtDepth[]. Trả kèm verticalAtDepth để ocRenderDiagramForest() tính chiều cao ảnh cuối cùng.
+function ocComputeDepthY(roots, maxDepth) {
+  const verticalAtDepth = new Array(maxDepth + 1).fill(false);
+  roots.forEach(root => {
+    (function scan(n) {
+      if (ocNodeIsVertical(n)) verticalAtDepth[n._depth] = true;
+      n.children.forEach(scan);
+    })(root);
+  });
+  const depthY = new Array(maxDepth + 1).fill(0);
+  depthY[0] = OC_DIAGRAM_MARGIN;
+  for (let d = 1; d <= maxDepth; d++) {
+    const gap = (verticalAtDepth[d - 1] || verticalAtDepth[d]) ? OC_DIAGRAM_V_LEVEL_H : OC_DIAGRAM_H_LEVEL_H;
+    depthY[d] = depthY[d - 1] + gap;
+  }
+  return { depthY, verticalAtDepth };
 }
 
 // Tính node._nameLines + node._h — NHÁNH NGANG: xuống dòng tối đa 2 dòng theo khung rộng cố định (hành
@@ -366,7 +392,7 @@ function ocDiagramAssignXY(node, depth, cursorRef) {
 // công thức ký tự trung bình như nhánh ngang, chỉ đổi vai trò "khung rộng cố định, đo xem mấy dòng" ->
 // "khung cao co giãn theo đúng 1 dòng dài bao nhiêu"), cắt "…" nếu vượt quá OC_DIAGRAM_V_MAX_H.
 function ocPrepareNodeLines(node) {
-  if (ocIsVerticalDiagram()) {
+  if (ocNodeIsVertical(node)) {
     const fontSize = 12.5;
     const avgCharH = fontSize * 0.67;
     const maxChars = Math.max(3, Math.floor((OC_DIAGRAM_V_MAX_H - OC_DIAGRAM_V_PAD_Y) / avgCharH));
@@ -389,46 +415,49 @@ function ocPrepareNodeLines(node) {
 // Vẽ RỪNG CÂY (1 hoặc nhiều node gốc song song, xem ocBuildDiagramForest()) — mirror layout/vẽ của
 // ocRenderDepartmentDiagram() bản cũ (đã xoá), chỉ khác: (1) nhận MẢNG root thay vì 1 root, cursor X
 // chạy chung xuyên suốt mọi cây để các cây gốc không đè lên nhau; (2) MỌI node đều vẽ kiểu DEPARTMENT
-// (📁, không còn khái niệm COMPANY/"Trụ sở chính" vì cây này không có node Công Ty); (3) hỗ trợ 2 chiều
-// vẽ (ocIsVerticalDiagram()) — chiều dọc xoay cả khung LẪN chữ, chiều ngang giữ nguyên hành vi gốc.
+// (📁, không còn khái niệm COMPANY/"Trụ sở chính" vì cây này không có node Công Ty); (3) MỖI NODE tự chọn
+// chiều Ngang/Dọc RIÊNG (node.orientation, xem ocNodeIsVertical()) — không còn 1 chiều áp dụng chung cho
+// cả sơ đồ như trước (LỖI ĐÃ VÁ 11/2026, xem chú thích ở khối orientation phía trên).
 function ocRenderDiagramForest(roots) {
   if (!roots || !roots.length) return { svgHTML: '', width: 0, height: 0 };
-  const vertical = ocIsVerticalDiagram();
-  const levelH = ocDiagramLevelH(), boxW = ocDiagramBoxWidth();
   const cursor = { x: OC_DIAGRAM_MARGIN };
-  roots.forEach(root => ocDiagramAssignXY(root, 0, cursor));
+  roots.forEach(root => ocDiagramAssignDepthAndX(root, 0, cursor));
   let maxDepth = 0, maxX = 0;
   roots.forEach(root => {
     (function scan(n) {
       ocPrepareNodeLines(n);
       maxDepth = Math.max(maxDepth, n._depth);
-      maxX = Math.max(maxX, n._x + boxW / 2);
+      maxX = Math.max(maxX, n._x + ocNodeBoxWidth(n) / 2);
       n.children.forEach(scan);
     })(root);
   });
+  const { depthY, verticalAtDepth } = ocComputeDepthY(roots, maxDepth);
+  roots.forEach(root => {
+    (function assignY(n) { n._y = depthY[n._depth]; n.children.forEach(assignY); })(root);
+  });
   const width = Math.round(maxX + OC_DIAGRAM_MARGIN);
-  let height;
-  if (vertical) {
-    // OC_DIAGRAM_V_LEVEL_H đã đủ rộng rãi chứa khung cao nhất (OC_DIAGRAM_V_MAX_H) + đường nối — không
-    // cần cộng dồn "phần vượt chuẩn" như nhánh ngang (khung ngang có thể xuống dòng không giới hạn trên).
-    height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * levelH + 16);
-  } else {
-    const extraHByDepth = new Array(maxDepth + 1).fill(0);
-    roots.forEach(root => {
-      (function scanExtra(n) {
-        extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_H_BOX_H);
-        n.children.forEach(scanExtra);
-      })(root);
-    });
-    const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
-    height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * levelH + totalExtraH + 16);
-  }
+  // bottomPad: khoảng trống dưới hàng cuối cùng — dùng kiểu khoảng cách của CHÍNH cấp sâu nhất (mirror
+  // công thức gốc (maxDepth+1)*levelH cho sơ đồ thuần 1 chiều, xem ocComputeDepthY()).
+  const bottomPad = verticalAtDepth[maxDepth] ? OC_DIAGRAM_V_LEVEL_H : OC_DIAGRAM_H_LEVEL_H;
+  // extraHByDepth — CHỈ cộng thêm cho node NGANG có nhiều hơn 1 dòng chữ (khung ngang có thể xuống dòng
+  // không giới hạn trên) — node DỌC không cần vì OC_DIAGRAM_V_LEVEL_H đã đủ rộng rãi chứa khung cao nhất
+  // (OC_DIAGRAM_V_MAX_H) + đường nối (hành vi gốc, giữ nguyên).
+  const extraHByDepth = new Array(maxDepth + 1).fill(0);
+  roots.forEach(root => {
+    (function scanExtra(n) {
+      if (!ocNodeIsVertical(n)) extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_H_BOX_H);
+      n.children.forEach(scanExtra);
+    })(root);
+  });
+  const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
+  const height = Math.round(depthY[maxDepth] + bottomPad + totalExtraH + 16);
 
   let linesSvg = '', nodesSvg = '';
   function drawConnectors(node) {
     if (!node.children.length) return;
+    const levelGap = depthY[node._depth + 1] - depthY[node._depth];
     const pBottom = node._y + node._h / 2;
-    const busY = pBottom + (levelH - node._h / 2 - node.children[0]._h / 2) / 2;
+    const busY = pBottom + (levelGap - node._h / 2 - node.children[0]._h / 2) / 2;
     linesSvg += `<line x1="${node._x}" y1="${pBottom}" x2="${node._x}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
     if (node.children.length > 1) {
       const firstX = node.children[0]._x, lastX = node.children[node.children.length - 1]._x;
@@ -441,10 +470,10 @@ function ocRenderDiagramForest(roots) {
     });
   }
   function drawNode(node) {
-    const w = boxW, h = node._h;
+    const w = ocNodeBoxWidth(node), h = node._h;
     const x = node._x - w / 2, y = node._y - h / 2;
     nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
-    if (vertical) {
+    if (ocNodeIsVertical(node)) {
       // Chữ xoay -90° quanh đúng tâm khung (đọc từ dưới lên — quy ước phổ biến cho nhãn xoay dọc, VD
       // trục hoành biểu đồ) — dominant-baseline="middle" để canh giữa chữ theo trục đã xoay, giống hệt
       // text-anchor="middle" vốn canh giữa theo trục ngang bình thường.
@@ -467,14 +496,27 @@ function ocRenderDiagramForest(roots) {
 }
 
 // Đổi chiều vẽ sơ đồ (nút "↔️ Ngang"/"↕️ Dọc" ở toolbar) — vẽ lại NGAY, không cần gọi lại API.
-function setOrgChartDiagramOrientation(mode) {
-  _ocDiagramOrientation = mode === 'vertical' ? 'vertical' : 'horizontal';
-  const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
-  const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
-  const hBtn = document.getElementById('btnOrgChartDiagramOrientH');
-  const vBtn = document.getElementById('btnOrgChartDiagramOrientV');
-  if (hBtn) hBtn.className = !ocIsVerticalDiagram() ? activeCls : inactiveCls;
-  if (vBtn) vBtn.className = ocIsVerticalDiagram() ? activeCls : inactiveCls;
+// Chiều khối cho Phòng Ban SẮP THÊM (chỉ đổi style 2 nút ở form "➕ Thêm Phòng Ban", KHÔNG lưu/vẽ lại gì
+// cả — giá trị này chỉ thật sự áp dụng khi bấm "➕ Thêm Vào Sơ Đồ", xem addOrgChartDiagramNodeClick()).
+let _ocAddNodeOrientation = 'horizontal';
+function setOrgChartAddNodeOrientation(mode) {
+  _ocAddNodeOrientation = mode === 'vertical' ? 'vertical' : 'horizontal';
+  const activeCls = 'flex-1 px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'flex-1 px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
+  const hBtn = document.getElementById('btnOrgChartAddNodeOrientH');
+  const vBtn = document.getElementById('btnOrgChartAddNodeOrientV');
+  if (hBtn) hBtn.className = _ocAddNodeOrientation === 'horizontal' ? activeCls : inactiveCls;
+  if (vBtn) vBtn.className = _ocAddNodeOrientation === 'vertical' ? activeCls : inactiveCls;
+}
+
+// Đổi chiều 1 Phòng Ban ĐÃ CÓ sẵn (nút ↔️/↕️ nhỏ cạnh mỗi dòng trong danh sách bên trái) — PATCH lưu
+// ngay, CHỈ ảnh hưởng đúng node này (LỖI ĐÃ VÁ 11/2026, xem chú thích ocNodeIsVertical() ở trên).
+async function setOrgChartDiagramNodeOrientationClick(nodeId, mode) {
+  try {
+    await orgChartApiCall('PATCH', `/api/org-chart/diagram-nodes/${nodeId}`, { orientation: mode === 'vertical' ? 'vertical' : 'horizontal' });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  await loadOrgChartDiagramNodes();
+  renderOrgChartDiagramNodeList();
   renderOrgChartDiagramSvgOnly();
 }
 
@@ -520,10 +562,17 @@ function renderOrgChartDiagramNodeList() {
   });
   function rowsFor(parentKey, depth) {
     return (byParent.get(parentKey) || []).map(n => {
+      const isV = n.orientation === 'vertical';
+      // Nút đổi chiều RIÊNG cho đúng Phòng Ban này (LỖI ĐÃ VÁ 11/2026) — đang ở chiều nào thì nút đó tô
+      // đậm, bấm nút còn lại để đổi, PATCH lưu ngay.
+      const orient = canEdit ? `
+        <button type="button" data-op="setOrgChartDiagramNodeOrientationClick" data-arg0="${n.id}" data-arg1="horizontal" title="Chiều Ngang" class="${!isV ? 'text-teal-700 font-bold' : 'text-gray-300'} hover:bg-teal-50 rounded px-1">↔️</button>
+        <button type="button" data-op="setOrgChartDiagramNodeOrientationClick" data-arg0="${n.id}" data-arg1="vertical" title="Chiều Dọc" class="${isV ? 'text-teal-700 font-bold' : 'text-gray-300'} hover:bg-teal-50 rounded px-1">↕️</button>` : '';
       const del = canEdit ? `<button type="button" data-op="deleteOrgChartDiagramNodeClick" data-arg0="${n.id}" title="Xoá" class="text-red-600 hover:bg-red-50 rounded px-1.5 ml-1 font-bold">✕</button>` : '';
       return `<div class="flex items-center gap-1 py-1 border-b border-gray-50">
         <span class="text-gray-400">${'&nbsp;'.repeat(depth * 3)}${depth > 0 ? '└ ' : ''}</span>
         <span class="flex-1 font-semibold">${escapeHtml(n.nodeName)}</span>
+        ${orient}
         ${del}
       </div>` + rowsFor(n.id, depth + 1);
     }).join('');
@@ -545,7 +594,8 @@ async function renderOrgChartDiagramTab() {
   if (statusEl) statusEl.innerText = '';
   renderOrgChartDiagramNodeParentSelect();
   renderOrgChartDiagramNodeList();
-  setOrgChartDiagramOrientation(_ocDiagramOrientation);
+  setOrgChartAddNodeOrientation('horizontal');
+  renderOrgChartDiagramSvgOnly();
 }
 
 // Chỉ vẽ lại SVG (không gọi lại API) — dùng sau mỗi lần thêm/xoá Phòng Ban để sơ đồ cập nhật NGAY.
@@ -565,7 +615,7 @@ async function addOrgChartDiagramNodeClick() {
   if (!name) { if (statusEl) statusEl.innerText = 'Vui lòng nhập tên Phòng Ban/Siêu Thị'; nameInput.focus(); return; }
   const parentNodeId = parentSelect.value ? Number(parentSelect.value) : null;
   try {
-    await orgChartApiCall('POST', '/api/org-chart/diagram-nodes', { nodeName: name, parentNodeId });
+    await orgChartApiCall('POST', '/api/org-chart/diagram-nodes', { nodeName: name, parentNodeId, orientation: _ocAddNodeOrientation });
   } catch (err) { if (statusEl) statusEl.innerText = `⛔ ${err.message}`; return; }
   nameInput.value = '';
   await loadOrgChartDiagramNodes();

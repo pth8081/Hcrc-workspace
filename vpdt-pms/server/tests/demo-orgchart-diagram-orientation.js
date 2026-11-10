@@ -1,9 +1,12 @@
 // server/tests/demo-orgchart-diagram-orientation.js
 //
-// DEMO thật (Playwright) cho tính năng "↔️ Ngang / ↕️ Dọc" (11/2026, theo yêu cầu người dùng "nhiều sơ đồ
-// cần quay dọc mới đủ chỗ") ở tab "🖼️ Cây Sơ Đồ Tổ Chức" — mô phỏng đúng tình huống người dùng mô tả: 1
-// Phòng Ban có NHIỀU Phòng Ban con (6 node) khiến sơ đồ ngang rất rộng, chụp ảnh Ngang (mặc định) rồi
-// bấm "↕️ Dọc" — chụp lại xác nhận: khung hẹp lại (xếp sát nhau hơn), chữ xoay 90° đọc dọc theo khung.
+// DEMO thật (Playwright) cho tính năng "↔️ Ngang / ↕️ Dọc" ở tab "🖼️ Cây Sơ Đồ Tổ Chức".
+//
+// LỖI ĐÃ VÁ (11/2026, người dùng báo lại): bản đầu tiên của tính năng này dùng 1 công tắc "Chiều khối"
+// DUY NHẤT ở toolbar, đổi là đổi NGUYÊN sơ đồ — không đúng ý người dùng, vốn chỉ muốn đổi chiều của
+// ĐÚNG 1 Phòng Ban đang thêm/sửa. Demo này xác nhận bản sửa: mỗi Phòng Ban tự chọn chiều RIÊNG (lúc
+// thêm, hoặc đổi lại sau bằng nút ↔️/↕️ nhỏ cạnh mỗi dòng trong danh sách) — CÁC Phòng Ban khác giữ
+// nguyên chiều cũ, không bị ảnh hưởng.
 //
 // Chạy: node server/tests/demo-orgchart-diagram-orientation.js
 'use strict';
@@ -48,33 +51,46 @@ async function main() {
   const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
   const page = await browser.newPage();
-  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'load' });
 
   await page.evaluate(() => {
     window.confirm = () => true;
     window.prompt = () => '';
-    // 1 Phòng Ban gốc (id 1) + 6 Phòng Ban con (id 2-7) — mô phỏng đúng tình huống "nhiều Phòng Ban cạnh
-    // nhau khiến sơ đồ ngang quá rộng" người dùng mô tả.
+    // 1 Phòng Ban gốc (id 1) + 6 Phòng Ban con (id 2-7), TOÀN BỘ Ngang (mặc định) lúc đầu — mô phỏng
+    // đúng tình huống người dùng mô tả "nhiều Phòng Ban cạnh nhau".
     window.__ocDiagramNodesStore = [
-      { id: 1, parentNodeId: null, nodeName: 'BAN VẬN HÀNH KINH DOANH' },
-      { id: 2, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 1' },
-      { id: 3, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 2' },
-      { id: 4, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 3' },
-      { id: 5, parentNodeId: 1, nodeName: 'Phòng Marketing' },
-      { id: 6, parentNodeId: 1, nodeName: 'Phòng Chăm Sóc Khách Hàng' },
-      { id: 7, parentNodeId: 1, nodeName: 'Phòng Phát Triển Thị Trường' }
+      { id: 1, parentNodeId: null, nodeName: 'BAN VẬN HÀNH KINH DOANH', orientation: 'horizontal' },
+      { id: 2, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 1', orientation: 'horizontal' },
+      { id: 3, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 2', orientation: 'horizontal' },
+      { id: 4, parentNodeId: 1, nodeName: 'Kinh Doanh Khu Vực 3', orientation: 'horizontal' },
+      { id: 5, parentNodeId: 1, nodeName: 'Phòng Marketing', orientation: 'horizontal' },
+      { id: 6, parentNodeId: 1, nodeName: 'Phòng Chăm Sóc Khách Hàng', orientation: 'horizontal' },
+      { id: 7, parentNodeId: 1, nodeName: 'Phòng Phát Triển Thị Trường', orientation: 'horizontal' }
     ];
     window.__ocDiagramNextId = 8;
 
     window.fetch = async (url, opts) => {
       const u = String(url);
       const method = (opts && opts.method) || 'GET';
+      const body = opts && opts.body ? JSON.parse(opts.body) : {};
       if (u === '/api/org-chart/versions' && method === 'GET') return { ok: true, status: 200, json: async () => ({ versions: [{ id: 1, versionName: 'Demo', status: 'DRAFT', createdBy: 'admin' }] }) };
       if (u === '/api/org-chart/versions/1' && method === 'GET') return { ok: true, status: 200, json: async () => ({ version: { id: 1, versionName: 'Demo', status: 'DRAFT', nodes: [{ nodeId: 1, nodeType: 'COMPANY', nodeName: 'Công Ty', parentNodeId: null }], kpiFlow: [] } }) };
       if (u === '/api/org-chart/kpi-flow' && method === 'GET') return { ok: true, status: 200, json: async () => ({ rows: [] }) };
       if (u === '/api/org-chart/diagram-nodes' && method === 'GET') return { ok: true, status: 200, json: async () => ({ nodes: window.__ocDiagramNodesStore }) };
+      if (u === '/api/org-chart/diagram-nodes' && method === 'POST') {
+        const node = { id: window.__ocDiagramNextId++, parentNodeId: body.parentNodeId ?? null, nodeName: body.nodeName, orientation: body.orientation === 'vertical' ? 'vertical' : 'horizontal' };
+        window.__ocDiagramNodesStore.push(node);
+        return { ok: true, status: 200, json: async () => ({ ok: true, node }) };
+      }
+      const patchMatch = u.match(/^\/api\/org-chart\/diagram-nodes\/(\d+)$/);
+      if (patchMatch && method === 'PATCH') {
+        const id = Number(patchMatch[1]);
+        const n = window.__ocDiagramNodesStore.find(x => x.id === id);
+        if (n && body.orientation !== undefined) n.orientation = body.orientation === 'vertical' ? 'vertical' : 'horizontal';
+        return { ok: true, status: 200, json: async () => ({ ok: true, node: n }) };
+      }
       return { ok: true, status: 200, json: async () => ([]) };
     };
 
@@ -117,32 +133,59 @@ async function main() {
   await page.click('#btnOrgChartSubDiagram');
   await page.waitForTimeout(250);
 
-  // 1) Mặc định "↔️ Ngang" — sơ đồ rộng (7 khối cạnh nhau).
-  await shot(page, '#orgChartSection', '01-ngang-mac-dinh.png');
-  const hState = await page.evaluate(() => ({ width: document.getElementById('orgChartDiagramSvg').getAttribute('width') }));
-  console.log('Chiều rộng sơ đồ (Ngang):', hState.width);
+  // 1) Trạng thái ban đầu — TOÀN BỘ 7 khối đều Ngang.
+  await shot(page, '#orgChartSection', '01-tat-ca-ngang-ban-dau.png');
+  const initState = await page.evaluate(() => ({ width: document.getElementById('orgChartDiagramSvg').getAttribute('width') }));
+  console.log('Chiều rộng sơ đồ (tất cả Ngang):', initState.width);
 
-  // 2) Bấm "↕️ Dọc" — khối hẹp lại, chữ xoay 90°.
-  await page.click('#btnOrgChartDiagramOrientV');
+  // 2) Đổi RIÊNG node id=2 ("Kinh Doanh Khu Vực 1") sang Dọc bằng nút ↕️ nhỏ cạnh dòng tương ứng trong
+  // danh sách bên trái — các node khác (3-7) PHẢI giữ nguyên Ngang.
+  const node2Row = page.locator('#orgChartDiagramNodeList > div', { hasText: 'Kinh Doanh Khu Vực 1' }).first();
+  await node2Row.locator('button[data-arg1="vertical"]').click();
   await page.waitForTimeout(250);
-  await shot(page, '#orgChartSection', '02-doc-chu-xoay.png');
-  const vState = await page.evaluate(() => {
-    const svg = document.getElementById('orgChartDiagramSvg');
-    const text = svg.querySelector('text');
-    return { width: svg.getAttribute('width'), transform: text ? text.getAttribute('transform') : null };
+  await shot(page, '#orgChartSection', '02-chi-1-phong-ban-doc-cac-phong-khac-van-ngang.png');
+
+  const mixedState = await page.evaluate(() => {
+    const nodes = window.__ocDiagramNodesStore;
+    return {
+      node2: nodes.find(n => n.id === 2).orientation,
+      node3: nodes.find(n => n.id === 3).orientation,
+      node5: nodes.find(n => n.id === 5).orientation,
+      node7: nodes.find(n => n.id === 7).orientation
+    };
   });
-  console.log('Chiều rộng sơ đồ (Dọc, phải HẸP hơn Ngang):', vState.width);
-  console.log('Thuộc tính transform của chữ (phải có rotate(-90...)):', vState.transform);
+  console.log('Chiều lưu lại từng node sau khi đổi:', mixedState);
 
   const assert = require('assert');
-  assert.ok(Number(vState.width) < Number(hState.width), 'LỖI: sơ đồ Dọc phải HẸP hơn Ngang (khối thu nhỏ lại)');
-  assert.ok(vState.transform && vState.transform.includes('rotate(-90'), 'LỖI: chữ phải xoay -90° ở chế độ Dọc');
-  console.log('\n✅ Demo xác nhận: chế độ Dọc thu hẹp sơ đồ + xoay chữ 90°, đúng yêu cầu.');
+  assert.strictEqual(mixedState.node2, 'vertical', 'LỖI: node vừa đổi (id=2) phải thành Dọc');
+  assert.strictEqual(mixedState.node3, 'horizontal', 'LỖI: node KHÁC (id=3) không được bị đổi theo');
+  assert.strictEqual(mixedState.node5, 'horizontal', 'LỖI: node KHÁC (id=5) không được bị đổi theo');
+  assert.strictEqual(mixedState.node7, 'horizontal', 'LỖI: node KHÁC (id=7) không được bị đổi theo');
+  console.log('✅ Chỉ ĐÚNG 1 Phòng Ban đổi chiều, các Phòng Ban khác giữ nguyên — đúng yêu cầu.');
 
-  // 3) Bấm lại "↔️ Ngang" — trở về như cũ.
-  await page.click('#btnOrgChartDiagramOrientH');
+  // 3) Thêm 1 Phòng Ban MỚI với chiều Dọc chọn ngay ở form "➕ Thêm Phòng Ban" (không qua nút sửa) — xác
+  // nhận orientation được gửi kèm lúc tạo.
+  await page.fill('#orgChartDiagramNodeNameInput', 'Phòng Nhân Sự Mới (Demo)');
+  await page.selectOption('#orgChartDiagramNodeParentSelect', '1');
+  await page.click('#btnOrgChartAddNodeOrientV');
+  await page.waitForTimeout(100);
+  await page.click('#btnOrgChartDiagramAddNode');
   await page.waitForTimeout(250);
-  await shot(page, '#orgChartSection', '03-quay-lai-ngang.png');
+  await shot(page, '#orgChartSection', '03-them-phong-ban-moi-chon-doc-ngay-luc-them.png');
+  const newNodeState = await page.evaluate(() => {
+    const nodes = window.__ocDiagramNodesStore;
+    const n = nodes.find(x => x.nodeName === 'Phòng Nhân Sự Mới (Demo)');
+    return n ? n.orientation : null;
+  });
+  console.log('Chiều của Phòng Ban mới thêm (phải là vertical):', newNodeState);
+  assert.strictEqual(newNodeState, 'vertical', 'LỖI: Phòng Ban mới thêm phải lưu đúng chiều đã chọn ở form');
+  console.log('✅ Thêm Phòng Ban mới với chiều riêng hoạt động đúng.');
+
+  // 4) Đổi node 2 về lại Ngang — xác nhận đổi qua đổi lại không ảnh hưởng node khác.
+  const node2RowAgain = page.locator('#orgChartDiagramNodeList > div', { hasText: 'Kinh Doanh Khu Vực 1' }).first();
+  await node2RowAgain.locator('button[data-arg1="horizontal"]').click();
+  await page.waitForTimeout(250);
+  await shot(page, '#orgChartSection', '04-doi-lai-ngang-cac-phong-khac-van-khong-doi.png');
 
   await browser.close();
   server.close();
