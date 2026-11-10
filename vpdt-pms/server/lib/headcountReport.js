@@ -15,6 +15,7 @@
 //     cặp (dept, jobTitle) của node, tính hệ số 0.5 theo đúng mẫu Excel.
 // "Thai sản/nghỉ ốm": hệ thống hiện CHỈ có 1 trạng thái ON_LEAVE gộp chung (không phân biệt được 2 lý do
 // riêng — đã nêu rõ với người dùng ở doc phân tích), nên cột này = toàn bộ profile ON_LEAVE tại vị trí.
+const ExcelJS = require('exceljs');
 const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
 
 const ACTIVE_LIKE_STATUSES = new Set(['ACTIVE', 'ON_LEAVE']);
@@ -139,4 +140,165 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
   return { rows };
 }
 
-module.exports = { computeHeadcountReport };
+// ===== Dạng BẢNG PHẲNG theo mẫu Excel định biên của người dùng (11/2026, theo yêu cầu người dùng gửi
+// kèm ảnh file mẫu thật đang dùng) — KHÁC HẲN computeHeadcountReport() ở trên (cây thụt lề 1 cột
+// "Cấp/Tên"): bảng này tách riêng "BAN/PHÒNG" (cấp 1, đánh số La Mã I/II...) / "BAN/PHÒNG/BỘ PHẬN" (cấp
+// 2, đánh "I.1/I.2...") / "BỘ PHẬN/NHÓM" (cấp 3 trở lên, gộp tên nối bằng " > ", KHÔNG đánh số La Mã
+// riêng — layout chỉ cố định 3 cột đường dẫn), cộng thêm "Mã vị trí" tự sinh (VT1, VT2... — mã nội bộ
+// thật positionKey là UUID dài không hiển thị được) và viết tắt Phòng Ban lấy từ danh mục đã có sẵn
+// (AppData.deptAbbrs, khớp theo node.departmentRef). TÁI DÙNG NGUYÊN hàm computeHeadcountReport() ở trên
+// để lấy Định Biên/Thực Tế/Chênh Lệch mỗi node (tôn trọng ĐÚNG headcountSelfOnly) — chỉ XẾP LẠI thành
+// bảng phẳng, không tính lại bất kỳ con số nào, tránh 2 nơi lệch nhau.
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+function toRoman(n) { return ROMAN[n - 1] || String(n); }
+
+function buildFlatChildrenMap(nodes) {
+  const byParent = new Map();
+  for (const n of nodes || []) {
+    const key = n.parentNodeId == null ? '__root' : n.parentNodeId;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(n);
+  }
+  for (const list of byParent.values()) list.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  return byParent;
+}
+function abbrForNode(node, deptAbbrs) {
+  if (!node.departmentRef) return '';
+  return (deptAbbrs || {})[node.departmentRef] || '';
+}
+// Gom toàn bộ Vị Trí thuộc 1 "bucket" (nhóm cấp 2 đang mở, hoặc cấp 1 nếu Vị Trí nằm thẳng dưới cấp 1) —
+// gặp DEPARTMENT cấp 3 trở lên thì CHỈ gộp tên vào extraPathParts (cột "BỘ PHẬN/NHÓM"), không tạo bucket
+// STT mới, không đánh số La Mã riêng — tiếp tục cộng dồn vào ĐÚNG bucket đang mở.
+function collectPositionsInBucket(node, childrenByParent, extraPathParts, out) {
+  const children = childrenByParent.get(node.nodeId) || [];
+  for (const child of children) {
+    if (child.nodeType === 'POSITION') out.push({ position: child, extraPath: extraPathParts.join(' > ') });
+    else collectPositionsInBucket(child, childrenByParent, [...extraPathParts, child.nodeName], out);
+  }
+}
+
+function buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs) {
+  const { rows: statRows } = computeHeadcountReport(version, employeeProfiles, hrProcesses, users);
+  const statsByNodeId = new Map(statRows.map(r => [r.nodeId, r]));
+  const nodes = version?.nodes || [];
+  const childrenByParent = buildFlatChildrenMap(nodes);
+  const root = nodes.find(n => n.parentNodeId == null);
+  const rows = [];
+  if (!root) return { rootLabel: '', rootAbbr: '', rootStats: null, rows };
+
+  let positionCounter = 0;
+  const nextCode = () => 'VT' + (++positionCounter);
+
+  function pushPositionRow(stt, banPhong, banPhongBoPhan, boPhanNhom, posNode) {
+    const s = statsByNodeId.get(posNode.nodeId) || {};
+    rows.push({
+      kind: 'POSITION', nodeId: posNode.nodeId, stt, banPhong, banPhongBoPhan, boPhanNhom,
+      chucDanh: posNode.jobTitle, capBac: posNode.jobGrade || '', maViTri: nextCode(),
+      quota: s.quota, actualTotal: s.actualTotal, variance: s.variance,
+      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary
+    });
+  }
+  function pushGroupRow(kind, sttLabel, deptNode) {
+    const s = statsByNodeId.get(deptNode.nodeId) || {};
+    rows.push({
+      kind, nodeId: deptNode.nodeId, sttLabel, label: deptNode.nodeName, abbr: abbrForNode(deptNode, deptAbbrs),
+      quota: s.quota, actualTotal: s.actualTotal, variance: s.variance,
+      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary
+    });
+  }
+
+  const rootChildren = childrenByParent.get(root.nodeId) || [];
+  const rootLevelPositions = rootChildren.filter(c => c.nodeType === 'POSITION');
+  const rootLevelDepts = rootChildren.filter(c => c.nodeType === 'DEPARTMENT');
+
+  if (rootLevelPositions.length) {
+    const label = `(Trực thuộc ${root.nodeName || 'Công Ty'})`;
+    let stt = 0;
+    for (const pos of rootLevelPositions) { stt++; pushPositionRow(stt, label, label, '', pos); }
+  }
+
+  let g1 = 0;
+  for (const dept1 of rootLevelDepts) {
+    g1++;
+    const roman1 = toRoman(g1);
+    pushGroupRow('GROUP1', roman1, dept1);
+
+    const dept1Children = childrenByParent.get(dept1.nodeId) || [];
+    const positionsUnderDept1 = dept1Children.filter(c => c.nodeType === 'POSITION');
+    const subDepts = dept1Children.filter(c => c.nodeType === 'DEPARTMENT');
+
+    if (positionsUnderDept1.length) {
+      let stt = 0;
+      for (const pos of positionsUnderDept1) { stt++; pushPositionRow(stt, dept1.nodeName, dept1.nodeName, '', pos); }
+    }
+
+    let g2 = 0;
+    for (const dept2 of subDepts) {
+      g2++;
+      pushGroupRow('GROUP2', `${roman1}.${g2}`, dept2);
+      const bucket = [];
+      collectPositionsInBucket(dept2, childrenByParent, [], bucket);
+      let stt = 0;
+      for (const item of bucket) { stt++; pushPositionRow(stt, dept1.nodeName, dept2.nodeName, item.extraPath, item.position); }
+    }
+  }
+
+  const rootStats = statsByNodeId.get(root.nodeId) || {};
+  return { rootLabel: root.nodeName, rootAbbr: abbrForNode(root, deptAbbrs), rootStats, rows };
+}
+
+// Xuất Excel đúng layout bảng phẳng ở trên (dùng ExcelJS trực tiếp — không qua buildGenericWorkbook() vì
+// cần tô màu/đậm chữ riêng theo từng loại dòng, khác khuôn 1-màu của hàm dùng chung đó).
+function buildFlatHeadcountReportWorkbook(report) {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Định Biên Nhân Sự');
+  sheet.columns = [
+    { header: 'STT', key: 'stt', width: 8 },
+    { header: 'BAN/PHÒNG', key: 'banPhong', width: 26 },
+    { header: 'BAN/PHÒNG/BỘ PHẬN', key: 'banPhongBoPhan', width: 26 },
+    { header: 'BỘ PHẬN/NHÓM', key: 'boPhanNhom', width: 20 },
+    { header: 'CHỨC DANH', key: 'chucDanh', width: 32 },
+    { header: 'CẤP BẬC', key: 'capBac', width: 10 },
+    { header: 'Mã vị trí', key: 'maViTri', width: 10 },
+    { header: 'Định biên', key: 'quota', width: 10 },
+    { header: 'Thực tế', key: 'actualTotal', width: 10 },
+    { header: 'Chênh lệch', key: 'variance', width: 10 }
+  ];
+  const header = sheet.getRow(1);
+  header.font = { bold: true };
+  header.eachCell(c => {
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    c.border = { bottom: { style: 'thin' } };
+  });
+  header.height = 30;
+
+  const FILL_ROOT = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+  const FILL_GROUP = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } };
+
+  const rRoot = sheet.addRow({ stt: 'A', banPhong: report.rootLabel, banPhongBoPhan: report.rootAbbr || '', quota: report.rootStats?.quota ?? '', actualTotal: report.rootStats?.actualTotal, variance: report.rootStats?.variance ?? '' });
+  rRoot.eachCell(c => { c.fill = FILL_ROOT; c.font = { bold: true }; });
+
+  for (const r of report.rows) {
+    if (r.kind === 'GROUP1' || r.kind === 'GROUP2') {
+      const row = sheet.addRow({ stt: r.sttLabel, banPhong: r.label, banPhongBoPhan: r.abbr || '', quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal, variance: r.variance == null ? '' : r.variance });
+      row.eachCell(c => { c.fill = FILL_GROUP; });
+      sheet.getCell(`B${row.number}`).font = r.kind === 'GROUP1' ? { bold: true, color: { argb: 'FFDC2626' } } : { bold: true, color: { argb: 'FF111827' } };
+      ['H', 'I', 'J'].forEach(col => { sheet.getCell(`${col}${row.number}`).font = { bold: true }; });
+    } else {
+      const row = sheet.addRow({
+        stt: r.stt, banPhong: r.banPhong, banPhongBoPhan: r.banPhongBoPhan, boPhanNhom: r.boPhanNhom,
+        chucDanh: r.chucDanh, capBac: r.capBac, maViTri: r.maViTri,
+        quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal, variance: r.variance == null ? '' : r.variance
+      });
+      sheet.getCell(`G${row.number}`).font = { italic: true, color: { argb: 'FF2563EB' } };
+      sheet.getCell(`H${row.number}`).font = { bold: true, color: { argb: 'FF1D4ED8' } };
+    }
+  }
+  sheet.eachRow(row => row.eachCell(c => {
+    c.border = { ...(c.border || {}), left: { style: 'thin', color: { argb: 'FFD1D5DB' } }, right: { style: 'thin', color: { argb: 'FFD1D5DB' } }, top: { style: 'thin', color: { argb: 'FFD1D5DB' } }, bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } } };
+  }));
+  return wb;
+}
+
+module.exports = { computeHeadcountReport, buildFlatGroupedHeadcountReport, buildFlatHeadcountReportWorkbook };

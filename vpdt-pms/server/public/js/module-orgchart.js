@@ -1163,46 +1163,109 @@ async function forceDeleteOrgChartNodeClick(nodeId) {
   }
 }
 
-// ===== Báo Cáo Định Biên Nhân Sự (10/2026) =====
+// ===== Báo Cáo Định Biên Nhân Sự (10/2026, layout bảng phẳng theo mẫu Excel thật của người dùng từ
+// 11/2026 — xem lib/headcountReport.js::buildFlatGroupedHeadcountReport()): STT | BAN/PHÒNG |
+// BAN/PHÒNG/BỘ PHẬN | BỘ PHẬN/NHÓM | CHỨC DANH | CẤP BẬC | Mã vị trí | Định Biên | Thực Tế | Chênh Lệch,
+// nhóm La Mã I/II.../II.1/II.2... — THAY THẾ hẳn layout cây thụt lề cũ (1 cột "Cấp/Tên").
 function ocFmtNum(n) {
   if (n == null) return '—';
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
-function renderOrgChartHeadcountTable(rows) {
+function renderOrgChartHeadcountTable(report) {
   const tbody = document.getElementById('orgChartHeadcountTableBody');
-  const LEVEL_CLS = { 0: 'font-bold bg-teal-50', 1: 'font-bold bg-gray-50' };
-  tbody.innerHTML = rows.map(r => {
-    const indent = '&nbsp;'.repeat(r.level * 4);
-    const rowCls = r.nodeType === 'POSITION' ? '' : (LEVEL_CLS[r.level] || 'font-semibold');
-    const varianceCls = r.variance == null ? '' : r.variance > 0 ? 'text-amber-700 font-bold' : r.variance < 0 ? 'text-red-600 font-bold' : '';
-    return `<tr class="border-t ${rowCls}">
-      <td class="p-1.5">${indent}${r.nodeType === 'POSITION' ? '💺 ' : r.nodeType === 'DEPARTMENT' ? '🏢 ' : ''}${escapeHtml(r.displayName || '')}</td>
-      <td class="p-1.5">${escapeHtml(r.jobTitle || '')}</td>
-      <td class="p-1.5">${escapeHtml(r.jobGrade || '')}</td>
-      <td class="p-1.5 text-right">${r.quota == null ? '—' : r.quota}</td>
+  const varianceCls = (v) => v == null ? '' : v > 0 ? 'text-amber-700 font-bold' : v < 0 ? 'text-red-600 font-bold' : '';
+  const rootRow = `<tr class="bg-gray-100 font-bold">
+    <td class="p-1.5 text-center">A</td>
+    <td class="p-1.5" colspan="2">${escapeHtml(report.rootLabel || '')}</td>
+    <td class="p-1.5"></td><td class="p-1.5"></td><td class="p-1.5"></td><td class="p-1.5"></td>
+    <td class="p-1.5 text-right">${report.rootStats?.quota == null ? '—' : report.rootStats.quota}</td>
+    <td class="p-1.5 text-right">${ocFmtNum(report.rootStats?.actualTotal)}</td>
+    <td class="p-1.5 text-right ${varianceCls(report.rootStats?.variance)}">${report.rootStats?.variance == null ? '—' : report.rootStats.variance}</td>
+  </tr>`;
+  const bodyRows = (report.rows || []).map(r => {
+    if (r.kind === 'GROUP1' || r.kind === 'GROUP2') {
+      const nameCls = r.kind === 'GROUP1' ? 'font-bold text-red-600' : 'font-bold text-gray-900';
+      return `<tr class="bg-amber-200">
+        <td class="p-1.5 font-bold text-center">${escapeHtml(r.sttLabel)}</td>
+        <td class="p-1.5 ${nameCls}" colspan="2">${escapeHtml(r.label)}${r.abbr ? ` <span class="font-normal text-gray-600">(${escapeHtml(r.abbr)})</span>` : ''}</td>
+        <td class="p-1.5"></td><td class="p-1.5"></td><td class="p-1.5"></td><td class="p-1.5"></td>
+        <td class="p-1.5 text-right font-bold">${r.quota == null ? '—' : r.quota}</td>
+        <td class="p-1.5 text-right font-bold">${ocFmtNum(r.actualTotal)}</td>
+        <td class="p-1.5 text-right font-bold ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
+      </tr>`;
+    }
+    return `<tr class="border-t">
+      <td class="p-1.5 text-center text-gray-500">${r.stt}</td>
+      <td class="p-1.5">${escapeHtml(r.banPhong || '')}</td>
+      <td class="p-1.5">${escapeHtml(r.banPhongBoPhan || '')}</td>
+      <td class="p-1.5">${escapeHtml(r.boPhanNhom || '')}</td>
+      <td class="p-1.5">${escapeHtml(r.chucDanh || '')}</td>
+      <td class="p-1.5 text-center">${escapeHtml(r.capBac || '')}</td>
+      <td class="p-1.5 text-center italic text-blue-600">${escapeHtml(r.maViTri || '')}</td>
+      <td class="p-1.5 text-right font-bold text-blue-700">${r.quota == null ? '—' : r.quota}</td>
       <td class="p-1.5 text-right">${ocFmtNum(r.actualTotal)}</td>
-      <td class="p-1.5 text-right ${varianceCls}">${r.variance == null ? '—' : r.variance}</td>
-      <td class="p-1.5 text-right">${r.active}</td>
-      <td class="p-1.5 text-right">${r.offboarding}</td>
-      <td class="p-1.5 text-right">${r.onLeave}</td>
-      <td class="p-1.5 text-right">${ocFmtNum(r.secondary)}</td>
+      <td class="p-1.5 text-right ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
     </tr>`;
   }).join('');
+  tbody.innerHTML = rootRow + bodyRows;
 }
 async function openOrgChartHeadcountModal() {
   if (!_ocCurrentVersion) return;
   document.getElementById('btnOrgChartHeadcountExportXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report/export-xlsx`;
+  document.getElementById('btnOrgChartHeadcountTemplateXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-template/export-xlsx`;
   document.getElementById('orgChartHeadcountModal').classList.remove('hidden');
   document.getElementById('orgChartHeadcountTableBody').innerHTML = '<tr><td colspan="10" class="p-2 text-center text-gray-400">Đang tải...</td></tr>';
   try {
-    const { rows } = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
-    renderOrgChartHeadcountTable(rows);
+    const report = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
+    renderOrgChartHeadcountTable(report);
   } catch (err) {
     document.getElementById('orgChartHeadcountTableBody').innerHTML = `<tr><td colspan="10" class="p-2 text-center text-red-600">⛔ ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 function closeOrgChartHeadcountModal() {
   document.getElementById('orgChartHeadcountModal').classList.add('hidden');
+}
+
+// ===== Nhập Định Biên hàng loạt (11/2026) — KHÁC hẳn "Nhập Excel" cả cây: chỉ cập nhật headcountQuota
+// của Vị Trí ĐÃ CÓ qua lib/orgChartHeadcountImport.js, không tạo bản mới, chỉ áp dụng được lên bản Nháp
+// (server tự chặn — xem orgChart.requireDraft() trong route). Khoan dung theo dòng (giống đa số Excel
+// Nhập khác), KHÁC "Nhập Excel" cả cây (tất-cả-hoặc-không-gì) — nên không cần màn xem trước/xác nhận
+// riêng, upload xong là áp dụng luôn, hiện kết quả (số dòng cập nhật + dòng bị bỏ qua) ngay trong modal.
+function openOrgChartHeadcountImportModal() {
+  document.getElementById('orgChartHeadcountImportFileInput').value = '';
+  document.getElementById('orgChartHeadcountImportResult').innerHTML = '';
+  document.getElementById('orgChartHeadcountImportModal').classList.remove('hidden');
+}
+function closeOrgChartHeadcountImportModal() {
+  document.getElementById('orgChartHeadcountImportModal').classList.add('hidden');
+}
+async function submitOrgChartHeadcountImport() {
+  if (!_ocCurrentVersion) return;
+  const fileInput = document.getElementById('orgChartHeadcountImportFileInput');
+  const file = fileInput.files[0];
+  const resultEl = document.getElementById('orgChartHeadcountImportResult');
+  if (!file) { resultEl.innerHTML = '<p class="text-red-600">⛔ Vui lòng chọn file.</p>'; return; }
+  resultEl.innerHTML = '<p class="text-gray-400">⏳ Đang nhập...</p>';
+  const formData = new FormData();
+  formData.append('file', file);
+  let data;
+  try {
+    const res = await fetch(`/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-template/import`, { method: 'POST', body: formData });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+  } catch (err) {
+    resultEl.innerHTML = `<p class="text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  let html = `<p class="text-emerald-700 font-semibold">✅ Đã cập nhật Định Biên cho ${data.updatedCount} Vị Trí.</p>`;
+  if (data.errors.length) {
+    html += `<p class="text-amber-700 font-semibold mt-1">⚠️ ${data.errors.length} dòng bị bỏ qua:</p>` +
+      `<ul class="list-disc pl-4 text-amber-700">${data.errors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>`;
+  }
+  resultEl.innerHTML = html;
+  fileInput.value = '';
+  await loadOrgChartCurrentVersion(_ocCurrentVersion.id);
+  await openOrgChartHeadcountModal();
 }
 
 // ===== Tab "Cấu Hình Đánh Giá KPI" — chỉ thao tác trên version đang APPLIED =====

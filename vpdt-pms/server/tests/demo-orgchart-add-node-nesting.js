@@ -19,7 +19,7 @@ const http = require('http');
 const fs = require('fs');
 const assert = require('assert');
 const orgChart = require('../lib/orgChart');
-const { computeHeadcountReport } = require('../lib/headcountReport');
+const { buildFlatGroupedHeadcountReport } = require('../lib/headcountReport');
 
 const OUT_DIR = process.env.OC_ADDNODE_DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-screenshots', 'orgchart-add-node-nesting');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -70,7 +70,8 @@ function seed() {
   orgChart.addNode(version, { parentNodeId: phongKiemSoat.nodeId, nodeType: 'POSITION', jobTitle: 'Chuyên viên Kiểm soát Tuân thủ' });
   orgChart.addNode(version, { parentNodeId: phongKiemSoat.nodeId, nodeType: 'POSITION', jobTitle: 'Chuyên viên Kiểm soát Chất lượng' });
   const khoiSieuThi = orgChart.addNode(version, { parentNodeId: banTgd.nodeId, nodeType: 'DEPARTMENT', nodeName: 'Khối siêu thị/Cửa hàng' });
-  orgChart.addNode(version, { parentNodeId: khoiSieuThi.nodeId, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị hàng trống' });
+  const sieuThiHangTrong = orgChart.addNode(version, { parentNodeId: khoiSieuThi.nodeId, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị hàng trống' });
+  orgChart.addNode(version, { parentNodeId: sieuThiHangTrong.nodeId, nodeType: 'POSITION', jobTitle: 'Nhân viên bán hàng' });
   return banTgd.nodeId;
 }
 const banTgdNodeId = seed();
@@ -100,7 +101,7 @@ async function main() {
     return { node, parentNodeIdSentByClient: payload.parentNodeId, displayOrderSentByClient: payload.displayOrder };
   });
   await page.exposeFunction('__serverGetVersion', () => version);
-  await page.exposeFunction('__serverGetHeadcountRows', () => computeHeadcountReport(version, [], [], []).rows);
+  await page.exposeFunction('__serverGetHeadcountReport', () => buildFlatGroupedHeadcountReport(version, [], [], [], {}));
 
   await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'load' });
 
@@ -125,7 +126,7 @@ async function main() {
         return { ok: true, status: 200, json: async () => ({ ok: true, node: result.node }) };
       }
       if (/\/headcount-report$/.test(u)) {
-        return { ok: true, status: 200, json: async () => ({ rows: await window.__serverGetHeadcountRows() }) };
+        return { ok: true, status: 200, json: async () => (await window.__serverGetHeadcountReport()) };
       }
       if (u === '/api/org-chart/kpi-flow') {
         return { ok: true, status: 200, json: async () => ({ rows: [] }) };
@@ -228,7 +229,7 @@ async function main() {
   await page.waitForTimeout(300);
   const headcountOrder = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('#orgChartHeadcountTableBody tr')];
-    return rows.map(r => r.querySelector('td')?.innerText.replace(/ /g, '').trim() || '');
+    return rows.map(r => [...r.querySelectorAll('td')].map(td => td.innerText).join(' ').replace(/ /g, '').trim());
   });
   const hcIdxBanTgd = headcountOrder.findIndex(t => t.includes('BAN TỔNG GIÁM ĐỐC'));
   const hcIdxChuTich = headcountOrder.findIndex(t => t.includes('Chủ Tịch'));
