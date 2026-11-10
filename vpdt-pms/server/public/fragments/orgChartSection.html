@@ -43,11 +43,14 @@
       <p id="orgChartVersionMeta" class="text-[11px] text-gray-500"></p>
     </div>
 
-    <!-- Sub-tab: "Sơ Đồ Tổ Chức" (cây) / "Cấu Hình Đánh Giá KPI" (luồng theo cặp vị trí, chỉ thao tác
-         trên version đang APPLIED). -->
+    <!-- Sub-tab: "Định Biên Nhân Sự" (cây Phòng Ban+Vị Trí+định biên, ĐỔI TÊN 11/2026 từ "🌳 Sơ Đồ Tổ
+         Chức" — chức năng giữ NGUYÊN, chỉ đổi tên theo yêu cầu người dùng "tách cơ cấu tổ chức ra khỏi
+         định biên") / "Cây Sơ Đồ Tổ Chức" (MỚI 11/2026, cây Phòng Ban/Siêu Thị RIÊNG — xem
+         lib/orgChartDiagramTree.js, HOÀN TOÀN TÁCH BIỆT khỏi cây Định Biên bên cạnh) / "Cấu Hình Đánh
+         Giá KPI" (luồng theo cặp vị trí, chỉ thao tác trên version đang APPLIED). -->
     <div id="orgChartSubTabsWrap" class="hidden flex flex-wrap items-center gap-2">
-      <button type="button" id="btnOrgChartSubTree" data-op="setOrgChartSubTab" data-arg0="TREE" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🌳 Sơ Đồ Tổ Chức</button>
-      <button type="button" id="btnOrgChartSubDiagram" data-op="setOrgChartSubTab" data-arg0="DIAGRAM" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🖼️ Sơ Đồ Trực Quan</button>
+      <button type="button" id="btnOrgChartSubTree" data-op="setOrgChartSubTab" data-arg0="TREE" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🧩 Định Biên Nhân Sự</button>
+      <button type="button" id="btnOrgChartSubDiagram" data-op="setOrgChartSubTab" data-arg0="DIAGRAM" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🖼️ Cây Sơ Đồ Tổ Chức</button>
       <button type="button" id="btnOrgChartSubKpi" data-op="setOrgChartSubTab" data-arg0="KPI" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🎯 Cấu Hình Đánh Giá KPI</button>
     </div>
 
@@ -56,20 +59,38 @@
       <div id="orgChartTreeContainer" class="bg-white border rounded p-3 space-y-1 text-sm"></div>
     </div>
 
-    <!-- "Sơ Đồ Trực Quan" (yêu cầu người dùng 10/2026): tự vẽ theo ĐÚNG version đang xem ở dropdown
-         (giống tab Cây, không giới hạn chỉ version APPLIED), CHỈ tới cấp Phòng Ban (không đưa Vị Trí vào
-         hình — xem đầy đủ Vị Trí ở tab 🌳 Sơ Đồ Tổ Chức) — xem renderOrgChartDiagramTab()/
-         ocBuildDepartmentTree() ở module-orgchart.js. Bấm "✅ Áp Dụng Phiên Bản Này" ở thanh version phía
-         trên tự chuyển sang đúng sub-tab này (activeOrgChartSubTab = 'DIAGRAM' trong applyOrgChartVersionClick()). -->
+    <!-- "🖼️ Cây Sơ Đồ Tổ Chức" (11/2026, theo yêu cầu người dùng "tách cơ cấu tổ chức ra khỏi định
+         biên" — demo đã xác nhận): cây Phòng Ban/Siêu Thị RIÊNG, HOÀN TOÀN TÁCH BIỆT khỏi tab "🧩 Định
+         Biên Nhân Sự" bên cạnh (không dùng chung dữ liệu, không versioning) — thêm Phòng Ban ở khung
+         trái, sơ đồ bên phải TỰ VẼ LẠI ngay, không cần bấm "Áp Dụng" gì cả (khác hẳn cơ chế version của
+         tab Định Biên). Xem renderOrgChartDiagramTab()/lib/orgChartDiagramTree.js. -->
     <div id="orgChartDiagramView" class="hidden space-y-2">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <p class="text-[11px] text-gray-500 italic flex-1 min-w-[220px]">Sơ đồ chỉ vẽ tới cấp Phòng Ban (không hiện Vị Trí) — xem đầy đủ Vị Trí ở tab 🌳 Sơ Đồ Tổ Chức.</p>
-        <button type="button" id="btnOrgChartDiagramPng" data-op="downloadOrgChartDiagramPng" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">🖼️ Tải Ảnh (PNG)</button>
-        <button type="button" id="btnOrgChartDiagramSvg" data-op="downloadOrgChartDiagramSvg" class="bg-white border border-teal-700 text-teal-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-50">⬇️ Tải SVG (Vector)</button>
-      </div>
-      <p id="orgChartDiagramStatus" class="text-[11px] text-gray-500 min-h-[14px]"></p>
-      <div class="bg-white border rounded overflow-x-auto p-4">
-        <div id="orgChartDiagramContainer"></div>
+      <p class="text-[11px] text-gray-500 italic">Cây Phòng Ban/Siêu Thị riêng — chỉ dùng để vẽ sơ đồ, không liên quan tới Vị Trí/định biên ở tab "🧩 Định Biên Nhân Sự". Thêm/xoá Phòng Ban bên dưới, sơ đồ tự vẽ lại ngay.</p>
+      <div class="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <h4 class="font-bold text-sm text-gray-700">➕ Thêm Phòng Ban / Siêu Thị</h4>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Tên Phòng Ban / Siêu Thị</label>
+            <input id="orgChartDiagramNodeNameInput" placeholder="VD: Phòng Marketing" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Thuộc vào</label>
+            <select id="orgChartDiagramNodeParentSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+          </div>
+          <button type="button" id="btnOrgChartDiagramAddNode" data-op="addOrgChartDiagramNodeClick" class="w-full bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">➕ Thêm Vào Sơ Đồ</button>
+          <p id="orgChartDiagramNodeFormStatus" class="text-[11px] text-red-600 min-h-[14px]"></p>
+          <div id="orgChartDiagramNodeList" class="pt-2 border-t space-y-1 text-xs max-h-[360px] overflow-y-auto"></div>
+        </div>
+        <div class="bg-white border rounded p-3 space-y-2">
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" id="btnOrgChartDiagramPng" data-op="downloadOrgChartDiagramPng" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">🖼️ Tải Ảnh (PNG)</button>
+            <button type="button" id="btnOrgChartDiagramSvg" data-op="downloadOrgChartDiagramSvg" class="bg-white border border-teal-700 text-teal-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-50">⬇️ Tải SVG (Vector)</button>
+          </div>
+          <p id="orgChartDiagramStatus" class="text-[11px] text-gray-500 min-h-[14px]"></p>
+          <div class="overflow-x-auto p-2">
+            <div id="orgChartDiagramContainer"></div>
+          </div>
+        </div>
       </div>
     </div>
 

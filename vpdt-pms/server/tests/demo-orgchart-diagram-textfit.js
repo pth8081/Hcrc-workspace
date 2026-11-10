@@ -1,10 +1,15 @@
 // server/tests/demo-orgchart-diagram-textfit.js
 //
 // DEMO thật (người dùng chủ động yêu cầu "demo bằng ảnh trước khi tôi xác nhận làm") cho fix "chữ tràn
-// ra ngoài ô" trên tab 🖼️ Sơ Đồ Trực Quan (Cơ Cấu Tổ Chức) — dùng ĐÚNG tên Phòng/Ban dài trong ảnh chụp
-// người dùng gửi ("BAN TỔNG GIÁM ĐỐC", "BAN VẬN HÀNH KINH DOANH", "BAN CUNG ỨNG") để tái hiện chính xác
-// tình huống lỗi rồi chụp lại sau khi vá (ocWrapLines()/module-orgchart.js — xuống dòng theo ước lượng
-// số ký tự vừa khung, tối đa 2 dòng, box tự cao thêm nếu cần).
+// ra ngoài ô" trên tab 🖼️ Cây Sơ Đồ Tổ Chức (Cơ Cấu Tổ Chức) — dùng ĐÚNG tên Phòng/Ban dài trong ảnh chụp
+// người dùng gửi kèm yêu cầu ("BAN TỔNG GIÁM ĐỐC", "BAN VẬN HÀNH KINH DOANH", "BAN CUNG ỨNG") để tái hiện
+// chính xác tình huống lỗi rồi chụp lại sau khi vá (ocWrapLines()/module-orgchart.js — xuống dòng theo
+// ước lượng số ký tự vừa khung, tối đa 2 dòng, box tự cao thêm nếu cần).
+//
+// CẬP NHẬT (11/2026, tách "Cây Sơ Đồ Tổ Chức" thành cây Phòng Ban RIÊNG — xem
+// lib/orgChartDiagramTree.js): logic xuống dòng/đo chữ (ocWrapLines()/ocPrepareNodeLines()) KHÔNG đổi,
+// chỉ đổi NGUỒN DỮ LIỆU nạp vào sơ đồ — trước đọc từ orgChartVersions[].nodes (DEPARTMENT), giờ đọc từ
+// cây Phòng Ban RIÊNG qua GET /api/org-chart/diagram-nodes — stub lại fetch cho đúng 3 endpoint mới.
 //
 // Chạy: node server/tests/demo-orgchart-diagram-textfit.js
 'use strict';
@@ -49,23 +54,26 @@ async function main() {
 
   await page.evaluate(() => {
     window.alert = () => {}; window.confirm = () => true; window.prompt = () => '';
-    // Đúng tên Công Ty/Phòng Ban dài trong ảnh chụp người dùng gửi kèm yêu cầu.
-    window.__ocNodes = [
-      { nodeId: 1, nodeType: 'COMPANY', nodeName: 'Công Ty HCRC', parentNodeId: null },
-      { nodeId: 2, nodeType: 'DEPARTMENT', nodeName: 'BAN TỔNG GIÁM ĐỐC', parentNodeId: 1, departmentRef: 'BAN TỔNG GIÁM ĐỐC' },
-      { nodeId: 3, nodeType: 'DEPARTMENT', nodeName: 'BAN VẬN HÀNH KINH DOANH', parentNodeId: 2, departmentRef: 'BAN VẬN HÀNH KINH DOANH' },
-      { nodeId: 4, nodeType: 'DEPARTMENT', nodeName: 'BAN CUNG ỨNG', parentNodeId: 2, departmentRef: 'BAN CUNG ỨNG' }
+    // Đúng tên Phòng Ban dài trong ảnh chụp người dùng gửi kèm yêu cầu — cây Phòng Ban RIÊNG (không còn
+    // node COMPANY/Công Ty, xem lib/orgChartDiagramTree.js), BAN VẬN HÀNH KINH DOANH + BAN CUNG ỨNG lồng
+    // dưới BAN TỔNG GIÁM ĐỐC để vẫn tái hiện đúng độ sâu 2 cấp như ảnh gốc.
+    window.__ocDiagramNodesStore = [
+      { id: 1, nodeName: 'BAN TỔNG GIÁM ĐỐC', parentNodeId: null },
+      { id: 2, nodeName: 'BAN VẬN HÀNH KINH DOANH', parentNodeId: 1 },
+      { id: 3, nodeName: 'BAN CUNG ỨNG', parentNodeId: 1 }
     ];
     window.fetch = async (url, opts) => {
       const u = String(url);
-      if (u === '/api/org-chart/versions') return { ok: true, status: 200, json: async () => ({ versions: [{ id: 1, versionName: 'Demo', status: 'APPLIED', createdBy: 'admin' }] }) };
-      if (u === '/api/org-chart/versions/1') return { ok: true, status: 200, json: async () => ({ version: { id: 1, versionName: 'Demo', status: 'APPLIED', nodes: window.__ocNodes, kpiFlow: [] } }) };
-      if (u === '/api/org-chart/kpi-flow') return { ok: true, status: 200, json: async () => ({ rows: [] }) };
+      const method = (opts && opts.method) || 'GET';
+      if (u === '/api/org-chart/versions' && method === 'GET') return { ok: true, status: 200, json: async () => ({ versions: [{ id: 1, versionName: 'Demo', status: 'APPLIED', createdBy: 'admin' }] }) };
+      if (u === '/api/org-chart/versions/1' && method === 'GET') return { ok: true, status: 200, json: async () => ({ version: { id: 1, versionName: 'Demo', status: 'APPLIED', nodes: [{ nodeId: 1, nodeType: 'COMPANY', nodeName: 'Công Ty HCRC', parentNodeId: null }], kpiFlow: [] } }) };
+      if (u === '/api/org-chart/kpi-flow' && method === 'GET') return { ok: true, status: 200, json: async () => ({ rows: [] }) };
+      if (u === '/api/org-chart/diagram-nodes' && method === 'GET') return { ok: true, status: 200, json: async () => ({ nodes: window.__ocDiagramNodesStore }) };
       return { ok: true, status: 200, json: async () => ([]) };
     };
     Object.assign(DB, {
       depts: [], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {}, jobTitles: [], storeJobTitles: [],
-      positionTypes: [], users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true }, active: true, groupIds: [], permOverrides: null }],
+      positionTypes: [], users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true, orgChartManage: true }, active: true, groupIds: [], permOverrides: null }],
       workflows: [], quickApplyConfigs: [], deptWorkflows: {}, docs: [], submissions: [], submissionApprovalGroups: [],
       submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {}, contracts: [], contractApprovalGroups: [],
       contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {}, meetings: [], meetingRooms: [], meetingMinutes: [],

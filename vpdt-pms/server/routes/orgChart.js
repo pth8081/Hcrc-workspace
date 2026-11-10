@@ -23,6 +23,7 @@ const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { HttpError } = require('../lib/httpErrors');
 const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 const orgChart = require('../lib/orgChart');
+const orgChartDiagramTree = require('../lib/orgChartDiagramTree');
 const orgChartImport = require('../lib/orgChartImport');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { computeHeadcountReport } = require('../lib/headcountReport');
@@ -273,6 +274,73 @@ const upload = multer({
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
     cb(null, true);
+  }
+});
+
+// ===== "🖼️ Cây Sơ Đồ Tổ Chức" (11/2026, theo yêu cầu người dùng "tách cơ cấu tổ chức ra khỏi định
+// biên") — cây Phòng Ban/Siêu Thị RIÊNG, HOÀN TOÀN TÁCH BIỆT khỏi orgChartVersions[].nodes ở trên
+// (xem lib/orgChartDiagramTree.js) — lưu 1 khoá AppData riêng "orgChartDiagramNodes", không versioning
+// (DRAFT/APPLIED/ARCHIVED) — sửa là lưu ngay, giống khuôn các danh mục đơn giản khác. Gác quyền giống
+// hệt versions/nodes ở trên: XEM = canView() (orgChartManage/nhanSuManage/kpiFlowConfigManage), SỬA
+// (thêm/sửa/xoá) = canManageTree() (chỉ orgChartManage).
+
+// GET /api/org-chart/diagram-nodes — toàn bộ cây Phòng Ban/Siêu Thị (mảng phẳng, không kèm version).
+router.get('/diagram-nodes', async (req, res) => {
+  if (!requireView(req, res)) return;
+  try {
+    const list = (await getAppDataValue('orgChartDiagramNodes')) || [];
+    res.json({ nodes: list });
+  } catch (err) { sendCatchError(res, err, 'GET /api/org-chart/diagram-nodes'); }
+});
+
+// POST /api/org-chart/diagram-nodes — thêm 1 Phòng Ban/Siêu Thị.
+router.post('/diagram-nodes', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let created;
+    await withLockedAppDataValue('orgChartDiagramNodes', (list) => {
+      const result = orgChartDiagramTree.addDiagramNode(list, req.body || {});
+      created = result.node;
+      return result.list;
+    });
+    res.json({ ok: true, node: created });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/diagram-nodes', 'Không thể thêm Phòng Ban');
+  }
+});
+
+// PATCH /api/org-chart/diagram-nodes/:nodeId — sửa tên/chuyển Phòng Ban cha.
+router.patch('/diagram-nodes/:nodeId', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let updated;
+    await withLockedAppDataValue('orgChartDiagramNodes', (list) => {
+      const result = orgChartDiagramTree.renameDiagramNode(list, Number(req.params.nodeId), req.body || {});
+      updated = result.node;
+      return result.list;
+    });
+    res.json({ ok: true, node: updated });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'PATCH /api/org-chart/diagram-nodes/:nodeId', 'Không thể sửa Phòng Ban');
+  }
+});
+
+// DELETE /api/org-chart/diagram-nodes/:nodeId — xoá Phòng Ban + nhánh con (cascade).
+router.delete('/diagram-nodes/:nodeId', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let deletedIds;
+    await withLockedAppDataValue('orgChartDiagramNodes', (list) => {
+      const result = orgChartDiagramTree.deleteDiagramNodeCascade(list, Number(req.params.nodeId));
+      deletedIds = result.deletedIds;
+      return result.list;
+    });
+    res.json({ ok: true, deletedNodeIds: deletedIds });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'DELETE /api/org-chart/diagram-nodes/:nodeId', 'Không thể xoá Phòng Ban');
   }
 });
 

@@ -1,22 +1,38 @@
 // server/tests/test-orgchart-diagram-tab.js
 //
-// Sub-tab MỚI "🖼️ Sơ Đồ Trực Quan" (yêu cầu người dùng 10/2026) — Cơ Cấu Tổ Chức tự vẽ sơ đồ hình ảnh
-// CHỈ tới cấp Phòng Ban (không đưa Vị Trí vào hình, khác tab 🌳 Sơ Đồ Tổ Chức vẫn hiện đủ Vị Trí), xem
-// trực tiếp + tải về PNG/SVG. Bấm "✅ Áp Dụng Phiên Bản Này" tự chuyển sang đúng sub-tab này.
+// Sub-tab "🖼️ Cây Sơ Đồ Tổ Chức" — VIẾT LẠI HOÀN TOÀN (11/2026, theo yêu cầu người dùng "tách cơ cấu
+// tổ chức ra khỏi định biên", demo đã xác nhận): bài test CŨ (trước v29.78) kiểm tra ocBuildDepartmentTree()
+// suy cây Phòng Ban TỪ orgChartVersions[].nodes (cùng dữ liệu Định Biên) + hành vi tự-chuyển-tab sau khi
+// "Áp Dụng" — CẢ HAI đã đổi hẳn:
+//   1. Tab "🌳 Sơ Đồ Tổ Chức" cũ ĐỔI TÊN thành "🧩 Định Biên Nhân Sự" (btnOrgChartSubTree), chức năng
+//      giữ nguyên (không liên quan bài test này).
+//   2. Tab "🖼️ Sơ Đồ Trực Quan" cũ ĐỔI TÊN thành "🖼️ Cây Sơ Đồ Tổ Chức" (btnOrgChartSubDiagram) — giờ
+//      đọc/ghi 1 cây Phòng Ban/Siêu Thị RIÊNG qua API /api/org-chart/diagram-nodes (lib/orgChartDiagramTree.js,
+//      khoá AppData "orgChartDiagramNodes") — HOÀN TOÀN TÁCH BIỆT khỏi orgChartVersions, không
+//      versioning/DRAFT/APPLIED, thêm/xoá là lưu ngay. ocBuildDepartmentTree()/ocRenderDepartmentDiagram()
+//      ĐÃ XOÁ, thay bằng ocBuildDiagramForest()/ocRenderDiagramForest() (nhận MẢNG node gốc — cây này có
+//      thể có NHIỀU node gốc song song, không bắt buộc đúng 1 "Công Ty").
+//   3. Bấm "✅ Áp Dụng Phiên Bản Này" (Định Biên) KHÔNG còn tự chuyển sang sub-tab Sơ Đồ nữa (ĐẢO LẠI
+//      đúng quyết định 10/2026 cũ) — vì sơ đồ giờ là cây RIÊNG, không còn lý do để tự nhảy qua xem ngay
+//      sau khi Áp Dụng Định Biên.
 //
-//   1. ocBuildDepartmentTree(): chỉ giữ COMPANY + DEPARTMENT, BỎ QUA mọi node POSITION nằm giữa (kể cả
-//      khi 1 Phòng Ban là con của 1 Vị Trí, VD "Tổng Giám Đốc") — gắn đúng vào Phòng Ban/Công Ty tổ
-//      tiên gần nhất, giữ nguyên cấu trúc lồng Phòng Ban con.
-//   2. Bấm sub-tab "🖼️ Sơ Đồ Trực Quan" -> đúng view hiện/ẩn, SVG chứa tên MỌI Phòng Ban (kể cả Phòng
-//      Ban con lồng nhau) nhưng KHÔNG chứa bất kỳ Chức Danh/tên Vị Trí nào.
-//   3. Nút "⬇️ Tải SVG (Vector)"/"🖼️ Tải Ảnh (PNG)" tồn tại, bấm không phát sinh lỗi JS (link tải file
-//      thật qua Blob — không tự động click-through file dialog nào cần polyfill thêm).
-//   4. Bấm "✅ Áp Dụng Phiên Bản Này" (DRAFT -> APPLIED) -> activeOrgChartSubTab tự chuyển 'DIAGRAM',
-//      sau khi renderOrgChartModule() chạy xong, view Sơ Đồ Trực Quan phải đang HIỆN (không phải Cây).
+// Kịch bản bài test MỚI:
+//   1. Vào tab Cây Sơ Đồ Tổ Chức lúc chưa có Phòng Ban nào -> thông báo trống đúng, dropdown "Thuộc vào"
+//      chỉ có "(gốc)".
+//   2. Thêm Phòng Ban gốc "Phòng Kinh Doanh" -> xuất hiện trong danh sách + SVG vẽ ngay (không cần tải
+//      lại trang/bấm gì thêm).
+//   3. Thêm Phòng Ban con "Kinh Doanh Khu Vực 1" (chọn "Phòng Kinh Doanh" làm cha qua dropdown) -> lồng
+//      đúng cấp trong danh sách + SVG.
+//   4. Thêm Phòng Ban gốc thứ 2 "Phòng IT" (song song, không chung cha với Phòng Kinh Doanh) -> cả 2 cây
+//      gốc cùng vẽ, không đè nhau.
+//   5. Xoá "Phòng Kinh Doanh" (có con) -> cascade xoá luôn "Kinh Doanh Khu Vực 1", chỉ còn "Phòng IT".
+//   6. Bấm "✅ Áp Dụng Phiên Bản Này" ở tab Định Biên (đang xem tab Cây/Định Biên) -> VẪN ở tab Định
+//      Biên, KHÔNG tự nhảy sang tab Sơ Đồ (activeOrgChartSubTab vẫn 'TREE').
 //
 // Dựng lại đúng khuôn tests/test-car-report-week-month.js (static server phục vụ public/ + Chromium
-// thật, không cần route server nào — stub thẳng window.fetch cho 3 endpoint /api/org-chart/* module này
-// gọi tới).
+// thật, không cần route server nào — stub thẳng window.fetch cho các endpoint module này gọi tới, bao
+// gồm 3 endpoint MỚI /api/org-chart/diagram-nodes GET/POST/DELETE, mô phỏng lại ĐÚNG hành vi AppData
+// (list phẳng trong biến window.__ocDiagramNodesStore, tự tăng id như nextIdFor() ở lib/orgChartDiagramTree.js).
 'use strict';
 const path = require('path');
 const http = require('http');
@@ -72,54 +88,65 @@ async function main() {
     window.confirm = () => true;
     window.prompt = () => '';
 
-    // Cây mẫu: Công Ty(1) -> Vị Trí "Tổng Giám Đốc"(2, POSITION) -> Phòng Kinh Doanh(3, DEPARTMENT) ->
-    // [Vị Trí "Trưởng Phòng Kinh Doanh"(4, POSITION), Phòng Kinh Doanh Khu Vực 1(6, DEPARTMENT con)];
-    // Công Ty(1) -> Phòng IT(5, DEPARTMENT, con TRỰC TIẾP của Công Ty, không qua Vị Trí nào).
-    window.__ocNodes = [
-      { nodeId: 1, nodeType: 'COMPANY', nodeName: 'CÔNG TY TEST', parentNodeId: null },
-      { nodeId: 2, nodeType: 'POSITION', jobTitle: 'Tổng Giám Đốc', parentNodeId: 1, requiresDept: false },
-      { nodeId: 3, nodeType: 'DEPARTMENT', nodeName: 'Phòng Kinh Doanh', parentNodeId: 2, departmentRef: 'Phòng Kinh Doanh' },
-      { nodeId: 4, nodeType: 'POSITION', jobTitle: 'Trưởng Phòng Kinh Doanh', parentNodeId: 3 },
-      { nodeId: 5, nodeType: 'DEPARTMENT', nodeName: 'Phòng IT', parentNodeId: 1, departmentRef: 'Phòng IT' },
-      { nodeId: 6, nodeType: 'DEPARTMENT', nodeName: 'Kinh Doanh Khu Vực 1', parentNodeId: 3, departmentRef: 'Kinh Doanh Khu Vực 1' }
+    // Định Biên (tab Cây) — 1 version DRAFT đơn giản, chỉ dùng để test Apply KHÔNG tự chuyển tab.
+    window.__ocVersionNodes = [
+      { nodeId: 1, nodeType: 'COMPANY', nodeName: 'CÔNG TY TEST', parentNodeId: null }
     ];
-    window.__ocApplied = false;
     window.__ocApplyCalled = false;
+    window.__ocApplied = false;
+
+    // Cây Sơ Đồ Tổ Chức (RIÊNG, tách biệt) — mô phỏng khoá AppData orgChartDiagramNodes.
+    window.__ocDiagramNodesStore = [];
+    window.__ocDiagramNextId = 1;
 
     window.fetch = async (url, opts) => {
       const u = String(url);
-      if (u === '/api/org-chart/versions' && (!opts || opts.method === undefined || opts.method === 'GET')) {
-        return {
-          ok: true, status: 200,
-          json: async () => ({ versions: [{ id: 1, versionName: 'Nháp Test', status: window.__ocApplied ? 'APPLIED' : 'DRAFT', createdBy: 'admin' }] })
-        };
+      const method = (opts && opts.method) || 'GET';
+      if (u === '/api/org-chart/versions' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ versions: [{ id: 1, versionName: 'Nháp Test', status: window.__ocApplied ? 'APPLIED' : 'DRAFT', createdBy: 'admin' }] }) };
       }
-      if (u === '/api/org-chart/versions/1' && (!opts || opts.method === undefined || opts.method === 'GET')) {
-        return {
-          ok: true, status: 200,
-          json: async () => ({ version: { id: 1, versionName: 'Nháp Test', status: window.__ocApplied ? 'APPLIED' : 'DRAFT', nodes: window.__ocNodes, kpiFlow: [] } })
-        };
+      if (u === '/api/org-chart/versions/1' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ version: { id: 1, versionName: 'Nháp Test', status: window.__ocApplied ? 'APPLIED' : 'DRAFT', nodes: window.__ocVersionNodes, kpiFlow: [] } }) };
       }
-      if (u === '/api/org-chart/versions/1/apply' && opts && opts.method === 'POST') {
+      if (u === '/api/org-chart/versions/1/apply' && method === 'POST') {
         window.__ocApplied = true;
         window.__ocApplyCalled = true;
-        return {
-          ok: true, status: 200,
-          json: async () => ({ version: { versionName: 'Nháp Test', effectiveDate: '2026-01-01' }, unresolvedManagerUsers: [] })
-        };
+        return { ok: true, status: 200, json: async () => ({ version: { versionName: 'Nháp Test', effectiveDate: '2026-11-10' }, unresolvedManagerUsers: [] }) };
       }
-      if (u === '/api/org-chart/kpi-flow' && (!opts || opts.method === undefined || opts.method === 'GET')) {
+      if (u === '/api/org-chart/kpi-flow' && method === 'GET') {
         return { ok: true, status: 200, json: async () => ({ rows: [] }) };
+      }
+      // ===== 3 endpoint MỚI của Cây Sơ Đồ Tổ Chức (lib/orgChartDiagramTree.js) =====
+      if (u === '/api/org-chart/diagram-nodes' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ nodes: window.__ocDiagramNodesStore }) };
+      }
+      if (u === '/api/org-chart/diagram-nodes' && method === 'POST') {
+        const body = JSON.parse(opts.body);
+        if (!body.nodeName || !body.nodeName.trim()) return { ok: false, status: 400, json: async () => ({ error: 'Vui lòng nhập tên Phòng Ban/Siêu Thị' }) };
+        const node = { id: window.__ocDiagramNextId++, parentNodeId: body.parentNodeId != null ? Number(body.parentNodeId) : null, nodeName: body.nodeName.trim() };
+        window.__ocDiagramNodesStore.push(node);
+        return { ok: true, status: 200, json: async () => ({ ok: true, node }) };
+      }
+      const delMatch = u.match(/^\/api\/org-chart\/diagram-nodes\/(\d+)$/);
+      if (delMatch && method === 'DELETE') {
+        const id = Number(delMatch[1]);
+        const toDelete = new Set([id]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          window.__ocDiagramNodesStore.forEach(n => {
+            if (n.parentNodeId != null && toDelete.has(n.parentNodeId) && !toDelete.has(n.id)) { toDelete.add(n.id); changed = true; }
+          });
+        }
+        window.__ocDiagramNodesStore = window.__ocDiagramNodesStore.filter(n => !toDelete.has(n.id));
+        return { ok: true, status: 200, json: async () => ({ ok: true, deletedNodeIds: [...toDelete] }) };
       }
       return { ok: true, status: 200, json: async () => ([]) };
     };
 
     Object.assign(DB, {
-      depts: ['Phòng Kinh Doanh', 'Phòng IT'], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
+      depts: [], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
       jobTitles: [], storeJobTitles: [], positionTypes: [], users: [
-        // 11/2026: canAccessOrgChartModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu người
-        // dùng) -> phải có orgChartManage riêng mới vào được tab Cơ Cấu Tổ Chức, test này không liên quan
-        // gì tới phân quyền (chỉ test sơ đồ trực quan) nên vẫn giữ perms.admin, thêm orgChartManage.
         { id: 1, username: 'admin', name: 'Quản Trị Viên Test', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true, orgChartManage: true }, active: true, groupIds: [], permOverrides: null }
       ],
       workflows: [], quickApplyConfigs: [], deptWorkflows: {},
@@ -151,78 +178,90 @@ async function main() {
     finishLogin(DB.users[0]);
   });
 
-  // Điều hướng THẬT vào tab Cơ Cấu Tổ Chức (trigger loadModuleGroup() nạp module-orgchart.js +
-  // renderOrgChartModule() tự gọi GET /api/org-chart/versions).
   await page.evaluate(() => switchTab('orgChart'));
   await page.waitForTimeout(300);
 
-  const ready = await page.evaluate(() => typeof ocBuildDepartmentTree === 'function' && typeof renderOrgChartDiagramTab === 'function' && typeof downloadOrgChartDiagramSvg === 'function');
+  const ready = await page.evaluate(() => typeof ocBuildDiagramForest === 'function' && typeof renderOrgChartDiagramTab === 'function' && typeof downloadOrgChartDiagramSvg === 'function');
   record('setup: module-orgchart.js đã nạp xong qua điều hướng thật, các hàm cần test đã sẵn sàng', ready);
   if (!ready) { record('DỪNG SỚM — không thể tiếp tục vì hàm chưa nạp được', false, JSON.stringify(pageErrors)); await browser.close(); server.close(); return finish(); }
 
-  // ===== 1. ocBuildDepartmentTree() — chỉ giữ COMPANY+DEPARTMENT, bỏ qua POSITION nằm giữa =====
-  const treeState = await page.evaluate(() => {
-    const root = ocBuildDepartmentTree(window.__ocNodes);
-    // Công Ty -> [Phòng Kinh Doanh -> [Kinh Doanh Khu Vực 1], Phòng IT] (thứ tự không quan trọng).
-    const names = (n) => [n.type + ':' + n.name].concat((n.children || []).flatMap(names));
-    return { root, flatNames: names(root) };
-  });
-  record('ocBuildDepartmentTree(): gốc là COMPANY "CÔNG TY TEST"', treeState.root.type === 'COMPANY' && treeState.root.name === 'CÔNG TY TEST');
-  record('ocBuildDepartmentTree(): Phòng Kinh Doanh gắn đúng vào Công Ty (bỏ qua Vị Trí "Tổng Giám Đốc" nằm giữa)', treeState.root.children.some(c => c.type === 'DEPARTMENT' && c.name === 'Phòng Kinh Doanh'));
-  record('ocBuildDepartmentTree(): Phòng IT (con trực tiếp Công Ty, không qua Vị Trí nào) vẫn đúng vị trí', treeState.root.children.some(c => c.type === 'DEPARTMENT' && c.name === 'Phòng IT'));
-  const kinhDoanhNode = treeState.root.children.find(c => c.name === 'Phòng Kinh Doanh');
-  record('ocBuildDepartmentTree(): Phòng Kinh Doanh Khu Vực 1 lồng ĐÚNG bên trong Phòng Kinh Doanh (Phòng Ban con)', !!kinhDoanhNode && kinhDoanhNode.children.some(c => c.name === 'Kinh Doanh Khu Vực 1'));
-  record('ocBuildDepartmentTree(): KHÔNG có node nào kiểu POSITION trong cây kết quả', !treeState.flatNames.some(n => n.startsWith('POSITION:')));
-
-  // ===== 2. Bấm sub-tab "🖼️ Sơ Đồ Trực Quan" — đúng view hiện/ẩn, SVG chỉ có tên Phòng Ban =====
+  // ===== 1. Vào tab Cây Sơ Đồ Tổ Chức lúc trống =====
   const subTabBtnExists = await page.evaluate(() => !!document.getElementById('btnOrgChartSubDiagram'));
-  record('Sub-tab "🖼️ Sơ Đồ Trực Quan" tồn tại trên UI thật (không chỉ hàm JS)', subTabBtnExists);
+  record('Sub-tab "🖼️ Cây Sơ Đồ Tổ Chức" tồn tại trên UI thật (không chỉ hàm JS)', subTabBtnExists);
+  record('Nhãn sub-tab "🧩 Định Biên Nhân Sự" (đổi tên từ "🌳 Sơ Đồ Tổ Chức")', (await page.evaluate(() => document.getElementById('btnOrgChartSubTree').textContent)).includes('Định Biên Nhân Sự'));
+  record('Nhãn sub-tab "🖼️ Cây Sơ Đồ Tổ Chức" (đổi tên từ "🖼️ Sơ Đồ Trực Quan")', (await page.evaluate(() => document.getElementById('btnOrgChartSubDiagram').textContent)).includes('Cây Sơ Đồ Tổ Chức'));
 
   await page.evaluate(() => document.getElementById('btnOrgChartSubDiagram').click());
-  await page.waitForTimeout(150);
-  const diagramState = await page.evaluate(() => ({
+  await page.waitForTimeout(250);
+  const emptyState = await page.evaluate(() => ({
     diagramVisible: !document.getElementById('orgChartDiagramView').classList.contains('hidden'),
-    treeHidden: document.getElementById('orgChartTreeView').classList.contains('hidden'),
-    kpiHidden: document.getElementById('orgChartKpiView').classList.contains('hidden'),
-    svgHTML: document.getElementById('orgChartDiagramContainer').innerHTML
+    containerText: document.getElementById('orgChartDiagramContainer').textContent,
+    parentOptionsCount: document.getElementById('orgChartDiagramNodeParentSelect').options.length
   }));
-  record('Bấm sub-tab Sơ Đồ Trực Quan -> đúng view hiện (Cây/KPI ẩn)', diagramState.diagramVisible && diagramState.treeHidden && diagramState.kpiHidden);
-  // LỖI ĐÃ VÁ (người dùng báo "chữ tràn ra ngoài ô") — tên Phòng Ban dài giờ có thể XUỐNG DÒNG (mỗi
-  // dòng là 1 thẻ <text> riêng, xem ocWrapLines()/module-orgchart.js), nên không còn chắc xuất hiện
-  // NGUYÊN VĂN liền mạch trong chuỗi svgHTML — gộp toàn bộ nội dung text (bỏ hết thẻ + khoảng trắng) rồi
-  // so khớp cũng bỏ khoảng trắng, để việc xuống dòng hợp lệ không làm test này báo sai.
-  const svgTextFlat = diagramState.svgHTML.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '');
-  const hasFlat = (name) => svgTextFlat.includes(name.replace(/\s+/g, ''));
-  record('SVG chứa tên MỌI Phòng Ban (kể cả Phòng Ban con lồng nhau)', hasFlat('Phòng Kinh Doanh') && hasFlat('Phòng IT') && hasFlat('Kinh Doanh Khu Vực 1'));
-  record('SVG chứa tên Công Ty (node gốc)', hasFlat('CÔNG TY TEST'));
-  record('SVG KHÔNG chứa bất kỳ Chức Danh/tên Vị Trí nào (đúng yêu cầu "chỉ cần cấp phòng")', !hasFlat('Tổng Giám Đốc') && !hasFlat('Trưởng Phòng Kinh Doanh'));
+  record('Lúc trống: view Sơ Đồ đang hiện, thông báo "chưa có Phòng Ban"', emptyState.diagramVisible && emptyState.containerText.includes('Chưa có Phòng Ban'));
+  record('Lúc trống: dropdown "Thuộc vào" chỉ có đúng 1 lựa chọn "(gốc)"', emptyState.parentOptionsCount === 1);
 
-  // ===== 3. 2 nút Tải Ảnh/Tải SVG tồn tại, bấm không lỗi JS =====
-  const exportBtnsExist = await page.evaluate(() => !!document.getElementById('btnOrgChartDiagramPng') && !!document.getElementById('btnOrgChartDiagramSvg'));
-  record('2 nút "🖼️ Tải Ảnh (PNG)"/"⬇️ Tải SVG (Vector)" tồn tại', exportBtnsExist);
-  await page.evaluate(() => { document.getElementById('btnOrgChartDiagramSvg').click(); });
-  await page.waitForTimeout(150);
-  await page.evaluate(() => { document.getElementById('btnOrgChartDiagramPng').click(); });
-  await page.waitForTimeout(300);
+  // ===== 2. Thêm Phòng Ban gốc "Phòng Kinh Doanh" =====
+  await page.fill('#orgChartDiagramNodeNameInput', 'Phòng Kinh Doanh');
+  await page.click('#btnOrgChartDiagramAddNode');
+  await page.waitForTimeout(250);
+  // flatSvgText(): LỖI ĐÃ VÁ mẫu CŨ (test-orgchart-diagram-tab.js trước v29.78) — tên dài có thể bị
+  // ocWrapLines() xuống dòng (2 thẻ <text> riêng), nên KHÔNG thể so khớp nguyên văn liền mạch trong
+  // chuỗi innerHTML thô — gộp toàn bộ nội dung text (bỏ hết thẻ + khoảng trắng) trước khi so khớp.
+  const flatSvgText = async () => (await page.evaluate(() => document.getElementById('orgChartDiagramContainer').innerHTML)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, '');
+  const afterAdd1 = await page.evaluate(() => ({
+    listText: document.getElementById('orgChartDiagramNodeList').textContent
+  }));
+  record('Thêm "Phòng Kinh Doanh" -> hiện ngay trong danh sách khung trái', afterAdd1.listText.includes('Phòng Kinh Doanh'));
+  record('Thêm "Phòng Kinh Doanh" -> SVG tự vẽ lại ngay (không cần tải lại trang)', (await flatSvgText()).includes('PhòngKinhDoanh'));
 
-  // ===== 4. Bấm "✅ Áp Dụng Phiên Bản Này" -> tự chuyển sang sub-tab Sơ Đồ Trực Quan =====
-  // Trước tiên bấm sang tab Cây để xác nhận nút Apply thật sự ĐỔI sub-tab (không phải tình cờ đã đúng).
+  // ===== 3. Thêm Phòng Ban con "Kinh Doanh Khu Vực 1" (cha = Phòng Kinh Doanh) =====
+  const parentIdKD = await page.evaluate(() => window.__ocDiagramNodesStore.find(n => n.nodeName === 'Phòng Kinh Doanh').id);
+  await page.fill('#orgChartDiagramNodeNameInput', 'Kinh Doanh Khu Vực 1');
+  await page.selectOption('#orgChartDiagramNodeParentSelect', String(parentIdKD));
+  await page.click('#btnOrgChartDiagramAddNode');
+  await page.waitForTimeout(250);
+  const afterAdd2 = await page.evaluate(() => window.__ocDiagramNodesStore);
+  const kdkv1 = afterAdd2.find(n => n.nodeName === 'Kinh Doanh Khu Vực 1');
+  record('Thêm "Kinh Doanh Khu Vực 1" lồng ĐÚNG cấp dưới "Phòng Kinh Doanh"', !!kdkv1 && kdkv1.parentNodeId === parentIdKD);
+
+  // ===== 4. Thêm Phòng Ban gốc thứ 2 "Phòng IT" (song song, không chung cha) =====
+  await page.fill('#orgChartDiagramNodeNameInput', 'Phòng IT');
+  await page.selectOption('#orgChartDiagramNodeParentSelect', '');
+  await page.click('#btnOrgChartDiagramAddNode');
+  await page.waitForTimeout(250);
+  const afterAdd3RootCount = await page.evaluate(() => window.__ocDiagramNodesStore.filter(n => n.parentNodeId == null).length);
+  const afterAdd3SvgFlat = await flatSvgText();
+  record('Có 2 Phòng Ban gốc song song ("Phòng Kinh Doanh" + "Phòng IT")', afterAdd3RootCount === 2);
+  record('SVG vẽ CẢ 2 cây gốc song song, không đè nhau (cả 2 tên đều xuất hiện)', afterAdd3SvgFlat.includes('PhòngKinhDoanh') && afterAdd3SvgFlat.includes('PhòngIT'));
+
+  // ===== 5. Xoá "Phòng Kinh Doanh" (có con) -> cascade xoá "Kinh Doanh Khu Vực 1" =====
+  page.once('dialog', d => d.accept());
+  await page.evaluate((id) => document.querySelector(`[data-op="deleteOrgChartDiagramNodeClick"][data-arg0="${id}"]`).click(), parentIdKD);
+  await page.waitForTimeout(250);
+  const afterDeleteStore = await page.evaluate(() => window.__ocDiagramNodesStore);
+  const afterDeleteSvgFlat = await flatSvgText();
+  record('Xoá "Phòng Kinh Doanh" cascade xoá luôn "Kinh Doanh Khu Vực 1"', !afterDeleteStore.some(n => n.nodeName === 'Kinh Doanh Khu Vực 1'));
+  record('Chỉ còn "Phòng IT" sau khi xoá', afterDeleteStore.length === 1 && afterDeleteStore[0].nodeName === 'Phòng IT');
+  record('SVG sau khi xoá KHÔNG còn chứa "Phòng Kinh Doanh"', !afterDeleteSvgFlat.includes('PhòngKinhDoanh') && afterDeleteSvgFlat.includes('PhòngIT'));
+
+  // ===== 6. "✅ Áp Dụng Phiên Bản Này" (tab Định Biên) KHÔNG tự chuyển sang tab Sơ Đồ nữa =====
   await page.evaluate(() => document.getElementById('btnOrgChartSubTree').click());
   await page.waitForTimeout(100);
   const beforeApplyOnTree = await page.evaluate(() => !document.getElementById('orgChartTreeView').classList.contains('hidden'));
-  record('Trước khi Áp Dụng: đang ở tab Cây (chuẩn bị đối chứng)', beforeApplyOnTree);
+  record('Trước khi Áp Dụng: đang ở tab Định Biên Nhân Sự (chuẩn bị đối chứng)', beforeApplyOnTree);
 
   await page.evaluate(() => document.getElementById('btnOrgChartApplyVersion').click());
   await page.waitForTimeout(400);
   const afterApplyState = await page.evaluate(() => ({
     applyCalled: window.__ocApplyCalled === true,
     activeSubTab: activeOrgChartSubTab,
-    diagramVisible: !document.getElementById('orgChartDiagramView').classList.contains('hidden'),
-    treeVisible: !document.getElementById('orgChartTreeView').classList.contains('hidden')
+    treeVisible: !document.getElementById('orgChartTreeView').classList.contains('hidden'),
+    diagramVisible: !document.getElementById('orgChartDiagramView').classList.contains('hidden')
   }));
   record('Bấm "✅ Áp Dụng Phiên Bản Này" -> gọi đúng API apply', afterApplyState.applyCalled);
-  record('Sau khi Áp Dụng: TỰ chuyển sang sub-tab "Sơ Đồ Trực Quan" (activeOrgChartSubTab===\'DIAGRAM\')', afterApplyState.activeSubTab === 'DIAGRAM');
-  record('Sau khi Áp Dụng: view Sơ Đồ Trực Quan đang HIỆN, view Cây đang ẨN', afterApplyState.diagramVisible && !afterApplyState.treeVisible);
+  record('Sau khi Áp Dụng: KHÔNG tự chuyển tab nữa — vẫn ở "Định Biên Nhân Sự" (activeOrgChartSubTab===\'TREE\')', afterApplyState.activeSubTab === 'TREE');
+  record('Sau khi Áp Dụng: view Định Biên vẫn đang HIỆN, view Sơ Đồ vẫn đang ẨN', afterApplyState.treeVisible && !afterApplyState.diagramVisible);
 
   record('Không có lỗi JS chưa bắt (pageerror) nào phát sinh trong suốt bài test', pageErrors.length === 0, JSON.stringify(pageErrors));
 
