@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**29.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.92 (2026-11): Cơ Cấu Tổ Chức — nút "✨ Tạo Bản Mới (Trống)"
+
+Yêu cầu người dùng (kèm ảnh màn Cơ Cấu Tổ Chức): "Mình muốn tạo thêm một bản, không phải bản nháp mà
+bản mới đi, để mình xóa những bản nháp cũ. Hiện tại đang không xóa được. Hiện tại hạn chế là chỉ tạo
+được bản nháp, tức là lấy nguyên cái bản mà cuối cùng mình muốn tạo một bản mới, thêm một tính năng
+tạo bản mới mà sạch luôn để mình có thể làm lại đầu."
+
+**Gốc vấn đề**: nút "+ Tạo Bản Nháp Mới" sẵn có LUÔN nhân bản (clone) toàn bộ cây từ bản đang áp dụng
+— không có cách nào bắt đầu lại từ số 0 khi dữ liệu cây hiện tại đã rối/sai quá nhiều (`bootstrapFirstVersion()`
+cũng không dùng lại được, hàm này chỉ cho chạy đúng 1 lần lúc CHƯA có version nào). Việc xoá bản Nháp
+("🗑️ Xoá Tất Cả Bản Nháp"/"🗑️ Xoá Bản Nháp Này") đã có sẵn từ trước (task #308) — không phải phần còn
+thiếu, nên đợt này CHỈ bổ sung đúng khả năng "tạo bản trắng".
+
+**Đã làm**:
+1. `lib/orgChart.js`: hàm mới `createBlankVersion(list, versionName, actingUsername)` — tạo 1 bản Nháp
+   HOÀN TOÀN TRỐNG (chỉ 1 node gốc "Công Ty", `kpiFlow: []`, `clonedFromVersionId: null`), GIỐNG
+   `bootstrapFirstVersion()` nhưng KHÔNG chặn khi đã có version khác trong danh sách.
+2. `routes/orgChart.js`: route mới `POST /api/org-chart/versions/blank` — dùng CHUNG quyền
+   `orgChartManage` y hệt `/versions/:id/clone` (không cần quyền riêng, vì tạo bản Nháp không có rủi ro
+   mất dữ liệu — các bản khác không bị đụng tới).
+3. `public/fragments/orgChartSection.html`: nút mới "✨ Tạo Bản Mới (Trống)" (màu tím, cạnh "+ Tạo Bản
+   Nháp Mới").
+4. `public/js/module-orgchart.js`: gate hiện/ẩn nút theo đúng quyền quản lý cây (`canManageTree`, cùng
+   nút "+ Tạo Bản Nháp Mới"); handler `createBlankOrgChartVersionClick()` — xác nhận 2 bước (confirm +
+   đặt tên bản mới), gọi route mới, tự chuyển dropdown Phiên bản sang bản vừa tạo.
+5. Demo Playwright (real browser, `page.exposeFunction()` bridge sang `lib/orgChart.js` thật) — ảnh
+   trước/sau gửi người dùng xác nhận trước khi merge, người dùng xác nhận "Ok, bạn thực hiện và merge
+   và main đi."
+6. `tests/test-orgchart-create-blank-version.js` (mới, 7/7 pass) — 4 scenario logic thuần + 3 scenario
+   HTTP qua route thật (403 khi thiếu quyền, 200 tạo thành công giữ nguyên vẹn các bản khác, tạo được cả
+   khi danh sách đang rỗng — khác hẳn `/bootstrap` vốn chỉ cho tạo đúng 1 lần).
+7. Chạy lại toàn bộ 16 file test Cơ Cấu Tổ Chức hiện có — KHÔNG có regression (xoá/lưu trữ/sơ đồ/báo cáo
+   định biên/import Excel/luồng KPI/Khối 0 đều pass như cũ).
+
+**Lưu ý triển khai**: thuần logic ứng dụng + AppData trong bộ nhớ, KHÔNG có `schema.sql` mới, KHÔNG có
+biến môi trường `.env` mới, KHÔNG có gói npm mới — chỉ cần copy code + `pm2 restart`.
 
 ## v29.91 (2026-11): Kiểm Soát Hàng Hóa — thêm sub-tab "💲 Kiểm Tra Giá"
 

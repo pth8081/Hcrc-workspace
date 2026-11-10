@@ -3587,6 +3587,21 @@ theo đúng vị trí trong cây**.
   nút **"🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này"** khi đang xem 1 bản Lưu Trữ — bấm
   vào phải xác nhận 2 lớp (cảnh báo + gõ lại đúng tên phiên bản). Vẫn KHÔNG
   BAO GIỜ xoá được bản đang Áp Dụng.
+- **✨ Tạo Bản Mới (Trống) (11/2026, theo yêu cầu người dùng "thêm một tính
+  năng tạo bản mới mà sạch luôn để mình có thể làm lại đầu")**: nút "+ Tạo
+  Bản Nháp Mới" LUÔN nhân bản (clone) toàn bộ cây từ bản đang áp dụng — không
+  có cách nào bắt đầu lại từ con số 0 khi dữ liệu cây hiện tại đã rối/sai quá
+  nhiều, kể cả xoá hết bản Nháp cũ cũng không giúp được vì bản tiếp theo vẫn
+  tự kế thừa y nguyên từ bản đang áp dụng. Nút **"✨ Tạo Bản Mới (Trống)"**
+  (cạnh nút "+ Tạo Bản Nháp Mới") giải quyết đúng nhu cầu này: tạo 1 bản Nháp
+  HOÀN TOÀN TRỐNG, CHỈ có đúng 1 node gốc "Công Ty" — KHÔNG sao chép Phòng
+  Ban/Vị Trí nào từ bất kỳ bản nào (khác hẳn "+ Tạo Bản Nháp Mới"), rồi tự
+  thêm lại cây từ đầu trên bản Nháp mới này. Các bản/phiên bản khác (đang áp
+  dụng, Nháp cũ, Lưu trữ) giữ nguyên, không bị ảnh hưởng gì — dùng được bất
+  cứ lúc nào, không chỉ khi chưa có bản nào (khác nút "Khởi Tạo" chỉ dùng
+  đúng 1 lần lúc chưa có phiên bản nào). Dùng chung quyền Quản Lý Cơ Cấu Tổ
+  Chức (không cần quyền riêng, vì tạo bản Nháp vốn không có rủi ro mất dữ
+  liệu — các bản khác không hề bị đụng tới).
 - **🔧 Buộc Gỡ & Xoá Vị Trí (11/2026, theo yêu cầu người dùng "đổi tên vị trí
   rồi vẫn gắn vào, muốn xóa đi kể cả gắn vào thì tự động remove người ra khỏi
   vị trí luôn")**: bình thường bấm "🗑️ Xoá" trên 1 node (Phòng Ban/Vị Trí) ở

@@ -17,6 +17,13 @@
         <span id="orgChartVersionStatusBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full"></span>
         <span class="flex-1"></span>
         <button type="button" id="btnOrgChartCreateDraft" data-op="cloneOrgChartVersionClick" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">+ Tạo Bản Nháp Mới</button>
+        <!-- "✨ Tạo Bản Mới (Trống)" (11/2026, theo yêu cầu người dùng: "thêm một tính năng tạo bản mới
+             mà sạch luôn để mình có thể làm lại đầu") — KHÁC "+ Tạo Bản Nháp Mới" ở trên (LUÔN sao chép
+             TOÀN BỘ cây từ bản đang áp dụng): nút này tạo 1 bản Nháp HOÀN TOÀN TRỐNG (chỉ gốc "Công Ty"),
+             để xây lại cây từ đầu khi dữ liệu cũ sai/rối quá, không muốn kế thừa gì cả. KHÔNG đụng/xoá
+             bất kỳ version nào khác — các bản Nháp cũ không cần nữa tự xoá bằng "🗑️ Xoá Tất Cả Bản Nháp"
+             bên dưới. -->
+        <button type="button" id="btnOrgChartCreateBlank" data-op="createBlankOrgChartVersionClick" class="bg-purple-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-purple-700">✨ Tạo Bản Mới (Trống)</button>
         <!-- "✏️ Sửa Bản Đang Áp Dụng" (11/2026, theo yêu cầu người dùng — sửa định biên TRONG kỳ hiện
              tại, không phải tạo kỳ mới) — CHỈ hiện khi đang xem ĐÚNG bản đang áp dụng (toggle ở
              loadOrgChartCurrentVersion(), module-orgchart.js). Bấm vào tạo 1 bản nháp (nhân bản toàn bộ
