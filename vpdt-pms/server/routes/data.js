@@ -439,6 +439,13 @@ const NON_ADMIN_GATED_KEYS = new Map([
     allow: (perms) => !!(perms?.orgChartManage),
     error: 'Chỉ người có quyền Quản Lý Cơ Cấu Tổ Chức mới được sửa — vui lòng dùng đúng màn "Cơ Cấu Tổ Chức"'
   }],
+  // orgChartDiagramNodes (11/2026, cây Phòng Ban/Siêu Thị RIÊNG cho tab "🖼️ Cây Sơ Đồ Tổ Chức" — xem
+  // lib/orgChartDiagramTree.js) — KHÁC HẲN orgChartVersions (tách biệt hoàn toàn theo yêu cầu người
+  // dùng) nhưng cùng rủi ro/đường ghi chính thức (routes/orgChart.js), gate ở đây cùng khuôn phòng thủ.
+  ['orgChartDiagramNodes', {
+    allow: (perms) => !!(perms?.orgChartManage),
+    error: 'Chỉ người có quyền Quản Lý Cơ Cấu Tổ Chức mới được sửa — vui lòng dùng đúng màn "Cơ Cấu Tổ Chức"'
+  }],
   // hrTaskTemplates: danh mục checklist chuẩn Onboarding/Offboarding (Nhân Sự) — sửa được ở màn quản trị
   // riêng (module-hrlifecycle.js), lưu nguyên khối (không qua CRUD record thường) cùng khuôn
   // meetingAttendeeTemplates/kpiEvaluatorConfig ở trên — KHÔNG dùng ADMIN_ONLY_KEYS vì
@@ -1893,6 +1900,9 @@ router.get('/', async (req, res) => {
     // field này khỏi response chung — cùng khuôn employeeProfiles/systemLogs ở trên, không cần giữ lại
     // field dẫn xuất nào (khác employeeProfiles còn giữ `myEmployeeCode`).
     delete data.orgChartVersions;
+    // orgChartDiagramNodes: cùng lý do (client luôn gọi GET /api/org-chart/diagram-nodes riêng, không
+    // đọc DB.orgChartDiagramNodes) — xem chú thích orgChartVersions ngay trên.
+    delete data.orgChartDiagramNodes;
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.

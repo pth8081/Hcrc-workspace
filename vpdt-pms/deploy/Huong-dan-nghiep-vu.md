@@ -3511,17 +3511,25 @@ theo đúng vị trí trong cây**.
   **Vị Trí** còn có thể gắn thêm **"Vị Trí Làm Việc"** (🏢 Văn phòng / 🏪 Siêu
   Thị, tuỳ chọn) — dùng để tự đồng bộ mô hình chấm công (module Công & Phép)
   xuống tài khoản khi HR gán chức vụ này cho ai đó ở Hồ Sơ Nhân Sự (mục 4.5.3).
-- **Sub-tab "🖼️ Sơ Đồ Trực Quan" (từ 10/2026, theo yêu cầu người dùng)** — bên
-  cạnh tab "🌳 Sơ Đồ Tổ Chức" (cây thụt lề, đủ cả Vị Trí), tab này TỰ VẼ sơ đồ
-  khối (Công ty → Phòng Ban → Phòng Ban con) theo ĐÚNG phiên bản đang chọn ở
-  dropdown phía trên (không giới hạn chỉ bản Đang áp dụng) — **CHỈ tới cấp
-  Phòng Ban**, không đưa Vị Trí vào hình (bỏ qua mọi node Vị Trí nằm giữa, kể
-  cả khi 1 Phòng Ban là "con" của 1 Vị Trí như Tổng Giám Đốc — tự gắn vào
-  Phòng Ban/Công Ty tổ tiên gần nhất). Xem trực tiếp ngay trên màn, bấm
-  **"🖼️ Tải Ảnh (PNG)"** hoặc **"⬇️ Tải SVG (Vector)"** để tải về máy (vẽ
-  bằng SVG thuần phía trình duyệt, không qua server, không sinh file trung
-  gian nào). Bấm **"✅ Áp Dụng Phiên Bản Này"** xong tự chuyển sang ĐÚNG
-  sub-tab này để thấy ngay sơ đồ vừa cập nhật, không phải tự bấm qua.
+- **Đổi tên sub-tab (11/2026, theo yêu cầu người dùng "tách cơ cấu tổ chức ra
+  khỏi định biên")**: tab "🌳 Sơ Đồ Tổ Chức" (cây thụt lề, đủ cả Vị Trí +
+  định biên, như mô tả ở trên) nay gọi là **"🧩 Định Biên Nhân Sự"** — chức
+  năng giữ nguyên 100%, chỉ đổi tên cho đúng bản chất. Bấm **"✅ Áp Dụng Phiên
+  Bản Này"** từ 11/2026 **KHÔNG còn tự chuyển sang tab Sơ Đồ** nữa (đảo lại
+  quyết định 10/2026 cũ) — vẫn ở đúng tab đang xem sau khi Áp Dụng.
+- **Sub-tab "🖼️ Cây Sơ Đồ Tổ Chức" (viết lại hoàn toàn 11/2026)** — thay cho
+  "Sơ Đồ Trực Quan" cũ (trước đây tự suy sơ đồ từ chính cây Định Biên). Giờ là
+  **1 cây Phòng Ban/Siêu Thị HOÀN TOÀN RIÊNG**, độc lập 100% với tab "🧩 Định
+  Biên Nhân Sự" bên cạnh — không versioning, không DRAFT/APPLIED, thêm/xoá
+  Phòng Ban là **lưu ngay**. Cách dùng: ở khung trái, gõ tên Phòng Ban/Siêu
+  Thị + chọn "Thuộc vào" (Phòng Ban cha, hoặc để trống = node gốc — có thể có
+  NHIỀU node gốc song song, không bắt buộc đúng 1 "Công Ty" như cây Định
+  Biên), bấm "➕ Thêm Vào Sơ Đồ" — sơ đồ bên phải **TỰ VẼ LẠI NGAY**. Bấm ✕
+  cạnh 1 Phòng Ban để xoá (xoá luôn mọi Phòng Ban con bên trong — cascade).
+  Xem trực tiếp ngay trên màn, bấm **"🖼️ Tải Ảnh (PNG)"** hoặc **"⬇️ Tải SVG
+  (Vector)"** để tải về máy (vẽ bằng SVG thuần phía trình duyệt, không qua
+  server). Vì tách biệt hoàn toàn khỏi cây Định Biên, sơ đồ chắc chắn không
+  bao giờ lẫn Vị Trí/định biên vào hình.
 - **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức

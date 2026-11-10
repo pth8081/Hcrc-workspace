@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**29.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.78 (2026-11): Cơ Cấu Tổ Chức — tách "🧩 Định Biên Nhân Sự" khỏi "🖼️ Cây Sơ Đồ Tổ Chức"
+
+Người dùng yêu cầu (demo-first, đã xác nhận qua Artifact mockup trước khi làm thật): "tách cơ cấu tổ
+chức ra khỏi định biên" — làm cơ cấu + định biên xong không được tự tạo/nhảy sang sơ đồ ngay, và sơ đồ
+chỉ nên có Phòng Ban/Siêu Thị chứ không có Vị Trí/định biên trong đó.
+
+**Đã làm (3 thay đổi, module Cơ Cấu Tổ Chức, Nhân Sự)**:
+
+1. **Đổi tên tab "🌳 Sơ Đồ Tổ Chức" → "🧩 Định Biên Nhân Sự"** (`btnOrgChartSubTree`) — chức năng giữ
+   NGUYÊN 100% (cây Phòng Ban+Vị Trí+định biên, versioning DRAFT/APPLIED/ARCHIVED, mọi nút bấm) — chỉ
+   đổi nhãn hiển thị cho đúng bản chất (cây này vốn đã luôn gắn liền định biên).
+2. **"✅ Áp Dụng Phiên Bản Này" KHÔNG còn tự chuyển sang tab Sơ Đồ nữa** (đảo lại quyết định 10/2026 cũ)
+   — Áp Dụng xong vẫn ở đúng tab đang xem, tách hẳn việc "chốt định biên" khỏi việc "xem/tạo sơ đồ".
+3. **Tab "🖼️ Sơ Đồ Trực Quan" thay bằng "🖼️ Cây Sơ Đồ Tổ Chức" MỚI** — cây Phòng Ban/Siêu Thị HOÀN TOÀN
+   RIÊNG, độc lập 100% với cây Định Biên (không dùng chung dữ liệu, không versioning — thêm/xoá Phòng
+   Ban là lưu ngay, giống khuôn các danh mục đơn giản khác). Người dùng tự thêm Phòng Ban (tên + chọn
+   Phòng Ban cha, có thể nhiều node gốc song song) ở khung trái, sơ đồ bên phải TỰ VẼ LẠI NGAY — không
+   còn đọc/suy ra từ `orgChartVersions[].nodes` như trước, nên không thể lẫn Vị Trí/định biên vào sơ đồ.
+
+**Kỹ thuật**: `lib/orgChartDiagramTree.js` (mới, hàm thuần `addDiagramNode()`/`renameDiagramNode()`/
+`deleteDiagramNodeCascade()`) + 3 route mới `GET/POST/PATCH/DELETE /api/org-chart/diagram-nodes`
+(`routes/orgChart.js`, gác quyền giống hệt `versions/nodes` — XEM mở cho `orgChartManage`/
+`nhanSuManage`/`kpiFlowConfigManage`, SỬA chỉ `orgChartManage`) — lưu 1 khoá AppData riêng
+`orgChartDiagramNodes` (mảng phẳng `{id, parentNodeId, nodeName}`, KHÔNG dùng chung khoá
+`orgChartVersions`), thêm gate phòng thủ + lọc khỏi `GET /api/data` ở `routes/data.js` (cùng khuôn
+`orgChartVersions` đã có). Client: `ocBuildDiagramForest()`/`ocRenderDiagramForest()` (mới, vẽ RỪNG cây
+— hỗ trợ nhiều node gốc song song, mọi node đều vẽ kiểu Phòng Ban 📁) thay cho
+`ocBuildDepartmentTree()`/`ocRenderDepartmentDiagram()` cũ (đã xoá hẳn, không còn dùng).
+
+**Demo-first đúng quy trình** (người dùng chủ động yêu cầu "gửi demo trước khi xác nhận làm"): gửi
+Artifact mockup tương tác trước, người dùng phản hồi tinh chỉnh đúng 1 vòng (ban đầu đề xuất chỉ bỏ
+auto-switch, người dùng làm rõ muốn 2 cây TÁCH BIỆT HOÀN TOÀN — xác nhận qua AskUserQuestion), rồi mới
+viết code thật + demo Playwright thật (`tests/demo-orgchart-diagram-tree-separated.js`, 5 ảnh) gửi lại
+xác nhận lần cuối trước khi merge.
+
+Viết lại hoàn toàn `tests/test-orgchart-diagram-tab.js` (19 kịch bản — thêm/xoá Phòng Ban độc lập, nhiều
+node gốc song song, cascade xoá, Áp Dụng không tự chuyển tab) + cập nhật `tests/demo-orgchart-diagram-
+textfit.js` (vẫn đúng logic xuống dòng `ocWrapLines()`, chỉ đổi nguồn dữ liệu nạp vào). Chạy lại toàn bộ
+~15 test/demo liên quan Cơ Cấu Tổ Chức (`test-orgchart-*`, `test-khoi0-orgchart-gate`, `test-stuck-
+subtab-fallback-fix`) + các test Khối 0/`NON_ADMIN_GATED_KEYS` khác đụng `routes/data.js` — PASS 100%,
+không regression.
 
 ## v29.77 (2026-11): Fix "Kiểm Soát Hàng Hóa" — tab "⏰ Hạn Sử Dụng" lệch số với tab "📊 Đối Chiếu" cho cùng 1 mã hàng
 

@@ -20,6 +20,10 @@ let activeOrgChartSubTab = 'TREE';
 let orgChartNodeModalMode = null; // 'ADD' | 'EDIT'
 let orgChartNodeModalParentId = null;
 let orgChartNodeModalEditingId = null;
+// _ocDiagramNodes (11/2026): cây Phòng Ban/Siêu Thị RIÊNG cho tab "🖼️ Cây Sơ Đồ Tổ Chức" — mảng phẳng
+// {id, parentNodeId, nodeName} từ GET /api/org-chart/diagram-nodes, HOÀN TOÀN TÁCH BIỆT khỏi
+// _ocCurrentVersion.nodes (không versioning/DRAFT/APPLIED, sửa là lưu ngay).
+let _ocDiagramNodes = [];
 
 async function orgChartApiCall(method, path, body) {
   let res;
@@ -255,41 +259,25 @@ function ocBuildTreeNodeHtml(nodes, node, depth, canEdit, version) {
   return html;
 }
 
-// ===== "🖼️ Sơ Đồ Trực Quan" (yêu cầu nghiệp vụ 10/2026) — vẽ sơ đồ hình ảnh CHỈ tới cấp Phòng Ban
-// (không đưa Vị Trí vào hình, theo đúng yêu cầu người dùng — Vị Trí vẫn xem đủ ở tab Cây), xem/tải về
-// PNG-SVG. Dùng ĐÚNG version đang xem ở dropdown (_ocCurrentVersion), giống tab Cây — không giới hạn
-// chỉ version APPLIED. SVG dựng bằng CHUỖI HTML nội suy (mirror renderNVFlow()/nvRoundedNode() ở
-// module-nghiepvu.js — màu tô qua thuộc tính fill/stroke trực tiếp trên thẻ SVG, KHÔNG phải style="..."
-// nên không vướng CSP style-src) thay vì createElementNS(), khớp đúng quy ước SVG duy nhất đã có sẵn
-// trong toàn bộ client.
-function ocBuildDepartmentTree(nodes) {
-  const list = nodes || [];
-  const byId = new Map(list.map(n => [n.nodeId, n]));
-  const root = list.find(n => n.nodeType === 'COMPANY') || list.find(n => n.parentNodeId == null);
-  if (!root) return null;
-  // Tìm tổ tiên gần nhất là DEPARTMENT/COMPANY, BỎ QUA mọi node POSITION nằm giữa (VD "Tổng Giám Đốc"
-  // là POSITION đứng giữa Công Ty và các Phòng Ban) — mirror ý tưởng ocFindNearestDeptAncestor() ở trên,
-  // chỉ khác là áp dụng đệ quy cho MỌI Phòng Ban thay vì chỉ tìm 1 lần cho 1 node.
-  function nearestDeptOrCompanyAncestorId(node) {
-    let cur = byId.get(node.parentNodeId);
-    let steps = 0;
-    while (cur && steps < 100) {
-      if (cur.nodeType === 'DEPARTMENT' || cur.nodeType === 'COMPANY') return cur.nodeId;
-      cur = byId.get(cur.parentNodeId);
-      steps++;
-    }
-    return null;
-  }
-  const treeRoot = { id: root.nodeId, type: 'COMPANY', name: root.nodeName, children: [] };
-  const byTreeId = new Map([[root.nodeId, treeRoot]]);
-  const depts = list.filter(n => n.nodeType === 'DEPARTMENT');
-  depts.forEach(n => byTreeId.set(n.nodeId, { id: n.nodeId, type: 'DEPARTMENT', name: n.nodeName, children: [] }));
-  depts.forEach(n => {
-    const parentId = nearestDeptOrCompanyAncestorId(n);
-    const parentTreeNode = (parentId != null && byTreeId.get(parentId)) || treeRoot;
-    parentTreeNode.children.push(byTreeId.get(n.nodeId));
+// ===== "🖼️ Cây Sơ Đồ Tổ Chức" (11/2026, theo yêu cầu người dùng "tách cơ cấu tổ chức ra khỏi định
+// biên" — demo đã xác nhận) — vẽ sơ đồ hình ảnh từ CÂY PHÒNG BAN/SIÊU THỊ RIÊNG (_ocDiagramNodes, xem
+// loadOrgChartDiagramNodes()/lib/orgChartDiagramTree.js), HOÀN TOÀN TÁCH BIỆT khỏi orgChartVersions[].
+// nodes (tab "🧩 Định Biên Nhân Sự") — không có khái niệm COMPANY/POSITION/định biên ở đây, mọi node
+// đều là Phòng Ban/Siêu Thị cùng kiểu, có thể có NHIỀU node gốc song song (parentNodeId=null, vẽ thành
+// rừng cây cạnh nhau, không bắt buộc đúng 1 "Công Ty" như cây Định Biên). SVG dựng bằng CHUỖI HTML nội
+// suy (mirror renderNVFlow()/nvRoundedNode() ở module-nghiepvu.js — màu tô qua thuộc tính fill/stroke
+// trực tiếp trên thẻ SVG, KHÔNG phải style="..." nên không vướng CSP style-src) thay vì createElementNS(),
+// khớp đúng quy ước SVG duy nhất đã có sẵn trong toàn bộ client.
+function ocBuildDiagramForest(nodesFlat) {
+  const list = nodesFlat || [];
+  const byTreeId = new Map(list.map(n => [n.id, { id: n.id, type: 'DEPARTMENT', name: n.nodeName, children: [] }]));
+  const roots = [];
+  list.forEach(n => {
+    const treeNode = byTreeId.get(n.id);
+    if (n.parentNodeId == null || !byTreeId.has(n.parentNodeId)) { roots.push(treeNode); return; }
+    byTreeId.get(n.parentNodeId).children.push(treeNode);
   });
-  return treeRoot;
+  return roots;
 }
 
 const OC_DIAGRAM_SLOT_W = 196, OC_DIAGRAM_LEVEL_H = 118, OC_DIAGRAM_MARGIN = 40;
@@ -362,24 +350,31 @@ function ocPrepareNodeLines(node) {
   node._h = OC_DIAGRAM_BOX_H[node.type] + Math.max(0, node._nameLines.length - 1) * OC_DIAGRAM_EXTRA_LINE_H;
 }
 
-function ocRenderDepartmentDiagram(root) {
-  ocDiagramAssignXY(root, 0, { x: OC_DIAGRAM_MARGIN });
+// Vẽ RỪNG CÂY (1 hoặc nhiều node gốc song song, xem ocBuildDiagramForest()) — mirror layout/vẽ của
+// ocRenderDepartmentDiagram() bản cũ (đã xoá), chỉ khác: (1) nhận MẢNG root thay vì 1 root, cursor X
+// chạy chung xuyên suốt mọi cây để các cây gốc không đè lên nhau; (2) MỌI node đều vẽ kiểu DEPARTMENT
+// (📁, không còn khái niệm COMPANY/"Trụ sở chính" vì cây này không có node Công Ty).
+function ocRenderDiagramForest(roots) {
+  if (!roots || !roots.length) return { svgHTML: '', width: 0, height: 0 };
+  const cursor = { x: OC_DIAGRAM_MARGIN };
+  roots.forEach(root => ocDiagramAssignXY(root, 0, cursor));
   let maxDepth = 0, maxX = 0;
-  (function scan(n) {
-    ocPrepareNodeLines(n);
-    maxDepth = Math.max(maxDepth, n._depth);
-    maxX = Math.max(maxX, n._x + OC_DIAGRAM_BOX_W[n.type] / 2);
-    n.children.forEach(scan);
-  })(root);
+  roots.forEach(root => {
+    (function scan(n) {
+      ocPrepareNodeLines(n);
+      maxDepth = Math.max(maxDepth, n._depth);
+      maxX = Math.max(maxX, n._x + OC_DIAGRAM_BOX_W[n.type] / 2);
+      n.children.forEach(scan);
+    })(root);
+  });
   const width = Math.round(maxX + OC_DIAGRAM_MARGIN);
-  // Chiều cao tổng: cộng dồn phần "vượt chuẩn" (so với 1 dòng) của node CAO NHẤT ở mỗi cấp, để khung
-  // hình luôn đủ chỗ cho tên dài xuống 2 dòng mà không bị cấp dưới đè lên (trước đây LUÔN cố định
-  // (maxDepth+1)*LEVEL_H, không tính blaị tên dài nào từng làm khung cao hơn 1 dòng).
   const extraHByDepth = new Array(maxDepth + 1).fill(0);
-  (function scanExtra(n) {
-    extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_BOX_H[n.type]);
-    n.children.forEach(scanExtra);
-  })(root);
+  roots.forEach(root => {
+    (function scanExtra(n) {
+      extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_BOX_H[n.type]);
+      n.children.forEach(scanExtra);
+    })(root);
+  });
   const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
   const height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * OC_DIAGRAM_LEVEL_H + totalExtraH + 16);
 
@@ -399,54 +394,135 @@ function ocRenderDepartmentDiagram(root) {
       drawConnectors(c);
     });
   }
-  drawConnectors(root);
-
   function drawNode(node) {
     const w = OC_DIAGRAM_BOX_W[node.type], h = node._h;
     const x = node._x - w / 2, y = node._y - h / 2;
     const nameLines = node._nameLines;
-    if (node.type === 'COMPANY') {
-      nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="#0d3b3a"/>`;
-      // Khối 2 dòng cố định (tên + "Trụ sở chính") CĂN GIỮA quanh tâm — tên xuống thêm dòng nào thì cả
-      // khối dời lên theo (mirror cách nvRoundedNode() căn giữa label+sub ở module-nghiepvu.js).
-      const totalLines = nameLines.length + 1;
-      const blockTop = node._y - (totalLines - 1) * 9.5;
-      nameLines.forEach((line, i) => {
-        const icon = i === 0 ? '🏢 ' : '';
-        nodesSvg += `<text x="${node._x}" y="${blockTop + i * 19}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="15" font-weight="700" fill="#f2fbf9">${icon}${escapeHtml(line)}</text>`;
-      });
-      nodesSvg += `<text x="${node._x}" y="${blockTop + nameLines.length * 19}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="10.5" fill="#a9d6cd">Trụ sở chính</text>`;
-    } else {
-      nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
-      const blockTop = node._y - (nameLines.length - 1) * 8 + 5;
-      nameLines.forEach((line, i) => {
-        const icon = i === 0 ? '📁 ' : '';
-        nodesSvg += `<text x="${node._x}" y="${blockTop + i * 16}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">${icon}${escapeHtml(line)}</text>`;
-      });
-    }
+    nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
+    const blockTop = node._y - (nameLines.length - 1) * 8 + 5;
+    nameLines.forEach((line, i) => {
+      const icon = i === 0 ? '📁 ' : '';
+      nodesSvg += `<text x="${node._x}" y="${blockTop + i * 16}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">${icon}${escapeHtml(line)}</text>`;
+    });
     node.children.forEach(drawNode);
   }
-  drawNode(root);
+  roots.forEach(root => { drawConnectors(root); drawNode(root); });
 
-  const svgHTML = `<svg id="orgChartDiagramSvg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Sơ đồ tổ chức theo cấp Phòng Ban">${linesSvg}${nodesSvg}</svg>`;
+  const svgHTML = `<svg id="orgChartDiagramSvg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Sơ đồ tổ chức theo Phòng Ban/Siêu Thị">${linesSvg}${nodesSvg}</svg>`;
   return { svgHTML, width, height };
 }
 
-function renderOrgChartDiagramTab() {
-  const container = document.getElementById('orgChartDiagramContainer');
-  const version = _ocCurrentVersion;
-  if (!version) { container.innerHTML = ''; return; }
-  const root = ocBuildDepartmentTree(version.nodes || []);
-  if (!root) { container.innerHTML = '<p class="text-xs text-gray-400 italic">Không tìm thấy node gốc Công Ty.</p>'; return; }
-  container.innerHTML = ocRenderDepartmentDiagram(root).svgHTML;
+// Tải lại cây Phòng Ban/Siêu Thị RIÊNG từ server — gọi mỗi khi vào tab, hoặc sau khi thêm/sửa/xoá.
+async function loadOrgChartDiagramNodes() {
+  const result = await orgChartApiCall('GET', '/api/org-chart/diagram-nodes');
+  _ocDiagramNodes = result.nodes || [];
 }
 
-// Tên file gợi ý từ tên phiên bản (bỏ dấu, chỉ chữ-số-gạch ngang) — mirror pattern slugify đã dùng ở
-// nhiều nơi khác trong hệ thống (VD slugifyKey() ở routes/positionTypes.js).
+// Dropdown "Thuộc vào" ở form thêm Phòng Ban — liệt kê lồng cấp theo thụt lề, option đầu = "(gốc)".
+function renderOrgChartDiagramNodeParentSelect() {
+  const sel = document.getElementById('orgChartDiagramNodeParentSelect');
+  if (!sel) return;
+  const byParent = new Map();
+  (_ocDiagramNodes || []).forEach(n => {
+    const key = n.parentNodeId == null ? 'root' : n.parentNodeId;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(n);
+  });
+  const options = ['<option value="">(Không có — Phòng Ban gốc)</option>'];
+  function addOptions(parentKey, depth) {
+    (byParent.get(parentKey) || []).forEach(n => {
+      options.push(`<option value="${n.id}">${'— '.repeat(depth)}${escapeHtml(n.nodeName)}</option>`);
+      addOptions(n.id, depth + 1);
+    });
+  }
+  addOptions('root', 0);
+  sel.innerHTML = options.join('');
+}
+
+// Danh sách Phòng Ban đã thêm (khung trái) — lồng cấp theo thụt lề, kèm nút xoá nếu có quyền sửa.
+function renderOrgChartDiagramNodeList() {
+  const listEl = document.getElementById('orgChartDiagramNodeList');
+  if (!listEl) return;
+  const nodes = _ocDiagramNodes || [];
+  if (!nodes.length) { listEl.innerHTML = '<p class="text-gray-400 italic">Chưa có Phòng Ban nào — thêm Phòng Ban đầu tiên ở trên.</p>'; return; }
+  const canEdit = !!(currentUser.perms?.orgChartManage);
+  const byParent = new Map();
+  nodes.forEach(n => {
+    const key = n.parentNodeId == null ? 'root' : n.parentNodeId;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(n);
+  });
+  function rowsFor(parentKey, depth) {
+    return (byParent.get(parentKey) || []).map(n => {
+      const del = canEdit ? `<button type="button" data-op="deleteOrgChartDiagramNodeClick" data-arg0="${n.id}" title="Xoá" class="text-red-600 hover:bg-red-50 rounded px-1.5 ml-1 font-bold">✕</button>` : '';
+      return `<div class="flex items-center gap-1 py-1 border-b border-gray-50">
+        <span class="text-gray-400">${'&nbsp;'.repeat(depth * 3)}${depth > 0 ? '└ ' : ''}</span>
+        <span class="flex-1 font-semibold">${escapeHtml(n.nodeName)}</span>
+        ${del}
+      </div>` + rowsFor(n.id, depth + 1);
+    }).join('');
+  }
+  listEl.innerHTML = rowsFor('root', 0);
+}
+
+async function renderOrgChartDiagramTab() {
+  const container = document.getElementById('orgChartDiagramContainer');
+  const statusEl = document.getElementById('orgChartDiagramStatus');
+  if (statusEl) statusEl.innerText = 'Đang tải…';
+  try {
+    await loadOrgChartDiagramNodes();
+  } catch (err) {
+    if (statusEl) statusEl.innerText = '';
+    container.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  if (statusEl) statusEl.innerText = '';
+  renderOrgChartDiagramNodeParentSelect();
+  renderOrgChartDiagramNodeList();
+  renderOrgChartDiagramSvgOnly();
+}
+
+// Chỉ vẽ lại SVG (không gọi lại API) — dùng sau mỗi lần thêm/xoá Phòng Ban để sơ đồ cập nhật NGAY.
+function renderOrgChartDiagramSvgOnly() {
+  const container = document.getElementById('orgChartDiagramContainer');
+  const roots = ocBuildDiagramForest(_ocDiagramNodes);
+  if (!roots.length) { container.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có Phòng Ban nào — thêm Phòng Ban đầu tiên ở khung bên trái.</p>'; return; }
+  container.innerHTML = ocRenderDiagramForest(roots).svgHTML;
+}
+
+async function addOrgChartDiagramNodeClick() {
+  const nameInput = document.getElementById('orgChartDiagramNodeNameInput');
+  const parentSelect = document.getElementById('orgChartDiagramNodeParentSelect');
+  const statusEl = document.getElementById('orgChartDiagramNodeFormStatus');
+  if (statusEl) statusEl.innerText = '';
+  const name = (nameInput.value || '').trim();
+  if (!name) { if (statusEl) statusEl.innerText = 'Vui lòng nhập tên Phòng Ban/Siêu Thị'; nameInput.focus(); return; }
+  const parentNodeId = parentSelect.value ? Number(parentSelect.value) : null;
+  try {
+    await orgChartApiCall('POST', '/api/org-chart/diagram-nodes', { nodeName: name, parentNodeId });
+  } catch (err) { if (statusEl) statusEl.innerText = `⛔ ${err.message}`; return; }
+  nameInput.value = '';
+  await loadOrgChartDiagramNodes();
+  renderOrgChartDiagramNodeParentSelect();
+  renderOrgChartDiagramNodeList();
+  renderOrgChartDiagramSvgOnly();
+  nameInput.focus();
+}
+
+async function deleteOrgChartDiagramNodeClick(nodeId) {
+  if (!confirm('Xoá Phòng Ban này? (Phòng Ban con bên trong, nếu có, sẽ bị xoá theo)')) return;
+  try {
+    await orgChartApiCall('DELETE', `/api/org-chart/diagram-nodes/${nodeId}`);
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  await loadOrgChartDiagramNodes();
+  renderOrgChartDiagramNodeParentSelect();
+  renderOrgChartDiagramNodeList();
+  renderOrgChartDiagramSvgOnly();
+}
+
+// Tên file gợi ý cố định (không còn gắn theo tên phiên bản — cây này không có khái niệm version).
 function ocDiagramFilenameBase() {
-  const name = (_ocCurrentVersion?.versionName || 'so-do-to-chuc').trim();
-  const slug = name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
-  return slug || 'so-do-to-chuc';
+  return 'cay-so-do-to-chuc';
 }
 
 function ocSerializeDiagramSvgWithBackground() {
@@ -681,10 +757,11 @@ async function applyOrgChartVersionClick(keepEffectiveDate) {
   try {
     result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, { keepEffectiveDate: !!keepEffectiveDate });
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  // Yêu cầu nghiệp vụ (10/2026): Áp Dụng xong tự chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" để thấy ngay
-  // sơ đồ cấp Phòng Ban vừa cập nhật, không phải tự bấm qua — đặt TRƯỚC renderOrgChartModule() vì hàm đó
-  // tự gọi setOrgChartSubTab(activeOrgChartSubTab) ở bước cuối.
-  activeOrgChartSubTab = 'DIAGRAM';
+  // Yêu cầu nghiệp vụ (11/2026, ĐẢO LẠI quyết định 10/2026): Áp Dụng cơ cấu + định biên KHÔNG còn tự
+  // chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" nữa — người dùng phản hồi việc tự nhảy sang sơ đồ ngay sau
+  // khi Áp Dụng khiến 2 việc "làm cơ cấu/định biên" và "tạo sơ đồ" bị dính liền, muốn tách hẳn: Áp Dụng
+  // xong vẫn ở ĐÚNG sub-tab đang xem (giữ nguyên activeOrgChartSubTab), chỉ khi người dùng TỰ bấm qua tab
+  // Sơ Đồ Trực Quan thì mới xem/tạo sơ đồ (tab đó vẫn CHỈ vẽ tới cấp Phòng Ban/Công Ty, không đổi).
   await renderOrgChartModule();
   openOrgChartApplyResultModal(result);
 }
