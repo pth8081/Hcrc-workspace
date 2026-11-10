@@ -122,14 +122,20 @@ function buildNodeDisplayName(version, node) {
 // giữ vị trí, dẫn tới gán nhầm managerUsername cho đồng nghiệp hoặc chặn nhầm việc xoá vị trí dù người
 // giữ đã nghỉ hẳn. Optional để KHÔNG phá vỡ caller cũ chưa kịp truyền vào (hành vi giữ nguyên nếu bỏ
 // qua tham số này).
-function resolvePositionOccupants(version, node, users, employeeProfiles) {
-  if (!node || node.nodeType !== 'POSITION') return [];
+// resolvePositionOccupantsDetailed() (11/2026, tách ra khỏi resolvePositionOccupants() dưới đây — theo
+// yêu cầu người dùng "buộc gỡ & xoá" 1 Vị Trí) — TÁCH RIÊNG 2 nguồn khớp "đang giữ vị trí", thay vì gộp
+// chung 1 mảng như trước, để forceDeleteNodeCascade() biết CHÍNH XÁC occupant nào gỡ được (qua
+// employeeProfiles[].positionKey — Hồ Sơ Nhân Sự) và occupant nào KHÔNG gỡ tự động được (qua
+// users[].jobTitle/dept — tài khoản VPDT, cố ý KHÔNG đồng bộ 1 chiều với Hồ Sơ Nhân Sự từ 11/2026, xem
+// lib/hrProfilePositionAssign.js). Hành vi/điều kiện lọc giữ NGUYÊN VẸN — chỉ tách thành 2 mảng.
+function resolvePositionOccupantsDetailed(version, node, users, employeeProfiles) {
+  if (!node || node.nodeType !== 'POSITION') return { accountMatches: [], profileMatches: [] };
   const deptNode = node.requiresDept !== false ? findNearestDeptAncestor(version, node) : null;
   const deptRef = deptNode?.departmentRef || null;
   const inactiveProfileUsernames = employeeProfiles
     ? new Set((employeeProfiles || []).filter(p => p?.status === 'INACTIVE' && p.username).map(p => p.username))
     : null;
-  const occupants = (users || []).filter(u => {
+  const accountMatches = (users || []).filter(u => {
     if (u.active === false) return false;
     if (inactiveProfileUsernames && inactiveProfileUsernames.has(u.username)) return false;
     if (u.jobTitle !== node.jobTitle) return false;
@@ -142,8 +148,9 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
   // tuyển chưa cấp tài khoản đăng nhập) -> quét theo users.dept/jobTitle ở trên bỏ sót hoàn toàn, cho phép
   // xoá node dù thực tế đã có người giữ theo hồ sơ chính thức. Dò thêm theo positionKey, bỏ qua hồ sơ đã
   // đếm qua username ở trên (tránh trùng) và hồ sơ INACTIVE (đã nghỉ việc).
+  const profileMatches = [];
   if (employeeProfiles && node.positionKey) {
-    const seenUsernames = new Set(occupants.map(o => o.username));
+    const seenUsernames = new Set(accountMatches.map(o => o.username));
     for (const p of employeeProfiles) {
       if (!p || p.positionKey !== node.positionKey || p.status === 'INACTIVE') continue;
       if (p.username && seenUsernames.has(p.username)) continue;
@@ -152,11 +159,16 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
       // linkedUser.active===false như nhánh users.dept/jobTitle chính ở trên — tài khoản đã bị khoá vẫn
       // hiện là đang giữ vị trí, chặn nhầm việc xoá node dù thực tế không còn ai giữ.
       if (linkedUser && linkedUser.active === false) continue;
-      occupants.push({ username: p.username || null, name: linkedUser?.name || p.employeeCode || p.username || '(hồ sơ chưa có tài khoản)' });
+      profileMatches.push({ profile: p, username: p.username || null, name: linkedUser?.name || p.employeeCode || p.username || '(hồ sơ chưa có tài khoản)' });
       if (p.username) seenUsernames.add(p.username);
     }
   }
-  return occupants;
+  return { accountMatches, profileMatches };
+}
+
+function resolvePositionOccupants(version, node, users, employeeProfiles) {
+  const { accountMatches, profileMatches } = resolvePositionOccupantsDetailed(version, node, users, employeeProfiles);
+  return [...accountMatches, ...profileMatches.map(m => ({ username: m.username, name: m.name }))];
 }
 
 // Vị trí (node POSITION) khớp đúng dept+jobTitle hiện tại của 1 user — ngược lại resolvePositionOccupants().
@@ -280,11 +292,10 @@ function editNode(version, nodeId, patch) {
   return node;
 }
 
-// Xoá node + TOÀN BỘ nhánh con (cascade) — chặn nếu bất kỳ node POSITION nào trong nhánh đang có người
-// giữ (resolvePositionOccupants), đúng luật tài liệu gốc mục 6 (DELETE /api/org/nodes/:id). Dọn luôn
-// mọi dòng kpiFlow tham chiếu tới các nodeId bị xoá (evaluator hoặc evaluatee).
-function deleteNodeCascade(version, nodeId, users, employeeProfiles) {
-  requireDraft(version);
+// collectCascadeNodeIds() (11/2026, tách ra khỏi deleteNodeCascade() để forceDeleteNodeCascade() dùng lại
+// ĐÚNG 1 logic duyệt cascade, không viết lại) — trả về Set các nodeId sẽ bị xoá nếu xoá `nodeId` (gồm
+// chính nó + toàn bộ nhánh con, đệ quy).
+function collectCascadeNodeIds(version, nodeId) {
   const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
   if (!byId.has(nodeId)) throw new HttpError(404, 'Không tìm thấy node');
   const toDelete = new Set([nodeId]);
@@ -298,6 +309,16 @@ function deleteNodeCascade(version, nodeId, users, employeeProfiles) {
       }
     }
   }
+  return toDelete;
+}
+
+// Xoá node + TOÀN BỘ nhánh con (cascade) — chặn nếu bất kỳ node POSITION nào trong nhánh đang có người
+// giữ (resolvePositionOccupants), đúng luật tài liệu gốc mục 6 (DELETE /api/org/nodes/:id). Dọn luôn
+// mọi dòng kpiFlow tham chiếu tới các nodeId bị xoá (evaluator hoặc evaluatee).
+function deleteNodeCascade(version, nodeId, users, employeeProfiles) {
+  requireDraft(version);
+  const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
+  const toDelete = collectCascadeNodeIds(version, nodeId);
   const heldPositions = [];
   for (const id of toDelete) {
     const n = byId.get(id);
@@ -313,6 +334,45 @@ function deleteNodeCascade(version, nodeId, users, employeeProfiles) {
   version.nodes = version.nodes.filter(n => !toDelete.has(n.nodeId));
   version.kpiFlow = (version.kpiFlow || []).filter(f => !toDelete.has(f.evaluatorNodeId) && !toDelete.has(f.evaluateeNodeId));
   return [...toDelete];
+}
+
+// planForceDeleteNodeCascade() (11/2026, theo yêu cầu người dùng: đổi/xoá vị trí dù còn người giữ theo
+// Hồ Sơ Nhân Sự, "tự động remove tất cả người ra khỏi vị trí này") — BƯỚC 1/2 của "Buộc Gỡ & Xóa". CHỈ
+// tính toán + GỠ CHỨC VỤ trên `employeeProfiles` (mutate TRỰC TIẾP mảng truyền vào — gọi hàm này bên
+// trong withLockedAppDataValue('employeeProfiles', ...) ở route, xem routes/orgChart.js) — KHÔNG đụng gì
+// tới `version.nodes`/collection "orgChartVersions" (bước 2 — gọi deleteNodeCascade() THẬT riêng, SAU khi
+// bước này đã commit, ở 1 lượt khoá "orgChartVersions" riêng — 2 collection khác nhau, 2 khoá riêng, cùng
+// mẫu POST /versions/:id/apply đã dùng cho orgChartVersions+users, xem routes/orgChart.js).
+//
+// CHẶN CỨNG (throw, KHÔNG mutate gì) nếu có occupant khớp qua users[].jobTitle/dept (tài khoản VPDT) —
+// KHÔNG BAO GIỜ tự sửa "users" ở đây, đúng ranh giới đã xác nhận với người dùng (Hồ Sơ Nhân Sự và tài
+// khoản/Phân Quyền là 2 nguồn ĐỘC LẬP từ 11/2026, xem lib/hrProfilePositionAssign.js) — admin phải tự vào
+// Hệ Thống → Quản Trị Người Dùng đổi Chức Danh/Phòng Ban của những tài khoản đó trước.
+function planForceDeleteNodeCascade(version, nodeId, users, employeeProfiles, actorUsername, actorName) {
+  requireDraft(version);
+  const toDelete = collectCascadeNodeIds(version, nodeId);
+  const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
+  const blockedAccounts = [];
+  const toClear = [];
+  for (const id of toDelete) {
+    const n = byId.get(id);
+    if (n?.nodeType !== 'POSITION') continue;
+    const { accountMatches, profileMatches } = resolvePositionOccupantsDetailed(version, n, users, employeeProfiles);
+    const positionLabel = buildNodeDisplayName(version, n);
+    for (const a of accountMatches) blockedAccounts.push({ ...a, positionLabel });
+    for (const m of profileMatches) toClear.push({ profile: m.profile, name: m.name, positionLabel });
+  }
+  if (blockedAccounts.length) {
+    const names = blockedAccounts.map(b => `${b.name} (${b.username}) — "${b.positionLabel}"`).join('; ');
+    throw new HttpError(400, `Không thể buộc gỡ — ${blockedAccounts.length} tài khoản vẫn đang khớp đúng Chức Danh/Phòng Ban của vị trí cần xoá qua tài khoản đăng nhập (không qua Hồ Sơ Nhân Sự): ${names}. Vào Hệ Thống → Quản Trị Người Dùng đổi Chức Danh/Phòng Ban của những tài khoản này trước — hệ thống KHÔNG tự sửa tài khoản đăng nhập để tránh ảnh hưởng phân quyền/luồng duyệt đang cấu hình riêng.`);
+  }
+  const { clearPositionAssignmentForce } = require('./employeeProfile'); // require trễ — tránh vòng lặp require (employeeProfile.js cũng require('./orgChart') trễ)
+  const clearedProfiles = [];
+  for (const { profile, name, positionLabel } of toClear) {
+    clearPositionAssignmentForce(profile, actorUsername, actorName, `Tự động gỡ do "Buộc Gỡ & Xóa" vị trí "${positionLabel}" trong Cơ Cấu Tổ Chức`);
+    clearedProfiles.push({ employeeCode: profile.employeeCode, name, positionLabel });
+  }
+  return clearedProfiles;
 }
 
 // ===== Validate trước khi áp dụng =====
@@ -635,9 +695,9 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
-  buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, findPositionNodeForUser,
+  buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser,
   normalizeHeadcountQuota,
-  addNode, editNode, deleteNodeCascade,
+  addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
   bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,

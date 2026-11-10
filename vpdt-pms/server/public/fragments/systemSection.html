@@ -3054,6 +3054,12 @@
             <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pOrgChartDeleteArchived"> 🗑️ Xoá Vĩnh Viễn Phiên Bản Lưu Trữ (Cơ Cấu Tổ Chức) — không hoàn tác được, mất lịch sử bản đó
             </label>
+            <!-- "🔧 Buộc Gỡ & Xoá Vị Trí" (11/2026, theo yêu cầu người dùng: "tự động remove tất cả
+                 người ra khỏi vị trí này") — gỡ thẳng chức vụ nhiều hồ sơ Hồ Sơ Nhân Sự cùng lúc rồi mới
+                 xoá, quyền RIÊNG mặc định KHÔNG ai có (xem routes/orgChart.js::canForceUnassignDelete()). -->
+            <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pOrgChartForceUnassignDelete"> 🔧 Buộc Gỡ &amp; Xoá Vị Trí (Cơ Cấu Tổ Chức) — tự động gỡ chức vụ Hồ Sơ Nhân Sự của người đang giữ rồi mới xoá, không hoàn tác được
+            </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrOnboardingManage"> 🆕 Quản Lý Onboarding
             </label>

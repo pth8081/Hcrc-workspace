@@ -3525,6 +3525,26 @@ theo đúng vị trí trong cây**.
   nút **"🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này"** khi đang xem 1 bản Lưu Trữ — bấm
   vào phải xác nhận 2 lớp (cảnh báo + gõ lại đúng tên phiên bản). Vẫn KHÔNG
   BAO GIỜ xoá được bản đang Áp Dụng.
+- **🔧 Buộc Gỡ & Xoá Vị Trí (11/2026, theo yêu cầu người dùng "đổi tên vị trí
+  rồi vẫn gắn vào, muốn xóa đi kể cả gắn vào thì tự động remove người ra khỏi
+  vị trí luôn")**: bình thường bấm "🗑️ Xoá" trên 1 node (Phòng Ban/Vị Trí) ở
+  bản Nháp mà trong nhánh đó (node + toàn bộ con) còn nhân viên đang giữ sẽ bị
+  CHẶN — phải tự chuyển nhân viên sang vị trí khác trước. Lưu ý: ĐỔI TÊN 1 Vị
+  Trí (sửa nhãn hiển thị) KHÔNG làm nhân viên tự rời khỏi vị trí đó — mã định
+  danh vị trí (`positionKey`) không đổi theo tên, nên vẫn bị chặn xoá dù đã
+  đổi tên. Người có quyền RIÊNG **"🔧 Buộc Gỡ & Xoá Vị Trí"**
+  (`orgChartForceUnassignDelete`, Hệ Thống → Phân Quyền → Nhân Sự, mặc định
+  KHÔNG ai có) khi gặp thông báo chặn này sẽ được hỏi thêm có muốn **Buộc Gỡ &
+  Xoá** không — xác nhận thì hệ thống tự gỡ CHỨC VỤ (trong Hồ Sơ Nhân Sự) của
+  mọi người đang giữ bất kỳ vị trí nào trong nhánh đó, ghi vào lịch sử chức vụ
+  của họ, rồi mới xoá node. **Giới hạn quan trọng**: chỉ tự gỡ được chức vụ
+  gán qua Hồ Sơ Nhân Sự — nếu còn TÀI KHOẢN ĐĂNG NHẬP (Phân Quyền) có Chức
+  Danh/Phòng Ban đang khớp đúng vị trí đó (không qua Hồ Sơ Nhân Sự), vẫn bị
+  chặn cứng và báo rõ đúng tài khoản nào — phải vào Hệ Thống → Quản Trị Người
+  Dùng tự đổi Chức Danh/Phòng Ban của tài khoản đó trước, hệ thống KHÔNG tự
+  sửa tài khoản đăng nhập để tránh ảnh hưởng phân quyền/luồng duyệt đang cấu
+  hình riêng cho tài khoản đó. Hành động KHÔNG hoàn tác được (gỡ chức vụ + xoá
+  node cùng lúc).
 - **Sửa định biên TRONG kỳ hiện tại, không bắt đầu kỳ mới (11/2026, theo yêu
   cầu người dùng)** — phân biệt rõ 2 tình huống: (1) trong năm/kỳ hiện tại chỉ
   cần CHỈNH LẠI định biên đang áp dụng (VD sửa 1 lỗi nhỏ), muốn giữ nguyên

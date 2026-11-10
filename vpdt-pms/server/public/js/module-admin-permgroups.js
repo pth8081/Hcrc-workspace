@@ -620,6 +620,7 @@ const PERM_KEY_VN_LABELS = {
   "operationStoreReportView": "Vận Hành — 📊 Xem Báo Cáo QLDA/Siêu Thị (Mở Mới + Sửa Chữa)",
   "orgChartManage": "Nhân Sự — 🌳 Quản Lý Cơ Cấu Tổ Chức",
   "orgChartDeleteArchived": "Nhân Sự — 🗑️ Xoá Vĩnh Viễn Phiên Bản Lưu Trữ (Cơ Cấu Tổ Chức)",
+  "orgChartForceUnassignDelete": "Nhân Sự — 🔧 Buộc Gỡ & Xoá Vị Trí (Cơ Cấu Tổ Chức)",
   "paymentConfirm": "Thanh Toán — ✅ Xác nhận thanh toán (toàn công ty)",
   "paymentManage": "Thanh Toán — 💰 Quản lý Thanh Toán (toàn công ty)",
   "rebateApprove": "Mua Hàng > BAS — ✅ Phê Duyệt (dự phòng Giai đoạn 2 — Sổ Cái)",
