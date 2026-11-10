@@ -1093,23 +1093,50 @@ function closeOrgChartHeadcountModal() {
 }
 
 // ===== Tab "Cấu Hình Đánh Giá KPI" — chỉ thao tác trên version đang APPLIED =====
+// Ô "Vị Trí Đánh Giá (cấp trên)"/"Vị Trí Được Đánh Giá" (11/2026, theo yêu cầu người dùng — "tôi muốn
+// theo kiểu dropdown + searchable + single choice để tôi dễ dàng tìm kiếm"): đổi từ <select> liệt kê
+// toàn bộ Vị Trí (dễ dài, khó tìm khi cây lớn) sang ô tìm-kiếm-gõ-chọn chuẩn "sdd*" (xem CLAUDE.md — toàn
+// hệ thống KHÔNG dùng <datalist> native). KHÁC các ô "sdd*" khác trong hệ thống ở 1 điểm: giá trị thật
+// cần gửi lên server là nodeId (số), KHÔNG PHẢI chuỗi hiển thị — widget sdd* chỉ lưu CHUỖI nhãn vào ô
+// input (xem core.js). Giải: mỗi lựa chọn vẫn hiển thị ĐÚNG tên vị trí (ocBuildNodeDisplayName) làm nhãn,
+// chỉ phụ thêm " (#id)" cho những nhãn BỊ TRÙNG (2 Vị Trí khác nhau nhưng cùng 1 tên hiển thị, vẫn có thể
+// xảy ra — VD 2 "Nhân viên" cùng 1 Phòng Ban) để LUÔN phân biệt được, còn trường hợp phổ biến (nhãn không
+// trùng ai) giữ nguyên sạch sẽ không có số. Submit tra ngược nodeId từ ĐÚNG nhãn đã chọn qua
+// ocResolveKpiPositionInput() — không khớp được (gõ tự do, không bấm chọn từ gợi ý) thì chặn rõ ràng,
+// không gửi NaN lên server.
+function ocBuildKpiPositionOptions() {
+  const positionNodes = (_ocAppliedVersion?.nodes || []).filter(n => n.nodeType === 'POSITION');
+  const items = positionNodes.map(n => ({ id: n.nodeId, label: ocBuildNodeDisplayName(_ocAppliedVersion.nodes, n) }));
+  const labelCounts = new Map();
+  items.forEach(it => labelCounts.set(it.label, (labelCounts.get(it.label) || 0) + 1));
+  return items
+    .map(it => ({ value: String(it.id), label: labelCounts.get(it.label) > 1 ? `${it.label} (#${it.id})` : it.label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
+}
+// Tra ngược nodeId (số) từ ĐÚNG nhãn đang hiện trong ô input — chỉ khớp khi người dùng THẬT SỰ bấm chọn 1
+// gợi ý (nhãn trùng khớp tuyệt đối với 1 lựa chọn đã nạp qua sddSetOptions()), gõ tự do không khớp trả về
+// null để nơi gọi tự chặn rõ ràng.
+function ocResolveKpiPositionInput(dropdownId, inputValue) {
+  const dd = document.getElementById(dropdownId);
+  const match = (dd?._sddItems || []).find(it => it.label === inputValue);
+  return match ? Number(match.value) : null;
+}
 async function renderOrgChartKpiFlowTab() {
   const container = document.getElementById('orgChartKpiFlowContainer');
+  const evaluatorInput = document.getElementById('orgChartKpiEvaluatorSelect');
+  const evaluateeInput = document.getElementById('orgChartKpiEvaluateeSelect');
   if (!_ocAppliedVersion) {
     container.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có phiên bản nào đang áp dụng.</p>';
-    document.getElementById('orgChartKpiEvaluatorSelect').innerHTML = '';
-    document.getElementById('orgChartKpiEvaluateeSelect').innerHTML = '';
+    sddSetOptions('orgChartKpiEvaluatorDatalist', []);
+    sddSetOptions('orgChartKpiEvaluateeDatalist', []);
+    evaluatorInput.value = ''; evaluateeInput.value = '';
     return;
   }
   // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
   const canManageKpiFlow = !!(currentUser.perms?.orgChartManage || currentUser.perms?.kpiFlowConfigManage);
-  const positionNodes = (_ocAppliedVersion.nodes || []).filter(n => n.nodeType === 'POSITION');
-  const optionsHtml = positionNodes
-    .map(n => ({ id: n.nodeId, label: ocBuildNodeDisplayName(_ocAppliedVersion.nodes, n) }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
-    .map(o => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join('');
-  document.getElementById('orgChartKpiEvaluatorSelect').innerHTML = optionsHtml;
-  document.getElementById('orgChartKpiEvaluateeSelect').innerHTML = optionsHtml;
+  const kpiPositionOptions = ocBuildKpiPositionOptions();
+  sddSetOptions('orgChartKpiEvaluatorDatalist', kpiPositionOptions);
+  sddSetOptions('orgChartKpiEvaluateeDatalist', kpiPositionOptions);
   document.getElementById('btnAddOrgChartKpiFlow').classList.toggle('hidden', !canManageKpiFlow);
 
   let result;
@@ -1137,11 +1164,16 @@ async function renderOrgChartKpiFlowTab() {
   }).join('');
 }
 async function addOrgChartKpiFlowClick() {
-  const evaluatorNodeId = Number(document.getElementById('orgChartKpiEvaluatorSelect').value);
-  const evaluateeNodeId = Number(document.getElementById('orgChartKpiEvaluateeSelect').value);
+  const evaluatorInput = document.getElementById('orgChartKpiEvaluatorSelect');
+  const evaluateeInput = document.getElementById('orgChartKpiEvaluateeSelect');
+  const evaluatorNodeId = ocResolveKpiPositionInput('orgChartKpiEvaluatorDatalist', evaluatorInput.value);
+  const evaluateeNodeId = ocResolveKpiPositionInput('orgChartKpiEvaluateeDatalist', evaluateeInput.value);
+  if (!evaluatorNodeId) return alert('⛔ Vui lòng gõ tìm và BẤM CHỌN đúng 1 "Vị Trí Đánh Giá (cấp trên)" từ danh sách gợi ý.');
+  if (!evaluateeNodeId) return alert('⛔ Vui lòng gõ tìm và BẤM CHỌN đúng 1 "Vị Trí Được Đánh Giá" từ danh sách gợi ý.');
   try {
     await orgChartApiCall('POST', '/api/org-chart/kpi-flow', { evaluatorNodeId, evaluateeNodeId });
   } catch (err) { return alert(`⛔ ${err.message}`); }
+  evaluatorInput.value = ''; evaluateeInput.value = '';
   renderOrgChartKpiFlowTab();
 }
 async function removeOrgChartKpiFlowClick(rowId) {
