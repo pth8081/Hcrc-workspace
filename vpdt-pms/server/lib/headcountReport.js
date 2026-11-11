@@ -62,7 +62,11 @@ function computePositionStats(version, node, employeeProfiles, offboardingUserna
   const secondary = countSecondaryHolders(version, node, users) * 0.5;
   const actualTotal = active + onLeave + offboarding + secondary;
   const quota = node.headcountQuota;
-  const variance = quota == null ? null : quota - actualTotal;
+  // Chênh lệch (variance) KHÔNG tính Kiêm Nhiệm (11/2026, theo yêu cầu người dùng: "kiêm nhiệm tự lấy
+  // 0.5 vị trí nhưng không tính vào chênh lệch") — khác "Thực Tế" (actualTotal) ở trên vẫn GIỮ NGUYÊN ý
+  // nghĩa cũ (gồm cả Kiêm Nhiệm, để không đổi số đang hiển thị) — 2 cột cố ý KHÔNG còn khớp số học với
+  // nhau nữa (Chênh Lệch != Định Biên - Thực Tế kể từ đợt này), xem cột "Kiêm Nhiệm" riêng để đối chiếu.
+  const variance = quota == null ? null : quota - (active + onLeave + offboarding);
   return { active, onLeave, offboarding, secondary, actualTotal, quota, variance };
 }
 
@@ -131,7 +135,10 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
     rows[rowIndex].offboarding = displayAgg.offboarding;
     rows[rowIndex].secondary = displayAgg.secondary;
     rows[rowIndex].actualTotal = displayAgg.actualTotal;
-    rows[rowIndex].variance = displayAgg.hasAnyQuota ? (displayAgg.quota - displayAgg.actualTotal) : null;
+    // CÙNG quyết định 11/2026 ở computePositionStats() — Chênh Lệch cộng dồn cũng KHÔNG trừ Kiêm Nhiệm.
+    rows[rowIndex].variance = displayAgg.hasAnyQuota
+      ? (displayAgg.quota - (displayAgg.active + displayAgg.onLeave + displayAgg.offboarding))
+      : null;
     return agg;
   }
 
@@ -262,6 +269,12 @@ function buildFlatHeadcountReportWorkbook(report) {
     { header: 'Mã vị trí', key: 'maViTri', width: 10 },
     { header: 'Định biên', key: 'quota', width: 10 },
     { header: 'Thực tế', key: 'actualTotal', width: 10 },
+    // 3 cột breakdown MỚI (11/2026, theo yêu cầu người dùng) — tách từ đúng số đã gộp sẵn trong "Thực tế"
+    // ở trên (Thực tế GIỮ NGUYÊN ý nghĩa cũ, không đổi số đang hiển thị). "Chênh lệch" ở cột cuối KHÔNG
+    // còn trừ "Kiêm Nhiệm" nữa (xem computePositionStats() — 2 cột cố ý không còn khớp số học nữa).
+    { header: 'Kiêm Nhiệm', key: 'secondary', width: 10 },
+    { header: 'Đang Bàn Giao Nghỉ Việc', key: 'offboarding', width: 14 },
+    { header: 'Thai Sản/Nghỉ Ốm', key: 'onLeave', width: 12 },
     { header: 'Chênh lệch', key: 'variance', width: 10 }
   ];
   const header = sheet.getRow(1);
@@ -276,20 +289,33 @@ function buildFlatHeadcountReportWorkbook(report) {
   const FILL_ROOT = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
   const FILL_GROUP = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } };
 
-  const rRoot = sheet.addRow({ stt: 'A', banPhong: report.rootLabel, banPhongBoPhan: report.rootAbbr || '', quota: report.rootStats?.quota ?? '', actualTotal: report.rootStats?.actualTotal, variance: report.rootStats?.variance ?? '' });
+  const rRoot = sheet.addRow({
+    stt: 'A', banPhong: report.rootLabel, banPhongBoPhan: report.rootAbbr || '',
+    quota: report.rootStats?.quota ?? '', actualTotal: report.rootStats?.actualTotal,
+    secondary: report.rootStats?.secondary, offboarding: report.rootStats?.offboarding, onLeave: report.rootStats?.onLeave,
+    variance: report.rootStats?.variance ?? ''
+  });
   rRoot.eachCell(c => { c.fill = FILL_ROOT; c.font = { bold: true }; });
 
   for (const r of report.rows) {
     if (r.kind === 'GROUP1' || r.kind === 'GROUP2') {
-      const row = sheet.addRow({ stt: r.sttLabel, banPhong: r.label, banPhongBoPhan: r.abbr || '', quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal, variance: r.variance == null ? '' : r.variance });
+      const row = sheet.addRow({
+        stt: r.sttLabel, banPhong: r.label, banPhongBoPhan: r.abbr || '',
+        quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
+        secondary: r.secondary, offboarding: r.offboarding, onLeave: r.onLeave,
+        variance: r.variance == null ? '' : r.variance
+      });
       row.eachCell(c => { c.fill = FILL_GROUP; });
       sheet.getCell(`B${row.number}`).font = r.kind === 'GROUP1' ? { bold: true, color: { argb: 'FFDC2626' } } : { bold: true, color: { argb: 'FF111827' } };
-      ['H', 'I', 'J'].forEach(col => { sheet.getCell(`${col}${row.number}`).font = { bold: true }; });
+      // H=Định biên, I=Thực tế, J=Kiêm Nhiệm, K=Đang Bàn Giao Nghỉ Việc, L=Thai Sản/Nghỉ Ốm, M=Chênh lệch.
+      ['H', 'I', 'J', 'K', 'L', 'M'].forEach(col => { sheet.getCell(`${col}${row.number}`).font = { bold: true }; });
     } else {
       const row = sheet.addRow({
         stt: r.stt, banPhong: r.banPhong, banPhongBoPhan: r.banPhongBoPhan, boPhanNhom: r.boPhanNhom,
         chucDanh: r.chucDanh, capBac: r.capBac, maViTri: r.maViTri,
-        quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal, variance: r.variance == null ? '' : r.variance
+        quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
+        secondary: r.secondary, offboarding: r.offboarding, onLeave: r.onLeave,
+        variance: r.variance == null ? '' : r.variance
       });
       sheet.getCell(`G${row.number}`).font = { italic: true, color: { argb: 'FF2563EB' } };
       sheet.getCell(`H${row.number}`).font = { bold: true, color: { argb: 'FF1D4ED8' } };

@@ -127,7 +127,7 @@ async function runImportLibTests(run) {
     assertEqual(sheet.rowCount, positions.length + 1, 'Số dòng = số Vị Trí + 1 header');
     const row2 = sheet.getRow(2);
     assertEqual(row2.getCell(1).value, positions[0].nodeId, 'Cột ID (ẩn) đúng nodeId thật');
-    assertEqual(row2.getCell(6).value, positions[0].headcountQuota, '"Định Biên Mới" pre-fill = Định Biên hiện tại');
+    assertEqual(row2.getCell(9).value, positions[0].headcountQuota, '"Định Biên Mới" pre-fill = Định Biên hiện tại');
     assertEqual(sheet.getColumn(1).hidden, true, 'Cột ID phải ẩn');
   });
 
@@ -138,10 +138,10 @@ async function runImportLibTests(run) {
     const sheet = wb.getWorksheet('Định Biên Nhân Sự');
     // Dòng 2: đổi Định Biên Mới hợp lệ. Dòng 3: ID giả (không tồn tại). Dòng 4: Định Biên Mới âm.
     // Dòng 5: để trống Định Biên Mới -> headcountQuota=null (bỏ định biên).
-    sheet.getRow(2).getCell(6).value = 9;
+    sheet.getRow(2).getCell(9).value = 9;
     sheet.getRow(3).getCell(1).value = 999999;
-    sheet.getRow(4).getCell(6).value = -3;
-    sheet.getRow(5).getCell(6).value = null;
+    sheet.getRow(4).getCell(9).value = -3;
+    sheet.getRow(5).getCell(9).value = null;
     const blankPos = positions[3];
 
     const buf = await wb.xlsx.writeBuffer();
@@ -259,7 +259,7 @@ async function main() {
       resetAppData([versionForImport]);
       const wb = await buildHeadcountTemplateWorkbook(versionForImport);
       const sheet = wb.getWorksheet('Định Biên Nhân Sự');
-      sheet.getRow(2).getCell(6).value = 99;
+      sheet.getRow(2).getCell(9).value = 99;
       const buf = Buffer.from(await wb.xlsx.writeBuffer());
       const res = await apiUpload('/api/org-chart/versions/1/headcount-template/import', buf, MANAGER);
       assertEqual(res.status, 200);
