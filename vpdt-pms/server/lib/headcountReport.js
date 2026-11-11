@@ -4,15 +4,18 @@
 // Quyết định thiết kế đã xác nhận với người dùng (xem doc phân tích "Rà Soát Hồ Sơ Nhân Sự HCRC", Phần 5,
 // Phương án A): KHÔNG dựng collection/bảng mới — "Định biên" (headcountQuota) là 1 field TUỲ CHỌN trực
 // tiếp trên node POSITION của Cơ Cấu Tổ Chức (xem lib/orgChart.js::addNode()/editNode()), sửa qua đúng
-// màn Cơ Cấu Tổ Chức hiện có. "Thực tế" KHÔNG lưu gì thêm — tính ĐỘNG mỗi lần xem, từ 3 nguồn đã có sẵn:
+// màn Cơ Cấu Tổ Chức hiện có. "Thực tế" KHÔNG lưu gì thêm — tính ĐỘNG mỗi lần xem, từ 2 nguồn đã có sẵn:
 //   - employeeProfiles.positionKey (nguồn CHÍNH THỨC "ai đang giữ vị trí nào", xem
 //     applyPositionAssignment() ở lib/employeeProfile.js) — status ACTIVE/ON_LEAVE được tính là 1 chỗ
 //     đang chiếm (status INACTIVE/DRAFT thì KHÔNG, đã nghỉ hẳn hoặc chưa chính thức vào làm).
 //   - hrProcesses (processType OFFBOARDING, status IN_PROGRESS) — hồ sơ ĐANG bàn giao nghỉ việc (profile
 //     vẫn còn ACTIVE/ON_LEAVE ở bước này, chỉ chuyển INACTIVE khi quy trình COMPLETED, xem
 //     applyProcessCompletion() ở lib/employeeProfile.js) — tách riêng khỏi "Đang làm việc" theo đúng mẫu.
-//   - users[].secondaryPositions[] ("Vị Trí Kiêm Nhiệm", xem lib/positionApprovers.js) — khớp theo đúng
-//     cặp (dept, jobTitle) của node, tính hệ số 0.5 theo đúng mẫu Excel.
+// users[].secondaryPositions[] ("Vị Trí Kiêm Nhiệm", xem lib/positionApprovers.js, khớp theo đúng cặp
+// (dept, jobTitle) của node, tính hệ số 0.5) — 11/2026 ĐỢT 3 (theo phản hồi người dùng xem ảnh demo: "cột
+// thực tế bạn ko nên cộng kiêm nhiệm vào... kiêm nhiệm chỉ có ở hồ sơ nhân sự nên cột thực tế là cột không
+// có kiêm nhiệm") — ĐỔI QUYẾT ĐỊNH so với 2 đợt trước: Kiêm Nhiệm KHÔNG còn cộng vào "Thực Tế" (actualTotal)
+// NỮA, chỉ còn là 1 cột RIÊNG (`secondary`) hoàn toàn tách biệt, không ảnh hưởng Thực Tế/Chênh Lệch.
 // "Thai sản/nghỉ ốm": hệ thống hiện CHỈ có 1 trạng thái ON_LEAVE gộp chung (không phân biệt được 2 lý do
 // riêng — đã nêu rõ với người dùng ở doc phân tích), nên cột này = toàn bộ profile ON_LEAVE tại vị trí.
 const ExcelJS = require('exceljs');
@@ -60,13 +63,17 @@ function computePositionStats(version, node, employeeProfiles, offboardingUserna
     active++;
   }
   const secondary = countSecondaryHolders(version, node, users) * 0.5;
-  const actualTotal = active + onLeave + offboarding + secondary;
+  // Thực Tế (actualTotal) KHÔNG gồm Kiêm Nhiệm (11/2026 ĐỢT 3, theo phản hồi người dùng xem ảnh demo:
+  // "cột thực tế bạn ko nên cộng kiêm nhiệm vào. Báo cáo định biên lấy từ cấu hình định biên nhân sự mà
+  // trên cấu hình này ko có kiêm nhiệm, kiêm nhiệm chỉ có ở hồ sơ nhân sự nên cột thực tế là cột không có
+  // kiêm nhiệm") — ĐỔI QUYẾT ĐỊNH so với đợt trước (khi đó GIỮ actualTotal gồm cả Kiêm Nhiệm, chỉ sửa
+  // variance riêng) — nay actualTotal chỉ còn active+onLeave+offboarding, Kiêm Nhiệm hoàn toàn tách biệt
+  // (cột riêng, cộng tổng riêng để báo cáo, không cộng vào Thực Tế/Chênh Lệch nữa).
+  const actualTotal = active + onLeave + offboarding;
   const quota = node.headcountQuota;
-  // Chênh lệch (variance) KHÔNG tính Kiêm Nhiệm (11/2026, theo yêu cầu người dùng: "kiêm nhiệm tự lấy
-  // 0.5 vị trí nhưng không tính vào chênh lệch") — khác "Thực Tế" (actualTotal) ở trên vẫn GIỮ NGUYÊN ý
-  // nghĩa cũ (gồm cả Kiêm Nhiệm, để không đổi số đang hiển thị) — 2 cột cố ý KHÔNG còn khớp số học với
-  // nhau nữa (Chênh Lệch != Định Biên - Thực Tế kể từ đợt này), xem cột "Kiêm Nhiệm" riêng để đối chiếu.
-  const variance = quota == null ? null : quota - (active + onLeave + offboarding);
+  // Chênh Lệch = Định Biên - Thực Tế, ĐƠN GIẢN/NHẤT QUÁN trở lại (Thực Tế đã không còn chứa Kiêm Nhiệm
+  // nên không cần công thức riêng như đợt trước nữa).
+  const variance = quota == null ? null : quota - actualTotal;
   return { active, onLeave, offboarding, secondary, actualTotal, quota, variance };
 }
 
@@ -135,10 +142,9 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
     rows[rowIndex].offboarding = displayAgg.offboarding;
     rows[rowIndex].secondary = displayAgg.secondary;
     rows[rowIndex].actualTotal = displayAgg.actualTotal;
-    // CÙNG quyết định 11/2026 ở computePositionStats() — Chênh Lệch cộng dồn cũng KHÔNG trừ Kiêm Nhiệm.
-    rows[rowIndex].variance = displayAgg.hasAnyQuota
-      ? (displayAgg.quota - (displayAgg.active + displayAgg.onLeave + displayAgg.offboarding))
-      : null;
+    // CÙNG quyết định 11/2026 ĐỢT 3 ở computePositionStats() — actualTotal cộng dồn đã KHÔNG còn chứa
+    // Kiêm Nhiệm (secondary) nữa nên variance cộng dồn trở lại ĐƠN GIẢN "quota - actualTotal".
+    rows[rowIndex].variance = displayAgg.hasAnyQuota ? (displayAgg.quota - displayAgg.actualTotal) : null;
     return agg;
   }
 
@@ -269,9 +275,8 @@ function buildFlatHeadcountReportWorkbook(report) {
     { header: 'Mã vị trí', key: 'maViTri', width: 10 },
     { header: 'Định biên', key: 'quota', width: 10 },
     { header: 'Thực tế', key: 'actualTotal', width: 10 },
-    // 3 cột breakdown MỚI (11/2026, theo yêu cầu người dùng) — tách từ đúng số đã gộp sẵn trong "Thực tế"
-    // ở trên (Thực tế GIỮ NGUYÊN ý nghĩa cũ, không đổi số đang hiển thị). "Chênh lệch" ở cột cuối KHÔNG
-    // còn trừ "Kiêm Nhiệm" nữa (xem computePositionStats() — 2 cột cố ý không còn khớp số học nữa).
+    // 3 cột breakdown MỚI (11/2026, theo yêu cầu người dùng). "Kiêm Nhiệm" KHÔNG nằm trong "Thực tế"/
+    // "Chênh lệch" (11/2026 ĐỢT 3 — xem computePositionStats()), chỉ là cột riêng để tham khảo/báo cáo.
     { header: 'Kiêm Nhiệm', key: 'secondary', width: 10 },
     { header: 'Đang Bàn Giao Nghỉ Việc', key: 'offboarding', width: 14 },
     { header: 'Thai Sản/Nghỉ Ốm', key: 'onLeave', width: 12 },

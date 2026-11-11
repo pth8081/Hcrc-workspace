@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**29.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
-`29.0` theo đúng quy tắc.)
+`29.0` theo đúng quy tắc. **Lưu ý**: MINOR đã lại chạm `99` ở bản này — lần merge KẾ TIẾP phải cuộn sang
+`30.0`, không được tiếp tục đếm `.100`.)
+
+## v29.99 (2026-11): FIX — Báo Cáo Định Biên: Thực Tế KHÔNG gồm Kiêm Nhiệm nữa (đợt 2 sửa công thức)
+
+Nối tiếp v29.98 (thêm 3 cột breakdown Kiêm Nhiệm/Đang Bàn Giao Nghỉ Việc/Thai Sản-Nghỉ Ốm). Sau khi gửi
+ảnh demo THẬT (kèm số liệu cụ thể) qua `SendUserFile` để xác nhận trước khi merge — đúng quy trình người
+dùng yêu cầu — người dùng phát hiện quyết định công thức ở v29.98 (Chênh Lệch không trừ Kiêm Nhiệm, nhưng
+Thực Tế vẫn CỘNG Kiêm Nhiệm vào) vẫn sai: "Bạn xem lại tính cột chênh lệch, cột thực tế là chưa tính kiêm
+nhiệm đâu chỉ tính thực tế đang có nên chênh lệch bạn lại trừ đi thêm kiêm nhiệm là chưa đúng và cột thực
+tế bạn ko nên cộng kiêm nhiệm vào. Báo cáo định biên lấy từ cấu hình định biên nhân sự mà trên cấu hình
+này ko có kiêm nhiệm, kiêm nhiệm chỉ có ở hồ sơ nhân sự nên cột thực tế là cột không có kiêm nhiệm."
+
+**Quyết định CUỐI (thay thế công thức v29.98)**:
+- **Thực Tế** = Đang Làm Việc + Đang Bàn Giao Nghỉ Việc + Thai Sản/Nghỉ Ốm — **KHÔNG còn cộng Kiêm Nhiệm**
+  (trước đây v29.98 vẫn cộng, chỉ sửa riêng Chênh Lệch — SAI, đã sửa lại đúng ở bản này).
+- **Chênh Lệch** = Định Biên − Thực Tế — quay lại công thức ĐƠN GIẢN, NHẤT QUÁN (không cần trừ riêng Kiêm
+  Nhiệm nữa vì Thực Tế đã không chứa nó).
+- **Kiêm Nhiệm** vẫn là cột riêng, cộng tổng để báo cáo, hoàn toàn tách biệt khỏi Thực Tế/Chênh Lệch.
+
+**Đã sửa (gửi lại demo ảnh + 2 file Excel thật lần 2 xác nhận trước khi merge lần này)**:
+1. `lib/headcountReport.js::computePositionStats()`: `actualTotal` đổi từ `active+onLeave+offboarding+
+   secondary` sang `active+onLeave+offboarding` (bỏ `secondary`/Kiêm Nhiệm hẳn ra). `variance` quay về
+   `quota - actualTotal` (đơn giản, bỏ công thức riêng của v29.98).
+2. `lib/headcountReport.js` (nhánh cộng dồn DEPARTMENT/COMPANY): `variance` cũng quay về `quota -
+   actualTotal` cho nhất quán (actualTotal cộng dồn tự động không còn chứa secondary vì leaf đã không có).
+3. Cập nhật mô tả công thức: `public/index.html` (tooltip modal Báo Cáo), `public/js/module-nghiepvu.js`
+   (`NGHIEP_VU_DOCS`), `deploy/Huong-dan-nghiep-vu.md` (mục 3 Hồ Sơ Nhân Sự).
+4. Test: `tests/test-orgchart-headcount-breakdown-columns.js` + `tests/test-orgchart-headcount-report.js`
+   cập nhật toàn bộ assertion theo công thức mới. Chạy lại `tests/test-orgchart-*.js` — pass hết.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
+Lưu ý: nếu đã deploy v29.98 lên server thật trước đó, số "Thực Tế"/"Chênh Lệch" hiển thị sẽ ĐỔI LẠI (giảm
+đúng phần Kiêm Nhiệm đã lỡ cộng vào Thực Tế) sau khi cập nhật lên bản này — không phải lỗi, là đúng ý sửa.
 
 ## v29.98 (2026-11): Báo Cáo Định Biên Nhân Sự — tách 3 cột breakdown + đổi công thức Chênh Lệch
 
