@@ -5,8 +5,9 @@
 // lib/orgChart.js (field headcountQuota trên node POSITION) + routes/orgChart.js (2 route mới).
 //
 //   PHẦN A (gọi thẳng lib/headcountReport.js::computeHeadcountReport() qua require(), không cần HTTP):
-//     1. Vị trí có người ACTIVE bình thường -> đếm vào "active", actualTotal đúng, variance = quota -
-//        (active+onLeave+offboarding) (11/2026 ĐỢT 2: KHÔNG còn trừ "secondary"/Kiêm Nhiệm nữa).
+//     1. Vị trí có người ACTIVE bình thường -> đếm vào "active", actualTotal = active+onLeave+offboarding
+//        (11/2026 ĐỢT 3: Kiêm Nhiệm/"secondary" KHÔNG còn cộng vào actualTotal nữa, chỉ còn 1 cột riêng
+//        để báo cáo), variance = quota - actualTotal (đơn giản, nhất quán trở lại).
 //     2. Vị trí có người ON_LEAVE -> đếm vào "onLeave", KHÔNG vào "active".
 //     3. Hồ sơ ACTIVE nhưng có hrProcesses OFFBOARDING IN_PROGRESS khớp username -> đếm vào "offboarding",
 //        KHÔNG vào "active" (ưu tiên offboarding trước khi xét onLeave/active).
@@ -82,13 +83,14 @@ function runPureTests(run) {
     assertEqual(nv.active, 1, 'Nhân Viên Bán Hàng: 1 người ACTIVE thường (nv1)');
     assertEqual(nv.onLeave, 1, 'Nhân Viên Bán Hàng: 1 người ON_LEAVE (nv2)');
     assertEqual(nv.offboarding, 1, 'Nhân Viên Bán Hàng: 1 người đang offboarding IN_PROGRESS (nv3) — không rơi vào active');
-    assertEqual(nv.secondary, 0.5, 'Nhân Viên Bán Hàng: 1 người kiêm nhiệm = 0.5');
-    assertEqual(nv.actualTotal, 1 + 1 + 1 + 0.5, 'actualTotal = active+onLeave+offboarding+secondary (INACTIVE/DRAFT không tính)');
+    assertEqual(nv.secondary, 0.5, 'Nhân Viên Bán Hàng: 1 người kiêm nhiệm = 0.5 (chỉ để báo cáo riêng)');
+    // 11/2026 ĐỢT 3 (theo phản hồi người dùng xem ảnh demo thật: "cột thực tế bạn ko nên cộng kiêm nhiệm
+    // vào... kiêm nhiệm chỉ có ở hồ sơ nhân sự nên cột thực tế là cột không có kiêm nhiệm") — actualTotal
+    // (Thực Tế) KHÔNG còn cộng "secondary" (Kiêm Nhiệm) nữa; variance (Chênh Lệch) quay về công thức đơn
+    // giản "quota - actualTotal" (nhất quán trở lại, vì actualTotal đã không còn chứa Kiêm Nhiệm).
+    assertEqual(nv.actualTotal, 1 + 1 + 1, 'actualTotal = active+onLeave+offboarding, KHÔNG cộng secondary (Kiêm Nhiệm) nữa');
     assertEqual(nv.quota, 3, 'Quota giữ đúng giá trị đã đặt (3)');
-    // 11/2026 ĐỢT 2 (theo yêu cầu người dùng): variance KHÔNG còn trừ "secondary" (Kiêm Nhiệm) nữa —
-    // actualTotal (Thực Tế) GIỮ NGUYÊN gồm cả Kiêm Nhiệm, nhưng variance (Chênh Lệch) chỉ trừ
-    // active+onLeave+offboarding — cố ý KHÔNG còn khớp "quota - actualTotal" khi secondary > 0.
-    assertEqual(nv.variance, 3 - (1 + 1 + 1), 'variance = quota - (active+onLeave+offboarding), KHÔNG trừ secondary (Kiêm Nhiệm)');
+    assertEqual(nv.variance, 3 - (1 + 1 + 1), 'variance = quota - actualTotal = 3 - 3 = 0');
 
     const tp = byId.get(3);
     assertEqual(tp.active, 1, 'Trưởng Phòng: 1 người active');
@@ -103,7 +105,7 @@ function runPureTests(run) {
     const dept = byId.get(2);
     assertEqual(dept.quota, 1 + 3, 'Phòng Kinh Doanh: roll-up quota = 1 (TP) + 3 (NV) — bỏ qua TT (null)');
     assertEqual(dept.actualTotal, tp.actualTotal + nv.actualTotal + tt.actualTotal, 'Phòng Kinh Doanh: roll-up actualTotal = tổng 3 vị trí con');
-    assertEqual(dept.variance, dept.quota - (dept.active + dept.onLeave + dept.offboarding), 'Phòng Kinh Doanh: variance roll-up đúng công thức MỚI (không trừ secondary)');
+    assertEqual(dept.variance, dept.quota - dept.actualTotal, 'Phòng Kinh Doanh: variance roll-up đúng công thức (quota - actualTotal, actualTotal đã không chứa secondary)');
 
     const company = byId.get(1);
     assertEqual(company.actualTotal, dept.actualTotal, 'Công Ty (gốc): roll-up xuyên 2 cấp vẫn đúng tổng');

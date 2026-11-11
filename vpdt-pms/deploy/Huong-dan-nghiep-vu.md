@@ -3808,28 +3808,32 @@ theo đúng vị trí trong cây**.
     ngay trong modal Sửa Vị Trí (ô "Định Biên (tuỳ chọn)", số nguyên ≥ 0) —
     **field hoàn toàn mới**, không suy ra được từ dữ liệu vận hành sẵn có. Để
     trống (không hiện "0") nếu chưa đặt kế hoạch cho vị trí đó.
-  - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 4
+  - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 3
     cột con: **Đang Làm Việc** (hồ sơ Hồ Sơ Nhân Sự đang gán đúng vị trí đó,
     trạng thái Đang làm việc) + **Đang Bàn Giao Nghỉ Việc** (đang có quy
     trình Offboarding CHƯA hoàn tất) + **Thai Sản/Nghỉ Ốm** (trạng thái Đang
     nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2 lý do
-    riêng) + **Kiêm Nhiệm** (tính hệ số ×0.5/người, lấy từ "Vị Trí Kiêm
-    Nhiệm" đã gán ở hồ sơ Người Dùng).
-  - **3 cột tách riêng (11/2026 ĐỢT 2, theo yêu cầu người dùng)**: "Kiêm
-    Nhiệm"/"Đang Bàn Giao Nghỉ Việc"/"Thai Sản-Nghỉ Ốm" giờ hiện THÀNH CỘT
-    RIÊNG ngay sau cột "Thực Tế" (cả màn xem lẫn file Excel xuất ra) thay vì
-    chỉ gộp ẩn bên trong "Thực Tế" như trước — giúp xem được chi tiết từng
-    thành phần mà không cần tính nhẩm.
-  - **Chênh Lệch (ĐỔI CÔNG THỨC 11/2026 ĐỢT 2)** = Định Biên − (Đang Làm Việc
-    + Đang Bàn Giao Nghỉ Việc + Thai Sản/Nghỉ Ốm) — **KHÔNG còn trừ Kiêm
-    Nhiệm nữa** (theo đúng yêu cầu người dùng: "kiêm nhiệm tự lấy 0.5 vị trí
-    nhưng không tính vào chênh lệch"). Dương (tô cam) = còn thiếu người, cần
-    tuyển thêm đúng số đó; âm (tô đỏ) = đang dư người so với kế hoạch. **Lưu
-    ý quan trọng**: cột "Thực Tế" GIỮ NGUYÊN ý nghĩa cũ (vẫn gồm cả Kiêm
-    Nhiệm×0.5, không đổi số đang hiển thị) — nên từ đợt này, "Chênh Lệch"
-    KHÔNG còn khớp số học với "Định Biên − Thực Tế" nữa khi vị trí đó có
-    người kiêm nhiệm (cố ý, xem cột "Kiêm Nhiệm" riêng để đối chiếu phần
-    chênh ra).
+    riêng). **KHÔNG gồm Kiêm Nhiệm** (11/2026 ĐỢT 3 — xem ngay dưới).
+  - **Kiêm Nhiệm (11/2026, tách hẳn khỏi Thực Tế từ ĐỢT 3)**: tính hệ số
+    ×0.5/người, lấy từ "Vị Trí Kiêm Nhiệm" đã gán ở hồ sơ Người Dùng — hiện
+    THÀNH CỘT RIÊNG, hoàn toàn độc lập với Thực Tế/Chênh Lệch, chỉ để
+    tham khảo/báo cáo (vẫn cộng tổng theo đúng cấp cây như các cột khác).
+    Lý do tách hẳn ra (theo đúng phản hồi người dùng khi xem ảnh demo thật
+    với số liệu cụ thể, phát hiện bản demo lần đầu vẫn sai): "cột thực tế
+    bạn ko nên cộng kiêm nhiệm vào. Báo cáo định biên lấy từ cấu hình định
+    biên nhân sự mà trên cấu hình này ko có kiêm nhiệm, kiêm nhiệm chỉ có ở
+    hồ sơ nhân sự nên cột thực tế là cột không có kiêm nhiệm" — Định Biên là
+    cấu hình trên CHÍNH node Vị Trí của Cơ Cấu Tổ Chức (không có khái niệm
+    kiêm nhiệm), còn Kiêm Nhiệm là dữ liệu gán ở Hồ Sơ Nhân Sự/Người Dùng,
+    2 nguồn khác hẳn nhau nên không nên gộp chung vào 1 cột Thực Tế.
+  - **2 cột tách riêng còn lại (11/2026)**: "Đang Bàn Giao Nghỉ Việc"/
+    "Thai Sản-Nghỉ Ốm" cũng hiện THÀNH CỘT RIÊNG ngay sau cột "Thực Tế" (cả
+    màn xem lẫn file Excel xuất ra) để xem chi tiết từng thành phần mà không
+    cần tính nhẩm.
+  - **Chênh Lệch** = Định Biên − Thực Tế (đơn giản, nhất quán — vì Thực Tế
+    đã không còn chứa Kiêm Nhiệm nên không cần công thức riêng nữa). Dương
+    (tô cam) = còn thiếu người, cần tuyển thêm đúng số đó; âm (tô đỏ) = đang
+    dư người so với kế hoạch.
   - Số liệu **cộng dồn theo đúng cấp cây** (Vị Trí → Phòng Ban chứa nó → Khối
     → Công Ty) — dòng Phòng Ban/Khối/Công Ty hiện tổng Định Biên/Thực Tế của
     toàn bộ nhánh con, không phải số riêng của chính node đó.
@@ -3859,7 +3863,7 @@ theo đúng vị trí trong cây**.
     mẫu thật của HR: **STT | BAN/PHÒNG | BAN/PHÒNG/BỘ PHẬN | BỘ PHẬN/NHÓM |
     CHỨC DANH | CẤP BẬC | Mã vị trí | Định Biên | Thực Tế | Kiêm Nhiệm | Đang
     Bàn Giao Nghỉ Việc | Thai Sản/Nghỉ Ốm | Chênh Lệch** (3 cột breakdown
-    thêm 11/2026 ĐỢT 2, xem chi tiết công thức ở trên).
+    thêm 11/2026, xem chi tiết công thức ở trên).
     - Phòng Ban/Khối nằm **trực tiếp dưới Công Ty** (cấp 1) được đánh số La
       Mã **I, II, III...**; Phòng Ban con của nó (cấp 2) đánh **I.1, I.2...**.
       Phòng Ban nằm **sâu hơn cấp 2** (VD Ban → Phòng → Tổ) **không** có số
@@ -3900,7 +3904,7 @@ theo đúng vị trí trong cây**.
       (hệ thống tự gán, không hiện ra để HR không nhỡ tay sửa) dùng để khớp
       lại ĐÚNG Vị Trí khi nhập lên — đơn giản hơn cả mẫu nhập cả cây (không
       cần gõ lại đường dẫn Phòng Ban nào, vì Vị Trí đã có sẵn, chỉ cập nhật
-      đúng 1 con số). **Từ 11/2026 ĐỢT 2**: thêm 3 cột THAM KHẢO "Kiêm Nhiệm"/
+      đúng 1 con số). **Từ 11/2026**: thêm 3 cột THAM KHẢO "Kiêm Nhiệm"/
       "Đang Bàn Giao Nghỉ Việc"/"Thai Sản-Nghỉ Ốm" (số liệu hiện tại của đúng
       Vị Trí đó) nằm giữa "Định Biên Hiện Tại" và "Định Biên Mới (\*)" — giúp
       HR có đủ thông tin để quyết định đặt Định Biên Mới bao nhiêu, sửa các

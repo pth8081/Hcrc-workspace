@@ -1,25 +1,27 @@
 // server/tests/test-orgchart-headcount-breakdown-columns.js
 //
-// Đợt việc 11/2026 ĐỢT 2 (theo yêu cầu người dùng, kèm ảnh chụp "Báo Cáo Định Biên Nhân Sự bạn còn thiếu
+// Đợt việc 11/2026 (theo yêu cầu người dùng, kèm ảnh chụp "Báo Cáo Định Biên Nhân Sự bạn còn thiếu
 // các cột..."): bổ sung 3 cột breakdown vào "📋 Báo Cáo Định Biên Nhân Sự" — Kiêm Nhiệm / Đang Bàn Giao
-// Nghỉ Việc / Thai Sản-Nghỉ Ốm — tách ra từ đúng số đã gộp sẵn trong "Thực Tế" (computePositionStats() ở
-// lib/headcountReport.js, không đổi cách tính). Xác nhận qua AskUserQuestion (demo HTML kèm công tắc so
-// sánh 2 công thức) với 4 quyết định:
-//   1. Cột "Thực Tế" GIỮ NGUYÊN ý nghĩa cũ (tổng tất cả, gồm cả Kiêm Nhiệm×0.5) — không đổi số đang hiện.
-//   2. Cột "Chênh Lệch" đổi công thức: KHÔNG còn trừ Kiêm Nhiệm nữa — Chênh Lệch = Định Biên − (Đang làm
-//      việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm). Từ đợt này, Chênh Lệch KHÔNG còn khớp số học
-//      với "Định Biên − Thực Tế" nữa (cố ý, Thực Tế vẫn gồm Kiêm Nhiệm còn Chênh Lệch thì không).
-//   3. Chỉ 3 cột mới (không phải 4) — "cột nghỉ thai sản tiếp theo" trong yêu cầu chỉ là lời dẫn, không
-//      phải 1 cột riêng.
-//   4. Áp dụng ở CẢ 4 nơi: màn xem (#orgChartHeadcountTableBody), Xuất Excel (buildFlatHeadcountReportWorkbook),
-//      Tải Mẫu Định Biên (buildHeadcountTemplateWorkbook — 3 cột THAM KHẢO, không đọc lại lúc nhập), Nhập
-//      Định Biên (parseHeadcountTemplateBuffer không đổi gì — vẫn chỉ đọc "ID"/"Định Biên Mới").
+// Nghỉ Việc / Thai Sản-Nghỉ Ốm. Trải qua 2 vòng demo xác nhận (gửi ảnh + file Excel thật qua SendUserFile
+// trước khi code, đúng quy trình người dùng yêu cầu):
+//   ĐỢT 2 (quyết định ban đầu, qua AskUserQuestion + demo HTML công tắc so sánh công thức): Thực Tế GIỮ
+//     NGUYÊN (gồm cả Kiêm Nhiệm×0.5), chỉ đổi công thức Chênh Lệch để KHÔNG trừ Kiêm Nhiệm.
+//   ĐỢT 3 (sau khi xem ảnh demo THẬT với số liệu cụ thể, người dùng phát hiện ĐỢT 2 vẫn sai): "cột thực tế
+//     bạn ko nên cộng kiêm nhiệm vào. Báo cáo định biên lấy từ cấu hình định biên nhân sự mà trên cấu hình
+//     này ko có kiêm nhiệm, kiêm nhiệm chỉ có ở hồ sơ nhân sự nên cột thực tế là cột không có kiêm nhiệm"
+//     — ĐỔI LẠI: Thực Tế (actualTotal) = active+onLeave+offboarding, KHÔNG còn cộng Kiêm Nhiệm nữa; Chênh
+//     Lệch quay về công thức ĐƠN GIẢN "Định Biên − Thực Tế" (nhất quán trở lại, không cần trừ riêng Kiêm
+//     Nhiệm vì Thực Tế đã không chứa nó). Kiêm Nhiệm CHỈ còn là 1 cột RIÊNG hoàn toàn tách biệt, không ảnh
+//     hưởng Thực Tế/Chênh Lệch, chỉ cộng tổng để báo cáo — ĐÂY LÀ QUYẾT ĐỊNH CUỐI, test dưới đây theo ĐỢT 3.
+//   Các quyết định khác GIỮ NGUYÊN cả 2 đợt: chỉ 3 cột mới (không phải 4 — "cột nghỉ thai sản tiếp theo"
+//   trong yêu cầu chỉ là lời dẫn); áp dụng ở CẢ 4 nơi: màn xem (#orgChartHeadcountTableBody), Xuất Excel
+//   (buildFlatHeadcountReportWorkbook), Tải Mẫu Định Biên (buildHeadcountTemplateWorkbook — 3 cột THAM
+//   KHẢO, không đọc lại lúc nhập), Nhập Định Biên (parseHeadcountTemplateBuffer không đổi gì).
 //
 // Phạm vi test:
-//   1. computePositionStats() (qua computeHeadcountReport()): Thực Tế (actualTotal) KHÔNG đổi (vẫn gồm
-//      Kiêm Nhiệm); Chênh Lệch (variance) đổi công thức, KHÔNG trừ Kiêm Nhiệm nữa — xác nhận 2 cột KHÔNG
-//      còn khớp số học khi Kiêm Nhiệm > 0.
-//   2. Cộng dồn (DEPARTMENT/COMPANY) cũng áp dụng ĐÚNG công thức Chênh Lệch mới (không chỉ node lá).
+//   1. computePositionStats() (qua computeHeadcountReport()): Thực Tế (actualTotal) KHÔNG còn gồm Kiêm
+//      Nhiệm; Chênh Lệch (variance) = Định Biên − Thực Tế (đơn giản, nhất quán).
+//   2. Cộng dồn (DEPARTMENT/COMPANY) cũng áp dụng ĐÚNG công thức mới (không chỉ node lá).
 //   3. buildFlatHeadcountReportWorkbook(): đủ 3 cột mới đúng vị trí (sau "Thực tế", trước "Chênh lệch"),
 //      đúng giá trị ở dòng root/group/position.
 //   4. buildHeadcountTemplateWorkbook(): đủ 3 cột THAM KHẢO đúng giá trị, "Định Biên Mới (*)" vẫn ở cột
@@ -47,7 +49,8 @@ async function main() {
   const { v, phong, posBanHang, posThuNgan } = buildVersion();
 
   // Nhân viên bán hàng (quota=7): 5 đang làm việc, 1 đang bàn giao nghỉ việc, 1 thai sản/nghỉ ốm, 1 người
-  // kiêm nhiệm (secondary = 0.5) -> actualTotal (Thực Tế) = 5+1+1+0.5 = 7.5; Chênh Lệch MỚI = 7-(5+1+1) = 0.
+  // kiêm nhiệm (secondary=0.5, KHÔNG cộng vào Thực Tế) -> actualTotal (Thực Tế) = 5+1+1 = 7; Chênh Lệch =
+  // Định Biên − Thực Tế = 7-7 = 0.
   const employeeProfiles = [
     { username: 'u1', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
     { username: 'u2', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
@@ -56,8 +59,8 @@ async function main() {
     { username: 'u5', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
     { username: 'u6', positionKey: posBanHang.positionKey, status: 'ACTIVE' }, // offboarding (qua hrProcesses)
     { username: 'u7', positionKey: posBanHang.positionKey, status: 'ON_LEAVE' },
-    // Thu ngân (quota=4): 1 đang làm việc, 2 người kiêm nhiệm (secondary=1.0) -> actualTotal=1+1=2;
-    // Chênh Lệch MỚI = 4-1 = 3 (KHÔNG trừ 2 kiêm nhiệm); Chênh Lệch CŨ (nếu còn trừ) sẽ là 4-2=2.
+    // Thu ngân (quota=4): 1 đang làm việc, 2 người kiêm nhiệm (secondary=1.0, KHÔNG cộng vào Thực Tế) ->
+    // actualTotal (Thực Tế) = 1; Chênh Lệch = 4-1 = 3.
     { username: 'u8', positionKey: posThuNgan.positionKey, status: 'ACTIVE' }
   ];
   const hrProcesses = [{ processType: 'OFFBOARDING', status: 'IN_PROGRESS', employeeUsername: 'u6' }];
@@ -67,29 +70,29 @@ async function main() {
     { username: 'u11', active: true, secondaryPositions: [{ jobTitle: 'Thu ngân', dept: 'Phòng Kinh Doanh' }] }
   ];
 
-  await run.run('1. computePositionStats() (qua computeHeadcountReport): Thực Tế GIỮ NGUYÊN (gồm Kiêm Nhiệm), Chênh Lệch KHÔNG còn trừ Kiêm Nhiệm', () => {
+  await run.run('1. computePositionStats() (qua computeHeadcountReport): Thực Tế KHÔNG gồm Kiêm Nhiệm, Chênh Lệch = Định Biên − Thực Tế', () => {
     const { rows } = computeHeadcountReport(v, employeeProfiles, hrProcesses, users);
     const rBanHang = rows.find(r => r.nodeId === posBanHang.nodeId);
     assertEqual(rBanHang.active, 5, 'Nhân viên bán hàng: 5 đang làm việc');
     assertEqual(rBanHang.offboarding, 1, 'Nhân viên bán hàng: 1 đang bàn giao nghỉ việc');
     assertEqual(rBanHang.onLeave, 1, 'Nhân viên bán hàng: 1 thai sản/nghỉ ốm');
-    assertEqual(rBanHang.secondary, 0.5, 'Nhân viên bán hàng: 1 người kiêm nhiệm × 0.5');
-    assertEqual(rBanHang.actualTotal, 7.5, 'Thực Tế GIỮ NGUYÊN = 5+1+1+0.5 = 7.5 (gồm cả Kiêm Nhiệm, không đổi hành vi cũ)');
-    assertEqual(rBanHang.variance, 0, 'Chênh Lệch MỚI = 7 - (5+1+1) = 0, KHÔNG trừ 0.5 Kiêm Nhiệm (khác Định Biên-Thực Tế=-0.5)');
+    assertEqual(rBanHang.secondary, 0.5, 'Nhân viên bán hàng: 1 người kiêm nhiệm × 0.5 (chỉ để báo cáo riêng)');
+    assertEqual(rBanHang.actualTotal, 7, 'Thực Tế = 5+1+1 = 7, KHÔNG cộng 0.5 Kiêm Nhiệm nữa');
+    assertEqual(rBanHang.variance, 0, 'Chênh Lệch = Định Biên − Thực Tế = 7-7 = 0');
 
     const rThuNgan = rows.find(r => r.nodeId === posThuNgan.nodeId);
     assertEqual(rThuNgan.active, 1, 'Thu ngân: 1 đang làm việc');
-    assertEqual(rThuNgan.secondary, 1.0, 'Thu ngân: 2 người kiêm nhiệm × 0.5 = 1.0');
-    assertEqual(rThuNgan.actualTotal, 2, 'Thực Tế GIỮ NGUYÊN = 1+1.0 = 2');
-    assertEqual(rThuNgan.variance, 3, 'Chênh Lệch MỚI = 4 - 1 = 3 (KHÔNG trừ 1.0 Kiêm Nhiệm, khác Định Biên-Thực Tế=2)');
+    assertEqual(rThuNgan.secondary, 1.0, 'Thu ngân: 2 người kiêm nhiệm × 0.5 = 1.0 (chỉ để báo cáo riêng)');
+    assertEqual(rThuNgan.actualTotal, 1, 'Thực Tế = 1, KHÔNG cộng 1.0 Kiêm Nhiệm nữa');
+    assertEqual(rThuNgan.variance, 3, 'Chênh Lệch = Định Biên − Thực Tế = 4-1 = 3');
   });
 
-  await run.run('2. Cộng dồn DEPARTMENT/COMPANY cũng áp dụng ĐÚNG công thức Chênh Lệch mới (không chỉ node lá)', () => {
+  await run.run('2. Cộng dồn DEPARTMENT/COMPANY cũng áp dụng ĐÚNG công thức mới (không chỉ node lá)', () => {
     const { rows } = computeHeadcountReport(v, employeeProfiles, hrProcesses, users);
     const rPhong = rows.find(r => r.nodeId === phong.nodeId);
-    // Tổng active=5+1=6, offboarding=1, onLeave=1, secondary=0.5+1.0=1.5, quota=7+4=11.
-    assertEqual(rPhong.actualTotal, 9.5, 'Thực Tế cộng dồn GIỮ NGUYÊN = 6+1+1+1.5 = 9.5');
-    assertEqual(rPhong.variance, 3, 'Chênh Lệch cộng dồn MỚI = 11 - (6+1+1) = 3, KHÔNG trừ 1.5 Kiêm Nhiệm cộng dồn');
+    // Tổng active=5+1=6, offboarding=1, onLeave=1, secondary=0.5+1.0=1.5 (chỉ để báo cáo), quota=7+4=11.
+    assertEqual(rPhong.actualTotal, 8, 'Thực Tế cộng dồn = 6+1+1 = 8, KHÔNG cộng 1.5 Kiêm Nhiệm cộng dồn');
+    assertEqual(rPhong.variance, 3, 'Chênh Lệch cộng dồn = Định Biên − Thực Tế = 11-8 = 3');
   });
 
   await run.run('3. buildFlatHeadcountReportWorkbook(): đủ 3 cột mới đúng vị trí + giá trị', () => {
@@ -107,11 +110,11 @@ async function main() {
     });
     assert(!!banHangRow, 'Phải tìm thấy dòng "Nhân viên bán hàng"');
     assertEqual(banHangRow.getCell(8).value, 7, 'Cột H (Định biên) = 7');
-    assertEqual(banHangRow.getCell(9).value, 7.5, 'Cột I (Thực tế) = 7.5 (GIỮ NGUYÊN, gồm Kiêm Nhiệm)');
+    assertEqual(banHangRow.getCell(9).value, 7, 'Cột I (Thực tế) = 7, KHÔNG gồm Kiêm Nhiệm');
     assertEqual(banHangRow.getCell(10).value, 0.5, 'Cột J (Kiêm Nhiệm) = 0.5');
     assertEqual(banHangRow.getCell(11).value, 1, 'Cột K (Đang Bàn Giao Nghỉ Việc) = 1');
     assertEqual(banHangRow.getCell(12).value, 1, 'Cột L (Thai Sản/Nghỉ Ốm) = 1');
-    assertEqual(banHangRow.getCell(13).value, 0, 'Cột M (Chênh lệch) = 0 (công thức MỚI, không trừ Kiêm Nhiệm)');
+    assertEqual(banHangRow.getCell(13).value, 0, 'Cột M (Chênh lệch) = Định Biên − Thực Tế = 7-7 = 0');
   });
 
   await run.run('4. buildHeadcountTemplateWorkbook(): đủ 3 cột THAM KHẢO đúng giá trị, "Định Biên Mới (*)" vẫn ở cột cuối, round-trip nhập lại vẫn hoạt động', async () => {
