@@ -3852,7 +3852,21 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
   // cả khi hồ sơ không có lớp phê duyệt thêm nào — lộ ra qua test-mixed-approval-delete-warning-ui.js.
   if (locationType !== 'STORE') {
     const layers = o?.extraApprovalLayers;
-    if (!Array.isArray(layers) || !layers.length) return tierCfg;
+    if (!Array.isArray(layers) || !layers.length) {
+      // LỖI ĐÃ VÁ (11/2026, người dùng báo "Đặt Hàng Tại HO không thấy số bước/ai đã-chưa phê duyệt" —
+      // khác hẳn Bán Buôn/Bán Lẻ): tierCfg đọc thẳng từ DB.operationOrderHOTierWorkflows[tier] chỉ có
+      // {workflowId, approvers} — KHÔNG có sẵn `.steps` như resolveItPriceWorkflowConfigForItemClient()
+      // (WHOLESALE) hay nhánh STORE ngay dưới đã gắn đúng. workflowStepProgressText()/
+      // buildWorkflowStepsStatusHTML() đều đọc THẲNG wfConfig.steps (không tự tra DB.workflows), nên thiếu
+      // field này khiến badge "⏳ BƯỚC" luôn trống VÀ khối "ai đã duyệt/ai chưa duyệt" ở modal chi tiết
+      // biến mất hoàn toàn, dù mức ĐÃ được admin cấu hình quy trình thật. CHỈ gắn `.steps` khi tierCfg
+      // KHÔNG null (mức đã cấu hình) — GIỮ NGUYÊN trả về null khi chưa cấu hình, không đụng tới nhánh cảnh
+      // báo "⚠️ Chưa cấu hình duyệt" (xem chú thích ở trên — gọi withWfStepsClient() vô điều kiện ở đây
+      // từng làm mất cảnh báo đó, lộ qua test-mixed-approval-delete-warning-ui.js).
+      if (!tierCfg) return null;
+      const baseWf = (DB.workflows || []).find(w => w.id === tierCfg.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+      return { ...tierCfg, steps: baseWf.steps };
+    }
     return appendExtraApprovalLayersClient(withWfStepsClient(tierCfg), o);
   }
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): STORE trước đây cũng `return null` khi mức

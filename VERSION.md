@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**30.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. MINOR chạm `99` lại ở v29.99 nên bản này cuộn
-sang MAJOR mới `30.0`, reset MINOR về `0`, đúng quy tắc.
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.1 (2026-11): FIX — Đặt Hàng Tại HO: thiếu số bước + khối "ai đã/chưa phê duyệt"
+
+Người dùng gửi 2 ảnh chụp màn hình "⚙️ Vận Hành → 📦 Đặt Hàng → Đặt Hàng Tại HO": (1) danh sách đơn chỉ
+hiện badge "⏳ BƯỚC" trống, không có số như "Phê Duyệt Giá Bán Buôn/Bán Lẻ" (luôn hiện "BƯỚC 1/2"...);
+(2) modal "Xem chi tiết" không có khối nào cho biết ai sẽ duyệt/đã duyệt, chỉ có "Lịch Sử Xử Lý" trống —
+yêu cầu kiểm tra lại cho giống 2 màn Phê Duyệt Giá.
+
+**Nguyên nhân**: `resolveOperationOrderWorkflowConfigForItemClient()` (`public/js/core.js`) — nhánh HO
+(không có "Nhóm Phê Duyệt Cuối", chiếm đa số đơn) trả THẲNG `tierCfg` đọc từ
+`DB.operationOrderHOTierWorkflows[tier]` — object này chỉ có `{workflowId, approvers}`, KHÔNG có sẵn
+`.steps` (danh sách bước). Trong khi đó, hàm tương ứng của Bán Buôn
+(`resolveItPriceWorkflowConfigForItemClient()`) và nhánh STORE của chính hàm Đặt Hàng NGAY DƯỚI đều LUÔN
+tự tra `DB.workflows` theo `workflowId` rồi gắn `.steps` vào trước khi trả về. 2 hàm hiển thị dùng chung
+toàn hệ thống — `workflowStepProgressText()` (badge "BƯỚC done/total") và `buildWorkflowStepsStatusHTML()`
+(khối "ai đã/chưa duyệt" ở modal) — đều đọc THẲNG `wfConfig.steps`, không tự tra lại `DB.workflows`, nên
+thiếu field này khiến CẢ 2 chỗ hiển thị rỗng, dù mức tiền ĐÃ được admin cấu hình quy trình thật.
+
+**Đã làm**: `public/js/core.js::resolveOperationOrderWorkflowConfigForItemClient()` — nhánh HO không có
+lớp phê duyệt thêm: khi `tierCfg` KHÔNG null (mức đã cấu hình), tự tra `DB.workflows` theo
+`tierCfg.workflowId` rồi trả về `{...tierCfg, steps}`. **Giữ NGUYÊN trả về `null`** khi `tierCfg` null
+(mức CHƯA cấu hình) — không đụng tới cảnh báo "⚠️ Chưa cấu hình duyệt" đã có từ trước (khu vực này từng bị
+phá bởi 1 lần vá khác trong quá khứ do gọi `withWfStepsClient()` vô điều kiện, biến `null` thành object —
+lần này tránh lặp lại, chỉ gắn `.steps` khi `tierCfg` thật sự tồn tại). "Đặt Hàng Tại Siêu Thị" không bị
+lỗi này (đã gắn đúng `.steps` từ trước) — không đổi gì ở nhánh STORE.
+
+Demo thật (dựng lại ĐÚNG đơn hàng trong ảnh người dùng gửi — mã HCRC-KSCSVH-DH-HO-195) gửi qua
+`SendUserFile` so sánh TRƯỚC/SAU xác nhận đúng ý trước khi merge.
+
+**Test**: chạy lại `test-mixed-approval-delete-warning-ui.js` (19/19, xác nhận cảnh báo "Chưa cấu hình
+duyệt" KHÔNG bị ảnh hưởng — đúng lớp đã từng vỡ trước đây), `test-operation-order-noapprover-warning.js`
+(15/15), `test-operation-order-location-tiers.js` (34/34), `test-operationorder-store-tier-mixed-approval.js`
+(4/4), `test-operation-order-mixed-approver-preload.js` (6/6), `test-operation-order-approval-slip.js`
+(13/13), `test-operation-order-store-approver-scope.js` (16/16) — pass hết, không ảnh hưởng chức năng
+Đặt Hàng/Phê Duyệt nào khác. Grep CSP chuẩn trên diff `core.js` — sạch.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.0 (2026-11): Checklist "Chỉ Đạt/Chưa đạt" — thêm Ngưỡng % Số Câu Đạt (tuỳ chọn) + cột "Đã Trả Lời/Đạt" ở Báo Cáo
 
