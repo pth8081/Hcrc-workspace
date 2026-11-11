@@ -8,12 +8,14 @@
 // tests/test-checklist.js (chạy thẳng routes/checklist.js qua HTTP, không qua browser).
 //
 // Kiểm:
-//   1. Builder UI hiện ô "Chế Độ Chấm Điểm" + đổi sang PASS_FAIL_ONLY thì ẩn hết ô nhập điểm tối đa/điểm
-//      đáp án/ngưỡng đạt %.
+//   1. Builder UI hiện ô "Chế Độ Chấm Điểm" + đổi sang PASS_FAIL_ONLY thì ẩn ô nhập điểm tối đa/điểm đáp
+//      án (vẫn vô nghĩa ở chế độ này) nhưng ô "Ngưỡng Đạt %" VẪN HIỆN (11/2026 ĐỢT 2, đổi nhãn theo đúng
+//      ý nghĩa mới — xem onChecklistBuilderScoringModeChange()/module-admin-checklistconfig.js).
 //   2. Lưu mẫu SCORED với 1 đáp án mang điểm ÂM (trừ điểm "yêu cầu vàng") -> server THẬT chấp nhận
 //      nguyên vẹn, không bị ép về 0/dương.
-//   3. Lưu mẫu PASS_FAIL_ONLY -> server THẬT ép cứng maxScore/scoreValue về 0 + passThreshold về null,
-//      bất kể client trót còn gửi số cũ (builder ẩn ô nhưng KHÔNG xoá field khỏi state JS đang soạn).
+//   3. Lưu mẫu PASS_FAIL_ONLY -> server THẬT ép cứng maxScore/scoreValue về 0 NHƯNG GIỮ NGUYÊN
+//      passThreshold client gửi (11/2026 ĐỢT 2 — KHÔNG còn ép về null như trước, xem
+//      assertTemplateCoreFields()/lib/checklist.js).
 //
 // Chạy: node server/tests/test-checklist-builder-ui.js
 const {
@@ -67,12 +69,13 @@ async function main() {
       assertEqual(state1.hasScoreValueInput, true, 'SCORED -> ô Điểm đáp án phải HIỆN');
     });
 
-    await run.run('Builder: đổi sang PASS_FAIL_ONLY -> ẩn hết ô Ngưỡng Đạt/Điểm Tối Đa/Điểm Đáp Án (không xoá field khỏi state JS đang soạn)', async () => {
+    await run.run('Builder: đổi sang PASS_FAIL_ONLY -> ẩn Điểm Tối Đa/Điểm Đáp Án nhưng Ngưỡng Đạt % VẪN HIỆN (đổi nhãn), không xoá field khỏi state JS đang soạn', async () => {
       const state2 = await page.evaluate(() => {
         document.getElementById('checklistBuilderScoringMode').value = 'PASS_FAIL_ONLY';
         onChecklistBuilderScoringModeChange();
         return {
           thresholdHidden: document.getElementById('checklistBuilderPassThresholdWrap').classList.contains('hidden'),
+          thresholdLabel: document.getElementById('checklistBuilderPassThresholdLabel').innerText,
           hasMaxScoreInput: !!document.querySelector('#checklistBuilderQuestionsWrap input[data-arg1="maxScore"]'),
           hasScoreValueInput: !!document.querySelector('#checklistBuilderQuestionsWrap input[data-arg2="scoreValue"]'),
           // isPassing/isCriticalFail vẫn phải còn — đây là 2 cờ DUY NHẤT còn ý nghĩa ở chế độ này.
@@ -80,7 +83,8 @@ async function main() {
           questionsInMemory: checklistBuilderQuestions.length
         };
       });
-      assertEqual(state2.thresholdHidden, true, 'PASS_FAIL_ONLY -> ô Ngưỡng Điểm Đạt phải ẨN');
+      assertEqual(state2.thresholdHidden, false, '11/2026 ĐỢT 2: PASS_FAIL_ONLY -> ô Ngưỡng Đạt % KHÔNG còn ẩn nữa (nay dùng được)');
+      assertEqual(/Số Câu Đạt/.test(state2.thresholdLabel), true, 'Nhãn phải đổi sang mô tả "Ngưỡng % Số Câu Đạt" đúng ý nghĩa mới của PASS_FAIL_ONLY');
       assertEqual(state2.hasMaxScoreInput, false, 'PASS_FAIL_ONLY -> ô Điểm Tối Đa câu hỏi phải ẨN');
       assertEqual(state2.hasScoreValueInput, false, 'PASS_FAIL_ONLY -> ô Điểm đáp án phải ẨN');
       assertEqual(state2.hasIsPassingCheckbox, true, 'PASS_FAIL_ONLY -> ô "Đạt" vẫn phải còn (cờ duy nhất còn ý nghĩa)');
@@ -110,7 +114,7 @@ async function main() {
       assertEqual(saved.questions[0].options[1].scoreValue, -20, 'Server THẬT phải giữ nguyên điểm ÂM (-20), không ép về 0/dương');
     });
 
-    await run.run('Lưu mẫu PASS_FAIL_ONLY -> server THẬT ép cứng maxScore/scoreValue về 0 + passThreshold về null', async () => {
+    await run.run('Lưu mẫu PASS_FAIL_ONLY -> server THẬT ép cứng maxScore/scoreValue về 0 nhưng GIỮ NGUYÊN passThreshold (11/2026 ĐỢT 2)', async () => {
       const saved = await page.evaluate(async () => {
         closeChecklistTemplateBuilder();
         openChecklistTemplateBuilder();
@@ -119,7 +123,7 @@ async function main() {
         document.getElementById('checklistBuilderType').value = 'STORE_SELF';
         document.getElementById('checklistBuilderScoringMode').value = 'PASS_FAIL_ONLY';
         onChecklistBuilderScoringModeChange();
-        document.getElementById('checklistBuilderPassThreshold').value = '80'; // cố tình còn giá trị cũ trong DOM (đã ẩn, KHÔNG đọc khi lưu)
+        document.getElementById('checklistBuilderPassThreshold').value = '80'; // ô này giờ THẬT SỰ còn tác dụng (11/2026 ĐỢT 2)
         addChecklistBuilderQuestion();
         checklistBuilderQuestions[0].text = 'Đồng phục có đúng quy định không?';
         // Mô phỏng field CŨ vẫn còn "sót" trong state JS đang soạn (builder ẩn ô nhưng object questions[]
@@ -132,7 +136,7 @@ async function main() {
       });
       assertEqual(!!saved, true, 'Template phải được lưu thành công');
       assertEqual(saved.scoringMode, 'PASS_FAIL_ONLY', 'scoringMode phải lưu đúng PASS_FAIL_ONLY');
-      assertEqual(saved.passThreshold, null, 'Server THẬT phải ép passThreshold về null');
+      assertEqual(saved.passThreshold, 80, '11/2026 ĐỢT 2: server THẬT GIỮ NGUYÊN passThreshold=80 cho PASS_FAIL_ONLY, không còn ép về null');
       assertEqual(saved.questions[0].maxScore, 0, 'Server THẬT phải ép maxScore về 0 dù state JS còn "sót" giá trị 50');
       assertEqual(saved.questions[0].options[0].scoreValue, 0, 'Server THẬT phải ép scoreValue đáp án Đạt về 0 dù state JS còn "sót" giá trị 999');
       assertEqual(saved.questions[0].options[1].scoreValue, 0, 'Server THẬT phải ép scoreValue đáp án Không đạt về 0 dù state JS còn "sót" giá trị -50');

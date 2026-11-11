@@ -867,14 +867,23 @@ function applyChecklistReportFilter() {
   if (!rows.length) { tableEl.innerHTML = '<p class="text-xs text-gray-400 italic">Không có dữ liệu phù hợp bộ lọc.</p>'; return; }
   tableEl.innerHTML = `<table class="w-full text-xs border-collapse">
     <thead><tr class="border-b text-left text-gray-500">
-      <th class="p-1.5">Checklist</th><th class="p-1.5">Siêu Thị</th><th class="p-1.5">Người Làm</th><th class="p-1.5">Ngày Nộp</th><th class="p-1.5">Điểm</th><th class="p-1.5">Kết Quả</th>
+      <th class="p-1.5">Checklist</th><th class="p-1.5">Siêu Thị</th><th class="p-1.5">Người Làm</th><th class="p-1.5">Ngày Nộp</th><th class="p-1.5">Đã Trả Lời/Đạt</th><th class="p-1.5">Điểm</th><th class="p-1.5">Kết Quả</th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr class="border-b">
       <td class="p-1.5">${escapeHtml(r.templateName)}</td><td class="p-1.5">${escapeHtml(r.storeCode)}</td><td class="p-1.5">${escapeHtml(r.submittedByName || '')}</td>
-      <td class="p-1.5">${escapeHtml(r.submittedAt || '')}</td><td class="p-1.5">${r.scorePercent != null ? r.scorePercent.toFixed(1) + '%' : '—'}</td>
+      <td class="p-1.5">${escapeHtml(r.submittedAt || '')}</td><td class="p-1.5">${formatChecklistAnswerBreakdown(r)}</td>
+      <td class="p-1.5">${r.scorePercent != null ? r.scorePercent.toFixed(1) + '%' : '—'}</td>
       <td class="p-1.5">${r.hasCriticalFail ? '🔴 Lỗi nghiêm trọng' : (r.isPassed === false ? '🟡 Không đạt' : (r.isPassed === true ? '🟢 Đạt' : '—'))}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+}
+// "Đã trả lời X/Y câu, Z câu đạt" (11/2026 ĐỢT 2, theo yêu cầu người dùng "không có cột đã làm đánh giá
+// hay gì?") — X=answeredCount (đã trả lời), Y=totalVisibleCount (tổng số câu hiển thị, câu không bắt
+// buộc bị bỏ qua không tính), Z=passedCount (số câu được chọn đáp án Đạt). "—" cho bài nộp trước khi có
+// field này (answeredCount null) hoặc mẫu DEDUCTION (không có khái niệm câu hỏi Đạt/Không đạt riêng lẻ).
+function formatChecklistAnswerBreakdown(r) {
+  if (r.answeredCount == null || r.totalVisibleCount == null) return '—';
+  return `${r.answeredCount}/${r.totalVisibleCount} câu, ${r.passedCount} đạt`;
 }
 function exportChecklistReportExcel() {
   const columns = [
@@ -882,13 +891,15 @@ function exportChecklistReportExcel() {
     { header: 'Siêu Thị', key: 'storeCode', width: 18 },
     { header: 'Người Làm', key: 'submittedByName', width: 22 },
     { header: 'Ngày Nộp', key: 'submittedAt', width: 20 },
+    { header: 'Đã Trả Lời/Đạt', key: 'answerBreakdown', width: 18 },
     { header: 'Điểm (%)', key: 'scorePercent', width: 12 },
     { header: 'Lỗi Nghiêm Trọng', key: 'hasCriticalFailLabel', width: 16 },
     { header: 'Kết Quả', key: 'isPassedLabel', width: 12 }
   ];
   const rows = checklistReportFilteredRows.map(r => ({
     templateName: r.templateName, storeCode: r.storeCode, submittedByName: r.submittedByName,
-    submittedAt: r.submittedAt, scorePercent: r.scorePercent != null ? Number(r.scorePercent.toFixed(1)) : '',
+    submittedAt: r.submittedAt, answerBreakdown: formatChecklistAnswerBreakdown(r),
+    scorePercent: r.scorePercent != null ? Number(r.scorePercent.toFixed(1)) : '',
     hasCriticalFailLabel: r.hasCriticalFail ? 'Có' : 'Không', isPassedLabel: r.isPassed === true ? 'Đạt' : (r.isPassed === false ? 'Không đạt' : '')
   }));
   downloadXlsxFromServer('bao-cao-checklist.xlsx', 'Báo Cáo Checklist', columns, rows);

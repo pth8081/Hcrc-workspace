@@ -5166,15 +5166,33 @@ tạo/sửa (tab Cấu Hình, ô "Chế Độ Chấm Điểm"):
   điểm) — không cần cờ/field riêng nào khác, tái dùng đúng field "Điểm Đáp
   Án" đã có. Tổng điểm/% **chặn sàn ở 0** (không hiển thị số âm dù cộng dồn
   nhiều lượt trừ ra kết quả âm) — hiển thị cho người xem luôn là 0% trở lên.
-- **Chỉ Đạt / Chưa đạt** (không chấm điểm) — ẨN HẲN mọi ô nhập/hiển thị
-  điểm (Điểm Tối Đa/Điểm Đáp Án/Ngưỡng Đạt %/số điểm ở kết quả/báo cáo), kể
-  cả ở tầng SERVER (không chỉ ẩn giao diện — `maxScore`/`scoreValue` bị ép về
-  0 và không lưu `totalScore`/`scorePercent` nào cả). Kết quả Đạt/Không đạt
-  suy TRỰC TIẾP từ việc mọi câu trả lời đã chọn có phải đáp án "Đạt"
-  (`isPassing`) hay không — độc lập hoàn toàn với điểm số. Cờ "Lỗi nghiêm
-  trọng" vẫn hoạt động y hệt ở cả 2 chế độ (vẫn phủ quyết `isPassed=false`
-  bất kể gì khác). Đổi chế độ của 1 mẫu ĐANG DÙNG phải qua đúng luồng Nhân
-  Bản → sửa bản Nháp → Kích Hoạt như mọi thay đổi câu hỏi khác.
+- **Chỉ Đạt / Chưa đạt** (không chấm điểm) — ẨN HẲN mọi ô nhập/hiển thị điểm
+  (Điểm Tối Đa/Điểm Đáp Án/số điểm ở kết quả/báo cáo), kể cả ở tầng SERVER
+  (không chỉ ẩn giao diện — `maxScore`/`scoreValue` bị ép về 0, `totalScore`/
+  `maxPossibleScore` không lưu gì). Cờ "Lỗi nghiêm trọng" vẫn hoạt động y hệt
+  ở cả 2 chế độ (vẫn phủ quyết `isPassed=false` bất kể gì khác). Đổi chế độ
+  của 1 mẫu ĐANG DÙNG phải qua đúng luồng Nhân Bản → sửa bản Nháp → Kích Hoạt
+  như mọi thay đổi câu hỏi khác.
+  - **Cách tính "Đạt" (11/2026 ĐỢT 2, theo yêu cầu người dùng kèm ảnh demo
+    thật "làm 5 câu đạt 4 câu vẫn bị tính Không đạt cả bài")** — ô "Ngưỡng %
+    Số Câu Đạt" (CÙNG Ô với "Ngưỡng Điểm Đạt (%)" của chế độ Có chấm điểm,
+    chỉ đổi nhãn/ý nghĩa) giờ **DÙNG ĐƯỢC** cho chế độ này:
+    - **Để trống** (mặc định, mọi mẫu tạo trước đợt này) — GIỮ NGUYÊN hành vi
+      gốc: chỉ cần 1 câu bất kỳ chọn đáp án "Không đạt" (không phải đáp án
+      "Đạt") là CẢ BÀI tính "Không đạt" ngay, không phụ thuộc tỉ lệ.
+    - **Đặt 1 số cụ thể (VD 80)** — "Đạt" đổi sang tính theo **TỈ LỆ** = (số
+      câu được chọn đáp án Đạt) ÷ (số câu ĐÃ TRẢ LỜI — câu không bắt buộc bỏ
+      qua không bị trừ điểm oan) × 100%, so với ngưỡng đã đặt. VD 5 câu bắt
+      buộc, trả lời đủ 5, 4 câu chọn Đạt = 4/5 = 80% → nếu ngưỡng đặt ≤80%
+      thì "Đạt", ngưỡng >80% thì "Không đạt". "Lỗi nghiêm trọng" vẫn LUÔN
+      phủ quyết `isPassed=false` tuyệt đối dù tỉ lệ có đạt ngưỡng hay không.
+  - **Cột "Đã Trả Lời/Đạt" (11/2026 ĐỢT 2)** — tab Báo Cáo (cả màn xem lẫn
+    "📤 Xuất Excel") hiện thêm cột dạng "X/Y câu, Z đạt" (X=đã trả lời,
+    Y=tổng số câu hiển thị, Z=số câu chọn đáp án Đạt) cho MỌI mẫu Câu Hỏi &
+    Đáp Án (QA) bất kể chế độ chấm điểm nào — giúp xem nhanh chi tiết mà
+    không cần tính nhẩm từ % hay mở từng bài. Hiện "—" cho mẫu Trừ Điểm Theo
+    Hạng Mục (không có khái niệm "câu hỏi" riêng lẻ) hoặc bài nộp từ trước
+    đợt này (chưa có dữ liệu này).
 
 **Nhập/Tải Mẫu/Xuất Excel câu hỏi (v20.9)** — tab Cấu Hình, khi đang soạn 1
 mẫu (tạo mới/sửa bản Nháp): **"⬇️ Tải Mẫu Excel"** tải file `.xlsx` có sẵn ví

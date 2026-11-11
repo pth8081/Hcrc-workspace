@@ -696,13 +696,16 @@ async function main() {
     });
 
     // ===== 7 (v20.9): scoringMode PASS_FAIL_ONLY — ẩn hẳn điểm/%, Đạt/Không đạt suy từ isPassing =====
-    await run.run('assertTemplateCoreFields: PASS_FAIL_ONLY ép passThreshold về null bất kể client gửi gì', () => {
+    // 11/2026 ĐỢT 2 (theo yêu cầu người dùng — xem computeChecklistScoring()): PASS_FAIL_ONLY KHÔNG còn bị
+    // ép cứng passThreshold về null nữa — cho phép đặt ngưỡng theo TỈ LỆ SỐ CÂU ĐẠT. Đảo ngược assertion
+    // so với trước (test gốc kiểm tra hành vi CŨ đã chủ động đổi).
+    await run.run('assertTemplateCoreFields: PASS_FAIL_ONLY giờ GIỮ passThreshold client gửi (không ép về null nữa)', () => {
       const core = checklist.assertTemplateCoreFields({
         templateCode: 'CL_PF', templateName: 'Checklist Pass/Fail', templateType: 'STORE_SELF',
         scoringMode: 'PASS_FAIL_ONLY', passThreshold: 80
       });
       assertEqual(core.scoringMode, 'PASS_FAIL_ONLY', 'scoringMode phải giữ đúng giá trị hợp lệ client gửi');
-      assertEqual(core.passThreshold, null, 'PASS_FAIL_ONLY phải ép passThreshold về null dù client cố gửi 80');
+      assertEqual(core.passThreshold, 80, 'PASS_FAIL_ONLY giờ GIỮ NGUYÊN passThreshold client gửi (80), không ép về null nữa');
     });
 
     await run.run('validateChecklistQuestions: PASS_FAIL_ONLY ép cứng maxScore/scoreValue về 0 (bỏ qua số client gửi)', () => {
@@ -715,10 +718,12 @@ async function main() {
       assertEqual(questions[0].options[1].scoreValue, 0, 'PASS_FAIL_ONLY phải ép scoreValue đáp án Không đạt về 0 dù client gửi -50');
     });
 
-    await run.run('Finalize PASS_FAIL_ONLY: mọi câu chọn đáp án Đạt -> isPassed=true, KHÔNG có điểm/% nào được lưu', async () => {
+    await run.run('Finalize PASS_FAIL_ONLY: mọi câu chọn đáp án Đạt -> isPassed=true, KHÔNG có điểm/% nào được lưu (chưa đặt ngưỡng -> giữ hành vi cũ)', async () => {
       resetRecords();
       const t = seedTemplate({
-        scoringMode: 'PASS_FAIL_ONLY',
+        // passThreshold: null GHI ĐÈ default 80 của seedTemplate() — test này CHỦ ĐÍCH kiểm tra hành vi
+        // KHI CHƯA đặt ngưỡng (tương thích ngược), khác các test "ĐỢT 2" bên dưới có đặt ngưỡng cụ thể.
+        scoringMode: 'PASS_FAIL_ONLY', passThreshold: null,
         questions: [{
           text: 'Khu vực có sạch sẽ không?', isRequired: true,
           options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }]
@@ -737,10 +742,10 @@ async function main() {
       assertEqual(res.body.item.scorePercent, null, 'PASS_FAIL_ONLY KHÔNG được lưu scorePercent');
     });
 
-    await run.run('Finalize PASS_FAIL_ONLY: chọn 1 đáp án "Không đạt" (không phải lỗi nghiêm trọng) -> isPassed=false dù không có % nào để so ngưỡng', async () => {
+    await run.run('Finalize PASS_FAIL_ONLY: chọn 1 đáp án "Không đạt" (không phải lỗi nghiêm trọng), CHƯA đặt ngưỡng -> isPassed=false (giữ hành vi cũ "sai 1 câu thua cả bài")', async () => {
       resetRecords();
       const t = seedTemplate({
-        scoringMode: 'PASS_FAIL_ONLY',
+        scoringMode: 'PASS_FAIL_ONLY', passThreshold: null,
         questions: [{
           text: 'Khu vực có sạch sẽ không?', isRequired: true,
           options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }]
@@ -756,6 +761,78 @@ async function main() {
       assertEqual(res.status, 200, 'Đủ ảnh minh chứng phải nộp bài được');
       assertEqual(res.body.item.isPassed, false, 'PASS_FAIL_ONLY: có câu chọn đáp án Không đạt -> cả bài Không đạt (suy TRỰC TIẾP từ isPassing, không qua %)');
       assertEqual(res.body.item.scorePercent, null, 'Vẫn không có scorePercent nào được lưu dù isPassed=false');
+    });
+
+    // ===== 7b (11/2026 ĐỢT 2, theo yêu cầu người dùng kèm ảnh demo thật): PASS_FAIL_ONLY CÓ đặt ngưỡng
+    // -> "Đạt" tính theo TỈ LỆ số câu Đạt / số câu đã trả lời, KHÔNG còn "sai 1 câu thua cả bài" =====
+    function buildFiveQuestionPassFailTemplate(overrides) {
+      const questions = [];
+      for (let i = 1; i <= 5; i++) {
+        questions.push({
+          text: `Câu ${i}: có đạt không?`, isRequired: true,
+          options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }]
+        });
+      }
+      return seedTemplate(Object.assign({ scoringMode: 'PASS_FAIL_ONLY', questions }, overrides));
+    }
+    async function submitFiveQuestionsOneFail(t) {
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      const answers = t.questions.map((q, i) => {
+        const wantFail = i === 0; // câu đầu tiên trả lời "Không đạt", 4 câu còn lại "Đạt" -> 4/5 = 80%
+        const opt = q.options.find(o => o.isPassing !== wantFail);
+        return { questionId: q.id, optionIds: [opt.id] };
+      });
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers }, STORE_A_EMP);
+      await checklistAttachFakePhoto(subId, t.questions[0].id);
+      return api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+    }
+
+    await run.run('Finalize PASS_FAIL_ONLY (ĐỢT 2): làm 5 câu đạt 4 câu (80%), ngưỡng=80 -> isPassed=true, KHÁC hành vi cũ', async () => {
+      resetRecords();
+      const t = buildFiveQuestionPassFailTemplate({ passThreshold: 80 });
+      t.status = 'ACTIVE';
+      const res = await submitFiveQuestionsOneFail(t);
+      assertEqual(res.status, 200, 'Nộp bài phải thành công');
+      assertEqual(res.body.item.answeredCount, 5, 'Đã trả lời 5/5 câu');
+      assertEqual(res.body.item.passedCount, 4, '4/5 câu được chọn đáp án Đạt');
+      assertEqual(res.body.item.totalVisibleCount, 5, 'Tổng 5 câu hiển thị');
+      assertEqual(res.body.item.scorePercent, 80, 'Tỉ lệ = 4/5 = 80%, được lưu vì mẫu ĐÃ đặt ngưỡng');
+      assertEqual(res.body.item.isPassed, true, 'Đạt 4/5 (80%) >= ngưỡng 80% -> isPassed=true, KHÁC hành vi "sai 1 câu thua cả bài" trước đây');
+    });
+
+    await run.run('Finalize PASS_FAIL_ONLY (ĐỢT 2): làm 5 câu đạt 4 câu (80%), ngưỡng=90 -> isPassed=false (80% < 90%)', async () => {
+      resetRecords();
+      const t = buildFiveQuestionPassFailTemplate({ passThreshold: 90 });
+      t.status = 'ACTIVE';
+      const res = await submitFiveQuestionsOneFail(t);
+      assertEqual(res.status, 200, 'Nộp bài phải thành công');
+      assertEqual(res.body.item.scorePercent, 80, 'Tỉ lệ vẫn = 80%');
+      assertEqual(res.body.item.isPassed, false, '80% < ngưỡng 90% -> isPassed=false');
+    });
+
+    await run.run('Finalize PASS_FAIL_ONLY (ĐỢT 2): có ngưỡng nhưng vẫn chọn Lỗi nghiêm trọng -> isPassed=false TUYỆT ĐỐI dù tỉ lệ đạt ngưỡng', async () => {
+      resetRecords();
+      const t = seedTemplate({
+        scoringMode: 'PASS_FAIL_ONLY', passThreshold: 50,
+        questions: [
+          { text: 'Câu 1', isRequired: true, options: [{ text: 'Đạt', isPassing: true }, { text: 'Lỗi nghiêm trọng', isPassing: false, isCriticalFail: true }] },
+          { text: 'Câu 2', isRequired: true, options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }] }
+        ]
+      });
+      t.status = 'ACTIVE';
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      const critOption = t.questions[0].options.find(o => o.isCriticalFail);
+      const passOption = t.questions[1].options.find(o => o.isPassing);
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, {
+        answers: [{ questionId: t.questions[0].id, optionIds: [critOption.id] }, { questionId: t.questions[1].id, optionIds: [passOption.id] }]
+      }, STORE_A_EMP);
+      await checklistAttachFakePhoto(subId, t.questions[0].id);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Nộp bài phải thành công (đã có ảnh minh chứng)');
+      // 1/2 = 50% >= ngưỡng 50%, nhưng Lỗi nghiêm trọng phải PHỦ QUYẾT tuyệt đối.
+      assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng luôn isPassed=false, bất kể tỉ lệ có đạt ngưỡng hay không');
     });
 
     // ===== 8 (v21.0) — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", theo file VSATTP người dùng gửi) =====

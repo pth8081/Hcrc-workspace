@@ -285,6 +285,7 @@ router.post('/submissions/start', async (req, res) => {
       storeCode, submittedByUsername: user.username, submittedByName: user.name,
       status: 'DRAFT', answers: [], deductions: [], // deductions[] chỉ có ý nghĩa với templateKind DEDUCTION (v21.0) — luôn khởi tạo cả 2 field cho đơn giản, field không dùng tới thì mãi mãi rỗng.
       totalScore: null, maxPossibleScore: null, scorePercent: null, hasCriticalFail: null, isPassed: null,
+      answeredCount: null, passedCount: null, totalVisibleCount: null,
       startedAt: checklist.nowVN(), submittedAt: null,
       storeResponseText: null, storeRespondedAt: null, storeRespondedByUsername: null, storeRespondedByName: null,
       storeResponseHistory: [] // bản cũ trước mỗi lần ghi đè store-response (xem POST .../store-response)
@@ -454,7 +455,11 @@ router.post('/submissions/:id/finalize', async (req, res) => {
       return {
         ...sub, ...sanitized, status: 'SUBMITTED', submittedAt: checklist.nowVN(),
         totalScore: scoring.totalScore, maxPossibleScore: scoring.maxPossibleScore,
-        scorePercent: scoring.scorePercent, hasCriticalFail: scoring.hasCriticalFail, isPassed: scoring.isPassed
+        scorePercent: scoring.scorePercent, hasCriticalFail: scoring.hasCriticalFail, isPassed: scoring.isPassed,
+        // answeredCount/passedCount/totalVisibleCount (11/2026 ĐỢT 2) — null cho DEDUCTION (không có khái
+        // niệm "câu hỏi" riêng lẻ, computeDeductionScoring() không trả về các field này).
+        answeredCount: scoring.answeredCount ?? null, passedCount: scoring.passedCount ?? null,
+        totalVisibleCount: scoring.totalVisibleCount ?? null
       };
     });
     res.json({ ok: true, item: updated });
