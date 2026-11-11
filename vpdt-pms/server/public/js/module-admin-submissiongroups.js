@@ -970,7 +970,23 @@ function readUserFormState() {
   // lại PHẦN KHÁC BIỆT so với nền đó (permOverrides), không lưu y nguyên toàn bộ như trước — nhờ vậy
   // khi 1 trong các nhóm đổi quyền sau này (savePermGroup()) vẫn tự động cập nhật đúng cho người này mà
   // không mất phần tuỳ chỉnh riêng.
-  const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "tích quyền tay cho 1 user xong lưu lại, quyền tự mất mà không
+  // báo lỗi gì"): `groups` trước đây CHỈ tính từ `groupIds` (nhóm admin TƯỜNG MINH tick ở picker) — bỏ
+  // sót trường hợp Chức Danh/Vị Trí Kiêm Nhiệm của user KHỚP tiêu chí "phân quyền theo chức danh" của 1
+  // Nhóm Phân Quyền (jobTitleGroupIds, TỰ ĐỘNG, không cần admin tick picker) mà server LUÔN tính thêm ở
+  // recomputeEffectivePerms() (lib/permGroupMerge.js — effectiveGroupIds = explicit HỢP auto-matched).
+  // Khi đó basePerms ở ĐÂY tính SAI (null hoặc thiếu nhóm khớp chức danh) trong khi server tính ĐÚNG (có
+  // nhóm đó) — permOverrides gửi lên (diff so với basePerms SAI) không khớp basePerms THẬT server dùng,
+  // khiến `mergePermsServer(basePerms THẬT, permOverrides SAI)` làm MẤT quyền admin vừa tích tay mà
+  // không có cảnh báo nào (lưu vẫn báo thành công). Tính thêm autoGroupIds NGAY TẠI ĐÂY (cùng thuật toán
+  // userMatchesPermGroupJobTitles() đã dùng ở module-admin-permgroups.js) rồi HỢP với groupIds tường
+  // minh — mirror ĐÚNG effectiveGroupIds của recomputeEffectivePerms(), để permOverrides tính đúng ngay
+  // từ phía client, khớp basePerms thật server sẽ dùng.
+  const autoGroupIds = (DB.permGroups || [])
+    .filter(g => userMatchesPermGroupJobTitles({ jobTitle, secondaryPositions }, g.jobTitles))
+    .map(g => g.id);
+  const effectiveGroupIds = [...new Set([...groupIds, ...autoGroupIds])];
+  const groups = effectiveGroupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
   // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): DB.permGroups KHÔNG được tự di trú + tự lưu ngầm như DB.users
   // (xem initDatabase()) — g.perms RAW có thể còn thiếu hẳn 1 số field MỚI mà chỉ suy diễn được từ field
   // cũ (operationOrderReceiptManageHO/Store, checklistExecute/checklistAtvstpExecute/checklistAtvstpReportView,

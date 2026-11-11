@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**30.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.2 (2026-11): FIX NGHIÊM TRỌNG — Sửa quyền tay cho 1 user có thể bị ÂM THẦM XOÁ MẤT nếu Chức Danh khớp 1 Nhóm Phân Quyền
+
+Phát hiện trong lúc điều tra báo cáo "đã cấp quyền Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị) cho 1
+tài khoản nhưng tài khoản đó đăng xuất/đăng nhập lại vẫn không thấy dữ liệu gì, dù màn Sửa vẫn hiện tích
+✓". Sau khi loại trừ lần lượt: logic lọc server (`canViewShelfScopedItem`, xác nhận ĐÚNG qua test Node
+trực tiếp), "Khối 0" moduleAccess (loại trừ vì tab vẫn hiện, chuỗi cha-con nhất quán), và lỗi phiên/cache
+(user đã đăng xuất/đăng nhập lại vẫn không fix) — tìm ra gốc rễ thật ở cơ chế LƯU quyền, ảnh hưởng MỌI
+quyền phẳng, không riêng gì Kiểm Soát Hàng Hóa.
+
+**Nguyên nhân**: `readUserFormState()` (`public/js/module-admin-submissiongroups.js`, hàm đọc form "Sửa
+Người Dùng" để lưu) chỉ tính `basePerms`/`permOverrides` dựa trên Nhóm Phân Quyền **admin tường minh tick
+ở picker** (`groupIds`) — bỏ sót trường hợp **Chức Danh (hoặc Vị Trí Kiêm Nhiệm) của user khớp tiêu chí
+"phân quyền theo chức danh"** của 1 Nhóm đã tạo (`jobTitleGroupIds`, tự động, không cần tick picker — xem
+`test-permgroup-jobtitle-match.js`). Server (`recomputeEffectivePerms()`, `lib/permGroupMerge.js`) LUÔN
+cộng thêm các nhóm khớp chức danh này vào `effectiveGroupIds` khi tính lại quyền hiệu lực lúc lưu. Hậu
+quả: nếu user KHÔNG được tick vào nhóm nào qua picker nhưng Chức Danh lại khớp 1 nhóm, client tính
+`basePerms = null` (sai, tưởng không có nhóm nào áp dụng) → gửi `permOverrides: null` lên server — trong
+khi server tính `basePerms` THẬT có nhóm (theo chức danh) → `merge(base THẬT, overrides null)` = **CHỈ
+còn đúng quyền nền của nhóm đó, xoá sạch MỌI quyền admin vừa tích tay riêng cho người này** — không có
+cảnh báo gì, lưu vẫn báo "thành công". Đã tái hiện bằng cách gọi trực tiếp hàm server thật
+(`recomputeEffectivePerms()`) với dữ liệu mô phỏng — quyền tích tay biến mất hoàn toàn sau khi lưu.
+
+**Đã làm**: `public/js/module-admin-submissiongroups.js::readUserFormState()` — tính thêm
+`autoGroupIds` (lọc `DB.permGroups` khớp Chức Danh/Vị Trí Kiêm Nhiệm của user đang sửa qua
+`userMatchesPermGroupJobTitles()` đã có sẵn ở client) rồi HỢP với `groupIds` tường minh thành
+`effectiveGroupIds` trước khi tính `groups`/`basePerms` — mirror ĐÚNG `effectiveGroupIds` của
+`recomputeEffectivePerms()` phía server. Nhờ vậy `permOverrides` tính đúng ngay từ client, khớp
+`basePerms` thật server sẽ dùng, không còn mất quyền tích tay. Không đổi gì cho user KHÔNG khớp chức danh
+nhóm nào (trường hợp phổ biến nhất — `autoGroupIds` rỗng, hành vi y hệt cũ).
+
+**Test**: thêm scenario mới "(h2)" vào `tests/test-admin-users-permgroups.js` — dựng đúng kịch bản lỗi
+(user Chức Danh khớp 1 nhóm, KHÔNG tick picker, admin tích thêm 1 quyền phẳng riêng) qua trình duyệt thật
++ `readUserFormState()` thật, xác nhận quyền vừa tích VẪN còn trong `perms` lẫn `permOverrides` sau khi
+tính — 4/4 assertion mới pass, 131/131 scenario của cả file pass. Chạy lại `test-permgroup-jobtitle-match.js`
+(13/13), `test-permgroup-dangling-groupids.js` (4/4), `test-user-import-permgroups.js` (7/7),
+`test-perm-matrix-client.js` (46/46), `test-perm-tree-dept-table.js`/`test-perm-tree-expand-collapse.js`/
+`test-perm-tree-store-scope-widget.js` (6/6, 6/6, 9/9), `test-permoverrides-moduleaccess-freeze.js`
+(7/7), `test-permission-batch-oct2026.js` (17/17) — pass hết, không ảnh hưởng luồng phân quyền/Nhóm Phân
+Quyền nào khác. Grep CSP chuẩn trên file đã sửa — sạch.
+
+**Khuyến nghị cho người dùng**: những tài khoản đã bị admin sửa quyền tay trong lúc Chức Danh của họ
+đang khớp 1 Nhóm Phân Quyền nào đó (trước bản vá này) có thể đang THIẾU quyền so với ý định ban đầu của
+admin — nên rà soát lại (qua Ma Trận Phân Quyền hoặc mở lại "Sửa" từng người) các tài khoản có Chức Danh
+trùng tiêu chí 1 Nhóm Phân Quyền đã tạo, xác nhận lại đúng quyền đang cần rồi lưu lại 1 lần nữa nếu thiếu
+(từ bản vá này, lưu lại sẽ giữ đúng, không còn mất nữa).
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.1 (2026-11): FIX — Đặt Hàng Tại HO: thiếu số bước + khối "ai đã/chưa phê duyệt"
 
