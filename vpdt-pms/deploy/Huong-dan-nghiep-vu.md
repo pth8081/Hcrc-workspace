@@ -3642,16 +3642,38 @@ theo đúng vị trí trong cây**.
   ngày — tải lại trang, kiểm tra lại rồi làm lại từ bước Sửa Bản Đang Áp Dụng.
   **Vẫn KHÔNG cho sửa trực tiếp cây đang Áp Dụng** — 2 nút trên chỉ là lối tắt
   tiện lợi trên cơ chế Nháp → Áp Dụng sẵn có, không đổi quy tắc bất biến này.
-- **Tải Mẫu/Nhập/Xuất Excel (10/2026, theo yêu cầu người dùng)** — bên cạnh
-  cách dựng cây bằng tay (Thêm/Sửa từng node), HR có thể chuẩn bị cả cây
-  trong 1 file Excel rồi nhập 1 lần: bấm **"📤 Nhập Excel (Bản Nháp Mới)"**
-  ở thanh Phiên bản → tải file mẫu (nút trong khung cảnh báo của màn nhập) →
-  điền, mỗi DÒNG là 1 node, dùng cột **"Mã Node"/"Mã Node Cha"** (mã ngắn tự
-  đặt trong file, VD "CT"/"PKD"/"PKD-TP" — KHÔNG phải mã nội bộ hệ thống) để
-  nối cây thay vì phải biết id thật → chọn file, xem trước kết quả đọc được
-  (từng dòng + lỗi nếu có) → đặt tên phiên bản → "Xác Nhận Nhập". **Khác hẳn
-  mọi Excel nhập khác trong hệ thống (VPP/Ngân Sách/Hồ Sơ Nhân Sự...) ở 2
-  điểm quan trọng**:
+- **Tải Mẫu/Nhập/Xuất Excel (10/2026, theo yêu cầu người dùng; viết lại HOÀN
+  TOÀN 11/2026 — bỏ hẳn "Mã Node", theo yêu cầu người dùng "mã node hơi phức
+  tạp cho nhân sự")** — bên cạnh cách dựng cây bằng tay (Thêm/Sửa từng node),
+  HR có thể chuẩn bị cả cây trong 1 file Excel rồi nhập 1 lần: bấm **"📤 Nhập
+  Excel (Bản Nháp Mới)"** ở thanh Phiên bản → tải file mẫu (nút trong khung
+  cảnh báo của màn nhập) → điền, mỗi DÒNG mô tả ĐÚNG **1 Phòng Ban** (để
+  trống cột "Chức Danh") HOẶC ĐÚNG **1 Vị Trí** (điền "Chức Danh") → chọn
+  file, xem trước kết quả đọc được (từng dòng + lỗi nếu có) → đặt tên phiên
+  bản → "Xác Nhận Nhập".
+  - **KHÔNG còn "Mã Node"/"Mã Node Cha"** — thay bằng 5 cột **"Cấp 1".."Cấp
+    5"** (TÊN THẬT của Phòng Ban/Khối, không phải mã tự đặt), điền LIÊN TỤC
+    từ Cấp 1 (không bỏ trống 1 cấp giữa chừng rồi điền cấp sâu hơn). Dòng
+    Phòng Ban: cấp SÂU NHẤT có điền = TÊN của chính Phòng Ban đó (VD muốn
+    tạo "Ban Lễ Tân" bên trong "Phòng Hành Chính" thì Cấp 1 = "Phòng Hành
+    Chính", Cấp 2 = "Ban Lễ Tân"). Dòng Vị Trí: Cấp 1".."Cấp 5" là đường dẫn
+    Phòng Ban CHỨA vị trí đó (để TRỐNG HẾT nếu vị trí nằm thẳng dưới Công Ty,
+    VD "Tổng Giám Đốc"). Hệ thống tự nhận 2 dòng có CÙNG 1 chuỗi tên ở các
+    cột Cấp là CÙNG 1 Phòng Ban (không tạo trùng) — HR chỉ cần gõ LẶP LẠI
+    đúng tên Phòng Ban có sẵn trên mọi dòng Vị Trí thuộc Phòng Ban đó, không
+    cần nghĩ mã/nối tay quan hệ cha-con nào cả. Tối đa **5 cấp** Phòng Ban
+    (đủ dùng cho mọi cấu trúc thực tế).
+  - **"Mã Phòng Ban Hệ Thống"/"Thứ Tự Hiển Thị"** của 1 Phòng Ban chỉ cần
+    điền 1 LẦN trên dòng Phòng Ban tương ứng — không bắt buộc, không cần lặp
+    lại ở các dòng Vị Trí con; không có dòng Phòng Ban riêng thì Phòng Ban đó
+    vẫn được TỰ TẠO (ngầm định) khi có Vị Trí nào nhắc tới, chỉ là không gắn
+    được Mã Phòng Ban Hệ Thống cho nó.
+  - **Tên "Công Ty" (gốc cây) KHÔNG điền được qua file này** — bản Nháp mới
+    luôn có gốc tên mặc định "Công Ty" (giống hệt nút "✨ Tạo Bản Mới
+    (Trống)"), sửa lại tên gốc bằng nút "✏️ Sửa" trên cây sau khi nhập xong,
+    giống sửa tên bất kỳ Phòng Ban nào khác.
+  **Vẫn giữ nguyên 2 điểm KHÁC HẲN mọi Excel nhập khác trong hệ thống (VPP/
+  Ngân Sách/Hồ Sơ Nhân Sự...) từ bản gốc 10/2026**:
   1. **LUÔN tạo 1 bản Nháp (DRAFT) HOÀN TOÀN MỚI** dựng lại từ nội dung file
      — không bao giờ gộp/chèn vào bản nháp đang mở sẵn, dù đang xem bản nháp
      nào ở dropdown. Muốn "sửa tiếp" 1 cây đã có, xuất Excel bản đó ra, sửa
@@ -3669,8 +3691,9 @@ theo đúng vị trí trong cây**.
   `requireView`), giống các quyền thao tác cây khác ở mục này.
   - **Cột "Định Biên Nhân Sự" (11/2026, theo yêu cầu người dùng "nhập luôn
     định biên từng vị trí, khỏi phải sửa từng người một sau khi nhập")** —
-    file mẫu/nhập/xuất có thêm cột này, chỉ áp dụng cho dòng Loại Node "Vị
-    Trí", để trống = chưa đặt kế hoạch, chỉ nhận số nguyên không âm. Điền
+    file mẫu/nhập/xuất có thêm cột này, chỉ áp dụng cho dòng Vị Trí (dòng có
+    điền "Chức Danh"), để trống = chưa đặt kế hoạch, chỉ nhận số nguyên không
+    âm. Điền
     ngay trong lúc dựng cây bằng Excel là xong Định Biên luôn cho mọi Vị
     Trí trong 1 lần nhập — không cần mở lại từng Vị Trí ở modal "Sửa Vị
     Trí" (ô "Định Biên") để gõ tay sau đó. Xuất Excel 1 bản đã có cũng kèm
@@ -3832,15 +3855,17 @@ theo đúng vị trí trong cây**.
     nút mới ngay trong modal Báo Cáo, dành cho HR cập nhật Định Biên HÀNG
     LOẠT (nhiều Vị Trí 1 lúc) mà không cần sửa tay từng Vị Trí qua modal Sửa
     Vị Trí, và KHÁC HẲN "📤 Nhập Excel (Bản Nháp Mới)" của cả cây (mục dựng
-    LẠI toàn bộ cây, bắt buộc tự đặt "Mã Node"/"Mã Node Cha"):
+    LẠI toàn bộ cây, vẫn cần điền đường dẫn Phòng Ban qua cột "Cấp 1".."Cấp
+    5" để diễn tả cấu trúc):
     - **"📥 Tải Mẫu Định Biên"**: xuất ra file Excel liệt kê ĐÚNG toàn bộ Vị
       Trí đang có trong bản version đang xem, kèm cột "Phòng Ban"/"Chức
       Danh"/"Cấp Bậc"/"Định Biên Hiện Tại" (chỉ để xem/đối chiếu) và cột
       **"Định Biên Mới (\*)"** (pre-fill = Định Biên hiện tại) — HR CHỈ cần
       sửa đúng cột này, không cần đụng cột nào khác. File có 1 cột "ID" ẨN
       (hệ thống tự gán, không hiện ra để HR không nhỡ tay sửa) dùng để khớp
-      lại ĐÚNG Vị Trí khi nhập lên — khác hẳn "Mã Node" tự đặt tay của mẫu
-      nhập cả cây.
+      lại ĐÚNG Vị Trí khi nhập lên — đơn giản hơn cả mẫu nhập cả cây (không
+      cần gõ lại đường dẫn Phòng Ban nào, vì Vị Trí đã có sẵn, chỉ cập nhật
+      đúng 1 con số).
     - **"📤 Nhập Định Biên"**: chọn lại file mẫu đã sửa cột "Định Biên Mới",
       hệ thống chỉ **PATCH** field Định Biên của đúng các Vị Trí khớp ID,
       KHÔNG đổi tên/cấu trúc/thêm-xoá gì khác. Chỉ áp dụng được lên bản đang

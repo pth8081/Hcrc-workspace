@@ -1,11 +1,11 @@
 // lib/orgChartHeadcountImport.js — Tải Mẫu/Nhập "Định Biên" HÀNG LOẠT cho Cơ Cấu Tổ Chức (11/2026, theo
 // yêu cầu người dùng: "Là một cái file định biên nó sắp xếp giống như cái bảng có định biên... không cần
-// mã nốt gì đâu đúng không?"). KHÁC HẲN lib/orgChartImport.js (mẫu "Mã Node"/"Mã Node Cha" để dựng LẠI
-// CẢ CÂY từ đầu, luôn tạo 1 bản Nháp MỚI) — mẫu này CHỈ cập nhật field headcountQuota của các Vị Trí ĐÃ
-// CÓ SẴN trong ĐÚNG 1 bản đang xem (phải là bản Nháp — orgChart.editNode() tự chặn nếu không), không đổi
-// cấu trúc/tên/phòng ban gì khác. Mẫu tải xuống PRE-FILL sẵn toàn bộ Vị Trí hiện có (Phòng Ban/Chức Danh/
+// mã nốt gì đâu đúng không?"). KHÁC HẲN lib/orgChartImport.js (mẫu "Cấp 1".."Cấp 5" để dựng LẠI CẢ CÂY
+// từ đầu, luôn tạo 1 bản Nháp MỚI) — mẫu này CHỈ cập nhật field headcountQuota của các Vị Trí ĐÃ CÓ SẴN
+// trong ĐÚNG 1 bản đang xem (phải là bản Nháp — orgChart.editNode() tự chặn nếu không), không đổi cấu
+// trúc/tên/phòng ban gì khác. Mẫu tải xuống PRE-FILL sẵn toàn bộ Vị Trí hiện có (Phòng Ban/Chức Danh/
 // Cấp Bậc/Định Biên Hiện Tại) kèm 1 cột ẩn "ID" (= nodeId thật) để khi nhập lại, hệ thống tự khớp ĐÚNG Vị
-// Trí mà KHÔNG cần HR tự đặt mã nào — khác hẳn "Mã Node" tự đặt tay của mẫu nhập cả cây.
+// Trí mà KHÔNG cần HR tự gõ lại đường dẫn Phòng Ban nào — khác hẳn mẫu nhập cả cây (vẫn cần Cấp 1-5).
 //
 // Nguyên tắc nhập — THEO DÒNG, khoan dung lỗi (GIỐNG đa số Excel Nhập khác trong hệ thống, KHÁC
 // lib/orgChartImport.js): 1 dòng lỗi (ID không khớp Vị Trí nào còn tồn tại, hoặc Định Biên Mới không hợp
@@ -69,7 +69,7 @@ async function buildHeadcountTemplateWorkbook(version) {
   noteSheet.getColumn(1).width = 100;
   const notes = [
     `Mẫu này tải từ bản "${version?.versionName || ''}" — chỉ dùng để cập nhật số "Định Biên" cho các Vị Trí ĐÃ CÓ SẴN, KHÔNG dùng để thêm/xoá/đổi tên Vị Trí hay Phòng Ban.`,
-    'KHÔNG cần "Mã Node"/"Mã Node Cha" như mẫu "Nhập Excel" đầy đủ — hệ thống tự nối đúng Vị Trí qua cột ẩn "ID", HR không cần đụng tới.',
+    'KHÔNG cần gõ lại đường dẫn Phòng Ban (Cấp 1-5) như mẫu "Nhập Excel" đầy đủ — hệ thống tự nối đúng Vị Trí qua cột ẩn "ID", HR không cần đụng tới.',
     'HR CHỈ cần sửa cột "Định Biên Mới (*)" — để trống nghĩa là BỎ Định Biên (coi như chưa đặt kế hoạch), các cột còn lại chỉ để xem/đối chiếu, sửa cũng không có tác dụng.',
     'Không xoá dòng, không thêm dòng mới (dòng mới sẽ không có ID để đối chiếu, bị bỏ qua). Muốn thêm Vị Trí mới vẫn dùng "+ Thêm Vị Trí" hoặc mẫu "Nhập Excel" đầy đủ.',
     'Chỉ nhập lại được lên bản đang ở trạng thái Nháp. Dòng nào có ID không còn khớp Vị Trí nào (VD đã bị xoá) hoặc Định Biên Mới không hợp lệ sẽ bị BỎ QUA — các dòng còn lại vẫn cập nhật bình thường.'

@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**29.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.94 (2026-11): Cơ Cấu Tổ Chức — Nhập/Xuất Excel cả cây bỏ hẳn "Mã Node", đổi sang "Cấp 1-5"
+
+Yêu cầu người dùng: "Tôi yêu cầu bạn làm file cơ cấu tổ chức đơn giản hơn mà, hiện tại mã node hơi phức
+tạp cho nhân sự... hoặc có hướng mẫu file CCTC để import và export đơn giản hơn." — sau khi phân tích và
+đề xuất phương án (cột "Cấp 1".."Cấp 5" ghi TÊN thật thay vì mã tự đặt, hệ thống tự nhận 2 dòng cùng
+chuỗi tên là cùng 1 Phòng Ban), người dùng xác nhận 3 điểm: (1) tối đa 5 cấp, (2) Vị Trí thẳng dưới Công
+Ty để trống hết các cột Cấp, (3) "Không bỏ hết làm cái mới" — thay HẲN mẫu cũ, không giữ song song.
+
+**Đã làm**:
+1. `lib/orgChartImport.js`: viết lại hoàn toàn layout Excel — bỏ cột "Mã Node (\*)"/"Mã Node Cha", thay
+   bằng 5 cột "Cấp 1".."Cấp 5" (hằng số `MAX_LEVELS=5`). Mỗi dòng mô tả ĐÚNG 1 Phòng Ban (để trống "Chức
+   Danh") hoặc ĐÚNG 1 Vị Trí (điền "Chức Danh") — Cấp 1-5 là đường dẫn Phòng Ban (dòng Phòng Ban: cấp sâu
+   nhất có điền = tên chính nó; dòng Vị Trí: đường dẫn Phòng Ban CHỨA nó, để trống hết nếu thẳng dưới
+   Công Ty). Thuật toán dựng cây MỚI: mọi path (chuỗi Cấp 1..N) xuất hiện ở bất kỳ dòng nào đều kéo theo
+   toàn bộ path CHA (prefix) được tự tạo Phòng Ban NGẦM ĐỊNH nếu chưa có dòng khai báo riêng — không cần
+   Mã Node/Mã Node Cha để nối quan hệ cha-con. "Mã Phòng Ban Hệ Thống"/"Thứ Tự Hiển Thị" chỉ cần khai 1
+   lần trên dòng Phòng Ban tương ứng (không bắt buộc, không lặp lại ở dòng Vị Trí con). Gốc "Công Ty"
+   không điền được qua file (luôn mặc định tên "Công Ty", giống `createBlankVersion()`) — sửa tên gốc qua
+   "✏️ Sửa" node sau khi nhập, như sửa bất kỳ Phòng Ban nào khác. `buildExportWorkbook()` viết lại theo
+   DFS cây thật, luôn xuất 1 dòng riêng cho MỌI Phòng Ban (kể cả rỗng, không Vị Trí/Phòng Ban con nào) để
+   không mất departmentRef/displayOrder khi xuất-nhập lại vòng tròn; báo lỗi rõ ràng (400) nếu gặp Phòng
+   Ban sâu quá 5 cấp (từ dữ liệu cũ dựng bằng mẫu Mã Node trước đây), không âm thầm cắt mất dữ liệu.
+   `buildDraftVersionFromRows()` vẫn Zero-Trust re-validate toàn bộ (tính lại levels/depth/isPosition từ
+   đúng field thô client echo lại, không tin field dẫn xuất) + giữ nguyên quy tắc TẤT CẢ-HOẶC-KHÔNG-GÌ.
+2. `public/js/module-orgchart.js` + `public/index.html`: bảng xem trước đổi từ 2 cột "Mã Node"/"Mã Node
+   Cha" sang 1 cột "Đường Dẫn Phòng Ban" (nối các Cấp bằng " > ") + cột "Loại" (Phòng Ban/Vị Trí).
+3. `routes/orgChart.js` KHÔNG đổi gì (API surface giữ nguyên — client vẫn echo lại nguyên `items` giữa
+   `/parse-import` và `/import-confirm`, chỉ hình dạng item bên trong thay đổi).
+4. `tests/test-orgchart-import-export.js` viết lại hoàn toàn (22/22 pass) — phủ: Phòng Ban cấp 2 tự tạo
+   ngầm định (không cần dòng riêng), Phòng Ban rỗng vẫn tạo được khi có dòng khai báo riêng, Vị Trí thẳng
+   dưới gốc (depth=0), lỗi Cấp không liên tục, lỗi Phòng Ban khai trùng đường dẫn, round-trip xuất-nhập
+   ổn định (kể cả Phòng Ban ngầm định + Phòng Ban rỗng), và lỗi rõ ràng khi vượt quá 5 cấp. Cập nhật
+   `tests/test-excel-dropdown-longlist-roundtrip.js` + `tests/test-orgchart-import-modal-binding.js` theo
+   đúng layout cột mới.
+5. Chạy lại toàn bộ 19 file test Cơ Cấu Tổ Chức + dropdown-longlist liên quan — KHÔNG regression nào
+   khác (báo cáo định biên/import định biên/xoá-lưu trữ/sơ đồ/Khối 0/luồng KPI đều pass như cũ).
+
+**Lưu ý triển khai**: thuần logic ứng dụng, KHÔNG có `schema.sql` mới, KHÔNG có biến môi trường `.env`
+mới, KHÔNG có gói npm mới — chỉ cần copy code + `pm2 restart`. **Lưu ý tương thích ngược**: bản Nháp/Đã
+áp dụng/Lưu trữ đã có sẵn trong hệ thống KHÔNG bị ảnh hưởng gì (đây chỉ là đổi FORMAT FILE Excel nhập/
+xuất, không đổi cấu trúc dữ liệu `orgChartVersions` lưu trong AppData) — chỉ ai TỪNG lưu sẵn file mẫu cũ
+(có cột Mã Node) sẽ cần tải lại mẫu mới trước khi nhập lần tới; Phòng Ban sâu hơn 5 cấp (nếu có, dựng từ
+mẫu cũ) vẫn XEM/SỬA/ÁP DỤNG bình thường, chỉ riêng thao tác "Xuất Excel" của đúng bản đó sẽ báo lỗi rõ
+ràng thay vì xuất ra (rất khó xảy ra — cấu trúc thực tế sâu nhất đã thấy là 4 cấp).
 
 ## v29.93 (2026-11): Cơ Cấu Tổ Chức — Báo Cáo Định Biên đổi sang bảng phẳng + Nhập Định Biên hàng loạt
 

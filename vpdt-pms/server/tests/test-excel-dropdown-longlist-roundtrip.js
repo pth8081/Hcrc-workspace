@@ -49,16 +49,16 @@ async function main() {
     const dvDept = sheet.getCell(`${sheet.getColumn('departmentRef').letter}2`).dataValidation;
     assert.ok(dvDept && !dvDept.formulae[0].startsWith('"'), 'departmentRef phải rơi vào nhánh fallback (danh sách dài)');
 
-    // Giữ nguyên 5 dòng ví dụ mẫu có sẵn (đúng dòng 2-6, như người dùng thật mở file sẽ thấy) — chỉ sửa
-    // đúng 1 ô departmentRef (dòng PKD, dòng 3) sang 1 giá trị THẬT trong danh sách dài, mô phỏng đúng
-    // thao tác chọn từ dropdown dài.
-    sheet.getRow(3).getCell('departmentRef').value = LONG_DEPTS[22];
+    // Giữ nguyên 4 dòng ví dụ mẫu có sẵn (đúng dòng 2-5, như người dùng thật mở file sẽ thấy) — chỉ sửa
+    // đúng 1 ô departmentRef (dòng Phòng Ban "Phòng Kinh Doanh", dòng 2) sang 1 giá trị THẬT trong danh
+    // sách dài, mô phỏng đúng thao tác chọn từ dropdown dài.
+    sheet.getRow(2).getCell('departmentRef').value = LONG_DEPTS[22];
     const buffer = await wb.xlsx.writeBuffer();
     const { items, fileErrors, valid } = await orgChartImport.parseImportExcelBuffer(buffer);
     assert.strictEqual(fileErrors.length, 0, 'không được có lỗi cấu trúc: ' + fileErrors.join(';'));
     assert.ok(valid, 'phải hợp lệ');
-    assert.strictEqual(items.length, 5, 'phải đọc đúng 5 dòng ví dụ mẫu có sẵn (ĐÚNG dòng 2-6), không lẫn cột ẩn thành dòng/field giả: ' + JSON.stringify(items));
-    const pkd = items.find(it => it.nodeKey === 'PKD');
+    assert.strictEqual(items.length, 4, 'phải đọc đúng 4 dòng ví dụ mẫu có sẵn (ĐÚNG dòng 2-5), không lẫn cột ẩn thành dòng/field giả: ' + JSON.stringify(items));
+    const pkd = items.find(it => !it.isPosition && it.levels[0] === 'Phòng Kinh Doanh');
     assert.strictEqual(pkd.departmentRef, LONG_DEPTS[22], 'departmentRef phải đọc đúng giá trị đã chọn từ dropdown dài');
   });
 
