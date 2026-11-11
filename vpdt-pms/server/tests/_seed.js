@@ -157,10 +157,10 @@ function buildAppData() {
     // có: không có kịch bản nào trong test-budget-lines.js từng kiểm tra "kd1/tp_kd KHÔNG duyệt được
     // dòng APPROVED", chỉ admin/budgetmgr1 gọi action 'approve' trong suốt bộ test đó).
     budgetApprovedDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD_BUDGET },
-    // meetingDeptWorkflows (10/2026, bổ sung route phê duyệt cuối Đặt Phòng Họp) — rỗng mặc định, mirror
-    // đúng các map dept-workflow rỗng khác ở trên (carDeptWorkflows/vppDeptWorkflows) cho tới khi có bộ
-    // test riêng cần cấu hình cụ thể (xem tests/test-budget-meeting-dept-workflow-ui.js, dùng
-    // testHarness.js/createMockState riêng, không đụng tới fixture dùng chung này).
+    // meetingDeptWorkflows: TỪNG dùng cho route phê duyệt cuối Đặt Phòng Họp (10/2026) — ĐÃ BỊ GỠ hoàn
+    // toàn 11/2026 (theo yêu cầu người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm", xem
+    // canDecideMeeting() ở lib/recordActions.js) — giữ lại key rỗng này chỉ để dữ liệu cũ (nếu có) không
+    // lỗi khi đọc/ghi qua các hàm generic chung, KHÔNG còn bộ test riêng nào cấu hình giá trị khác rỗng.
     meetingDeptWorkflows: {},
     contractApprovalDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     // Lớp phê duyệt bổ sung tuỳ chọn của Hợp Đồng — mỗi lớp 1 người phụ trách RIÊNG để bài test xác

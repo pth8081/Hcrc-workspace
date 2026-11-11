@@ -142,10 +142,9 @@
       <button data-op="switchWfModule" data-arg0="CONTRACT_APPROVAL" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
       <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
       <button data-op="switchWfModule" data-arg0="PAYMENT" id="btnWfModPAYMENT" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 QT Thanh Toán</button>
-      <!-- 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối: meetingApprove/admin vẫn LUÔN
-           duyệt được mọi phòng ban như cũ, map này chỉ cộng thêm khả năng gán riêng người duyệt theo
-           phòng ban — xem canDecideMeeting() ở lib/recordActions.js. -->
-      <button data-op="switchWfModule" data-arg0="MEETING" id="btnWfModMeeting" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏢 QT Đặt Phòng Họp</button>
+      <!-- "QT Đặt Phòng Họp" ĐÃ BỊ GỠ (11/2026, theo yêu cầu người dùng "bỏ luôn quy trình phòng họp cho
+           đỡ nhầm") — xem canDecideMeeting() ở lib/recordActions.js, Đặt Phòng Họp từ nay chỉ còn gác
+           bằng quyền phẳng meetingApprove, không cấu hình theo phòng ban ở màn này nữa. -->
       <!-- Khôi phục lại (rà soát chuyên sâu 9/2026, phát hiện #5) — chỉ cấu hình bước "Đề Xuất" (PROPOSED)
            của Ngân Sách 2.0 (budgetLines), xem canDecideBudgetLineProposal() ở lib/recordActions.js. -->
       <button data-op="switchWfModule" data-arg0="BUDGET" id="btnWfModBudget" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Ngân Sách - Đề Xuất</button>

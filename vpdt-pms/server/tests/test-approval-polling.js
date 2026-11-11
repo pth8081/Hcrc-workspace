@@ -312,12 +312,16 @@ async function runPartA(run) {
     assert(keys.includes('meeting:81'), 'meeting:81 (không phải do duyet1 tạo) vẫn phải nhận như cũ');
   });
 
-  await run.run('computeMyPendingApprovalKeys(): approver được gán RIÊNG theo meetingDeptWorkflows (KHÔNG có meetingApprove) PHẢI nhận khoá meeting:<id>', async () => {
+  // 11/2026: nhánh meetingDeptWorkflows ĐÃ BỊ GỠ hoàn toàn khỏi canDecideMeeting() (theo yêu cầu người
+  // dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm") — scenario dưới đây đảo ngược lại kỳ vọng gốc: dữ
+  // liệu meetingDeptWorkflows cũ (nếu có) không còn tác dụng gì, approver chỉ được gán riêng theo phòng
+  // ban (không giữ meetingApprove) KHÔNG còn nhận được khoá nữa.
+  await run.run('computeMyPendingApprovalKeys(): 11/2026 — approver CHỈ được gán theo meetingDeptWorkflows CŨ (KHÔNG có meetingApprove) KHÔNG còn nhận khoá meeting:<id> nữa (đã bỏ hẳn nhánh này)', async () => {
     const appData = buildFixtureAppData();
     appData.meetingDeptWorkflows = { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['phonghop.buoc'] } } };
     const stepOnlyApprover = { username: 'phonghop.buoc', name: 'Duyệt Phòng Họp Chỉ Theo Bước', dept: 'Kế Toán', perms: {} };
     const keys = computeMyPendingApprovalKeys(stepOnlyApprover, appData);
-    assert(keys.includes('meeting:81'), 'approver chỉ được gán theo meetingDeptWorkflows (không có meetingApprove/admin) vẫn phải nhận khoá meeting:81 — trước đây canApproveMeeting() cũ không hề biết tới nhánh này');
+    assert(!keys.includes('meeting:81'), 'KHÔNG còn nhận khoá meeting:81 — dữ liệu meetingDeptWorkflows cũ không còn tác dụng, chỉ meetingApprove mới tính');
   });
 
   await run.run('computeMyPendingApprovalKeys(): meetingApprove nhưng KHÔNG phải người tạo lịch họp -> vẫn nhận bình thường (đối chứng, không chặn nhầm)', async () => {

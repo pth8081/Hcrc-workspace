@@ -92,11 +92,13 @@ test('LỖI ĐÃ VÁ: approver bước 1 theo workflow phòng ban là creator ->
   assert.strictEqual(sb.canDecideMeetingClient(STEP_APPROVER_USER, meeting), false);
 });
 
-// ===== 4) đối chứng: approver theo bước 1, KHÁC creator -> vẫn trả về true =====
-test('đối chứng: approver bước 1 theo workflow phòng ban, creator là người KHÁC -> vẫn trả về true', () => {
+// ===== 4) 11/2026: nhánh DB.meetingDeptWorkflows ĐÃ BỊ GỠ (theo yêu cầu người dùng "bỏ luôn quy trình
+// phòng họp cho đỡ nhầm") — approver bước 1 theo workflow phòng ban CŨ, dù KHÁC creator, KHÔNG còn tự
+// động trả về true nữa nếu không giữ quyền phẳng meetingApprove.
+test('11/2026: approver bước 1 theo workflow phòng ban CŨ (KHÔNG giữ meetingApprove), creator là người KHÁC -> nay trả về false (đã bỏ nhánh dept-workflow)', () => {
   const sb = runWithWorkflow([STEP_APPROVER_USER.username]);
   const meeting = { dept: 'Kế Toán', creator: 'nguoi-khac' };
-  assert.strictEqual(sb.canDecideMeetingClient(STEP_APPROVER_USER, meeting), true);
+  assert.strictEqual(sb.canDecideMeetingClient(STEP_APPROVER_USER, meeting), false);
 });
 
 // ===== 5) đối chứng: user thường (không quyền gì, không phải approver bước 1) -> luôn false bất kể creator =====

@@ -78,10 +78,10 @@ router.post('/:id/:action', async (req, res) => {
     const freshUser = req.freshUser;
     const hasPerm = !!(freshUser.perms?.admin || freshUser.perms?.[config.perm]);
     // "cancel" có thêm lối "tự huỷ lịch của mình", nên phải kiểm tra creator NGAY TRONG mutatorFn (chỉ
-    // biết được item.creator sau khi đã khoá/đọc bản ghi). "approve" (10/2026, theo yêu cầu người dùng
-    // bổ sung route phê duyệt cuối) giờ CŨNG kiểm tra NGAY TRONG mutatorFn thay vì chặn sớm ở đây — cần
-    // biết item.dept để đối chiếu meetingDeptWorkflows (canDecideMeeting(), xem lib/recordActions.js).
-    const appData = action === 'approve' ? await getAllAppData() : null;
+    // biết được item.creator sau khi đã khoá/đọc bản ghi). "approve" cũng kiểm tra NGAY TRONG mutatorFn
+    // thay vì chặn sớm ở đây (cần biết item.creator để canDecideMeeting() loại trừ tự duyệt). 11/2026: đã
+    // bỏ việc tải appData riêng cho "approve" — canDecideMeeting() không còn cần đối chiếu
+    // meetingDeptWorkflows nữa (theo yêu cầu người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm").
 
     // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: allMeetings trước đây được đọc 1 LẦN DUY NHẤT TRƯỚC CẢ
     // withAppLock('meeting_room:...') ở dưới — bên trong closure đã khoá vẫn dùng LẠI đúng snapshot cũ
@@ -98,7 +98,7 @@ router.post('/:id/:action', async (req, res) => {
       // lúc này có thể đã được đặt cho lịch khác. Duyệt chỉ hợp lệ từ PENDING; huỷ hợp lệ từ PENDING/
       // APPROVED (không huỷ lại 1 lịch đã huỷ).
       if (action === 'approve') {
-        if (!canDecideMeeting(freshUser, item, appData)) {
+        if (!canDecideMeeting(freshUser, item)) {
           throw new HttpError(403, 'Bạn không có quyền duyệt lịch họp của phòng ban này');
         }
         if (item.status !== 'PENDING') {

@@ -295,7 +295,7 @@ async function scenario(name, fn) {
   // ==========================================================================
   // (2) findPendingApprovalsForUsername() + toggleUserActive() warning.
   // ==========================================================================
-  await scenario('(2a) findPendingApprovalsForUsername() finds the doc + submission + payment/operationOrder/meeting where locked_approver is a named approver', async () => {
+  await scenario('(2a) findPendingApprovalsForUsername() finds the doc + submission + payment/operationOrder where locked_approver is a named approver', async () => {
     const r = await page.evaluate(() => {
       const found = findPendingApprovalsForUsername('locked_approver');
       const notApprover = findPendingApprovalsForUsername('locked_not_approver');
@@ -304,12 +304,16 @@ async function scenario(name, fn) {
     // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): trước đây chỉ 2 (doc +
     // submission) — giờ thêm 3 (payment/operationOrder/meeting), đủ 5.
     // LỖI ĐÃ VÁ (đợt re-audit lần 3, mức Cao): thêm 2 nữa (budgetLines PROPOSED + APPROVED), đủ 7.
-    record('(2a) exactly 7 pending records found for locked_approver (doc + submission + payment + operationOrder + meeting + budgetLines PROPOSED + budgetLines APPROVED)',
-      r.found.length === 7, JSON.stringify(r));
+    // 11/2026: Phòng Họp (meeting) ĐÃ BỊ GỠ khỏi findPendingApprovalsForUsername() — theo yêu cầu người
+    // dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm", meetingDeptWorkflows không còn tồn tại nữa nên
+    // không còn "named-approver theo phòng ban" nào để cảnh báo ở đây (quay lại đúng nhóm "quyền phẳng
+    // thuần" — khoá tài khoản tự chặn ngay, không cần cảnh báo riêng). Còn lại 6.
+    record('(2a) exactly 6 pending records found for locked_approver (doc + submission + payment + operationOrder + budgetLines PROPOSED + budgetLines APPROVED) — Phòng Họp đã bị gỡ',
+      r.found.length === 6, JSON.stringify(r));
     record('(2a) each result carries typeLabel/code/title/stepLabel',
       r.found.every(p => p.typeLabel && p.code && p.title && p.stepLabel), JSON.stringify(r));
-    record('(2a) includes "TT-1" (Thanh toán), "DH-1" (Vận Hành - Đơn hàng), "PH-1" (Phòng họp)',
-      ['TT-1', 'DH-1', 'PH-1'].every(code => r.found.some(p => p.code === code)), JSON.stringify(r));
+    record('(2a) includes "TT-1" (Thanh toán), "DH-1" (Vận Hành - Đơn hàng); KHÔNG còn "PH-1" (Phòng họp)',
+      ['TT-1', 'DH-1'].every(code => r.found.some(p => p.code === code)) && !r.found.some(p => p.code === 'PH-1'), JSON.stringify(r));
     record('(2a) includes budgetLines id=601 (PROPOSED) and id=602 (APPROVED), each with đúng typeLabel riêng',
       r.found.some(p => p.code === '601' && p.typeLabel.includes('Đề Xuất')) &&
       r.found.some(p => p.code === '602' && p.typeLabel.includes('Phê Duyệt')), JSON.stringify(r));

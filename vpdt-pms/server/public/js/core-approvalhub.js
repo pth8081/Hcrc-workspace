@@ -510,15 +510,17 @@ function getMyPendingApprovals(user) {
 // chặn được ĐĂNG NHẬP, không "gỡ" họ khỏi 1 bước quy trình đã chỉ định tên sẵn — đó mới là vấn đề cần
 // cảnh báo ở đây).
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent "bảng liên kết"): Thanh
-// Toán/Vận Hành-Đơn Hàng/Phòng Họp trước đây bị liệt vào nhóm "quyền phẳng" ở chú thích trên và CỐ Ý bỏ
-// qua — ĐÚNG lúc hàm này được viết (khi cả 3 module này chỉ có đúng 1 quyền phẳng toàn công ty), nhưng cả
-// 3 module đó SAU ĐÓ đều được bổ sung thêm lớp "người duyệt CHỈ ĐỊNH TÊN theo phòng ban" (paymentDeptWorkflows/
-// operationOrderHOTierWorkflows+operationOrderStoreTierWorkflows/meetingDeptWorkflows, xem
-// resolvePaymentApprovalWorkflow()/resolveOperationOrderWorkflowConfigForItemClient()/canDecideMeetingClient()
-// ở core.js) — ĐÚNG lớp rủi ro hàm này tồn tại để cảnh báo (1 username bị khoá/xoá có thể đang là người
-// duyệt CHỈ ĐỊNH TÊN riêng cho 1 phòng ban, không phải ai có quyền phẳng cũng thay được), nhưng chưa bao
-// giờ được thêm vào đây khi 3 module này chuyển đổi. Thêm cả 3 — giữ đúng tinh thần CHỈ xét named-approver
-// (không dùng flat bypass canApproveMeeting()/canManagePaymentRequestsClient() ở đây).
+// Toán/Vận Hành-Đơn Hàng trước đây bị liệt vào nhóm "quyền phẳng" ở chú thích trên và CỐ Ý bỏ qua — ĐÚNG
+// lúc hàm này được viết (khi cả 2 module này chỉ có đúng 1 quyền phẳng toàn công ty), nhưng cả 2 module
+// đó SAU ĐÓ đều được bổ sung thêm lớp "người duyệt CHỈ ĐỊNH TÊN theo phòng ban" (paymentDeptWorkflows/
+// operationOrderHOTierWorkflows+operationOrderStoreTierWorkflows, xem
+// resolvePaymentApprovalWorkflow()/resolveOperationOrderWorkflowConfigForItemClient() ở core.js) — ĐÚNG
+// lớp rủi ro hàm này tồn tại để cảnh báo (1 username bị khoá/xoá có thể đang là người duyệt CHỈ ĐỊNH TÊN
+// riêng cho 1 phòng ban, không phải ai có quyền phẳng cũng thay được), nhưng chưa bao giờ được thêm vào
+// đây khi 2 module này chuyển đổi. Thêm cả 2 — giữ đúng tinh thần CHỈ xét named-approver (không dùng flat
+// bypass canApproveMeeting()/canManagePaymentRequestsClient() ở đây). Phòng Họp TỪNG ở nhóm named-approver
+// này (meetingDeptWorkflows) nhưng đã BỊ GỠ 11/2026 (theo yêu cầu người dùng) — quay lại đúng nhóm "quyền
+// phẳng thuần" ban đầu, không cần cảnh báo gì ở hàm này nữa.
 function findPendingApprovalsForUsername(username) {
   if (!username) return [];
   const results = [];
@@ -611,28 +613,17 @@ function findPendingApprovalsForUsername(username) {
     { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep' }
   );
 
-  // 3 module bổ sung (LỖI ĐÃ VÁ ở trên — Thanh Toán/Vận Hành-Đơn Hàng/Phòng Họp đều đã có lớp người
-  // duyệt CHỈ ĐỊNH TÊN theo phòng ban, không còn thuần quyền phẳng).
+  // 2 module bổ sung (LỖI ĐÃ VÁ ở trên — Thanh Toán/Vận Hành-Đơn Hàng đều có lớp người duyệt CHỈ ĐỊNH
+  // TÊN theo phòng ban, không còn thuần quyền phẳng). Phòng Họp ĐÃ BỊ GỠ khỏi đây (11/2026, theo yêu cầu
+  // người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm") — từ nay CHỈ còn quyền phẳng meetingApprove
+  // (canApproveMeeting()), không còn named-approver theo phòng ban nào để cảnh báo ở hàm này nữa, đúng
+  // quay lại nhóm "quyền phẳng thuần" đã loại trừ ở đầu hàm.
   scan(DB.paymentRequests, pr => resolvePaymentApprovalWorkflow(pr), {
     typeLabel: '💰 Thanh toán', codeOf: r => r.sourceCode || String(r.id), titleOf: r => r.title
   });
 
   scan(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
     typeLabel: '📦 Vận Hành - Đơn hàng', codeOf: r => r.code, titleOf: r => r.title
-  });
-
-  // meetings: CHỈ xét lớp named-approver theo phòng ban (DB.meetingDeptWorkflows[dept], LUÔN đúng bước
-  // 1 — meetings KHÔNG có field "currentStep" như các module nhiều bước khác, khớp nhánh thứ 2 của
-  // canDecideMeetingClient() ở core.js, hardcode step=1 — KHÔNG dùng chung scan() ở trên vì helper đó
-  // đọc rec.currentStep, luôn undefined cho meetings) — KHÔNG dùng canApproveMeeting() (quyền phẳng
-  // meetingApprove/admin, người khác giữ quyền đó vẫn duyệt được ngay sau khi khoá/xoá, không cần cảnh
-  // báo gì thêm — đúng tinh thần loại trừ quyền phẳng đã nêu ở đầu hàm).
-  (DB.meetings || []).forEach(m => {
-    if (m.status !== 'PENDING') return;
-    const wfConfig = DB.meetingDeptWorkflows?.[m.dept];
-    const approvers = normalizeApproversList(resolveEffectiveStepApprovers(wfConfig, 1));
-    if (!approvers.includes(username)) return;
-    results.push({ typeLabel: '📅 Phòng họp', code: m.code, title: m.title, stepLabel: buildStepLabelForHub(wfConfig, 1) });
   });
 
   return results;

@@ -9487,15 +9487,18 @@ function renewItServiceRenewal(user, item, payload) {
 // ra đây CHỈ để tái dùng đúng pattern cấu hình quy trình theo phòng ban (flatWorkflowConfigToSteps) +
 // testable thuần không cần Express/DB, cùng khuôn canDecideBudgetLineFinal() ở trên.
 //
-// Trước đây "approve" chỉ gác bằng ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty — BẤT KỲ ai giữ
-// quyền này đều duyệt được lịch họp của MỌI phòng ban, không phân biệt phòng ban nào duyệt phòng ban
-// nào. Nay CỘNG THÊM cấu hình theo phòng ban (meetingDeptWorkflows, admin gán ở "Quy Trình & Phê Duyệt").
-// meetingApprove/admin vẫn LUÔN duyệt được MỌI phòng ban như cũ (ghi đè toàn quyền, KHÔNG đổi hành vi cũ
-// cho ai đang giữ quyền này) — map chỉ CỘNG THÊM khả năng admin gán RIÊNG người duyệt cho 1 phòng ban cụ
-// thể dù người đó không giữ quyền phẳng meetingApprove (khác budgetLines — module này không có khái
-// niệm "quyền tạo hồ sơ" (meetingCreate) làm điều kiện tiên quyết, nên không cần thêm gate phụ nào, mirror
-// đúng carDeptWorkflows/vppDeptWorkflows — chỉ cần có mặt trong danh sách approver bước 1 là đủ).
-function canDecideMeeting(user, item, appData) {
+// LỖI THIẾT KẾ ĐÃ VÁ (11/2026, theo yêu cầu người dùng "đặt phòng họp không theo quy trình, bỏ luôn quy
+// trình phòng họp cho đỡ nhầm" — người dùng rà soát và phát hiện màn "Quy Trình & Phê Duyệt → 🏢 QT Đặt
+// Phòng Họp" cho admin chọn mẫu "2 bước"/"3 bước" y hệt 10+ module thật, NHƯNG hàm này chỉ TỪNG đọc đúng
+// Bước 1 (approvers[1]), không bao giờ đọc Bước 2 trở đi — dễ khiến admin tưởng đã cấu hình duyệt nhiều
+// cấp mà thực tế không có tác dụng gì, CHƯA KỂ còn chồng chéo với quyền phẳng meetingApprove (người có
+// quyền này luôn duyệt được MỌI phòng ban bất kể cấu hình riêng, khiến màn cấu hình theo phòng ban dễ bị
+// hiểu nhầm là "vô dụng" khi tình cờ đã có người giữ quyền phẳng). DỨT ĐIỂM bỏ hẳn nhánh meetingDeptWorkflows
+// — CHỈ còn ĐÚNG 1 cách quyết định: quyền phẳng meetingApprove, áp dụng chung toàn công ty, không phân
+// biệt phòng ban. Màn "QT Đặt Phòng Họp" đã gỡ khỏi WF_MODULE_CONFIG (module-workflow.js) + nút tab
+// (systemSection.html) — dữ liệu meetingDeptWorkflows cũ (nếu có) giữ nguyên trong AppData nhưng không
+// còn được đọc ở bất kỳ đâu nữa (không cần xoá/migrate, chỉ đơn thuần không dùng tới).
+function canDecideMeeting(user, item) {
   // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): trước đây admin/meetingApprove đều `return true` NGAY, không so
   // sánh gì với item.creator — admin tự đặt phòng họp (module tự phục vụ "Đặt Phòng Họp") rồi tự duyệt
   // lịch của chính mình. Khác action 'cancel' ngay cạnh (routes/meetingActions.js) vốn ĐÃ có nhánh kiểm
@@ -9504,20 +9507,17 @@ function canDecideMeeting(user, item, appData) {
   // riêng của module, không nằm trong "họ" assertNotSelfDeciding*/assertNotSelfHandling* bị quét theo
   // tên ở đợt v26.50.
   if (item.creator && user.username === item.creator) return false;
-  // 11/2026: đã bỏ `user.perms?.admin ||` — admin phải có đúng meetingApprove hoặc có tên trong
-  // meetingDeptWorkflows[dept] mới quyết định được, không còn bypass chung.
-  if (user.perms?.meetingApprove) return true;
-  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[item.dept], appData || {});
-  return (approvers[1] || []).includes(user.username);
+  // 11/2026: admin phải có đúng quyền phẳng meetingApprove mới quyết định được, không còn bypass chung
+  // (giữ nguyên quyết định đã chốt trước đó — chỉ bỏ thêm nhánh meetingDeptWorkflows).
+  return !!user.perms?.meetingApprove;
 }
 
 // hasAnyValidMeetingApprover() (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/
-// khoá người duyệt"): meetings KHÔNG đi qua lib/workflowEngine.js::findMissingApproverStep() (dùng quyền
-// PHẲNG meetingApprove + CỘNG THÊM cấu hình theo phòng ban, khác hẳn cơ chế {steps, approvers} theo bước
-// của 10+ module kia) nên cần 1 hàm RIÊNG hỏi đúng câu hỏi tương đương: "CÓ bất kỳ ai hiện ĐANG HOẠT
-// ĐỘNG ĐƯỢC CẤP QUYỀN duyệt lịch họp của phòng ban này không" — dùng NGAY TRƯỚC khi đăng ký
-// (createValidation.js meetings.extraValidate) để chặn tạo mới khi câu trả lời là KHÔNG.
+// khoá người duyệt"; ĐƠN GIẢN HOÁ LẠI cùng đợt bỏ meetingDeptWorkflows ở canDecideMeeting() trên đây —
+// nay chỉ còn hỏi đúng 1 câu: "CÓ AI đang hoạt động giữ quyền phẳng meetingApprove không" — dùng NGAY
+// TRƯỚC khi đăng ký (createValidation.js meetings.extraValidate) để chặn tạo mới khi câu trả lời là
+// KHÔNG. Tham số `dept` không còn cần thiết (giữ lại trong chữ ký hàm để không phải sửa nơi gọi) vì
+// meetingApprove áp dụng chung toàn công ty, không phân biệt phòng ban.
 //
 // CỐ Ý KHÔNG tính admin vào đây (khác canDecideMeeting() ở trên, nơi admin LUÔN được coi là "quyết được"
 // — đặc quyền can thiệp xử lý TỪNG hồ sơ cụ thể khi cần gỡ kẹt). Lý do: admin luôn tồn tại vĩnh viễn
@@ -9529,14 +9529,7 @@ function canDecideMeeting(user, item, appData) {
 // riêng CỔNG CHẶN TẠO MỚI này đòi hỏi phải có người được cấp quyền THẬT.
 function hasAnyValidMeetingApprover(dept, appData) {
   const users = appData?.users || [];
-  if (users.some(u => u && u.active !== false && u.perms?.meetingApprove)) return true;
-  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[dept], appData || {});
-  const activeByUsername = new Map(users.filter(u => u?.username).map(u => [u.username, u]));
-  return (approvers[1] || []).some(username => {
-    const u = activeByUsername.get(username);
-    return !!u && u.active !== false;
-  });
+  return users.some(u => u && u.active !== false && u.perms?.meetingApprove);
 }
 
 // hasAnyValidLicenseApprover() — cùng lý do hasAnyValidMeetingApprover() ở trên (CỐ Ý KHÔNG tính đặc

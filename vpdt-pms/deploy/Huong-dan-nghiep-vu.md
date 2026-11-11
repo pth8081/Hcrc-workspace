@@ -349,19 +349,38 @@ CHUNG với module Ngân Sách 1.0 cũ (`budgetEntries`) — cấu hình 1 phòn
 đây áp dụng cho CẢ 2 nơi đọc tới nó; `budgetApprovedDeptWorkflows` là map
 MỚI, không dùng chung với module nào khác.
 
-**Đặt Phòng Họp (10/2026, MỚI)**: tương tự Ngân Sách ở trên — bước Duyệt
-trước đây chỉ gác bằng ĐÚNG 1 quyền phẳng `meetingApprove` toàn công ty (ai
-giữ quyền này duyệt được lịch của MỌI phòng ban). Nay bổ sung
-`meetingDeptWorkflows` qua `canDecideMeeting()` (`lib/recordActions.js`) —
-màn cấu hình **"🏢 QT Đặt Phòng Họp"**. `meetingApprove` vẫn LUÔN duyệt được
-mọi phòng ban như cũ (quyền đặt tên riêng, không đổi) — map mới chỉ CỘNG
-THÊM khả năng gán riêng người duyệt cho 1 phòng ban cụ thể dù người đó
-không giữ `meetingApprove`. **Từ 11/2026** (xem "Lưu ý riêng" ngay dưới):
-`admin` ĐƠN THUẦN (không giữ `meetingApprove`, không có tên trong
-`meetingDeptWorkflows[phòng ban]`) KHÔNG còn tự động duyệt được nữa — đã bỏ
-hẳn nhánh bypass admin khỏi `canDecideMeeting()`. Nút "🔍
-Xem Quy Trình" ở form Đăng Ký hiện GỘP (union) cả người giữ `meetingApprove`
-lẫn người được gán riêng cho đúng phòng ban đang chọn trên form.
+**Đặt Phòng Họp — ĐÃ BỎ HẲN cấu hình theo phòng ban (10/2026 thêm, 11/2026
+ĐỢT 2 bỏ lại)**: tháng 10/2026 từng bổ sung `meetingDeptWorkflows` (màn cấu
+hình "🏢 QT Đặt Phòng Họp") cho phép gán riêng người duyệt theo phòng ban,
+cộng thêm vào quyền phẳng `meetingApprove`. Qua thực tế sử dụng, người dùng
+phát hiện màn cấu hình này cho phép chọn **mẫu quy trình nhiều bước** (qua
+dropdown "Chọn mẫu quy trình") nhưng engine chỉ từng đọc ĐÚNG bước 1 — bước
+2 trở đi cấu hình xong không có tác dụng gì, dễ gây hiểu lầm "đã thêm người
+duyệt bước 2" mà thực ra không có. Theo yêu cầu người dùng ("không áp dụng
+quy trình thì nên bỏ luôn quy trình phòng họp cho đỡ nhầm"), **từ 11/2026 đã
+BỎ HẲN** màn cấu hình "🏢 QT Đặt Phòng Họp" cùng toàn bộ nhánh đọc
+`meetingDeptWorkflows` ở `canDecideMeeting()`/`hasAnyValidMeetingApprover()`
+(`lib/recordActions.js`) và `canViewMeeting()` (`lib/recordViewScope.js`).
+**Duyệt Đặt Phòng Họp nay CHỈ còn ĐÚNG 1 cách — quyền phẳng `meetingApprove`,
+áp dụng CHUNG TOÀN CÔNG TY, không phân biệt phòng ban nữa** (giống các module
+"quyền phẳng" khác như Nghỉ Phép/Đổi Ca/Đồng Phục — xem danh sách ở mục dưới).
+Dữ liệu `meetingDeptWorkflows` cũ (nếu còn trong CSDL) không còn tác dụng gì,
+không cần admin tự xoá tay. Nút "🔍 Xem Người Duyệt" ở form Đăng Ký chỉ còn
+hiện danh sách người giữ `meetingApprove` (không còn gộp theo phòng ban).
+
+**Các module "quyền phẳng" khác — KHÔNG có màn cấu hình quy trình theo
+phòng ban nào cả** (duyệt bằng ĐÚNG 1 quyền phẳng toàn công ty, không phân
+biệt phòng ban — tương tự Đặt Phòng Họp sau khi bỏ cấu hình trên): Đồng Phục
+(`uniformApprove`/`uniformTransferApprove`), Nghỉ Phép (`leaveApprove`), Đổi
+Ca (quyền duyệt đổi ca tương ứng), Huỷ Đăng Ký Đào Tạo (`trainingManage`/
+admin), Gia Hạn-Huỷ Công Việc (người giao việc/admin), Chia Sẻ Nội Bộ
+(`canApproveInternalPost`), Giấy Phép (`licenseApprove`) — các module này
+chưa từng có khái niệm "cấu hình theo phòng ban" nên không cần bỏ gì, chỉ
+ghi lại đây để admin không nhầm là còn thiếu màn cấu hình. **Lưu ý riêng**:
+Ngân Sách (Ngân Sách — bước Duyệt/Phê Duyệt Cuối ở mục ngay trên) có cùng
+hạn chế kỹ thuật "chỉ đọc bước 1 của mẫu nhiều bước" như Đặt Phòng Họp từng
+có, nhưng đây là thiết kế đã được người dùng xác nhận trước đó — **KHÔNG**
+nằm trong đợt bỏ này, vẫn giữ nguyên màn cấu hình theo phòng ban.
 
 **Chặn đăng ký khi CHƯA có người duyệt (11/2026, theo yêu cầu người dùng,
 rà soát "quy trình phê duyệt thiếu/khoá người duyệt")**: **Đặt Phòng Họp**
@@ -1554,11 +1573,12 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   Dung Phong Hop", 9 cột: mã lịch, phòng ban, phòng họp, nội dung, số người dự,
   thời gian, thiết bị, trạng thái) — CHỈ đọc dữ liệu đã có, tái dùng route xuất
   Excel dùng chung.
-  **Duyệt theo phòng ban (10/2026, MỚI)** — xem chi tiết cơ chế ở mục 3: bên
-  cạnh quyền phẳng `meetingApprove` (vẫn luôn duyệt được mọi phòng ban),
-  admin nay có thể gán RIÊNG người duyệt cho 1 phòng ban cụ thể tại "Hệ
-  Thống → Quy Trình & Phê Duyệt → 🏢 QT Đặt Phòng Họp", không cần cấp quyền
-  toàn công ty cho người đó.
+  **Duyệt (11/2026, ĐÃ BỎ cấu hình theo phòng ban)** — xem chi tiết cơ chế ở
+  mục 3: duyệt lịch họp CHỈ còn ĐÚNG 1 cách — quyền phẳng `meetingApprove`,
+  áp dụng chung toàn công ty, không phân biệt phòng ban. Màn cấu hình "🏢 QT
+  Đặt Phòng Họp" (từng cho gán riêng người duyệt theo phòng ban, 10/2026) đã
+  bị BỎ HẲN do chỉ hỗ trợ đúng 1 bước duyệt dù UI cho chọn mẫu nhiều bước, dễ
+  gây hiểu lầm.
   **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
   nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
   để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/

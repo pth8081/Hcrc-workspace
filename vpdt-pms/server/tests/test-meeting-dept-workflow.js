@@ -1,14 +1,19 @@
 // server/tests/test-meeting-dept-workflow.js
 //
-// 10/2026, theo yêu cầu người dùng "bổ sung route phê duyệt cuối" cho Đặt Phòng Họp: trước đây "approve"
-// chỉ gác bằng ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty (routes/meetingActions.js) — nay CỘNG
-// THÊM cấu hình theo phòng ban (meetingDeptWorkflows). meetingApprove/admin vẫn LUÔN duyệt được MỌI
-// phòng ban như cũ (không đổi hành vi cho ai đang giữ quyền này) — xem canDecideMeeting()
-// (lib/recordActions.js) + canViewMeeting() (lib/recordViewScope.js, nhánh approver mới để người được
-// gán riêng theo phòng ban cũng XEM được lịch mới duyệt được, cùng lớp lỗi "extra-approval-layer-only
-// approver không thấy được hồ sơ" đã vá ở 7 module khác).
+// 10/2026 (gốc): "bổ sung route phê duyệt cuối" cho Đặt Phòng Họp — trước đây "approve" chỉ gác bằng
+// ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty, sau đó CỘNG THÊM cấu hình theo phòng ban
+// (meetingDeptWorkflows, màn "Quy Trình & Phê Duyệt → 🏢 QT Đặt Phòng Họp").
 //
-// Toàn bộ test ở đây THUẦN (không đụng DB/network), cùng khuôn test-audit-createvsapprove-gaps.js.
+// 11/2026 (VIẾT LẠI HOÀN TOÀN): theo yêu cầu người dùng "đặt phòng họp không theo quy trình, bỏ luôn quy
+// trình phòng họp cho đỡ nhầm" — người dùng phát hiện màn cấu hình đó cho chọn mẫu "2 bước"/"3 bước" y
+// hệt 10+ module thật, NHƯNG canDecideMeeting() chỉ TỪNG đọc đúng Bước 1, không bao giờ đọc Bước 2 trở
+// đi, dễ gây hiểu nhầm là đã cấu hình duyệt nhiều cấp. DỨT ĐIỂM bỏ hẳn nhánh meetingDeptWorkflows khỏi cả
+// canDecideMeeting() (lib/recordActions.js) VÀ canViewMeeting() (lib/recordViewScope.js) — CHỈ còn ĐÚNG 1
+// cách quyết định: quyền phẳng meetingApprove, áp dụng chung toàn công ty. File test này nay xác nhận
+// ĐÚNG NGƯỢC LẠI bài test gốc: dữ liệu meetingDeptWorkflows cũ (nếu công ty nào từng cấu hình trước đây)
+// hoàn toàn KHÔNG còn tác dụng gì — chặn tái phát sinh lại nhánh này trong tương lai do nhầm lẫn.
+//
+// Toàn bộ test ở đây THUẦN (không đụng DB/network).
 // Chạy: node server/tests/test-meeting-dept-workflow.js
 'use strict';
 const assert = require('assert');
@@ -23,63 +28,57 @@ function test(name, fn) {
 
 const ADMIN = { username: 'admin1', perms: { admin: true } };
 const FLAT_APPROVER = { username: 'qlph1', perms: { meetingApprove: true } };
-const DEPT_APPROVER = { username: 'tp_kd', perms: {} }; // KHÔNG giữ meetingApprove
+const DEPT_APPROVER = { username: 'tp_kd', perms: {} }; // KHÔNG giữ meetingApprove, CHỈ có tên trong meetingDeptWorkflows cũ
 const OUTSIDER = { username: 'nv_khac', perms: {} };
 
+// meetingDeptWorkflows GIẢ LẬP dữ liệu CŨ (từ trước 11/2026, nếu công ty nào đã từng cấu hình) — phải
+// CHỨNG MINH dữ liệu này nằm đó nhưng không còn được đọc ở bất kỳ đâu nữa.
 const appData = {
   workflows: [{ id: 'wf1', steps: [{ order: 1, name: 'Duyệt' }] }],
   meetingDeptWorkflows: {
     'Khối Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp_kd'] } }
-    // 'Khối Vận Hành' CỐ Ý không có trong đây — mô phỏng phòng ban CHƯA được admin cấu hình gì.
   }
 };
 
 // ===================== canDecideMeeting() =====================
-// 11/2026: đã bỏ `user.perms?.admin ||` — admin phải có đúng meetingApprove hoặc có tên trong
-// meetingDeptWorkflows[dept] mới duyệt được, không còn "luôn duyệt được mọi phòng ban".
-test('canDecideMeeting(): admin ĐƠN THUẦN (không meetingApprove) KHÔNG còn duyệt được phòng ban chưa cấu hình (đã bỏ bypass)', () => {
-  const item = { dept: 'Khối Vận Hành' };
+test('canDecideMeeting(): admin ĐƠN THUẦN (không meetingApprove) KHÔNG duyệt được, kể cả phòng ban ĐÃ có cấu hình meetingDeptWorkflows cũ', () => {
+  const item = { dept: 'Khối Kinh Doanh' };
   assert.strictEqual(recordActions.canDecideMeeting(ADMIN, item, appData), false);
 });
 
-test('canDecideMeeting(): meetingApprove luôn duyệt được mọi phòng ban bất kể cấu hình (ghi đè toàn quyền, không đổi hành vi cũ)', () => {
+test('canDecideMeeting(): meetingApprove luôn duyệt được mọi phòng ban (áp dụng chung toàn công ty)', () => {
   const item = { dept: 'Khối Vận Hành' };
   assert.strictEqual(recordActions.canDecideMeeting(FLAT_APPROVER, item, appData), true);
 });
 
-test('canDecideMeeting(): người KHÔNG giữ meetingApprove nhưng được gán riêng cho ĐÚNG phòng ban -> true', () => {
-  const item = { dept: 'Khối Kinh Doanh' };
-  assert.strictEqual(recordActions.canDecideMeeting(DEPT_APPROVER, item, appData), true);
-});
-
-test('canDecideMeeting(): người được gán cho phòng ban KHÁC -> false (không duyệt chéo được)', () => {
-  const item = { dept: 'Khối Vận Hành' };
+test('LỖI ĐÃ VÁ (11/2026): người CHỈ có tên trong meetingDeptWorkflows cũ (KHÔNG giữ meetingApprove) KHÔNG còn duyệt được nữa — dữ liệu cũ hoàn toàn không còn tác dụng', () => {
+  const item = { dept: 'Khối Kinh Doanh' }; // ĐÚNG phòng ban đã gán DEPT_APPROVER ở appData cũ
   assert.strictEqual(recordActions.canDecideMeeting(DEPT_APPROVER, item, appData), false);
 });
 
-test('canDecideMeeting(): người ngoài cuộc (không admin/meetingApprove/được gán) -> false', () => {
+test('canDecideMeeting(): không truyền appData (lời gọi cũ/thiếu tham số) vẫn an toàn, không throw — tham số appData không còn cần thiết', () => {
+  const item = { dept: 'Khối Kinh Doanh' };
+  assert.strictEqual(recordActions.canDecideMeeting(DEPT_APPROVER, item), false);
+  assert.strictEqual(recordActions.canDecideMeeting(FLAT_APPROVER, item), true);
+});
+
+test('canDecideMeeting(): người ngoài cuộc (không admin/meetingApprove) -> false', () => {
   const item = { dept: 'Khối Kinh Doanh' };
   assert.strictEqual(recordActions.canDecideMeeting(OUTSIDER, item, appData), false);
 });
 
-test('canDecideMeeting(): phòng ban chưa cấu hình gì -> chỉ admin/meetingApprove quyết định được', () => {
-  const item = { dept: 'Khối Vận Hành' };
-  assert.strictEqual(recordActions.canDecideMeeting(OUTSIDER, item, appData), false);
-  assert.strictEqual(recordActions.canDecideMeeting(FLAT_APPROVER, item, appData), true);
-});
-
-// ===================== canViewMeeting() — nhánh approver mới =====================
-test('canViewMeeting(): người được gán riêng cho ĐÚNG phòng ban XEM được lịch đó dù không giữ meetingApprove', () => {
+// ===================== canViewMeeting() =====================
+test('LỖI ĐÃ VÁ (11/2026): người CHỈ có tên trong meetingDeptWorkflows cũ KHÔNG còn được xem riêng lịch của phòng ban đó nữa (dữ liệu cũ không còn tác dụng)', () => {
   const meeting = { dept: 'Khối Kinh Doanh', creator: 'ai_do_khac' };
-  assert.strictEqual(canViewMeeting(DEPT_APPROVER, meeting, appData), true);
-});
-
-test('canViewMeeting(): người được gán cho phòng ban KHÁC KHÔNG xem được lịch của phòng ban chưa gán', () => {
-  const meeting = { dept: 'Khối Vận Hành', creator: 'ai_do_khac' };
   assert.strictEqual(canViewMeeting(DEPT_APPROVER, meeting, appData), false);
 });
 
-test('canViewMeeting(): không truyền appData (lời gọi cũ) vẫn an toàn, không throw, chỉ mất đúng nhánh mới', () => {
+test('canViewMeeting(): meetingApprove vẫn xem được mọi phòng ban như cũ', () => {
+  const meeting = { dept: 'Khối Kinh Doanh', creator: 'ai_do_khac' };
+  assert.strictEqual(canViewMeeting(FLAT_APPROVER, meeting, appData), true);
+});
+
+test('canViewMeeting(): không truyền appData vẫn an toàn, không throw', () => {
   const meeting = { dept: 'Khối Kinh Doanh', creator: 'ai_do_khac' };
   assert.strictEqual(canViewMeeting(DEPT_APPROVER, meeting), false);
   assert.strictEqual(canViewMeeting(FLAT_APPROVER, meeting), true);

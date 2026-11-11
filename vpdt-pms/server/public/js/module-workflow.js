@@ -36,12 +36,12 @@ const WF_MODULE_CONFIG = {
   // không "types" lồng), thay cho quyền phẳng paymentManage/admin cũ. Xem lib/workflowEngine.js
   // MODULE_CONFIGS.paymentRequests.
   PAYMENT: { dbKey: 'paymentDeptWorkflows', label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
-  // MEETING (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): trước đây Đặt Phòng Họp chỉ
-  // gác bằng 1 cờ quyền phẳng meetingApprove toàn công ty (xem routes/meetingActions.js) — nay CỘNG THÊM
-  // cấu hình theo phòng ban, cùng khuôn PAYMENT/BUDGET_APPROVE ở trên. meetingApprove/admin vẫn LUÔN
-  // duyệt được MỌI phòng ban như cũ (không đổi hành vi cho ai đang giữ quyền này) — xem
-  // canDecideMeeting() ở lib/recordActions.js.
-  MEETING: { dbKey: 'meetingDeptWorkflows', label: 'Đặt Phòng Họp', title: '🏢 Cấu Hình Quy Trình Phê Duyệt Đặt Phòng Họp Theo Phòng Ban' },
+  // MEETING (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối) ĐÃ BỊ GỠ (11/2026, theo yêu
+  // cầu người dùng "đặt phòng họp không theo quy trình, bỏ luôn quy trình phòng họp cho đỡ nhầm" — màn
+  // cấu hình theo phòng ban ở đây cho chọn mẫu "2 bước"/"3 bước" NHƯNG canDecideMeeting()
+  // (lib/recordActions.js) chỉ TỪNG đọc đúng Bước 1, không bao giờ đọc Bước 2 trở đi, gây hiểu nhầm là
+  // đã cấu hình duyệt nhiều cấp). Đặt Phòng Họp từ nay CHỈ còn ĐÚNG 1 cách duyệt: quyền phẳng
+  // meetingApprove, áp dụng chung toàn công ty, không cấu hình được ở màn này nữa — xem Phân Quyền.
   // "Quy Trình Phê Duyệt Giá Bán Lẻ"/"...Bán Buôn" — 10/2026, TÁCH THÀNH 2 TAB RIÊNG (yêu cầu người
   // dùng: "Quy trình Phê duyệt giá bán buôn và giá bán lẻ trong tab quy trình và phê duyệt tách riêng"),
   // không còn 1 entry 'ITPRICE' gộp chung + priceTypeNested + wfSubmissionTypeTabs switcher như trước.
