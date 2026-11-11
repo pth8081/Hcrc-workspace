@@ -1,9 +1,28 @@
 # Phiên bản hiện tại
 
-**29.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.97 (2026-11): FIX — modal "📤 Nhập Định Biên" bị treo (thiếu bindCspDelegation)
+
+Người dùng báo kèm ảnh chụp: "Nhập excel ở phần báo cáo định biên nhân sự các nút này đang không khả
+dụng, có thể lỗi cps bạn kiểm tra lại" (khoanh đỏ nút ✕ góc trên + "Đóng"/"Nhập" ở chân modal "📤 Nhập Định
+Biên"). Nguyên nhân: `#orgChartHeadcountImportModal` là 1 `<div>` gốc ĐỘC LẬP sống NGOÀI `#orgChartSection`
+trong `index.html` — CÙNG LỚP LỖI đã vá cho `#orgChartHeadcountModal` (modal cha, xem v29.x trước và
+`tests/test-orgchart-headcount-modal-binding.js`), nhưng lần vá đó chỉ gọi `bindCspDelegation()` cho modal
+CHA, bỏ sót modal CON này (thêm cùng đợt nhưng là 1 gốc riêng). Nút mở modal con
+(`data-op="openOrgChartHeadcountImportModal"`) nằm BÊN TRONG modal cha (đã bind) nên mở được bình thường —
+dễ gây hiểu lầm cả modal "hoạt động tốt" — nhưng 3 nút BÊN TRONG modal con (✕, "Đóng", "Nhập") không nằm
+trong gốc nào đã bind nên không có listener nào bắt được click, đúng mô tả "không khả dụng" của người dùng.
+
+**Đã làm**: `public/js/core.js` — thêm `bindCspDelegation('orgChartHeadcountImportModal')` ngay sau dòng
+bind modal cha. Test mới `tests/test-orgchart-headcount-import-modal-binding.js` (7/7 pass, đã xác nhận
+test THẬT SỰ bắt được lỗi — chạy lại trên code CHƯA vá cho ra đúng 4/7, 3 kịch bản trọng tâm FAIL). Chạy
+lại toàn bộ `tests/test-orgchart-*.js` — pass hết, không ảnh hưởng chức năng Cơ Cấu Tổ Chức nào khác.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v29.96 (2026-11): Kiểm Soát Hàng Hóa — "💲 Kiểm Tra Giá": "Quét Lại" mở thẳng camera, "Hủy" mới về form trống
 
