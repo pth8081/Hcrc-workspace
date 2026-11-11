@@ -60,18 +60,16 @@ async function buildSampleXlsx(filePath) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Cơ Cấu Tổ Chức');
   sheet.columns = [
-    { header: 'Mã Node (*)', key: 'nodeKey' },
-    { header: 'Mã Node Cha', key: 'parentKey' },
-    { header: 'Loại Node (*) (Công Ty/Phòng Ban/Vị Trí)', key: 'nodeTypeLabel' },
-    { header: 'Tên (Công Ty/Phòng Ban)', key: 'nodeName' },
+    { header: 'Cấp 1 (Khối/Phòng/Ban trực thuộc Công Ty)', key: 'level1' },
+    { header: 'Cấp 2 (tuỳ chọn)', key: 'level2' },
     { header: 'Mã Phòng Ban Hệ Thống (Phòng Ban, tuỳ chọn)', key: 'departmentRef' },
-    { header: 'Chức Danh (Vị Trí)', key: 'jobTitle' },
+    { header: 'Chức Danh (để trống nếu dòng này là 1 Phòng Ban)', key: 'jobTitle' },
     { header: 'Yêu Cầu Phòng Ban (Vị Trí, Có/Không)', key: 'requiresDeptLabel' },
     { header: 'Vị Trí Làm Việc (Vị Trí, HO/STORE, tuỳ chọn)', key: 'posType' },
     { header: 'Cấp Bậc (Vị Trí, tuỳ chọn)', key: 'jobGrade' },
     { header: 'Thứ Tự Hiển Thị (tuỳ chọn)', key: 'displayOrder' }
   ];
-  sheet.addRow({ nodeKey: 'CT', parentKey: '', nodeTypeLabel: 'Công Ty', nodeName: 'Công Ty ABC' });
+  sheet.addRow({ level1: 'Phòng Kinh Doanh', departmentRef: 'Phòng Kinh Doanh' });
   await wb.xlsx.writeFile(filePath);
 }
 
@@ -108,7 +106,7 @@ async function main() {
             fileName: 'orgchart-import-test.xlsx',
             valid: true,
             fileErrors: [],
-            items: [{ nodeKey: 'CT', parentKey: null, nodeType: 'COMPANY', nodeTypeLabel: 'Công Ty', nodeName: 'Công Ty ABC', valid: true, errors: [] }]
+            items: [{ levels: ['Phòng Kinh Doanh', null, null, null, null], isPosition: false, departmentRef: 'Phòng Kinh Doanh', valid: true, errors: [] }]
           })
         };
       }

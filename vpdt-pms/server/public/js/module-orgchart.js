@@ -800,13 +800,13 @@ async function onOrgChartImportFileChange(event) {
     }
     document.getElementById('orgChartImportPreviewBody').innerHTML = data.items.map(it => {
       const statusCell = it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
-      const nameOrTitle = it.nodeType === 'POSITION' ? it.jobTitle : it.nodeName;
+      const pathText = (it.levels || []).filter(Boolean).join(' > ') || (it.isPosition ? '(Trực thuộc Công Ty)' : '');
+      const typeLabel = it.isPosition ? 'Vị Trí' : 'Phòng Ban';
       return `<tr class="${it.valid ? '' : 'bg-red-50'}">
-        <td class="p-1 font-mono">${escapeHtml(it.nodeKey)}</td>
-        <td class="p-1 font-mono">${escapeHtml(it.parentKey || '')}</td>
-        <td class="p-1">${escapeHtml(it.nodeTypeLabel || '')}</td>
-        <td class="p-1">${escapeHtml(nameOrTitle || '')}</td>
-        <td class="p-1">${it.nodeType === 'POSITION' && it.headcountQuota != null ? escapeHtml(String(it.headcountQuota)) : ''}</td>
+        <td class="p-1">${escapeHtml(pathText)}</td>
+        <td class="p-1">${typeLabel}</td>
+        <td class="p-1">${escapeHtml(it.isPosition ? (it.jobTitle || '') : '')}</td>
+        <td class="p-1">${it.isPosition && it.headcountQuota != null ? escapeHtml(String(it.headcountQuota)) : ''}</td>
         <td class="p-1">${statusCell}</td>
       </tr>`;
     }).join('');
