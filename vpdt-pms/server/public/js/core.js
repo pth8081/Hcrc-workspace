@@ -14294,6 +14294,14 @@ bindCspDelegation('orgChartImportModal');
 // "mở ra lại không đóng được" (cả 2 nút ✕/Đóng đều dùng data-op="closeOrgChartHeadcountModal", không có
 // listener nào bắt được sự kiện click, không phải modal bị khoá/treo thật sự).
 bindCspDelegation('orgChartHeadcountModal');
+// #orgChartHeadcountImportModal ("📤 Nhập Định Biên", thêm CÙNG đợt với #orgChartHeadcountModal ở trên,
+// 11/2026) — CÙNG LỖI Y HỆT, lần này lọt qua cả đợt vá lỗi #orgChartHeadcountModal: đây CŨNG là 1 <div>
+// gốc độc lập sống NGOÀI #orgChartSection (mở từ nút data-op="openOrgChartHeadcountImportModal" nằm BÊN
+// TRONG #orgChartHeadcountModal nên mở được bình thường — dễ gây hiểu lầm toàn bộ modal "hoạt động tốt"),
+// nhưng 3 nút bên trong modal con này (✕, "Đóng", "Nhập", data-op="closeOrgChartHeadcountImportModal"/
+// "submitOrgChartHeadcountImport") lại không nằm trong bất kỳ gốc nào đã bindCspDelegation() — người dùng
+// báo đúng y hệt "các nút này đang không khả dụng". Xem tests/test-orgchart-headcount-import-modal-binding.js.
+bindCspDelegation('orgChartHeadcountImportModal');
 // Onboarding / Offboarding — module con riêng của Nhân Sự (#hrLifecycleSection, TÁCH khỏi #hrSection,
 // cùng lý do #orgChartSection ở trên) — BỊ THIẾU gốc riêng từ lúc dựng module này (commit 2278c17),
 // khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/
