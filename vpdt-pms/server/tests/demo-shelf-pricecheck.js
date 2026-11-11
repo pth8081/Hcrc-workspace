@@ -51,7 +51,9 @@ async function shot(page, selector, file) {
     await page.waitForTimeout(250);
     await shot(page, '#vanHanhShelfWrap', '02-ket-qua-khong-khuyen-mai.png');
 
-    await page.click('#priceCheckResultWrap button[data-op="resetPriceCheck"]');
+    // 11/2026 ĐỢT 2: nút "🔄 Quét Lại" giờ mở THẲNG camera (rescanPriceCheck()) — demo này gõ tay mã kế
+    // tiếp nên dùng "✖️ Hủy" (cancelPriceCheck(), vẫn quay về form trống) để tiếp tục, không phải Quét Lại.
+    await page.click('#priceCheckResultWrap button[data-op="cancelPriceCheck"]');
     await page.waitForTimeout(150);
 
     // Tra giá bằng Mã Vạch EAN-13 (API bản 1.1) — CÓ khuyến mại.
