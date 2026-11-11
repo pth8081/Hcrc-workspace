@@ -1,10 +1,74 @@
 # Phiên bản hiện tại
 
-**29.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
-`29.0` theo đúng quy tắc. **Lưu ý**: MINOR đã lại chạm `99` ở bản này — lần merge KẾ TIẾP phải cuộn sang
-`30.0`, không được tiếp tục đếm `.100`.)
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. MINOR chạm `99` lại ở v29.99 nên bản này cuộn
+sang MAJOR mới `30.0`, reset MINOR về `0`, đúng quy tắc.
+
+## v30.0 (2026-11): Checklist "Chỉ Đạt/Chưa đạt" — thêm Ngưỡng % Số Câu Đạt (tuỳ chọn) + cột "Đã Trả Lời/Đạt" ở Báo Cáo
+
+Người dùng gửi kèm 1 file Excel báo cáo thật (`bao-cao-CL_STCH_DAILY.xlsx`) + 2 ảnh chụp màn hình Checklist
+Đánh Giá Siêu Thị (nhiều dòng "Không đạt", bảng "Thống Kê Hoàn Thành" có cột "SL") và hỏi: "sao ko đạt
+nhiều mà trong file st làm 5 câu đạt 4 câu thì tính đạt ntn... Bạn giải thích tính ko đạt ntn? Và ko có tt
+cột đã làm đánh giá hay gi? Nếu đạt thì cần có cấu hình tỉ lệ đạt ở admin, vì làm 5 câu mà đạt 4 thì tính
+lad đạt hay ko đạt?". Điều tra `lib/checklist.js::computeChecklistScoring()` xác nhận: mẫu "Checklist hàng
+ngày ĐST/CHT" chạy ở `scoringMode: 'PASS_FAIL_ONLY'` — chế độ này trước đây LUÔN ép `passThreshold` về
+`null` ở `assertTemplateCoreFields()` (không cho admin đặt ngưỡng gì cả), nên CHỈ cần sai/"Không đạt" ĐÚNG
+1 câu là cả bài "Không đạt" ngay, bất kể tổng số câu đạt được bao nhiêu — đúng khớp hiện tượng người dùng
+thấy ("làm 5 câu đạt 4 câu" vẫn ra "Không đạt"). "SL" ở bảng Thống Kê Hoàn Thành đã giải thích riêng (không
+phải code) = số BÀI đã nộp trong kỳ, không phải số câu.
+
+Hỏi lại qua `AskUserQuestion` về hướng tính lại + có cần thêm cột báo cáo không, người dùng chọn: **"Tính
+số lượng câu đạt/tổng câu trả lời, ko tính sai 1 câu báo không đạt, bạn tạm làm theo logic này nhé"** +
+**"Có, thêm giúp tôi"** (cột báo cáo mới).
+
+**Thiết kế (tương thích ngược, mặc định KHÔNG đổi hành vi mẫu cũ)**: tái dùng field `passThreshold` có sẵn
+(trước đây vô nghĩa với PASS_FAIL_ONLY vì luôn bị ép `null`) làm ngưỡng % tỉ lệ câu đạt — admin phải CHỦ
+ĐỘNG vào sửa mẫu và điền số % mới kích hoạt cách tính mới; mẫu chưa đụng tới (hoặc để trống ô ngưỡng) giữ
+NGUYÊN hành vi cũ "sai 1 câu thua cả bài". Lỗi nghiêm trọng ("Luôn trượt nếu chọn") vẫn TUYỆT ĐỐI làm cả
+bài "Không đạt" dù tỉ lệ có đạt ngưỡng hay không — không đổi quy tắc vetoes này.
+
+**Đã làm**:
+1. `lib/checklist.js::assertTemplateCoreFields()`: bỏ nhánh ép `passThreshold` về `null` khi
+   `scoringMode === 'PASS_FAIL_ONLY'` — nay field này được giữ nguyên như client gửi cho CẢ 3 trường hợp
+   (SCORED/PASS_FAIL_ONLY/DEDUCTION), không ảnh hưởng cách DEDUCTION dùng field này độc lập ở
+   `computeDeductionScoring()`.
+2. `lib/checklist.js::computeChecklistScoring()`: thêm đếm `answeredCount`/`passedCount` trong lúc chấm;
+   nhánh PASS_FAIL_ONLY nay tính `ratioPercent = passedCount/answeredCount*100` — nếu mẫu CÓ đặt
+   `passThreshold`, `isPassed = (ratioPercent >= passThreshold)` (trừ lỗi nghiêm trọng luôn phủ quyết);
+   nếu KHÔNG đặt, giữ đúng `isPassed = !hasFailingAnswer` như cũ. Trả thêm `answeredCount`/`passedCount`/
+   `totalVisibleCount` ở kết quả (cả nhánh SCORED cũng trả thêm 3 field này để dùng chung cho cột báo cáo
+   mới — nhánh DEDUCTION/`computeDeductionScoring()` KHÔNG có 3 field này, báo cáo hiện "—" cho mẫu đó).
+3. `routes/checklist.js`: route tạo bản Nháp (nộp dở) và route Finalize (nộp hoàn tất) đều lưu thêm
+   `answeredCount`/`passedCount`/`totalVisibleCount` vào bản ghi `checklistSubmissions` (trước đó route
+   Finalize liệt kê tường minh field cần copy từ kết quả chấm, không phải spread, nên phải thêm tay 3 field
+   mới vào đây mới thấy được ở API response).
+4. `public/fragments/systemSection.html` + `public/js/module-admin-checklistconfig.js`: ô ngưỡng ở màn
+   "✅ Cấu Hình Checklist" (`onChecklistBuilderScoringModeChange()`) đổi từ ẨN HẲN sang HIỆN LUÔN khi chọn
+   PASS_FAIL_ONLY, chỉ đổi NHÃN cho đúng ý nghĩa mới: "Ngưỡng % Số Câu Đạt (trên số câu đã trả lời) — để
+   trống = sai 1 câu là thua cả bài (mặc định cũ)".
+5. `public/js/module-checklist.js`: thêm cột "Đã Trả Lời/Đạt" (hiện "X/Y câu, Z đạt", "—" nếu không có dữ
+   liệu) ở cả bảng xem trên màn (`applyChecklistReportFilter()`) và file "📥 Xuất Excel"
+   (`exportChecklistReportExcel()`) của tab Báo Cáo.
+6. Tài liệu: `deploy/Huong-dan-nghiep-vu.md` (mục Chế Độ Chấm Điểm) + `public/js/module-nghiepvu.js`
+   (`NGHIEP_VU_DOCS.checklist`) — thêm bước hướng dẫn admin đặt ngưỡng + mô tả cột báo cáo mới.
+7. Test: `tests/test-checklist.js` — đảo 1 test đang khẳng định hành vi ép `null` CŨ (nay khẳng định GIỮ
+   NGUYÊN `passThreshold`), sửa 2 test PASS_FAIL_ONLY cũ truyền tường minh `passThreshold: null` (tránh
+   dính default `passThreshold: 80` của `seedTemplate()` sau khi bỏ ép), thêm 3 kịch bản MỚI (5 câu đạt
+   4/5 + ngưỡng 80 → Đạt; cùng bài + ngưỡng 90 → Không đạt; có ngưỡng nhưng vẫn chọn Lỗi nghiêm trọng →
+   Không đạt tuyệt đối) — 58/58 pass. `tests/test-checklist-builder-ui.js` — đảo 2 test theo đúng hành vi
+   mới (ô ngưỡng không còn ẩn + nhãn đổi; lưu mẫu PASS_FAIL_ONLY giữ `passThreshold`) — 6/6 pass. Chạy lại
+   `tests/test-audit-round5-checklist.js` (8/8 pass) + grep CSP chuẩn trên toàn bộ file đã sửa — sạch,
+   không phát hiện gì.
+
+**Lưu ý quan trọng cho người dùng**: riêng mẫu "Checklist hàng ngày ĐST/CHT" đang dùng thật sẽ KHÔNG tự
+đổi cách tính — phải vào **Hệ Thống → ⚙️ Cấu Hình Nghiệp Vụ → "✅ Cấu Hình Checklist"** → "✏️ Sửa" mẫu đó →
+điền số % vào ô "Ngưỡng % Số Câu Đạt" → lưu, thì mới áp dụng cách tính tỉ lệ mới cho các bài nộp SAU đó.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
+`answeredCount`/`passedCount`/`totalVisibleCount` là field MỚI trên bản ghi `checklistSubmissions` (lưu
+trong AppData dạng JSON, không phải cột SQL cố định) — bài nộp từ TRƯỚC bản này sẽ không có 3 field này,
+cột báo cáo mới tự hiện "—" cho các bài đó, không cần migrate dữ liệu cũ.
 
 ## v29.99 (2026-11): FIX — Báo Cáo Định Biên: Thực Tế KHÔNG gồm Kiêm Nhiệm nữa (đợt 2 sửa công thức)
 

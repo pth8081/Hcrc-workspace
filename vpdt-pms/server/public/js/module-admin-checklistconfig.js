@@ -173,11 +173,16 @@ function onChecklistBuilderTypeChange() {
   document.getElementById('checklistBuilderIsAtvstpWrap').classList.toggle('hidden', !isAudit);
   if (!isAudit) document.getElementById('checklistBuilderIsAtvstp').checked = false;
 }
-// Đổi "Chế độ chấm điểm" — ẩn/hiện khối "Ngưỡng Điểm Đạt (%)" (không còn ý nghĩa khi PASS_FAIL_ONLY) và
-// render lại câu hỏi để ẩn/hiện ô nhập điểm tối đa/điểm đáp án theo đúng chế độ hiện chọn.
+// Đổi "Chế độ chấm điểm" — đổi NHÃN khối "Ngưỡng Điểm Đạt (%)" theo đúng ý nghĩa của từng chế độ (11/2026
+// ĐỢT 2, theo yêu cầu người dùng: "tính số lượng câu đạt/tổng câu trả lời, ko tính sai 1 câu báo không
+// đạt" — PASS_FAIL_ONLY giờ CŨNG dùng được ngưỡng này, KHÔNG còn ẩn đi như trước, xem
+// computeChecklistScoring() ở lib/checklist.js) và render lại câu hỏi để ẩn/hiện ô nhập điểm tối đa/điểm
+// đáp án theo đúng chế độ hiện chọn.
 function onChecklistBuilderScoringModeChange() {
   const isPassFailOnly = document.getElementById('checklistBuilderScoringMode').value === 'PASS_FAIL_ONLY';
-  document.getElementById('checklistBuilderPassThresholdWrap').classList.toggle('hidden', isPassFailOnly);
+  document.getElementById('checklistBuilderPassThresholdLabel').innerText = isPassFailOnly
+    ? 'Ngưỡng % Số Câu Đạt (trên số câu đã trả lời) — để trống = sai 1 câu là thua cả bài (mặc định cũ)'
+    : 'Ngưỡng Điểm Đạt (%) — để trống nếu không chấm ngưỡng';
   renderChecklistBuilderQuestions();
 }
 function closeChecklistTemplateBuilder() {

@@ -315,10 +315,16 @@ function assertTemplateCoreFields(payload) {
   // scoringMode — CHỈ áp dụng cho templateKind QA (DEDUCTION luôn tính điểm số, không có khái niệm "chỉ
   // Đạt/Chưa đạt" — bản chất là đo MỨC ĐỘ tuân thủ, xem chú thích TEMPLATE_KINDS) — ép về null cho
   // DEDUCTION để không lưu field vô nghĩa. Mặc định SCORED nếu payload không gửi/gửi giá trị lạ (khớp
-  // hành vi mọi template tạo trước v20.9). PASS_FAIL_ONLY ép cứng passThreshold về null NGAY Ở ĐÂY (không
-  // còn ý nghĩa "ngưỡng đạt theo %" khi không chấm điểm/% nữa) — bất kể client gửi gì.
+  // hành vi mọi template tạo trước v20.9).
+  // 11/2026 ĐỢT 2 (theo yêu cầu người dùng — xem computeChecklistScoring()): PASS_FAIL_ONLY KHÔNG còn bị
+  // ép cứng passThreshold về null nữa (trước đây coi "ngưỡng đạt theo %" là vô nghĩa khi không chấm điểm
+  // — nay cho phép đặt ngưỡng dựa trên TỈ LỆ SỐ CÂU ĐẠT, không phải điểm số, nên vẫn hợp lệ). Để trống
+  // vẫn giữ nguyên hành vi gốc "sai 1 câu là thua cả bài" (xem computeChecklistScoring()), không đổi gì
+  // cho các mẫu CHƯA đặt ngưỡng.
   const scoringMode = templateKind === 'DEDUCTION' ? null : (SCORING_MODES.has(payload?.scoringMode) ? payload.scoringMode : 'SCORED');
-  const passThreshold = scoringMode === 'PASS_FAIL_ONLY' || payload?.passThreshold === null || payload?.passThreshold === undefined || payload?.passThreshold === ''
+  // passThreshold hợp lệ cho CẢ 3 trường hợp (SCORED/PASS_FAIL_ONLY/DEDUCTION) — DEDUCTION vẫn dùng
+  // passThreshold riêng ở computeDeductionScoring() (không bị ảnh hưởng bởi thay đổi PASS_FAIL_ONLY trên).
+  const passThreshold = payload?.passThreshold === null || payload?.passThreshold === undefined || payload?.passThreshold === ''
     ? null : Number(payload.passThreshold);
   if (passThreshold !== null && (!Number.isFinite(passThreshold) || passThreshold < 0 || passThreshold > 100)) {
     throw new HttpError(400, 'Ngưỡng điểm đạt (%) không hợp lệ');
@@ -609,6 +615,10 @@ function computeChecklistScoring(template, answers) {
   const missingRequired = visibleQuestions.filter(q => q.isRequired && !(answersByQ.get(q.id)?.optionIds || []).length);
 
   let totalScore = 0, maxPossibleScore = 0, hasCriticalFail = false, hasFailingAnswer = false;
+  // answeredCount/passedCount (11/2026, theo yêu cầu người dùng "tính số lượng câu đạt/tổng câu trả lời,
+  // ko tính sai 1 câu báo không đạt") — đếm theo CÂU HỎI (không phải lựa chọn), tính cho MỌI chế độ chấm
+  // điểm như nhau (không chỉ PASS_FAIL_ONLY) để dùng chung cho cột báo cáo "Đã trả lời X/Y câu, Z câu đạt".
+  let answeredCount = 0, passedCount = 0;
   const answersNeedingPhoto = [];
   for (const q of visibleQuestions) {
     maxPossibleScore += q.maxScore;
@@ -640,16 +650,37 @@ function computeChecklistScoring(template, answers) {
     if (anyFailing) hasFailingAnswer = true;
     if (selectedOptions.some(o => o.isCriticalFail)) hasCriticalFail = true;
     if (anyFailing && !(ans.attachments || []).length) answersNeedingPhoto.push(q.id);
+    answeredCount++;
+    if (!anyFailing) passedCount++;
   }
   // Câu KHÔNG còn hiển thị (do đổi ý ở câu điều kiện) vẫn giữ lại trong answers[] (audit trail, Mục
   // 5.3) nhưng KHÔNG tính vào điểm — đã tự động loại vì vòng lặp trên chỉ chạy qua visibleQuestions.
 
-  // PASS_FAIL_ONLY (v20.9) — KHÔNG có khái niệm điểm/% (kể cả để lưu ngầm), "Đạt" suy TRỰC TIẾP từ việc
-  // mọi câu trả lời đã chọn đều là đáp án "Đạt" (không phụ thuộc con số nào) — độc lập hẳn với nhánh
-  // SCORED bên dưới, đúng yêu cầu "ẩn chấm điểm đi" (không chỉ ẩn ở UI mà server cũng không tính ra).
+  // PASS_FAIL_ONLY (v20.9) — mặc định KHÔNG có khái niệm điểm/% (kể cả để lưu ngầm), "Đạt" suy TRỰC TIẾP
+  // từ việc mọi câu trả lời đã chọn đều là đáp án "Đạt" (không phụ thuộc con số nào) — độc lập hẳn với
+  // nhánh SCORED bên dưới, đúng yêu cầu gốc "ẩn chấm điểm đi" (không chỉ ẩn ở UI mà server cũng không
+  // tính ra). GIỮ NGUYÊN hành vi này khi template CHƯA đặt passThreshold (tương thích ngược 100% các mẫu
+  // đã tạo trước đây, không có mẫu nào bị đổi hành vi ngầm).
+  //
+  // 11/2026 ĐỢT 2 (theo yêu cầu người dùng, kèm ảnh demo "Checklist hàng ngày ĐST/CHT" — làm 5 câu đạt 4
+  // câu vẫn bị tính Không đạt cả bài): "tính số lượng câu đạt/tổng câu trả lời, ko tính sai 1 câu báo
+  // không đạt" — CHO PHÉP PASS_FAIL_ONLY cũng đặt được passThreshold (gỡ bỏ việc ép cứng về null ở
+  // assertTemplateCoreFields()) — khi admin ĐÃ đặt 1 ngưỡng cụ thể cho mẫu, "Đạt" đổi sang tính theo TỈ LỆ
+  // số câu Đạt / số câu ĐÃ TRẢ LỜI (không phải trên tổng số câu hiển thị — câu không bắt buộc bị bỏ qua
+  // không bị trừ điểm oan) so với ngưỡng đó, THAY VÌ "sai 1 câu là thua cả bài" như trước. "Lỗi nghiêm
+  // trọng" vẫn LUÔN phủ quyết tuyệt đối (isPassed=false ngay) bất kể tỉ lệ, giống hệt nhánh SCORED.
   if (scoringMode === 'PASS_FAIL_ONLY') {
-    const isPassed = hasCriticalFail ? false : !hasFailingAnswer;
-    return { totalScore: null, maxPossibleScore: null, scorePercent: null, hasCriticalFail, isPassed, missingRequired, answersNeedingPhoto, visibleIds: [...visibleIds] };
+    const ratioPercent = answeredCount > 0 ? (passedCount / answeredCount) * 100 : null;
+    const hasThreshold = template?.passThreshold != null;
+    const isPassed = hasCriticalFail ? false
+      : (hasThreshold && ratioPercent != null ? ratioPercent >= template.passThreshold : !hasFailingAnswer);
+    // scorePercent CHỈ lưu khi admin thật sự bật ngưỡng (hasThreshold) — mẫu nào chưa cấu hình gì vẫn ẩn
+    // hẳn con số này như hành vi gốc, không bất ngờ xuất hiện % mà admin không yêu cầu.
+    const scorePercent = hasThreshold ? ratioPercent : null;
+    return {
+      totalScore: null, maxPossibleScore: null, scorePercent, hasCriticalFail, isPassed, missingRequired,
+      answersNeedingPhoto, visibleIds: [...visibleIds], answeredCount, passedCount, totalVisibleCount: visibleQuestions.length
+    };
   }
 
   // SCORED — yêu cầu người dùng: cho phép trừ điểm (scoreValue âm, xem validateChecklistQuestions()) khi
@@ -660,7 +691,10 @@ function computeChecklistScoring(template, answers) {
   const isPassed = hasCriticalFail ? false
     : (template.passThreshold != null && scorePercent != null ? scorePercent >= template.passThreshold : null);
 
-  return { totalScore, maxPossibleScore, scorePercent, hasCriticalFail, isPassed, missingRequired, answersNeedingPhoto, visibleIds: [...visibleIds] };
+  return {
+    totalScore, maxPossibleScore, scorePercent, hasCriticalFail, isPassed, missingRequired,
+    answersNeedingPhoto, visibleIds: [...visibleIds], answeredCount, passedCount, totalVisibleCount: visibleQuestions.length
+  };
 }
 
 // ===================== Chấm điểm khi Finalize — LOẠI 2: DEDUCTION (v21.0) =====================
