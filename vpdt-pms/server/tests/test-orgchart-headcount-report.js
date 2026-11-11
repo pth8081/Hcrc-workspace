@@ -5,7 +5,8 @@
 // lib/orgChart.js (field headcountQuota trên node POSITION) + routes/orgChart.js (2 route mới).
 //
 //   PHẦN A (gọi thẳng lib/headcountReport.js::computeHeadcountReport() qua require(), không cần HTTP):
-//     1. Vị trí có người ACTIVE bình thường -> đếm vào "active", actualTotal đúng, variance = quota - actual.
+//     1. Vị trí có người ACTIVE bình thường -> đếm vào "active", actualTotal đúng, variance = quota -
+//        (active+onLeave+offboarding) (11/2026 ĐỢT 2: KHÔNG còn trừ "secondary"/Kiêm Nhiệm nữa).
 //     2. Vị trí có người ON_LEAVE -> đếm vào "onLeave", KHÔNG vào "active".
 //     3. Hồ sơ ACTIVE nhưng có hrProcesses OFFBOARDING IN_PROGRESS khớp username -> đếm vào "offboarding",
 //        KHÔNG vào "active" (ưu tiên offboarding trước khi xét onLeave/active).
@@ -84,7 +85,10 @@ function runPureTests(run) {
     assertEqual(nv.secondary, 0.5, 'Nhân Viên Bán Hàng: 1 người kiêm nhiệm = 0.5');
     assertEqual(nv.actualTotal, 1 + 1 + 1 + 0.5, 'actualTotal = active+onLeave+offboarding+secondary (INACTIVE/DRAFT không tính)');
     assertEqual(nv.quota, 3, 'Quota giữ đúng giá trị đã đặt (3)');
-    assertEqual(nv.variance, 3 - 3.5, 'variance = quota - actualTotal');
+    // 11/2026 ĐỢT 2 (theo yêu cầu người dùng): variance KHÔNG còn trừ "secondary" (Kiêm Nhiệm) nữa —
+    // actualTotal (Thực Tế) GIỮ NGUYÊN gồm cả Kiêm Nhiệm, nhưng variance (Chênh Lệch) chỉ trừ
+    // active+onLeave+offboarding — cố ý KHÔNG còn khớp "quota - actualTotal" khi secondary > 0.
+    assertEqual(nv.variance, 3 - (1 + 1 + 1), 'variance = quota - (active+onLeave+offboarding), KHÔNG trừ secondary (Kiêm Nhiệm)');
 
     const tp = byId.get(3);
     assertEqual(tp.active, 1, 'Trưởng Phòng: 1 người active');
@@ -99,7 +103,7 @@ function runPureTests(run) {
     const dept = byId.get(2);
     assertEqual(dept.quota, 1 + 3, 'Phòng Kinh Doanh: roll-up quota = 1 (TP) + 3 (NV) — bỏ qua TT (null)');
     assertEqual(dept.actualTotal, tp.actualTotal + nv.actualTotal + tt.actualTotal, 'Phòng Kinh Doanh: roll-up actualTotal = tổng 3 vị trí con');
-    assertEqual(dept.variance, dept.quota - dept.actualTotal, 'Phòng Kinh Doanh: variance roll-up đúng công thức');
+    assertEqual(dept.variance, dept.quota - (dept.active + dept.onLeave + dept.offboarding), 'Phòng Kinh Doanh: variance roll-up đúng công thức MỚI (không trừ secondary)');
 
     const company = byId.get(1);
     assertEqual(company.actualTotal, dept.actualTotal, 'Công Ty (gốc): roll-up xuyên 2 cấp vẫn đúng tổng');

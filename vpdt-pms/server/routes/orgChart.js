@@ -597,7 +597,14 @@ router.get('/versions/:id/headcount-template/export-xlsx', async (req, res) => {
   try {
     const list = (await getAppDataValue('orgChartVersions')) || [];
     const version = orgChart.requireVersion(list, Number(req.params.id));
-    const wb = await orgChartHeadcountImport.buildHeadcountTemplateWorkbook(version);
+    // 11/2026: thêm 3 cột tham khảo (Kiêm Nhiệm/Đang Bàn Giao Nghỉ Việc/Thai Sản-Nghỉ Ốm) vào mẫu — cần
+    // cùng 3 nguồn dữ liệu như loadHeadcountReport() ở trên.
+    const [employeeProfiles, hrProcesses, users] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('hrProcesses'),
+      getAppDataValue('users').then(v => v || [])
+    ]);
+    const wb = await orgChartHeadcountImport.buildHeadcountTemplateWorkbook(version, employeeProfiles, hrProcesses, users);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Mau_Dinh_Bien_${version.id}.xlsx"`);
     await wb.xlsx.write(res);

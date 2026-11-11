@@ -2391,7 +2391,7 @@
       </div>
       <div class="p-4 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
-          <p class="text-[11px] text-gray-500 flex-1">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí, hoặc nhập hàng loạt qua "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên"). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm + Kiêm nhiệm×0.5, tính theo bản đang xem. Chênh lệch dương = cần tuyển thêm, âm = dôi dư.</p>
+          <p class="text-[11px] text-gray-500 flex-1">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí, hoặc nhập hàng loạt qua "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên"). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm + Kiêm nhiệm×0.5 (GIỮ NGUYÊN, gồm cả Kiêm Nhiệm). 3 cột Kiêm Nhiệm/Đang Bàn Giao Nghỉ Việc/Thai Sản-Nghỉ Ốm tách riêng để xem chi tiết. Chênh lệch = Định Biên − (Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm) — KHÔNG trừ Kiêm Nhiệm (11/2026); dương = cần tuyển thêm, âm = dôi dư.</p>
           <a id="btnOrgChartHeadcountTemplateXlsx" href="#" class="bg-purple-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-purple-700 inline-block whitespace-nowrap">📥 Tải Mẫu Định Biên</a>
           <button type="button" id="btnOrgChartHeadcountImport" data-op="openOrgChartHeadcountImportModal" class="bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">📤 Nhập Định Biên</button>
           <a id="btnOrgChartHeadcountExportXlsx" href="#" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-700 inline-block whitespace-nowrap">📊 Xuất Excel</a>
@@ -2402,7 +2402,9 @@
               <th class="p-1.5 text-center">STT</th><th class="p-1.5">BAN/PHÒNG</th><th class="p-1.5">BAN/PHÒNG/BỘ PHẬN</th>
               <th class="p-1.5">BỘ PHẬN/NHÓM</th><th class="p-1.5">CHỨC DANH</th><th class="p-1.5 text-center">CẤP BẬC</th>
               <th class="p-1.5 text-center">Mã vị trí</th>
-              <th class="p-1.5 text-right">Định Biên</th><th class="p-1.5 text-right">Thực Tế</th><th class="p-1.5 text-right">Chênh Lệch</th>
+              <th class="p-1.5 text-right">Định Biên</th><th class="p-1.5 text-right">Thực Tế</th>
+              <th class="p-1.5 text-right">Kiêm Nhiệm</th><th class="p-1.5 text-right">Đang Bàn Giao<br>Nghỉ Việc</th><th class="p-1.5 text-right">Thai Sản/<br>Nghỉ Ốm</th>
+              <th class="p-1.5 text-right">Chênh Lệch</th>
             </tr></thead>
             <tbody id="orgChartHeadcountTableBody"></tbody>
           </table>

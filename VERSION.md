@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**29.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.98 (2026-11): Báo Cáo Định Biên Nhân Sự — tách 3 cột breakdown + đổi công thức Chênh Lệch
+
+Người dùng gửi ảnh chụp "Báo Cáo Định Biên Nhân Sự bạn còn thiếu các cột, nên bổ sung cột Kiêm Nhiệm
+(tự lấy 0.5 vị trí nhưng không tính vào chênh lệch, vẫn cộng tổng để báo cáo), cột Đang Bàn Giao Nghỉ Việc,
+cột Thai Sản/Nghỉ Ốm và cột Chênh Lệch cuối cùng". Trước khi làm, gửi demo HTML (kèm công tắc so sánh 2
+công thức Chênh Lệch) qua Artifact để xác nhận — 4 quyết định qua `AskUserQuestion`: (1) cột "Thực Tế" GIỮ
+NGUYÊN ý nghĩa cũ (không đổi số đang hiện), (2) "Chênh Lệch" đổi công thức KHÔNG còn trừ Kiêm Nhiệm, (3)
+đúng 3 cột mới (không phải 4 — "cột nghỉ thai sản tiếp theo" trong yêu cầu chỉ là lời dẫn), (4) áp dụng ở
+CẢ 4 nơi: màn xem, Xuất Excel, Tải Mẫu Định Biên, Nhập Định Biên.
+
+**Đã làm**:
+1. `lib/headcountReport.js::computePositionStats()`: công thức `variance` đổi từ `quota - actualTotal`
+   (gồm cả `secondary`/Kiêm Nhiệm) sang `quota - (active + onLeave + offboarding)` — KHÔNG trừ Kiêm Nhiệm
+   nữa. `actualTotal` (Thực Tế) GIỮ NGUYÊN không đổi. Áp dụng tương tự ở nhánh cộng dồn DEPARTMENT/COMPANY
+   (không chỉ node lá POSITION).
+2. `lib/headcountReport.js::buildFlatHeadcountReportWorkbook()`: thêm 3 cột "Kiêm Nhiệm"/"Đang Bàn Giao
+   Nghỉ Việc"/"Thai Sản/Nghỉ Ốm" vào file "📊 Xuất Excel", nằm giữa "Thực tế" và "Chênh lệch" (cột J/K/L,
+   "Chênh lệch" dời từ J sang M) — cập nhật lại các tham chiếu ô theo chữ cái cho đúng.
+3. `lib/orgChartHeadcountImport.js::buildHeadcountTemplateWorkbook()`: nhận thêm tham số
+   `employeeProfiles/hrProcesses/users`, tái dùng `computeHeadcountReport()` (export thêm từ
+   `headcountReport.js`) để thêm 3 cột THAM KHẢO (không đọc lại lúc nhập — `parseHeadcountTemplateBuffer()`
+   khớp cột theo HEADER TEXT, không theo vị trí cột, nên an toàn khi chèn thêm cột ở giữa) vào file
+   "📥 Tải Mẫu Định Biên", nằm giữa "Định Biên Hiện Tại" và "Định Biên Mới (*)".
+4. `routes/orgChart.js`: route `GET /versions/:id/headcount-template/export-xlsx` fetch thêm
+   employeeProfiles/hrProcesses/users (cùng khuôn `loadHeadcountReport()`) truyền vào hàm build mẫu.
+5. `public/index.html` + `public/js/module-orgchart.js`: bảng trên màn hình (`renderOrgChartHeadcountTable()`)
+   thêm 3 cột tương ứng (root row + group row + position row), colspan "Đang tải..."/lỗi đổi 10→13, cập
+   nhật đoạn mô tả công thức ngay trong modal.
+6. Tài liệu: `deploy/Huong-dan-nghiep-vu.md` (mục 3 Hồ Sơ Nhân Sự) + `public/js/module-nghiepvu.js`
+   (`NGHIEP_VU_DOCS` module Cơ Cấu Tổ Chức) cập nhật công thức + layout cột mới.
+7. Test: `tests/test-orgchart-headcount-breakdown-columns.js` (MỚI, 4/4 pass) — phủ công thức mới ở cả
+   node lá lẫn cộng dồn, đúng cột/giá trị ở cả Xuất Excel lẫn Tải Mẫu, round-trip Nhập Định Biên vẫn hoạt
+   động bình thường dù file có thêm cột. Cập nhật `tests/test-orgchart-headcount-flat-report.js` (cột
+   "Định Biên Mới" dời từ ô F sang ô I trong mẫu) + `tests/test-orgchart-headcount-report.js` (assertion
+   variance theo công thức mới). Chạy lại toàn bộ `tests/test-orgchart-*.js` + `tests/demo-orgchart-*.js`
+   — pass hết (1 demo flaky-từ-trước `demo-orgchart-headcount.js` lỗi `openOrgChartEditNodeModal is not
+   defined` — xác nhận bằng `git stash` chạy trên code gốc CHƯA sửa, lỗi giống hệt, không liên quan đợt
+   này).
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v29.97 (2026-11): FIX — modal "📤 Nhập Định Biên" bị treo (thiếu bindCspDelegation)
 
