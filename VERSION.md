@@ -1,9 +1,79 @@
 # Phiên bản hiện tại
 
-**29.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.95 (2026-11): Đặt Phòng Họp — bỏ hẳn cấu hình duyệt theo phòng ban ("Quy Trình")
+
+**Nguyên nhân/yêu cầu người dùng**: người dùng gửi 2 ảnh chụp — ảnh 1 là modal "🔍 Xem Quy Trình" ở form
+Đăng Ký Phòng Họp chỉ hiện đúng người giữ quyền phẳng `meetingApprove` dù người dùng vừa add 2 người
+("Liên" và "Thúy") vào màn cấu hình theo phòng ban; ảnh 2 là màn cấu hình "🏢 QT Đặt Phòng Họp" (chọn mẫu
+quy trình nhiều bước). Hỏi: "Đặt phòng họp ko theo quy trình hả bạn?... Nếu không áp dụng quy trình thì
+nên bỏ luôn quy trình phòng họp cho tôi nhé cho đỡ nhầm." Điều tra xác nhận: `canDecideMeeting()`/
+`hasAnyValidMeetingApprover()` (`lib/recordActions.js`) và `canViewMeeting()` (`lib/recordViewScope.js`)
+gọi `flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[dept], appData)` nhưng CHỈ TỪNG đọc
+`approvers[1]` (Bước 1) — Bước 2 trở đi cấu hình qua dropdown "Chọn mẫu quy trình" ở màn admin không bao
+giờ được đọc, nên người được gán ở Bước 2+ (như "Liên"/"Thúy" nếu họ cấu hình ở bước sau) không bao giờ
+xuất hiện trong danh sách người duyệt thật — đúng như người dùng phát hiện. Hỏi lại qua `AskUserQuestion`
+với 3 phương án (giữ nguyên + giải thích rõ hạn chế / chỉ hỗ trợ đúng 1 bước, ẩn phần chọn mẫu nhiều bước /
+bỏ hẳn màn cấu hình, chỉ còn quyền phẳng) — người dùng chọn **"Bỏ hẳn toàn bộ màn 'Quy Trình' cho Phòng
+Họp"**. Người dùng cũng yêu cầu rà soát thêm các chức năng khác "không phụ thuộc vào quy trình" như Phòng
+Họp — xem phần báo cáo riêng (không phải thay đổi code) gửi kèm trong hội thoại.
+
+**Đã làm**:
+1. `lib/recordActions.js`: `canDecideMeeting()`/`hasAnyValidMeetingApprover()` bỏ hẳn nhánh đọc
+   `appData?.meetingDeptWorkflows?.[dept]` — chỉ còn kiểm tra quyền phẳng `meetingApprove` (chặn tự duyệt
+   hồ sơ do chính mình tạo, giữ nguyên như trước).
+2. `lib/recordViewScope.js::canViewMeeting()`: bỏ nhánh `flatWorkflowConfigToSteps(appData?.
+   meetingDeptWorkflows?.[meeting.dept], appData)` — quyền xem vẫn giữ nguyên các nhánh khác (admin,
+   người tạo, phạm vi xem theo phòng ban, `meetingApprove`/`meetingCancel`/`meetingReportView`).
+3. `public/js/core.js`: `canDecideMeetingClient()` bỏ nhánh dept-workflow phía client (đồng bộ với server);
+   bỏ `meetingDeptWorkflows: {}` khỏi default `DB` và bỏ dòng load `DB.meetingDeptWorkflows = data.
+   meetingDeptWorkflows || {}`.
+4. `public/js/core-approvalhub.js::findPendingApprovalsForUsername()`: bỏ nhánh quét `DB.meetings` tìm
+   người được gán riêng theo phòng ban (Phòng Họp quay lại nhóm "quyền phẳng thuần", không cần cảnh báo
+   đặc biệt trước khi khoá/xoá tài khoản nữa — khoá quyền `meetingApprove` là chặn được ngay).
+5. `public/js/module-phonghop.js::previewMeetingWorkflow()`: modal "🔍 Xem Quy Trình" chỉ còn hiện danh
+   sách người giữ `meetingApprove` (bỏ hẳn phần gộp theo phòng ban).
+6. `public/js/module-workflow.js::WF_MODULE_CONFIG`: bỏ entry `MEETING` — tự động biến mất khỏi lưới
+   "Áp Dụng Nhanh" (Quick Apply) vì lưới đọc trực tiếp từ object này.
+7. `public/fragments/systemSection.html`: bỏ nút tab `#btnWfModMeeting` ("🏢 QT Đặt Phòng Họp") khỏi thanh
+   tab "🔄 Quy Trình & Phê Duyệt".
+8. `lib/createValidation.js`: thông báo lỗi khi chặn đăng ký do chưa có người duyệt đổi từ nêu tên phòng
+   ban sang thông báo chung (vì giờ không còn phân biệt phòng ban).
+9. `routes/meetingActions.js`, `lib/approvalAggregator.js`: bỏ tham số/biến `appData` chỉ dùng cho nhánh
+   dept-workflow đã gỡ ở các lệnh gọi `canDecideMeeting()`.
+10. `defaults.js`: giữ nguyên key `meetingDeptWorkflows: {}` (không xoá, tránh ảnh hưởng dữ liệu cũ/các
+    hạ tầng dùng chung khác — xem mục dưới) chỉ sửa chú thích nói rõ key này đã orphan/hết tác dụng.
+11. **CHỦ ĐÍCH KHÔNG ĐỔI** (rủi ro thấp, không có lợi ích chức năng nếu đổi): `lib/catalogRename.js`
+    (cascade đổi tên phòng ban vẫn cập nhật `meetingDeptWorkflows` nếu còn dữ liệu cũ — vô hại),
+    `lib/workflowEngine.js::DEPT_OR_TIER_WORKFLOW_MAP_KEYS` (tập hợp validate cấu trúc, vô hại nếu giữ
+    key orphan), `routes/data.js` (2 danh sách khoá nhạy cảm vẫn chặn ghi trực tiếp `meetingDeptWorkflows`
+    qua API chung — phòng vệ thêm, vô hại).
+12. Tài liệu: `deploy/Huong-dan-nghiep-vu.md` (mục 3 — Đặt Phòng Họp + mục Đặt Phòng Họp ở phần module)
+    + `public/js/module-nghiepvu.js` (`NGHIEP_VU_DOCS.meeting`) cập nhật mô tả đúng hành vi mới, nêu rõ lý
+    do bỏ ("chỉ đọc đúng Bước 1 dù UI cho chọn nhiều bước").
+13. Test: viết lại hoàn toàn `tests/test-meeting-dept-workflow.js` (8/8 pass, test thực tế mới: dữ liệu
+    `meetingDeptWorkflows` cũ không còn tác dụng gì); đảo ngược assertion ở `tests/test-meeting-license-
+    no-approver-block.js`, `tests/test-selfapprove-leave-shiftswap-meeting.js`, `tests/test-meeting-
+    approval-hub-self-decide.js`, `tests/test-approval-polling.js`, `tests/test-catalog-rename-locked-
+    accounts.js` cho đúng hành vi mới; xoá `tests/test-budget-meeting-dept-workflow-ui.js`, thay bằng
+    `tests/test-budget-dept-workflow-ui.js` (bỏ phần assertion riêng Meeting, giữ Budget, thêm assertion
+    xác nhận `#btnWfModMeeting` không còn trong DOM). Chạy lại toàn bộ test liên quan workflow/meeting/
+    approval-hub/catalog-rename — pass hết. Xác nhận riêng: `tests/test-preview-workflow-buttons.js` có
+    2 FAIL liên quan Hợp Đồng/Đơn Hàng Vận Hành — đã kiểm tra bằng `git stash` chạy lại trên `main` gốc
+    (trước đợt này), FAIL giống hệt y nguyên → xác nhận lỗi CÓ TRƯỚC, không liên quan tới đợt sửa này,
+    không thuộc phạm vi đợt này xử lý.
+
+**Lưu ý nghiệp vụ quan trọng**: Ngân Sách (Ngân Sách - Đề Xuất/Phê Duyệt Cuối) có đúng hạn chế kỹ thuật
+tương tự ("chỉ đọc Bước 1 của mẫu nhiều bước") nhưng đây là thiết kế ĐÃ ĐƯỢC xác nhận trước đó với người
+dùng (xem comment sẵn trong code) — KHÔNG đổi gì ở đợt này, chỉ nêu lại làm FYI.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/`package.json` dependencies — chỉ copy code
++ `pm2 restart`. Dữ liệu `meetingDeptWorkflows` cũ (nếu admin đã từng cấu hình) vẫn còn trong CSDL nhưng
+từ nay không còn tác dụng gì, không cần admin tự xoá tay, không gây lỗi gì nếu còn tồn đọng.
 
 ## v29.94 (2026-11): Cơ Cấu Tổ Chức — Nhập/Xuất Excel cả cây bỏ hẳn "Mã Node", đổi sang "Cấp 1-5"
 

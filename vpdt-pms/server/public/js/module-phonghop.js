@@ -82,22 +82,19 @@ function toDatetimeLocalValue(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// "Xem Quy Trình" cho Đặt Phòng Họp — KHÔNG có dept-workflow NHIỀU BƯỚC như 10+ module khác (chỉ 1 bước
-// duy nhất, không có currentStep), nên vẫn dùng openSimpleApproverPreviewModal() (core.js) thay vì
-// openGenericWorkflowPreviewModal() — nhưng từ 10/2026 (bổ sung route phê duyệt cuối) danh sách này GỘP
-// (union) người giữ quyền phẳng meetingApprove toàn công ty (luôn duyệt được mọi phòng ban, ghi đè toàn
-// quyền) VỚI người được admin gán riêng cho ĐÚNG phòng ban đang chọn trên form (DB.meetingDeptWorkflows,
-// xem canDecideMeeting() ở lib/recordActions.js) — mirror đúng previewCarWorkflow() (module-dangkyxe.js)
-// về cách đọc dept từ form, nhưng gộp phẳng vì đây vẫn chỉ 1 bước, không phải nhiều bước theo step.
+// "Xem Quy Trình" cho Đặt Phòng Họp — BỎ HẲN cấu hình dept-workflow theo phòng ban (11/2026, theo yêu
+// cầu người dùng "đặt phòng họp không theo quy trình, bỏ luôn quy trình phòng họp cho đỡ nhầm" — màn
+// "Quy Trình & Phê Duyệt → 🏢 QT Đặt Phòng Họp" cho chọn mẫu "2 bước"/"3 bước" NHƯNG canDecideMeeting()
+// chỉ từng đọc đúng Bước 1, không bao giờ đọc Bước 2 trở đi, dễ khiến admin tưởng đã cấu hình duyệt
+// nhiều cấp mà thực tế không có — DỨT ĐIỂM bỏ nhánh này, CHỈ còn ĐÚNG 1 cách duyệt: quyền phẳng
+// meetingApprove, áp dụng chung toàn công ty, không phân biệt phòng ban). Xem canDecideMeeting()
+// (lib/recordActions.js).
 function previewMeetingWorkflow() {
-  const dept = document.getElementById('meetingDept')?.value || '';
   const flatApprovers = getFlatApproverUsernames(['meetingApprove']);
-  const deptApprovers = dept ? resolveEffectiveStepApprovers(DB.meetingDeptWorkflows?.[dept], 1) : [];
-  const merged = [...new Set([...flatApprovers, ...deptApprovers])];
   openSimpleApproverPreviewModal('🔍 Người Duyệt Đặt Phòng Họp',
-    dept ? `Áp dụng chung toàn công ty + riêng cho phòng ban: ${dept}` : 'Áp dụng chung toàn công ty (chưa chọn phòng ban cụ thể)',
-    merged,
-    'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) hoặc được gán riêng cho phòng ban này — liên hệ Quản trị viên.');
+    'Áp dụng chung toàn công ty (quyền "Duyệt Đặt Phòng Họp" ở Phân Quyền), không phân biệt phòng ban',
+    flatApprovers,
+    'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) — liên hệ Quản trị viên.');
 }
 
 // "Thu gọn form nhập" (10/2026) — #meetingForm ẩn mặc định (class "hidden" tĩnh ở meetingSection.html),

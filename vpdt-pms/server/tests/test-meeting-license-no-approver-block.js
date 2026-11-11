@@ -2,17 +2,19 @@
 //
 // Regression test cho LỖ HỔNG ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt
 // thiếu/khoá người duyệt" — mở rộng sang 2 module KHÔNG đi qua lib/workflowEngine.js::findMissingApproverStep()):
-//   - Phòng Họp (meetings): duyệt bằng quyền PHẲNG meetingApprove + CỘNG THÊM cấu hình theo phòng ban
-//     (meetingDeptWorkflows), xem canDecideMeeting()/hasAnyValidMeetingApprover() (lib/recordActions.js).
+//   - Phòng Họp (meetings): duyệt bằng quyền PHẲNG meetingApprove, xem canDecideMeeting()/
+//     hasAnyValidMeetingApprover() (lib/recordActions.js). (11/2026, ĐỢT 2: đã bỏ hẳn nhánh cấu hình
+//     theo phòng ban meetingDeptWorkflows — theo yêu cầu người dùng "bỏ luôn quy trình phòng họp cho đỡ
+//     nhầm" — CHỈ còn ĐÚNG 1 cách duyệt, áp dụng chung toàn công ty, không phân biệt phòng ban nữa.)
 //   - Giấy Phép (licenses): duyệt bằng quyền PHẲNG licenseApprove, xem canApproveLicense()/
 //     hasAnyValidLicenseApprover() (lib/recordActions.js).
 // TRƯỚC ĐÂY cả 2 module này KHÔNG có lớp chặn nào — nếu chưa từng có ai được cấp quyền duyệt tương ứng,
 // hồ sơ vẫn tạo/tải lên "thành công" rồi treo PENDING vĩnh viễn, không ai duyệt được, admin không biết.
 //
 //   PHẦN A — Phòng Họp:
-//     1. CHƯA có ai giữ meetingApprove, CHƯA gán riêng cho phòng ban -> chặn 409, admin được thông báo.
-//     2. ĐÃ gán riêng 1 người cho phòng ban (meetingDeptWorkflows) dù không ai giữ meetingApprove toàn
-//        công ty -> KHÔNG chặn, đăng ký thành công bình thường (đối chứng).
+//     1. CHƯA có ai giữ meetingApprove -> chặn 409, admin được thông báo.
+//     2. Có dữ liệu meetingDeptWorkflows CŨ gán riêng 1 người cho phòng ban (không giữ meetingApprove) ->
+//        VẪN BỊ CHẶN 409 (11/2026: dữ liệu cũ không còn tác dụng gì, khác hẳn hành vi gốc 10/2026).
 //     3. Người giữ meetingApprove đã bị KHOÁ TÀI KHOẢN (active:false), không ai khác -> vẫn chặn 409.
 //     4. Có người ĐANG giữ meetingApprove (active) -> không chặn (đối chứng).
 //
@@ -128,7 +130,7 @@ async function main() {
     resetAll(); notifications.length = 0;
     const r1 = await api(server, 'POST', '/api/create/meetings', meetingPayload(), NV_PHONGA);
     check('[1] Chưa ai giữ meetingApprove, chưa gán riêng phòng ban -> chặn 409', r1.status === 409 && RECORDS.meetings.length === 0, r1.body);
-    check('[1] Thông báo nêu đúng tên phòng ban', /Phòng A/.test(r1.body?.error || ''), r1.body);
+    check('[1] Thông báo nêu rõ lý do (meetingApprove) — 11/2026: không còn nêu tên phòng ban (meetingApprove áp dụng chung toàn công ty, không phân biệt phòng ban)', /meetingApprove/.test(r1.body?.error || ''), r1.body);
     check('[1] Admin được thông báo', notifications.length === 1 && notifications[0].usernames.includes('admin'), notifications);
 
     resetAll(); notifications.length = 0;
@@ -136,7 +138,7 @@ async function main() {
     APP_DATA.users.push(NGUOI_DUYET_RIENG);
     APP_DATA.meetingDeptWorkflows['Phòng A'] = { workflowId: 'WF_1STEP', approvers: { 1: [NGUOI_DUYET_RIENG.username] } };
     const r2 = await api(server, 'POST', '/api/create/meetings', meetingPayload(), NV_PHONGA);
-    check('[2 — đối chứng] Đã gán riêng người duyệt cho phòng ban -> đăng ký thành công, không chặn', r2.status === 200 && RECORDS.meetings.length === 1, r2.body);
+    check('[2] Dữ liệu meetingDeptWorkflows CŨ gán riêng người duyệt cho phòng ban -> VẪN CHẶN 409 (11/2026: không còn tác dụng, chỉ meetingApprove mới tính)', r2.status === 409 && RECORDS.meetings.length === 0, r2.body);
 
     resetAll(); notifications.length = 0;
     const TP_NGHIVIEC = { username: 'tp.old', name: 'Trưởng Phòng Cũ', dept: 'Phòng A', perms: { meetingApprove: true }, active: false };

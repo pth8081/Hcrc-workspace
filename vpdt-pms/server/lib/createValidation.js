@@ -1587,15 +1587,16 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền đăng ký phòng họp');
       }
       // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/khoá người
-      // duyệt"): meetings KHÔNG đi qua findMissingApproverStep() (dùng quyền PHẲNG meetingApprove + CỘNG
-      // THÊM cấu hình theo phòng ban, xem canDecideMeeting()/lib/recordActions.js) nên trước đây KHÔNG hề
-      // có lớp chặn nào — nếu chưa từng có ai được cấp meetingApprove (hoặc gán riêng cho phòng ban này),
-      // lịch họp vẫn đăng ký "thành công" rồi treo PENDING vĩnh viễn, không ai duyệt được. forceOwnDept:
-      // true nên dùng ĐÚNG user.dept (không phải payload.dept — chưa chắc client gửi, màn đăng ký không
-      // có ô chọn phòng ban).
+      // duyệt"): meetings KHÔNG đi qua findMissingApproverStep() (dùng quyền PHẲNG meetingApprove, xem
+      // canDecideMeeting()/lib/recordActions.js) nên trước đây KHÔNG hề có lớp chặn nào — nếu chưa từng
+      // có ai được cấp meetingApprove, lịch họp vẫn đăng ký "thành công" rồi treo PENDING vĩnh viễn,
+      // không ai duyệt được. forceOwnDept: true nên dùng ĐÚNG user.dept (không phải payload.dept — chưa
+      // chắc client gửi, màn đăng ký không có ô chọn phòng ban). Tham số dept chỉ còn giữ cho khớp chữ ký
+      // hàm (11/2026 đã bỏ nhánh meetingDeptWorkflows theo phòng ban — meetingApprove áp dụng chung toàn
+      // công ty, không phân biệt phòng ban nữa).
       const { hasAnyValidMeetingApprover, notifyAdminsNoApprover } = require('./recordActions'); // require trễ — tránh vòng lặp
       if (!hasAnyValidMeetingApprover(user.dept, appData)) {
-        const message = `Phòng ban "${user.dept}" chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) hoặc được gán riêng cho phòng ban này — không thể gửi đăng ký. Vui lòng liên hệ Quản Trị Viên cấu hình trước khi đăng ký.`;
+        const message = `Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) — không thể gửi đăng ký. Vui lòng liên hệ Quản Trị Viên cấu hình trước khi đăng ký.`;
         notifyAdminsNoApprover(appData, 'Lịch Phòng Họp', user, message);
         throw new CreateError(409, message);
       }

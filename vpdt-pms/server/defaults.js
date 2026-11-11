@@ -750,12 +750,12 @@ const DEFAULTS = {
   // Trưởng phòng duyệt, Phê Duyệt cuối do Ban Giám Đốc/Tài Chính duyệt) — xem canDecideBudgetLineFinal()
   // ở lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối cho Ngân Sách.
   budgetApprovedDeptWorkflows: {},
-  // Đặt Phòng Họp — trước đây duyệt bằng ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty, không phân
-  // biệt phòng ban nào duyệt phòng ban nào. Nay CŨNG cấu hình thêm theo phòng ban (cùng khuôn
-  // budgetApprovedDeptWorkflows ở trên) — ai có meetingApprove/admin vẫn LUÔN duyệt được MỌI phòng ban
-  // như cũ (ghi đè toàn quyền, không đổi hành vi cũ), map này chỉ CỘNG THÊM khả năng admin gán riêng
-  // người duyệt cho 1 phòng ban cụ thể (không cần có meetingApprove) — xem canDecideMeeting() ở
-  // lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối.
+  // Đặt Phòng Họp — TỪNG cấu hình thêm theo phòng ban (10/2026), nhưng ĐÃ BỊ GỠ (11/2026, theo yêu cầu
+  // người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm" — xem canDecideMeeting() ở lib/recordActions.js)
+  // vì Bước 2 trở đi không bao giờ thật sự được dùng, dễ gây hiểu nhầm đã cấu hình duyệt nhiều cấp. Từ
+  // nay CHỈ còn ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty quyết định được, không phân biệt phòng
+  // ban. Giữ lại key rỗng này (KHÔNG đọc ở đâu nữa) để dữ liệu cũ (nếu công ty nào đã cấu hình trước đây)
+  // không bị lỗi khi đọc/ghi qua các hàm generic chung (cascade rename/structure validate...).
   meetingDeptWorkflows: {},
   // 10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở xem theo phòng ban" rồi nâng
   // cấp thành "4 trạng thái" (v24.74, theo yêu cầu "cần 4 trạng thái này mới đúng để có thể chọn tắt mở

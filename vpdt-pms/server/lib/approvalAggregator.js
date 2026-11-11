@@ -123,17 +123,13 @@ function computeMyPendingApprovalKeys(user, appData) {
 
   // ----- 2) Module theo 1 QUYỀN PHẲNG, không có khái niệm bước -----
   // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "approvalAggregator canApproveMeeting lỗi thời"): hàm cũ
-  // canApproveMeeting(user) (đã XOÁ) chỉ kiểm `admin || meetingApprove` KHÔNG theo TỪNG hồ sơ — mirror
-  // SAI/CŨ của canDecideMeeting() (lib/recordActions.js, hàm THẬT đang gác route "approve" ở
-  // routes/meetingActions.js): (1) KHÔNG loại trừ chính người tạo lịch họp (self-approval) -> false
-  // positive, người vừa tự đặt phòng họp của chính mình thấy ngay badge "Phê Duyệt (1)" dù bấm Duyệt sẽ
-  // bị 403 thật; (2) KHÔNG tính nhánh meetingDeptWorkflows[dept] (admin gán RIÊNG người duyệt cho 1
-  // phòng ban dù người đó KHÔNG có quyền phẳng meetingApprove) -> false negative, người được gán duyệt
-  // riêng cho phòng ban mình không BAO GIỜ nhận được khoá "meeting:<id>" (không có thông báo hồ sơ mới
-  // cần duyệt, phải tự F5/tự vào Hub mới thấy). Nay gọi THẲNG canDecideMeeting(user, m, appData) — ĐÚNG
-  // hàm enforcement thật, cho TỪNG hồ sơ — khớp đúng triết lý "không tự suy diễn lại logic quyền" nêu ở
-  // đầu file.
-  (appData.meetings || []).filter(m => m.status === 'PENDING' && canDecideMeeting(user, m, appData))
+  // canApproveMeeting(user) (đã XOÁ) chỉ kiểm `admin || meetingApprove` KHÔNG theo TỪNG hồ sơ (không
+  // loại trừ chính người tạo lịch họp — false positive, người vừa tự đặt phòng họp của chính mình thấy
+  // ngay badge "Phê Duyệt (1)" dù bấm Duyệt sẽ bị 403 thật). Nay gọi THẲNG canDecideMeeting(user, m) —
+  // ĐÚNG hàm enforcement thật, cho TỪNG hồ sơ — khớp đúng triết lý "không tự suy diễn lại logic quyền"
+  // nêu ở đầu file. (11/2026: canDecideMeeting() đã bỏ hẳn nhánh meetingDeptWorkflows[dept] — theo yêu
+  // cầu người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm" — nên không cần truyền appData nữa.)
+  (appData.meetings || []).filter(m => m.status === 'PENDING' && canDecideMeeting(user, m))
     .forEach(m => keys.push(`meeting:${m.id}`));
   if (canApproveInternalPost(user)) {
     (appData.internalPosts || []).forEach(p => {

@@ -1061,22 +1061,16 @@ function filterItSupportTicketsForUser(items, user, appData) {
 // deptViewScopeConfig — KHÔNG đụng gì ở đây, vẫn độc lập như trước), (2) extraViewScopeAllows (người
 // xem thêm/quản lý trực tiếp). Quyền TẠO (meetingBook, lib/createValidation.js) và quyền XEM giờ tách
 // bạch hoàn toàn — không còn bảng phòng ban nào gán kiểu "xem được phòng ban X" riêng cho Phòng Họp nữa.
-// canViewMeeting() (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): thêm nhánh approver
-// theo meetingDeptWorkflows (appData, optional — các nơi gọi cũ chưa truyền vẫn an toàn nhờ optional
-// chaining, chỉ mất đúng nhánh mới này) — một người được admin gán làm approver riêng cho phòng ban của
-// lịch họp đó (dù KHÔNG giữ quyền phẳng meetingApprove) giờ cũng phải XEM được lịch mới duyệt được (xem
-// canDecideMeeting() ở lib/recordActions.js) — thiếu nhánh này thì GET /api/data âm thầm lọc mất lịch
-// của phòng ban khác trước khi tới tay approver, cùng lớp lỗi "extra-approval-layer-only approver không
-// thấy được hồ sơ" đã vá ở 7 module khác (Fix #1, đợt rà soát 8-agent).
+// canViewMeeting() — 11/2026: đã bỏ nhánh approver theo meetingDeptWorkflows (theo yêu cầu người dùng
+// "bỏ luôn quy trình phòng họp cho đỡ nhầm" — xem canDecideMeeting() ở lib/recordActions.js, đã bỏ cùng
+// đợt) — CHỈ còn quyền phẳng meetingApprove (áp dụng chung toàn công ty) mới có thêm quyền xem ngoài
+// phạm vi thường (sở hữu/cùng phòng ban/quản lý trực tiếp).
 function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
   if (scopeAllows(user, {}, meeting.dept, 'meeting', appData, meeting.creator)) return true;
-  if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
-  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});
-  return (approvers[1] || []).includes(user.username);
+  return !!(user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView);
 }
 
 function filterMeetingsForUser(meetings, user, appData) {

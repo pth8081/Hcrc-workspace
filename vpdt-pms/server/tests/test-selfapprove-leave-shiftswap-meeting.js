@@ -69,11 +69,11 @@ async function partMeeting() {
     assert.strictEqual(canDecideMeeting(approver, meeting, {}), false);
   });
 
-  await test('named-approver theo meetingDeptWorkflows vẫn duyệt được lịch họp của phòng ban mình phụ trách (không mất chức năng)', () => {
+  await test('11/2026: named-approver theo meetingDeptWorkflows CŨ KHÔNG còn duyệt được nữa (đã bỏ hẳn nhánh này — theo yêu cầu người dùng "bỏ luôn quy trình phòng họp cho đỡ nhầm", chỉ meetingApprove mới tính)', () => {
     const approver = { username: 'ap2', perms: {} };
     const meeting = { creator: 'nv_khac', dept: 'Phòng IT' };
     const appData = { meetingDeptWorkflows: { 'Phòng IT': { approvers: { 1: ['ap2'] } } } };
-    assert.strictEqual(canDecideMeeting(approver, meeting, appData), true);
+    assert.strictEqual(canDecideMeeting(approver, meeting, appData), false);
   });
 }
 

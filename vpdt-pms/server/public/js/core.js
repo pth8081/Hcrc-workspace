@@ -642,7 +642,7 @@ const DB = {
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [], submissionApprovalLevels: [],
   contracts: [], contractApprovalGroups: [], contractApprovalLevels: [], contractApprovalDeptWorkflows: {}, contractTypeApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
-  meetings: [], meetingDeptWorkflows: {}, deptViewScopeConfig: {},
+  meetings: [], deptViewScopeConfig: {},
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
   officeBuyDeptWorkflows: {},
@@ -4471,13 +4471,8 @@ function canApproveMeeting(user) {
   return !!user.perms?.meetingApprove;
 }
 
-// canDecideMeetingClient() — mirror canDecideMeeting() (lib/recordActions.js), 10/2026 theo yêu cầu
-// người dùng bổ sung route phê duyệt cuối: bước Duyệt giờ CŨNG xét cấu hình theo phòng ban
-// (DB.meetingDeptWorkflows[meeting.dept]) — ai có meetingApprove/admin VẪN LUÔN duyệt được MỌI phòng
-// ban như cũ (canApproveMeeting() ở trên, không đổi hành vi cũ); người KHÔNG có meetingApprove nhưng
-// được admin gán làm approver riêng cho ĐÚNG phòng ban của lịch đó (bước 1) cũng duyệt được. KHÁC
-// canApproveMeeting() (vẫn dùng riêng cho Report/danh sách email, không cần biết 1 lịch cụ thể nào).
-// CHỈ dùng để ẩn/hiện nút (UX) — server luôn tự xác minh lại, sửa 1 bên phải sửa cả 2 bên.
+// canDecideMeetingClient() — mirror canDecideMeeting() (lib/recordActions.js). CHỈ dùng để ẩn/hiện nút
+// (UX) — server luôn tự xác minh lại, sửa 1 bên phải sửa cả 2 bên.
 // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "Approval Hub client mirror thiếu loại trừ creator cho Phòng
 // Họp"): mirror này trước đây KHÔNG loại trừ creator như canDecideMeeting() thật (lib/recordActions.js,
 // đã vá re-audit lần 4 — `if (item.creator && user.username === item.creator) return false` NGAY ĐẦU,
@@ -4486,11 +4481,12 @@ function canApproveMeeting(user) {
 // luôn nhận 403 từ server (canDecideMeeting() đã chặn đúng tự duyệt) — không phải lỗ hổng bảo mật
 // (server enforce đúng) nhưng là nút/thông báo giả gây hiểu lầm. Loại trừ creator ĐẦU TIÊN, mirror
 // đúng thứ tự ưu tiên của hàm thật.
+// 11/2026: đã bỏ hẳn nhánh DB.meetingDeptWorkflows[meeting.dept] — theo yêu cầu người dùng "bỏ luôn quy
+// trình phòng họp cho đỡ nhầm" (xem canDecideMeeting(), lib/recordActions.js) — CHỈ còn quyền phẳng
+// meetingApprove quyết định được.
 function canDecideMeetingClient(user, meeting) {
   if (meeting?.creator && user?.username === meeting.creator) return false;
-  if (canApproveMeeting(user)) return true;
-  const wfConfig = DB.meetingDeptWorkflows?.[meeting?.dept];
-  return resolveEffectiveStepApprovers(wfConfig, 1).includes(user?.username);
+  return canApproveMeeting(user);
 }
 
 // Mọi user LUÔN huỷ được lịch do CHÍNH MÌNH đặt (creator === self, không cần quyền gì thêm) —
@@ -5631,9 +5627,6 @@ async function initDatabase(loggingInUser, opts) {
     DB.submissionPriorities = data.submissionPriorities || [];
     DB.contracts = data.contracts || [];
     DB.meetings = data.meetings || [];
-    // meetingDeptWorkflows (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): cấu hình
-    // người duyệt lịch họp theo phòng ban — xem canDecideMeeting()/canDecideMeetingClient().
-    DB.meetingDeptWorkflows = data.meetingDeptWorkflows || {};
     // meetingRooms: danh sách Phòng Họp (TRƯỚC ĐÂY const MEETING_ROOMS gõ cứng, đợt audit "form-fields-6").
     DB.meetingRooms = data.meetingRooms || [];
     DB.carRegs = data.carRegs || [];
