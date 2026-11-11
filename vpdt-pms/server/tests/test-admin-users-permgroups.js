@@ -737,6 +737,64 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (h2) LỖI THẬT đã vá (11/2026, người dùng báo "tích quyền tay cho 1 user xong lưu lại, quyền tự mất
+  //     mà không báo lỗi gì"): readUserFormState() trước đây CHỈ tính `groups`/`basePerms` từ groupIds
+  //     TƯỜNG MINH (picker "Nhóm Phân Quyền" đang tick) — bỏ sót trường hợp Chức Danh của user KHỚP tiêu
+  //     chí "phân quyền theo chức danh" của 1 Nhóm (jobTitleGroupIds, TỰ ĐỘNG — xem
+  //     test-permgroup-jobtitle-match.js) mà server LUÔN cộng thêm vào effectiveGroupIds khi tính lại
+  //     (recomputeEffectivePerms(), lib/permGroupMerge.js). Khi đó basePerms ở client SAI (null, vì
+  //     groupIds picker rỗng) trong khi basePerms THẬT ở server có nhóm khớp chức danh đó — permOverrides
+  //     gửi lên null/thiếu khiến server merge (base THẬT, overrides null) = CHỈ còn quyền nền của nhóm,
+  //     XOÁ MẤT quyền admin vừa tích tay (VD shelfReportView) mà không có cảnh báo nào, lưu vẫn "thành
+  //     công". Test này xác nhận readUserFormState() nay tính ĐÚNG permOverrides ngay từ client (không
+  //     cần round-trip qua server giả lập — lib/permGroupMerge.js đã có test riêng xác nhận server luôn
+  //     merge đúng nếu overrides gửi lên đúng, xem test-permgroup-jobtitle-match.js).
+  // ==========================================================================
+  await scenario('(h2) sửa quyền user KHỚP chức danh 1 Nhóm (không tick picker) -> permOverrides không còn mất quyền vừa tích', async () => {
+    const r = await page.evaluate(() => {
+      DB.permGroups.push({
+        id: 'grp_jobtitle_qlv', name: 'Nhóm Quản Lý Vùng', description: '', jobTitles: ['Quản Lý Vùng'],
+        perms: { operationRecordViewAll: true }
+      });
+      const qlvUser = {
+        id: 9002, username: 'qlv.test', name: 'Quản Lý Vùng Test', email: 'qlv@hcrc.local', phone: '0977777777',
+        posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: 'Quản Lý Vùng', secondaryPositions: [],
+        groupIds: [], permOverrides: null, // KHÔNG hề gán tay vào nhóm nào qua picker
+        perms: { ...defaultNewUserPerms(), operationRecordViewAll: true }, // quyền nền nhóm đã TỰ khớp từ trước
+      };
+      DB.users.push(qlvUser);
+
+      editUser(qlvUser.id);
+      const pickerTickedBeforeEdit = currentEditingUserGroupIds();
+
+      // Admin tích THÊM 1 quyền phẳng khác hẳn nhóm (shelfReportView.all — nhóm không có field này).
+      document.getElementById('pShelfReportViewAll').checked = true;
+      if (typeof toggleShelfReportViewScopeGroup === 'function') toggleShelfReportViewScopeGroup();
+
+      const state = readUserFormState();
+
+      DB.users = DB.users.filter(u => u.id !== qlvUser.id);
+      DB.permGroups = DB.permGroups.filter(g => g.id !== 'grp_jobtitle_qlv');
+
+      return {
+        pickerTickedBeforeEdit,
+        permsShelfAll: state.perms?.shelfReportView?.all === true,
+        permsKeepsGroupBase: state.perms?.operationRecordViewAll === true,
+        overridesHasShelf: state.permOverrides?.shelfReportView?.all === true,
+        overridesIsNull: state.permOverrides === null,
+      };
+    });
+    record('(h2) picker "Nhóm Phân Quyền" KHÔNG tick nhóm nào (đúng kịch bản lỗi — chỉ khớp ngầm theo chức danh)',
+      Array.isArray(r.pickerTickedBeforeEdit) && r.pickerTickedBeforeEdit.length === 0, JSON.stringify(r.pickerTickedBeforeEdit));
+    record('(h2) readUserFormState().perms.shelfReportView.all = true (quyền vừa tích tay KHÔNG bị mất)',
+      r.permsShelfAll, JSON.stringify(r));
+    record('(h2) readUserFormState().perms vẫn giữ operationRecordViewAll (quyền nền của nhóm khớp chức danh)',
+      r.permsKeepsGroupBase, JSON.stringify(r));
+    record('(h2) permOverrides tính ĐÚNG — có shelfReportView (không phải null/rỗng) để sống sót qua server merge',
+      r.overridesHasShelf && !r.overridesIsNull, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (i)+(j) 409 "vừa bị người khác thay đổi" ở "users" — cơ chế tự động refetch + áp lại + thử lưu lại 1
   //     lần (retryUsersSaveAfterConflict()/syncStorageOnce(), core.js). "Server" giả lập ngay trong
   //     window.fetch để kiểm soát chính xác kịch bản 2 người viết đồng thời — mirror kịch bản
