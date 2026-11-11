@@ -1682,11 +1682,17 @@ function resetPriceCheck() {
   const input = document.getElementById('pcMaHang');
   if (input) input.focus();
 }
-// cancelPriceCheck() — "✖️ Hủy": CÙNG hành vi xoá sạch kết quả với resetPriceCheck() (không giữ lại gì),
-// tách hàm riêng theo đúng yêu cầu người dùng có 2 nút riêng biệt — chỉ khác Ý NGHĨA với người dùng (dừng
-// hẳn vs. tiếp tục quét ngay), không khác gì về xử lý dữ liệu/trạng thái.
+// cancelPriceCheck() — "✖️ Hủy": xoá sạch kết quả, quay về màn hình mặc định ban đầu (form nhập trống) —
+// KHÁC "🔄 Quét Lại" (rescanPriceCheck() ngay dưới, mở thẳng camera) theo đúng yêu cầu người dùng.
 function cancelPriceCheck() {
   resetPriceCheck();
+}
+// rescanPriceCheck() — "🔄 Quét Lại" (11/2026, theo yêu cầu người dùng: "ấn quét lại nó hiện ra camera
+// quét tiếp"): xoá sạch kết quả cũ NHƯ resetPriceCheck() rồi mở LUÔN camera quét tiếp mặt hàng kế tiếp,
+// không bắt người dùng quay về form nhập tay rồi phải bấm thêm "📷 Quét Mã" lần nữa.
+function rescanPriceCheck() {
+  resetPriceCheck();
+  openShelfBarcodeModalForPriceCheck();
 }
 // resolveShelfPriceCheckLookupCode(rawInput) — API Giá Bán bản 1.1 (11/2026, đối tác gửi lại) nhận ĐÚNG
 // 1 TRONG 2: maHang (mã nội bộ, 10 chữ số) HOẶC maVach (mã vạch EAN-13 thật in trên sản phẩm) — khác bản

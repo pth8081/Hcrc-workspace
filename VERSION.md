@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**29.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**29.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v28.99, cuộn sang MAJOR mới
 `29.0` theo đúng quy tắc.)
+
+## v29.96 (2026-11): Kiểm Soát Hàng Hóa — "💲 Kiểm Tra Giá": "Quét Lại" mở thẳng camera, "Hủy" mới về form trống
+
+Yêu cầu người dùng (kèm ảnh chụp màn hình kết quả tra giá): "Tôi muốn khi ấn quét lại nó hiện ra camera
+quét tiếp và ấn hủy mới về màn hình mặc định ban đầu." Trước đây 2 nút "🔄 Quét Lại" và "✖️ Hủy" ở màn kết
+quả/lỗi của "💲 Kiểm Tra Giá" (Vận Hành → Kiểm Soát Hàng Hóa) làm Y HỆT NHAU — đều chỉ gọi `resetPriceCheck()`
+quay về form nhập tay trống, không tự mở lại camera, bắt người dùng bấm thêm "📷 Quét Mã" mới quét tiếp
+được mặt hàng kế tiếp.
+
+**Đã làm**:
+1. `public/js/module-vanhanh.js`: thêm hàm mới `rescanPriceCheck()` — gọi `resetPriceCheck()` (xoá sạch
+   kết quả cũ, như trước) RỒI gọi luôn `openShelfBarcodeModalForPriceCheck()` để mở camera ngay, không cần
+   thao tác thêm. `cancelPriceCheck()` GIỮ NGUYÊN hành vi cũ (chỉ `resetPriceCheck()`, quay về form trống —
+   đúng "màn hình mặc định ban đầu" người dùng mô tả).
+2. `public/fragments/vanHanhSection.html`: 2 nút "🔄 Quét Lại" (ở khối lỗi `priceCheckErrorWrap` và khối
+   kết quả `priceCheckResultWrap`) đổi `data-op="resetPriceCheck"` → `data-op="rescanPriceCheck"`. Nút
+   "✖️ Hủy" giữ nguyên `data-op="cancelPriceCheck"`.
+3. `public/js/module-nghiepvu.js` (`NGHIEP_VU_DOCS.shelfStock`): cập nhật bước hướng dẫn mô tả đúng hành
+   vi mới của 2 nút.
+4. Test: `tests/test-shelf-pricecheck-real-click.js` — cập nhật kịch bản "🔄 Quét Lại" để xác nhận modal
+   camera (`#shelfBarcodeModal`) THỰC SỰ mở ra sau khi bấm (cùng khuôn `getUserMedia` thất bại êm trong môi
+   trường test như `test-shelf-mobile-and-offline-inventory.js` — modal vẫn hiện, chỉ báo lỗi camera trên
+   status text), cập nhật selector nút "Quét Lại" ở kịch bản lỗi 404. `tests/demo-shelf-pricecheck.js` đổi
+   bước demo dùng "✖️ Hủy" thay vì "🔄 Quét Lại" cho đúng với hành vi mới (demo cần quay về form gõ tay,
+   không cần mở camera). Chạy lại toàn bộ `tests/test-shelf-*.js` (21 file) — pass hết, không ảnh hưởng
+   module Vận Hành/Kiểm Soát Hàng Hóa nào khác.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v29.95 (2026-11): Đặt Phòng Họp — bỏ hẳn cấu hình duyệt theo phòng ban ("Quy Trình")
 

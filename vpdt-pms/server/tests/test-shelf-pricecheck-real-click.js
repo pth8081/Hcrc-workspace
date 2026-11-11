@@ -10,9 +10,10 @@
 //     (tên hàng/giá thường) khi KHÔNG khuyến mại.
 //  3. Có khuyến mại (coKhuyenMai=true) -> hiện giá khuyến mại làm "Giá áp dụng" + giá thường gạch ngang +
 //     badge "Đang khuyến mại".
-//  4. "🔄 Quét Lại" xoá sạch kết quả cũ, quay về form trống, focus lại ô nhập.
-//  5. "✖️ Hủy" cũng xoá sạch kết quả cũ, quay về form trống (cùng hành vi dữ liệu, khác ý nghĩa với người
-//     dùng — xem cancelPriceCheck()/module-vanhanh.js).
+//  4. "🔄 Quét Lại" (11/2026 ĐỢT 2, rescanPriceCheck()) xoá sạch kết quả cũ RỒI mở THẲNG camera (modal
+//     #shelfBarcodeModal hiện ra) để quét tiếp mặt hàng kế tiếp ngay, không bắt quay về form nhập tay.
+//  5. "✖️ Hủy" (cancelPriceCheck()) xoá sạch kết quả cũ, quay về form trống (màn hình mặc định ban đầu) —
+//     KHÁC "Quét Lại" từ đợt này (trước đây 2 nút giống hệt nhau).
 //  6. Lỗi 404 (không tìm thấy giá) -> hiện đúng thông báo lỗi server trả về + 2 nút quay lại.
 //  7. TUYỆT ĐỐI KHÔNG LƯU GIÁ vào đâu — xác nhận KHÔNG có request POST/PUT nào khác ngoài đúng 1 lần gọi
 //     price-check cho mỗi lần "Kiểm Tra Giá" (không có autosave/no debounce ghi AppData/DB nào xảy ra).
@@ -114,18 +115,25 @@ async function main() {
       assertEqual(pcCallCount, 1, `Phải gọi ĐÚNG 1 lần POST /price-check cho 1 lượt tra, thực tế: ${pcCallCount}`);
     });
 
-    await run.run('"🔄 Quét Lại": xoá sạch kết quả cũ, quay về form trống', async () => {
-      await page.click('#priceCheckResultWrap button[data-op="resetPriceCheck"]');
+    await run.run('"🔄 Quét Lại": xoá sạch kết quả cũ RỒI mở THẲNG camera quét tiếp (không chỉ quay về form)', async () => {
+      await page.click('#priceCheckResultWrap button[data-op="rescanPriceCheck"]');
       await page.waitForTimeout(50);
       const after = await page.evaluate(() => ({
         formVisible: !document.getElementById('priceCheckForm').classList.contains('hidden'),
         resultHidden: document.getElementById('priceCheckResultWrap').classList.contains('hidden'),
         input: document.getElementById('pcMaHang').value,
-        tenHangText: document.getElementById('pcResultTenHang').textContent
+        // getUserMedia không có camera thật trong môi trường test -> statusEl báo lỗi, nhưng modal VẪN
+        // hiện ra (unhidden) đúng như openShelfBarcodeModal() ở test-shelf-mobile-and-offline-inventory.js.
+        modalVisible: !document.getElementById('shelfBarcodeModal').classList.contains('hidden')
       }));
-      assert(after.formVisible, 'Phải quay lại trạng thái FORM sau khi bấm Quét Lại');
+      assert(after.formVisible, 'Form nhập (ẩn SAU modal camera) vẫn phải được reset về trạng thái FORM');
       assert(after.resultHidden, 'Khối kết quả phải ẩn lại');
       assertEqual(after.input, '', 'Ô Mã Hàng phải về rỗng');
+      assert(after.modalVisible, '"Quét Lại" phải mở THẲNG camera (modal quét mã vạch phải hiện ra)');
+      // Đóng modal camera lại (như người dùng bấm "Đóng"/"✏️ Nhập Tay", modal có 2 nút CÙNG data-op nên
+      // gọi thẳng hàm thay vì page.click() để tránh Playwright strict-mode do khớp nhiều phần tử).
+      await page.evaluate(() => closeShelfBarcodeModal());
+      await page.waitForTimeout(50);
     });
 
     await run.run('Có khuyến mại (coKhuyenMai=true): hiện giá khuyến mại làm "Giá áp dụng" + giá thường gạch ngang + badge', async () => {
@@ -184,7 +192,7 @@ async function main() {
         errorVisible: !document.getElementById('priceCheckErrorWrap').classList.contains('hidden'),
         formVisible: !document.getElementById('priceCheckForm').classList.contains('hidden'),
         errorText: document.getElementById('priceCheckErrorText').textContent,
-        hasRetryBtn: !!document.querySelector('#priceCheckErrorWrap button[data-op="resetPriceCheck"]'),
+        hasRetryBtn: !!document.querySelector('#priceCheckErrorWrap button[data-op="rescanPriceCheck"]'),
         hasCancelBtn: !!document.querySelector('#priceCheckErrorWrap button[data-op="cancelPriceCheck"]')
       }));
       assert(result.errorVisible, 'Khối lỗi phải hiện ra khi server trả 404');
