@@ -519,9 +519,13 @@ router.use(requireAuth, blockIfMustChangePassword);
 // — front-end không đọc/hiển thị field này ở bất kỳ đâu, và để lộ nguyên giá trị còn khiến bản chụp
 // DB.users trên trình duyệt lệch khỏi CSDL bất cứ khi nào có người đăng nhập lại (kể cả không phải
 // admin nào can thiệp) — xem chú thích đầy đủ tại điểm ép record.sessionVersion trong prepareUsersForSave().
+// activeSessions (11/2026, hỗ trợ N phiên đồng thời — xem lib/auth.js/routes/auth.js
+// grantSessionAfterLogin()) cùng khuôn sessionVersion — danh sách jti/thời điểm nội bộ, front-end không
+// đọc/hiển thị gì từ đây, bỏ hẳn tránh lệch bản chụp trình duyệt mỗi khi có người đăng nhập/đăng xuất ở
+// thiết bị khác.
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, sessionVersion, ...rest }) => rest);
+  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, sessionVersion, activeSessions, ...rest }) => rest);
 }
 
 // Không bao giờ trả mật khẩu SMTP đã mã hoá (smtpPassEnc, xem lib/emailCrypto.js) ra ngoài — kể cả
@@ -735,6 +739,28 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     // trong khi bản chụp trình duyệt của admin luôn cầm giá trị CŨ — nay field này không còn xuất hiện ở
     // cả 2 phía (GET lẫn payload gửi lên) nên không còn gây lệch bản ghi giả nữa.
     record.sessionVersion = prior ? prior.sessionVersion : undefined;
+    // activeSessions (11/2026, hỗ trợ N phiên đồng thời) — CÙNG LÝ DO/KHUÔN sessionVersion ngay trên:
+    // field này CHỈ được phép sửa qua các luồng ĐÍCH DANH của lib/auth.js/routes/auth.js (đăng nhập/đăng
+    // xuất/đổi mật khẩu-PIN/gỡ TOTP-WebAuthn...), KHÔNG BAO GIỜ qua lượt lưu NGUYÊN MẢNG "users" này — ép
+    // về đúng giá trị đang có trong CSDL, bỏ qua hoàn toàn "u.activeSessions" (trường hợp này còn không
+    // cần lo client gửi lên vì đã bị stripPasswords() lọc khỏi GET /api/data, chỉ phòng hờ 1 request tự
+    // soạn cố tình gửi kèm).
+    record.activeSessions = prior ? prior.activeSessions : undefined;
+    // maxConcurrentSessions (11/2026, theo yêu cầu người dùng "cho phép có cái box cho phép user được
+    // login bao nhiêu phiên trên bao nhiêu máy tại một thời điểm") — KHÁC activeSessions/sessionVersion ở
+    // trên, field này DO ADMIN TỰ GÁN qua form Sửa Người Dùng nên được phép ghi từ "u" bình thường, chỉ
+    // validate lại ở đây (client đã validate sơ bộ, xem readUserFormState() — không tin tuyệt đối 1
+    // request tự soạn). Để trống/không hợp lệ -> bỏ hẳn field (undefined) để
+    // getMaxConcurrentSessions() (lib/auth.js) tự áp dụng mặc định hệ thống (1).
+    if (u.maxConcurrentSessions !== undefined && u.maxConcurrentSessions !== null && u.maxConcurrentSessions !== '') {
+      const n = parseInt(u.maxConcurrentSessions, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 20) {
+        throw new HttpError(400, `Số Phiên Đăng Nhập Đồng Thời Tối Đa (tài khoản "${u.username}") phải là số nguyên từ 1 đến 20.`);
+      }
+      record.maxConcurrentSessions = n;
+    } else {
+      record.maxConcurrentSessions = undefined;
+    }
     record.secondaryPositions = sanitizeSecondaryPositions(u.secondaryPositions);
     record.nghiepVuExtraKeys = sanitizeExtraKeys(u.nghiepVuExtraKeys);
     record.reportExtraKeys = sanitizeExtraKeys(u.reportExtraKeys);

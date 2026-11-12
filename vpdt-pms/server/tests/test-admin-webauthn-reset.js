@@ -81,7 +81,11 @@ stubModule('lib/auth', {
   validatePin: () => null,
   signToken: () => 'fake-token',
   setAuthCookie: () => {},
-  clearAuthCookie: () => {}
+  clearAuthCookie: () => {},
+  // getMaxConcurrentSessions (11/2026, hỗ trợ N phiên đồng thời) — routes/auth.js (shouldConfirmKick()/
+  // grantSessionAfterLogin()) giờ gọi hàm này; bài test NÀY không quan tâm gì tới cơ chế đa phiên (chỉ
+  // kiểm luồng gỡ vân tay/webauthn), mock cố định về 1 (mặc định hệ thống, đúng hành vi N=1 gốc) là đủ.
+  getMaxConcurrentSessions: () => 1
 });
 
 // ===================== 1) Require code THẬT (sau khi đã cắm bản giả lập) =====================

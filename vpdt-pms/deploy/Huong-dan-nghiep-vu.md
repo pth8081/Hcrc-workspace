@@ -79,6 +79,24 @@ nào lách qua bước xác nhận để giữ cả 2 phiên cùng sống). Lư�
 thường (không có phiên nào khác đủ gần để lo) không bị hỏi gì cả, kể cả sau
 khi vừa đăng xuất chủ động.
 
+**Số phiên đăng nhập đồng thời tối đa theo từng tài khoản (11/2026)**: mặc
+định vẫn đúng "1 tài khoản = 1 phiên" như trên — nhưng admin có thể TĂNG
+riêng cho TỪNG tài khoản (ô "🔐 Số Phiên Đăng Nhập Đồng Thời Tối Đa" trong
+form Sửa Người Dùng, Hệ Thống → Quản Trị → Quản Lý Người Dùng, giá trị 1-20)
+để tài khoản đó được đăng nhập đồng thời trên nhiều máy/thiết bị (VD máy pha
+chế dùng chung ở siêu thị, tài khoản IT cần mở song song điện thoại + máy
+tính). Cơ chế: thay vì 1 số đếm phiên (`sessionVersion`) duy nhất cho MỌI
+đăng nhập, mỗi tài khoản giờ có 1 DANH SÁCH phiên đang được phép
+(`activeSessions`, giới hạn đúng số đã cấp) — đăng nhập khi danh sách còn
+chỗ trống thì KHÔNG hỏi gì, cấp phiên mới luôn; đăng nhập khi đã đầy mới hỏi
+xác nhận rồi đá ĐÚNG phiên cũ nhất (không đá cả loạt). Đăng xuất 1 máy chỉ
+mất hiệu lực đúng máy đó, các máy khác không bị ảnh hưởng — khác "1 tài
+khoản = 1 phiên" (đăng xuất khi đó mất hiệu lực toàn bộ, vì chỉ có 1 phiên).
+Riêng đổi mật khẩu/PIN/gỡ xác thực 2 lớp (TOTP)/gỡ vân tay-Face ID vẫn LUÔN
+đá TOÀN BỘ phiên đang mở của tài khoản đó ngay lập tức (`sessionVersion`
+vẫn giữ vai trò này, không phân biệt đang cho phép bao nhiêu phiên đồng
+thời) — đúng ý "đổi mật khẩu phải chắc chắn đăng xuất mọi nơi khác".
+
 ```
 [Nhân viên / Quản lý / Admin — trình duyệt]
         │  HTTPS (JWT cookie httpOnly)
