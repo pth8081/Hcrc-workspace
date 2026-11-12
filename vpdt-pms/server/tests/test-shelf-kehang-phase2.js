@@ -43,14 +43,55 @@ async function main() {
     assert(caught instanceof HttpError && caught.status === 403, `phải 403, thực tế: ${caught}`);
   });
 
-  await run.run('applyShelfLocationEdit: đúng siêu thị -> sửa OK, code/dept KHÔNG đổi dù client gửi lên', async () => {
+  await run.run('applyShelfLocationEdit: đúng siêu thị -> sửa OK (không gửi code), dept KHÔNG đổi dù client gửi lên', async () => {
     const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', category: 'Cũ', active: true };
-    const next = applyShelfLocationEdit(item, { name: 'Mới', category: 'NganhHangMoi', active: false, code: 'HACK', dept: 'Siêu thị Quận 7' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }));
+    const next = applyShelfLocationEdit(item, { name: 'Mới', category: 'NganhHangMoi', active: false, dept: 'Siêu thị Quận 7' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }));
     assertEqual(next.name, 'Mới', 'name phải đổi');
     assertEqual(next.category, 'NganhHangMoi', 'category phải đổi');
     assertEqual(next.active, false, 'active phải đổi thành false (Ngừng dùng)');
-    assertEqual(next.code, 'A1', 'code KHÔNG được đổi dù client gửi "HACK"');
-    assertEqual(next.dept, 'Siêu thị Quận 1', 'dept KHÔNG được đổi dù client gửi siêu thị khác');
+    assertEqual(next.code, 'A1', 'code phải GIỮ NGUYÊN khi body không gửi field code');
+    assertEqual(next.dept, 'Siêu thị Quận 1', 'dept KHÔNG được đổi dù client gửi siêu thị khác (không có cơ chế sửa dept)');
+  });
+
+  // Mã Quầy Kệ SỬA ĐƯỢC (11/2026, theo yêu cầu người dùng "cho tôi sửa cả mã kệ") — ĐỔI quyết định cũ,
+  // xem chú thích đầy đủ tại applyShelfLocationEdit() (lib/shelfStockEdit.js).
+  await run.run('applyShelfLocationEdit: gửi code MỚI -> đổi thành công khi không trùng trong CÙNG siêu thị', async () => {
+    const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', active: true };
+    const collection = [item, { id: 2, dept: 'Siêu thị Quận 1', code: 'B1', name: 'Khác', active: true }];
+    const next = applyShelfLocationEdit(item, { code: 'A1-NEW' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }), collection);
+    assertEqual(next.code, 'A1-NEW', 'code phải đổi thành công');
+  });
+
+  await run.run('applyShelfLocationEdit: đổi code TRÙNG với quầy kệ KHÁC cùng siêu thị -> HttpError 409, KHÔNG đổi gì', async () => {
+    const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', active: true };
+    const collection = [item, { id: 2, dept: 'Siêu thị Quận 1', code: 'B1', name: 'Khác', active: true }];
+    let caught = null;
+    try { applyShelfLocationEdit(item, { code: 'B1' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }), collection); }
+    catch (err) { caught = err; }
+    assert(caught instanceof HttpError && caught.status === 409, `phải 409 (trùng mã), thực tế: ${caught}`);
+  });
+
+  await run.run('applyShelfLocationEdit: đổi code TRÙNG tên nhưng KHÁC siêu thị -> vẫn cho phép (unique CHỈ trong cùng siêu thị)', async () => {
+    const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', active: true };
+    const collection = [item, { id: 3, dept: 'Siêu thị Quận 7', code: 'B1', name: 'Siêu thị khác', active: true }];
+    const next = applyShelfLocationEdit(item, { code: 'B1' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }), collection);
+    assertEqual(next.code, 'B1', 'code trùng tên nhưng khác siêu thị khác vẫn phải cho phép');
+  });
+
+  await run.run('applyShelfLocationEdit: giữ NGUYÊN code cũ (gửi lại đúng code hiện tại) -> không bị báo trùng với chính nó', async () => {
+    const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', active: true };
+    const collection = [item];
+    const next = applyShelfLocationEdit(item, { code: 'A1', name: 'Cũ 2' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }), collection);
+    assertEqual(next.code, 'A1');
+    assertEqual(next.name, 'Cũ 2');
+  });
+
+  await run.run('applyShelfLocationEdit: đổi code rỗng -> HttpError 400', async () => {
+    const item = { id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Cũ', active: true };
+    let caught = null;
+    try { applyShelfLocationEdit(item, { code: '   ' }, userOf('Siêu thị Quận 1', { shelfLocationManage: true }), [item]); }
+    catch (err) { caught = err; }
+    assert(caught instanceof HttpError && caught.status === 400, `phải 400, thực tế: ${caught}`);
   });
 
   await run.run('applyShelfLocationEdit: admin sửa được siêu thị khác', async () => {

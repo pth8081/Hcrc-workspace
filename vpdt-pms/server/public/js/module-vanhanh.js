@@ -1272,6 +1272,11 @@ function cancelShelfLocationEdit() {
 }
 async function saveShelfLocationEdit(id) {
   const numId = Number(id);
+  // Mã Quầy Kệ SỬA ĐƯỢC (11/2026, theo yêu cầu người dùng "cho tôi sửa cả mã kệ") — an toàn với ghi nhận
+  // CŨ vì shelfRecords tham chiếu qua shelfLocationId (số, không đụng), xem chú thích đầy đủ tại
+  // applyShelfLocationEdit() (lib/shelfStockEdit.js).
+  const code = document.getElementById(`slEditCode_${numId}`).value.trim();
+  if (!code) return alert('Vui lòng nhập Mã Quầy Kệ!');
   const name = document.getElementById(`slEditName_${numId}`).value.trim();
   if (!name) return alert('Vui lòng nhập Tên Quầy Kệ!');
   const category = document.getElementById(`slEditCategory_${numId}`).value.trim();
@@ -1279,7 +1284,7 @@ async function saveShelfLocationEdit(id) {
   try {
     const res = await shelfFetch(`/api/shelf-stock/locations/${numId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, active })
+      body: JSON.stringify({ code, name, category, active })
     });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
@@ -1293,6 +1298,30 @@ async function saveShelfLocationEdit(id) {
   populateShelfLocationPicker();
   cacheShelfLocationsOffline(); // Phần E — giữ cache offline khớp ngay khi vừa sửa quầy kệ lúc còn mạng.
 }
+// deleteShelfLocationClick() (11/2026, theo yêu cầu người dùng "thêm nút xóa nữa để tôi xóa hẳn đi") —
+// XOÁ VĨNH VIỄN khỏi danh mục (khác hẳn tích "Ngừng dùng" chỉ ẩn khỏi danh sách chọn ở Ghi Nhận, vẫn giữ
+// trong danh mục) — KHÔNG hoàn tác được. An toàn với lịch sử ghi nhận CŨ (xem chú thích đầy đủ tại
+// applyShelfLocationEdit()/route DELETE /locations/:id) — chỉ không còn chọn được quầy kệ này cho ghi
+// nhận MỚI nữa, đúng ý "xoá hẳn khỏi danh mục".
+async function deleteShelfLocationClick(id) {
+  const numId = Number(id);
+  const item = DB.shelfLocations.find(s => s.id === numId);
+  if (!item) return;
+  if (!confirm(`⚠️ Xoá VĨNH VIỄN quầy kệ "${item.code} — ${item.name}" khỏi danh mục?\n\nLịch sử ghi nhận CŨ trên kệ này vẫn được giữ nguyên (không mất dữ liệu), nhưng sẽ KHÔNG còn chọn được quầy kệ này để ghi nhận MỚI nữa. Hành động KHÔNG hoàn tác được.`)) return;
+  try {
+    const res = await shelfFetch(`/api/shelf-stock/locations/${numId}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể xoá'}`);
+  } catch (err) { return alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+  const idx = DB.shelfLocations.findIndex(s => s.id === numId);
+  if (idx !== -1) DB.shelfLocations.splice(idx, 1);
+  logSystemAction('SHELF_LOCATION', 'DELETE', `Xoá vĩnh viễn quầy kệ [${item.code} - ${item.name}]`, 'SUCCESS', item.code);
+  alert('✅ Đã xoá quầy kệ khỏi danh mục.');
+  renderShelfLocationsList();
+  populateShelfLocationPicker();
+  cacheShelfLocationsOffline();
+}
 function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
   if (!tbody) return;
@@ -1302,7 +1331,7 @@ function renderShelfLocationsList() {
     if (canManage && editingShelfLocationId === s.id) {
       return `
     <tr class="border-b bg-cyan-50">
-      <td class="p-2 font-semibold">${escapeHtml(s.code)}</td>
+      <td class="p-2"><input id="slEditCode_${s.id}" value="${escapeHtml(s.code)}" class="w-full border p-1 rounded font-semibold"></td>
       <td class="p-2"><input id="slEditName_${s.id}" value="${escapeHtml(s.name)}" class="w-full border p-1 rounded"></td>
       <td class="p-2"><input id="slEditCategory_${s.id}" value="${escapeHtml(s.category || '')}" class="w-full border p-1 rounded"></td>
       <td class="p-2"><label class="inline-flex items-center gap-1"><input type="checkbox" id="slEditActive_${s.id}" ${s.active !== false ? 'checked' : ''}> Đang dùng</label></td>
@@ -1321,7 +1350,7 @@ function renderShelfLocationsList() {
       <td class="p-2">${escapeHtml(s.name)}</td>
       <td class="p-2 text-gray-500">${escapeHtml(s.category || '')}</td>
       <td class="p-2">${badge}</td>
-      <td class="p-2">${canManage ? `<button type="button" data-op="enterShelfLocationEditMode" data-arg0="${s.id}" class="text-gray-500 hover:underline">Sửa</button>` : ''}</td>
+      <td class="p-2 whitespace-nowrap">${canManage ? `<button type="button" data-op="enterShelfLocationEditMode" data-arg0="${s.id}" class="text-gray-500 hover:underline mr-2">Sửa</button><button type="button" data-op="deleteShelfLocationClick" data-arg0="${s.id}" class="text-red-600 hover:underline">🗑️ Xoá</button>` : ''}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
 }

@@ -965,6 +965,31 @@ function createDispatcher(state) {
         list.splice(idx, 1);
         return { status: 200, body: { success: true } };
       }
+      // PATCH/DELETE /api/shelf-stock/locations/:id (11/2026, "sửa cả mã kệ... thêm nút xoá hẳn") — mirror
+      // ĐÚNG routes/shelfStock.js bằng CHÍNH applyShelfLocationEdit() thật (lib/shelfStockEdit.js), cùng
+      // triết lý các nhánh shelf-stock khác ở trên; DELETE chỉ cần mô phỏng gọn 2 lớp gác quyền thật (gate +
+      // dept) rồi xoá thẳng khỏi mảng mock, không cần toàn bộ cơ chế khoá/log thật của deleteRecordForCollection.
+      if ((m = pathName.match(/^\/api\/shelf-stock\/locations\/(\d+)$/)) && method === 'PATCH') {
+        const { applyShelfLocationEdit } = require('../lib/shelfStockEdit');
+        const id = Number(m[1]);
+        const list = state.shelfLocations || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const updated = applyShelfLocationEdit(list[idx], body, freshUser, list);
+        list[idx] = updated;
+        return { status: 200, body: { item: updated } };
+      }
+      if ((m = pathName.match(/^\/api\/shelf-stock\/locations\/(\d+)$/)) && method === 'DELETE') {
+        const { canManageShelfStock } = require('../lib/shelfStockEdit');
+        const id = Number(m[1]);
+        const list = state.shelfLocations || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        if (!canManageShelfStock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Danh Mục Quầy Kệ' } };
+        if (!freshUser.perms?.admin && list[idx].dept !== freshUser.dept) return { status: 403, body: { error: 'Quầy kệ không thuộc siêu thị của bạn' } };
+        list.splice(idx, 1);
+        return { status: 200, body: { ok: true } };
+      }
       // GET /api/shelf-stock/system-inventory — mock ĐƠN GIẢN HOÁ (state.__mockSystemInventoryRows, test tự
       // seed khi cần) vì store-scoping thật của route này (storeExternalCodes -> maDiem -> cache đối tác) đã
       // được kiểm riêng ở routes test khác — ở đây chỉ cần dữ liệu để test cột "Tồn Kho Hệ Thống" (Hạn Sử Dụng).
