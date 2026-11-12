@@ -1,8 +1,58 @@
 # Phiên bản hiện tại
 
-**30.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.3 (2026-11): FIX RẤT NGHIÊM TRỌNG — Tick thêm Nhóm Phân Quyền có thể ÂM THẦM GỠ MẤT quyền Admin của chính tài khoản đang sửa
+
+Người dùng báo cáo TRỰC TIẾP, nhấn mạnh mức độ nghiêm trọng: "tôi dùng quyền admin, tôi sửa quyền của
+tôi, add tôi vào 1 nhóm quyền khác, thì nó bị mất quyền admin luôn — mấy lần tôi bị rồi... Nó phải có cái
+khóa, đã là admin rồi mà không gỡ quyền admin ra thì không thể nào tự động gỡ."
+
+**Nguyên nhân gốc**: `onUserPermGroupsChange()` (`public/js/module-admin-permgroups.js`) — mỗi lần admin
+tick thêm 1 Nhóm Phân Quyền ở form "Sửa Người Dùng", hàm gọi `populatePermsForm(mergeGroupsBasePerms(...))`
+để VẼ LẠI TOÀN BỘ cây checkbox theo đúng quyền NỀN của (các) Nhóm vừa tick — bao gồm CẢ checkbox "👑 Quản
+Trị Viên (Admin)" (`#pAdmin`). Nhóm Phân Quyền hầu như KHÔNG BAO GIỜ có `admin:true` trong quyền nền, nên
+thao tác này ÂM THẦM bỏ tick Admin ngay trên form — nếu admin không để ý tích lại trước khi bấm "Lưu",
+quyền Admin biến mất VĨNH VIỄN khỏi tài khoản đó, không cảnh báo gì, lưu vẫn báo "Đã lưu" bình thường.
+Tài khoản literal "admin" gốc đã được khoá cứng từ trước (`setAdminAccountPermsLocked()`), nhưng MỌI tài
+khoản admin KHÁC (dùng tên riêng — chính là tài khoản người dùng đang dùng) hoàn toàn không có lớp bảo vệ
+này.
+
+**Đã làm — 3 lớp vá độc lập (phòng mọi đường có thể dẫn tới mất quyền Admin, không chỉ đúng 1 đường đã
+tìm ra)**:
+1. `public/js/module-admin-permgroups.js::onUserPermGroupsChange()` — giữ NGUYÊN trạng thái checkbox
+   Admin (nếu đang tích) trước khi vẽ lại cây theo quyền nền của Nhóm vừa chọn. Tick Nhóm giờ KHÔNG BAO
+   GIỜ tự ý bỏ tick Admin.
+2. `public/js/module-admin-submissiongroups.js::saveUser()` — LƯỚI AN TOÀN thứ 2: ngay trước khi lưu,
+   nếu phát hiện 1 tài khoản (khác "admin" gốc) đang là Admin SẮP MẤT quyền Admin sau khi lưu (bất kể do
+   đường nào), hỏi xác nhận tường minh — Huỷ để tích lại Admin nếu không cố ý, OK nếu THẬT SỰ muốn gỡ
+   (không khoá cứng tuyệt đối — gỡ quyền Admin có chủ đích vẫn là thao tác hợp lệ, chỉ bắt buộc phải RÕ
+   RÀNG, không âm thầm).
+3. `routes/data.js` (POST /api/data/users) — LƯỚI AN TOÀN thứ 3, phía SERVER: bất kỳ tài khoản nào (trừ
+   "admin" gốc) chuyển từ `perms.admin=true` sang `false` sau 1 lượt lưu "users" (qua BẤT KỲ đường nào —
+   form Sửa, Nhập Excel, Ma Trận Phân Quyền, request tự soạn...) đều để lại ĐÚNG 1 dòng Nhật Ký Hệ Thống
+   mức WARNING (`ADMIN_PERMS_REMOVED`) nêu rõ tài khoản bị gỡ + người thao tác — tra lại được dấu vết dù
+   2 lớp vá client bị bỏ qua.
+
+**Test**: thêm scenario "(h3)" vào `tests/test-admin-users-permgroups.js` (dựng đúng kịch bản báo lỗi: tick
+thêm Nhóm Phân Quyền cho 1 tài khoản đang Admin qua `dispatchEvent('change')` thật, xác nhận Admin không
+còn bị bỏ tick; giả lập "Huỷ" ở hộp xác nhận → không lưu, vẫn còn Admin; giả lập "OK" → cho lưu bình
+thường) — 5/5 assertion pass, 136/136 scenario của cả file pass. Thêm file mới
+`tests/test-admin-perms-removed-auditlog.js` (mount thật `routes/data.js`) — 3/3 scenario pass (ghi đúng 1
+dòng log khi gỡ Admin thật; không ghi log khi không có gì bị gỡ; tài khoản "admin" gốc không bao giờ bị
+gỡ/không bị ghi log). Chạy lại `test-permgroup-dangling-groupids.js` (4/4), `test-permgroup-jobtitle-match.js`
+(13/13), `test-audit-hethong-cluster-server.js` (22/22), `test-audit-hethong-round2-server.js` (18/18),
+`test-admin-self-approve-blocked.js` (39/39), `test-admin-webauthn-reset.js` (8/8),
+`test-auth-single-session.js` (9/9) — pass hết. `test-admin-totp.js` có 4 lỗi `resolveGraphOption is not a
+function` — xác nhận bằng `git stash` chạy trên code GỐC chưa sửa, lỗi giống hệt, hoàn toàn không liên
+quan tới đợt vá này (lỗi gửi email báo TOTP, không đụng gì tới phân quyền). Grep CSP chuẩn trên mọi file
+đã sửa — sạch.
+
+**Tài liệu**: cập nhật `public/js/module-nghiepvu.js` (mục "🔑 Phân Quyền", Hệ Thống) ghi rõ cơ chế mới.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.2 (2026-11): FIX NGHIÊM TRỌNG — Sửa quyền tay cho 1 user có thể bị ÂM THẦM XOÁ MẤT nếu Chức Danh khớp 1 Nhóm Phân Quyền
 

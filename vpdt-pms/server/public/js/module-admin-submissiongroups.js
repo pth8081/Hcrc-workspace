@@ -1055,6 +1055,20 @@ async function saveUser(e) {
         const confirmed = confirm(`⚠️ Tên đăng nhập đang đổi từ "${user.username}" thành "${username}" — người dùng này sẽ phải dùng tên đăng nhập MỚI ("${username}") ở lần đăng nhập tiếp theo, tên cũ sẽ KHÔNG còn dùng được nữa.\n\nBấm OK nếu bạn THẬT SỰ muốn đổi tên đăng nhập, hoặc Huỷ để sửa lại đúng tên cũ (nếu chỉ là gõ nhầm).`);
         if (!confirmed) return;
       }
+      // LỚP VÁ THỨ 2 (11/2026, RẤT NGHIÊM TRỌNG — người dùng báo "tôi dùng quyền admin, sửa quyền của
+      // tôi, add vào 1 nhóm quyền khác, thì bị mất quyền admin luôn, mấy lần rồi"): gốc rễ đã vá ở
+      // onUserPermGroupsChange() (module-admin-permgroups.js — populatePermsForm() vẽ lại cây theo quyền
+      // nền của Nhóm vừa tick, ÂM THẦM bỏ tick checkbox Admin nếu Nhóm không có admin:true). Lớp này là
+      // LƯỚI AN TOÀN BỔ SUNG, phòng mọi đường khác (hiện tại hoặc về sau) cũng có thể vô tình làm
+      // perms.admin rơi về false — tài khoản "admin" gốc đã được khoá cứng tuyệt đối (isProtectedAdminAccount
+      // ngay dưới), nhưng MỌI tài khoản admin KHÁC (dùng tên riêng, không phải "admin") không có lớp khoá
+      // đó. Hỏi xác nhận TƯỜNG MINH ngay khi phát hiện 1 tài khoản ĐANG LÀ ADMIN sắp MẤT quyền Admin sau
+      // khi lưu — admin có thể Huỷ để tích lại "👑 Quản Trị Viên (Admin)" trước khi lưu, hoặc OK nếu
+      // THẬT SỰ cố ý gỡ quyền Admin của tài khoản này (đổi chức vụ, nghỉ quản trị...).
+      if (user.username !== 'admin' && user.perms?.admin === true && !perms?.admin) {
+        const confirmed = confirm(`⚠️ Tài khoản "${user.username}" (${user.name}) ĐANG LÀ QUẢN TRỊ VIÊN (Admin) — sau khi lưu sẽ MẤT quyền Admin (có thể do vừa gán/đổi Nhóm Phân Quyền không có quyền Admin).\n\nBấm Huỷ để tích lại "👑 Quản Trị Viên (Admin)" nếu đây KHÔNG phải ý định của bạn, hoặc OK nếu bạn THẬT SỰ muốn gỡ quyền Admin của tài khoản này.`);
+        if (!confirmed) return;
+      }
       // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): 3 dòng ép quyền bên
       // dưới trước đây so theo `username` — tức tên MỚI vừa gõ trong form — nên chỉ cần đổi tên tài
       // khoản admin gốc ngay trong CÙNG lượt lưu là bỏ qua được hoàn toàn lớp khoá này (và ngược lại,
