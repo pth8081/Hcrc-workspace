@@ -13,6 +13,13 @@ const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessItPrice
 const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS, findMissingApproverStep } = require('../lib/workflowEngine');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { notifyUsers } = require('../lib/notifications');
+const { getShelfEffectiveUserFromReq } = require('../lib/shelfStockEdit');
+// 3 moduleKey Kiểm Soát Hàng Hóa HỖ TRỢ quyền shelfAnyStoreAccess ("🔑 Được Chọn Siêu Thị Bất Kỳ", xem
+// lib/shelfStockEdit.js getShelfEffectiveUser()) — route generic này dùng CHUNG cho ~45 module khác
+// nhau, nên CHỈ tính effectiveUser (dept override) cho ĐÚNG 3 key này, KHÔNG đụng tới freshUser thật
+// dùng cho mọi module khác (moduleAccessOk/assertPayloadFileUrlsOwnedByUser/log... vẫn luôn dùng
+// freshUser THẬT, chỉ validateAndPrepareCreate() ở builderFn bên dưới nhận effectiveUser).
+const SHELF_ANY_STORE_MODULE_KEYS = new Set(['shelfLocations', 'shelfRecords', 'shelfStockThresholds']);
 // Nhãn hiển thị cho việc CHẶN TẠO MỚI khi quy trình duyệt áp dụng cho hồ sơ có bước THIẾU người duyệt
 // hợp lệ (xem khối kiểm tra ở builderFn bên dưới) — CHỈ liệt kê module dept/tier-workflow tạo qua route
 // này mà resolveWfConfig() trả đúng khuôn {steps, approvers} (docs/carRegs/officeReqs/vppRegistrations/
@@ -208,6 +215,9 @@ router.post('/:module', async (req, res) => {
     // requireAuth đã tự tra cứu bản ghi user hiện tại từ DB (kể cả trạng thái active) và gắn sẵn vào
     // req.freshUser — không cần tự đọc lại DB thêm 1 lần nữa cho cùng mục đích.
     const freshUser = req.freshUser;
+    const effectiveUser = SHELF_ANY_STORE_MODULE_KEYS.has(moduleKey)
+      ? await getShelfEffectiveUserFromReq(req)
+      : freshUser;
 
     // Khối 0: chặn TẠO MỚI nếu module này đang bị tắt moduleAccess cho user — xem chú thích
     // COLLECTION_TO_MODULE_ACCESS_KEY ở đầu file.
@@ -329,7 +339,7 @@ router.post('/:module', async (req, res) => {
     // createForCollectionSerialized() (lib/recordStore.js) đều đã `await builderFn(...)` sẵn, an toàn
     // với builderFn async.
     const builderFn = async (list) => {
-      const record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
+      const record = validateAndPrepareCreate(moduleKey, req.body, effectiveUser, list, appData, trashedItems);
       await assertPayloadFileUrlsOwnedByUser(record, freshUser);
       // Chặn TẠO MỚI nếu BẤT KỲ bước nào (không chỉ bước 1) của quy trình duyệt áp dụng cho hồ sơ này
       // KHÔNG có ít nhất 1 người duyệt HỢP LỆ (đã loại tài khoản bị khoá/nghỉ việc) — xem

@@ -296,6 +296,7 @@ function collectPermsFromForm() {
     // Quản lý vùng độc lập mỗi người 1 danh sách siêu thị riêng, xem chú thích đầy đủ ở
     // renderShelfReportViewScopeCheckboxes() (module-admin.js).
     shelfReportView: scopeFromMultiSelectDropdown('pShelfReportViewAll', 'pShelfReportViewDeptContainer'),
+    shelfAnyStoreAccess: document.getElementById('pShelfAnyStoreAccess').checked,
     // Overhaul quyền Vận Hành > Siêu Thị: 4 quyền tách riêng cũ (operationEstimateCreate/
     // operationExecutionManage/operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN, không còn là
     // checkbox admin gán riêng được nữa — gộp vào luật "toàn quyền quản lý hồ sơ" của 2 quyền
@@ -447,6 +448,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pShelfLocationManage').checked = !!perms.shelfLocationManage;
   document.getElementById('pShelfReportViewAll').checked = !!perms.shelfReportView?.all;
   setShelfReportViewScopeCheckboxes(perms.shelfReportView?.depts);
+  document.getElementById('pShelfAnyStoreAccess').checked = !!perms.shelfAnyStoreAccess;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
   document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
   document.getElementById('pOperationOrderReportView').checked = !!perms.operationOrderReportView;

@@ -6888,9 +6888,20 @@ async function callWorkflowAction(moduleKey, id, action, payload) {
 // cho phòng ban bất kỳ). Trả về đúng bản ghi server đã lưu (id/creator là giá trị THẬT, không phải
 // giá trị client tạm tính).
 async function callCreateAction(moduleKey, payload) {
+  const headers = { 'Content-Type': 'application/json' };
+  // shelfAnyStoreAccess (11/2026) — 3 moduleKey Kiểm Soát Hàng Hóa duy nhất cần gửi kèm header chọn
+  // siêu thị override, xem getShelfStoreOverrideHeaderValue() (module-vanhanh.js). callCreateAction()
+  // dùng CHUNG cho ~45 module khác — CHỈ gắn header cho đúng 3 key này, không ảnh hưởng module khác.
+  if ((moduleKey === 'shelfLocations' || moduleKey === 'shelfRecords' || moduleKey === 'shelfStockThresholds')
+    && typeof getShelfStoreOverrideHeaderValue === 'function') {
+    const override = getShelfStoreOverrideHeaderValue();
+    // encodeURIComponent() — xem chú thích đầy đủ tại shelfFetch() (module-vanhanh.js): header HTTP
+    // không nhận thẳng được tên siêu thị tiếng Việt có dấu.
+    if (override) headers['X-Shelf-Store-Override'] = encodeURIComponent(override);
+  }
   const res = await fetch(`/api/create/${moduleKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload)
   });
   if (res.status === 401) {
@@ -10798,7 +10809,8 @@ function applyNavVisibility(user) {
   // riêng — setVanHanhSubTab() đã tự gác lại đúng Khối 0 khi bấm vào).
   document.getElementById('btnVanHanhShelfNav').classList.toggle('hidden',
     !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
-      || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll));
+      || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
+      || user.perms?.shelfAnyStoreAccess));
   updateVanHanhNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
@@ -12582,6 +12594,7 @@ function canAccessOperationModule(user) {
     // vào được tab Vận Hành để thấy sub-tab "Kiểm Soát Hàng Hóa".
     || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
     || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
+    || user.perms?.shelfAnyStoreAccess
     // LỖI ĐÃ VÁ (11/2026, người dùng báo "có người trong Nhóm Quyền Vận Hành thấy menu, có người không"):
     // operationOrderReceiptManageHO/Store ("🧾 Quyền Phê Duyệt Đặt Hàng HO/Siêu Thị" — xác nhận NHẬN
     // HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong, xem renderOperationOrderReceiptScopeCheckboxes()/
@@ -12634,7 +12647,7 @@ function canAccessOperationModule(user) {
 function canViewShelfReportClient(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage) return true;
+  if (user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage || user.perms?.shelfAnyStoreAccess) return true;
   const scope = user.perms?.shelfReportView !== undefined ? user.perms.shelfReportView
     : (user.perms?.shelfReportViewAll !== undefined ? { all: !!user.perms.shelfReportViewAll, depts: [] } : undefined);
   if (scope?.all) return true;

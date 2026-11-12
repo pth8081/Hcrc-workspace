@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**30.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.10 (2026-11): "📋 Kiểm Soát Hàng Hóa" — quyền đặc biệt "🔑 Được Chọn Siêu Thị Bất Kỳ"
+
+Người dùng yêu cầu: "cho tôi một cái phân quyền được phép chọn siêu thị... để không cần phải phân
+quyền theo người dùng vào siêu thị nào mới vào kiểm tra kệ và lấy giá ở siêu thị đấy. Thì tôi sẽ
+chọn siêu thị thì tự động sẽ nhảy sang siêu thị đấy". Đã xác nhận demo ảnh trước khi triển khai đầy đủ.
+
+**Quyền mới** `shelfAnyStoreAccess` ("🔑 Được Chọn Siêu Thị Bất Kỳ Để Thao Tác Kiểm Soát Hàng Hóa",
+Hệ Thống → Phân Quyền → Khối "22. Vận Hành", cạnh 3 quyền Kiểm Soát Hàng Hóa đã có) — KHÁC hẳn
+"👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" (chỉ XEM báo cáo nhiều siêu thị): quyền mới cho THAO TÁC (ghi/sửa)
+trực tiếp tại 1 siêu thị bất kỳ được chọn tạm, không cần đổi phân quyền theo từng siêu thị. Vẫn cần có
+quyền hành động tương ứng (VD "📷 Ghi Nhận Trên Kệ") mới thao tác được — quyền này chỉ đổi "siêu thị
+đang áp dụng".
+
+**Client** (`public/fragments/vanHanhSection.html`, `public/js/module-vanhanh.js`): người có quyền này
+(hoặc admin) thấy khối cam "📍 Chọn Siêu Thị Để Thao Tác" ngay trên tab "📋 Kiểm Soát Hàng Hóa" (thay cho
+dòng "📍 Siêu Thị: ..." cố định của người thường) — chọn xong hiện xác nhận xanh, MỌI sub-tab (Ghi
+Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm Tra Giá) tự áp dụng theo siêu thị vừa chọn.
+Mọi request liên quan gửi kèm header `X-Shelf-Store-Override` (percent-encode qua `encodeURIComponent()`
+— tên siêu thị tiếng Việt có dấu vượt quá ByteString của header HTTP, phải mã hoá mới gửi được).
+Offline-first (Ghi Nhận lúc mất mạng) CỐ Ý không áp dụng override — luôn gắn đúng siêu thị thật của máy,
+chặn hẳn việc lưu tạm nếu đang chọn siêu thị khác lúc mất mạng (tránh ghi nhận gán nhầm siêu thị).
+
+**Server**: `getShelfEffectiveUser()`/`getShelfEffectiveUserFromReq()` (`lib/shelfStockEdit.js`) — xác
+thực header NGHIÊM (thiếu quyền → 403, siêu thị không có trong danh mục → 400, giải mã lại
+`decodeURIComponent()`), trả về bản sao user chỉ đổi field `dept`. Áp dụng tại cả 10 route liên quan
+(`routes/shelfStock.js`) + 3 moduleKey Kiểm Soát Hàng Hóa qua route tạo mới chung (`routes/create.js`,
+scoped hẹp, không ảnh hưởng ~42 module khác dùng chung route này). `canViewShelfScopedItem()`
+(`lib/recordViewScope.js`) cho người có quyền này XEM được dữ liệu MỌI siêu thị (phục vụ việc chọn
+qua/xem lại), giống admin/`shelfReportView.all`.
+
+**Test mới**: `tests/test-shelf-any-store-access.js` (17 scenario, unit `getShelfEffectiveUser()` + end-
+to-end qua `routes/create.js` thật + `canViewShelfScopedItem()`) — phát hiện và vá ngay 1 lỗi thật trong
+lúc viết test: gửi tên siêu thị tiếng Việt thẳng qua header HTTP bị trình duyệt tự throw TypeError (ký
+tự Unicode vượt 255), phải `encodeURIComponent()`/`decodeURIComponent()` ở cả 2 đầu.
 
 ## v30.9 (2026-11): Quét mã vạch iPhone — vá nốt 4 khác biệt còn lại so với code mẫu "BRG Scan & Checkout"
 

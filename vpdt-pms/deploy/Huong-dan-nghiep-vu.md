@@ -3511,7 +3511,7 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   hệ thống, server tự tra "Mã Điểm" theo siêu thị của tài khoản đăng nhập —
   KHÔNG nhận mã này từ client, nên luôn thấy đúng tồn kho của chính siêu
   thị mình.
-- **3 quyền** (Hệ Thống → Phân Quyền → mục "22. Vận Hành", không thêm quyền
+- **4 quyền** (Hệ Thống → Phân Quyền → mục "22. Vận Hành", không thêm quyền
   mới cho Ngưỡng Tồn/Đối Chiếu — Đối Chiếu dùng lại quyền vào tab, Ngưỡng
   Tồn dùng lại "🗄️ Quản Lý Danh Mục Quầy Kệ" vì cùng vai trò Cửa hàng
   trưởng/Tổ trưởng, ĐỒNG THỜI cũng chính là Tầng 1 người nhận cảnh báo
@@ -3525,7 +3525,40 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   **nhiều Quản lý vùng độc lập cùng lúc**, mỗi người được admin gán 1 danh
   sách siêu thị riêng không chồng lấn (VD vùng Bắc 3 siêu thị, vùng Nam 5
   siêu thị khác); không có quyền này (hoặc để trống danh sách) thì Báo Cáo
-  tự lọc đúng 1 siêu thị của chính người đó.
+  tự lọc đúng 1 siêu thị của chính người đó. Và "🔑 Được Chọn Siêu Thị Bất
+  Kỳ Để Thao Tác Kiểm Soát Hàng Hóa" (`shelfAnyStoreAccess`, 11/2026) — xem
+  mục riêng ngay dưới.
+- **"🔑 Được Chọn Siêu Thị Bất Kỳ" (`shelfAnyStoreAccess`, 11/2026)** — quyền
+  ĐẶC BIỆT, theo yêu cầu người dùng "cho một cái phân quyền được phép chọn
+  siêu thị... không cần phải phân quyền theo người dùng vào siêu thị nào
+  mới vào kiểm tra kệ và lấy giá ở siêu thị đấy". KHÁC HẲN "👁️ Xem Báo Cáo
+  Kiểm Soát Hàng Hóa" ở trên (quyền đó CHỈ cho XEM báo cáo nhiều siêu thị,
+  không cho thao tác ghi/sửa): người có `shelfAnyStoreAccess` vào tab "📋
+  Kiểm Soát Hàng Hóa" sẽ thấy ngay 1 khối cam **"📍 Chọn Siêu Thị Để Thao
+  Tác"** NGAY TRÊN CÙNG (thay cho dòng "📍 Siêu Thị: ..." cố định của người
+  thường) — chọn 1 siêu thị bất kỳ trong danh mục (`DB.stores`) → hệ thống
+  hiện xác nhận xanh "Đang thao tác tại Siêu Thị: ..." → **mọi sub-tab bên
+  dưới** (Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm
+  Tra Giá) tự áp dụng NGAY cho siêu thị vừa chọn, không cần đăng xuất/đổi
+  tài khoản/đổi phân quyền theo từng siêu thị — đổi lại siêu thị khác bất
+  cứ lúc nào ở đúng ô đó. Admin luôn có sẵn năng lực này (bypass mọi quyền
+  chi tiết), không cần gán riêng.
+  - Quyền này CHỈ đổi "siêu thị đang áp dụng" — vẫn cần có quyền hành động
+    tương ứng (VD "📷 Ghi Nhận Trên Kệ"/"🗄️ Quản Lý Danh Mục Quầy Kệ") mới
+    thực hiện được hành động cụ thể tại siêu thị đã chọn; tự nó không cấp
+    thêm năng lực ghi/sửa nào.
+  - An toàn: server xác thực lại NGHIÊM qua header `X-Shelf-Store-Override`
+    ở mọi request liên quan — thiếu quyền mà vẫn cố gửi header này (sửa tay
+    qua devtools...) bị chặn 403 rõ ràng; chọn siêu thị không có trong danh
+    mục bị chặn 400. KHÔNG tin riêng việc ẩn/hiện ô chọn phía giao diện.
+  - Chỉ nên gán cho RẤT ÍT người thật sự cần kiểm tra/xử lý hộ nhiều siêu
+    thị (VD Ban điều hành đi kiểm tra đột xuất quầy kệ/giá bán của nhiều
+    siêu thị) — không phải quyền phổ biến cho nhân viên siêu thị thường.
+  - **Không áp dụng cho offline-first**: hàng đợi "Lưu Ghi Nhận" lúc mất
+    mạng luôn gắn theo ĐÚNG siêu thị thật của tài khoản (không theo siêu
+    thị đang chọn tạm) — nếu đang chọn siêu thị khác mà đúng lúc mất mạng
+    khi bấm Lưu, hệ thống báo lỗi và KHÔNG lưu tạm, để tránh ghi nhận bị
+    gán nhầm siêu thị khi có mạng lại.
 - **Báo cáo**: 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Soát Hàng Hóa" — xuất Excel
   dùng nút có sẵn trong màn Báo Cáo.
 - **Offline-first**: khi máy mất mạng, mỗi lượt "Lưu Ghi Nhận" lưu tạm trên

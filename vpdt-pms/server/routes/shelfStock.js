@@ -20,7 +20,11 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { withLockedRecordForCollection, getAllForCollection, deleteRecordForCollection } = require('../lib/recordStore');
 const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile } = require('../lib/shelfLocationImport');
 const { buildShelfThresholdTemplateWorkbook, parseShelfThresholdFile } = require('../lib/shelfThresholdImport');
-const { canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit } = require('../lib/shelfStockEdit');
+const {
+  canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits,
+  applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit,
+  getShelfEffectiveUserFromReq
+} = require('../lib/shelfStockEdit');
 const { normalizeShelfRecordPayload, findMatchingActiveShelfRecord, formatCreatedAt } = require('../lib/shelfRecordUpsert');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -44,7 +48,8 @@ router.patch('/locations/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const updated = await withLockedRecordForCollection('shelfLocations', id, (item) => applyShelfLocationEdit(item, req.body, req.freshUser));
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
+    const updated = await withLockedRecordForCollection('shelfLocations', id, (item) => applyShelfLocationEdit(item, req.body, effectiveUser));
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/locations/:id');
@@ -58,8 +63,9 @@ router.patch('/thresholds/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     const allUsers = (await getAppDataValue('users')) || [];
-    const updated = await withLockedRecordForCollection('shelfStockThresholds', id, (item) => applyShelfStockThresholdEdit(item, req.body, req.freshUser, allUsers));
+    const updated = await withLockedRecordForCollection('shelfStockThresholds', id, (item) => applyShelfStockThresholdEdit(item, req.body, effectiveUser, allUsers));
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/thresholds/:id');
@@ -87,15 +93,16 @@ router.post('/records/upsert', async (req, res) => {
     return res.status(403).json({ error: 'Bạn không có quyền ghi nhận trên kệ' });
   }
   try {
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     const shelfLocations = await getAllForCollection('shelfLocations');
-    const normalized = normalizeShelfRecordPayload(req.body, req.freshUser, { shelfLocations });
+    const normalized = normalizeShelfRecordPayload(req.body, effectiveUser, { shelfLocations });
     const clientRecordId = req.body?.clientRecordId ? String(req.body.clientRecordId).trim().slice(0, 100) : '';
     let resultItem = null;
     let wasUpdate = false;
     await withLockedAppDataValue('shelfRecords', (list) => {
       const arr = Array.isArray(list) ? list : [];
       const existing = findMatchingActiveShelfRecord(arr, {
-        dept: req.freshUser.dept, shelfLocationId: normalized.shelfLocationId,
+        dept: effectiveUser.dept, shelfLocationId: normalized.shelfLocationId,
         maHang: normalized.maHang, maVach: normalized.maVach, expiryDate: normalized.expiryDate
       });
       // lastScannedAt (KHÁC createdAt — createdAt giữ NGUYÊN thời điểm tạo lô lần đầu, phục vụ lịch sử)
@@ -117,7 +124,7 @@ router.post('/records/upsert', async (req, res) => {
         wasUpdate = true;
       } else {
         const rec = {
-          ...normalized, dept: req.freshUser.dept, id: Date.now(),
+          ...normalized, dept: effectiveUser.dept, id: Date.now(),
           createdAt: formatCreatedAt(new Date()), lastScannedAt,
           creator: req.freshUser.username, creatorName: req.freshUser.name,
           clientRecordId
@@ -148,8 +155,9 @@ router.patch('/records/:id', async (req, res) => {
     // lib/shelfStockEdit.js) — không thể suy ra trước ở đây dòng đang sửa có đang ở quantity 0 hay không
     // mà không khoá/đọc nó, nên đơn giản nhất và AN TOÀN nhất là luôn đọc (chi phí nhỏ, collection này
     // không lớn — đổi lại tránh bỏ sót dup-check ở đúng trường hợp hay gặp).
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     const allRecords = await getAllForCollection('shelfRecords');
-    const updated = await withLockedRecordForCollection('shelfRecords', id, (item) => applyShelfRecordEdit(item, req.body, req.freshUser, allRecords));
+    const updated = await withLockedRecordForCollection('shelfRecords', id, (item) => applyShelfRecordEdit(item, req.body, effectiveUser, allRecords));
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/records/:id');
@@ -170,9 +178,10 @@ router.delete('/records/:id', async (req, res) => {
     return res.status(403).json({ error: 'Bạn không có quyền truy cập module Vận Hành' });
   }
   try {
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     await deleteRecordForCollection('shelfRecords', id, (item) => {
-      if (!canManageShelfRecordEdits(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền sửa/xóa Ghi Nhận Trên Kệ (cần quyền quản lý Quầy Kệ)');
-      if (!req.freshUser.perms?.admin && item.dept !== req.freshUser.dept) {
+      if (!canManageShelfRecordEdits(effectiveUser)) throw new HttpError(403, 'Bạn không có quyền sửa/xóa Ghi Nhận Trên Kệ (cần quyền quản lý Quầy Kệ)');
+      if (!effectiveUser.perms?.admin && item.dept !== effectiveUser.dept) {
         throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
       }
     }, { username: req.freshUser.username, name: req.freshUser.name });
@@ -202,11 +211,12 @@ router.get('/system-inventory', async (req, res) => {
     if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
     }
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     await syncSystemInventory({ force: false });
     const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
-    const maDiem = storeExternalCodes[req.freshUser.dept];
+    const maDiem = storeExternalCodes[effectiveUser.dept];
     if (!maDiem) {
-      return res.status(404).json({ error: `Siêu thị "${req.freshUser.dept || ''}" chưa cấu hình Mã Điểm API Tồn Kho — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
+      return res.status(404).json({ error: `Siêu thị "${effectiveUser.dept || ''}" chưa cấu hình Mã Điểm API Tồn Kho — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
     }
     const cached = await getSystemInventoryForMaDiem(maDiem);
     if (!cached) {
@@ -234,7 +244,7 @@ router.get('/system-inventory', async (req, res) => {
       // lại rủi ro hiệu năng mà bản vá trước đó (dòng scope=recon gốc) đã né.
       const scannedMaHangEver = new Set();
       for (const r of allShelfRecords) {
-        if (!r || r.dept !== req.freshUser.dept || !r.maHang) continue;
+        if (!r || r.dept !== effectiveUser.dept || !r.maHang) continue;
         scannedMaHangEver.add(String(r.maHang));
         const scannedAt = parseVNDateTime(r.lastScannedAt || r.createdAt);
         if (!scannedAt) continue;
@@ -281,6 +291,7 @@ router.post('/price-check', async (req, res) => {
     if (!canManageShelfRecords(req.freshUser)) {
       throw new HttpError(403, 'Bạn không có quyền kiểm tra giá trên Kiểm Soát Hàng Hóa');
     }
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     const maHang = String(req.body?.maHang || '').trim();
     const maVach = String(req.body?.maVach || '').trim();
     if (!maHang && !maVach) throw new HttpError(400, 'Vui lòng nhập/quét Mã Hàng hoặc Mã Vạch cần kiểm tra giá');
@@ -290,9 +301,9 @@ router.post('/price-check', async (req, res) => {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API đối tác (liên hệ quản trị hệ thống)' });
     }
     const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
-    const maDiem = storeExternalCodes[req.freshUser.dept];
+    const maDiem = storeExternalCodes[effectiveUser.dept];
     if (!maDiem) {
-      return res.status(404).json({ error: `Siêu thị "${req.freshUser.dept || ''}" chưa cấu hình Mã Điểm API — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
+      return res.status(404).json({ error: `Siêu thị "${effectiveUser.dept || ''}" chưa cấu hình Mã Điểm API — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
     }
 
     const result = await checkPrice({ baseUrl: creds.baseUrl, apiKey: creds.apiKey, maHang: maHang || undefined, maVach: maHang ? undefined : (maVach || undefined), maDiem });
@@ -321,8 +332,9 @@ router.get('/recon-recipients', async (req, res) => {
     if (!canManageShelfStock(req.freshUser)) {
       return res.status(403).json({ error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu (cần quyền quản lý Quầy Kệ)' });
     }
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     const map = await getAppDataValue('shelfReconExtraRecipients') || {};
-    res.json({ extraRecipientUsernames: Array.isArray(map[req.freshUser.dept]) ? map[req.freshUser.dept] : [] });
+    res.json({ extraRecipientUsernames: Array.isArray(map[effectiveUser.dept]) ? map[effectiveUser.dept] : [] });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/recon-recipients');
   }
@@ -332,6 +344,7 @@ router.put('/recon-recipients', async (req, res) => {
     if (!canManageShelfStock(req.freshUser)) {
       return res.status(403).json({ error: 'Bạn không có quyền quản lý người nhận email Đối Chiếu (cần quyền quản lý Quầy Kệ)' });
     }
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
     // Chỉ chấp nhận username của user ACTIVE đang thuộc ĐÚNG siêu thị người gọi (server tự tra qua
     // dbo.AppData key "users", KHÔNG tin dept client gửi kèm) — cùng khuôn Tầng 4 "tự thêm thêm" đã áp
     // dụng ở shelfStockThresholds (lib/createValidation.js).
@@ -340,17 +353,17 @@ router.put('/recon-recipients', async (req, res) => {
     const allUsers = (await getAppDataValue('users')) || [];
     const invalidUsername = wantedUsernames.find(un => {
       const u = allUsers.find(x => x.username === un);
-      return !u || u.active === false || u.dept !== req.freshUser.dept;
+      return !u || u.active === false || u.dept !== effectiveUser.dept;
     });
     if (invalidUsername) {
       return res.status(400).json({ error: `Người nhận "${invalidUsername}" không hợp lệ (phải là nhân viên đang hoạt động của đúng siêu thị bạn)` });
     }
     const updated = await withLockedAppDataValue('shelfReconExtraRecipients', (current) => {
       const next = { ...(current || {}) };
-      next[req.freshUser.dept] = wantedUsernames;
+      next[effectiveUser.dept] = wantedUsernames;
       return next;
     });
-    res.json({ extraRecipientUsernames: updated[req.freshUser.dept] || [] });
+    res.json({ extraRecipientUsernames: updated[effectiveUser.dept] || [] });
   } catch (err) {
     sendCatchError(res, err, 'PUT /api/shelf-stock/recon-recipients');
   }
@@ -520,10 +533,11 @@ router.post('/locations/parse-import', uploadRateLimiter, (req, res) => {
       const check = await verifyFileSignature(buffer, ext);
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
+      const effectiveUser = await getShelfEffectiveUserFromReq(req);
       const parsedItems = await parseShelfLocationFile(buffer, ext);
       const allLocations = await getAllForCollection('shelfLocations');
       const existingCodesOwnDept = new Set(
-        (allLocations || []).filter(s => s.dept === req.freshUser.dept).map(s => s.code)
+        (allLocations || []).filter(s => s.dept === effectiveUser.dept).map(s => s.code)
       );
       const seenInFile = new Set();
       const items = [];
@@ -585,9 +599,10 @@ router.post('/thresholds/parse-import', uploadRateLimiter, (req, res) => {
       const check = await verifyFileSignature(buffer, ext);
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
+      const effectiveUser = await getShelfEffectiveUserFromReq(req);
       const parsedItems = await parseShelfThresholdFile(buffer, ext);
       const allThresholds = await getAllForCollection('shelfStockThresholds');
-      const existingOwnDept = (allThresholds || []).filter(t => t.dept === req.freshUser.dept && t.active !== false);
+      const existingOwnDept = (allThresholds || []).filter(t => t.dept === effectiveUser.dept && t.active !== false);
       const existingKeys = new Set(existingOwnDept.map(t =>
         `${String(t.maHang || '').trim()}|${String(t.maVach || '').trim().toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`
       ));
