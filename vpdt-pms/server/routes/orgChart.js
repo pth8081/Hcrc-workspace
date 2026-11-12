@@ -683,20 +683,49 @@ router.post('/versions/:id/validate', async (req, res) => {
 // users — xem giải thích ở lib/orgChart.js applyVersionInPlace()/computeManagerUsernameUpdates()).
 router.post('/versions/:id/apply', async (req, res) => {
   if (!requireManageTree(req, res)) return;
+  // force (11/2026, "🚨 Áp Dụng Cưỡng Chế" — theo yêu cầu người dùng: thay thế HÀNG LOẠT cơ cấu tổ chức,
+  // đi "Buộc Gỡ & Xoá" từng node 1 không khả thi ở quy mô cả khối Siêu Thị/Cửa Hàng) — ĐÚNG quyền riêng
+  // orgChartForceUnassignDelete đã dùng cho force-delete từng node (không có quyền mới), gác RIÊNG ở đây
+  // (không gộp vào requireManageTree ở trên) vì đây là hành động NẶNG hơn hẳn áp dụng thường.
+  const forceUnassignOccupied = req.body?.force === true;
+  if (forceUnassignOccupied && !canForceUnassignDelete(req.freshUser.perms)) {
+    return res.status(403).json({ error: 'Chỉ người có quyền "Buộc Gỡ & Xoá Vị Trí" mới áp dụng cưỡng chế được' });
+  }
   let appliedVersion;
+  let clearedProfiles = [];
+  let accountsNeedingManualFix = [];
   try {
     const usersSnapshot = (await getAppDataValue('users')) || []; // chỉ để validate — bước ghi managerUsername thật ở dưới tự đọc lại bản mới nhất trong khoá riêng
-    const employeeProfilesSnapshot = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
+    let employeeProfilesSnapshot = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     // keepEffectiveDate (11/2026, theo yêu cầu người dùng — "sửa định biên TRONG kỳ hiện tại") — xem
     // chú thích đầy đủ ở applyVersionInPlace() (lib/orgChart.js) cho điều kiện CHỈ cho phép khi bản nháp
     // này bắt nguồn TRỰC TIẾP từ đúng bản đang áp dụng (server tự kiểm tra lại, không tin cờ client gửi).
     const keepEffectiveDate = req.body?.keepEffectiveDate === true;
+    // Áp Dụng Cưỡng Chế — BƯỚC 1/2 (cùng mẫu force-delete từng node ở trên: khoá riêng "employeeProfiles"
+    // TRƯỚC, commit xong mới khoá "orgChartVersions" ở bước 2 bên dưới) — tự gỡ chức vụ Hồ Sơ Nhân Sự của
+    // MỌI người đang giữ các vị trí sắp bị xoá, RỒI MỚI gọi applyVersionInPlace() với cờ bỏ qua check.
+    if (forceUnassignOccupied) {
+      const versionSnapshot = orgChart.requireVersion((await getAppDataValue('orgChartVersions')) || [], Number(req.params.id));
+      const appliedSnapshot = orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []);
+      await withLockedAppDataValue('employeeProfiles', (profiles) => {
+        const result = orgChart.planForceApplyUnassignOccupiedPositions(versionSnapshot, appliedSnapshot, usersSnapshot, profiles, req.freshUser.username, req.freshUser.name);
+        clearedProfiles = result.clearedProfiles;
+        accountsNeedingManualFix = result.accountsNeedingManualFix;
+        return profiles;
+      });
+      employeeProfilesSnapshot = (await getAppDataValue('employeeProfiles')) || []; // đọc lại bản VỪA gỡ xong ở trên
+    }
     await withLockedAppDataValue('orgChartVersions', (list) => {
-      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username, employeeProfilesSnapshot, { keepEffectiveDate });
+      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username, employeeProfilesSnapshot, { keepEffectiveDate, forceUnassignOccupied });
       return list;
     });
   } catch (err) {
-    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof HttpError) {
+      if (clearedProfiles.length) {
+        return res.status(err.status).json({ error: `Đã gỡ chức vụ của ${clearedProfiles.length} hồ sơ nhưng áp dụng thất bại (${err.message}) — vui lòng tải lại trang và thử lại.`, clearedProfiles });
+      }
+      return res.status(err.status).json({ error: err.message });
+    }
     return sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/apply', 'Không thể áp dụng phiên bản');
   }
   let unresolved = [];
@@ -722,13 +751,14 @@ router.post('/versions/:id/apply', async (req, res) => {
   // xong), nêu rõ số user bị đổi managerUsername + ai thực hiện.
   insertSystemLog({
     username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
-    module: 'SYSTEM', actionType: 'ORGCHART_APPLY_VERSION',
+    module: 'SYSTEM', actionType: forceUnassignOccupied ? 'ORGCHART_APPLY_VERSION_FORCE' : 'ORGCHART_APPLY_VERSION',
     targetObject: `orgChartVersions#${appliedVersion?.id ?? req.params.id}`,
     description: `Áp dụng phiên bản Cơ Cấu Tổ Chức [${appliedVersion?.id ?? req.params.id}] — tự cập nhật Quản Lý Trực Tiếp cho ${changedCount} user`
-      + (unresolved.length ? ` (${unresolved.length} user KHÔNG suy ra được, cần kiểm tra thủ công)` : ''),
-    status: unresolved.length ? 'WARNING' : 'SUCCESS'
+      + (unresolved.length ? ` (${unresolved.length} user KHÔNG suy ra được, cần kiểm tra thủ công)` : '')
+      + (forceUnassignOccupied ? ` — CƯỠNG CHẾ: tự gỡ chức vụ ${clearedProfiles.length} hồ sơ Hồ Sơ Nhân Sự` + (accountsNeedingManualFix.length ? `, ${accountsNeedingManualFix.length} tài khoản đăng nhập cần tự sửa Chức Danh/Phòng Ban` : '') : ''),
+    status: (unresolved.length || accountsNeedingManualFix.length) ? 'WARNING' : 'SUCCESS'
   }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (áp dụng Cơ Cấu Tổ Chức):', e.message));
-  res.json({ ok: true, version: appliedVersion, unresolvedManagerUsers: unresolved });
+  res.json({ ok: true, version: appliedVersion, unresolvedManagerUsers: unresolved, clearedProfiles, accountsNeedingManualFix });
 });
 
 // POST /api/org-chart/recompute-manager-usernames — Đợt 4 (vá gap #2 Phần A/B): đồng bộ lại
