@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**30.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.15 (2026-11): Sửa BUG NGHIÊM TRỌNG — lưu phân quyền xong ấn F5 thấy mất thay đổi
+
+Người dùng báo cáo "hay bị": lưu phân quyền (cả màn "Sửa 1 Người Dùng" lẫn "Nhóm Phân Quyền") xong, ấn
+F5 thấy thay đổi vừa lưu MẤT LUÔN.
+
+**Nguyên nhân (đã xác nhận với người dùng: server chạy `pm2 start ecosystem.config.js`, CLUSTER MODE
+nhiều tiến trình Node song song, `instances: 'max'`)**: `getAllAppDataWithVersionsCached()`
+(`lib/appData.js`, dùng cho `GET /api/data` — nơi F5 tải lại dữ liệu) trước đây chỉ dựa vào TTL (3 giây)
++ thông báo xoá cache qua `process.send()` giữa các tiến trình PM2 cluster. Request F5 có thể bị định
+tuyến sang 1 tiến trình KHÁC với tiến trình vừa xử lý lượt lưu — nếu thông báo đó (cơ chế BEST-EFFORT,
+không đảm bảo 100% luôn tới kịp mọi tiến trình) tới trễ/không tới, tiến trình đó vẫn trả về cache CŨ
+(tối đa 3 giây) dù CSDL đã có dữ liệu mới. Lỗi xảy ra ở CẢ 2 màn báo cáo vì cả "Sửa 1 Người Dùng"
+(patch-mode, v30.12) lẫn "Nhóm Phân Quyền" đều ghi vào cùng bảng `dbo.AppData` mà hàm này đọc cache
+chung cho TOÀN BỘ bảng, không phân biệt theo collection.
+
+**Đã vá**: hàm này giờ KHÔNG còn "đoán" qua TTL/thông báo liên tiến trình nữa — mỗi lần gọi đều tự xác
+nhận lại với CSDL qua 1 câu truy vấn CỰC RẺ (`SELECT MAX(UpdatedAt) FROM dbo.AppData`, chỉ đọc 1 giá trị
+scalar, không kéo blob JSON nào) trước khi quyết định dùng cache hay đọc lại toàn bộ — đúng/sai không
+còn phụ thuộc tiến trình nào xử lý request hay cơ chế thông báo liên tiến trình có hoạt động hay không,
+dù chạy bao nhiêu tiến trình PM2 cũng luôn chính xác. Cache `getAppDataValueCached()` dùng cho
+`requireAuth()` (kiểm tra tài khoản còn active) giữ nguyên cơ chế TTL cũ — đây là tầng xác thực đăng
+nhập (chấp nhận trễ tối đa vài giây theo thiết kế từ trước), không phải dữ liệu hiển thị như GET
+/api/data nên không thuộc phạm vi lỗi người dùng báo cáo.
+
+**Test**: `tests/test-appdata-allcache-cross-process-staleness.js` (mới — mô phỏng 2 "tiến trình" độc
+lập dùng chung 1 CSDL giả lập, CỐ Ý tắt hẳn `process.send()`/`process.on('message')` để xác nhận bản vá
+KHÔNG còn phụ thuộc cơ chế IPC đó; đã xác nhận test này THẬT SỰ fail nếu bỏ bản vá) + chạy lại
+`tests/test-inventory-recon.js`, `tests/test-shelf-defaults-seed.js`, `tests/test-user-save-patch-mode.js`
+và toàn bộ 54 file test khác có mount `routes/data.js` — 53/54 pass (1 fail còn lại,
+`test-username-case-insensitive.js`, đã xác nhận lỗi môi trường sandbox không có SQL Server thật, KHÔNG
+liên quan tới thay đổi này — xác nhận bằng cách tạm bỏ bản vá rồi chạy lại, vẫn fail y hệt).
 
 ## v30.14 (2026-11): Xác nhận quyền Onboarding/Offboarding đã tách riêng hoàn toàn (không đổi code sản phẩm)
 
