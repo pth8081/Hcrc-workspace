@@ -48,11 +48,25 @@ function currentEditingUserGroupIds() {
 // Gán được NHIỀU nhóm phân quyền cùng lúc cho 1 người (trước đây chỉ 1 nhóm duy nhất) — quyền nền hiển
 // thị lên cây quyền là quyền GỘP của TẤT CẢ nhóm đang tick (xem mergeGroupsBasePerms()), permOverrides
 // vẫn tính là phần khác biệt so với quyền gộp này (xem readUserFormState()).
+//
+// LỖI THẬT RẤT NGHIÊM TRỌNG đã vá (11/2026, người dùng báo "tôi dùng quyền admin, tôi sửa quyền của tôi,
+// add tôi vào 1 nhóm quyền khác, thì bị mất quyền admin luôn — mấy lần tôi bị rồi"): populatePermsForm()
+// VẼ LẠI TOÀN BỘ cây checkbox theo ĐÚNG quyền nền của (các) nhóm vừa tick — bao gồm cả checkbox "👑 Quản
+// Trị Viên (Admin)" (#pAdmin). Nhóm Phân Quyền hầu như KHÔNG BAO GIỜ có admin:true trong quyền nền, nên
+// MỖI LẦN tick thêm 1 Nhóm Phân Quyền cho 1 tài khoản ĐANG LÀ ADMIN (không phải tài khoản "admin" gốc —
+// tài khoản đó đã được khoá cứng ở setAdminAccountPermsLocked(), xem editUser()), checkbox Admin bị ÂM
+// THẦM bỏ tick ngay trên form — nếu admin không để ý tích lại trước khi bấm "Lưu", quyền Admin biến mất
+// hoàn toàn khỏi tài khoản đó sau khi lưu, không có cảnh báo nào (xem thêm lớp vá thứ 2 ở saveUser(),
+// module-admin-submissiongroups.js — hỏi xác nhận rõ ràng nếu phát hiện quyền Admin sắp bị gỡ, phòng hờ
+// mọi đường khác cũng có thể dẫn tới tình huống này). Giữ NGUYÊN checkbox Admin đúng trạng thái TRƯỚC khi
+// vẽ lại cây — gán quyền theo Nhóm KHÔNG BAO GIỜ được phép tự ý gỡ quyền Admin đã có từ trước.
 function onUserPermGroupsChange() {
   const groupIds = currentEditingUserGroupIds();
   if (groupIds.length) {
     const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+    const wasAdminChecked = document.getElementById('pAdmin').checked;
     populatePermsForm(mergeGroupsBasePerms(groups.map(g => g.perms)));
+    if (wasAdminChecked) document.getElementById('pAdmin').checked = true;
     updatePermGroupNote(true);
   } else {
     updatePermGroupNote(false);

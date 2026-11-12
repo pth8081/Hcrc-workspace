@@ -795,6 +795,83 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (h3) LỖI THẬT RẤT NGHIÊM TRỌNG đã vá (11/2026, người dùng báo TRỰC TIẾP, "mấy lần tôi bị rồi" — "tôi
+  //     dùng quyền admin, tôi sửa quyền của tôi, add tôi vào 1 nhóm quyền khác, thì nó bị mất quyền admin
+  //     luôn"): onUserPermGroupsChange() gọi populatePermsForm(mergeGroupsBasePerms(...)) để vẽ lại TOÀN
+  //     BỘ cây checkbox theo quyền nền của (các) Nhóm vừa tick — bao gồm CẢ checkbox "👑 Quản Trị Viên
+  //     (Admin)" (#pAdmin). Nhóm Phân Quyền hầu như không bao giờ có admin:true trong quyền nền, nên MỖI
+  //     LẦN admin (không phải tài khoản "admin" gốc — tài khoản đó bị khoá cứng ở setAdminAccountPermsLocked())
+  //     tick thêm 1 Nhóm cho CHÍNH MÌNH hoặc người khác đang là admin, checkbox Admin bị ÂM THẦM bỏ tick
+  //     ngay trên form — bấm Lưu mà không để ý là mất quyền Admin vĩnh viễn, không cảnh báo gì.
+  //     2 lớp vá: (1) onUserPermGroupsChange() (module-admin-permgroups.js) giữ nguyên trạng thái checkbox
+  //     Admin trước khi vẽ lại cây; (2) saveUser() (module-admin-submissiongroups.js) hỏi xác nhận tường
+  //     minh nếu PHÁT HIỆN 1 tài khoản đang là Admin sắp mất quyền Admin sau khi lưu — phòng mọi đường
+  //     khác (VD admin tự tay bỏ tick) cũng dẫn tới tình huống này.
+  // ==========================================================================
+  await scenario('(h3) tick thêm 1 Nhóm Phân Quyền cho tài khoản ĐANG LÀ ADMIN KHÔNG được tự ý gỡ quyền Admin', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups.push({
+        id: 'grp_no_admin', name: 'Nhóm Vận Hành (không có Admin)', description: '', jobTitles: [],
+        perms: { operationRecordViewAll: true }
+      });
+      const adminUser2 = {
+        id: 9004, username: 'quantri2', name: 'Quản Trị Viên Thứ 2', email: 'qt2@hcrc.local', phone: '0988888888',
+        posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, secondaryPositions: [],
+        groupIds: [], permOverrides: null, perms: { admin: true }, active: true,
+      };
+      DB.users.push(adminUser2);
+
+      editUser(adminUser2.id);
+      const adminCheckedRightAfterOpen = document.getElementById('pAdmin').checked;
+
+      // Tick thêm 1 Nhóm Phân Quyền (không có admin:true) cho CHÍNH tài khoản admin này — đúng kịch bản
+      // người dùng báo lỗi — qua dispatchEvent('change') THẬT (kích hoạt onUserPermGroupsChange() thật,
+      // không gọi thẳng hàm để không bỏ sót nếu dây nối data-op-change có vấn đề).
+      const cb = document.querySelector(`#uPermGroupsChecklist input[value="grp_no_admin"]`);
+      cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true }));
+      const adminCheckedAfterTickingGroup = document.getElementById('pAdmin').checked;
+
+      // ---- Nhánh 1: admin VÔ TÌNH để checkbox Admin bị bỏ tick (VD do 1 đường khác chưa lường tới) rồi
+      // bấm Lưu -> lớp vá thứ 2 (confirm) phải HỎI XÁC NHẬN, và nếu admin bấm "Huỷ" thì KHÔNG được lưu.
+      document.getElementById('pAdmin').checked = false;
+      let confirmMessageSeen = null;
+      const origConfirm = window.confirm;
+      window.confirm = (msg) => { confirmMessageSeen = msg; return false; }; // "Huỷ"
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault() {} });
+      const userAfterCancelledSave = DB.users.find(u => u.id === adminUser2.id);
+      const cancelledSaveKeepsAdmin = userAfterCancelledSave?.perms?.admin === true;
+      const noSavedAlertOnCancel = window.__alerts.length === 0;
+
+      // ---- Nhánh 2: admin bấm "OK" xác nhận THẬT SỰ muốn gỡ quyền Admin -> PHẢI cho lưu (không khoá
+      // cứng mọi trường hợp, chỉ bắt buộc xác nhận rõ ràng).
+      window.confirm = () => true; // "OK"
+      await saveUser({ preventDefault() {} });
+      const userAfterConfirmedSave = DB.users.find(u => u.id === adminUser2.id);
+      const confirmedSaveRemovesAdmin = userAfterConfirmedSave?.perms?.admin !== true;
+
+      window.confirm = origConfirm;
+      DB.users = DB.users.filter(u => u.id !== adminUser2.id);
+      DB.permGroups = DB.permGroups.filter(g => g.id !== 'grp_no_admin');
+
+      return {
+        adminCheckedRightAfterOpen, adminCheckedAfterTickingGroup,
+        confirmMessageSeen, cancelledSaveKeepsAdmin, noSavedAlertOnCancel, confirmedSaveRemovesAdmin,
+      };
+    });
+    record('(h3) checkbox Admin đang tích đúng khi vừa mở form Sửa',
+      r.adminCheckedRightAfterOpen === true, JSON.stringify(r));
+    record('(h3) LỚP VÁ 1: tick thêm 1 Nhóm Phân Quyền (không có admin:true) KHÔNG còn tự ý bỏ tick checkbox Admin',
+      r.adminCheckedAfterTickingGroup === true, JSON.stringify(r));
+    record('(h3) LỚP VÁ 2: bấm Lưu khi checkbox Admin đang bị bỏ tích -> PHẢI hỏi xác nhận, nhắc rõ "Admin"/"Quản Trị Viên"',
+      typeof r.confirmMessageSeen === 'string' && /admin|quản trị viên/i.test(r.confirmMessageSeen), JSON.stringify(r));
+    record('(h3) Bấm "Huỷ" ở hộp xác nhận -> KHÔNG lưu, tài khoản VẪN còn quyền Admin',
+      r.cancelledSaveKeepsAdmin && r.noSavedAlertOnCancel, JSON.stringify(r));
+    record('(h3) Bấm "OK" xác nhận thật sự muốn gỡ -> vẫn cho lưu bình thường (không khoá cứng mọi trường hợp)',
+      r.confirmedSaveRemovesAdmin, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (i)+(j) 409 "vừa bị người khác thay đổi" ở "users" — cơ chế tự động refetch + áp lại + thử lưu lại 1
   //     lần (retryUsersSaveAfterConflict()/syncStorageOnce(), core.js). "Server" giả lập ngay trong
   //     window.fetch để kiểm soát chính xác kịch bản 2 người viết đồng thời — mirror kịch bản

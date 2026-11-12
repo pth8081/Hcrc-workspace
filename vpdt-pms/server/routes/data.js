@@ -2376,6 +2376,33 @@ router.post('/:key', async (req, res) => {
       oldUsersForProfileCascade = (await getAppDataValue('users')) || [];
     }
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
+    // Nhật ký "mất quyền Admin" (11/2026, RẤT NGHIÊM TRỌNG — người dùng báo "sửa quyền của tôi, add vào
+    // 1 nhóm quyền khác, bị mất quyền admin luôn, mấy lần rồi"): gốc rễ đã vá ở client
+    // (onUserPermGroupsChange()/module-admin-permgroups.js + xác nhận tường minh ở saveUser()/
+    // module-admin-submissiongroups.js) — đây là LƯỚI AN TOÀN cuối cùng, ghi lại dấu vết BẤT KỲ tài
+    // khoản nào (trừ "admin" gốc, đã khoá cứng tuyệt đối ở prepareUsersForSave()) chuyển từ
+    // perms.admin=true sang false sau 1 lượt lưu "users", dù qua đường nào (form Sửa, Nhập Excel, request
+    // tự soạn...) — để admin còn lại tra lại được NGAY ở "🔍 Audit Người Dùng"/Nhật Ký Hệ Thống thay vì
+    // chỉ phát hiện khi đã quá muộn (tự khoá mất quyền của chính mình).
+    if (key === 'users' && Array.isArray(value)) {
+      const oldAdminById = new Map(oldUsersForProfileCascade.map(u => [u.id, !!u.perms?.admin]));
+      value.forEach(u => {
+        if (u.username === 'admin') return;
+        const wasAdmin = oldAdminById.get(u.id);
+        if (wasAdmin && !u.perms?.admin) {
+          insertSystemLog({
+            username: req.freshUser?.username || req.user?.username,
+            fullName: req.freshUser?.name || req.user?.username,
+            ipAddress: req.ip,
+            module: 'CONFIG',
+            actionType: 'ADMIN_PERMS_REMOVED',
+            targetObject: u.username,
+            description: `Tài khoản "${u.username}" (${u.name || ''}) bị GỠ quyền Quản Trị Viên (Admin) — người thao tác: "${req.user.username}"`,
+            status: 'WARNING'
+          }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (gỡ quyền Admin):', e.message));
+        }
+      });
+    }
     // permGroups.jobTitles[] (11/2026, "phân quyền theo chức danh") — sanitize NHẸ hình dạng (mảng
     // chuỗi, cùng mức sanitizeSecondaryPositions()/sanitizeExtraKeys() ở trên) tại điểm ghi DUY NHẤT,
     // không cần đối chiếu whitelist đúng chức danh thật đang có trong danh mục (chức danh lạ/đã đổi tên
