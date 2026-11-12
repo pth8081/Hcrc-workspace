@@ -822,9 +822,14 @@ function renderShelfReportTable() {
   const tbody = document.getElementById('shelfReportBody');
   const thead = document.getElementById('shelfReportTableHead');
   if (!tbody || !thead) return;
-  const isMulti = shelfReportIsMultiStore();
-  const storeTh = isMulti ? '<th class="border p-2">Siêu Thị</th>' : '';
-  thead.innerHTML = storeTh + `
+  // Cột "Siêu Thị" (11/2026, theo yêu cầu người dùng "báo cáo này cho tôi thêm cột siêu thị") — LUÔN
+  // hiện, KHÔNG còn điều kiện theo shelfReportIsMultiStore() nữa (trước đây chỉ hiện khi dữ liệu có từ
+  // 2 siêu thị trở lên) — để biết chắc chắn đang xem đúng siêu thị nào ở MỌI lúc, đặc biệt hữu ích khi
+  // dùng quyền "🔑 Được Chọn Siêu Thị Bất Kỳ" (shelfAnyStoreAccess). CHỈ đổi ở tab "📑 Báo Cáo" này — bộ
+  // lọc "Siêu Thị" (shelfReportStoreFilterWrap) + dòng header "📍 Đang xem báo cáo tổng hợp..." vẫn GIỮ
+  // NGUYÊN điều kiện multi-store cũ (populateShelfReportStoreFilter()), không đụng tới.
+  thead.innerHTML = `
+    <th class="border p-2">Siêu Thị</th>
     <th class="border p-2">Mã Hàng</th>
     <th class="border p-2">Tên Hàng</th>
     <th class="border p-2">Quầy Kệ</th>
@@ -835,7 +840,7 @@ function renderShelfReportTable() {
     <th class="border p-2">Người Ghi Nhận</th>
     <th class="border p-2">Cập Nhật Lúc</th>`;
   const items = shelfReportFilteredItems();
-  const colCount = (isMulti ? 1 : 0) + 9;
+  const colCount = 10;
   tbody.innerHTML = items.length ? items.map(r => {
     const soldOut = Number(r.quantity) <= 0;
     const statusBadge = soldOut
@@ -844,7 +849,7 @@ function renderShelfReportTable() {
     const sysStock = shelfReportSysStockFor(r);
     return `
     <tr class="border-b ${soldOut ? 'opacity-60' : ''}">
-      ${isMulti ? `<td class="p-2">${escapeHtml(r.dept || '')}</td>` : ''}
+      <td class="p-2">${escapeHtml(r.dept || '')}</td>
       <td class="p-2">${escapeHtml(r.maHang || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
@@ -859,10 +864,11 @@ function renderShelfReportTable() {
 }
 
 function exportShelfReportExcel() {
-  const isMulti = shelfReportIsMultiStore();
   const items = shelfReportFilteredItems();
+  // Cột "Siêu Thị" LUÔN xuất ra Excel (khớp đúng bảng trên màn hình — xem chú thích tại
+  // renderShelfReportTable()), không còn điều kiện theo shelfReportIsMultiStore() nữa.
   const columns = [
-    ...(isMulti ? [{ header: 'Siêu Thị', key: 'dept', width: 20 }] : []),
+    { header: 'Siêu Thị', key: 'dept', width: 20 },
     { header: 'Mã Hàng', key: 'maHang', width: 14 },
     { header: 'Tên Hàng', key: 'productName', width: 30 },
     { header: 'Quầy Kệ', key: 'shelfLocation', width: 22 },
