@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**30.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.7 (2026-11): Quét mã vạch iPhone (Ghi Nhận + Kiểm Tra Giá) — tối ưu lần 3, đổi sang pipeline cấp thấp của ZXing
+
+Theo phản hồi người dùng sau khi thử lại v30.6 trên iPhone thật: "Tôi vẫn chưa quét mã bằng iPhone
+được." Người dùng gửi kèm 1 bộ tài liệu + code mẫu (`iphone-scanner.js`, `README.md`, `demo.html`,
+cùng `zxing.min.js` — xác nhận TRÙNG KHỚP 100% với bản đang vendor trong repo này) rút trực tiếp từ
+1 ứng dụng nội bộ KHÁC do chính người dùng phát triển ("BRG Scan & Checkout") — ứng dụng đó ĐÃ xác
+nhận quét được thật trên iPhone.
+
+**Nguyên nhân nghi vấn**: v30.6 đã co nhỏ khung hình + giới hạn định dạng + TRY_HARDER (đúng thông số
+BRG mô tả) nhưng vẫn gọi qua lớp `ZXing.BrowserMultiFormatReader` (lớp bọc cấp cao, tự quản lý 1 canvas
+nội bộ + logic nhận diện nguồn ảnh riêng) — khác với code mẫu BRG gọi THẲNG lớp giải mã cấp thấp nhất.
+Nghi vấn lớp bọc cấp cao này xử lý khác đi trên 1 số bản Safari iOS.
+
+**Đã làm** (`public/js/module-vanhanh.js`):
+1. Bỏ hẳn `BrowserMultiFormatReader` — dùng thẳng `ZXing.MultiFormatReader` (cấp thấp nhất) +
+   `setHints()`, rồi tự dựng `HTMLCanvasElementLuminanceSource` (ảnh xám từ canvas) →
+   `HybridBinarizer` (nhị phân hoá thích nghi) → `BinaryBitmap` → `reader.decode(bitmap)` — đúng
+   từng bước code mẫu BRG, không qua lớp bọc nào khác.
+2. Vòng lặp đổi từ `setInterval()` thuần sang `setTimeout(...)` rồi mới `requestAnimationFrame(...)`
+   (khớp đúng mẫu BRG) + thêm điều kiện `video.readyState >= 2` (không chỉ `videoWidth`).
+3. `facingMode` đổi từ chuỗi trần `'environment'` sang `{ ideal: 'environment' }` (object) — đúng
+   khuôn constraint BRG dùng; thêm `audio: false` tường minh.
+4. Gán lại `playsinline`/`webkit-playsinline`/`muted` qua JS ngay sau khi gắn `srcObject` (phòng vệ bổ
+   sung, cạnh thuộc tính tĩnh đã có sẵn trên thẻ `<video>`).
+
+**Test**: viết lại `tests/test-shelf-barcode-zxing-hints.js` (9/9) cho đúng pipeline cấp thấp mới (xác
+nhận `MultiFormatReader.decode()` được gọi với 1 `BinaryBitmap` dựng từ canvas đã co nhỏ đúng 960px,
+không còn qua `BrowserMultiFormatReader`). Chạy lại toàn bộ 8 file test Kiểm Soát Hàng Hóa liên quan
+(torch/vibrate, price-check, mã vạch, ghi nhận, sub-tab, mobile/offline, suffix-match) — pass hết,
+không regression. Grep CSP chuẩn — sạch.
+
+**Lưu ý**: vẫn CHƯA thể tự xác nhận trên iPhone thật trong phiên làm việc này (không có thiết bị thật) —
+đây là lần thứ 3 vá theo đúng hướng BRG mô tả, độ tin cậy cao hơn hẳn 2 lần trước (bám sát 100% code mẫu
+ĐÃ xác nhận hoạt động thật, không còn tự suy luận cơ chế ZXing), nhưng người dùng vẫn cần tự thử lại trên
+máy thật sau khi deploy để xác nhận dứt điểm.
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.6 (2026-11): Quét mã vạch iPhone (Ghi Nhận + Kiểm Tra Giá) — tối ưu lần 2, theo cơ chế "BRG Scan & Checkout"
 

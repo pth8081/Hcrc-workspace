@@ -15,14 +15,23 @@
 //   2. Danh sách định dạng: bỏ QR_CODE (QR bên BRG chỉ dành cho quét mã giỏ hàng, KHÔNG áp dụng cho Mã
 //      Vạch/Mã Hàng ở đây), thêm CODE_39 + ITF (1 số mã vạch thùng/sỉ NCC dùng 2 định dạng này).
 //
-// Test này xác nhận ĐÚNG hints được truyền vào constructor BrowserMultiFormatReader() + ĐÚNG luồng vẽ-canvas-
-// rồi-decode() — dùng THẬT public/vendor/zxing/zxing.min.js (không mock enum, tránh lệch giá trị thật) +
-// static server thật. Giả lập camera: KHÔNG mở camera thật (tránh getUserMedia()/video.play() treo trong môi
-// trường không có camera phần cứng) — gọi THẲNG runShelfBarcodeZxingLoop() với 1 <video> có sẵn trong DOM,
-// tự gán videoWidth/videoHeight giả (video thật không có stream) + override CanvasRenderingContext2D.
-// prototype.drawImage thành no-op (vẽ video rỗng lên canvas sẽ không có pixel thật/có thể ném lỗi tuỳ trình
-// duyệt, không liên quan tới điều cần kiểm ở đây — chỉ cần xác nhận reader.decode() được gọi với 1
-// HTMLCanvasElement đã co nhỏ đúng kích thước).
+// CẬP NHẬT LẦN 3 (11/2026, người dùng gửi kèm tài liệu + code mẫu rút trực tiếp từ ứng dụng nội bộ KHÁC
+// của chính người dùng — "BRG Scan & Checkout" — ĐÃ xác nhận quét được thật trên iPhone, sau khi xác nhận
+// bản vá lần 2 ở trên VẪN KHÔNG quét được trên iPhone thật): bỏ hẳn lớp `BrowserMultiFormatReader` (lớp
+// bọc cấp cao của ZXing) — gọi THẲNG lớp giải mã cấp thấp `MultiFormatReader` + tự dựng
+// `HTMLCanvasElementLuminanceSource`/`BinaryBitmap`/`HybridBinarizer` thủ công, đúng từng bước BRG dùng.
+// Vòng lặp cũng đổi từ setInterval() thuần sang setTimeout(...) rồi mới requestAnimationFrame(...) (khớp
+// đúng mẫu BRG), và thêm điều kiện video.readyState >= 2 (không chỉ videoWidth).
+//
+// Test này xác nhận ĐÚNG hints được set qua setHints() + ĐÚNG luồng vẽ-canvas-rồi-decode() qua
+// MultiFormatReader/HTMLCanvasElementLuminanceSource/BinaryBitmap/HybridBinarizer — dùng THẬT public/
+// vendor/zxing/zxing.min.js (không mock enum, tránh lệch giá trị thật) + static server thật. Giả lập
+// camera: KHÔNG mở camera thật (tránh getUserMedia()/video.play() treo trong môi trường không có camera
+// phần cứng) — gọi THẲNG runShelfBarcodeZxingLoop() với 1 <video> có sẵn trong DOM, tự gán
+// videoWidth/videoHeight/readyState giả (video thật không có stream) + override
+// CanvasRenderingContext2D.prototype.drawImage thành no-op (vẽ video rỗng lên canvas sẽ không có pixel
+// thật/có thể ném lỗi tuỳ trình duyệt, không liên quan tới điều cần kiểm ở đây — chỉ cần xác nhận
+// reader.decode() được gọi với 1 BinaryBitmap dựng từ canvas đã co nhỏ đúng kích thước).
 //
 // Chạy: node server/tests/test-shelf-barcode-zxing-hints.js
 'use strict';
@@ -89,30 +98,33 @@ async function main() {
     let capturedHints = null;
     let decodeCalls = [];
 
-    // Video thật trong DOM không có stream (videoWidth/videoHeight = 0 mặc định) — gán giả 2 thuộc tính
-    // readonly này để vòng lặp (kiểm tra !video.videoWidth) không bị bỏ qua ngay từ đầu.
+    // Video thật trong DOM không có stream (videoWidth/videoHeight = 0, readyState = 0 mặc định) — gán
+    // giả các thuộc tính readonly này để vòng lặp (kiểm tra readyState >= 2 && videoWidth) không bị bỏ
+    // qua ngay từ đầu.
     const video = document.getElementById('shelfBarcodeVideo');
     Object.defineProperty(video, 'videoWidth', { value: 1280, configurable: true });
     Object.defineProperty(video, 'videoHeight', { value: 720, configurable: true });
+    Object.defineProperty(video, 'readyState', { value: 2, configurable: true }); // HAVE_CURRENT_DATA
     // drawImage(video,...) thật có thể ném lỗi/không vẽ gì vì video không có khung hình thật — không liên
     // quan tới điều cần kiểm (hints + kích thước canvas đưa vào decode()) nên vô hiệu hoá no-op.
     const origDrawImage = CanvasRenderingContext2D.prototype.drawImage;
     CanvasRenderingContext2D.prototype.drawImage = function () { /* no-op cho môi trường test */ };
 
-    const RealReader = window.ZXing.BrowserMultiFormatReader;
-    window.ZXing.BrowserMultiFormatReader = class extends RealReader {
-      constructor(hints) {
-        super(hints);
+    const RealReader = window.ZXing.MultiFormatReader;
+    window.ZXing.MultiFormatReader = class extends RealReader {
+      setHints(hints) {
         capturedHints = hints;
+        return super.setHints(hints);
       }
-      decode(source) {
+      decode(bitmap) {
         decodeCalls.push({
-          isCanvas: source instanceof HTMLCanvasElement,
-          width: source && source.width,
-          height: source && source.height
+          isBinaryBitmap: bitmap instanceof window.ZXing.BinaryBitmap,
+          width: bitmap && typeof bitmap.getWidth === 'function' ? bitmap.getWidth() : null,
+          height: bitmap && typeof bitmap.getHeight === 'function' ? bitmap.getHeight() : null
         });
-        // Lượt gọi ĐẦU TIÊN mô phỏng quét thành công — các lượt tiếp theo (nếu interval còn sống) không
-        // nên xảy ra vì onShelfBarcodeDecoded() sẽ đóng modal + clearInterval ngay sau lượt thành công.
+        // Lượt gọi ĐẦU TIÊN mô phỏng quét thành công — các lượt tiếp theo (nếu vòng lặp còn sống) không
+        // nên xảy ra vì onShelfBarcodeDecoded() sẽ đóng modal (shelfBarcodeStream=null) ngay sau đó, loop
+        // tự dừng hẳn không hẹn tick tiếp theo nữa.
         if (decodeCalls.length === 1) return { getText: () => '4710105060019' };
         throw new Error('NotFoundException (giả lập)');
       }
@@ -157,7 +169,7 @@ async function main() {
   if (out.error) {
     record('setup: window.ZXing tải được trong thời gian chờ', false, out.error);
   } else {
-    record('runShelfBarcodeZxingLoop(): khởi tạo BrowserMultiFormatReader() CÓ truyền hints (không còn rỗng/undefined)',
+    record('runShelfBarcodeZxingLoop(): khởi tạo MultiFormatReader (cấp thấp) + setHints() CÓ truyền hints (không còn rỗng/undefined)',
       out.hasHints, JSON.stringify(out));
     record('hints: POSSIBLE_FORMATS giới hạn ĐÚNG 7 định dạng (EAN-13/EAN-8/Code128/UPC-A/UPC-E/Code39/ITF — KHÔNG còn QR_CODE)',
       Array.isArray(out.possibleFormats) && JSON.stringify([...out.possibleFormats].sort()) === JSON.stringify([...out.expectedFormats].sort()),
@@ -165,13 +177,13 @@ async function main() {
     record('hints: TRY_HARDER = true (ưu tiên đọc đúng hơn tốc độ, chấp nhận được vì đã giảm số định dạng phải thử)',
       out.tryHarder === true, JSON.stringify(out));
     record('hints: ĐÚNG 2 mục (không thừa/thiếu field lạ)', out.hintsEntryCount === 2, JSON.stringify(out));
-    record('reader.decode() được gọi với 1 HTMLCanvasElement (KHÔNG còn gọi decodeFromVideoElement trên <video> gốc)',
-      out.decodeCallCount >= 1 && out.firstDecodeCall && out.firstDecodeCall.isCanvas, JSON.stringify(out));
-    record('canvas đưa vào decode() đã được CO NHỎ về rộng tối đa 960px (video gốc 1280px) — đúng pipeline BRG mô tả',
+    record('reader.decode() được gọi với 1 BinaryBitmap dựng từ HTMLCanvasElementLuminanceSource+HybridBinarizer (KHÔNG còn qua lớp BrowserMultiFormatReader)',
+      out.decodeCallCount >= 1 && out.firstDecodeCall && out.firstDecodeCall.isBinaryBitmap, JSON.stringify(out));
+    record('canvas đưa vào BinaryBitmap đã được CO NHỎ về rộng tối đa 960px (video gốc 1280px) — đúng pipeline BRG mô tả',
       out.firstDecodeCall && out.firstDecodeCall.width === 960 && out.firstDecodeCall.height === 540, JSON.stringify(out));
     record('Giả lập quét thành công ở chế độ Kiểm Tra Giá -> vẫn route đúng sang submitPriceCheck() với đúng mã vừa quét (hành vi cũ không đổi)',
       out.submitPriceCheckCalled && out.pcMaHangValue === '4710105060019', JSON.stringify(out));
-    record('Sau khi quét thành công, vòng lặp KHÔNG gọi decode() thêm lần nào nữa (interval đã bị clear khi đóng modal)',
+    record('Sau khi quét thành công, vòng lặp KHÔNG gọi decode() thêm lần nào nữa (loop tự dừng vì shelfBarcodeStream đã về null)',
       out.decodeCallCount === 1, JSON.stringify(out));
   }
   record('Không có lỗi JS chưa bắt (pageerror) nào phát sinh trong suốt bài test', pageErrors.length === 0, JSON.stringify(pageErrors));
