@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**30.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.9 (2026-11): Quét mã vạch iPhone — vá nốt 4 khác biệt còn lại so với code mẫu "BRG Scan & Checkout"
+
+Người dùng yêu cầu rà soát kỹ lại, chỉ ra TỪNG khác biệt cụ thể giữa code hiện tại và code mẫu đã gửi
+(v30.7 mới đồng bộ phần LÕI giải mã) rồi xử lý luôn. Rà lại phát hiện 4 khác biệt còn sót (1 khác biệt
+thứ 5 — quét liên tục nhiều mã có bỏ trùng 2 giây — xác nhận là THIẾT KẾ CHỦ Ý khác nhau giữa 2 ứng dụng,
+không sửa: BRG phục vụ quét nhiều món liên tục lúc checkout, còn Ghi Nhận/Kiểm Tra Giá chỉ cần đúng 1 mã
+rồi tự đóng).
+
+**Đã làm** (`public/js/module-vanhanh.js`):
+1. **Phân loại lỗi camera theo `err.name`** — trước đây chỉ hiện `err.message` chung chung. Nay:
+   `NotAllowedError`/`SecurityError` → thông báo CỤ THỂ "bị chặn quyền camera — vào Cài Đặt > Safari (hoặc
+   Cài Đặt > tên ứng dụng) bật lại"; `NotFoundError`/`OverconstrainedError` → "không tìm thấy camera phù
+   hợp"; còn lại → thông báo chung kèm message gốc. Đây là khác biệt CÓ THỂ chính là nguyên nhân thật nếu
+   vấn đề nằm ở xin quyền camera (không phải ở bước giải mã) — trước đây người dùng không biết chính xác
+   phải làm gì khi gặp lỗi này.
+2. **Kiểm tra `window.isSecureContext` tường minh** trước khi thử mở camera — báo rõ ngay "trang không an
+   toàn/HTTPS" thay vì lỗi mơ hồ từ `getUserMedia()`.
+3. **`video.srcObject = null`** khi đóng modal (trước đây chỉ dừng track, chưa gỡ tham chiếu).
+4. **Tự đóng modal (tắt camera)** khi chuyển sang app khác/khoá màn hình (`document.visibilitychange`) —
+   tránh camera chạy ngầm tốn pin nếu quên đóng tay; gỡ đúng listener cũ mỗi lần đóng, không tích luỹ qua
+   nhiều lượt mở modal.
+
+**Test**: file mới `tests/test-shelf-barcode-camera-error-handling.js` (8/8 — phân loại đúng 3 loại lỗi
+camera, chặn sớm khi không an toàn/HTTPS, dọn sạch `srcObject`, tự đóng khi `document.hidden`, không tích
+luỹ listener qua nhiều lượt mở). Chạy lại toàn bộ 10 file test Kiểm Soát Hàng Hóa liên quan quét mã — pass
+hết, không regression. Grep CSP chuẩn — sạch.
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.8 (2026-11): Cho phép N phiên đăng nhập đồng thời theo từng tài khoản (Quản Lý Người Dùng)
 

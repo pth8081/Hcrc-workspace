@@ -1591,6 +1591,7 @@ let shelfBarcodeRafId = null;
 let shelfBarcodeZxingReader = null;
 let shelfBarcodeZxingLoopTimer = null; // id setTimeout() đang chờ của vòng lặp vẽ-canvas-rồi-giải-mã (xem runShelfBarcodeZxingLoop())
 let shelfBarcodeTorchOn = false; // trạng thái đèn flash hiện tại (chỉ có ý nghĩa khi nút #shelfBarcodeTorchBtn đang hiện)
+let shelfBarcodeVisibilityHandler = null; // listener document.visibilitychange đang đăng ký (xem openShelfBarcodeModalCore()/closeShelfBarcodeModal())
 // shelfBarcodeModalMode (MỚI, 11/2026, phục vụ "💲 Kiểm Tra Giá") — modal quét camera dùng CHUNG cho cả
 // "📷 Ghi Nhận" (mặc định, điền #srSku + applyShelfBarcodeMatch()) lẫn Kiểm Tra Giá (điền #pcMaHang +
 // submitPriceCheck() luôn) — CHỈ đổi NHÁNH xử lý ở onShelfBarcodeDecoded() theo biến này, giữ NGUYÊN
@@ -1608,6 +1609,15 @@ async function openShelfBarcodeModalCore() {
   document.getElementById('shelfBarcodeModal').classList.remove('hidden');
   const statusEl = document.getElementById('shelfBarcodeStatus');
   statusEl.textContent = 'Đang mở camera...';
+  // Kiểm tra HTTPS tường minh TRƯỚC khi thử mở camera (11/2026, theo tài liệu người dùng gửi) — báo rõ
+  // ngay "trang không an toàn" thay vì để getUserMedia() ném lỗi mơ hồ (1 số trình duyệt báo
+  // "NotAllowedError" y hệt lỗi từ chối quyền, dễ hiểu nhầm nguyên nhân là do người dùng bấm "Từ chối"
+  // chứ không phải do thiếu HTTPS). window.isSecureContext đã TÍNH SẴN "http://localhost"/"https://..."
+  // là an toàn, chỉ "http://" ra ngoài mới false.
+  if (!window.isSecureContext) {
+    statusEl.textContent = '⛔ Trang đang tải KHÔNG qua HTTPS — Safari/Chrome trên điện thoại sẽ không cấp quyền camera. Vui lòng truy cập qua địa chỉ https:// (hoặc nhập tay Mã SKU).';
+    return;
+  }
   if (!navigator.mediaDevices?.getUserMedia) {
     statusEl.textContent = '⛔ Thiết bị/trình duyệt không hỗ trợ camera — vui lòng nhập tay Mã SKU.';
     return;
@@ -1623,7 +1633,20 @@ async function openShelfBarcodeModalCore() {
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
   } catch (err) {
-    statusEl.textContent = `⛔ Không mở được camera (${err.message}) — vui lòng nhập tay Mã SKU.`;
+    // Phân loại lỗi theo err.name (11/2026, theo tài liệu người dùng gửi) — LỖI THẬT đã sửa: trước đây
+    // chỉ hiện nguyên err.message chung chung, không chỉ ra được nguyên nhân CỤ THỂ (từ chối quyền/không
+    // có camera/lỗi khác) — nếu nguyên nhân thật là "từ chối quyền" (hay gặp nhất trên iPhone: lỡ bấm
+    // "Không cho phép" ở hộp thoại xin quyền lần đầu, hoặc đã từng từ chối trước đó nên Safari không hỏi
+    // lại) thì người dùng không biết phải vào Cài Đặt > Safari (hoặc Cài Đặt > [Tên app] nếu cài qua
+    // "Thêm vào MH chính") bật lại quyền Camera — cứ tưởng là lỗi phần mềm.
+    const n = err && err.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError') {
+      statusEl.textContent = '⛔ Trình duyệt/thiết bị đang CHẶN quyền camera cho trang này. Vào Cài Đặt > Safari (hoặc Cài Đặt > tên ứng dụng nếu đã cài lên màn hình chính) > Camera, bật lại quyền rồi thử lại — hoặc nhập tay Mã SKU.';
+    } else if (n === 'NotFoundError' || n === 'OverconstrainedError') {
+      statusEl.textContent = '⛔ Không tìm thấy camera phù hợp trên thiết bị này — vui lòng nhập tay Mã SKU.';
+    } else {
+      statusEl.textContent = `⛔ Không mở được camera (${err.message}) — vui lòng nhập tay Mã SKU.`;
+    }
     return;
   }
   const video = document.getElementById('shelfBarcodeVideo');
@@ -1636,6 +1659,12 @@ async function openShelfBarcodeModalCore() {
   video.muted = true;
   try { await video.play(); } catch (err) { /* vài trình duyệt tự play khi có srcObject, bỏ qua lỗi autoplay */ }
   setupShelfBarcodeTorchButton();
+  // Tự đóng modal (tắt camera) khi người dùng chuyển sang app/tab khác hoặc khoá màn hình (11/2026, theo
+  // tài liệu người dùng gửi) — tránh camera chạy ngầm vô ích tốn pin nếu quên đóng tay. Gỡ listener này ở
+  // closeShelfBarcodeModal() (gọi lại từ đây), không để tích luỹ nhiều listener qua nhiều lượt mở modal.
+  if (shelfBarcodeVisibilityHandler) document.removeEventListener('visibilitychange', shelfBarcodeVisibilityHandler);
+  shelfBarcodeVisibilityHandler = () => { if (document.hidden) closeShelfBarcodeModal(); };
+  document.addEventListener('visibilitychange', shelfBarcodeVisibilityHandler);
   if (window.BarcodeDetector) {
     statusEl.textContent = 'Đưa mã vạch vào khung hình...';
     runShelfBarcodeDetectorLoop(video);
@@ -1659,6 +1688,12 @@ function closeShelfBarcodeModal() {
   // LUÔN tắt track camera khi đóng modal (CHỦ ĐỘNG, không chờ GC) — tránh giữ camera/đèn báo quyền
   // truy cập camera mở vô thời hạn sau khi người dùng đã xong, tốn pin + gây khó chịu trên di động.
   if (shelfBarcodeStream) { shelfBarcodeStream.getTracks().forEach(t => t.stop()); shelfBarcodeStream = null; }
+  // Dọn sạch srcObject (11/2026, theo tài liệu người dùng gửi) — tránh thẻ <video> còn giữ tham chiếu
+  // tới 1 MediaStream đã dừng hẳn track, dù không có ảnh hưởng chức năng rõ ràng vẫn nên khớp đúng code
+  // mẫu đã xác nhận hoạt động tốt.
+  const videoEl = document.getElementById('shelfBarcodeVideo');
+  if (videoEl) videoEl.srcObject = null;
+  if (shelfBarcodeVisibilityHandler) { document.removeEventListener('visibilitychange', shelfBarcodeVisibilityHandler); shelfBarcodeVisibilityHandler = null; }
   shelfBarcodeTorchOn = false;
   const torchBtn = document.getElementById('shelfBarcodeTorchBtn');
   torchBtn.classList.add('hidden');
