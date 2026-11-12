@@ -1264,6 +1264,13 @@
             <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div class="w-[72%] aspect-[3/1] border-2 border-white/90 rounded-lg"></div>
             </div>
+            <!-- Nút đèn flash (11/2026, theo yêu cầu người dùng "xử lý giống scan & checkout") — CHỈ hiện
+                 khi track.getCapabilities().torch === true (xem openShelfBarcodeModalCore()/
+                 toggleShelfBarcodeTorch() ở module-vanhanh.js). Phần lớn Safari iPhone KHÔNG hỗ trợ bật
+                 đèn flash qua trình duyệt nên nút này sẽ tự ẩn trên iPhone, chỉ hiện trên 1 số máy Android
+                 có hỗ trợ — đúng hành vi mô tả, không phải lỗi thiếu nút. -->
+            <button type="button" id="shelfBarcodeTorchBtn" data-op="toggleShelfBarcodeTorch"
+              class="hidden absolute top-2 right-2 w-10 h-10 rounded-full bg-black/55 text-white text-lg flex items-center justify-center">🔦</button>
           </div>
           <p id="shelfBarcodeStatus" class="text-gray-500">Đang mở camera...</p>
           <div class="flex gap-2">

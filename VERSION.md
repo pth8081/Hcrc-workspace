@@ -1,10 +1,47 @@
 # Phiên bản hiện tại
 
-**30.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## v30.5 (2026-11): Kiểm Soát Hàng Hóa — gõ tay 6 số cuối Mã Hàng/Mã Vạch (Ghi Nhận + Kiểm Tra Giá)
+## v30.6 (2026-11): Quét mã vạch iPhone (Ghi Nhận + Kiểm Tra Giá) — tối ưu lần 2, theo cơ chế "BRG Scan & Checkout"
+
+Theo yêu cầu người dùng: đối chiếu trực tiếp cơ chế quét mã vạch của ứng dụng "BRG Scan & Checkout"
+(người dùng tự đọc code `public/shared/lib.js` hàm `Scanner` của ứng dụng đó, đã chạy mượt trên iPhone) —
+"Bạn tham khảo bên Brg scan & checkout đã xử lý mượt trên iphone và bạn xử lý ghi nhận trên kệ và kiểm
+tra giá nhé" — rồi xác nhận "Bạn xử lý giống scan & checkout nhé". Đây là tối ưu LẦN 2 cho nhánh ZXing
+dùng trên Safari iPhone (lần 1 ở v30.4 mới giới hạn định dạng + TRY_HARDER, chưa đụng tới cách lấy khung
+hình/kích thước khung hình đưa vào giải mã).
+
+**Đã làm** (`public/js/module-vanhanh.js`, `public/fragments/vanHanhSection.html`):
+1. **Co nhỏ khung hình trước khi giải mã** (thay đổi quan trọng nhất): trước đây gọi thẳng
+   `reader.decodeFromVideoElement(video, cb)` — ZXing tự lấy khung hình ở ĐÚNG độ phân giải camera rồi
+   giải mã trên CPU thuần của Safari, không hề co nhỏ. Đổi sang vòng lặp tự dựng: mỗi 120ms vẽ 1 khung
+   hình video lên canvas ẩn, co về rộng tối đa 960px (giữ tỉ lệ) rồi mới gọi `reader.decode(canvas)` —
+   khớp đúng pipeline BRG mô tả, giảm hẳn số pixel phải xử lý mỗi lần.
+2. Hạ độ phân giải xin từ camera (`getUserMedia`): 1920×1080 → 1280×720 (khớp BRG) — giảm chi phí
+   capture/copy khung hình ban đầu.
+3. Danh sách định dạng mã vạch đọc được (cả nhánh BarcodeDetector native Android lẫn ZXing iPhone): bỏ
+   `QR_CODE` (QR bên BRG chỉ dành riêng cho quét mã giỏ hàng — tính năng khác, không áp dụng cho Mã
+   Vạch/Mã Hàng ở Kiểm Soát Hàng Hóa), thêm `CODE_39` + `ITF` (1 số mã vạch thùng/sỉ của NCC dùng 2 định
+   dạng này, trước đây hoàn toàn không đọc được).
+4. Rung nhẹ xác nhận khi bắt được mã (`navigator.vibrate(100)`, tự bỏ qua êm nếu thiết bị/trình duyệt
+   không hỗ trợ — Safari iOS không hỗ trợ API này).
+5. Thêm nút 🔦 đèn flash trên khung quét — CHỈ hiện khi `track.getCapabilities().torch === true` (đa số
+   Safari iPhone không hỗ trợ bật đèn qua trình duyệt nên nút tự ẩn, chỉ hiện trên 1 số máy Android có hỗ
+   trợ); bật/tắt qua `track.applyConstraints({advanced:[{torch}]})`, tự reset ẩn + tắt khi đóng modal.
+
+**Test**: file mới `tests/test-shelf-barcode-torch-vibrate.js` (10/10, Playwright thật — nút đèn flash ẩn/
+hiện đúng theo `getCapabilities()`, bật/tắt đổi đúng constraint + màu nút, lỗi `applyConstraints()` không
+làm crash, reset đúng khi đóng modal; rung đúng khi bắt được mã, thiết bị không hỗ trợ `vibrate` không
+crash). Viết lại `tests/test-shelf-barcode-zxing-hints.js` (9/9) cho đúng cơ chế mới (xác nhận
+`reader.decode()` được gọi với 1 canvas ĐÃ co nhỏ đúng 960px, không còn gọi `decodeFromVideoElement`; xác
+nhận đúng 7 định dạng mới). Sửa 1 assertion ở `test-shelf-mobile-and-offline-inventory.js` (đếm nhầm nút
+đèn flash mới thêm vào, đã loại trừ `#shelfBarcodeTorchBtn` khỏi phép đếm 2 nút Đóng/Nhập Tay). Chạy lại
+toàn bộ 18 file test liên quan Kiểm Soát Hàng Hóa (Ghi Nhận/Kiểm Tra Giá/Đối Chiếu/Báo Cáo/Offline...) —
+pass hết, không regression. Grep CSP chuẩn trên 2 file đã sửa — sạch.
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 Theo yêu cầu người dùng: "Gõ tay bạn cho kiểm tra 6 số cuối theo mã ncc hoặc nội bộ" — gõ đủ Mã Vạch
 EAN-13 (13 số) hoặc Mã Hàng nội bộ (10 số) bằng tay dễ sai/chậm, nên cho phép chỉ cần gõ **6 số cuối**
