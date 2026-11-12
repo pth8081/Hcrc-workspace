@@ -600,6 +600,27 @@ async function renderOrgChartDiagramTab() {
   renderOrgChartDiagramNodeList();
   setOrgChartAddNodeOrientation('horizontal');
   renderOrgChartDiagramSvgOnly();
+  applyOrgChartDiagramPanelState();
+}
+
+// toggleOrgChartDiagramPanel() (11/2026, theo yêu cầu người dùng "có nút để thu gọn khung khai báo phòng
+// ban ở sơ đồ tổ chức để hiện ra sơ đồ nhanh hơn") — ẩn/hiện khung trái "➕ Thêm Phòng Ban / Siêu Thị", sơ
+// đồ bên phải chiếm toàn bộ chiều rộng khi thu gọn. gridTemplateColumns gán thẳng qua JS (CSSOM, KHÔNG
+// phải style="..." nội tuyến trong HTML nên không bị CSP style-src chi phối, xem lib/securityHeaders.js) —
+// chuỗi rỗng khi mở lại để nhường quyền về đúng class Tailwind "lg:grid-cols-[300px_1fr]" như ban đầu.
+let _ocDiagramPanelCollapsed = false;
+function applyOrgChartDiagramPanelState() {
+  const panel = document.getElementById('orgChartDiagramFormPanel');
+  const grid = document.getElementById('orgChartDiagramGrid');
+  const btn = document.getElementById('btnOrgChartToggleDiagramPanel');
+  if (!panel || !grid) return;
+  panel.classList.toggle('hidden', _ocDiagramPanelCollapsed);
+  grid.style.gridTemplateColumns = _ocDiagramPanelCollapsed ? '1fr' : '';
+  if (btn) btn.textContent = _ocDiagramPanelCollapsed ? '➡️ Hiện Khung Khai Báo' : '⬅️ Thu Gọn Khung Khai Báo';
+}
+function toggleOrgChartDiagramPanel() {
+  _ocDiagramPanelCollapsed = !_ocDiagramPanelCollapsed;
+  applyOrgChartDiagramPanelState();
 }
 
 // Chỉ vẽ lại SVG (không gọi lại API) — dùng sau mỗi lần thêm/xoá Phòng Ban để sơ đồ cập nhật NGAY.

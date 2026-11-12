@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**30.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.19 (2026-11): "🖼️ Cây Sơ Đồ Tổ Chức" — nút thu gọn khung khai báo Phòng Ban
+
+Theo yêu cầu người dùng: "Tôi muốn có nút để thu gọn khung khai báo phòng ban ở sơ đồ tổ chức để hiện ra sơ
+đồ nhanh hơn". Thêm nút "⬅️ Thu Gọn Khung Khai Báo" ở đầu tab — bấm vào ẩn khung trái "➕ Thêm Phòng Ban /
+Siêu Thị" (form nhập + danh sách cây), sơ đồ bên phải chiếm toàn bộ chiều rộng màn hình; bấm lại (nút đổi
+thành "➡️ Hiện Khung Khai Báo") để mở lại như cũ. `gridTemplateColumns` gán thẳng qua JS (CSSOM, không phải
+`style="..."` nội tuyến nên không vướng CSP style-src).
+
+`public/fragments/orgChartSection.html` (thêm nút + id `orgChartDiagramGrid`/`orgChartDiagramFormPanel`),
+`public/js/module-orgchart.js` (`toggleOrgChartDiagramPanel()`/`applyOrgChartDiagramPanelState()` mới).
+
+**Test**: mở rộng `tests/test-orgchart-diagram-tab.js` (4 scenario mới: trạng thái ban đầu, sau khi thu
+gọn — khung ẩn + sơ đồ còn nguyên không vẽ lỗi, bấm lại mở ra đúng như cũ) + chạy lại 9 test Cơ Cấu Tổ
+Chức liên quan khác, không regression.
 
 ## v30.18 (2026-11): "🗄️ Quầy Kệ" — sửa được cả Mã Quầy Kệ, thêm nút Xoá hẳn khỏi danh mục
 
