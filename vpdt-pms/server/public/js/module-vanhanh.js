@@ -1589,7 +1589,7 @@ if (!window.__shelfOfflineOnlineListenerAdded) {
 let shelfBarcodeStream = null;
 let shelfBarcodeRafId = null;
 let shelfBarcodeZxingReader = null;
-let shelfBarcodeZxingIntervalId = null; // id setInterval() vòng lặp vẽ-canvas-rồi-giải-mã (xem runShelfBarcodeZxingLoop())
+let shelfBarcodeZxingLoopTimer = null; // id setTimeout() đang chờ của vòng lặp vẽ-canvas-rồi-giải-mã (xem runShelfBarcodeZxingLoop())
 let shelfBarcodeTorchOn = false; // trạng thái đèn flash hiện tại (chỉ có ý nghĩa khi nút #shelfBarcodeTorchBtn đang hiện)
 // shelfBarcodeModalMode (MỚI, 11/2026, phục vụ "💲 Kiểm Tra Giá") — modal quét camera dùng CHUNG cho cả
 // "📷 Ghi Nhận" (mặc định, điền #srSku + applyShelfBarcodeMatch()) lẫn Kiểm Tra Giá (điền #pcMaHang +
@@ -1614,12 +1614,13 @@ async function openShelfBarcodeModalCore() {
   }
   try {
     // width/height dùng "ideal" (không "exact") — trình duyệt/thiết bị tự hạ xuống mức hỗ trợ thật nếu
-    // camera yếu, không báo lỗi/treo như "exact". ĐỔI (11/2026, theo yêu cầu người dùng "xử lý giống scan
-    // & checkout" — đối chiếu cơ chế quét mã của BRG Scan & Checkout): hạ từ 1920×1080 xuống 1280×720 —
-    // khớp đúng độ phân giải BRG xin từ camera, giảm chi phí capture/copy khung hình ban đầu (quan trọng
-    // nhất với nhánh ZXing chạy CPU thuần trên Safari iPhone, xem runShelfBarcodeZxingLoop() bên dưới).
+    // camera yếu, không báo lỗi/treo như "exact". facingMode dùng { ideal: 'environment' } (object, KHÔNG
+    // phải chuỗi thường) — ĐỔI (11/2026, theo tài liệu người dùng gửi, rút từ chính ứng dụng "BRG Scan &
+    // Checkout" của người dùng ĐÃ xác nhận quét được thật trên iPhone): khớp đúng khuôn constraint BRG
+    // dùng, tránh khả năng 1 số bản Safari iOS diễn giải chuỗi trần khác với dạng { ideal }.
     shelfBarcodeStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
   } catch (err) {
     statusEl.textContent = `⛔ Không mở được camera (${err.message}) — vui lòng nhập tay Mã SKU.`;
@@ -1627,6 +1628,12 @@ async function openShelfBarcodeModalCore() {
   }
   const video = document.getElementById('shelfBarcodeVideo');
   video.srcObject = shelfBarcodeStream;
+  // playsinline/muted đã có sẵn tĩnh trên thẻ <video> (vanHanhSection.html) — gán lại CHỦ ĐỘNG qua JS ở
+  // đây (kèm "webkit-playsinline", thuộc tính CŨ hơn cho vài bản Safari iOS rất cũ) theo đúng khuôn tài
+  // liệu người dùng gửi — phòng vệ bổ sung, không thay cho thuộc tính tĩnh.
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.muted = true;
   try { await video.play(); } catch (err) { /* vài trình duyệt tự play khi có srcObject, bỏ qua lỗi autoplay */ }
   setupShelfBarcodeTorchButton();
   if (window.BarcodeDetector) {
@@ -1647,8 +1654,8 @@ async function openShelfBarcodeModalCore() {
 function closeShelfBarcodeModal() {
   document.getElementById('shelfBarcodeModal').classList.add('hidden');
   if (shelfBarcodeRafId) { cancelAnimationFrame(shelfBarcodeRafId); shelfBarcodeRafId = null; }
-  if (shelfBarcodeZxingIntervalId) { clearInterval(shelfBarcodeZxingIntervalId); shelfBarcodeZxingIntervalId = null; }
-  if (shelfBarcodeZxingReader) { try { shelfBarcodeZxingReader.reset(); } catch (err) { /* reader đã đóng */ } shelfBarcodeZxingReader = null; }
+  if (shelfBarcodeZxingLoopTimer) { clearTimeout(shelfBarcodeZxingLoopTimer); shelfBarcodeZxingLoopTimer = null; }
+  shelfBarcodeZxingReader = null; // MultiFormatReader cấp thấp không có .reset() — tạo mới mỗi lần mở modal (runShelfBarcodeZxingLoop()) nên không cần dọn trạng thái
   // LUÔN tắt track camera khi đóng modal (CHỦ ĐỘNG, không chờ GC) — tránh giữ camera/đèn báo quyền
   // truy cập camera mở vô thời hạn sau khi người dùng đã xong, tốn pin + gây khó chịu trên di động.
   if (shelfBarcodeStream) { shelfBarcodeStream.getTracks().forEach(t => t.stop()); shelfBarcodeStream = null; }
@@ -1737,16 +1744,25 @@ const SHELF_BARCODE_ZXING_MAX_WIDTH = 960;
 const SHELF_BARCODE_ZXING_INTERVAL_MS = 120;
 function runShelfBarcodeZxingLoop(video, statusEl) {
   try {
-    // LỖI THẬT đã vá (11/2026, người dùng báo "Kiểm Tra Giá/Ghi Nhận Quầy Kệ không hoạt động trên
-    // iPhone" — camera MỞ ĐƯỢC, mã vạch nằm rõ trong khung hình nhưng không bao giờ bắt được): trước đây
-    // khởi tạo BrowserMultiFormatReader() KHÔNG truyền hints — mặc định ZXing cố decode MỌI định dạng nó
-    // hỗ trợ (QR/EAN/UPC/Code128/Code39/Code93/ITF/Codabar/DataMatrix/Aztec/PDF417/RSS...) trên MỖI khung
-    // hình, khiến mỗi khung hình tốn quá nhiều thời gian thử đủ ~15 định dạng trên CPU thuần (không có
-    // BarcodeDetector native tăng tốc phần cứng như Android) — tỉ lệ bắt được mã vạch (trước khi tay di
-    // chuyển/camera mất nét) THẤP ĐẾN MỨC gần như "không hoạt động" dù camera vẫn chạy bình thường. Giới
-    // hạn ĐÚNG các định dạng cần dùng (SHELF_BARCODE_DETECTOR_FORMATS, mirror ZXing BarcodeFormat tương
-    // ứng) qua DecodeHintType.POSSIBLE_FORMATS + bật TRY_HARDER (ưu tiên đọc đúng hơn tốc độ, chấp nhận
-    // được vì đã giảm hẳn số định dạng phải thử).
+    // LỖI THẬT đã vá LẦN 1 (v30.4, 11/2026, người dùng báo "Kiểm Tra Giá/Ghi Nhận Quầy Kệ không hoạt
+    // động trên iPhone"): khởi tạo reader KHÔNG truyền hints — mặc định ZXing cố decode MỌI định dạng nó
+    // hỗ trợ (~15 định dạng) trên MỖI khung hình, quá chậm trên CPU thuần (không có BarcodeDetector tăng
+    // tốc phần cứng như Android). Giới hạn ĐÚNG các định dạng cần dùng qua DecodeHintType.POSSIBLE_FORMATS
+    // + bật TRY_HARDER.
+    //
+    // LỖI THẬT đã vá LẦN 2 (v30.6, vẫn theo yêu cầu người dùng "xử lý giống scan & checkout" — đối chiếu
+    // cơ chế BRG Scan & Checkout): thêm co nhỏ khung hình (canvas ≤960px) trước khi giải mã thay vì giải
+    // mã nguyên độ phân giải camera — NHƯNG người dùng xác nhận thử lại trên iPhone thật VẪN không quét
+    // được, dù camera mở được/mã rõ trong khung hình.
+    //
+    // LỖI THẬT đã vá LẦN 3 (11/2026, người dùng gửi kèm tài liệu + code mẫu rút trực tiếp từ ứng dụng nội
+    // bộ KHÁC của chính người dùng — "BRG Scan & Checkout" — ĐÃ xác nhận quét được thật trên iPhone): v30.6
+    // vẫn gọi qua lớp `BrowserMultiFormatReader.decode(canvas)` (lớp bọc cấp cao của ZXing, tự quản lý 1
+    // canvas nội bộ + đường quyết định video-hay-ảnh riêng) — nghi vấn lớp này xử lý khác đi trên 1 số bản
+    // Safari iOS so với gọi THẲNG lớp giải mã cấp thấp. Đổi sang ĐÚNG pipeline BRG dùng, không qua lớp bọc
+    // đó nữa: tự dựng `MultiFormatReader` (cấp thấp nhất, KHÔNG phải BrowserMultiFormatReader) +
+    // `HTMLCanvasElementLuminanceSource` (ảnh xám từ canvas) + `BinaryBitmap`+`HybridBinarizer` (nhị phân
+    // hoá thích nghi) hoàn toàn thủ công, đúng từng bước 1 như code mẫu BRG.
     const hints = new Map();
     hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       window.ZXing.BarcodeFormat.EAN_13, window.ZXing.BarcodeFormat.EAN_8,
@@ -1755,34 +1771,34 @@ function runShelfBarcodeZxingLoop(video, statusEl) {
       window.ZXing.BarcodeFormat.ITF
     ]);
     hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
-    shelfBarcodeZxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
-    // ĐỔI (11/2026, theo yêu cầu người dùng "xử lý giống scan & checkout" — đối chiếu cơ chế BRG Scan &
-    // Checkout dùng trên iPhone): trước đây gọi thẳng reader.decodeFromVideoElement(video, ...) — ZXing
-    // tự lấy khung hình ở ĐÚNG độ phân giải camera (lúc đó xin tới 1920×1080) rồi giải mã trên CPU thuần
-    // của Safari, không hề co nhỏ trước — quá nặng, làm chậm hẳn tốc độ bắt mã trên iPhone. Thay bằng
-    // VÒNG LẶP TỰ DỰNG: mỗi SHELF_BARCODE_ZXING_INTERVAL_MS (120ms), vẽ 1 khung hình video lên canvas ẩn,
-    // co nhỏ về rộng tối đa SHELF_BARCODE_ZXING_MAX_WIDTH (960px, giữ tỉ lệ) rồi mới đưa canvas đó cho
-    // reader.decode() — decode() tự nhận canvas KHÔNG phải HTMLVideoElement nên dùng nhánh
-    // drawImageOnCanvas() nội bộ của chính thư viện (giữ nguyên đúng pipeline chuẩn của ZXing: ảnh xám +
-    // HybridBinarizer + MultiFormatReader, không cần tự dựng lại), chỉ khác là ảnh ĐẦU VÀO đã nhỏ sẵn —
-    // giảm hẳn số pixel phải xử lý mỗi lần, nhanh hơn nhiều lần trên CPU yếu của Safari iOS.
+    shelfBarcodeZxingReader = new window.ZXing.MultiFormatReader();
+    shelfBarcodeZxingReader.setHints(hints);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    let decoding = false; // chặn chồng lượt giải mã nếu 1 lượt chưa xong mà tick tiếp theo đã tới (máy yếu)
-    shelfBarcodeZxingIntervalId = setInterval(() => {
-      if (!shelfBarcodeStream || decoding) return;
-      if (!video.videoWidth || !video.videoHeight) return; // video chưa sẵn sàng (vài frame đầu)
-      decoding = true;
-      try {
-        const scale = Math.min(1, SHELF_BARCODE_ZXING_MAX_WIDTH / video.videoWidth);
-        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const result = shelfBarcodeZxingReader.decode(canvas);
-        if (result) onShelfBarcodeDecoded(result.getText());
-      } catch (err) { /* NotFoundException (khung hình này không thấy mã) hoặc lỗi decode 1 frame — bỏ qua, thử khung tiếp theo */ }
-      decoding = false;
-    }, SHELF_BARCODE_ZXING_INTERVAL_MS);
+    // Vòng lặp setTimeout(...) RỒI MỚI requestAnimationFrame(...) (không phải setInterval thuần) — khớp
+    // đúng mẫu BRG dùng: setTimeout giãn cách đúng SHELF_BARCODE_ZXING_INTERVAL_MS, requestAnimationFrame
+    // đợi tới đúng nhịp vẽ kế tiếp của trình duyệt mới thực sự chụp khung hình — tránh chụp đúng lúc
+    // trình duyệt đang bận vẽ dở, từng được cho là 1 trong các nguyên nhân khiến ảnh chụp từ canvas bị
+    // rỗng/lỗi thời trên Safari iOS dù video vẫn đang phát bình thường.
+    const loop = () => {
+      if (!shelfBarcodeStream) return; // modal đã đóng (đã tắt track) — dừng hẳn, không hẹn tick tiếp theo nữa
+      // readyState >= 2 (HAVE_CURRENT_DATA — đã có ít nhất 1 khung hình thật để vẽ) — chặt hơn hẳn chỉ
+      // kiểm videoWidth (video có thể đã biết kích thước qua metadata nhưng CHƯA có khung hình thật nào).
+      if (video.readyState >= 2 && video.videoWidth) {
+        const w = Math.min(video.videoWidth, SHELF_BARCODE_ZXING_MAX_WIDTH);
+        const h = Math.round(w * video.videoHeight / video.videoWidth);
+        canvas.width = w; canvas.height = h;
+        ctx.drawImage(video, 0, 0, w, h);
+        try {
+          const source = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+          const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(source));
+          const result = shelfBarcodeZxingReader.decode(bitmap);
+          if (result) onShelfBarcodeDecoded(result.getText());
+        } catch (err) { /* NotFoundException (khung hình này chưa thấy mã) hoặc lỗi decode 1 frame — bỏ qua, thử khung tiếp theo */ }
+      }
+      shelfBarcodeZxingLoopTimer = setTimeout(() => { shelfBarcodeRafId = requestAnimationFrame(loop); }, SHELF_BARCODE_ZXING_INTERVAL_MS);
+    };
+    loop();
   } catch (err) {
     statusEl.textContent = `⛔ Không khởi tạo được bộ quét (${err.message}) — vui lòng nhập tay Mã SKU.`;
   }
