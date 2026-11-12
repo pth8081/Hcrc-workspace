@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**30.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.13 (2026-11): "⏰ Hạn Sử Dụng" — hết lệch "Tồn Kho Hệ Thống" so với "📊 Đối Chiếu"
+
+Người dùng báo kèm 2 ảnh chụp cùng lúc: ĐÚNG 1 mã hàng hiện "Tồn Kho Hệ Thống" = 3 ở tab "⏰ Hạn Sử
+Dụng" nhưng = 9 ở tab "📊 Đối Chiếu", hỏi "cả hai đều realtime phải không?".
+
+**Nguyên nhân**: `ensureShelfSystemInventoryForExpiry()` (tab Hạn Sử Dụng) dùng 1 cache dùng chung
+(`shelfSystemInventoryCache`) với 2 tab khác ("📷 Ghi Nhận"/"💲 Kiểm Tra Giá"), và có điều kiện CHỈ tải
+dữ liệu **1 lần duy nhất mỗi phiên làm việc** (`if (cache.length) return;`) — tab nào mở đầu tiên nạp
+cache, các lần mở lại sau đó (kể cả sau khi job nền `jobs/inventorySync.js` đã đồng bộ lại số mới ở
+server, ~20 phút/lần) vẫn hiện số CŨ cho tới khi tải lại cả trang. Trong khi đó tab "📊 Đối Chiếu"
+(`loadShelfReconciliation()`) LUÔN tự tải lại MỚI mỗi lần mở tab — nên 2 tab lệch số dù cùng 1 nguồn dữ
+liệu, càng dễ gặp nếu nhân viên mở "Hạn Sử Dụng" sớm rồi để tab đó mở xuyên ca làm việc.
+
+**Đã vá**: bỏ hẳn điều kiện "đã có cache thì bỏ qua" — `ensureShelfSystemInventoryForExpiry()` giờ LUÔN
+tải lại mới mỗi lần tab "Hạn Sử Dụng" được mở, cùng khuôn `loadShelfSystemInventoryForRecordPicker()`
+("Ghi Nhận"/"Kiểm Tra Giá" đã làm từ trước). Chi phí thêm không đáng kể — route `GET /system-inventory`
+chỉ đọc lại snapshot đã đồng bộ sẵn, không gọi thêm API đối tác ngoài chu kỳ đã cấu hình. Khi tải lỗi
+(mất mạng/server lỗi tạm thời), vẫn giữ nguyên cache đang có thay vì xoá rỗng (không làm xấu thêm trải
+nghiệm so với trước).
+
+`public/js/module-vanhanh.js` (`ensureShelfSystemInventoryForExpiry()`). **Test**:
+`tests/test-shelf-expiry-system-inventory-refresh.js` (mới — mô phỏng đúng kịch bản báo cáo: mở tab,
+server đồng bộ lại số mới, chuyển tab rồi quay lại, xác nhận hiện số MỚI không phải số cũ; đã xác nhận
+test này THẬT SỰ fail nếu bỏ bản vá, không phải test giả-pass) + chạy lại
+`tests/demo-shelf-expiry-duplicate-mahang.js`, `tests/test-shelf-ownstore-scope-regression.js`,
+`tests/test-inventory-api-config.js`, `tests/test-inventory-recon.js`,
+`tests/test-shelf-inventory-aggregate.js`, `tests/test-shelf-mavach-match.js`,
+`tests/test-shelf-mobile-and-offline-inventory.js`, `tests/test-shelf-record-lo-real-click.js`,
+`tests/test-store-external-codes-admin-gate.js`, `tests/demo-shelf-expiry-update-today-recon.js` — tất
+cả vẫn pass, không regression. CSP sweep sạch trên file đã sửa.
 
 ## v30.12 (2026-11): Màn "Sửa 1 Người Dùng" — lưu nhanh hơn, hết báo xung đột GIẢ
 
