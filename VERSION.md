@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**30.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.14 (2026-11): Xác nhận quyền Onboarding/Offboarding đã tách riêng hoàn toàn (không đổi code sản phẩm)
+
+Theo yêu cầu người dùng: cấp quyền riêng cho bộ phận Tuyển Dụng sửa/cập nhật "🕐 Hồ Sơ Onboarding" mà
+không đụng tới "📋 Quản Lý Hồ Sơ" chính thức, và tách hẳn quyền Onboarding khỏi Offboarding, không cho
+lẫn vào nhau.
+
+**Kết luận sau khi rà soát**: cả 2 yêu cầu đều **đã có sẵn** trong hệ thống từ đợt refactor 11/2026
+trước đó — không cần sửa code sản phẩm nào:
+- Quyền `hrOnboardingProcessManage` ("✅ Toàn Quyền Thao Tác Quy Trình Onboarding") đã đủ để Tuyển Dụng
+  xem/sửa hồ sơ đang chờ xác nhận (kể cả CCCD/BHXH/MST/số tài khoản ngân hàng) mà không cần
+  `hrProfileManage`/`hrProfileEdit`.
+- 4 quyền `hrOnboardingManage`/`hrOffboardingManage`/`hrOnboardingProcessManage`/
+  `hrOffboardingProcessManage` đã là 4 checkbox hoàn toàn độc lập (cả ở UI lẫn dữ liệu
+  `collectPermsFromForm()`), tick bên nào không lây sang bên kia.
+
+**Thêm mới**: `tests/demo-hr-onboarding-offboarding-perm-split.js` — demo thật (Playwright, chụp ảnh +
+click thật) chứng minh 4 quyền trên độc lập hoàn toàn, dùng để đối chiếu/kiểm tra lại sau này nếu cần.
 
 ## v30.13 (2026-11): "⏰ Hạn Sử Dụng" — hết lệch "Tồn Kho Hệ Thống" so với "📊 Đối Chiếu"
 
