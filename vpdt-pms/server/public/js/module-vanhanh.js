@@ -1396,12 +1396,23 @@ function findSystemInventoryQtyForProduct(maHang, maVach) {
   if (!matches.length) return null;
   return matches.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0);
 }
+// LỖI ĐÃ VÁ (11/2026, người dùng báo kèm 2 ảnh chụp cùng lúc: cột "Tồn Kho Hệ Thống" ở tab "⏰ Hạn Sử
+// Dụng" hiện "3" trong khi tab "📊 Đối Chiếu" hiện "9" cho ĐÚNG 1 mã hàng, hỏi "cả hai đều realtime phải
+// không?"): hàm này TRƯỚC ĐÂY chỉ tải "shelfSystemInventoryCache" ĐÚNG 1 LẦN DUY NHẤT mỗi phiên làm việc
+// (bỏ qua hẳn việc tải lại nếu cache đã có dữ liệu, bất kể đã cũ bao lâu) — nếu tab "📷 Ghi Nhận"/"⏰ Hạn
+// Sử Dụng"/"💲 Kiểm Tra Giá" được mở sớm (nạp cache từ lúc đó), rồi tồn kho hệ thống được đồng bộ lại ở
+// server (job nền mỗi ~20 phút, xem jobs/inventorySync.js), mở lại "Hạn Sử Dụng" sau đó vẫn hiện số CŨ từ
+// cache, không bao giờ tự làm mới cho tới khi tải lại cả trang — khác hẳn "📊 Đối Chiếu"
+// (loadShelfReconciliation()) vốn LUÔN tự tải lại MỚI mỗi lần mở tab, nên 2 tab lệch nhau dù cùng 1
+// nguồn dữ liệu. Bỏ hẳn điều kiện "đã có cache thì bỏ qua" — LUÔN tải lại mới mỗi lần tab "Hạn Sử Dụng"
+// được mở, cùng khuôn loadShelfSystemInventoryForRecordPicker() (Ghi Nhận/Kiểm Tra Giá) đã làm từ trước.
+// Chi phí thêm không đáng kể — route GET /system-inventory chỉ đọc lại snapshot đã đồng bộ sẵn, syncSystemInventory({force:false})
+// bên trong CHỈ thực sự gọi API đối tác khi đã tới chu kỳ cấu hình, không tăng thêm tải lên đối tác.
 async function ensureShelfSystemInventoryForExpiry() {
-  if (shelfSystemInventoryCache && shelfSystemInventoryCache.length) return;
   try {
     const res = await shelfFetch('/api/shelf-stock/system-inventory');
     if (res.status === 401) return handleSessionExpired();
-    if (!res.ok) return; // chưa cấu hình API đối tác/chưa có Mã Điểm -> giữ cache rỗng, cột hiện "—"
+    if (!res.ok) return; // chưa cấu hình API đối tác/chưa có Mã Điểm (hoặc lỗi tạm thời) -> giữ nguyên cache đang có (rỗng nếu chưa từng tải được lần nào, cột hiện "—")
     const data = await res.json();
     shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
     cacheShelfSystemInventoryOffline(shelfSystemInventoryCache, data.capNhatLuc);
