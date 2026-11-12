@@ -34,7 +34,8 @@ const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInvento
 const { checkPrice, PriceCheckApiAuthError, PriceCheckApiNotFoundError } = require('../lib/priceCheckApiClient');
 const { parseVNDateTime } = require('../lib/recordActions');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
-const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { hasModuleAccessServer, resolveShelfReportableDepts } = require('../lib/recordViewScope');
+const { getSnapshotMapForMaDiems } = require('../lib/inventorySnapshotStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -267,6 +268,52 @@ router.get('/system-inventory', async (req, res) => {
     res.json({ rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
+  }
+});
+
+// GET /system-inventory/report-all (11/2026, theo yêu cầu người dùng kèm ảnh chụp: tab "📑 Báo Cáo" khi
+// xem "Tất cả siêu thị" (tổng hợp nhiều siêu thị — quyền shelfReportView{all,depts[]}/admin/
+// shelfAnyStoreAccess) cột "Tồn Kho Hệ Thống" hiện "—" cho MỌI dòng KHÔNG thuộc ĐÚNG siêu thị của
+// effectiveUser — route /system-inventory ở trên CHỈ tra được đúng 1 siêu thị. Route RIÊNG này trả về
+// Tồn Kho Hệ Thống cho TỪNG siêu thị mà người gọi ĐƯỢC PHÉP XEM — phạm vi siêu thị tự suy ra từ quyền
+// SERVER-SIDE (ĐÚNG hệt canViewShelfScopedItem(), lib/recordViewScope.js — admin/shelfAnyStoreAccess ->
+// mọi siêu thị, shelfReportView.all -> mọi siêu thị, shelfReportView.depts[] -> đúng danh sách được gán,
+// còn lại -> đúng siêu thị mình), KHÔNG tin bất kỳ danh sách siêu thị nào client có thể gửi lên (tránh lộ
+// Tồn Kho Hệ Thống của siêu thị ngoài phạm vi được xem). getSnapshotMapForMaDiems() (lib/
+// inventorySnapshotStore.js) gộp TOÀN BỘ Mã Điểm cần vào ĐÚNG 1 câu SQL WHERE IN, không phải N lượt gọi
+// riêng từng siêu thị (giữ đúng tinh thần hiệu năng đã áp dụng cho scope=recon ở route trên).
+router.get('/system-inventory/report-all', async (req, res) => {
+  try {
+    if (!(await isInventoryApiConfigured())) {
+      return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
+    }
+    const user = req.freshUser;
+    const stores = (await getAppDataValue('stores')) || [];
+    const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
+    const allowedDepts = resolveShelfReportableDepts(user, stores);
+    await syncSystemInventory({ force: false });
+    // 1 siêu thị có thể có NHIỀU Mã Điểm cách nhau dấu phẩy (sáp nhập 2 chi nhánh cũ — xem
+    // getSystemInventoryForMaDiem() ở jobs/inventorySync.js) — gộp hết vào 1 Set rồi tra ĐÚNG 1 lượt.
+    const deptCodes = new Map(); // dept -> [maDiem,...]
+    const allCodes = new Set();
+    for (const dept of allowedDepts) {
+      const raw = storeExternalCodes[dept];
+      if (!raw) continue;
+      const codes = [...new Set(String(raw).split(',').map(s => s.trim()).filter(Boolean))];
+      if (!codes.length) continue;
+      deptCodes.set(dept, codes);
+      codes.forEach(c => allCodes.add(c));
+    }
+    const snapshotMap = allCodes.size ? await getSnapshotMapForMaDiems([...allCodes]) : {};
+    const byDept = {};
+    for (const [dept, codes] of deptCodes) {
+      const entries = codes.map(c => snapshotMap[c]).filter(Boolean);
+      if (!entries.length) continue;
+      byDept[dept] = entries.length === 1 ? entries[0].rows : entries.flatMap(e => e.rows || []);
+    }
+    res.json({ byDept });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory/report-all');
   }
 });
 

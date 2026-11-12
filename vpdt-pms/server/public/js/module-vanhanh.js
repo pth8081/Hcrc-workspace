@@ -756,28 +756,51 @@ async function saveShelfReconExtraRecipients() {
 // (đúng yêu cầu "siêu thị login vào chỉ xem báo cáo siêu thị đấy thôi"); người có quyền shelfReportView
 // (Quản lý vùng/Ban điều hành) có NHIỀU dept trong DB.shelfRecords nên bảng tự "nở" thêm cột + bộ lọc
 // Siêu Thị — ĐÂY CHÍNH LÀ "báo cáo tổng hợp" người quản lý xem, không cần dựng 2 màn UI riêng.
-let shelfReportSystemInventoryCache = null; // { maDiem, dept, rows: Map(maHang -> soLuongTon) }
+let shelfReportSystemInventoryCache = null; // { multi:false, maDiem, dept, rows: Map(maHang->soLuongTon) } HOẶC { multi:true, byDept: Map(dept -> Map(maHang->soLuongTon)) }
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp: xem "Tất cả siêu thị" ở tab "📑 Báo Cáo" cột "Tồn Kho
+// Hệ Thống" hiện trống "—" cho MỌI dòng, chọn đúng 1 siêu thị thì hiện bình thường — "để tôi có bc tổng
+// quan"): TRƯỚC ĐÂY CHỈ gọi scope=recon (tra ĐÚNG 1 siêu thị của effectiveUser) bất kể đang xem 1 hay
+// nhiều siêu thị — populateShelfReportStoreFilter() (xác định có đang xem NHIỀU siêu thị hay không, dựa
+// vào DB.shelfRecords) giờ chạy TRƯỚC để quyết định gọi route nào: nhiều siêu thị (quyền shelfReportView)
+// gọi route MỚI /system-inventory/report-all (trả về theo TỪNG siêu thị được phép xem, 1 lượt SQL duy
+// nhất cho mọi siêu thị — xem routes/shelfStock.js), đúng 1 siêu thị vẫn giữ nguyên scope=recon như cũ.
 async function loadShelfReportTab() {
-  // Tồn Kho Hệ Thống CHỈ tra được cho ĐÚNG siêu thị của currentUser (server tự resolve maDiem theo
-  // req.freshUser.dept, xem routes/shelfStock.js) — dòng của SIÊU THỊ KHÁC (chỉ xuất hiện khi đang xem
-  // qua shelfReportView) sẽ hiện "—", KHÔNG gọi thêm route nào khác cho từng siêu thị (tránh N lần gọi
-  // cho N siêu thị, giữ màn tải nhanh — cùng tinh thần giới hạn hiệu năng đã áp dụng ở Đối Chiếu).
+  populateShelfReportStoreFilter();
+  const isMulti = shelfReportIsMultiStore();
   try {
-    const res = await shelfFetch('/api/shelf-stock/system-inventory?scope=recon');
-    if (res.status === 401) return handleSessionExpired();
-    if (res.ok) {
-      const body = await res.json();
-      const rows = new Map();
-      (Array.isArray(body.rows) ? body.rows : []).forEach(r => { if (r.maHang) rows.set(String(r.maHang), r.soLuongTon); });
-      shelfReportSystemInventoryCache = { maDiem: body.maDiem, dept: getEffectiveShelfDept(), rows };
+    if (isMulti) {
+      const res = await fetch('/api/shelf-stock/system-inventory/report-all');
+      if (res.status === 401) return handleSessionExpired();
+      if (res.ok) {
+        const body = await res.json();
+        const byDept = new Map();
+        Object.entries(body.byDept || {}).forEach(([dept, rows]) => {
+          const m = new Map();
+          (Array.isArray(rows) ? rows : []).forEach(r => { if (r.maHang) m.set(String(r.maHang), r.soLuongTon); });
+          byDept.set(dept, m);
+        });
+        shelfReportSystemInventoryCache = { multi: true, byDept };
+      } else {
+        shelfReportSystemInventoryCache = null;
+      }
     } else {
-      shelfReportSystemInventoryCache = null;
+      // Tồn Kho Hệ Thống CHO ĐÚNG 1 siêu thị của currentUser (server tự resolve maDiem theo
+      // req.freshUser.dept, xem routes/shelfStock.js).
+      const res = await shelfFetch('/api/shelf-stock/system-inventory?scope=recon');
+      if (res.status === 401) return handleSessionExpired();
+      if (res.ok) {
+        const body = await res.json();
+        const rows = new Map();
+        (Array.isArray(body.rows) ? body.rows : []).forEach(r => { if (r.maHang) rows.set(String(r.maHang), r.soLuongTon); });
+        shelfReportSystemInventoryCache = { multi: false, maDiem: body.maDiem, dept: getEffectiveShelfDept(), rows };
+      } else {
+        shelfReportSystemInventoryCache = null;
+      }
     }
   } catch (err) {
     shelfReportSystemInventoryCache = null;
   }
-  populateShelfReportStoreFilter();
   renderShelfReportTable();
 }
 
@@ -808,7 +831,12 @@ function shelfReportIsMultiStore() {
   return !!(wrap && !wrap.classList.contains('hidden'));
 }
 function shelfReportSysStockFor(r) {
-  return (shelfReportSystemInventoryCache && r.dept === shelfReportSystemInventoryCache.dept && r.maHang && shelfReportSystemInventoryCache.rows.has(String(r.maHang)))
+  if (!shelfReportSystemInventoryCache || !r.maHang) return null;
+  if (shelfReportSystemInventoryCache.multi) {
+    const deptMap = shelfReportSystemInventoryCache.byDept.get(r.dept);
+    return (deptMap && deptMap.has(String(r.maHang))) ? deptMap.get(String(r.maHang)) : null;
+  }
+  return (r.dept === shelfReportSystemInventoryCache.dept && shelfReportSystemInventoryCache.rows.has(String(r.maHang)))
     ? shelfReportSystemInventoryCache.rows.get(String(r.maHang))
     : null;
 }

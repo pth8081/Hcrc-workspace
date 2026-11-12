@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**30.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.17 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — hiện Tồn Kho Hệ Thống khi xem Tất cả siêu thị
+
+Người dùng báo kèm ảnh chụp: tab "📑 Báo Cáo" khi xem "Tất cả siêu thị" (báo cáo tổng hợp, quyền
+`shelfReportView`/admin/`shelfAnyStoreAccess`), cột "Tồn Kho Hệ Thống" hiện trống "—" cho MỌI dòng —
+chọn đúng 1 siêu thị thì hiện bình thường. Nguyên nhân: route cũ (`GET /system-inventory?scope=recon`)
+chỉ tra được Tồn Kho Hệ Thống cho ĐÚNG 1 siêu thị của người gọi.
+
+**Đã vá**: thêm route `GET /system-inventory/report-all` — trả về Tồn Kho Hệ Thống theo TỪNG siêu thị mà
+người gọi ĐƯỢC PHÉP XEM (phạm vi tự suy ra từ quyền server-side qua hàm mới
+`resolveShelfReportableDepts()`, ĐÚNG HỆT `canViewShelfScopedItem()` — KHÔNG tin danh sách siêu thị client
+gửi lên, tránh lộ dữ liệu ngoài phạm vi), dùng `getSnapshotMapForMaDiems()` gộp TOÀN BỘ Mã Điểm cần vào
+ĐÚNG 1 câu SQL `WHERE IN` thay vì N lượt gọi riêng từng siêu thị (giữ đúng tinh thần hiệu năng đã áp dụng
+ở `scope=recon`). Trường hợp chỉ xem 1 siêu thị vẫn giữ nguyên route/hành vi cũ, không đổi gì.
+
+`routes/shelfStock.js`, `lib/recordViewScope.js` (`resolveShelfReportableDepts()` mới),
+`public/js/module-vanhanh.js` (`loadShelfReportTab()`/`shelfReportSysStockFor()`).
+
+**Test**: `tests/test-shelf-report-allstores-scope.js` (8 scenario mới, kiểm trực tiếp
+`resolveShelfReportableDepts()`) + mở rộng `tests/test-shelf-report-tab.js` (xác nhận hiện đúng số cho cả
+2 siêu thị, không lẫn mã hàng trùng giữa 2 siêu thị khác nhau; đã xác nhận test fail đúng như lỗi báo cáo
+nếu bỏ bản vá) + chạy lại 16 test Kiểm Soát Hàng Hóa/Tồn Kho liên quan khác, không regression.
 
 ## v30.16 (2026-11): Cơ Cấu Tổ Chức — "🚨 Áp Dụng Cưỡng Chế" khi thay thế hàng loạt
 
