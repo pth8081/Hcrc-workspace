@@ -1639,7 +1639,27 @@ function loadZxingScript() {
 }
 function runShelfBarcodeZxingLoop(video, statusEl) {
   try {
-    shelfBarcodeZxingReader = new window.ZXing.BrowserMultiFormatReader();
+    // LỖI THẬT đã vá (11/2026, người dùng báo "Kiểm Tra Giá/Ghi Nhận Quầy Kệ không hoạt động trên
+    // iPhone" — camera MỞ ĐƯỢC, mã vạch nằm rõ trong khung hình nhưng không bao giờ bắt được): trước đây
+    // khởi tạo BrowserMultiFormatReader() KHÔNG truyền hints — mặc định ZXing cố decode MỌI định dạng nó
+    // hỗ trợ (QR/EAN/UPC/Code128/Code39/Code93/ITF/Codabar/DataMatrix/Aztec/PDF417/RSS...) trên MỖI khung
+    // hình, trong khi nhánh BarcodeDetector native (runShelfBarcodeDetectorLoop() ngay trên — chạy được
+    // trên Android/Chrome) đã giới hạn ĐÚNG 6 định dạng thực tế cần dùng. Trên iPhone (không có
+    // BarcodeDetector native, LUÔN rơi vào nhánh ZXing này), máy chạy JS chậm hơn phần cứng tăng tốc gốc
+    // nên mỗi khung hình tốn quá nhiều thời gian thử đủ ~15 định dạng, tỉ lệ bắt được mã vạch (trước khi
+    // tay di chuyển/camera mất nét) THẤP ĐẾN MỨC gần như "không hoạt động" dù camera vẫn chạy bình
+    // thường. Giới hạn ĐÚNG 6 định dạng cần dùng (mirror y hệt danh sách BarcodeDetector) qua
+    // DecodeHintType.POSSIBLE_FORMATS + bật TRY_HARDER (ưu tiên đọc đúng hơn tốc độ, chấp nhận được vì đã
+    // giảm hẳn số định dạng phải thử) — giúp mỗi khung hình quét nhanh và chính xác hơn nhiều trên máy
+    // yếu hơn.
+    const hints = new Map();
+    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      window.ZXing.BarcodeFormat.EAN_13, window.ZXing.BarcodeFormat.EAN_8,
+      window.ZXing.BarcodeFormat.CODE_128, window.ZXing.BarcodeFormat.UPC_A,
+      window.ZXing.BarcodeFormat.UPC_E, window.ZXing.BarcodeFormat.QR_CODE
+    ]);
+    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+    shelfBarcodeZxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
     // Mặc định ZXing quét cách nhau 500ms/lần (timeBetweenScansMillis) — rút xuống 150ms để bắt mã vạch
     // nhanh hơn trên Safari iOS/trình duyệt không có BarcodeDetector native (vẫn đủ nhẹ, không treo UI,
     // vì mỗi lần quét 1 frame ảnh tĩnh, không phải xử lý nặng liên tục).
