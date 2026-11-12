@@ -1169,7 +1169,7 @@ const NGHIEP_VU_DOCS = {
       { label: '"💲 Kiểm Tra Giá" KHÁC hẳn "⏰ Hạn Sử Dụng"/"📊 Đối Chiếu"', text: '2 tab kia đọc SNAPSHOT tồn kho đã đồng bộ sẵn (job nền, cùng 1 lần gọi API phục vụ mọi người xem) — "Kiểm Tra Giá" gọi TRỰC TIẾP API đối tác MỖI LẦN bấm nút (tra giá tức thời, không cache), và KHÔNG LƯU kết quả vào đâu cả (không AppData/DB/lịch sử) — đúng bản chất "tra xong là xong", không phải dữ liệu cần đối chiếu/theo dõi lâu dài.' },
     ], right: [
       { label: 'Offline', text: 'Ghi nhận hỗ trợ offline-first — mất mạng vẫn "💾 Lưu Ghi Nhận" được (lưu tạm trên máy, hiện badge "🔌 Chưa đồng bộ"), tự động gửi lên server ngay khi có mạng lại mà không cần làm gì thêm. Chỉ áp dụng cho Ghi Nhận mới — Sửa/Xóa/Bán Hết/Cập Nhật CẦN có mạng (thao tác trên dòng đã tồn tại trên server).' },
-      { label: 'Quét mã vạch bằng camera', text: 'nút "📷 Quét Mã" ở form Ghi Nhận mở camera điện thoại/máy tính quét trực tiếp vào ô Mã Vạch — vẫn gõ tay được song song nếu mã mờ/máy không hỗ trợ camera.' },
+      { label: 'Quét mã vạch bằng camera', text: 'nút "📷 Quét Mã" ở form Ghi Nhận mở camera điện thoại/máy tính quét trực tiếp vào ô Mã Vạch — vẫn gõ tay được song song nếu mã mờ/máy không hỗ trợ camera. Dùng chung đúng 1 camera này cho cả "💲 Kiểm Tra Giá". Trên iPhone (không có bộ quét mã vạch sẵn trong trình duyệt như Android/Chrome), hệ thống tự chuyển sang thư viện quét riêng — đã tối ưu lại (11/2026, theo phản hồi người dùng quét không bắt được mã dù mã rõ trong khung hình) để bắt mã vạch nhanh và chính xác hơn hẳn trên iPhone.' },
     ] },
   },
   orgChart: {

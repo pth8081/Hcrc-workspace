@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**30.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.4 (2026-11): FIX — Quét mã vạch (Kiểm Tra Giá/Ghi Nhận Quầy Kệ) gần như không bắt được mã trên iPhone
+
+Người dùng gửi ảnh chụp: camera "💲 Kiểm Tra Giá" MỞ ĐƯỢC bình thường, mã vạch nằm rõ trong khung hình
+nhưng trạng thái vẫn mãi báo "Đưa mã vạch vào khung hình..." — báo "kiểm tra giá và ghi nhận quầy kệ đang
+không hoạt động với thiết bị iPhone".
+
+**Nguyên nhân**: camera dùng CHUNG 1 cơ chế quét cho cả "📷 Ghi Nhận" lẫn "💲 Kiểm Tra Giá"
+(`module-vanhanh.js`) — ưu tiên `BarcodeDetector` native (nhanh, tăng tốc phần cứng, có trên Android/
+Chrome) nếu trình duyệt hỗ trợ, nếu không thì tải thư viện ZXing chạy bằng JS thuần. **Safari/iPhone KHÔNG
+có `BarcodeDetector` native nên LUÔN rơi vào nhánh ZXing.** Trước đây khởi tạo
+`new ZXing.BrowserMultiFormatReader()` **không truyền hints** — mặc định ZXing cố decode MỌI định dạng nó
+hỗ trợ (~15 định dạng: QR/EAN/UPC/Code128/Code39/Code93/ITF/Codabar/DataMatrix/Aztec/PDF417/RSS...) trên
+MỖI khung hình, trong khi nhánh `BarcodeDetector` (chạy trên Android) đã giới hạn đúng 6 định dạng thực tế
+cần dùng. Trên iPhone (JS thuần, không có phần cứng tăng tốc), mỗi khung hình tốn quá nhiều thời gian thử
+đủ các định dạng không liên quan, khiến tỉ lệ bắt được mã vạch (trước khi tay di chuyển/camera mất nét)
+thấp tới mức gần như "không hoạt động" dù camera vẫn chạy bình thường.
+
+**Đã làm**: `public/js/module-vanhanh.js::runShelfBarcodeZxingLoop()` — khởi tạo
+`BrowserMultiFormatReader` kèm `hints` giới hạn ĐÚNG 6 định dạng (`EAN_13/EAN_8/CODE_128/UPC_A/UPC_E/
+QR_CODE`, mirror y hệt danh sách `BarcodeDetector`) qua `DecodeHintType.POSSIBLE_FORMATS`, kèm bật
+`TRY_HARDER` (ưu tiên đọc đúng hơn tốc độ — chấp nhận được vì đã giảm hẳn số định dạng phải thử). Không
+đổi gì ở nhánh `BarcodeDetector` (Android/Chrome không bị ảnh hưởng, vốn đã hoạt động tốt).
+
+**Test**: file mới `tests/test-shelf-barcode-zxing-hints.js` (tải THẬT `/vendor/zxing/zxing.min.js`, bọc
+lại constructor để bắt đúng hints truyền vào, không cần camera phần cứng thật) — 7/7 scenario pass, xác
+nhận đúng 6 định dạng + `TRY_HARDER` + luồng route kết quả quét sang Kiểm Tra Giá không đổi hành vi cũ.
+Chạy lại `test-shelf-pricecheck-real-click.js` (8/8), `test-shelf-mobile-and-offline-inventory.js` (8/8),
+`test-shelf-record-lo-real-click.js` (12/12), `test-shelf-subtab-real-click.js` (8/8),
+`test-shelf-mavach-match.js` (5/5), `test-shelf-record-quantity-increase-confirm.js` (7/7) — pass hết,
+không ảnh hưởng chức năng Ghi Nhận/Kiểm Tra Giá/Kiểm Soát Hàng Hóa nào khác. Grep CSP chuẩn — sạch.
+
+**Lưu ý**: fix này cải thiện ĐÁNG KỂ tỉ lệ bắt mã trên iPhone nhưng không "chắc chắn tuyệt đối" bằng
+`BarcodeDetector` native của Android (ZXing vẫn là giải pháp phần mềm thuần) — người dùng vẫn luôn gõ tay
+được song song nếu 1 mã cụ thể khó đọc (ánh sáng yếu/mã rách/góc chụp xiên).
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies (không đổi version `@zxing/library`,
+chỉ đổi cách gọi) — chỉ copy code + `pm2 restart`.
 
 ## v30.3 (2026-11): FIX RẤT NGHIÊM TRỌNG — Tick thêm Nhóm Phân Quyền có thể ÂM THẦM GỠ MẤT quyền Admin của chính tài khoản đang sửa
 
