@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**30.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.12 (2026-11): Màn "Sửa 1 Người Dùng" — lưu nhanh hơn, hết báo xung đột GIẢ
+
+Theo yêu cầu người dùng: "sao cho tôi phân quyền cho nhanh" — nút "Lưu Người Dùng & Phân Quyền" (sửa
+1 tài khoản) trước đây gửi NGUYÊN CẢ danh sách toàn bộ nhân viên công ty lên server mỗi lần lưu (dù chỉ
+sửa 1 người), so "phiên bản" của CẢ danh sách để phát hiện xung đột — vừa chậm (payload lớn theo tổng số
+nhân viên), vừa hay báo "vừa bị người khác thay đổi" GIẢ vì BẤT KỲ hoạt động nào khác ghi vào "users"
+(ai đó tự đổi mật khẩu, đăng nhập máy mới, Cơ Cấu Tổ Chức tự đồng bộ Quản Lý Trực Tiếp...) cũng làm
+"phiên bản" đổi, dù không đụng đúng người đang sửa.
+
+**Đã xác nhận phạm vi với người dùng trước khi làm** (3 phương án: chỉ màn Sửa 1 Người Dùng / tất cả
+thao tác hàng loạt / chuyển hẳn "users" sang bảng CSDL riêng) — chọn phương án hẹp nhất, rủi ro thấp
+nhất: **CHỈ** màn "Sửa 1 Người Dùng" (`saveUser()`). 13 nơi khác vẫn gọi `syncStorage('users', ...)`
+nguyên như cũ (Nhập Excel, Gán Nhóm Phân Quyền hàng loạt, Nhập Ma Trận Phân Quyền, Đặt Lại Mật Khẩu Hàng
+Loạt...) — những luồng đó vốn đã đụng NHIỀU người cùng lúc nên không thêm rủi ro ở phạm vi này.
+
+**Cơ chế mới** (`routes/data.js`, nhánh `isUsersPatchMode`): client gửi `{__patchUser: {...}}` (ĐÚNG 1
+bản ghi, không phải mảng) — server khoá đúng dòng "users" (`withLockedAppDataValue`, CÙNG cơ chế mọi
+collection sửa-1-bản-ghi khác trong hệ thống — KHÔNG phải kiến trúc mới), tự đọc danh sách MỚI NHẤT,
+gộp đúng 1 bản ghi vừa sửa/tạo vào đó, rồi chạy NGUYÊN VẸN `prepareUsersForSave()` (không viết lại logic
+nghiệp vụ — mọi luật hiện có: khoá tài khoản "admin" gốc, `assertAtLeastOneAdmin`, cascade đổi tên tài
+khoản, nhật ký "ADMIN_PERMS_REMOVED"... đều áp dụng ĐẦY ĐỦ). KHÔNG còn If-Match/kiểm tra phiên bản cho
+đường này — 2 request sửa 2 người KHÁC NHAU không bao giờ còn báo xung đột nhau nữa.
+
+**Đánh đổi có chủ ý đã ghi nhận rõ**: patch-mode không còn phát hiện xung đột ở mức field nữa — 2 admin
+cùng sửa ĐÚNG field của ĐÚNG 1 người trong vài trăm mili-giây (cực hiếm) sẽ là last-write-wins thay vì
+bị chặn như cơ chế cũ. Đổi lại hết hẳn báo xung đột GIẢ (hay gặp hơn RẤT NHIỀU) cho mọi lượt sửa thường
+ngày — cùng mức đánh đổi mọi collection sửa-1-bản-ghi khác trong hệ thống đã chấp nhận từ trước.
+
+**Vá kèm 1 lỗi thật phát hiện khi viết test**: `syncUserPatch()` (client) phải tự loại field
+`mustChangePassword` khỏi payload gửi lên — nếu không, DB.users phía trình duyệt có thể đang cầm giá trị
+CŨ (người đó vừa tự đổi mật khẩu ở nơi khác ngay trước lượt admin lưu field khác) sẽ bị gửi lên và ÂM
+THẦM khôi phục lại cờ "chưa đổi mật khẩu tạm" đã lỗi thời — đúng lỗi thật đã từng xảy ra ở cơ chế cũ.
+
+**Test**: `tests/test-user-save-patch-mode.js` (11 scenario mới, dùng `routes/data.js` THẬT không mock) +
+viết lại 4 scenario liên quan trong `tests/test-admin-users-permgroups.js` (134/134 scenario vẫn pass,
+toàn bộ 49 file test khác đụng `routes/data.js` cũng chạy lại sạch, không regression).
 
 ## v30.11 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — cột "Siêu Thị" LUÔN hiện
 

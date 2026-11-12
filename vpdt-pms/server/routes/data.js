@@ -2398,10 +2398,38 @@ router.post('/:key', async (req, res) => {
     // khoản + danh sách username bị XOÁ VĨNH VIỄN — cascade SAU KHI ghi 'users' đã chắc chắn thành
     // công (cùng nguyên tắc meetingRooms/nganhHangCatalog/submissionTypes ở trên).
     let oldUsersForProfileCascade = [];
-    if (key === 'users' && Array.isArray(value)) {
+    // usersPatchAlreadyWritten (11/2026, "màn Sửa 1 Người Dùng lưu chậm + hay báo xung đột GIẢ") — theo
+    // yêu cầu người dùng: màn "Lưu Người Dùng & Phân Quyền" khi sửa/tạo ĐÚNG 1 người KHÔNG còn cần gửi
+    // nguyên cả danh sách toàn công ty + so sánh "phiên bản" của CẢ danh sách đó nữa (gốc rễ cả 2 vấn đề
+    // — xem saveUserOne()/module-admin-submissiongroups.js). Phát hiện qua hình dạng body: patch-mode
+    // gửi { __patchUser: {...} } (OBJECT, không phải mảng) — mọi đường gửi MẢNG cũ (saveUser() nhập
+    // Excel/bulk group/Ma Trận Phân Quyền/Đặt Lại Mật Khẩu Hàng Loạt...) hoàn toàn KHÔNG đổi gì, vẫn đi
+    // đúng nhánh "Array.isArray(value)" như trước — patch-mode CHỈ áp dụng khi FE chủ động gửi đúng hình
+    // dạng mới, không có nguy cơ nhầm lẫn 2 luồng. Khoá đúng 1 dòng "users" (withLockedAppDataValue, CÙNG
+    // cơ chế khoá-đọc-mới-nhất-rồi-ghi đã dùng cho shelfLocations/shelfRecords.../mọi collection AppData
+    // sửa-1-bản-ghi khác trong hệ thống — KHÔNG phải kiến trúc mới) để tự gộp đúng 1 bản ghi vừa sửa/tạo
+    // vào BẢN MỚI NHẤT rồi chạy NGUYÊN VẸN prepareUsersForSave() (không viết lại logic nghiệp vụ) — 2
+    // request sửa 2 người KHÁC NHAU không bao giờ còn báo xung đột nhau nữa (lock chỉ chặn 2 request
+    // cùng sửa "users" THẬT SỰ chồng chéo mili-giây, không dựa vào "phiên bản" của cả mảng như cũ), và
+    // payload gửi lên/validate chỉ còn đúng 1 bản ghi thay vì toàn bộ nhân viên công ty.
+    let usersPatchAlreadyWritten = false;
+    let patchedUserId = null;
+    const isUsersPatchMode = key === 'users' && value && typeof value === 'object' && !Array.isArray(value) && value.__patchUser;
+    if (isUsersPatchMode) {
+      const patchUser = value.__patchUser;
+      patchedUserId = patchUser.id;
+      value = await withLockedAppDataValue('users', async (freshUsers) => {
+        const arr = Array.isArray(freshUsers) ? freshUsers : [];
+        oldUsersForProfileCascade = arr;
+        const idx = arr.findIndex(u => u.id === patchUser.id);
+        const merged = idx === -1 ? [...arr, patchUser] : arr.map((u, i) => (i === idx ? patchUser : u));
+        return prepareUsersForSave(merged, req.user.username);
+      });
+      usersPatchAlreadyWritten = true;
+    } else if (key === 'users' && Array.isArray(value)) {
       oldUsersForProfileCascade = (await getAppDataValue('users')) || [];
+      value = await prepareUsersForSave(value, req.user.username);
     }
-    if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     // Nhật ký "mất quyền Admin" (11/2026, RẤT NGHIÊM TRỌNG — người dùng báo "sửa quyền của tôi, add vào
     // 1 nhóm quyền khác, bị mất quyền admin luôn, mấy lần rồi"): gốc rễ đã vá ở client
     // (onUserPermGroupsChange()/module-admin-permgroups.js + xác nhận tường minh ở saveUser()/
@@ -2474,7 +2502,11 @@ router.post('/:key', async (req, res) => {
 
     const ifMatch = req.get('If-Match');
     let savedVersion = null;
-    if (ifMatch) {
+    if (usersPatchAlreadyWritten) {
+      // Đã ghi THẬT bên trong withLockedAppDataValue() ở trên rồi — KHÔNG ghi lại lần 2 (patch-mode
+      // không gửi If-Match, vì cơ chế khoá-đọc-mới-nhất-rồi-ghi đã tự đảm bảo an toàn, không cần client
+      // tự so phiên bản của cả mảng "users" nữa).
+    } else if (ifMatch) {
       const { conflict, version } = await setAppDataValueIfVersionMatches(key, value, ifMatch);
       if (conflict) {
         return res.status(409).json({
@@ -2501,6 +2533,12 @@ router.post('/:key', async (req, res) => {
       // ai khác thực sự đổi "users", chính lượt lưu permGroups này gây ra). Trả kèm version MỚI của
       // "users" để client tự cập nhật lại DB._versions.users (xem syncStorageOnce() ở index.html),
       // không phải đợi tới lượt sau bị 409 rồi mới biết.
+      usersVersion = (await getAppDataValueWithVersion('users')).version;
+    } else if (usersPatchAlreadyWritten) {
+      // CÙNG LÝ DO ngay trên — patch-mode cũng tự bump UpdatedAt của "users" (withLockedAppDataValue()
+      // ở trên) mà KHÔNG đi qua If-Match, nên trả kèm version MỚI để client tự đồng bộ DB._versions.users
+      // — tránh 1 lượt lưu "users" kiểu CŨ (Nhập Excel/Gán Nhóm hàng loạt...) ngay sau đó trong CÙNG
+      // phiên bị 409 giả vì vẫn đang cầm version từ trước lượt patch này.
       usersVersion = (await getAppDataValueWithVersion('users')).version;
     }
 
@@ -2612,11 +2650,17 @@ router.post('/:key', async (req, res) => {
     // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.
     logAdminSensitiveDataWrite(req, key);
 
+    // patch-mode (xem isUsersPatchMode ở trên) trả kèm ĐÚNG bản ghi vừa lưu (đã qua prepareUsersForSave(),
+    // KHÔNG phải nguyên văn client gửi lên — có thể đã hash mật khẩu/PIN mới, giữ lại field server quản
+    // lý...) để client tự thay đúng 1 phần tử trong DB.users, không cần cả mảng trả về.
+    const patchedItem = usersPatchAlreadyWritten
+      ? stripPasswords([(value || []).find(u => u.id === patchedUserId)])[0]
+      : undefined;
     if (ifMatch) {
       res.set('ETag', savedVersion);
-      return res.json({ ok: true, version: savedVersion, usersVersion, syncedVersions });
+      return res.json({ ok: true, version: savedVersion, usersVersion, syncedVersions, item: patchedItem });
     }
-    res.json({ ok: true, usersVersion, syncedVersions });
+    res.json({ ok: true, usersVersion, syncedVersions, item: patchedItem });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, `POST /api/data/${key}`, 'Không thể lưu dữ liệu vào SQL Server');

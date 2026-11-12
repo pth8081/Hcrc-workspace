@@ -872,44 +872,42 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
-  // (i)+(j) 409 "vừa bị người khác thay đổi" ở "users" — cơ chế tự động refetch + áp lại + thử lưu lại 1
-  //     lần (retryUsersSaveAfterConflict()/syncStorageOnce(), core.js). "Server" giả lập ngay trong
-  //     window.fetch để kiểm soát chính xác kịch bản 2 người viết đồng thời — mirror kịch bản
-  //     setAppDataValueIfVersionMatches() thật (routes/data.js): So đúng version If-Match, 409 nếu lệch.
+  // (i)+(j)+(j1b)+(j1c) — "cơ chế tự động refetch + áp lại + thử lưu lại 1 lần sau 409" MÔ TẢ Ở ĐÂY
+  // TRƯỚC 11/2026 đã bị THAY HẲN cho saveUser() (theo yêu cầu người dùng "sao cho tôi phân quyền cho
+  // nhanh" — màn "Sửa 1 Người Dùng" quá chậm + hay báo 409 GIẢ vì gửi NGUYÊN mảng users để so "phiên
+  // bản") bằng patch-mode: saveUser() giờ gọi syncUserPatch() (module-admin-submissiongroups.js), gửi
+  // ĐÚNG 1 bản ghi `{__patchUser:{...}}`, server (routes/data.js, nhánh isUsersPatchMode) tự khoá-đọc-
+  // mới-nhất-rồi-ghi (withLockedAppDataValue, CÙNG cơ chế mọi collection sửa-1-bản-ghi khác trong hệ
+  // thống) — KHÔNG CÒN KHÁI NIỆM 409/retry cho đường này nữa (vẫn còn nguyên cho 13 nơi khác dùng
+  // syncStorage('users', {usersBaseline}) — Nhập Excel/Gán Nhóm hàng loạt/Ma Trận Phân Quyền/Đặt Lại Mật
+  // Khẩu Hàng Loạt..., không đổi gì). 4 kịch bản dưới đây viết lại theo ĐÚNG cơ chế mới, giữ nguyên MỤC
+  // TIÊU nghiệp vụ gốc của từng kịch bản (mirror window.fetch theo patch-mode, không còn If-Match/GET).
+  // ĐÃ CÓ BỘ TEST RIÊNG đối chứng với server THẬT (không mock): tests/test-user-save-patch-mode.js.
   // ==========================================================================
-  await scenario('(i) 409 do hoạt động KHÔNG liên quan (không đụng đúng bản ghi đang sửa) -> tự lưu lại thành công, không mất thay đổi của ai', async () => {
+  await scenario('(i) Patch-mode: thay đổi của bystander (không liên quan) xảy ra NGAY TRƯỚC khi lưu -> lưu thành công, KHÔNG mất thay đổi của bystander', async () => {
     const r = await page.evaluate(async () => {
       let serverUsers = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
         { id: 8001, username: 'nv.editor.409', name: 'Người Được Sửa', email: 'ed409@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
         { id: 8002, username: 'nv.bystander.409', name: 'Người Không Liên Quan', email: 'by409@hcrc.local', phone: '092', posType: 'HO', dept: 'Kinh Doanh', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
       ];
-      let serverVersion = 5000;
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         const method = (opts && opts.method) || 'GET';
-        if (url === '/api/data/users' && method === 'GET') {
-          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
-        }
         if (url === '/api/data/users' && method === 'POST') {
-          const ifMatch = opts.headers['If-Match'];
-          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
-            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
-          }
-          serverUsers = JSON.parse(opts.body);
-          serverVersion++;
-          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+          const patch = JSON.parse(opts.body).__patchUser;
+          const idx = serverUsers.findIndex(u => u.id === patch.id);
+          if (idx !== -1) serverUsers[idx] = { ...patch }; else serverUsers.push({ ...patch });
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: patch, usersVersion: '2' }) };
         }
         return savedFetch(url, opts);
       };
 
       DB.users = JSON.parse(JSON.stringify(serverUsers));
-      DB._versions.users = String(serverVersion);
 
-      // Hoạt động KHÁC (không qua form Người Dùng) ghi "users" — đổi bystander, bump version, KHÔNG
-      // đụng gì tới "editor" (record Client A sắp sửa).
+      // Hoạt động KHÁC (không qua form Người Dùng) ghi THẲNG vào "server" — đổi bystander, KHÔNG đụng gì
+      // tới "editor" (record Client A sắp sửa) — mô phỏng đúng tình huống gây 409 GIẢ ở cơ chế CŨ.
       serverUsers = serverUsers.map(u => u.id === 8002 ? { ...u, phone: '099-tu-doi-noi-khac' } : u);
-      serverVersion++;
 
       editUser(8001);
       document.getElementById('uPhone').value = '091-SO-MOI-CUA-A';
@@ -918,130 +916,96 @@ async function scenario(name, fn) {
 
       const result = {
         alerts: window.__alerts.slice(),
-        editorPhoneOnClient: DB.users.find(u => u.id === 8001)?.phone,
-        bystanderPhonePreserved: DB.users.find(u => u.id === 8002)?.phone,
-        clientVersionSynced: DB._versions.users === String(serverVersion),
+        editorPhoneOnServer: serverUsers.find(u => u.id === 8001)?.phone,
+        bystanderPhonePreservedOnServer: serverUsers.find(u => u.id === 8002)?.phone,
       };
       window.fetch = savedFetch;
       DB.users = DB.users.filter(u => u.id !== 8001 && u.id !== 8002); // dọn lại cho scenario sau
       return result;
     });
-    record('(i) không có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — retry diễn ra êm',
+    record('(i) không có alert lỗi nào (chỉ có alert "Đã lưu" bình thường) — patch-mode không còn khái niệm 409/retry',
       !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
       JSON.stringify(r));
-    record('(i) thay đổi CỦA MÌNH (editor) được lưu thành công sau khi tự retry',
-      r.editorPhoneOnClient === '091-SO-MOI-CUA-A', JSON.stringify(r));
-    record('(i) thay đổi CỦA NGƯỜI KHÁC (bystander, không liên quan) KHÔNG bị ghi đè mất',
-      r.bystanderPhonePreserved === '099-tu-doi-noi-khac', JSON.stringify(r));
-    record('(i) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
-      r.clientVersionSynced, JSON.stringify(r));
+    record('(i) thay đổi CỦA MÌNH (editor) được lưu thành công', r.editorPhoneOnServer === '091-SO-MOI-CUA-A', JSON.stringify(r));
+    record('(i) thay đổi CỦA NGƯỜI KHÁC (bystander, không liên quan) KHÔNG bị ghi đè mất — patch-mode CHỈ gửi/sửa ĐÚNG 1 bản ghi',
+      r.bystanderPhonePreservedOnServer === '099-tu-doi-noi-khac', JSON.stringify(r));
   });
 
-  // LỖI ĐÃ VÁ (11/2026, người dùng yêu cầu "chỉ nên báo xung đột khi 2 admin cùng sửa TRÙNG đúng 1 phần
-  // phân quyền, còn không thì cho lưu thoải mái" — xem mergeUserRecordFieldLevel()/USER_CONFLICT_FIELD_VN_LABELS,
-  // core.js): retryUsersSaveAfterConflict() đổi từ đối chiếu NGUYÊN 1 bản ghi sang đối chiếu TỪNG FIELD —
-  // kịch bản (j) này TRƯỚC ĐÂY cố ý đổi field "name" (KHÁC field "phone" admin A đang sửa) để mô phỏng
-  // "conflict thật", nhưng với thiết kế MỚI, 2 field KHÁC NHAU không còn là xung đột (tự gộp được) — đổi
-  // fixture sang đụng ĐÚNG field "phone" (field admin A đang sửa) để tiếp tục kiểm đúng mục tiêu ban đầu
-  // của kịch bản này: xung đột THẬT (cùng field, khác giá trị) vẫn phải chặn, không tự ý ghi đè.
-  await scenario('(j) 409 do ĐÚNG field admin đang sửa bị đổi ở nơi khác (conflict thật) -> KHÔNG tự ý ghi đè, báo đúng nguyên nhân', async () => {
+  // ĐÁNH ĐỔI CÓ CHỦ Ý (11/2026, cùng quyết định làm phạm vi hẹp người dùng đã xác nhận): patch-mode
+  // KHÔNG còn phát hiện xung đột field-level nữa — 2 admin cùng sửa ĐÚNG field của ĐÚNG 1 người trong
+  // vài trăm ms (cực hiếm) sẽ là LAST-WRITE-WINS (ai lưu sau thắng, không báo gì) thay vì bị chặn như cơ
+  // chế CŨ. Đổi lại: hết HẲN báo xung đột GIẢ (hay gặp hơn RẤT NHIỀU — bất kỳ hoạt động không liên quan
+  // nào khác cũng từng gây ra) cho MỌI lượt sửa thường ngày — CÙNG mức đánh đổi mọi collection sửa-1-
+  // bản-ghi khác trong hệ thống đã chấp nhận từ trước (VD applyShelfLocationEdit(), lib/shelfStockEdit.js
+  // — không có kiểm tra "bản ghi có bị đổi từ lúc tôi mở form" nào cả).
+  await scenario('(j) Patch-mode: 2 admin cùng sửa ĐÚNG field của ĐÚNG 1 người gần như đồng thời -> last-write-wins (không còn báo xung đột)', async () => {
     const r = await page.evaluate(async () => {
       let serverUsers = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
         { id: 8003, username: 'nv.editor.409b', name: 'Người Được Sửa 2', email: 'ed409b@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
       ];
-      let serverVersion = 6000;
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         const method = (opts && opts.method) || 'GET';
-        if (url === '/api/data/users' && method === 'GET') {
-          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
-        }
         if (url === '/api/data/users' && method === 'POST') {
-          const ifMatch = opts.headers['If-Match'];
-          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
-            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
-          }
-          serverUsers = JSON.parse(opts.body);
-          serverVersion++;
-          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+          const patch = JSON.parse(opts.body).__patchUser;
+          const idx = serverUsers.findIndex(u => u.id === patch.id);
+          if (idx !== -1) serverUsers[idx] = { ...patch }; else serverUsers.push({ ...patch });
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: patch, usersVersion: '2' }) };
         }
         return savedFetch(url, opts);
       };
 
       DB.users = JSON.parse(JSON.stringify(serverUsers));
-      DB._versions.users = String(serverVersion);
 
-      // Người khác đổi ĐÚNG field "phone" mà Client A sắp sửa, sang giá trị KHÁC (conflict thật ở field
-      // level — xem chú thích tại tên kịch bản).
+      // Admin KHÁC đổi ĐÚNG field "phone" (field Client A SẮP sửa) NGAY TRƯỚC khi Client A bấm Lưu.
       serverUsers = serverUsers.map(u => u.id === 8003 ? { ...u, phone: '091-DA-BI-DOI-O-NOI-KHAC' } : u);
-      serverVersion++;
 
       editUser(8003);
       document.getElementById('uPhone').value = '091-CLIENT-A-MUON-LUU';
       window.__alerts.length = 0;
       await saveUser({ preventDefault(){} });
 
-      const result = {
-        alerts: window.__alerts.slice(),
-        serverName: serverUsers.find(u => u.id === 8003)?.name,
-        serverPhone: serverUsers.find(u => u.id === 8003)?.phone,
-      };
+      const result = { alerts: window.__alerts.slice(), serverPhone: serverUsers.find(u => u.id === 8003)?.phone };
       window.fetch = savedFetch;
       DB.users = DB.users.filter(u => u.id !== 8003); // dọn lại
       return result;
     });
-    record('(j) báo đúng 1 alert "conflict thật" (nêu rõ đúng tên người + tên field xung đột, không phải lỗi hệ thống chung chung)',
-      r.alerts.length === 1 && r.alerts[0].includes('⚠️') && r.alerts[0].includes('nv.editor.409b') && r.alerts[0].includes('Số điện thoại'),
-      JSON.stringify(r));
-    record('(j) KHÔNG tự ý ghi đè lên server — số điện thoại trên server vẫn giữ nguyên của người khác vừa đổi, tên KHÔNG bị đụng (field không liên quan)',
-      r.serverPhone === '091-DA-BI-DOI-O-NOI-KHAC' && r.serverName === 'Người Được Sửa 2', JSON.stringify(r));
+    record('(j) KHÔNG còn báo lỗi xung đột (patch-mode bỏ hẳn field-level conflict detection) — chỉ có alert "Đã lưu"',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(j) Client A GHI ĐÈ giá trị của admin khác (last-write-wins, đúng đánh đổi đã chấp nhận)',
+      r.serverPhone === '091-CLIENT-A-MUON-LUU', JSON.stringify(r));
   });
 
-  // ==========================================================================
-  // (j1b) LỖI THẬT đã vá (10/2026, người dùng báo lại ĐÚNG cảnh báo 409 "users" dù (i)/(j) ở trên đã có
-  //     cơ chế retry từ trước — hoá ra 1 lỗi KHÁC, sâu hơn): retryUsersSaveAfterConflict() TRƯỚC ĐÂY so
-  //     sánh NGUYÊN bản ghi (deepEqualJson cả object), trong khi server TỰ âm thầm đổi field
-  //     `sessionVersion` ở MỌI lượt đăng nhập THÀNH CÔNG (routes/auth.js) — hoàn toàn không do ai chủ
-  //     động sửa hồ sơ. Chỉ cần người đang được admin sửa đăng nhập ĐÚNG 1 lần trong lúc admin mở form là
-  //     báo "genuineConflict" SAI dù admin không hề đụng field đó. Kịch bản: "server" chỉ đổi
-  //     `sessionVersion` của ĐÚNG người admin đang sửa (mô phỏng người đó vừa đăng nhập lại) — mong đợi: 1)
-  //     KHÔNG báo conflict, tự retry lưu được bình thường; 2) sessionVersion LƯU LẠI đúng giá trị MỚI NHẤT
-  //     từ server (không bị ghi đè lùi về giá trị cũ từ lúc admin mở form — nếu bị lùi sẽ vô hiệu hoá tác
-  //     dụng bảo mật "đăng xuất phiên cũ" vừa có hiệu lực).
-  // ==========================================================================
-  await scenario('(j1b) 409 do CHỈ sessionVersion tự đổi (người đó vừa đăng nhập, không phải ai sửa hồ sơ) -> KHÔNG phải conflict thật, tự lưu lại thành công, giữ đúng sessionVersion mới nhất', async () => {
+  // (j1b) Server (prepareUsersForSave(), routes/data.js) LUÔN ép sessionVersion về đúng giá trị prior
+  // trong CSDL, bỏ qua hoàn toàn giá trị client gửi — mirror ĐÚNG hành vi đó ở mock để xác nhận
+  // syncUserPatch() không vô tình gửi/làm hỏng field này (client thật ra KHÔNG BAO GIỜ có field này
+  // trong tay — đã bị stripPasswords() lọc khỏi GET /api/data — nên patch cũng không có, giống hệt đường
+  // mảng cũ).
+  await scenario('(j1b) Patch-mode: người đó vừa đăng nhập lại (sessionVersion tự tăng) NGAY TRƯỚC khi admin lưu field khác -> KHÔNG bị admin ghi đè lùi', async () => {
     const r = await page.evaluate(async () => {
       let serverUsers = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true, sessionVersion: 1 },
         { id: 8004, username: 'nv.editor.409c', name: 'Người Được Sửa 3', email: 'ed409c@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true, sessionVersion: 1 },
       ];
-      let serverVersion = 7000;
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         const method = (opts && opts.method) || 'GET';
-        if (url === '/api/data/users' && method === 'GET') {
-          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
-        }
         if (url === '/api/data/users' && method === 'POST') {
-          const ifMatch = opts.headers['If-Match'];
-          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
-            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
-          }
-          serverUsers = JSON.parse(opts.body);
-          serverVersion++;
-          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+          const patch = JSON.parse(opts.body).__patchUser;
+          const idx = serverUsers.findIndex(u => u.id === patch.id);
+          // Mirror prepareUsersForSave(): sessionVersion LUÔN lấy từ prior, bỏ qua giá trị client gửi.
+          const merged = idx !== -1 ? { ...patch, sessionVersion: serverUsers[idx].sessionVersion } : { ...patch };
+          if (idx !== -1) serverUsers[idx] = merged; else serverUsers.push(merged);
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: merged, usersVersion: '2' }) };
         }
         return savedFetch(url, opts);
       };
 
       DB.users = JSON.parse(JSON.stringify(serverUsers));
-      DB._versions.users = String(serverVersion);
 
-      // "Đăng nhập" — CHỈ sessionVersion của ĐÚNG người admin sắp sửa tăng lên, không có ai đụng field nào
-      // khác (mirror routes/auth.js: `list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1`).
+      // "Đăng nhập" — CHỈ sessionVersion của ĐÚNG người admin sắp sửa tăng lên (mirror routes/auth.js).
       serverUsers = serverUsers.map(u => u.id === 8004 ? { ...u, sessionVersion: u.sessionVersion + 1 } : u);
-      serverVersion++;
 
       editUser(8004);
       document.getElementById('uPhone').value = '091-ADMIN-DANG-SUA';
@@ -1050,92 +1014,73 @@ async function scenario(name, fn) {
 
       const result = {
         alerts: window.__alerts.slice(),
-        editorPhoneOnClient: DB.users.find(u => u.id === 8004)?.phone,
+        editorPhoneOnServer: serverUsers.find(u => u.id === 8004)?.phone,
         serverSessionVersion: serverUsers.find(u => u.id === 8004)?.sessionVersion,
-        clientVersionSynced: DB._versions.users === String(serverVersion),
       };
       window.fetch = savedFetch;
       DB.users = DB.users.filter(u => u.id !== 8004); // dọn lại cho scenario sau
       return result;
     });
-    record('(j1b) KHÔNG có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — field nền KHÔNG bị coi là conflict',
-      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
-      JSON.stringify(r));
-    record('(j1b) thay đổi CỦA ADMIN (phone) được lưu thành công sau khi tự retry',
-      r.editorPhoneOnClient === '091-ADMIN-DANG-SUA', JSON.stringify(r));
+    record('(j1b) không có alert lỗi nào (chỉ có alert "Đã lưu" bình thường)',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(j1b) thay đổi CỦA ADMIN (phone) được lưu thành công', r.editorPhoneOnServer === '091-ADMIN-DANG-SUA', JSON.stringify(r));
     record('(j1b) sessionVersion trên server giữ ĐÚNG giá trị MỚI NHẤT (2, do vừa đăng nhập) — KHÔNG bị admin ghi đè lùi về giá trị cũ (1) lúc mở form',
       r.serverSessionVersion === 2, JSON.stringify(r));
-    record('(j1b) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
-      r.clientVersionSynced, JSON.stringify(r));
   });
 
-  // ==========================================================================
-  // (j1c) LỖI THẬT đã vá — ĐÚNG NGUYÊN NHÂN người dùng báo lại (10/2026, reset mật khẩu cho 1 user rồi
-  //     "Lưu Người Dùng & Phân Quyền" vẫn báo "vừa bị thay đổi ở nơi khác ... hoặc chính người đó vừa tự
-  //     đổi mật khẩu"): server tự GỠ `mustChangePassword` khi CHÍNH người đang được admin sửa tự đổi mật
-  //     khẩu thành công ở nơi khác (PATCH /api/auth/me) — hoàn toàn độc lập với admin. Kịch bản: "server"
-  //     chỉ đổi `mustChangePassword` (true -> false) của ĐÚNG người admin đang sửa, mô phỏng đúng tình
-  //     huống người dùng báo lại. Mong đợi: 1) KHÔNG báo conflict, tự retry lưu được; 2) admin reset mật
-  //     khẩu mới -> mustChangePassword server set lại true theo đúng logic chuẩn (prepareUsersForSave()),
-  //     không bị admin vô tình "khoá cứng" theo giá trị false đã lỗi thời từ lúc mở form.
-  // ==========================================================================
-  await scenario('(j1c) 409 do CHỈ mustChangePassword tự đổi (người đó vừa tự đổi mật khẩu, không phải ai sửa hồ sơ) -> KHÔNG phải conflict thật, tự lưu lại thành công', async () => {
+  // (j1c) LỖI THẬT đã vá TRƯỚC ĐÂY (10/2026, "reset mật khẩu cho 1 user rồi Lưu vẫn báo vừa bị thay đổi
+  // ở nơi khác... hoặc chính người đó vừa tự đổi mật khẩu") — NAY kiểm tra ĐÚNG NGUYÊN NHÂN GỐC theo cơ
+  // chế MỚI: syncUserPatch() (module-admin-submissiongroups.js) PHẢI tự loại field mustChangePassword
+  // khỏi payload gửi lên (DB.users phía trình duyệt có thể đang cầm giá trị CŨ nếu người đó vừa tự đổi
+  // mật khẩu ở nơi khác ngay trước lượt admin lưu) — thiếu bước này sẽ ÂM THẦM khôi phục lại cờ "chưa đổi
+  // mật khẩu tạm" đã lỗi thời, ĐÚNG lỗi thật đã xảy ra trước đây.
+  await scenario('(j1c) Patch-mode: người đó vừa TỰ đổi mật khẩu (mustChangePassword true->false) NGAY TRƯỚC khi admin sửa field KHÁC -> KHÔNG bị admin ghi đè lùi về true', async () => {
     const r = await page.evaluate(async () => {
       let serverUsers = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
         { id: 8005, username: 'nv.editor.409d', name: 'Người Được Sửa 4', email: 'ed409d@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true, mustChangePassword: true },
       ];
-      let serverVersion = 7100;
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         const method = (opts && opts.method) || 'GET';
-        if (url === '/api/data/users' && method === 'GET') {
-          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
-        }
         if (url === '/api/data/users' && method === 'POST') {
-          const ifMatch = opts.headers['If-Match'];
-          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
-            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
-          }
-          // Mirror prepareUsersForSave() (routes/data.js): admin gõ mật khẩu mới -> server tự set
-          // mustChangePassword=true, KHÔNG đọc gì từ payload (payload vốn đã bị syncStorageOnce() lọc
-          // bỏ hẳn field này, xem chú thích tại đó).
-          serverUsers = JSON.parse(opts.body).map(u => u.id === 8005 ? { ...u, mustChangePassword: true } : u);
-          serverVersion++;
-          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+          const patch = JSON.parse(opts.body).__patchUser;
+          const idx = serverUsers.findIndex(u => u.id === patch.id);
+          // Mirror prepareUsersForSave(): mustChangePassword GIỮ NGUYÊN giá trị prior nếu payload KHÔNG
+          // gửi kèm field này (undefined) — đây chính là điều syncUserPatch() (client) phải đảm bảo.
+          const prior = idx !== -1 ? serverUsers[idx] : null;
+          const merged = { ...patch, mustChangePassword: patch.mustChangePassword !== undefined ? patch.mustChangePassword : (prior ? prior.mustChangePassword : undefined) };
+          if (idx !== -1) serverUsers[idx] = merged; else serverUsers.push(merged);
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: merged, usersVersion: '2' }) };
         }
         return savedFetch(url, opts);
       };
 
       DB.users = JSON.parse(JSON.stringify(serverUsers));
-      DB._versions.users = String(serverVersion);
 
-      // "Tự đổi mật khẩu" — CHỈ mustChangePassword của ĐÚNG người admin sắp sửa chuyển true -> false,
-      // không có ai đụng field nào khác (mirror PATCH /api/auth/me khi chính user đó tự đổi mật khẩu).
+      // "Tự đổi mật khẩu" ở nơi khác — CHỈ mustChangePassword chuyển true -> false, DB.users phía trình
+      // duyệt (chưa tải lại trang) VẪN đang cầm giá trị CŨ (true) trên object sẽ bị saveUser() mutate.
       serverUsers = serverUsers.map(u => u.id === 8005 ? { ...u, mustChangePassword: false } : u);
-      serverVersion++;
 
       editUser(8005);
-      document.getElementById('uPassword').value = 'MatKhauMoiDoAdminDat123!';
+      document.getElementById('uPhone').value = '091-ADMIN-SUA-FIELD-KHAC'; // admin sửa field KHÁC, KHÔNG đổi mật khẩu
       window.__alerts.length = 0;
       await saveUser({ preventDefault(){} });
 
       const result = {
         alerts: window.__alerts.slice(),
-        clientVersionSynced: DB._versions.users === String(serverVersion),
+        editorPhoneOnServer: serverUsers.find(u => u.id === 8005)?.phone,
         serverMustChangePassword: serverUsers.find(u => u.id === 8005)?.mustChangePassword,
       };
       window.fetch = savedFetch;
       DB.users = DB.users.filter(u => u.id !== 8005); // dọn lại cho scenario sau
       return result;
     });
-    record('(j1c) KHÔNG có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — mustChangePassword KHÔNG bị coi là conflict',
-      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
-      JSON.stringify(r));
-    record('(j1c) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
-      r.clientVersionSynced, JSON.stringify(r));
-    record('(j1c) mustChangePassword trên server đúng theo logic chuẩn (true, do admin vừa đặt mật khẩu mới) — không bị client ghi đè theo giá trị cũ',
-      r.serverMustChangePassword === true, JSON.stringify(r));
+    record('(j1c) không có alert lỗi nào (chỉ có alert "Đã lưu" bình thường)',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(j1c) thay đổi CỦA ADMIN (phone, field khác) được lưu thành công', r.editorPhoneOnServer === '091-ADMIN-SUA-FIELD-KHAC', JSON.stringify(r));
+    record('(j1c) mustChangePassword server giữ ĐÚNG giá trị MỚI NHẤT (false) — KHÔNG bị admin ghi đè lùi về giá trị cũ (true) lúc mở form (syncUserPatch() đã loại field này khỏi payload)',
+      r.serverMustChangePassword === false, JSON.stringify(r));
   });
 
   // ==========================================================================

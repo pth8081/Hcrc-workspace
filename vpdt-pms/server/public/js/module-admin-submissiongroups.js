@@ -1039,6 +1039,42 @@ function buildNewUserFromState(state) {
   };
 }
 
+// syncUserPatch(patchUser) — lưu/tạo ĐÚNG 1 người dùng (11/2026, theo yêu cầu người dùng "sao cho tôi
+// phân quyền cho nhanh" — màn "Sửa 1 Người Dùng" trước đây gửi NGUYÊN CẢ DB.users lên server mỗi lần
+// lưu, dù chỉ sửa 1 người, vừa chậm (payload lớn theo tổng số nhân viên) vừa hay báo "vừa bị người khác
+// thay đổi" GIẢ vì so phiên bản của CẢ danh sách — xem routes/data.js nhánh isUsersPatchMode). CHỈ dùng
+// cho saveUser() (sửa/tạo 1 người từ form) — KHÔNG đổi 13 nơi khác đang gọi syncStorage('users', ...)
+// (Nhập Excel, Gán Nhóm hàng loạt, Nhập Ma Trận Phân Quyền, Đặt Lại Mật Khẩu Hàng Loạt...), những luồng
+// đó bản chất đã đụng NHIỀU người cùng lúc nên giữ nguyên cơ chế cũ, không thêm rủi ro ở phạm vi này.
+// Trả về { ok, item, usersVersion } (item = bản ghi THẬT server đã lưu) hoặc null nếu lỗi (alert đã tự
+// hiện, cùng khuôn syncStorage()).
+async function syncUserPatch(patchUser) {
+  // mustChangePassword PHẢI loại khỏi payload gửi lên — CÙNG LÝ DO/KHUÔN syncStorageOnce() (core.js) đã
+  // làm cho đường mảng cũ: field này do SERVER tự quản lý hoàn toàn (đặt true khi admin gõ mật khẩu tạm
+  // mới, gỡ khi chính user đó tự đổi mật khẩu — PATCH /api/auth/me), nhưng vẫn GIỮ LẠI trong GET /api/data
+  // để hiện badge "Chưa đổi mật khẩu tạm" — DB.users (và do đó patchUser, tham chiếu thẳng 1 phần tử của
+  // nó) có thể đang cầm giá trị CŨ nếu người đó vừa tự đổi mật khẩu ở nơi khác ngay trước lượt lưu này.
+  // Gửi kèm giá trị cũ đó sẽ bị prepareUsersForSave() (routes/data.js) tin là admin CHỦ Ý đặt lại — ÂM
+  // THẦM khôi phục lại cờ "chưa đổi mật khẩu tạm" đã lỗi thời (LỖI THẬT đã từng xảy ra ở đường mảng cũ,
+  // xem chú thích tại syncStorageOnce()). Bỏ hẳn field (để trống = "giữ nguyên") là đủ, khớp đúng thiết
+  // kế prepareUsersForSave() đã có sẵn.
+  const { mustChangePassword, ...payloadUser } = patchUser;
+  try {
+    const res = await fetch('/api/data/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ __patchUser: payloadUser })
+    });
+    if (res.status === 401) { handleSessionExpired(); return null; }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`⚠️ ${body.error || `Lỗi máy chủ (HTTP ${res.status})`}`); return null; }
+    return body;
+  } catch (err) {
+    alert(`⚠️ Không thể kết nối tới máy chủ để lưu: ${err.message}`);
+    return null;
+  }
+}
+
 async function saveUser(e) {
   e.preventDefault();
   if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()
@@ -1053,10 +1089,16 @@ async function saveUser(e) {
   // phản ánh đúng cho tới lần tải lại trang tiếp theo.
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   let savedUserId = editId ? parseInt(editId, 10) : null;
+  // patchUser (11/2026, tối ưu màn "Sửa 1 Người Dùng" — theo yêu cầu người dùng "sao cho tôi phân quyền
+  // cho nhanh") — tham chiếu ĐÚNG 1 bản ghi vừa sửa/tạo trong vòng lặp dưới đây, để gửi lên server qua
+  // syncUserPatch() thay vì nguyên cả DB.users (xem chú thích đầy đủ tại hàm đó + routes/data.js
+  // isUsersPatchMode).
+  let patchUser = null;
 
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
     if (user) {
+      patchUser = user;
       // LỖI THẬT đã vá (10/2026, theo báo cáo người dùng "sửa 1 người dùng để cập nhật thông tin thì
       // không đăng nhập được"): #uUsername (ô "Tên đăng nhập") KHÔNG hề bị khoá khi đang SỬA người dùng
       // đã có sẵn — khác PIN/mật khẩu ở dưới vốn "để trống = giữ nguyên", ô này LUÔN gửi thẳng giá trị
@@ -1126,6 +1168,7 @@ async function saveUser(e) {
     if (!newUser) return;
     DB.users.push(newUser);
     savedUserId = newUser.id;
+    patchUser = newUser;
   }
 
   // Chờ server xác nhận đã lưu thật rồi mới báo thành công/dọn form — trước đây gọi syncStorage() rồi
@@ -1133,12 +1176,23 @@ async function saveUser(e) {
   // chối sau đó (409 xung đột phiên bản, hoặc 400 "hệ thống sẽ không còn admin nào") người dùng đã
   // thấy thông báo thành công + giao diện coi như đã lưu xong, chỉ có thêm 1 alert lỗi hiện SAU đó gây
   // rối chứ không sửa lại được ấn tượng sai ban đầu.
-  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
-  if (!saved) {
+  // syncUserPatch() (11/2026, THAY cho syncStorage('users', {usersBaseline})) — gửi ĐÚNG 1 bản ghi thay
+  // vì nguyên cả danh sách toàn công ty, server tự khoá-đọc-mới-ghi an toàn (không cần If-Match) nên
+  // KHÔNG còn báo "vừa bị người khác thay đổi" GIẢ cho đúng thao tác này nữa — xem routes/data.js.
+  const result = await syncUserPatch(patchUser);
+  if (!result) {
     DB.users = usersSnapshot;
     renderUsers();
     return;
   }
+  // Thay đúng bản ghi vừa lưu bằng bản THẬT server trả về (có thể đã hash mật khẩu/PIN mới, tự tính lại
+  // quyền theo Nhóm Phân Quyền, áp giá trị mặc định maxConcurrentSessions...) — giữ DB.users khớp đúng
+  // với CSDL, không chỉ dựa vào bản tạm phía trình duyệt vừa gửi lên.
+  if (result.item) {
+    const idx = DB.users.findIndex(u => u.id === patchUser.id);
+    if (idx !== -1) DB.users[idx] = result.item;
+  }
+  if (result.usersVersion) DB._versions.users = result.usersVersion;
   logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
   alert('✅ Đã lưu thông tin người dùng và phân quyền!');
   resetUserForm();
