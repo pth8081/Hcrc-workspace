@@ -18,21 +18,27 @@ const cache = new Map(); // DataKey -> { value, expiresAt }
 // cho GET /api/data (xem routes/data.js): trước đây MỖI request đều tự SELECT + JSON.parse lại nguyên
 // bảng AppData (~28 collection), dù nội dung giống hệt nhau giữa các người dùng khác nhau gọi gần như
 // cùng lúc — phần lọc theo quyền xem CHỈ xảy ra SAU bước này (xem routes/data.js), nên bước đọc+parse
-// này an toàn để dùng chung. Xoá CÙNG LÚC với cacheInvalidate(key) bất kỳ bên dưới — đơn giản hơn theo
-// dõi key nào ảnh hưởng gì (bảng AppData có ~28 key, ghi 1 key bất kỳ đều nên coi ảnh hưởng "toàn bộ").
-let allDataCache = null; // { data, versions, expiresAt }
+// này an toàn để dùng chung. KHÔNG còn dùng `expiresAt`/TTL để quyết định còn dùng được hay không (xem
+// LỖI ĐÃ VÁ ở getAllAppDataWithVersionsCached() bên dưới) — thay bằng `maxUpdatedAt` (giá trị
+// MAX(UpdatedAt) của bảng AppData tại lúc nạp cache), tự xác nhận lại với CSDL ở MỖI lần gọi.
+let allDataCache = null; // { data, versions, maxUpdatedAt }
 
 // PM2 cluster mode chạy nhiều tiến trình Node độc lập, MỖI tiến trình giữ 1 bản cache TRONG BỘ NHỚ
 // riêng (biến `cache`/`allDataCache` ở trên) — ghi ở tiến trình A chỉ tự xoá cache của CHÍNH tiến trình
-// A, các tiến trình B/C/D... vẫn phục vụ dữ liệu cũ tới hết TTL (mặc định 3s). Với đa số collection đây
-// chỉ là dữ liệu hiển thị trễ vài giây, nhưng "users" lại là ngoại lệ ĐÁNG KỂ: requireAuth() (lib/auth.js)
-// đọc cache này ở MỌI request đã đăng nhập để kiểm tra tài khoản còn active/còn đúng quyền hay không —
-// admin khoá 1 tài khoản ở tiến trình A, nhưng request của tài khoản đó rơi vào tiến trình B vẫn coi là
-// active tới 3s sau. PM2 cluster mode tự động chuyển tiếp message process.send({type:'process:msg',...})
-// tới MỌI tiến trình khác của cùng app (tính năng IPC có sẵn, không cần thêm gói/hạ tầng như Redis) —
-// dùng kênh đó để phát tín hiệu xoá cache ngay khi có 1 tiến trình ghi, thay vì đợi hết TTL ở nơi khác.
-// applyRemoteCacheInvalidate() (nghe message tới) KHÔNG được gọi lại cacheInvalidate() ở dưới — nếu
-// không sẽ phát lại vô hạn giữa các tiến trình.
+// A, các tiến trình B/C/D... vẫn phục vụ dữ liệu cũ tới hết TTL (mặc định 3s) NẾU không nhận được thông
+// báo dưới đây. Với "users", requireAuth() (lib/auth.js) đọc `cache` (qua getAppDataValueCached()) ở MỌI
+// request đã đăng nhập để kiểm tra tài khoản còn active/còn đúng quyền hay không — admin khoá 1 tài
+// khoản ở tiến trình A, nhưng request của tài khoản đó rơi vào tiến trình B vẫn coi là active tới tối đa
+// TTL sau đó NẾU thông báo dưới đây tới trễ/không tới (chấp nhận được — đây là tầng xác thực đăng nhập,
+// không phải dữ liệu hiển thị). PM2 cluster mode tự động chuyển tiếp message
+// process.send({type:'process:msg',...}) tới MỌI tiến trình khác của cùng app (tính năng IPC có sẵn,
+// không cần thêm gói/hạ tầng như Redis) — dùng kênh đó để phát tín hiệu xoá cache ngay khi có 1 tiến
+// trình ghi, thay vì đợi hết TTL ở nơi khác. applyRemoteCacheInvalidate() (nghe message tới) KHÔNG được
+// gọi lại cacheInvalidate() ở dưới — nếu không sẽ phát lại vô hạn giữa các tiến trình.
+// LƯU Ý (11/2026, xem LỖI ĐÃ VÁ ở getAllAppDataWithVersionsCached()): cơ chế IPC này giờ CHỈ còn ý nghĩa
+// cho `cache` (per-key, dùng cho getAppDataValueCached()/requireAuth) — `allDataCache` (dùng cho GET
+// /api/data, nơi người dùng THẬT SỰ nhìn thấy dữ liệu vừa lưu) không còn phụ thuộc cơ chế best-effort
+// này nữa, đã tự xác nhận lại với CSDL ở MỖI lần gọi bất kể IPC có tới hay không.
 const APPDATA_CACHE_INVALIDATE_CHANNEL = 'appDataCacheInvalidate';
 
 function applyRemoteCacheInvalidate(key) {
@@ -70,9 +76,9 @@ async function getAppDataValueCached(key) {
 
 // Trả { data: {DataKey: value}, versions: {DataKey: isoString} } — cùng hình dạng vòng lặp đang làm
 // thủ công ở routes/data.js GET /. Đối tượng `data`/`versions` trả về được DÙNG CHUNG giữa nhiều request
-// đồng thời trong TTL — nơi gọi (routes/data.js) PHẢI shallow-clone `data` trước khi gán đè bất kỳ
-// property nào lên nó (vd `data.users = stripPasswords(...)`), tuyệt đối không sửa trực tiếp object trả
-// về ở đây hay các mảng bên trong nó, nếu không request khác đang đọc cùng cache sẽ thấy dữ liệu sai.
+// đồng thời — nơi gọi (routes/data.js) PHẢI shallow-clone `data` trước khi gán đè bất kỳ property nào
+// lên nó (vd `data.users = stripPasswords(...)`), tuyệt đối không sửa trực tiếp object trả về ở đây hay
+// các mảng bên trong nó, nếu không request khác đang đọc cùng cache sẽ thấy dữ liệu sai.
 // LỊCH SỬ (11/2026): khoá 'systemInventorySnapshot' (jobs/inventorySync.js) từng phình to tới ~650
 // nghìn dòng tồn kho sau khi đối tác BRGMART sửa lỗi maDiem — SELECT * nguyên bảng AppData ở hàm này
 // (chạy ở MỌI request GET /api/data) phải kéo nguyên blob JSON khổng lồ đó xuống mỗi lần, gây nghẽn
@@ -81,22 +87,39 @@ async function getAppDataValueCached(key) {
 // (dbo.SystemInventorySnapshots, mỗi Mã Điểm 1 dòng — xem lib/inventorySnapshotStore.js) nên khoá
 // không còn tồn tại trong dbo.AppData nữa — loại trừ thủ công ở đây không còn cần thiết, trở lại
 // SELECT * như thiết kế gốc của hàm (đọc chung TOÀN BỘ AppData, không đặc cách theo tên khoá cụ thể).
+//
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "hay bị" — lưu phân quyền xong ấn F5 thấy MẤT LUÔN thay đổi vừa
+// lưu, cả màn Sửa 1 Người Dùng lẫn Nhóm Phân Quyền): cache CŨ chỉ dựa vào TTL (vài giây) + thông báo xoá
+// cache qua process.send() giữa các tiến trình PM2 cluster (xem cacheInvalidate() dưới đây) — server
+// này chạy PM2 CLUSTER MODE nhiều tiến trình (`ecosystem.config.js`, instances: 'max'). Request F5 có
+// thể bị định tuyến sang 1 tiến trình KHÁC với tiến trình vừa xử lý lượt lưu — tiến trình đó chỉ xoá
+// cache ĐÚNG lúc khi nhận được thông báo process.send() (cơ chế BEST-EFFORT, không có gì đảm bảo 100%
+// luôn tới nơi/tới kịp mọi tiến trình), nên vẫn có thể trả về bản cache CŨ (tối đa bằng TTL) dù dữ liệu
+// thật trong CSDL đã đổi. Nay KHÔNG còn "đoán" qua TTL/thông báo liên tiến trình nữa — MỖI lần gọi hàm
+// này đều tự xác nhận lại với CSDL qua 1 câu truy vấn CỰC RẺ (`SELECT MAX(UpdatedAt)`, chỉ đọc 1 giá trị
+// scalar trên bảng AppData ~28 dòng, không kéo blob JSON nào) trước khi quyết định dùng cache hay đọc lại
+// toàn bộ — đúng/sai không còn phụ thuộc tiến trình nào xử lý request nữa, dù chạy bao nhiêu tiến trình
+// PM2 cũng luôn chính xác. TTL/process.send() ở cacheInvalidate() vẫn giữ nguyên (không hại gì, chỉ còn
+// là tối ưu phụ dọn cache sớm hơn ở ĐÚNG tiến trình vừa ghi, không còn là điều kiện quyết định đúng/sai).
 async function getAllAppDataWithVersionsCached() {
-  if (allDataCache && allDataCache.expiresAt > Date.now()) return allDataCache;
   const pool = await getPool();
+  const checkResult = await pool.request().query('SELECT MAX(UpdatedAt) AS maxUpdatedAt FROM dbo.AppData');
+  const row = checkResult.recordset[0];
+  const currentMaxUpdatedAt = row && row.maxUpdatedAt ? row.maxUpdatedAt.toISOString() : null;
+  if (allDataCache && allDataCache.maxUpdatedAt === currentMaxUpdatedAt) return allDataCache;
   const result = await pool.request().query('SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData');
   const data = {};
   const versions = {};
-  for (const row of result.recordset) {
+  for (const row2 of result.recordset) {
     try {
-      data[row.DataKey] = JSON.parse(row.DataValue);
-      versions[row.DataKey] = row.UpdatedAt.toISOString();
+      data[row2.DataKey] = JSON.parse(row2.DataValue);
+      versions[row2.DataKey] = row2.UpdatedAt.toISOString();
     } catch (e) {
-      console.error(`Lỗi parse JSON cho key "${row.DataKey}":`, e.message);
-      data[row.DataKey] = null;
+      console.error(`Lỗi parse JSON cho key "${row2.DataKey}":`, e.message);
+      data[row2.DataKey] = null;
     }
   }
-  allDataCache = { data, versions, expiresAt: Date.now() + CACHE_TTL_MS };
+  allDataCache = { data, versions, maxUpdatedAt: currentMaxUpdatedAt };
   return allDataCache;
 }
 
