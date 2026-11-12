@@ -44,7 +44,11 @@ async function main() {
       const layout = await page.evaluate(() => {
         const modal = document.getElementById('shelfBarcodeModal');
         const box = modal.querySelector('.bg-white');
-        const buttons = Array.from(box.querySelectorAll('button')).map(b => b.getBoundingClientRect());
+        // Loại #shelfBarcodeTorchBtn (nút đèn flash, 11/2026 — ẨN mặc định, chỉ hiện khi camera hỗ trợ
+        // getCapabilities().torch, xem setupShelfBarcodeTorchButton()) — bài test này chỉ kiểm 2 nút thao
+        // tác chính (Đóng/Nhập Tay), không phải nút đèn flash (môi trường test không có camera thật nên
+        // luôn ẩn, không liên quan tới kịch bản responsive/touch-target đang kiểm ở đây).
+        const buttons = Array.from(box.querySelectorAll('button:not(#shelfBarcodeTorchBtn)')).map(b => b.getBoundingClientRect());
         return {
           boxWidth: box.getBoundingClientRect().width,
           viewportWidth: window.innerWidth,
