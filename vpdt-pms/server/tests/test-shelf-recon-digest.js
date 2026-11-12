@@ -240,8 +240,12 @@ async function main() {
     const handlerSrc = src.slice(start, end);
     assert.ok(handlerSrc.includes('withLockedAppDataValue'), 'phải dùng withLockedAppDataValue để chỉ sửa đúng 1 khoá = dept người gọi');
     assert.ok(handlerSrc.includes('canManageShelfStock'), 'phải gác quyền canManageShelfStock (shelfLocationManage/admin)');
-    assert.ok(handlerSrc.includes('req.freshUser.dept'), 'phải tự tra theo req.freshUser.dept, không tin dept client gửi');
-    assert.ok(/u\.dept\s*!==\s*req\.freshUser\.dept/.test(handlerSrc), 'phải đối chiếu user được chọn ĐÚNG dept người gọi (chặn chọn nhân viên siêu thị khác)');
+    // effectiveUser (11/2026, quyền shelfAnyStoreAccess "🔑 Được Chọn Siêu Thị Bất Kỳ") — tự tra qua
+    // getShelfEffectiveUserFromReq() (lib/shelfStockEdit.js, THAY cho req.freshUser.dept trực tiếp cũ):
+    // KHÔNG tin dept client gửi kèm body, vẫn re-validate NGHIÊM header X-Shelf-Store-Override trước khi
+    // dùng — chỉ đổi TÊN biến, không nới lỏng gì so với bản cũ.
+    assert.ok(handlerSrc.includes('getShelfEffectiveUserFromReq'), 'phải tự tra siêu thị qua getShelfEffectiveUserFromReq(), không tin dept client gửi');
+    assert.ok(/u\.dept\s*!==\s*effectiveUser\.dept/.test(handlerSrc), 'phải đối chiếu user được chọn ĐÚNG dept người gọi (chặn chọn nhân viên siêu thị khác)');
   });
 
   console.log('\n== routes/data.js — guard: shelfReconExtraRecipients bị chặn khỏi route generic + không lộ qua bulk GET ==');

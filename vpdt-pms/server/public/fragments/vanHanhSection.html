@@ -831,9 +831,27 @@
     <div id="vanHanhShelfWrap" class="hidden space-y-4">
       <!-- Header cố định "Siêu Thị: ..." (11/2026, theo yêu cầu người dùng) — xác nhận NGAY, không cần
            chọn lại, đúng siêu thị (currentUser.dept) mà mọi ghi nhận/thao tác trong Kiểm Soát Hàng Hóa
-           đang áp dụng — xem setVanHanhSubTab() ở module-vanhanh.js (nhánh subTab === 'SHELF'). -->
-      <div class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-sm font-bold text-cyan-800 flex items-center gap-1.5">
+           đang áp dụng — xem setVanHanhSubTab() ở module-vanhanh.js (nhánh subTab === 'SHELF'). CHỈ hiện
+           cho người KHÔNG có quyền shelfAnyStoreAccess (renderVanHanhShelfStoreHeader() tự ẩn/hiện đúng 1
+           trong 2 khối header/picker bên dưới — người có quyền đặc biệt thấy khối picker thay vào đây). -->
+      <div id="vanHanhShelfStoreHeaderWrap" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-sm font-bold text-cyan-800 flex items-center gap-1.5">
         📍 Siêu Thị: <span id="vanHanhShelfStoreHeaderName"></span>
+      </div>
+      <!-- Picker "🔑 Được Chọn Siêu Thị Bất Kỳ" (shelfAnyStoreAccess, 11/2026) — thay THẲNG vào vị trí
+           header cố định ở trên cho người có quyền này (admin luôn thấy, vì admin bypass mọi quyền chi
+           tiết) — chọn xong, Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm Tra Giá bên
+           dưới áp dụng ĐÚNG siêu thị đã chọn (shelfStoreOverrideDept, module-vanhanh.js). Dùng SELECT
+           thường (KHÔNG phải ô tìm-kiếm-gõ-chọn sdd* — danh sách siêu thị đủ ngắn để duyệt tay, không cần
+           datalist/autocomplete, xem CLAUDE.md phần "Ô tìm-kiếm-gõ-chọn" chỉ áp dụng cho input gõ tay). -->
+      <div id="vanHanhShelfStoreOverrideWrap" class="hidden bg-orange-50 border border-orange-200 rounded px-3 py-2 text-xs space-y-2">
+        <label class="flex items-center gap-2 font-bold text-orange-800">
+          📍 Chọn Siêu Thị Để Thao Tác
+          <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-300 rounded-full px-2 py-0.5 text-[10px] font-bold">🔑 Quyền đặc biệt</span>
+        </label>
+        <select id="vanHanhShelfStoreOverrideSelect" data-op-change="onShelfStoreOverrideChange" class="w-full md:w-auto border p-1.5 rounded font-bold text-orange-900">
+          <option value="">-- Chọn siêu thị --</option>
+        </select>
+        <div id="vanHanhShelfStoreOverrideConfirm" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 rounded px-2 py-1.5 text-[11px] leading-relaxed"></div>
       </div>
       <div class="flex gap-2 flex-wrap border-b pb-2">
         <button data-op="setVanHanhShelfSubTab" data-tab="RECORD" id="btnVhShelfSubRecord" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📷 Ghi Nhận</button>

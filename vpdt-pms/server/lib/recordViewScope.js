@@ -980,6 +980,12 @@ function resolveShelfReportViewScope(user) {
 function canViewShelfScopedItem(user, item) {
   if (!user || !item) return false;
   if (user.perms?.admin) return true;
+  // shelfAnyStoreAccess (11/2026, "🔑 Được Chọn Siêu Thị Bất Kỳ") — người này CHỌN bất kỳ siêu thị nào để
+  // thao tác (xem getShelfEffectiveUser(), lib/shelfStockEdit.js) nên cũng cần XEM được dữ liệu MỌI siêu
+  // thị (không chỉ đúng siêu thị đang chọn tạm — client tự lọc lại theo đúng siêu thị đang chọn ở
+  // shelfItemsForOwnStore()/getEffectiveShelfDept(), module-vanhanh.js) — cùng mức rộng admin/
+  // shelfReportView.all, tránh phải đồng bộ phạm vi XEM theo header override ở mỗi request riêng.
+  if (user.perms?.shelfAnyStoreAccess) return true;
   const scope = resolveShelfReportViewScope(user);
   if (scope?.all) return true;
   if (Array.isArray(scope?.depts) && scope.depts.includes(item.dept)) return true;

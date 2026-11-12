@@ -7,6 +7,44 @@
 const { HttpError } = require('./httpErrors');
 const { formatCreatedAt } = require('./shelfRecordUpsert');
 
+// getShelfEffectiveUser()/getShelfEffectiveUserFromReq() (11/2026) — quyền shelfAnyStoreAccess ("🔑 Được
+// Chọn Siêu Thị Bất Kỳ"): người được cấp quyền này chọn 1 siêu thị bất kỳ ở màn Kiểm Soát Hàng Hóa, client
+// gửi kèm header X-Shelf-Store-Override ở MỌI request liên quan (thresholds/locations/records/price-check/
+// system-inventory...) — route đổi req.freshUser -> effectiveUser (shallow clone, CHỈ đổi field dept) rồi
+// truyền effectiveUser vào ĐÚNG những hàm đang nhận req.freshUser hiện có (applyShelfLocationEdit()...,
+// extraValidate() ở lib/createValidation.js) — KHÔNG cần sửa gì bên trong các hàm đó, vì toàn bộ logic ở
+// đó đều so sánh "item.dept !== user.dept" (admin bypass hẳn, không phân biệt dept) — effectiveUser.dept
+// chính là siêu thị ĐANG CHỌN nên mọi so sánh tự đúng. Validate NGHIÊM ở server (không tin riêng quyền
+// client tự ẩn/hiện UI): thiếu quyền mà vẫn gửi header -> 403 rõ ràng (lỗi thật, không âm thầm bỏ qua).
+function getShelfEffectiveUser(user, overrideDept, allStores) {
+  if (overrideDept === undefined || overrideDept === null) return user;
+  const dept = String(overrideDept).trim();
+  if (!dept) return user;
+  if (!(user?.perms?.admin || user?.perms?.shelfAnyStoreAccess)) {
+    throw new HttpError(403, 'Bạn không có quyền chọn siêu thị khác để thao tác Kiểm Soát Hàng Hóa');
+  }
+  if (!Array.isArray(allStores) || !allStores.includes(dept)) {
+    throw new HttpError(400, 'Siêu thị chọn không hợp lệ');
+  }
+  if (dept === user.dept) return user;
+  return { ...user, dept };
+}
+
+async function getShelfEffectiveUserFromReq(req) {
+  const rawHeader = req.get('x-shelf-store-override');
+  if (!rawHeader) return req.freshUser;
+  // Header HTTP chỉ chấp nhận ByteString (ASCII/Latin-1) — tên siêu thị tiếng Việt có dấu (VD "Siêu Thị",
+  // "ị"=U+1ECB vượt hẳn 255) KHÔNG gửi THẲNG được qua header, browser tự throw TypeError nếu cố gán —
+  // client PHẢI encodeURIComponent() trước khi gán header (xem shelfFetch()/module-vanhanh.js), nên ở
+  // đây giải mã lại ĐÚNG 1 lần. decodeURIComponent lỗi (header bị chỉnh tay sai định dạng) -> coi như
+  // siêu thị không hợp lệ, KHÔNG để lộ lỗi 500.
+  let overrideDept;
+  try { overrideDept = decodeURIComponent(rawHeader); } catch (err) { throw new HttpError(400, 'Siêu thị chọn không hợp lệ'); }
+  const { getAppDataValueCached } = require('./appData');
+  const allStores = (await getAppDataValueCached('stores')) || [];
+  return getShelfEffectiveUser(req.freshUser, overrideDept, allStores);
+}
+
 function canManageShelfStock(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
 }
@@ -138,4 +176,8 @@ function applyShelfRecordEdit(item, body, user, allRecords) {
   return next;
 }
 
-module.exports = { canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit };
+module.exports = {
+  canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits,
+  applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit,
+  getShelfEffectiveUser, getShelfEffectiveUserFromReq
+};

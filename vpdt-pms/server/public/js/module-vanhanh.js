@@ -193,17 +193,9 @@ function setVanHanhSubTab(subTab) {
   } else if (subTab === 'ITPRICE') {
     enterVanHanhItPriceForm();
   } else if (subTab === 'SHELF') {
-    // Header "📍 Siêu Thị: ..." (11/2026, theo yêu cầu người dùng) — xác nhận NGAY lúc mở module, không
-    // cần chọn lại. DB.stores.includes(currentUser.dept) mirror ĐÚNG cách module-admin-userstaging.js
-    // suy luận posType STORE từ dept — dept không nằm trong danh mục siêu thị (VD quản lý vùng ở HO có
-    // quyền shelfReportView xem nhiều siêu thị) thì nói rõ đang xem nhiều siêu thị, không in nhầm tên 1
-    // phòng ban HO như thể đó là 1 siêu thị.
-    const vhShelfStoreLabel = document.getElementById('vanHanhShelfStoreHeaderName');
-    if (vhShelfStoreLabel) {
-      vhShelfStoreLabel.textContent = (DB.stores || []).includes(currentUser.dept)
-        ? currentUser.dept
-        : `${currentUser.dept} (xem nhiều siêu thị theo quyền báo cáo)`;
-    }
+    // Header "📍 Siêu Thị: ..." (11/2026) — xem renderVanHanhShelfStoreHeader() ngay dưới (tự ẩn/hiện
+    // đúng 1 trong 2 khối header tĩnh/picker chọn siêu thị bất kỳ, theo quyền shelfAnyStoreAccess).
+    renderVanHanhShelfStoreHeader();
     setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
   }
 }
@@ -215,6 +207,88 @@ function setVanHanhSubTab(subTab) {
 // CHƯA có (để pha sau, chờ xác nhận nguồn tồn kho hệ thống + mẫu response API): Đối Chiếu Tồn Kho,
 // quét mã vạch camera, offline-first. =====
 let activeVanHanhShelfSubTab = 'RECORD';
+// shelfStoreOverrideDept (11/2026, quyền shelfAnyStoreAccess "🔑 Được Chọn Siêu Thị Bất Kỳ") — biến
+// trạng thái module-level: siêu thị người dùng ĐANG CHỌN tạm để thao tác (khác currentUser.dept cố
+// định), reset về '' (= dùng lại currentUser.dept) MỖI KHI tải lại trang/đăng nhập lại — KHÔNG lưu
+// localStorage, CỐ Ý để tránh 1 người quên đã chọn siêu thị khác từ lần trước rồi ghi nhận nhầm. Mọi
+// hàm render/lọc phía client ĐANG đọc currentUser.dept cho đúng 4 tab thao tác Kiểm Soát Hàng Hóa (Ghi
+// Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn + Đối Chiếu/Báo Cáo/Kiểm Tra Giá) phải đổi sang
+// getEffectiveShelfDept() — KHÔNG đụng tới currentUser.dept dùng cho các module khác (Đơn Hàng/Mở Mới/
+// Sửa Chữa...) hay chính currentUser.dept thật (vẫn giữ cho creator attribution/mọi nơi khác).
+// shelfFetch()/getShelfStoreOverrideHeaderValue() — mọi request tới /api/shelf-stock/* (file này) VÀ
+// callCreateAction('shelfLocations'/'shelfRecords'/'shelfStockThresholds', ...) (core.js) PHẢI gửi kèm
+// header X-Shelf-Store-Override khi đang chọn siêu thị khác — server xác thực lại NGHIÊM qua
+// getShelfEffectiveUserFromReq() (lib/shelfStockEdit.js), không tin riêng state phía client.
+let shelfStoreOverrideDept = '';
+function getEffectiveShelfDept() {
+  return shelfStoreOverrideDept || currentUser.dept;
+}
+function getShelfStoreOverrideHeaderValue() {
+  return shelfStoreOverrideDept || '';
+}
+function shelfFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  // encodeURIComponent() BẮT BUỘC — header HTTP chỉ nhận ByteString (ASCII/Latin-1), tên siêu thị tiếng
+  // Việt có dấu (VD "ị"=U+1ECB) vượt hẳn 255, gán thẳng sẽ bị browser tự throw TypeError ngay khi gọi
+  // fetch(). Server giải mã lại ĐÚNG 1 lần ở getShelfEffectiveUserFromReq() (lib/shelfStockEdit.js).
+  if (shelfStoreOverrideDept) headers['X-Shelf-Store-Override'] = encodeURIComponent(shelfStoreOverrideDept);
+  return fetch(url, { ...opts, headers });
+}
+// renderVanHanhShelfStoreHeader() — tự ẩn/hiện ĐÚNG 1 trong 2 khối: header tĩnh "📍 Siêu Thị: ..." (mặc
+// định, DB.stores.includes(currentUser.dept) mirror ĐÚNG cách module-admin-userstaging.js suy luận
+// posType STORE từ dept — dept không nằm trong danh mục siêu thị, VD quản lý vùng ở HO có quyền
+// shelfReportView xem nhiều siêu thị, thì nói rõ đang xem nhiều siêu thị) HOẶC picker "🔑 Được Chọn Siêu
+// Thị Bất Kỳ" (admin || shelfAnyStoreAccess, xem vanHanhShelfStoreOverrideWrap/vanHanhSection.html).
+function renderVanHanhShelfStoreHeader() {
+  const canPickAnyStore = !!(currentUser.perms?.admin || currentUser.perms?.shelfAnyStoreAccess);
+  const headerWrap = document.getElementById('vanHanhShelfStoreHeaderWrap');
+  const overrideWrap = document.getElementById('vanHanhShelfStoreOverrideWrap');
+  if (headerWrap) headerWrap.classList.toggle('hidden', canPickAnyStore);
+  if (overrideWrap) overrideWrap.classList.toggle('hidden', !canPickAnyStore);
+  if (!canPickAnyStore) {
+    // Mất quyền giữa phiên (admin vừa tắt quyền, đăng nhập lại) — không giữ lại override cũ của lần
+    // trước, tránh ghi nhận nhầm vào siêu thị không còn được phép chọn.
+    shelfStoreOverrideDept = '';
+    const vhShelfStoreLabel = document.getElementById('vanHanhShelfStoreHeaderName');
+    if (vhShelfStoreLabel) {
+      vhShelfStoreLabel.textContent = (DB.stores || []).includes(currentUser.dept)
+        ? currentUser.dept
+        : `${currentUser.dept} (xem nhiều siêu thị theo quyền báo cáo)`;
+    }
+    return;
+  }
+  const select = document.getElementById('vanHanhShelfStoreOverrideSelect');
+  if (select) {
+    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+    select.innerHTML = '<option value="">-- Chọn siêu thị --</option>' +
+      stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    select.value = shelfStoreOverrideDept || '';
+  }
+  renderShelfStoreOverrideConfirm();
+}
+function renderShelfStoreOverrideConfirm() {
+  const confirmEl = document.getElementById('vanHanhShelfStoreOverrideConfirm');
+  if (!confirmEl) return;
+  if (!shelfStoreOverrideDept) {
+    confirmEl.classList.add('hidden');
+    confirmEl.textContent = '';
+    return;
+  }
+  confirmEl.classList.remove('hidden');
+  confirmEl.textContent = `✅ Đang thao tác tại Siêu Thị: ${shelfStoreOverrideDept}. Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm Tra Giá bên dưới đều áp dụng cho ĐÚNG siêu thị này — chọn siêu thị khác ở ô trên bất cứ lúc nào để chuyển sang.`;
+}
+// onShelfStoreOverrideChange() — đổi siêu thị xong phải tải/vẽ lại ĐÚNG đúng sub-tab đang mở (giống
+// hệt lúc mở tab lần đầu — setVanHanhShelfSubTab() đã tự gọi đúng hàm nạp dữ liệu cho từng tab theo
+// getEffectiveShelfDept() mới), không chỉ đổi label suông.
+function onShelfStoreOverrideChange() {
+  const select = document.getElementById('vanHanhShelfStoreOverrideSelect');
+  shelfStoreOverrideDept = select ? select.value.trim() : '';
+  renderShelfStoreOverrideConfirm();
+  editingShelfLocationId = null;
+  editingShelfRecordId = null;
+  editingShelfStockThresholdId = null;
+  setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
+}
 function canManageShelfLocationsClient(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
 }
@@ -307,7 +381,7 @@ function setVanHanhShelfSubTab(tab) {
 // thay đổi gì phía server. KHÔNG áp dụng cho "📊 Đối Chiếu"/"📑 Báo Cáo" (2 tab đó CỐ Ý cho xem nhiều
 // siêu thị theo quyền, đã tự lọc/gắn nhãn riêng — xem loadShelfReconciliation()/loadShelfReportTab()).
 function shelfItemsForOwnStore(arr) {
-  return (arr || []).filter(x => x && x.dept === currentUser.dept);
+  return (arr || []).filter(x => x && x.dept === getEffectiveShelfDept());
 }
 // sdd* picker (xem CLAUDE.md "Ô tìm-kiếm-gõ-chọn") — CHỈ chọn từ DB.shelfLocations ĐÃ khai báo (không
 // ghi tay tên quầy mới ở màn Ghi Nhận), để báo cáo tiến độ kiểm hằng ngày (pha sau) đếm đúng trên tổng
@@ -410,7 +484,7 @@ async function loadShelfSystemInventoryForRecordPicker() {
   const wrap = document.getElementById('srSystemInventoryPickerWrap');
   if (!wrap) return;
   try {
-    const res = await fetch('/api/shelf-stock/system-inventory');
+    const res = await shelfFetch('/api/shelf-stock/system-inventory');
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) { wrap.classList.add('hidden'); shelfSystemInventoryCache = []; return; }
     const data = await res.json();
@@ -536,11 +610,11 @@ function setShelfReconHeader(maDiem, isError, errorMessage) {
   if (!headerEl) return;
   if (isError) {
     headerEl.className = 'bg-red-50 border border-red-200 rounded px-3 py-2 text-xs font-bold text-red-700';
-    headerEl.textContent = errorMessage || `⚠️ Siêu Thị: ${currentUser.dept} — chưa cấu hình Mã Điểm API Tồn Kho, không đối chiếu được (xem cột "Mã Điểm" ở Danh Mục Siêu Thị).`;
+    headerEl.textContent = errorMessage || `⚠️ Siêu Thị: ${getEffectiveShelfDept()} — chưa cấu hình Mã Điểm API Tồn Kho, không đối chiếu được (xem cột "Mã Điểm" ở Danh Mục Siêu Thị).`;
     return;
   }
   headerEl.className = 'bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800';
-  headerEl.textContent = `📍 Đang đối chiếu Siêu Thị: ${currentUser.dept} — Mã Điểm: ${maDiem || '(không rõ)'}`;
+  headerEl.textContent = `📍 Đang đối chiếu Siêu Thị: ${getEffectiveShelfDept()} — Mã Điểm: ${maDiem || '(không rõ)'}`;
 }
 function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount) {
   const tbody = document.getElementById('vhShelfReconBody');
@@ -558,7 +632,7 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
   // trong ngày sẽ bị cộng dồn nhầm số lượng của siêu thị khác vào "Trên Kệ Hôm Nay" của siêu thị mình
   // (giống đúng cách computeShelfThresholdTodayTotals() ở Ngưỡng Tồn đã lọc đúng từ trước).
   (DB.shelfRecords || []).forEach(r => {
-    if (!r.maHang || r.dept !== currentUser.dept) return;
+    if (!r.maHang || r.dept !== getEffectiveShelfDept()) return;
     if (isShelfRecordCreatedToday(r.lastScannedAt || r.createdAt)) {
       todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
     } else {
@@ -608,7 +682,7 @@ async function loadShelfReconciliation() {
     // TỪNG scan" để có dữ liệu cho cột "Trên Kệ Quá Khứ") — server tự lọc CHỈ trả về các mã đã TỪNG scan
     // lên kệ (hôm nay hoặc trước đây) của ĐÚNG siêu thị mình (xem routes/shelfStock.js), thay vì nguyên
     // mảng tồn kho hệ thống (có thể lên tới hàng chục nghìn dòng/siêu thị) như trước đây.
-    const res = await fetch('/api/shelf-stock/system-inventory?scope=recon');
+    const res = await shelfFetch('/api/shelf-stock/system-inventory?scope=recon');
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -632,7 +706,7 @@ async function loadShelfReconciliation() {
     if (cached) {
       renderShelfReconciliationTable(cached.rows, cached.capNhatLuc, true, cached.maDiem);
     } else {
-      setShelfReconHeader(null, true, `⚠️ Siêu Thị: ${currentUser.dept} — không thể kết nối tới máy chủ để đối chiếu.`);
+      setShelfReconHeader(null, true, `⚠️ Siêu Thị: ${getEffectiveShelfDept()} — không thể kết nối tới máy chủ để đối chiếu.`);
       tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
     }
   }
@@ -647,11 +721,11 @@ async function renderShelfReconExtraRecipientsSection() {
   if (!canManageShelfLocationsClient(currentUser)) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
   try {
-    const res = await fetch('/api/shelf-stock/recon-recipients');
+    const res = await shelfFetch('/api/shelf-stock/recon-recipients');
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) { wrap.classList.add('hidden'); return; }
     const body = await res.json();
-    const candidates = (DB.users || []).filter(u => u && u.dept === currentUser.dept && u.active !== false);
+    const candidates = (DB.users || []).filter(u => u && u.dept === getEffectiveShelfDept() && u.active !== false);
     renderPeopleMultiSelect('shelfReconRecipientsPicker', candidates, body.extraRecipientUsernames || [], 'shelfReconRecipientCheckbox', {});
   } catch (err) {
     wrap.classList.add('hidden');
@@ -660,7 +734,7 @@ async function renderShelfReconExtraRecipientsSection() {
 async function saveShelfReconExtraRecipients() {
   const extraRecipientUsernames = [...document.querySelectorAll('input.shelfReconRecipientCheckbox:checked')].map(cb => cb.value);
   try {
-    const res = await fetch('/api/shelf-stock/recon-recipients', {
+    const res = await shelfFetch('/api/shelf-stock/recon-recipients', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ extraRecipientUsernames })
     });
@@ -690,13 +764,13 @@ async function loadShelfReportTab() {
   // qua shelfReportView) sẽ hiện "—", KHÔNG gọi thêm route nào khác cho từng siêu thị (tránh N lần gọi
   // cho N siêu thị, giữ màn tải nhanh — cùng tinh thần giới hạn hiệu năng đã áp dụng ở Đối Chiếu).
   try {
-    const res = await fetch('/api/shelf-stock/system-inventory?scope=recon');
+    const res = await shelfFetch('/api/shelf-stock/system-inventory?scope=recon');
     if (res.status === 401) return handleSessionExpired();
     if (res.ok) {
       const body = await res.json();
       const rows = new Map();
       (Array.isArray(body.rows) ? body.rows : []).forEach(r => { if (r.maHang) rows.set(String(r.maHang), r.soLuongTon); });
-      shelfReportSystemInventoryCache = { maDiem: body.maDiem, dept: currentUser.dept, rows };
+      shelfReportSystemInventoryCache = { maDiem: body.maDiem, dept: getEffectiveShelfDept(), rows };
     } else {
       shelfReportSystemInventoryCache = null;
     }
@@ -721,7 +795,7 @@ function populateShelfReportStoreFilter() {
   if (headerEl) {
     headerEl.textContent = isMulti
       ? `📍 Đang xem báo cáo tổng hợp: ${depts.length} siêu thị (theo quyền "Xem Báo Cáo Kiểm Soát Hàng Hóa").`
-      : `📍 Siêu Thị: ${currentUser.dept}`;
+      : `📍 Siêu Thị: ${getEffectiveShelfDept()}`;
   }
   if (!isMulti) return;
   const prevValue = sel.value;
@@ -833,7 +907,7 @@ function previewShelfRecordQuantityIncrease(payload) {
     expiryIso = d.toISOString();
   }
   const match = (DB.shelfRecords || []).find(r => {
-    if (!r || r.dept !== currentUser.dept || r.shelfLocationId !== payload.shelfLocationId) return false;
+    if (!r || r.dept !== getEffectiveShelfDept() || r.shelfLocationId !== payload.shelfLocationId) return false;
     if (!(Number(r.quantity) > 0)) return false;
     const matchesCode = (payload.maHang && r.maHang === payload.maHang) || (payload.maVach && r.maVach === payload.maVach);
     if (!matchesCode) return false;
@@ -895,7 +969,7 @@ async function submitShelfRecord(e) {
       // Theo Lô": cùng Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng với 1 dòng ĐANG theo dõi -> ghi đè số
       // lượng, không cộng dồn; khác Hạn Sử Dụng -> lô mới. clientRecordId KHÔNG cần ở đây (chỉ hàng đợi
       // offline mới cần dedupe theo nó — xem lib/shelfRecordUpsert.js).
-      const res = await fetch('/api/shelf-stock/records/upsert', {
+      const res = await shelfFetch('/api/shelf-stock/records/upsert', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       if (res.status === 401) return handleSessionExpired();
@@ -925,6 +999,14 @@ async function submitShelfRecord(e) {
       // rơi tiếp xuống nhánh lưu offline.
     }
   }
+  // shelfAnyStoreAccess: hàng đợi offline LUÔN gửi lại cho ĐÚNG siêu thị thật của thiết bị khi có mạng
+  // lại (xem chú thích tại ensureShelfOfflineReady()/trySyncPendingShelfRecords(), KHÔNG mang theo siêu
+  // thị đang chọn tạm) — nếu đang chọn siêu thị KHÁC mà mất mạng ngay lúc này, chặn hẳn việc lưu tạm để
+  // tránh ghi nhận bị gán NHẦM sang siêu thị thật của mình khi đồng bộ lại, thay vì đúng siêu thị đang
+  // chọn lúc bấm Lưu.
+  if (shelfStoreOverrideDept) {
+    return alert('⛔ Mất kết nối trong khi đang chọn siêu thị khác để thao tác — vui lòng kiểm tra lại mạng và thử lưu lại (không thể lưu tạm ngoại tuyến khi đang chọn siêu thị khác, để tránh ghi nhận nhầm siêu thị).');
+  }
   await queueShelfRecordOffline(payload, matchedLocation);
   alert('🔌 Đang offline — đã lưu tạm trên máy, sẽ tự đồng bộ khi có mạng lại.');
   document.getElementById('srForm').reset();
@@ -953,7 +1035,7 @@ function cancelShelfRecordEdit() {
 // Dụng, vì cùng 1 nguồn dữ liệu) sau khi lưu thành công.
 async function patchShelfRecordCore(id, body, successMsg) {
   try {
-    const res = await fetch(`/api/shelf-stock/records/${id}`, {
+    const res = await shelfFetch(`/api/shelf-stock/records/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
     if (res.status === 401) return handleSessionExpired();
@@ -993,7 +1075,7 @@ async function deleteShelfRecordClient(id) {
   if (!confirm('Xóa hẳn dòng ghi nhận này? Không khôi phục lại được.')) return;
   const numId = Number(id);
   try {
-    const res = await fetch(`/api/shelf-stock/records/${numId}`, { method: 'DELETE' });
+    const res = await shelfFetch(`/api/shelf-stock/records/${numId}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return alert(`⛔ ${body.error || 'Không thể xóa'}`);
@@ -1047,7 +1129,7 @@ function renderShelfRecordActionsCell(r, source) {
   // không thuộc đúng siêu thị mình (đã có sẵn, xem lib/shelfStockEdit.js), nhưng để UI không mời bấm 1
   // nút CHẮC CHẮN sẽ lỗi, ẩn hẳn cụm nút này cho dòng khác siêu thị — người xem chéo chỉ ĐỌC được, không
   // thao tác được từ xa.
-  if (r.dept !== currentUser.dept) return '<span class="text-gray-400 italic text-[11px]">(siêu thị khác)</span>';
+  if (r.dept !== getEffectiveShelfDept()) return '<span class="text-gray-400 italic text-[11px]">(siêu thị khác)</span>';
   const prefix = source === 'expiry' ? 'expiry' : 'recent';
   if (Number(r.quantity) <= 0) {
     return `<button type="button" data-op="deleteShelfRecordClient" data-arg0="${r.id}" class="text-red-600 hover:underline">🗑️ Xóa</button>`;
@@ -1161,7 +1243,7 @@ async function saveShelfLocationEdit(id) {
   const category = document.getElementById(`slEditCategory_${numId}`).value.trim();
   const active = document.getElementById(`slEditActive_${numId}`).checked;
   try {
-    const res = await fetch(`/api/shelf-stock/locations/${numId}`, {
+    const res = await shelfFetch(`/api/shelf-stock/locations/${numId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, category, active })
     });
@@ -1239,7 +1321,7 @@ async function parseShelfLocationImportFile() {
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
   try {
-    const res = await fetch('/api/shelf-stock/locations/parse-import', { method: 'POST', body: formData });
+    const res = await shelfFetch('/api/shelf-stock/locations/parse-import', { method: 'POST', body: formData });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return alert(`⛔ ${body.error || 'Không đọc được file'}`);
@@ -1311,7 +1393,7 @@ function findSystemInventoryQtyForProduct(maHang, maVach) {
 async function ensureShelfSystemInventoryForExpiry() {
   if (shelfSystemInventoryCache && shelfSystemInventoryCache.length) return;
   try {
-    const res = await fetch('/api/shelf-stock/system-inventory');
+    const res = await shelfFetch('/api/shelf-stock/system-inventory');
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) return; // chưa cấu hình API đối tác/chưa có Mã Điểm -> giữ cache rỗng, cột hiện "—"
     const data = await res.json();
@@ -1378,7 +1460,7 @@ function renderShelfExpiryGroups() {
     // KHÁC qua shelfReportView (lib/recordViewScope.js) — nếu vẫn so dòng đó với cache này sẽ so nhầm
     // với tồn kho hệ thống của SIÊU THỊ MÌNH, không phải của siêu thị dòng đó — lỗi thật đã xảy ra. Ẩn cột
     // này (hiện "—") cho dòng khác siêu thị thay vì so sai.
-    if (!soldOut && r.dept === currentUser.dept) {
+    if (!soldOut && r.dept === getEffectiveShelfDept()) {
       const groupTotal = groupTotalOf(r);
       const systemQty = findSystemInventoryQtyForProduct(r.maHang, r.maVach);
       if (systemQty !== null) {
@@ -1460,6 +1542,11 @@ function shelfOfflineTx(db, storeName, mode, fn) {
 // Gọi 1 LẦN mỗi khi vào tab "📷 Ghi Nhận"/mở lại module — so `dept` hiện tại với dept đã gắn trên cache
 // IndexedDB cũ, LỆCH (đổi tài khoản siêu thị khác trên cùng máy) thì xoá sạch 2 store dữ liệu trước khi
 // nạp lại — rồi đồng bộ lại 2 biến cache JS từ IndexedDB.
+// CỐ Ý dùng currentUser.dept THẬT ở đây (KHÔNG đổi sang getEffectiveShelfDept()) — offline-first chỉ
+// phục vụ ĐÚNG siêu thị thật của thiết bị/tài khoản (quét hàng tại chỗ không có mạng), không liên quan
+// tới quyền shelfAnyStoreAccess (tiện ích kiểm tra CHÉO siêu thị khác, giả định luôn có mạng). Đổi theo
+// override sẽ khiến mỗi lần chọn siêu thị khác tự XOÁ SẠCH hàng đợi pendingRecords CHƯA đồng bộ của
+// chính siêu thị mình — rủi ro mất dữ liệu thật không đáng có.
 async function ensureShelfOfflineReady() {
   try {
     const db = await openShelfOfflineDb();
@@ -1551,6 +1638,10 @@ async function trySyncPendingShelfRecords() {
     const queue = shelfOfflinePendingCache.slice();
     for (const rec of queue) {
       try {
+        // CỐ Ý dùng fetch() thường ở đây (KHÔNG phải shelfFetch()) — hàng đợi offline LUÔN thuộc ĐÚNG
+        // siêu thị thật của thiết bị (xem chú thích tại ensureShelfOfflineReady()), gửi kèm header
+        // override (nếu người dùng đang chọn siêu thị KHÁC lúc mạng vừa có lại) sẽ khiến bản ghi cũ bị
+        // nhầm sang siêu thị đang chọn tạm, không phải siêu thị đã ghi nhận lúc mất mạng.
         const res = await fetch('/api/shelf-stock/records/upsert', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec.payload)
         });
@@ -1946,7 +2037,7 @@ function selectPriceCheckSuffixCandidate(maHang) {
 async function submitPriceCheckForLookup(lookup) {
   renderPriceCheckState('LOADING');
   try {
-    const res = await fetch('/api/shelf-stock/price-check', {
+    const res = await shelfFetch('/api/shelf-stock/price-check', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(lookup)
     });
@@ -1997,7 +2088,7 @@ function renderPriceCheckResult(data) {
 // tầng "tự thêm thêm" ở đây, picker CHỈ hiện nhân viên siêu thị mình — server re-validate lại, không tin
 // riêng lọc phía client). =====
 function populateShelfThresholdExtraRecipientsPicker(containerId, initialSelected) {
-  const candidates = (DB.users || []).filter(u => u && u.dept === currentUser.dept && u.active !== false);
+  const candidates = (DB.users || []).filter(u => u && u.dept === getEffectiveShelfDept() && u.active !== false);
   renderPeopleMultiSelect(containerId, candidates, initialSelected || [], 'stExtraRecipientCheckbox', {});
 }
 async function submitShelfStockThreshold(e) {
@@ -2040,7 +2131,7 @@ async function saveShelfStockThresholdEdit(id) {
   const extraRecipientUsernames = [...document.querySelectorAll(`input.stEditExtraRecipientCheckbox_${numId}:checked`)].map(cb => cb.value);
   const active = document.getElementById(`stEditActive_${numId}`).checked;
   try {
-    const res = await fetch(`/api/shelf-stock/thresholds/${numId}`, {
+    const res = await shelfFetch(`/api/shelf-stock/thresholds/${numId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ minQuantity, extraRecipientUsernames, active })
     });
@@ -2199,7 +2290,7 @@ async function parseShelfThresholdImportFile() {
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
   try {
-    const res = await fetch('/api/shelf-stock/thresholds/parse-import', { method: 'POST', body: formData });
+    const res = await shelfFetch('/api/shelf-stock/thresholds/parse-import', { method: 'POST', body: formData });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return alert(`⛔ ${body.error || 'Không đọc được file'}`);

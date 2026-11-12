@@ -649,6 +649,7 @@ const PERM_KEY_VN_LABELS = {
   "shelfLocationManage": "Vận Hành — 🗄️ Quản Lý Danh Mục Quầy Kệ (Siêu Thị Của Mình, Kiểm Soát Hàng Hóa)",
   "shelfRecordCreate": "Vận Hành — 📷 Ghi Nhận Trên Kệ (Kiểm Soát Hàng Hóa)",
   "shelfReportView.all": "Vận Hành — 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)",
+  "shelfAnyStoreAccess": "Vận Hành — 🔑 Được Chọn Siêu Thị Bất Kỳ Để Thao Tác Kiểm Soát Hàng Hóa",
   "submissionAllowSelfApprove": "Văn Bản Trình — ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Văn Bản Trình Do Chính Mình Tạo/Trình",
   "submissionCreate": "Văn Bản Trình — Tạo mới (tự khoá đúng phòng ban)",
   "submissionDownload.all": "Văn Bản Trình — Tải xuống",
