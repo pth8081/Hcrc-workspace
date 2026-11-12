@@ -254,6 +254,7 @@ function editPendingNewUser(idx) {
   renderSecondaryPositionsWidget(u.secondaryPositions);
   renderNVReportExtraKeysWidgets(u);
   document.getElementById('uIsDriver').checked = !!u.isDriver;
+  document.getElementById('uMaxConcurrentSessions').value = u.maxConcurrentSessions || '';
   document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
   populatePermsForm(u.perms);
@@ -317,6 +318,7 @@ function resetUserForm() {
   renderSecondaryPositionsWidget([]);
   renderNVReportExtraKeysWidgets(null);
   document.getElementById('uIsDriver').checked = false;
+  document.getElementById('uMaxConcurrentSessions').value = '';
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
   updatePermGroupNote(false);
@@ -402,6 +404,7 @@ function editUser(id) {
   });
   renderNVReportExtraKeysWidgets(user);
   document.getElementById('uIsDriver').checked = !!user.isDriver;
+  document.getElementById('uMaxConcurrentSessions').value = user.maxConcurrentSessions || '';
   document.getElementById('uStartDate').value = user.startDate || '';
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy
   // đổi tạm sang mảng 1 phần tử để form luôn hiển thị đúng (initDatabase() đã tự động di trú DB.users
