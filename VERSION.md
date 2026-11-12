@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**30.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.5 (2026-11): Kiểm Soát Hàng Hóa — gõ tay 6 số cuối Mã Hàng/Mã Vạch (Ghi Nhận + Kiểm Tra Giá)
+
+Theo yêu cầu người dùng: "Gõ tay bạn cho kiểm tra 6 số cuối theo mã ncc hoặc nội bộ" — gõ đủ Mã Vạch
+EAN-13 (13 số) hoặc Mã Hàng nội bộ (10 số) bằng tay dễ sai/chậm, nên cho phép chỉ cần gõ **6 số cuối**
+của 1 trong 2 mã, hệ thống tự tìm đúng mặt hàng trong Tồn Kho Hệ Thống.
+
+**Thiết kế (ưu tiên an toàn, không tự đoán khi còn mơ hồ)**: thêm hàm
+`matchShelfSystemInventoryBySuffix(code)` — CHỈ áp dụng khi gõ ĐÚNG 6 chữ số (không mò đoán với mã dài gõ
+sai 1-2 ký tự cuối). So khớp theo ĐUÔI của cả Mã Hàng lẫn Mã Vạch trong `shelfSystemInventoryCache`
+(cùng cache Tồn Kho Hệ Thống đã có, nạp cho CẢ "Ghi Nhận" lẫn "Kiểm Tra Giá" lúc vào tab):
+- Khớp ĐÚNG 1 dòng → tự động điền/tra giá luôn, như quét camera.
+- Khớp NHIỀU dòng (6 số cuối không đủ phân biệt) → **không tự ý chọn đại 1 dòng** (rủi ro hiện sai
+  giá/sai mã) — "Ghi Nhận" chỉ báo số lượng khớp + hướng dùng picker có sẵn; "Kiểm Tra Giá" hiện danh
+  sách tên các mặt hàng khớp để bấm chọn đúng 1 mặt hàng rồi mới tra giá.
+- Không khớp gì → rơi về hành vi cũ (gửi nguyên 6 số làm mã vạch, server/đối tác tự báo không tìm thấy).
+
+**Đã làm**:
+1. `public/js/module-vanhanh.js` — thêm `matchShelfSystemInventoryBySuffix()`; cập nhật
+   `applyShelfBarcodeMatch()` (Ghi Nhận) thêm nhánh suffix trước khi báo "không khớp"; tách
+   `submitPriceCheck()`/`submitPriceCheckForLookup()` (Kiểm Tra Giá) + thêm
+   `renderPriceCheckSuffixCandidates()`/`selectPriceCheckSuffixCandidate()`; tab "💲 Kiểm Tra Giá" giờ
+   cũng gọi `loadShelfSystemInventoryForRecordPicker()` khi vào tab (trước đây chỉ "Ghi Nhận" gọi) để có
+   cache dùng khớp 6 số cuối dù chưa từng mở "Ghi Nhận" trong phiên.
+2. `public/fragments/vanHanhSection.html` — thêm khối `#priceCheckSuffixPickerWrap` (danh sách chọn khi
+   khớp nhiều mặt hàng) + cập nhật hint ô nhập.
+3. Tài liệu: `public/js/module-nghiepvu.js` (mục Kiểm Soát Hàng Hóa) — cập nhật bước "Ghi Nhận"/"Kiểm Tra
+   Giá" nêu rõ khả năng gõ 6 số cuối.
+4. Test: file mới `tests/test-shelf-barcode-suffix-match.js` (6/6 pass, thao tác click/gõ THẬT — khớp duy
+   nhất tự tra giá/tự điền; khớp nhiều bắt buộc chọn, không tự đoán; không khớp rơi về hành vi cũ; cả 2
+   nơi Ghi Nhận lẫn Kiểm Tra Giá). Chạy lại `test-shelf-pricecheck-real-click.js` (8/8),
+   `test-shelf-mavach-match.js` (5/5), `test-shelf-record-lo-real-click.js` (12/12),
+   `test-shelf-subtab-real-click.js` (8/8), `test-shelf-record-quantity-increase-confirm.js` (7/7),
+   `test-shelf-mobile-and-offline-inventory.js` (8/8), `test-shelf-barcode-zxing-hints.js` (7/7) — pass
+   hết, không ảnh hưởng chức năng nào khác. Grep CSP chuẩn — sạch.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.4 (2026-11): FIX — Quét mã vạch (Kiểm Tra Giá/Ghi Nhận Quầy Kệ) gần như không bắt được mã trên iPhone
 
