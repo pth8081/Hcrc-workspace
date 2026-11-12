@@ -49,14 +49,31 @@ function canManageShelfStock(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
 }
 
-// code/dept BẤT BIẾN — chỉ name/category/active sửa được. Admin bypass kiểm dept (hỗ trợ xử lý hộ);
-// người chỉ có shelfLocationManage (không phải admin) CHỈ sửa được đúng siêu thị mình.
-function applyShelfLocationEdit(item, body, user) {
+// dept BẤT BIẾN (đổi siêu thị coi như tạo quầy kệ mới ở siêu thị khác — tránh lẫn lịch sử ghi nhận giữa
+// 2 siêu thị) — code/name/category/active sửa được. Admin bypass kiểm dept (hỗ trợ xử lý hộ); người chỉ
+// có shelfLocationManage (không phải admin) CHỈ sửa được đúng siêu thị mình.
+//
+// code SỬA ĐƯỢC (11/2026, theo yêu cầu người dùng "cho tôi sửa cả mã kệ") — ĐỔI quyết định cũ
+// ("code BẤT BIẾN", xem lịch sử git): xác nhận lại an toàn trước khi mở — shelfRecords (ghi nhận) tham
+// chiếu quầy kệ qua `shelfLocationId` (số, bất biến) chứ KHÔNG qua `code`, và tự CHỤP LẠI
+// shelfLocationCode/shelfLocationName vào ĐÚNG thời điểm ghi nhận (xem lib/shelfRecordUpsert.js) — đổi
+// code ở đây KHÔNG làm sai lệch bất kỳ ghi nhận cũ nào (vẫn giữ nguyên snapshot lúc đó), chỉ ảnh hưởng
+// ghi nhận MỚI từ sau khi đổi (hiển thị đúng mã mới). `allItemsInCollection` (mảng ĐANG KHOÁ, route
+// truyền vào — xem routes/shelfStock.js PATCH /locations/:id) để tự kiểm trùng mã TRONG CÙNG giao dịch
+// khoá, không tách rời 2 bước đọc/ghi (tránh race 2 request cùng đổi trùng 1 mã).
+function applyShelfLocationEdit(item, body, user, allItemsInCollection) {
   if (!canManageShelfStock(user)) throw new HttpError(403, 'Bạn không có quyền quản lý Danh Mục Quầy Kệ');
   if (!user.perms?.admin && item.dept !== user.dept) {
     throw new HttpError(403, 'Quầy kệ không thuộc siêu thị của bạn');
   }
   const next = { ...item };
+  if (body.code !== undefined) {
+    const code = String(body.code || '').trim();
+    if (!code) throw new HttpError(400, 'Vui lòng nhập Mã Quầy Kệ');
+    const isDup = (allItemsInCollection || []).some(it => it.id !== item.id && it.dept === item.dept && it.code === code);
+    if (isDup) throw new HttpError(409, `Mã quầy kệ "${code}" đã tồn tại ở siêu thị này`);
+    next.code = code;
+  }
   if (body.name !== undefined) {
     const name = String(body.name || '').trim();
     if (!name) throw new HttpError(400, 'Vui lòng nhập Tên Quầy Kệ');

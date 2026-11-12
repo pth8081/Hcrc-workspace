@@ -50,10 +50,46 @@ router.patch('/locations/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const effectiveUser = await getShelfEffectiveUserFromReq(req);
-    const updated = await withLockedRecordForCollection('shelfLocations', id, (item) => applyShelfLocationEdit(item, req.body, effectiveUser));
+    // Tự khoá TRỰC TIẾP qua withLockedAppDataValue (thay vì withLockedRecordForCollection(), vốn chỉ
+    // truyền ĐÚNG 1 bản ghi cho mutatorFn) để applyShelfLocationEdit() có NGUYÊN mảng đang khoá, tự kiểm
+    // trùng Mã Quầy Kệ (nếu đổi) trong CÙNG giao dịch khoá — xem chú thích đầy đủ tại hàm đó.
+    let updated;
+    await withLockedAppDataValue('shelfLocations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const idx = arr.findIndex(it => it.id === id);
+      if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      updated = applyShelfLocationEdit(arr[idx], req.body, effectiveUser, arr);
+      arr[idx] = updated;
+      return arr;
+    });
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/locations/:id');
+  }
+});
+
+// DELETE /locations/:id (11/2026, theo yêu cầu người dùng: "thêm nút xóa nữa để tôi xóa hẳn đi" — khác
+// hẳn "Ngừng dùng" hiện có, vốn chỉ ẩn khỏi danh sách chọn ở Ghi Nhận chứ không xoá khỏi danh mục). Xoá
+// VĨNH VIỄN, KHÔNG hoàn tác (shelfLocations là collection AppData thường, chưa "tốt nghiệp" lên
+// dbo.Records nên KHÔNG đi qua Thùng Rác — xem chú thích deleteRecordForCollection(), lib/recordStore.js).
+// AN TOÀN với ghi nhận CŨ: shelfRecords tham chiếu quầy kệ qua shelfLocationId (số, không đụng gì khi xoá
+// dòng danh mục) và đã tự CHỤP LẠI shelfLocationCode/shelfLocationName lúc ghi nhận (xem
+// lib/shelfRecordUpsert.js) — lịch sử ghi nhận cũ vẫn hiện đúng mã/tên quầy kệ CŨ, chỉ riêng việc CHỌN
+// quầy kệ này cho ghi nhận MỚI sẽ không còn được nữa (đúng ý "xoá hẳn" khỏi danh mục).
+router.delete('/locations/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
+    await deleteRecordForCollection('shelfLocations', id, (item) => {
+      if (!canManageShelfStock(effectiveUser)) throw new HttpError(403, 'Bạn không có quyền quản lý Danh Mục Quầy Kệ');
+      if (!effectiveUser.perms?.admin && item.dept !== effectiveUser.dept) {
+        throw new HttpError(403, 'Quầy kệ không thuộc siêu thị của bạn');
+      }
+    }, { username: req.user.username, name: req.freshUser?.name });
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/shelf-stock/locations/:id');
   }
 });
 

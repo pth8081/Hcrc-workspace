@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**30.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.18 (2026-11): "🗄️ Quầy Kệ" — sửa được cả Mã Quầy Kệ, thêm nút Xoá hẳn khỏi danh mục
+
+Người dùng yêu cầu kèm ảnh chụp màn hình "Quầy Kệ" (Kiểm Soát Hàng Hóa): "cho tôi sửa cả mã kệ, tên kệ và
+ngành hàng và thêm nút xóa nữa để tôi xóa hẳn đi". Trước đây chỉ Tên/Ngành Hàng sửa được — Mã Quầy Kệ cố ý
+BẤT BIẾN, và chỉ có "Ngừng dùng" (ẩn khỏi danh sách chọn, vẫn còn trong danh mục) chứ không xoá hẳn được.
+
+**Đã mở Mã Quầy Kệ cho sửa** sau khi xác nhận lại an toàn: `shelfRecords` (ghi nhận trên kệ) tham chiếu
+quầy kệ qua `shelfLocationId` (số, bất biến), KHÔNG qua `code`, và tự CHỤP LẠI `shelfLocationCode`/
+`shelfLocationName` vào đúng thời điểm ghi nhận (`lib/shelfRecordUpsert.js`) — đổi mã ở danh mục không làm
+sai lệch bất kỳ ghi nhận cũ nào, chỉ ảnh hưởng ghi nhận MỚI từ sau khi đổi. `applyShelfLocationEdit()`
+(`lib/shelfStockEdit.js`) kiểm trùng mã TRONG CÙNG siêu thị (409 nếu trùng, loại trừ chính nó), chặn mã/tên
+rỗng; siêu thị (`dept`) vẫn BẤT BIẾN như cũ (đổi siêu thị coi như tạo quầy kệ mới ở siêu thị khác, tránh lẫn
+lịch sử ghi nhận giữa 2 siêu thị).
+
+**Thêm nút "🗑️ Xoá"** — `DELETE /api/shelf-stock/locations/:id` (route mới) — xoá VĨNH VIỄN khỏi danh mục,
+KHÔNG qua Thùng Rác (đúng ý người dùng "xóa hẳn"), không hoàn tác; vẫn gác đúng quyền `shelfLocationManage`
++ đúng siêu thị (admin bypass để hỗ trợ xử lý hộ). Hộp thoại xác nhận trên UI nêu rõ lịch sử ghi nhận cũ
+trên kệ vẫn được giữ nguyên, chỉ không còn chọn được quầy kệ này để ghi nhận MỚI.
+
+`lib/shelfStockEdit.js` (`applyShelfLocationEdit()` nhận thêm tham số mảng đang khoá để kiểm trùng mã
+atomic), `routes/shelfStock.js` (PATCH đổi sang `withLockedAppDataValue` trực tiếp để kiểm trùng; DELETE
+mới dùng `deleteRecordForCollection()`), `public/js/module-vanhanh.js` (ô Mã Quầy Kệ sửa được khi bấm
+"Sửa", nút "🗑️ Xoá" mới), `public/fragments/vanHanhSection.html` (cập nhật chú thích hướng dẫn).
+
+**Test**: mở rộng `tests/test-shelf-kehang-phase2.js` (5 scenario mới: đổi mã thành công, 409 trùng mã cùng
+siêu thị, mã trùng khác siêu thị vẫn được phép, tự sửa lại đúng mã cũ không bị chặn nhầm, mã rỗng bị từ
+chối) + `tests/test-shelf-location-edit-code-delete.js` (mới, 7 scenario HTTP qua `routes/shelfStock.js`
+thật) + `tests/test-shelf-location-edit-delete-demo.js` (demo Playwright thao tác thật qua giao diện: sửa
+Mã/Tên/Ngành Hàng rồi Lưu, xoá hẳn 1 quầy kệ khác, xác nhận hộp thoại cảnh báo đúng nội dung) + chạy lại 12
+test Kiểm Soát Hàng Hóa/Tồn Kho liên quan khác, không regression.
 
 ## v30.17 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — hiện Tồn Kho Hệ Thống khi xem Tất cả siêu thị
 
