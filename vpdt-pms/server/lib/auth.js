@@ -4,6 +4,7 @@
 // request từ client, khiến GET/POST /api/data không có xác thực gì. Module này là gốc để vá lỗ đó.
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { getAppDataValue, getAppDataValueCached, withLockedAppDataValue } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
@@ -84,15 +85,37 @@ function validatePin(pin) {
   return null;
 }
 
-function signToken(user) {
+// Số phiên đăng nhập đồng thời tối đa của 1 tài khoản (11/2026, theo yêu cầu người dùng "cho phép có cái
+// box cho phép user được login bao nhiêu phiên trên bao nhiêu máy tại một thời điểm") — field
+// user.maxConcurrentSessions do admin gán qua form Sửa Người Dùng (ô "🔐 Số Phiên Đăng Nhập Đồng Thời Tối
+// Đa", xem module-admin-submissiongroups.js). Không hợp lệ/để trống -> mặc định 1 (giữ nguyên hành vi gốc
+// "1 tài khoản chỉ 1 kết nối tại 1 thời điểm" cho MỌI tài khoản chưa từng được cấp số khác).
+function getMaxConcurrentSessions(user) {
+  const n = parseInt(user && user.maxConcurrentSessions, 10);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
+
+function signToken(user, jti) {
   return jwt.sign(
     // sv (sessionVersion): ký kèm giá trị hiện tại của user để requireAuth() bên dưới có thể phát hiện
-    // token đã bị "vô hiệu hóa từ xa" khi mật khẩu/PIN đổi (xem routes/data.js prepareUsersForSave và
-    // routes/auth.js change-pin/PATCH /me — cả 2 nơi đều tăng sessionVersion mỗi khi đổi pass/pin).
-    // Trước đây đổi mật khẩu/PIN cho user khác (admin reset) hay chính user tự đổi không hề vô hiệu
-    // hóa các phiên JWT ĐANG MỞ ở nơi khác (điện thoại bị mất, máy dùng chung...) — token cũ vẫn xác
-    // thực bình thường tới tận khi hết hạn (tối đa 1h, có thể lâu hơn do trượt hạn theo hoạt động).
-    { sub: user.username, admin: !!(user.perms && user.perms.admin), sv: user.sessionVersion || 0 },
+    // token đã bị "vô hiệu hóa TOÀN BỘ từ xa" khi mật khẩu/PIN đổi, gỡ TOTP/vân tay... (xem routes/
+    // auth.js change-pin/PATCH /me/DELETE totp/DELETE webauthn — các nơi này tăng sessionVersion để đá
+    // NGAY mọi phiên đang mở, không phân biệt đang được phép bao nhiêu phiên đồng thời). Trước đây đổi
+    // mật khẩu/PIN cho user khác (admin reset) hay chính user tự đổi không hề vô hiệu hóa các phiên JWT
+    // ĐANG MỞ ở nơi khác (điện thoại bị mất, máy dùng chung...) — token cũ vẫn xác thực bình thường tới
+    // tận khi hết hạn (tối đa 1h, có thể lâu hơn do trượt hạn theo hoạt động).
+    //
+    // jti (11/2026, hỗ trợ N phiên đồng thời — xem getMaxConcurrentSessions() ở trên): định danh RIÊNG
+    // của ĐÚNG phiên đăng nhập này (1 giá trị ngẫu nhiên mới mỗi lần cấp phiên thật, xem
+    // grantSessionAfterLogin() ở routes/auth.js) — requireAuth() bên dưới đối chiếu với
+    // user.activeSessions (danh sách phiên đang được phép còn hiệu lực, giới hạn đúng
+    // maxConcurrentSessions) để biết ĐÚNG phiên này còn sống hay đã bị đá (khi vượt quá số phiên cho
+    // phép, phiên cũ nhất bị loại khỏi danh sách) — khác "sv" ở trên vốn chỉ có 2 trạng thái toàn-sống/
+    // toàn-chết cho MỌI phiên của 1 tài khoản. Token ký TRƯỚC khi có trường này (đang là phiên đăng nhập
+    // THẬT của người dùng thật ngay lúc triển khai tính năng) không có "jti" — requireAuth() cố ý CHO QUA
+    // không kiểm theo danh sách (không có gì để đối chiếu), tự nhiên có "jti" khi đăng nhập lại hoặc khi
+    // phiên đó được ký lại lúc trượt hạn — không ép ai phải đăng xuất ngay lúc vừa triển khai bản vá này.
+    { sub: user.username, admin: !!(user.perms && user.perms.admin), sv: user.sessionVersion || 0, jti },
     getJwtSecret(),
     { expiresIn: TOKEN_TTL }
   );
@@ -180,9 +203,40 @@ async function requireAuth(req, res, next) {
       effectiveFreshUser = freshUserFromDb;
     }
 
+    // Phiên này còn nằm trong danh sách phiên ĐANG ĐƯỢC PHÉP của tài khoản hay không (11/2026, hỗ trợ N
+    // phiên đồng thời — xem getMaxConcurrentSessions()/jti ở signToken() phía trên) — khi 1 tài khoản
+    // đăng nhập vượt quá số phiên cho phép (maxConcurrentSessions), phiên CŨ NHẤT bị loại khỏi
+    // user.activeSessions (xem grantSessionAfterLogin(), routes/auth.js), nên dù "sv" (sessionVersion)
+    // vẫn khớp (không phải lỗi đổi mật khẩu), phiên bị loại đó vẫn phải mất hiệu lực NGAY. Token ký
+    // TRƯỚC khi tính năng này triển khai không có "jti" — CHO QUA không kiểm theo danh sách (không có gì
+    // để đối chiếu, và đây là phiên ĐANG SỐNG THẬT của người dùng thật ngay lúc vừa deploy xong, ép đăng
+    // xuất ngay là trải nghiệm tệ không cần thiết — tự nhiên có "jti" ở lượt đăng nhập/trượt hạn kế tiếp).
+    let sessionEntry = null;
+    if (payload.jti) {
+      const sessionsNow = Array.isArray(effectiveFreshUser.activeSessions) ? effectiveFreshUser.activeSessions : [];
+      sessionEntry = sessionsNow.find(s => s.jti === payload.jti) || null;
+      if (!sessionEntry) {
+        // Cùng lý do cache PM2 cluster trễ như nhánh "sv" ở trên — chỉ re-đọc DB nếu CHƯA re-đọc ở đó
+        // (tránh đọc DB 2 lần vô ích trong CÙNG 1 request).
+        if (effectiveUsers === users) {
+          const freshFromDb = await getAppDataValue('users');
+          const freshUserFromDb = (freshFromDb || []).find(u => u.username === payload.sub);
+          if (freshUserFromDb) {
+            effectiveUsers = freshFromDb;
+            effectiveFreshUser = freshUserFromDb;
+            sessionEntry = (freshUserFromDb.activeSessions || []).find(s => s.jti === payload.jti) || null;
+          }
+        }
+        if (!sessionEntry) {
+          return res.status(401).json({ error: 'Phiên đăng nhập này đã bị đăng xuất (có thể do đăng nhập ở thiết bị/máy khác) — vui lòng đăng nhập lại' });
+        }
+      }
+    }
+
     req.user = { username: effectiveFreshUser.username, admin: !!effectiveFreshUser.perms?.admin };
     req.freshUser = effectiveFreshUser;
     req.allUsers = effectiveUsers || [];
+    req.sessionJti = payload.jti || null; // dùng ở các route tự đổi mật khẩu/PIN/gỡ TOTP... của CHÍNH mình (giữ đúng phiên hiện tại khi ký lại token, xem routes/auth.js)
 
     // Trượt hạn theo hoạt động: token JWT tuyệt đối hết hạn sau 1h (TOKEN_TTL, xác minh ở verifyToken()
     // phía trên) — nhưng nếu người dùng còn đang thao tác (còn request nào đó tới trước khi hết hạn),
@@ -193,7 +247,7 @@ async function requireAuth(req, res, next) {
       // Dùng effectiveFreshUser (không phải freshUser) — ở nhánh vừa tự đọc lại CSDL thật phía trên vì
       // lệch sessionVersion do cache trễ, freshUser (bản cache cũ) vẫn mang sessionVersion SAI, ký lại
       // token bằng nó sẽ tái tạo NGUYÊN lỗi vừa tự vá ở request kế tiếp.
-      setAuthCookie(res, signToken(effectiveFreshUser));
+      setAuthCookie(res, signToken(effectiveFreshUser, payload.jti));
       // LỖI ĐÃ VÁ (11/2026, người dùng báo "vào máy tính lúc điện thoại đang có phiên thì bị đá âm
       // thầm, không hỏi xác nhận như hướng ngược lại"): routes/auth.js shouldConfirmKick() quyết định
       // có hỏi xác nhận trước khi đá hay không dựa vào lastLoginAt — nhưng field đó trước đây CHỈ được
@@ -208,9 +262,20 @@ async function requireAuth(req, res, next) {
       withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
         const idx = list.findIndex(u => u.username === effectiveFreshUser.username);
-        if (idx !== -1) list[idx] = { ...list[idx], lastLoginAt: new Date().toISOString() };
+        if (idx !== -1) {
+          const next = { ...list[idx], lastLoginAt: new Date().toISOString() };
+          // Cập nhật lastSeenAt của ĐÚNG phiên này trong activeSessions (song song lastLoginAt ở trên,
+          // 11/2026) — để shouldConfirmKick()/grantSessionAfterLogin() (routes/auth.js) biết chính xác
+          // phiên này "có thể còn sống" tới thời điểm nào khi cần quyết định đá phiên cũ nhất lúc đăng
+          // nhập thêm ở thiết bị khác. Chỉ áp dụng khi token CÓ jti (bỏ qua phiên cũ ký trước khi có
+          // tính năng này — xem payload.jti ở nhánh kiểm phía trên).
+          if (payload.jti && Array.isArray(next.activeSessions)) {
+            next.activeSessions = next.activeSessions.map(s => s.jti === payload.jti ? { ...s, lastSeenAt: new Date().toISOString() } : s);
+          }
+          list[idx] = next;
+        }
         return list;
-      }).catch(err => console.error('requireAuth: không cập nhật được lastLoginAt lúc trượt hạn:', err.message));
+      }).catch(err => console.error('requireAuth: không cập nhật được lastLoginAt/lastSeenAt lúc trượt hạn:', err.message));
     }
 
     next();
@@ -259,6 +324,7 @@ function blockIfMustChangePassword(req, res, next) {
 module.exports = {
   COOKIE_NAME,
   TOKEN_TTL_MS,
+  getMaxConcurrentSessions,
   isBcryptHash,
   hashPassword,
   verifyPassword,

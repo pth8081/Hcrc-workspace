@@ -183,6 +183,10 @@ stubModule('lib/auth', {
   signToken: () => 'fake-token',
   setAuthCookie: () => {},
   clearAuthCookie: () => {},
+  // getMaxConcurrentSessions (11/2026, hỗ trợ N phiên đồng thời) — routes/auth.js (shouldConfirmKick()/
+  // grantSessionAfterLogin()) giờ gọi hàm này; bài test NÀY không quan tâm gì tới cơ chế đa phiên (chỉ
+  // kiểm luồng TOTP), mock cố định về 1 (mặc định hệ thống, đúng hành vi N=1 gốc) là đủ.
+  getMaxConcurrentSessions: () => 1,
   // findUserByUsernameCI() (10/2026, "cho phép user chữ hoa và chữ thường như nhau") — routes/auth.js
   // giờ gọi hàm này ở POST /login và /verify-totp-login thay vì tự .find() thẳng; mock lại đúng ngữ
   // nghĩa (không phân biệt hoa/thường) để 2 route đó vẫn hoạt động dưới stub module này.

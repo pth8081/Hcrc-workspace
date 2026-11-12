@@ -157,6 +157,56 @@ async function main() {
       assertEqual(saved.sessionVersion, 1, `user MỚI có mật khẩu -> sessionVersion phải tự tính = 1, KHÔNG lấy 42 do client tự gửi, got: ${saved.sessionVersion}`);
     });
 
+    // ===== activeSessions/maxConcurrentSessions (11/2026, hỗ trợ N phiên đồng thời) — CÙNG LÝ DO/KHUÔN
+    // sessionVersion ở trên: activeSessions chỉ được phép sửa qua các luồng đích danh của lib/auth.js/
+    // routes/auth.js, KHÔNG BAO GIỜ qua lượt lưu nguyên mảng "users" này; maxConcurrentSessions NGƯỢC
+    // LẠI do admin tự gán qua form nên được ghi bình thường, chỉ validate lại ở server. =====
+    await run.run('GET /api/data/users — activeSessions KHÔNG xuất hiện trong response (như sessionVersion/pass/pinHash)', async () => {
+      resetData();
+      APP_DATA.users[1].activeSessions = [{ jti: 'abc', createdAt: '2026-01-01', lastSeenAt: '2026-01-01' }];
+      const res = await api('GET', '/api/data/users');
+      assertEqual(res.status, 200);
+      const nv1 = res.body.find(u => u.username === 'nv1');
+      assertEqual(nv1 && !('activeSessions' in nv1), true, `activeSessions phải bị lọc khỏi GET /api/data/users, got: ${JSON.stringify(nv1)}`);
+    });
+
+    await run.run('POST /api/data/users — activeSessions client gửi lên (giả) bị BỎ QUA hoàn toàn, CSDL giữ nguyên giá trị thật', async () => {
+      resetData();
+      APP_DATA.users[1].activeSessions = [{ jti: 'real-session', createdAt: '2026-01-01', lastSeenAt: '2026-01-01' }];
+      const payload = [
+        { ...ADMIN },
+        { id: 2, username: 'nv1', name: 'Nhân Viên 1 (sửa SĐT)', dept: 'Phòng A', perms: {}, active: true, activeSessions: [{ jti: 'fake-injected', createdAt: '2099-01-01', lastSeenAt: '2099-01-01' }] }
+      ];
+      const res = await api('POST', '/api/data/users', payload);
+      assertEqual(res.status, 200, `phải lưu thành công, got: ${JSON.stringify(res.body)}`);
+      const saved = APP_DATA.users.find(u => u.username === 'nv1');
+      assertEqual(JSON.stringify(saved.activeSessions), JSON.stringify([{ jti: 'real-session', createdAt: '2026-01-01', lastSeenAt: '2026-01-01' }]), `activeSessions phải giữ ĐÚNG giá trị CSDL, KHÔNG bị client ghi đè, got: ${JSON.stringify(saved.activeSessions)}`);
+    });
+
+    await run.run('POST /api/data/users — maxConcurrentSessions hợp lệ (VD 3) được admin gán bình thường', async () => {
+      resetData();
+      const payload = [
+        { ...ADMIN },
+        { id: 2, username: 'nv1', name: 'Nhân Viên 1', dept: 'Phòng A', perms: {}, active: true, maxConcurrentSessions: 3 }
+      ];
+      const res = await api('POST', '/api/data/users', payload);
+      assertEqual(res.status, 200, `phải lưu thành công, got: ${JSON.stringify(res.body)}`);
+      const saved = APP_DATA.users.find(u => u.username === 'nv1');
+      assertEqual(saved.maxConcurrentSessions, 3, `maxConcurrentSessions hợp lệ phải được lưu đúng, got: ${saved.maxConcurrentSessions}`);
+    });
+
+    await run.run('POST /api/data/users — maxConcurrentSessions KHÔNG hợp lệ (0, âm, >20, chữ) -> 400 rõ ràng, KHÔNG lưu gì', async () => {
+      resetData();
+      for (const bad of [0, -1, 21, 'abc']) {
+        const payload = [
+          { ...ADMIN },
+          { id: 2, username: 'nv1', name: 'Nhân Viên 1', dept: 'Phòng A', perms: {}, active: true, maxConcurrentSessions: bad }
+        ];
+        const res = await api('POST', '/api/data/users', payload);
+        assertEqual(res.status, 400, `maxConcurrentSessions=${JSON.stringify(bad)} phải bị từ chối 400, got: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+    });
+
     run.summary();
   } finally {
     server.close();

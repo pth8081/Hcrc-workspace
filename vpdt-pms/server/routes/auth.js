@@ -4,7 +4,8 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, getAppDataValueWithVersion, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, TOKEN_TTL_MS, findUserByUsernameCI } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, TOKEN_TTL_MS, findUserByUsernameCI, getMaxConcurrentSessions } = require('../lib/auth');
+const crypto = require('crypto');
 const { setToken: setEphemeralToken, consumeToken: consumeEphemeralToken } = require('../lib/ephemeralStore');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
@@ -63,32 +64,76 @@ function logAuthFailure(req, { username, fullName, actionType, description }) {
 const KICK_CONFIRM_TTL_MS = 2 * 60 * 1000;
 function kickConfirmKey(username) { return `kickConfirm:login:${username}`; }
 
-// Chỉ true khi phiên trước CÓ THỂ còn thật sự sống (đăng nhập lần trước đủ gần, trong vòng TOKEN_TTL_MS
-// kể từ lúc đó — quá khung này thì token cũ chắc chắn đã tự hết hạn tuyệt đối dù không ai đá, hỏi xác
-// nhận lúc đó chỉ gây phiền vô ích). lastLoginAt được set ở MỌI lượt CẤP PHIÊN thật (grantSessionAfterLogin
-// bên dưới) và xoá về null khi đăng xuất tự nguyện (POST /logout — không còn phiên nào để lo đá nhầm).
+// ĐỔI (11/2026, theo yêu cầu người dùng "cho phép có cái box cho phép user được login bao nhiêu phiên
+// trên bao nhiêu máy tại một thời điểm"): trước đây CHỈ có 2 trạng thái (1 phiên sống/không) dựa vào
+// lastLoginAt (scalar DUY NHẤT trên user) — giờ mỗi tài khoản có 1 DANH SÁCH phiên đang được phép
+// (user.activeSessions, giới hạn đúng getMaxConcurrentSessions(user) — mặc định 1, giữ NGUYÊN hành vi
+// gốc cho tài khoản chưa từng được cấp số khác). Chỉ CÓ KHẢ NĂNG phải đá (và vì vậy cần hỏi xác nhận)
+// khi danh sách đã ĐẦY (>= max) VÀ phiên SẼ BỊ ĐÁ (cũ nhất theo lastSeenAt/createdAt) CÓ THỂ còn thật sự
+// sống (trong vòng TOKEN_TTL_MS kể từ lần hoạt động gần nhất của chính phiên đó — quá khung này thì
+// token đó chắc chắn đã tự hết hạn tuyệt đối dù không ai đá, hỏi xác nhận lúc đó chỉ gây phiền vô ích).
+// Còn chỗ trống (chưa đạt số phiên tối đa) -> KHÔNG cần đá ai cả -> cấp phiên mới luôn, không hỏi gì.
+function sortSessionsOldestFirst(sessions) {
+  return [...(sessions || [])].sort((a, b) =>
+    new Date(a.lastSeenAt || a.createdAt || 0).getTime() - new Date(b.lastSeenAt || b.createdAt || 0).getTime()
+  );
+}
 function shouldConfirmKick(user) {
-  if (!user || !user.lastLoginAt) return false;
-  const last = new Date(user.lastLoginAt).getTime();
-  return Number.isFinite(last) && (Date.now() - last) < TOKEN_TTL_MS;
+  const max = getMaxConcurrentSessions(user);
+  const sessions = Array.isArray(user?.activeSessions) ? user.activeSessions : [];
+  if (sessions.length < max) return false; // còn chỗ trống, không cần đá ai
+  // Số phiên SẼ BỊ ĐÁ để nhường chỗ cho phiên mới — thường đúng 1 (danh sách đang đầy vừa đúng max), trừ
+  // trường hợp admin vừa HẠ maxConcurrentSessions xuống thấp hơn số phiên đang có sẵn (VD đang có 3 phiên,
+  // admin đổi về 1) — lúc đó 1 lượt đăng nhập mới phải loại NHIỀU hơn 1 phiên cùng lúc để đủ chỗ, nên phải
+  // kiểm TẤT CẢ các phiên sẽ bị loại (không chỉ phiên cũ nhất) xem có phiên nào trong số đó CÓ THỂ còn
+  // sống hay không mới quyết định có cần hỏi xác nhận.
+  const evictCount = sessions.length - max + 1;
+  const victims = sortSessionsOldestFirst(sessions).slice(0, evictCount);
+  return victims.some(v => {
+    const last = new Date(v.lastSeenAt || v.createdAt || 0).getTime();
+    return Number.isFinite(last) && (Date.now() - last) < TOKEN_TTL_MS;
+  });
 }
 
-// Bước CẤP PHIÊN THẬT dùng chung cho cả lượt đăng nhập thẳng (không cần xác nhận) lẫn lượt đã qua xác
-// nhận ở POST /confirm-kick-session — gộp lại 1 chỗ để không lặp code tăng sessionVersion+lastLoginAt ở
-// 4 nơi gọi (3 nhánh đăng nhập + endpoint xác nhận).
+// Bước CẤP PHIÊN THẬT dùng chung cho cả 4 nhánh đăng nhập (login không-TOTP/verify-totp-login/webauthn-
+// login-verify/confirm-kick-session) — gộp lại 1 chỗ để không lặp code quản lý user.activeSessions ở 4
+// nơi gọi. Sinh 1 "jti" ngẫu nhiên MỚI cho phiên này (xem signToken()/requireAuth(), lib/auth.js); nếu
+// danh sách phiên đang được phép đã ĐẦY (>= maxConcurrentSessions), loại CŨ NHẤT trước khi thêm phiên
+// mới vào — đây chính là lúc "đá" thật sự diễn ra (CHỈ sau khi shouldConfirmKick() đã được hỏi xác nhận
+// nếu cần, xem 4 nơi gọi bên dưới). KHÔNG đụng tới sessionVersion ở đây nữa (sv giờ CHỈ dùng cho các
+// hành động "đá TOÀN BỘ phiên ngay" như đổi mật khẩu/PIN/gỡ TOTP — xem lib/auth.js signToken()).
 async function grantSessionAfterLogin(canonicalUsername) {
   let sessionUser = null;
+  const jti = crypto.randomUUID();
+  const now = new Date().toISOString();
   await withLockedAppDataValue('users', (collection) => {
     const list = Array.isArray(collection) ? collection : [];
     const idx = list.findIndex(u => u.username === canonicalUsername);
     if (idx !== -1) {
-      list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1;
-      list[idx].lastLoginAt = new Date().toISOString();
+      const max = getMaxConcurrentSessions(list[idx]);
+      let sessions = sortSessionsOldestFirst(list[idx].activeSessions);
+      while (sessions.length >= max) sessions.shift(); // loại (các) phiên cũ nhất cho tới khi còn đúng chỗ trống cho phiên mới
+      sessions.push({ jti, createdAt: now, lastSeenAt: now });
+      list[idx] = { ...list[idx], activeSessions: sessions, lastLoginAt: now };
       sessionUser = { ...list[idx] };
     }
     return list;
   });
-  return sessionUser;
+  return { user: sessionUser, jti };
+}
+
+// Dùng ở các route tự đổi mật khẩu/PIN/gỡ TOTP/gỡ vân tay... CỦA CHÍNH MÌNH — những nơi này đã tăng
+// sessionVersion (đá TOÀN BỘ phiên khác đang mở, không phân biệt được cấp bao nhiêu phiên đồng thời —
+// cố ý giữ nguyên, đổi mật khẩu/PIN vẫn phải đá hết mọi nơi khác) rồi ký lại token cho PHIÊN HIỆN TẠI để
+// không tự đăng xuất người vừa thao tác. Dọn luôn user.activeSessions về CHỈ còn đúng phiên hiện tại
+// (11/2026) — giữ danh sách phiên sạch/đúng cho lần đếm "còn bao nhiêu chỗ trống" ở lượt đăng nhập kế
+// tiếp (không bắt buộc cho tính ĐÚNG đắn vì sv đã chặn các phiên khác rồi, chỉ là dọn dẹp số liệu).
+// currentJti rỗng (req.sessionJti null — token hiện tại ký từ TRƯỚC khi có tính năng này) -> bỏ qua,
+// không đụng gì tới activeSessions.
+function resetSessionsToCurrent(record, currentJti) {
+  if (!currentJti) return record;
+  const now = new Date().toISOString();
+  return { ...record, activeSessions: [{ jti: currentJti, createdAt: now, lastSeenAt: now }] };
 }
 
 // Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
@@ -103,7 +148,11 @@ async function grantSessionAfterLogin(canonicalUsername) {
 // totpEnabled (boolean, đã có sẵn trong "safe" vì không bị destructure ra) đủ để client biết đã thiết
 // lập xác thực 2 lớp hay chưa mà không cần thấy gì nhạy cảm.
 function toSafeUser(user) {
-  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, ...safe } = user;
+  // activeSessions (11/2026, hỗ trợ N phiên đồng thời — xem lib/auth.js) — danh sách jti/thời điểm nội
+  // bộ dùng để đối chiếu phiên còn sống, không có giá trị gì cho client hiển thị và KHÔNG BAO GIỜ được
+  // phép quay ngược lại server qua route lưu "users" chung (đã ép lại ở prepareUsersForSave(), routes/
+  // data.js — cùng khuôn pinHash/webauthnCredentials/sessionVersion).
+  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, activeSessions, ...safe } = user;
   return { ...safe, hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length, totpEnabled: !!user.totpEnabled };
 }
 
@@ -278,8 +327,8 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       return res.json({ confirmKickRequired: true, username: canonicalUsername });
     }
 
-    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
-    const token = signToken(sessionUser);
+    const { user: sessionUser, jti } = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser, jti);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
     res.json(toSafeUser(sessionUser));
@@ -377,8 +426,8 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
       await setEphemeralToken(kickConfirmKey(canonicalUsername), true, KICK_CONFIRM_TTL_MS);
       return res.json({ confirmKickRequired: true, username: canonicalUsername });
     }
-    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
-    const token = signToken(sessionUser);
+    const { user: sessionUser, jti } = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser, jti);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
     res.json(toSafeUser(sessionUser));
@@ -410,8 +459,8 @@ router.post('/confirm-kick-session', loginRateLimiter, async (req, res) => {
     if (user.active === false) {
       return res.status(403).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
     }
-    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
-    const token = signToken(sessionUser);
+    const { user: sessionUser, jti } = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser, jti);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
     res.json(toSafeUser(sessionUser));
@@ -443,10 +492,25 @@ router.post('/logout', async (req, res) => {
           const list = Array.isArray(collection) ? collection : [];
           const idx = list.findIndex(u => u.username === payload.sub);
           if (idx === -1) return list;
-          // lastLoginAt: null — đăng xuất TỰ NGUYỆN nghĩa là không còn phiên nào cần lo đá nhầm nữa, nên
-          // lượt đăng nhập KẾ TIẾP của tài khoản này không cần hỏi xác nhận (shouldConfirmKick() ở trên)
-          // dù có đăng nhập lại ngay sau đó.
-          list[idx] = { ...list[idx], sessionVersion: (list[idx].sessionVersion || 0) + 1, lastLoginAt: null };
+          // ĐỔI (11/2026, hỗ trợ N phiên đồng thời): token CÓ jti (phiên ký từ bản vá này trở đi) -> chỉ
+          // gỡ ĐÚNG phiên đang đăng xuất khỏi activeSessions — các phiên khác (thiết bị khác, nếu tài
+          // khoản này được cấp maxConcurrentSessions > 1) KHÔNG bị ảnh hưởng, đúng ý "đăng xuất 1 máy
+          // không đăng xuất hộ các máy khác". Token KHÔNG có jti (ký từ TRƯỚC khi có tính năng này, đang
+          // trong giai đoạn chuyển tiếp ngay sau khi deploy) -> không có gì để gỡ theo từng phiên, dùng
+          // lại CƠ CHẾ CŨ (tăng sessionVersion) để vẫn đá NGAY đúng ý "logout phải đá thật" — chấp nhận hệ
+          // quả phụ hiếm gặp là có thể đá luôn các phiên MỚI khác đang mở của CÙNG người này nếu có, tự
+          // hết sau vài giờ khi mọi phiên cũ tự làm mới/đăng nhập lại.
+          // lastLoginAt: null — đăng xuất TỰ NGUYỆN nghĩa là không còn phiên nào cần lo đá nhầm nữa (ở
+          // nhánh legacy không-jti), nên lượt đăng nhập KẾ TIẾP của tài khoản này không cần hỏi xác nhận
+          // (shouldConfirmKick() ở trên) dù có đăng nhập lại ngay sau đó.
+          const next = { ...list[idx], lastLoginAt: null };
+          if (payload.jti) {
+            const sessions = Array.isArray(next.activeSessions) ? next.activeSessions : [];
+            next.activeSessions = sessions.filter(s => s.jti !== payload.jti);
+          } else {
+            next.sessionVersion = (next.sessionVersion || 0) + 1;
+          }
+          list[idx] = next;
           return list;
         });
       }
@@ -601,7 +665,7 @@ router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
       const list = Array.isArray(collection) ? collection : [];
       const idx = list.findIndex(u => u.username === username);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
-      updated = { ...list[idx], pinHash: newPinHash, sessionVersion: (list[idx].sessionVersion || 0) + 1 };
+      updated = resetSessionsToCurrent({ ...list[idx], pinHash: newPinHash, sessionVersion: (list[idx].sessionVersion || 0) + 1 }, req.sessionJti);
       resetLoginAttempts(updated); // đổi PIN thành công (kể cả sau khi vừa gõ sai vài lần) -> xoá lịch sử sai
       list[idx] = updated;
       return list;
@@ -609,7 +673,7 @@ router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
 
     // Vô hiệu hóa mọi phiên JWT KHÁC đang mở của chính người này (xem lib/auth.js) — cấp ngay 1 token
     // mới khớp sessionVersion vừa tăng cho PHIÊN HIỆN TẠI, để không tự đăng xuất người vừa đổi PIN.
-    setAuthCookie(res, signToken(updated));
+    setAuthCookie(res, signToken(updated, req.sessionJti));
     res.json(toSafeUser(updated));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -726,6 +790,7 @@ router.patch('/me', requireAuth, async (req, res) => {
         // requireAuth) — mất mật khẩu/thiết bị cũ vẫn đăng nhập được vô thời hạn cho tới khi token hết
         // hạn (tối đa 8h, có thể lâu hơn do trượt hạn theo hoạt động) trước khi có sessionVersion này.
         updated.sessionVersion = (updated.sessionVersion || 0) + 1;
+        updated = resetSessionsToCurrent(updated, req.sessionJti);
       }
 
       list[idx] = updated;
@@ -734,7 +799,7 @@ router.patch('/me', requireAuth, async (req, res) => {
 
     // Cấp lại token mới khớp sessionVersion vừa tăng cho PHIÊN HIỆN TẠI (nếu có đổi mật khẩu) — để
     // không tự đăng xuất người vừa đổi mật khẩu của chính mình.
-    if (password) setAuthCookie(res, signToken(updated));
+    if (password) setAuthCookie(res, signToken(updated, req.sessionJti));
     res.json(toSafeUser(updated));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -1047,11 +1112,12 @@ router.delete('/totp', loginRateLimiter, requireAuth, async (req, res) => {
       delete updated.totpBackupCodeHashes;
       resetLoginAttempts(updated);
       updated.sessionVersion = (updated.sessionVersion || 0) + 1;
+      updated = resetSessionsToCurrent(updated, req.sessionJti);
       list[idx] = updated;
       return list;
     });
 
-    setAuthCookie(res, signToken(updated));
+    setAuthCookie(res, signToken(updated, req.sessionJti));
     notifyTotpChange(updated, `Xác thực 2 lớp (TOTP) trên tài khoản của bạn (${username}) VỪA BỊ GỠ BỎ trên hệ thống VPDT. Nếu không phải bạn thực hiện, vui lòng liên hệ ngay quản trị viên.`).catch(e => console.error('Lỗi gửi email báo gỡ TOTP:', e.message));
     res.json(toSafeUser(updated));
   } catch (err) {
@@ -1256,15 +1322,15 @@ router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
       const idx = list.findIndex(u => u.username === req.freshUser.username);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
       const existing = Array.isArray(list[idx].webauthnCredentials) ? list[idx].webauthnCredentials : [];
-      updated = {
+      updated = resetSessionsToCurrent({
         ...list[idx],
         webauthnCredentials: existing.filter(c => c.id !== req.params.id),
         sessionVersion: (list[idx].sessionVersion || 0) + 1
-      };
+      }, req.sessionJti);
       list[idx] = updated;
       return list;
     });
-    if (updated) setAuthCookie(res, signToken(updated));
+    if (updated) setAuthCookie(res, signToken(updated, req.sessionJti));
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -1427,8 +1493,8 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
       await setEphemeralToken(kickConfirmKey(canonicalUsername), true, KICK_CONFIRM_TTL_MS);
       return res.json({ confirmKickRequired: true, username: canonicalUsername });
     }
-    const sessionUser = await grantSessionAfterLogin(canonicalUsername);
-    const token = signToken(sessionUser);
+    const { user: sessionUser, jti } = await grantSessionAfterLogin(canonicalUsername);
+    const token = signToken(sessionUser, jti);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
     res.json(toSafeUser(sessionUser));

@@ -962,6 +962,22 @@ function readUserFormState() {
   const nghiepVuExtraKeys = getMultiSelectValues('uNghiepVuExtraKeysMultiSelect');
   const reportExtraKeys = getMultiSelectValues('uReportExtraKeysMultiSelect');
   const isDriver = !!document.getElementById('uIsDriver')?.checked;
+  // Số Phiên Đăng Nhập Đồng Thời Tối Đa (11/2026, theo yêu cầu người dùng) — để trống = dùng mặc định hệ
+  // thống (1, server tự áp dụng — xem getMaxConcurrentSessions() ở lib/auth.js). Validate sơ bộ ở client
+  // (server vẫn xác minh lại ở prepareUsersForSave(), routes/data.js) — số nguyên 1-20, tránh gõ nhầm số
+  // âm/số khổng lồ vô nghĩa.
+  const maxConcurrentSessionsRaw = document.getElementById('uMaxConcurrentSessions')?.value?.trim() || '';
+  let maxConcurrentSessions;
+  if (maxConcurrentSessionsRaw) {
+    const n = parseInt(maxConcurrentSessionsRaw, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 20 || String(n) !== maxConcurrentSessionsRaw) {
+      alert('Số Phiên Đăng Nhập Đồng Thời Tối Đa phải là số nguyên từ 1 đến 20 (hoặc để trống để dùng mặc định).');
+      return null;
+    }
+    maxConcurrentSessions = n;
+  } else {
+    maxConcurrentSessions = undefined;
+  }
   const startDate = document.getElementById('uStartDate').value || '';
   const groupIds = currentEditingUserGroupIds();
 
@@ -1006,20 +1022,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, maxConcurrentSessions, startDate, groupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, maxConcurrentSessions, startDate, groupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, perms, groupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, maxConcurrentSessions, startDate, perms, groupIds, permOverrides
   };
 }
 
@@ -1029,7 +1045,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, maxConcurrentSessions, startDate, groupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -1093,6 +1109,7 @@ async function saveUser(e) {
       user.nghiepVuExtraKeys = nghiepVuExtraKeys;
       user.reportExtraKeys = reportExtraKeys;
       user.isDriver = isDriver;
+      user.maxConcurrentSessions = maxConcurrentSessions;
       user.startDate = startDate;
       // Tài khoản "admin" luôn toàn quyền, không cho sửa qua form (khối cây phân quyền đã bị khoá ở
       // editUser() khi mở form sửa đúng tài khoản này) — ép lại đây phòng trường hợp form vẫn đọc được

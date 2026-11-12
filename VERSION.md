@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**30.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.8 (2026-11): Cho phép N phiên đăng nhập đồng thời theo từng tài khoản (Quản Lý Người Dùng)
+
+Theo yêu cầu người dùng: "Bạn làm cho tôi một cái chức năng là cho phép có cái box cho phép user được
+login bao nhiêu phiên trên bao nhiêu máy tại một thời điểm, để tôi có thể lựa chọn là user nào có quyền
+login nhiều phiên tại một thời điểm." Đã gửi demo giao diện xin xác nhận trước khi làm phần backend
+(theo đúng quy trình chuẩn), người dùng xác nhận "Bạn xử lý giống scan & checkout nhé" cho tính năng
+quét mã (việc khác) rồi sau đó xác nhận "Bạn merge đi" cho tính năng này.
+
+**Thiết kế**: trước đây `sessionVersion` (1 số đếm DUY NHẤT/tài khoản) vừa đóng vai trò "1 tài khoản chỉ
+1 phiên tại 1 thời điểm" vừa đóng vai trò "đá toàn bộ phiên khi đổi mật khẩu". Tách 2 vai trò này ra:
+- **`user.activeSessions`** (MỚI): danh sách phiên đang được phép còn hiệu lực, mỗi phần tử
+  `{jti, createdAt, lastSeenAt}` — giới hạn đúng `user.maxConcurrentSessions` (MỚI, admin gán qua ô "🔐 Số
+  Phiên Đăng Nhập Đồng Thời Tối Đa" trong form Sửa Người Dùng, mặc định 1 nếu để trống/không hợp lệ — GIỮ
+  NGUYÊN 100% hành vi gốc "1 tài khoản 1 phiên" cho mọi tài khoản chưa từng được cấp số khác). Token JWT
+  ký kèm 1 `jti` ngẫu nhiên mới mỗi lần đăng nhập — `requireAuth()` (lib/auth.js) đối chiếu `jti` với danh
+  sách này; còn chỗ trống thì cấp phiên mới luôn (không hỏi gì); đã đầy thì hỏi xác nhận (như cơ chế đã có
+  từ trước) rồi loại phiên CŨ NHẤT khi xác nhận xong — không đá cả loạt.
+- **`sessionVersion`** (GIỮ NGUYÊN vai trò cũ, không đổi code ở các nơi gọi): vẫn là công tắc "đá TOÀN BỘ
+  phiên NGAY" cho đổi mật khẩu/PIN/gỡ TOTP/gỡ vân tay — không phân biệt đang cho phép bao nhiêu phiên đồng
+  thời, đúng ý "đổi mật khẩu phải chắc chắn đăng xuất mọi nơi khác".
+- Đăng xuất (logout) đổi từ "đá toàn bộ" sang "chỉ gỡ đúng phiên đang đăng xuất" — khác thiết bị khác
+  không bị ảnh hưởng (đúng ý nghĩa thật của "đăng xuất 1 máy" khi được phép nhiều phiên).
+- **Tương thích ngược khi vừa deploy**: token ký TRƯỚC khi có tính năng này (không có `jti`) được CHO QUA
+  không kiểm theo danh sách — không ép ai đang có phiên sống thật phải đăng xuất ngay lúc vừa deploy.
+
+**Đã làm**: `lib/auth.js` (`getMaxConcurrentSessions()`, `jti` trong `signToken()`, kiểm `jti` trong
+`requireAuth()` + xử lý cache-trễ PM2 cluster cùng cơ chế đã có cho `sv`), `routes/auth.js`
+(`shouldConfirmKick()`/`grantSessionAfterLogin()` viết lại theo danh sách phiên, 4 nhánh cấp phiên +
+logout + 4 route tự đổi mật khẩu/PIN/gỡ TOTP/gỡ vân tay cập nhật theo), `routes/data.js`
+(`prepareUsersForSave()` ép `activeSessions` giữ nguyên giá trị CSDL như `sessionVersion`, validate
+`maxConcurrentSessions` 1-20; `stripPasswords()` lọc `activeSessions` khỏi mọi response), form Sửa Người
+Dùng (`systemSection.html` + `module-admin-userstaging.js` + `module-admin-submissiongroups.js`) đọc/ghi
+field mới.
+
+**Test**: file mới `tests/test-auth-multi-session.js` (10/10 — N phiên đồng thời không hỏi khi còn chỗ,
+hỏi xác nhận + đá đúng 1 phiên cũ nhất khi đầy, logout 1 máy không ảnh hưởng máy khác, đổi mật khẩu vẫn
+đá toàn bộ, hạ giới hạn khi đang thừa phiên xử lý đúng, giá trị không hợp lệ coi như 1, tài khoản mặc định
+không bị ảnh hưởng, 3 kịch bản token không-jti tương thích ngược). Mở rộng `tests/test-users-session-
+version-strip.js` (+4, 8/8 — `activeSessions` cũng bị lọc/ép giữ nguyên như `sessionVersion`;
+`maxConcurrentSessions` hợp lệ/không hợp lệ). `tests/test-auth-single-session.js` (9/9, KHÔNG sửa gì)
+xác nhận hành vi N=1 gốc giữ nguyên tuyệt đối. Cập nhật 3 test stub lib/auth cũ (`test-admin-totp.js`,
+`test-admin-webauthn-reset.js`, `test-login-lockout-admin-reset.js`) thêm mock
+`getMaxConcurrentSessions`. Chạy toàn bộ ~690 file test còn lại (chia nhiều đợt, đối chiếu kỹ với baseline
+clean `main`) — không phát sinh regression nào ngoài các lỗi môi trường đã biết từ trước (thiếu SQL Server
+thật trong sandbox...).
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v30.7 (2026-11): Quét mã vạch iPhone (Ghi Nhận + Kiểm Tra Giá) — tối ưu lần 3, đổi sang pipeline cấp thấp của ZXing
 
