@@ -286,6 +286,12 @@ function setVanHanhShelfSubTab(tab) {
     loadShelfReportTab();
   } else if (tab === 'PRICECHECK') {
     resetPriceCheck();
+    // Nạp Tồn Kho Hệ Thống CÙNG cache dùng ở "📷 Ghi Nhận" (11/2026, phục vụ gõ tay 6 số cuối — xem
+    // matchShelfSystemInventoryBySuffix()/submitPriceCheck()) — KHÔNG phục vụ tra giá (vẫn gọi API đối
+    // tác trực tiếp như cũ, không đổi), chỉ dùng để nhận diện đúng mã hàng từ 6 số cuối gõ tay TRƯỚC khi
+    // gọi API. Gọi lại hàm có sẵn của "Ghi Nhận" — tác dụng phụ duy nhất là toggle ẩn/hiện
+    // #srSystemInventoryPickerWrap (nằm trong #vanHanhShelfRecordWrap đang ẩn khi ở tab này), vô hại.
+    loadShelfSystemInventoryForRecordPicker();
   }
 }
 
@@ -348,6 +354,26 @@ let shelfSystemInventoryCache = [];
 function matchShelfSystemInventoryByMaVach(code) {
   if (!code) return null;
   return shelfSystemInventoryCache.find(r => r.maVach && r.maVach === code) || null;
+}
+// matchShelfSystemInventoryBySuffix(code) — hỗ trợ gõ tay CHỈ 6 SỐ CUỐI của Mã Vạch (NCC) hoặc Mã Hàng
+// (nội bộ) thay vì phải gõ đủ mã dài (Mã Vạch EAN-13 tới 13 số, dễ gõ sai/nhìn nhầm) — theo yêu cầu
+// người dùng (11/2026, "kiểm tra 6 số cuối theo mã ncc hoặc nội bộ"). Dùng chung cho CẢ "📷 Ghi Nhận"
+// (applyShelfBarcodeMatch()) lẫn "💲 Kiểm Tra Giá" (submitPriceCheck()) — CHỈ áp dụng khi input ĐÚNG 6
+// chữ số (không mò đoán với mã dài gõ sai 1-2 ký tự cuối — vẫn coi là "không khớp" như cũ, an toàn hơn
+// là tự ý đoán nhầm). Trả về:
+//   - null nếu Tồn Kho Hệ Thống (shelfSystemInventoryCache) không có dòng nào khớp.
+//   - { unique: row } nếu khớp ĐÚNG 1 dòng duy nhất — đủ tin cậy để tự động điền/tra giá luôn.
+//   - { candidates: [rows...] } nếu khớp NHIỀU dòng (6 số cuối không đủ phân biệt) — KHÔNG được tự ý
+//     chọn đại 1 dòng (rủi ro hiện SAI giá/sai mã cho đúng-6-số-cuối-nhưng-khác-mã) — bắt buộc người
+//     dùng tự chọn rõ ràng.
+function matchShelfSystemInventoryBySuffix(code) {
+  if (!/^\d{6}$/.test(code)) return null;
+  const matches = shelfSystemInventoryCache.filter(r =>
+    (r.maHang && String(r.maHang).endsWith(code)) || (r.maVach && String(r.maVach).endsWith(code))
+  );
+  if (!matches.length) return null;
+  if (matches.length === 1) return { unique: matches[0] };
+  return { candidates: matches };
 }
 function setShelfMaHangMatchNote(text, ok) {
   const el = document.getElementById('srMaHangMatchNote');
@@ -427,11 +453,27 @@ function applyShelfBarcodeMatch(code) {
     document.getElementById('srMaHang').value = match.maHang;
     document.getElementById('srProductName').value = match.tenHang;
     setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${match.tenHang}`, true);
-  } else {
-    // KHÔNG khớp — mã vạch mờ/sai/mặt hàng chưa khai mã vạch trong hệ thống nguồn. KHÔNG xoá Mã Hàng đã
-    // có (phòng trường hợp người dùng đã tự gõ/chọn trước đó) — chỉ báo rõ để họ biết cần tự bấm picker.
-    setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
+    return;
   }
+  // Gõ tay ĐÚNG 6 chữ số (11/2026, yêu cầu người dùng) — thử khớp theo ĐUÔI (6 số cuối) của Mã Hàng/Mã
+  // Vạch trước khi báo "không khớp" hẳn — xem matchShelfSystemInventoryBySuffix() ở trên. Khớp NHIỀU dòng
+  // thì KHÔNG tự ý điền (rủi ro sai mã) — chỉ báo số lượng, hướng người dùng qua picker đã có sẵn tìm
+  // kiếm theo tên/mã (substring, đã khớp được cả trường hợp này).
+  const suffixResult = matchShelfSystemInventoryBySuffix(code);
+  if (suffixResult?.unique) {
+    const row = suffixResult.unique;
+    document.getElementById('srMaHang').value = row.maHang;
+    document.getElementById('srProductName').value = row.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống theo 6 số cuối: ${row.tenHang}`, true);
+    return;
+  }
+  if (suffixResult?.candidates) {
+    setShelfMaHangMatchNote(`⚠️ 6 số cuối "${code}" khớp ${suffixResult.candidates.length} mặt hàng khác nhau — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để chọn đúng mặt hàng.`, false);
+    return;
+  }
+  // KHÔNG khớp — mã vạch mờ/sai/mặt hàng chưa khai mã vạch trong hệ thống nguồn. KHÔNG xoá Mã Hàng đã
+  // có (phòng trường hợp người dùng đã tự gõ/chọn trước đó) — chỉ báo rõ để họ biết cần tự bấm picker.
+  setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
 }
 function onShelfMaVachTyped() {
   applyShelfBarcodeMatch(document.getElementById('srSku').value.trim());
@@ -1685,7 +1727,10 @@ function renderPriceCheckState(state) {
     FORM: 'priceCheckForm',
     LOADING: 'priceCheckLoadingWrap',
     ERROR: 'priceCheckErrorWrap',
-    RESULT: 'priceCheckResultWrap'
+    RESULT: 'priceCheckResultWrap',
+    // SUFFIX_PICKER (11/2026, gõ tay 6 số cuối khớp NHIỀU mặt hàng — xem submitPriceCheck()): bắt buộc
+    // người dùng tự chọn đúng 1 mặt hàng trước khi tra giá, không tự ý đoán.
+    SUFFIX_PICKER: 'priceCheckSuffixPickerWrap'
   };
   Object.entries(wrapByState).forEach(([key, id]) => {
     const el = document.getElementById(id);
@@ -1734,7 +1779,46 @@ async function submitPriceCheck(e) {
   if (e && e.preventDefault) e.preventDefault();
   const rawInput = document.getElementById('pcMaHang').value.trim();
   if (!rawInput) return;
-  const lookup = resolveShelfPriceCheckLookupCode(rawInput);
+  // Gõ tay ĐÚNG 6 chữ số (11/2026, yêu cầu người dùng "gõ tay cho kiểm tra 6 số cuối theo mã ncc hoặc
+  // nội bộ") — thử khớp theo ĐUÔI (6 số cuối) của Mã Hàng/Mã Vạch trong Tồn Kho Hệ Thống đã tải (xem
+  // loadShelfSystemInventoryForRecordPicker() gọi khi vào tab, matchShelfSystemInventoryBySuffix() ở
+  // trên) — nhanh hơn hẳn gõ đủ mã dài (Mã Vạch EAN-13 tới 13 số). Khớp ĐÚNG 1 dòng -> tra giá luôn như
+  // quét camera; khớp NHIỀU dòng -> bắt buộc người dùng tự chọn đúng mặt hàng (KHÔNG tự ý đoán, tránh
+  // hiện NHẦM giá của mặt hàng khác); không khớp gì -> rơi về hành vi cũ (gửi nguyên 6 số làm mã vạch,
+  // server/đối tác tự báo không tìm thấy nếu sai thật).
+  if (/^\d{6}$/.test(rawInput)) {
+    const suffixResult = matchShelfSystemInventoryBySuffix(rawInput);
+    if (suffixResult?.candidates) {
+      renderPriceCheckSuffixCandidates(rawInput, suffixResult.candidates);
+      renderPriceCheckState('SUFFIX_PICKER');
+      return;
+    }
+    if (suffixResult?.unique) {
+      return submitPriceCheckForLookup({ maHang: suffixResult.unique.maHang });
+    }
+  }
+  return submitPriceCheckForLookup(resolveShelfPriceCheckLookupCode(rawInput));
+}
+// renderPriceCheckSuffixCandidates()/selectPriceCheckSuffixCandidate() (11/2026) — danh sách chọn khi 6
+// số cuối gõ tay khớp NHIỀU mặt hàng (xem submitPriceCheck()) — mỗi dòng bấm vào tra giá NGAY theo đúng
+// Mã Hàng của dòng đó, không cần gõ lại gì thêm.
+function renderPriceCheckSuffixCandidates(code, candidates) {
+  const codeEl = document.getElementById('pcSuffixCodeShown');
+  if (codeEl) codeEl.textContent = code;
+  const list = document.getElementById('priceCheckSuffixCandidatesList');
+  if (!list) return;
+  list.innerHTML = candidates.map(r => `
+    <button type="button" data-op="selectPriceCheckSuffixCandidate" data-arg0="${escapeHtml(r.maHang || '')}"
+      class="w-full text-left border rounded p-2 hover:bg-cyan-50">
+      <div class="font-bold text-gray-800">${escapeHtml(r.tenHang || '(Chưa có tên hàng)')}</div>
+      <div class="text-gray-500 text-[11px]">Mã Hàng: ${escapeHtml(r.maHang || '')}${r.maVach ? ` · Mã Vạch: ${escapeHtml(r.maVach)}` : ''}</div>
+    </button>
+  `).join('');
+}
+function selectPriceCheckSuffixCandidate(maHang) {
+  return submitPriceCheckForLookup({ maHang });
+}
+async function submitPriceCheckForLookup(lookup) {
   renderPriceCheckState('LOADING');
   try {
     const res = await fetch('/api/shelf-stock/price-check', {
