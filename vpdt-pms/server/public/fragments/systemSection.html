@@ -2267,6 +2267,17 @@
           <label for="uIsDriver" class="text-xs font-semibold text-gray-600">🚗 Là tài xế (hiện trong picker "Lái xe được phân công" ở Đăng Ký Xe)</label>
         </div>
 
+        <!-- Số phiên đăng nhập đồng thời tối đa (DEMO — chưa gắn cơ chế thật ở server, chỉ dựng giao
+             diện xin xác nhận trước khi làm). Mặc định hệ thống hiện tại: 1 (đăng nhập máy/thiết bị mới
+             đá phiên cũ, xem lib/auth.js + routes/auth.js shouldConfirmKick()). Admin sẽ tăng số này cho
+             TỪNG người cụ thể cần dùng nhiều máy/thiết bị cùng lúc (VD thu ngân dùng chung máy pha ca,
+             IT/admin cần mở song song điện thoại + máy tính...). -->
+        <div class="bg-white p-3 rounded border">
+          <label for="uMaxConcurrentSessions" class="block text-xs font-semibold text-gray-600 mb-1">🔐 Số Phiên Đăng Nhập Đồng Thời Tối Đa</label>
+          <input id="uMaxConcurrentSessions" type="number" min="1" step="1" placeholder="1" class="w-full border p-1.5 rounded text-xs">
+          <p class="text-[11px] text-gray-400 mt-1">Mặc định <strong>1</strong>: đăng nhập ở máy/thiết bị mới sẽ đá phiên đang mở ở máy/thiết bị cũ (như hiện tại). Tăng số này (VD <strong>3</strong>) để cho phép tài khoản này đăng nhập đồng thời trên nhiều máy/thiết bị cùng lúc mà không bị đá. Để trống = dùng mặc định hệ thống (1).</p>
+        </div>
+
         <div class="bg-white p-3 rounded border">
           <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền (chọn được nhiều nhóm cùng lúc)</label>
           <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
