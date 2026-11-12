@@ -909,7 +909,21 @@ async function applyOrgChartVersionClick(keepEffectiveDate) {
   let result;
   try {
     result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, { keepEffectiveDate: !!keepEffectiveDate });
-  } catch (err) { return alert(`⛔ ${err.message}`); }
+  } catch (err) {
+    // "🚨 Áp Dụng Cưỡng Chế" (11/2026, theo yêu cầu người dùng: thay thế HÀNG LOẠT cơ cấu tổ chức — VD cả
+    // khối Siêu Thị/Cửa Hàng hàng trăm người giữ vị trí cùng lúc — đi xoá + "Buộc Gỡ & Xoá" từng node 1
+    // như deleteOrgChartNodeClick() ở trên không khả thi ở quy mô này) — CHỈ đề xuất khi lỗi ĐÚNG do còn
+    // người giữ vị trí bị xoá (không che các lỗi khác như node mồ côi/nhiều "Trưởng phòng" — những lỗi đó
+    // VẪN phải tự sửa cây trước, không có cách "cưỡng chế" nào bỏ qua được) VÀ người dùng có ĐÚNG quyền
+    // riêng orgChartForceUnassignDelete đã dùng cho "Buộc Gỡ & Xoá" từng node (KHÔNG có quyền mới nào).
+    const isBlockedByOccupant = /bị xoá khỏi bản nháp nhưng vẫn có người giữ/.test(err.message || '');
+    if (!isBlockedByOccupant || !currentUser.perms?.orgChartForceUnassignDelete) return alert(`⛔ ${err.message}`);
+    const wantForce = confirm(`⛔ ${err.message}\n\nBạn có quyền "Buộc Gỡ & Xoá" — ÁP DỤNG CƯỠNG CHẾ, tự động gỡ chức vụ Hồ Sơ Nhân Sự của MỌI người đang giữ các vị trí bị xoá ở trên rồi áp dụng?\n\nLƯU Ý: chỉ gỡ được chức vụ gán qua Hồ Sơ Nhân Sự — tài khoản đăng nhập nào khớp đúng Chức Danh/Phòng Ban (nếu có) sẽ KHÔNG bị sửa, hệ thống sẽ báo danh sách để bạn tự sửa sau. Hành động KHÔNG hoàn tác được.`);
+    if (!wantForce) return;
+    try {
+      result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, { keepEffectiveDate: !!keepEffectiveDate, force: true });
+    } catch (err2) { return alert(`⛔ ${err2.message}`); }
+  }
   // Yêu cầu nghiệp vụ (11/2026, ĐẢO LẠI quyết định 10/2026): Áp Dụng cơ cấu + định biên KHÔNG còn tự
   // chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" nữa — người dùng phản hồi việc tự nhảy sang sơ đồ ngay sau
   // khi Áp Dụng khiến 2 việc "làm cơ cấu/định biên" và "tạo sơ đồ" bị dính liền, muốn tách hẳn: Áp Dụng
@@ -941,6 +955,27 @@ function openOrgChartApplyResultModal(result, summaryText) {
   } else {
     listEl.innerHTML = `<p class="text-xs text-amber-700 font-semibold">⚠️ ${unresolved.length} nhân viên KHÔNG tự xác định được quản lý trực tiếp mới, cần kiểm tra tay:</p>` +
       unresolved.map(u => `<div class="text-xs bg-amber-50 border border-amber-200 rounded p-1.5">${escapeHtml(u.name || u.username)} — ${escapeHtml(u.reason)}</div>`).join('');
+  }
+  // "🚨 Áp Dụng Cưỡng Chế" (11/2026) — khối báo cáo RIÊNG, chỉ hiện khi result.clearedProfiles/
+  // accountsNeedingManualFix có dữ liệu (áp dụng thường không bao giờ có 2 field này).
+  const forceWrap = document.getElementById('orgChartApplyResultForceWrap');
+  const cleared = result.clearedProfiles || [];
+  const needFix = result.accountsNeedingManualFix || [];
+  if (!cleared.length && !needFix.length) {
+    forceWrap.classList.add('hidden');
+    forceWrap.innerHTML = '';
+  } else {
+    forceWrap.classList.remove('hidden');
+    let html = '';
+    if (cleared.length) {
+      html += `<p class="text-xs text-emerald-700 font-semibold">✅ Đã tự động gỡ chức vụ ${cleared.length} hồ sơ Hồ Sơ Nhân Sự (vị trí đã bị xoá khỏi cơ cấu):</p>` +
+        cleared.map(c => `<div class="text-xs bg-emerald-50 border border-emerald-200 rounded p-1.5">${escapeHtml(c.name)} — khỏi "${escapeHtml(c.positionLabel)}"</div>`).join('');
+    }
+    if (needFix.length) {
+      html += `<p class="text-xs text-red-700 font-semibold mt-2">⛔ ${needFix.length} tài khoản ĐĂNG NHẬP vẫn khớp Chức Danh/Phòng Ban của vị trí đã xoá — hệ thống KHÔNG tự sửa, cần vào Hệ Thống → Quản Trị Người Dùng đổi Chức Danh/Phòng Ban của những tài khoản này:</p>` +
+        needFix.map(a => `<div class="text-xs bg-red-50 border border-red-200 rounded p-1.5">${escapeHtml(a.name)} (${escapeHtml(a.username)}) — "${escapeHtml(a.positionLabel)}"</div>`).join('');
+    }
+    forceWrap.innerHTML = html;
   }
   document.getElementById('orgChartApplyResultModal').classList.remove('hidden');
 }

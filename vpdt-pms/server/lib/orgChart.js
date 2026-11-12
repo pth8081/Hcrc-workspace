@@ -375,9 +375,50 @@ function planForceDeleteNodeCascade(version, nodeId, users, employeeProfiles, ac
   return clearedProfiles;
 }
 
+// planForceApplyUnassignOccupiedPositions() (11/2026, "🚨 Áp Dụng Cưỡng Chế" — theo yêu cầu người dùng:
+// thay thế HÀNG LOẠT cơ cấu tổ chức, VD cả khối Siêu Thị/Cửa Hàng với hàng trăm người giữ vị trí cùng
+// lúc — đi xoá + "Buộc Gỡ & Xoá" từng node 1 như planForceDeleteNodeCascade() ở trên không khả thi ở quy
+// mô này). So sánh `candidate` (bản nháp sắp áp dụng) với `appliedVersion` (bản đang áp dụng, SẼ bị thay
+// thế) — ĐÚNG hệt logic check #2 của computeValidationIssues(), nhưng thay vì chặn, tự gỡ chức vụ Hồ Sơ
+// Nhân Sự của MỌI người giữ 1 lượt.
+//
+// CÙNG RANH GIỚI với planForceDeleteNodeCascade(): CHỈ tự gỡ qua `employeeProfiles` — KHÔNG BAO GIỜ tự
+// sửa `users[].jobTitle/dept` (tài khoản đăng nhập), đúng ranh giới "Hồ Sơ Nhân Sự và tài khoản/Phân
+// Quyền là 2 nguồn ĐỘC LẬP" đã xác nhận. KHÁC planForceDeleteNodeCascade() ở chỗ KHÔNG throw/chặn cứng
+// khi gặp account khớp qua tài khoản — ở quy mô thay thế HÀNG LOẠT này, chặn cứng theo từng tài khoản sẽ
+// không bao giờ áp dụng được — trả riêng `accountsNeedingManualFix` để route/client BÁO CÁO cho admin tự
+// sửa SAU, không chặn việc áp dụng.
+function planForceApplyUnassignOccupiedPositions(candidate, appliedVersion, users, employeeProfiles, actorUsername, actorName) {
+  requireDraft(candidate);
+  if (!appliedVersion) return { clearedProfiles: [], accountsNeedingManualFix: [] };
+  const candidateKeys = new Set((candidate.nodes || []).filter(n => n.nodeType === 'POSITION').map(n => n.positionKey));
+  const toClear = [];
+  const accountsNeedingManualFix = [];
+  for (const n of appliedVersion.nodes || []) {
+    if (n.nodeType !== 'POSITION' || candidateKeys.has(n.positionKey)) continue;
+    const { accountMatches, profileMatches } = resolvePositionOccupantsDetailed(appliedVersion, n, users, employeeProfiles);
+    const positionLabel = buildNodeDisplayName(appliedVersion, n);
+    for (const a of accountMatches) accountsNeedingManualFix.push({ ...a, positionLabel });
+    for (const m of profileMatches) toClear.push({ profile: m.profile, name: m.name, positionLabel });
+  }
+  const { clearPositionAssignmentForce } = require('./employeeProfile'); // require trễ — tránh vòng lặp require (employeeProfile.js cũng require('./orgChart') trễ)
+  const clearedProfiles = [];
+  for (const { profile, name, positionLabel } of toClear) {
+    clearPositionAssignmentForce(profile, actorUsername, actorName, `Tự động gỡ do "Áp Dụng Cưỡng Chế" Cơ Cấu Tổ Chức (xoá vị trí "${positionLabel}")`);
+    clearedProfiles.push({ employeeCode: profile.employeeCode, name, positionLabel });
+  }
+  return { clearedProfiles, accountsNeedingManualFix };
+}
+
 // ===== Validate trước khi áp dụng =====
 
-function computeValidationIssues(candidate, appliedVersion, users, employeeProfiles) {
+// options.skipOccupancyCheck (11/2026, "🚨 Áp Dụng Cưỡng Chế" — theo yêu cầu người dùng: thay thế HÀNG
+// LOẠT cơ cấu tổ chức, vd cả khối Siêu Thị/Cửa Hàng với hàng trăm người, đi xoá+Buộc Gỡ từng node 1 là
+// không khả thi) — bỏ qua HẲN check #2 dưới đây (CHỈ check #2, giữ nguyên check #1/#3 — những lỗi cấu
+// trúc của CHÍNH bản nháp, không liên quan gì tới việc còn người giữ vị trí cũ, KHÔNG được phép bỏ qua
+// dù cưỡng chế). Route gọi hàm này với cờ này chỉ SAU KHI đã tự gỡ xong chức vụ Hồ Sơ Nhân Sự của mọi
+// người giữ qua planForceApplyUnassignOccupiedPositions() — xem routes/orgChart.js.
+function computeValidationIssues(candidate, appliedVersion, users, employeeProfiles, options) {
   const issues = [];
   const byId = new Map((candidate.nodes || []).map(n => [n.nodeId, n]));
   // 1) Node mồ côi (parentNodeId trỏ tới node không tồn tại).
@@ -387,7 +428,7 @@ function computeValidationIssues(candidate, appliedVersion, users, employeeProfi
     }
   }
   // 2) Vị trí (POSITION) đã bị xoá so với bản đang áp dụng nhưng vẫn có người giữ.
-  if (appliedVersion) {
+  if (appliedVersion && !(options && options.skipOccupancyCheck)) {
     const candidateKeys = new Set((candidate.nodes || []).filter(n => n.nodeType === 'POSITION').map(n => n.positionKey));
     for (const n of appliedVersion.nodes || []) {
       if (n.nodeType !== 'POSITION' || candidateKeys.has(n.positionKey)) continue;
@@ -563,11 +604,16 @@ function deleteArchivedVersion(list, versionId) {
 // "sửa 1 lỗi/điều chỉnh nhỏ trong CÙNG kỳ, không phải bắt đầu kỳ mới". Validate hành vi gốc
 // (computeValidationIssues/managerUsername/kpiFlow...) KHÔNG đổi gì — chỉ khác đúng 1 dòng
 // `version.effectiveDate`.
+// `options.forceUnassignOccupied` (11/2026, "🚨 Áp Dụng Cưỡng Chế") — bỏ qua check #2 của
+// computeValidationIssues() (vị trí bị xoá nhưng còn người giữ). Route PHẢI tự gọi
+// planForceApplyUnassignOccupiedPositions() để gỡ chức vụ Hồ Sơ Nhân Sự TRƯỚC khi gọi hàm này với cờ
+// true (xem routes/orgChart.js) — hàm này KHÔNG tự gỡ gì, chỉ bỏ qua đúng 1 điều kiện chặn.
 function applyVersionInPlace(list, versionId, users, actingUsername, employeeProfiles, options) {
   const version = requireVersion(list, versionId);
   requireDraft(version);
   const applied = getAppliedVersion(list);
-  const issues = computeValidationIssues(version, applied, users, employeeProfiles);
+  const forceUnassignOccupied = !!(options && options.forceUnassignOccupied);
+  const issues = computeValidationIssues(version, applied, users, employeeProfiles, { skipOccupancyCheck: forceUnassignOccupied });
   if (issues.length) throw new HttpError(400, `Không thể áp dụng — còn lỗi cần xử lý: ${issues.join(' | ')}`);
   const wantsKeepEffectiveDate = !!(options && options.keepEffectiveDate);
   const canKeepEffectiveDate = !!(applied && version.clonedFromVersionId === applied.id && applied.effectiveDate);
@@ -726,7 +772,7 @@ module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
   buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser,
   normalizeHeadcountQuota,
-  addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade,
+  addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
   bootstrapFirstVersion, createBlankVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteAllDraftVersions, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,

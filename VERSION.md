@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**30.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.16 (2026-11): Cơ Cấu Tổ Chức — "🚨 Áp Dụng Cưỡng Chế" khi thay thế hàng loạt
+
+Theo yêu cầu người dùng: "Giờ tôi muốn xóa để thay thế bản khác làm từ đầu" — khi 1 bản nháp thay thế
+XOÁ HẲN nhiều vị trí đang có hàng chục/hàng trăm người giữ (VD cả khối Siêu Thị/Cửa Hàng), đi "Buộc Gỡ &
+Xoá" từng node 1 (tính năng cũ, vẫn giữ nguyên) không khả thi.
+
+**Tính năng mới**: "Áp Dụng Phiên Bản Này" — khi bị chặn vì còn người giữ vị trí bị xoá, nếu tài khoản có
+quyền **"🔧 Buộc Gỡ & Xoá Vị Trí"** (quyền RIÊNG đã có từ trước, không thêm quyền mới), hệ thống hỏi xác
+nhận **"🚨 Áp Dụng Cưỡng Chế"** — tự động gỡ chức vụ **Hồ Sơ Nhân Sự** của MỌI người đang giữ các vị trí
+bị xoá trong 1 lượt, rồi áp dụng.
+
+**Giữ nguyên ranh giới đã xác nhận trước đó ("Hồ Sơ Nhân Sự và tài khoản đăng nhập/Phân Quyền là 2 nguồn
+ĐỘC LẬP")**: hệ thống **KHÔNG BAO GIỜ** tự sửa Chức Danh/Phòng Ban của tài khoản đăng nhập — nếu có tài
+khoản nào khớp vị trí bị xoá qua đường đó (không qua Hồ Sơ Nhân Sự), hệ thống chỉ **báo cáo** danh sách
+để admin tự sửa ở Quản Trị Người Dùng, **không chặn** việc áp dụng (khác "Buộc Gỡ & Xoá" từng node vẫn
+chặn cứng — ở quy mô thay thế hàng loạt, chặn cứng theo từng tài khoản sẽ không bao giờ áp dụng được).
+Các lỗi cấu trúc KHÁC của bản nháp (node mồ côi, nhiều "Trưởng phòng" cùng phòng ban...) vẫn bị chặn bình
+thường, "cưỡng chế" chỉ bỏ qua đúng 1 điều kiện "còn người giữ vị trí bị xoá".
+
+`lib/orgChart.js` (`planForceApplyUnassignOccupiedPositions()` mới, `computeValidationIssues()`/
+`applyVersionInPlace()` thêm option bỏ qua đúng 1 check), `routes/orgChart.js` (`POST
+/versions/:id/apply` nhận thêm `force: true`), `public/js/module-orgchart.js` + `public/index.html`
+(hộp thoại xác nhận cưỡng chế + modal kết quả báo cáo rõ ai được tự gỡ/ai cần tự sửa tay).
+
+**Test**: `tests/test-orgchart-force-apply.js` (11 scenario mới, cả logic thuần lẫn HTTP qua
+`routes/orgChart.js` thật) + `tests/demo-orgchart-force-apply.js` (demo Playwright thật, chụp ảnh modal
+kết quả) + chạy lại 9 test Cơ Cấu Tổ Chức liên quan khác, không regression.
 
 ## v30.15 (2026-11): Sửa BUG NGHIÊM TRỌNG — lưu phân quyền xong ấn F5 thấy mất thay đổi
 
