@@ -977,6 +977,19 @@ function resolveShelfReportViewScope(user) {
   if (user.perms?.shelfReportViewAll !== undefined) return { all: !!user.perms.shelfReportViewAll, depts: [] };
   return undefined;
 }
+// resolveShelfReportableDepts(user, allStores) — ĐÚNG hệt phạm vi canViewShelfScopedItem() bên dưới
+// chấp nhận cho 1 siêu thị bất kỳ, nhưng trả về NGUYÊN danh sách thay vì kiểm từng item — dùng cho GET
+// /system-inventory/report-all (routes/shelfStock.js, 11/2026, "bc tổng quan" khi xem "Tất cả siêu thị"
+// ở tab "📑 Báo Cáo") để biết tra Tồn Kho Hệ Thống cho ĐÚNG những siêu thị nào, KHÔNG tin danh sách dept
+// client gửi lên (tránh lộ dữ liệu siêu thị ngoài phạm vi được xem).
+function resolveShelfReportableDepts(user, allStores) {
+  const stores = allStores || [];
+  if (user.perms?.admin || user.perms?.shelfAnyStoreAccess) return stores;
+  const scope = resolveShelfReportViewScope(user);
+  if (scope?.all) return stores;
+  if (Array.isArray(scope?.depts)) return stores.filter(d => scope.depts.includes(d));
+  return user.dept ? [user.dept] : [];
+}
 function canViewShelfScopedItem(user, item) {
   if (!user || !item) return false;
   if (user.perms?.admin) return true;
@@ -1953,6 +1966,7 @@ module.exports = {
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
   canViewShelfLocation, filterShelfLocationsForUser, canViewShelfRecord, filterShelfRecordsForUser,
+  resolveShelfReportViewScope, resolveShelfReportableDepts,
   canViewShelfStockThreshold, filterShelfStockThresholdsForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,

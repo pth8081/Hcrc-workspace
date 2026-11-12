@@ -111,6 +111,21 @@ async function openReportTab(page) {
     const MANAGER = { username: 'qlv1', name: 'Phạm Thị Quản Lý Vùng', dept: 'Ban Điều Hành', perms: { vanHanhShelfTab: true, shelfReportView: { all: true, depts: [] } }, active: true, totpEnabled: true };
     const state = createMockState({ depts: [], stores: ['Siêu thị Quận 1', 'Siêu thị Quận 3'], users: [MANAGER] });
     seedShelfRecords(state); // giữ CẢ 2 siêu thị — mirror đúng shelfReportView.all=true trả về mọi dept.
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp: xem "Tất cả siêu thị" cột "Tồn Kho Hệ Thống" hiện
+    // trống "—" cho MỌI dòng) — seed cho CẢ 2 siêu thị (trước đây route GET /system-inventory?scope=recon
+    // CHỈ tra được đúng 1 siêu thị của effectiveUser, route MỚI /system-inventory/report-all trả theo
+    // TỪNG siêu thị — xem routes/shelfStock.js).
+    state.__mockSystemInventoryByDept = {
+      'Siêu thị Quận 1': [
+        { maHang: 'SP001', tenHang: 'Bánh quy HCRC 200g', soLuongTon: 50 },
+        { maHang: 'SP002', tenHang: 'Sữa tươi HCRC 1L', soLuongTon: 5 },
+        { maHang: 'SP003', tenHang: 'Nước suối Lavie 500ml', soLuongTon: 130 }
+      ],
+      'Siêu thị Quận 3': [
+        { maHang: 'SP001', tenHang: 'Bánh quy HCRC 200g', soLuongTon: 32 },
+        { maHang: 'SP004', tenHang: 'Mì tôm Hảo Hảo', soLuongTon: 0 }
+      ]
+    };
     const { browser, page } = await launchPage(PORT, state);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
@@ -120,9 +135,20 @@ async function openReportTab(page) {
       headerText: document.getElementById('shelfReportHeader').textContent,
       filterHidden: document.getElementById('shelfReportStoreFilterWrap').classList.contains('hidden'),
       rowCount: document.querySelectorAll('#shelfReportBody tr').length,
-      hasStoreColumn: document.querySelector('#shelfReportTableHead th')?.textContent.trim() === 'Siêu Thị'
+      hasStoreColumn: document.querySelector('#shelfReportTableHead th')?.textContent.trim() === 'Siêu Thị',
+      // Cột "Tồn Kho Hệ Thống" là td thứ 8 (1-based) — [dept, maHang, tenHang, quầy kệ, số lượng, trạng
+      // thái, hạn sử dụng, Tồn Kho Hệ Thống, ...] — xem renderShelfReportTable().
+      sysStockValues: Array.from(document.querySelectorAll('#shelfReportBody tr')).map(tr => ({
+        dept: tr.children[0]?.textContent.trim(), maHang: tr.children[1]?.textContent.trim(), sysStock: tr.children[7]?.textContent.trim()
+      }))
     }));
     console.log('[Kịch bản 2 - Quản lý vùng]', info2);
+    console.log('[Kịch bản 2 - Tồn Kho Hệ Thống từng dòng]', info2.sysStockValues);
+    for (const row of info2.sysStockValues) {
+      assert.notStrictEqual(row.sysStock, '—', `LỖI (bug tái hiện): dòng "${row.dept} / ${row.maHang}" vẫn hiện "—" thay vì số thật khi xem "Tất cả siêu thị" — đúng lỗi người dùng báo cáo`);
+    }
+    assert.strictEqual(info2.sysStockValues.find(r => r.dept === 'Siêu thị Quận 1' && r.maHang === 'SP002').sysStock, '5');
+    assert.strictEqual(info2.sysStockValues.find(r => r.dept === 'Siêu thị Quận 3' && r.maHang === 'SP001').sysStock, '32', 'LỖI: phải lấy ĐÚNG Tồn Kho Hệ Thống của ĐÚNG siêu thị Quận 3, không lẫn số của Quận 1 (cùng mã SP001 nhưng khác siêu thị)');
     assert.strictEqual(info2.filterHidden, false, 'LỖI: quản lý vùng (shelfReportView.all=true, dữ liệu có 2 siêu thị) PHẢI thấy bộ lọc "Siêu Thị"');
     assert.strictEqual(info2.rowCount, 5, 'LỖI: quản lý vùng phải thấy ĐỦ 5 dòng của CẢ 2 siêu thị (báo cáo tổng hợp)');
     assert.strictEqual(info2.hasStoreColumn, true, 'LỖI: bảng tổng hợp phải tự thêm cột "Siêu Thị" ở đầu khi xem nhiều siêu thị');

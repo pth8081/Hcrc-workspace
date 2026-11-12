@@ -1000,6 +1000,15 @@ function createDispatcher(state) {
         }
         return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount, scannedEverCount } };
       }
+      // GET /api/shelf-stock/system-inventory/report-all (11/2026, tab "📑 Báo Cáo" xem NHIỀU siêu thị) —
+      // mirror ĐƠN GIẢN HOÁ CÙNG TINH THẦN block /system-inventory ở trên: test tự seed
+      // state.__mockSystemInventoryByDept = { [dept]: rows[] } đúng phạm vi siêu thị mong muốn trả về
+      // (phạm vi quyền thật — resolveShelfReportViewScope()/admin/shelfAnyStoreAccess — đã kiểm riêng ở
+      // lib/recordViewScope.js, không lặp lại logic đó ở mock này).
+      if (pathName === '/api/shelf-stock/system-inventory/report-all' && method === 'GET') {
+        if (!state.__mockSystemInventoryByDept) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác' } };
+        return { status: 200, body: { byDept: state.__mockSystemInventoryByDept } };
+      }
       // POST /api/shelf-stock/price-check (11/2026, "💲 Kiểm Tra Giá") — mirror ĐƠN GIẢN HOÁ routes/
       // shelfStock.js thật: quyền canManageShelfRecords (CÙNG "Ghi Nhận") -> state.__mockPriceCheckConfigured
       // (giả lập resolveInventoryApiCreds() null/có cấu hình) -> storeExternalCodes[dept] -> maDiem (giống
