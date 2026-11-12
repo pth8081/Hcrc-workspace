@@ -7,8 +7,11 @@
 //
 // Chụp 2 kịch bản:
 //   1. Nhân viên siêu thị thường (không có shelfReportView) — chỉ thấy đúng siêu thị mình, KHÔNG có bộ
-//      lọc/cột "Siêu Thị" (DB.shelfRecords phía client đã được server lọc sẵn chỉ còn đúng siêu thị này).
-//   2. Quản lý vùng (shelfReportView.all=true) — thấy NHIỀU siêu thị cùng lúc, bảng tự thêm cột + bộ lọc
+//      lọc "Siêu Thị" (DB.shelfRecords phía client đã được server lọc sẵn chỉ còn đúng siêu thị này) —
+//      nhưng VẪN có cột "Siêu Thị" trong bảng/Excel (11/2026, theo yêu cầu người dùng "báo cáo này cho
+//      tôi thêm cột siêu thị" — cột này LUÔN hiện từ nay, không còn điều kiện theo số lượng siêu thị
+//      trong dữ liệu, xem renderShelfReportTable()/exportShelfReportExcel()).
+//   2. Quản lý vùng (shelfReportView.all=true) — thấy NHIỀU siêu thị cùng lúc, bảng tự thêm bộ lọc
 //      "Siêu Thị" — đây chính là "báo cáo tổng hợp".
 //
 // Chạy: node server/tests/test-shelf-report-tab.js
@@ -78,22 +81,26 @@ async function openReportTab(page) {
     const info1 = await page.evaluate(() => ({
       headerText: document.getElementById('shelfReportHeader').textContent,
       filterHidden: document.getElementById('shelfReportStoreFilterWrap').classList.contains('hidden'),
-      rowCount: document.querySelectorAll('#shelfReportBody tr').length
+      rowCount: document.querySelectorAll('#shelfReportBody tr').length,
+      hasStoreColumn: document.querySelector('#shelfReportTableHead th')?.textContent.trim() === 'Siêu Thị'
     }));
     console.log('[Kịch bản 1 - Nhân viên]', info1);
     assert.strictEqual(info1.headerText, '📍 Siêu Thị: Siêu thị Quận 1', 'LỖI: nhân viên 1 siêu thị phải thấy header đúng tên siêu thị mình, không phải "báo cáo tổng hợp"');
     assert.strictEqual(info1.filterHidden, true, 'LỖI: nhân viên 1 siêu thị KHÔNG được thấy bộ lọc "Siêu Thị" (lộ khả năng xem siêu thị khác)');
     assert.strictEqual(info1.rowCount, 3, 'LỖI: nhân viên phải thấy đúng 3 dòng của ĐÚNG siêu thị mình (không thiếu/thừa)');
+    // (11/2026, theo yêu cầu người dùng "báo cáo này cho tôi thêm cột siêu thị") — cột "Siêu Thị" nay LUÔN
+    // hiện, kể cả khi chỉ xem đúng 1 siêu thị (TRƯỚC ĐÂY ẩn ở kịch bản này — xem renderShelfReportTable()).
+    assert.strictEqual(info1.hasStoreColumn, true, 'LỖI: cột "Siêu Thị" phải LUÔN hiện, kể cả khi chỉ có đúng 1 siêu thị');
 
-    // "📥 Xuất Excel" THẬT (bấm nút thật, không gọi thẳng hàm) — xác nhận gửi đúng cột + đủ 3 dòng, không
-    // có cột "Siêu Thị" (1 siêu thị thì không cần).
+    // "📥 Xuất Excel" THẬT (bấm nút thật, không gọi thẳng hàm) — xác nhận gửi đúng cột + đủ 3 dòng, có cả
+    // cột "Siêu Thị" (LUÔN xuất, không còn điều kiện theo số siêu thị).
     await page.click('[data-op="exportShelfReportExcel"]');
     await page.waitForTimeout(150);
     assert.strictEqual((state.__xlsxExports || []).length, 1, 'LỖI: bấm "📥 Xuất Excel" phải gửi đúng 1 lần gọi POST /api/admin/export-xlsx');
     const export1 = state.__xlsxExports[0];
     assert.strictEqual(export1.rows.length, 3, 'LỖI: file Excel của nhân viên phải có đủ 3 dòng');
     assert.ok(export1.columns.some(c => c.key === 'maHang'), 'LỖI: thiếu cột Mã Hàng trong file Excel');
-    assert.ok(!export1.columns.some(c => c.key === 'dept'), 'LỖI: nhân viên 1 siêu thị không cần cột "Siêu Thị" trong Excel');
+    assert.ok(export1.columns.some(c => c.key === 'dept'), 'LỖI: cột "Siêu Thị" phải LUÔN có trong file Excel, kể cả khi chỉ có đúng 1 siêu thị');
     console.log('[Kịch bản 1 - Xuất Excel]', { rows: export1.rows.length, columns: export1.columns.map(c => c.key) });
 
     await browser.close();

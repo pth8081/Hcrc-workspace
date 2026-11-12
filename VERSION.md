@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**30.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.11 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — cột "Siêu Thị" LUÔN hiện
+
+Người dùng yêu cầu (kèm demo trước khi xác nhận): tab "📑 Báo Cáo" trong "📋 Kiểm Soát Hàng Hóa" thêm cột
+"Siêu Thị". Cột này thực ra đã có sẵn từ trước nhưng chỉ tự hiện khi dữ liệu có từ 2 siêu thị trở lên
+(`shelfReportIsMultiStore()`) — nay đổi thành **LUÔN hiện** ở cả bảng trên màn hình lẫn file Xuất Excel,
+bất kể đang xem 1 hay nhiều siêu thị, để biết chắc chắn đang xem đúng siêu thị nào (đặc biệt hữu ích khi
+dùng quyền "🔑 Được Chọn Siêu Thị Bất Kỳ" mới thêm ở v30.10). CHỈ đổi đúng 1 cột này ở đúng tab Báo Cáo —
+bộ lọc "Siêu Thị" + dòng header "📍 Đang xem báo cáo tổng hợp..." vẫn giữ nguyên điều kiện đa siêu thị cũ,
+không đụng tới các tab khác (Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Kiểm Tra Giá).
+
+`public/js/module-vanhanh.js` (`renderShelfReportTable()`/`exportShelfReportExcel()`). Cập nhật
+`tests/test-shelf-report-tab.js` theo đúng hành vi mới (cột "Siêu Thị" phải LUÔN có, kể cả kịch bản nhân
+viên chỉ xem đúng 1 siêu thị) — chạy lại toàn bộ test liên quan Kiểm Soát Hàng Hóa, không có regression.
 
 ## v30.10 (2026-11): "📋 Kiểm Soát Hàng Hóa" — quyền đặc biệt "🔑 Được Chọn Siêu Thị Bất Kỳ"
 
