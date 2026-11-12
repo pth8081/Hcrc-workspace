@@ -245,6 +245,40 @@ async function main() {
   record('Chỉ còn "Phòng IT" sau khi xoá', afterDeleteStore.length === 1 && afterDeleteStore[0].nodeName === 'Phòng IT');
   record('SVG sau khi xoá KHÔNG còn chứa "Phòng Kinh Doanh"', !afterDeleteSvgFlat.includes('PhòngKinhDoanh') && afterDeleteSvgFlat.includes('PhòngIT'));
 
+  // ===== 5b. Nút "⬅️ Thu Gọn Khung Khai Báo" (11/2026, theo yêu cầu người dùng "có nút để thu gọn khung
+  // khai báo phòng ban ở sơ đồ tổ chức để hiện ra sơ đồ nhanh hơn") — ẩn khung trái, sơ đồ chiếm hết
+  // chiều rộng; bấm lại hiện lại như cũ. Kèm 2 ảnh demo (trước/sau khi thu gọn). =====
+  const demoDir = path.join(__dirname, '..', 'demo-screenshots', 'orgchart-diagram-collapse-panel');
+  fs.mkdirSync(demoDir, { recursive: true });
+  const beforeCollapse = await page.evaluate(() => ({
+    panelHidden: document.getElementById('orgChartDiagramFormPanel').classList.contains('hidden'),
+    btnText: document.getElementById('btnOrgChartToggleDiagramPanel').textContent,
+    gridInlineStyle: document.getElementById('orgChartDiagramGrid').style.gridTemplateColumns
+  }));
+  record('Trước khi bấm: khung khai báo đang HIỆN, nút ghi "Thu Gọn"', !beforeCollapse.panelHidden && beforeCollapse.btnText.includes('Thu Gọn') && beforeCollapse.gridInlineStyle === '');
+  await page.locator('#orgChartDiagramView').screenshot({ path: path.join(demoDir, '01-truoc-khi-thu-gon.png') });
+
+  await page.click('#btnOrgChartToggleDiagramPanel');
+  await page.waitForTimeout(150);
+  const afterCollapse = await page.evaluate(() => ({
+    panelHidden: document.getElementById('orgChartDiagramFormPanel').classList.contains('hidden'),
+    btnText: document.getElementById('btnOrgChartToggleDiagramPanel').textContent,
+    gridInlineStyle: document.getElementById('orgChartDiagramGrid').style.gridTemplateColumns
+  }));
+  record('Sau khi bấm: khung khai báo ĐÃ ẨN, sơ đồ chiếm toàn bộ chiều rộng (grid-template-columns: 1fr), nút đổi thành "Hiện"', afterCollapse.panelHidden && afterCollapse.btnText.includes('Hiện') && afterCollapse.gridInlineStyle === '1fr');
+  const svgStillThere = await page.evaluate(() => !!document.getElementById('orgChartDiagramContainer').querySelector('svg'));
+  record('Sơ đồ (SVG) vẫn còn nguyên, không bị xoá/vẽ lỗi khi thu gọn khung bên cạnh', svgStillThere);
+  await page.locator('#orgChartDiagramView').screenshot({ path: path.join(demoDir, '02-sau-khi-thu-gon.png') });
+
+  await page.click('#btnOrgChartToggleDiagramPanel');
+  await page.waitForTimeout(150);
+  const afterReopen = await page.evaluate(() => ({
+    panelHidden: document.getElementById('orgChartDiagramFormPanel').classList.contains('hidden'),
+    btnText: document.getElementById('btnOrgChartToggleDiagramPanel').textContent,
+    gridInlineStyle: document.getElementById('orgChartDiagramGrid').style.gridTemplateColumns
+  }));
+  record('Bấm lại lần 2: khung khai báo HIỆN LẠI đúng như ban đầu, nút trở về "Thu Gọn"', !afterReopen.panelHidden && afterReopen.btnText.includes('Thu Gọn') && afterReopen.gridInlineStyle === '');
+
   // ===== 6. "✅ Áp Dụng Phiên Bản Này" (tab Định Biên) KHÔNG tự chuyển sang tab Sơ Đồ nữa =====
   await page.evaluate(() => document.getElementById('btnOrgChartSubTree').click());
   await page.waitForTimeout(100);
