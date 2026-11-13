@@ -1342,7 +1342,7 @@ function shelfFilterTextMatch(haystack, needle) {
 // (text) + Số Lượng (khoảng từ-đến). Mặc định ẨN (thu gọn) — bấm "🔍 Hiện Bộ Lọc" để mở. Có lọc ĐANG áp
 // dụng -> bỏ giới hạn "chỉ 20 dòng gần nhất" (người dùng đang CHỦ ĐỘNG tìm 1 dòng cụ thể, có thể cũ hơn
 // 20 dòng gần nhất) — không lọc thì vẫn giữ nguyên hành vi cũ (20 dòng mới nhất).
-let shelfRecordRecentFilters = { maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
+let shelfRecordRecentFilters = { shelfLocation: '', maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
 let _shelfRecordRecentFilterCollapsed = true;
 function applyShelfRecordRecentFilterPanelState() {
   const panel = document.getElementById('shelfRecordRecentFilterPanel');
@@ -1357,6 +1357,7 @@ function toggleShelfRecordRecentFilterPanel() {
 }
 function onShelfRecordRecentFilterChanged() {
   shelfRecordRecentFilters = {
+    shelfLocation: document.getElementById('srfShelfLocation')?.value.trim() || '',
     maHang: document.getElementById('srfMaHang')?.value.trim() || '',
     maVach: document.getElementById('srfMaVach')?.value.trim() || '',
     productName: document.getElementById('srfProductName')?.value.trim() || '',
@@ -1368,14 +1369,14 @@ function onShelfRecordRecentFilterChanged() {
   renderShelfRecordRecentList();
 }
 function clearShelfRecordRecentFilters() {
-  ['srfMaHang', 'srfMaVach', 'srfProductName', 'srfEditor', 'srfQtyMin', 'srfQtyMax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  shelfRecordRecentFilters = { maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
+  ['srfShelfLocation', 'srfMaHang', 'srfMaVach', 'srfProductName', 'srfEditor', 'srfQtyMin', 'srfQtyMax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  shelfRecordRecentFilters = { shelfLocation: '', maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
   resetListPage('shelfRecordRecent');
   renderShelfRecordRecentList();
 }
 function shelfRecordRecentHasActiveFilter() {
   const f = shelfRecordRecentFilters;
-  return !!(f.maHang || f.maVach || f.productName || f.editor || f.qtyMin !== '' || f.qtyMax !== '');
+  return !!(f.shelfLocation || f.maHang || f.maVach || f.productName || f.editor || f.qtyMin !== '' || f.qtyMax !== '');
 }
 // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng: "cho phép ghi nhận ko giới hạn và bạn
 // phân trang giúp mình" — nhận ra "20 ghi nhận gần nhất" khiến Báo Cáo luôn hiện nhiều dòng hơn, không
