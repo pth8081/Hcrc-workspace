@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**30.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.33 (2026-11): Fix test báo động giả "GĐST siêu thị khác duyệt được Giá Bán Buôn"
+
+Trong đợt audit v30.27->v30.30, agent hồi quy báo `demo-itprice-wholesale-mixed-approval.js` FAIL
+("GĐST siêu thị khác duyệt được đề xuất của siêu thị khác" — nghe như lỗ hổng phân quyền thật). Tự
+kiểm chứng lại bằng cách tái hiện cả 2 chiều (dữ liệu thiếu vs dữ liệu đầy đủ như route thật luôn cung
+cấp qua `getAllAppData()`) xác nhận: **đây KHÔNG phải lỗ hổng bảo mật thật** — route thật vẫn chặn
+đúng 403. Lỗi nằm ở chính file test: dựng tay `appData` thiếu field `storeJobTitles` + dùng sai field
+`item.dept` thay vì `item.storeScope.stores` (field thật mà code đọc cho đề xuất Bán Buôn) khi gọi
+thẳng `applyWorkflowAction()`, bỏ qua tầng route thật. Đã sửa lại file test cho đúng, không đụng tới
+bất kỳ file ứng dụng thật nào.
 
 ## v30.32 (2026-11): Thêm test audit cho đợt rà soát chuyên sâu v30.27→v30.31
 
