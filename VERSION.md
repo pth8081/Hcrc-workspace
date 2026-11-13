@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**30.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.21 (2026-11): Checklist — màn "Xem Lại Toàn Bộ Trước Khi Nộp" + ảnh minh chứng cho browse thư viện
+
+Theo yêu cầu người dùng (Checklist An Toàn Thực Phẩm, Vận Hành): "trước khi ấn kết thúc thì có nút cho
+phép người thực hiện checklist review lại từ trên xuống dưới tất cả những checklist họ làm và có thể
+sửa trong lúc review... ảnh chụp cũng cho phép chụp lại ảnh nếu cần thiết, hoặc browse ảnh trong máy
+điện thoại cũng được". Đã gửi demo xác nhận trước khi triển khai chính thức.
+
+**Tính năng mới**: thêm nút "📋 Xem Lại Toàn Bộ Trước Khi Nộp" cạnh nút "✅ Nộp Bài" hiện có (nút Nộp Bài
+trực tiếp vẫn còn, Review chỉ là lựa chọn thêm, không ép buộc). Màn Review tái dùng ĐÚNG form làm bài
+hiện có (không tách màn riêng, không lặp code) — thêm banner đầu trang cảnh báo rõ số câu bắt buộc chưa
+trả lời (viền đỏ ngay tại câu đó, tự cập nhật khi sửa), đổi bộ nút cuối trang thành "⬅️ Quay Lại Chỉnh
+Sửa" / "💾 Lưu Nháp" / "✅ Xác Nhận Nộp Bài". Áp dụng chung cho CẢ 2 loại mẫu đang có: "Checklist Thường"
+(QA, câu hỏi/lựa chọn) và VSATTP (DEDUCTION, trừ điểm theo hạng mục).
+
+**Ảnh minh chứng trong Review**: bỏ `capture="environment"` (chỉ mở camera) — điện thoại tự hỏi "Chụp
+ảnh" hay "Thư viện ảnh", cho phép chụp lại ảnh lỗi hoặc chọn ảnh có sẵn trong máy. Màn làm bài bình
+thường GIỮ NGUYÊN `capture="environment"` (quyết định cũ không đổi — mở thẳng camera, nhanh tay khi
+đang đi kiểm tra thực tế).
+
+`public/js/module-checklist.js` (`checklistReviewMode`, `enterChecklistReviewMode()`/
+`exitChecklistReviewMode()`, `renderChecklistReviewBanner()`/`renderChecklistPhotoInput()`/
+`renderChecklistSubmissionFooterButtons()` dùng chung cho cả 2 loại mẫu). Không đổi gì ở server (logic
+chấm điểm/lưu dữ liệu/route finalize giữ nguyên — chỉ thêm bước UI trước khi gọi đúng endpoint cũ).
+
+**Test**: `tests/test-checklist-review-before-finalize.js` (mới, 23 scenario — nút Review xuất hiện
+không ảnh hưởng nút Nộp Bài cũ, banner/viền đỏ đúng số câu thiếu, sửa ngay trong Review cập nhật tại
+chỗ, Quay Lại Chỉnh Sửa khôi phục đúng trạng thái ban đầu, Review KHÔNG rò rỉ sang bài làm khác khi mở
+lại, Xác Nhận Nộp Bài gọi đúng endpoint finalize cũ, cùng cơ chế áp dụng đúng cho VSATTP) + chạy lại 17
+test Checklist liên quan khác (bao gồm demo ảnh chụp cũ xác nhận màn làm bài bình thường không đổi gì),
+không regression.
 
 ## v30.20 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — bảng trống lúc mới vào tab, phải đổi bộ lọc mới hiện
 
