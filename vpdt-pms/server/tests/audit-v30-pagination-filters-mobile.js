@@ -266,9 +266,14 @@ async function main() {
       await page.fill('#srfShelfLocation', 'KE-1');
       await page.fill('#srfQtyMin', '10');
       await page.waitForTimeout(150);
+      // Ghi Nhận KHÔNG có bộ lọc ngày (chỉ Hạn Sử Dụng mới có) — kết hợp ĐÚNG 2 điều kiện "Quầy Kệ=KE-1"
+      // VÀ "Số Lượng >= 10" phải ra giao (AND) của 2 điều kiện: record 103 (KE-1, SL=15, "Ghi nhận quá
+      // xa") VẪN khớp (không có field ngày để loại), CHỈ record 102 (KE-2, sai quầy kệ) và record 104
+      // (SL=3, thiếu) bị loại — nếu lọc theo kiểu OR hoặc "chỉ điều kiện gõ cuối" sẽ ra kết quả KHÁC hẳn
+      // (VD chỉ lọc SL>=10 riêng sẽ có thêm record 102; chỉ lọc KE-1 riêng sẽ có thêm record 104).
       const names = await page.locator('#vhShelfRecordRecentBody tr td:nth-child(2)').allTextContents();
-      assert.deepStrictEqual(names.map(s => s.trim()), ['Khớp cả 3 điều kiện'],
-        `LỖI: lọc kết hợp Ghi Nhận (Quầy Kệ=KE-1 + SL>=10) phải CHỈ còn đúng 1 dòng khớp CẢ HAI điều kiện, không phải OR/chỉ điều kiện cuối. Thực tế: ${JSON.stringify(names)}`);
+      assert.deepStrictEqual(names.map(s => s.trim()), ['Ghi nhận quá xa', 'Khớp cả 3 điều kiện'],
+        `LỖI: lọc kết hợp Ghi Nhận (Quầy Kệ=KE-1 + SL>=10, CÙNG LÚC) phải ra ĐÚNG giao (AND) của 2 điều kiện, không phải OR/chỉ điều kiện cuối. Thực tế: ${JSON.stringify(names)}`);
       await page.click('[data-op="clearShelfRecordRecentFilters"]');
       await page.waitForTimeout(120);
     });
@@ -303,8 +308,10 @@ async function main() {
       await page.waitForTimeout(100);
       let info = (await page.locator('#pageInfoText_shelfRecordRecent').innerText()).trim();
       assert.strictEqual(info, 'Trang 3/3 (Tổng 21 ghi nhận)', `LỖI: chưa vào được trang 3 để thiết lập tình huống test -> "${info}"`);
-      // Áp 1 filter chỉ khớp 2 dòng (còn 1 trang) -> fix cứng việc "resetListPage" tự chạy.
-      await page.click('#btnToggleShelfRecordRecentFilter');
+      // Áp 1 filter chỉ khớp 2 dòng (còn 1 trang) -> fix cứng việc "resetListPage" tự chạy. Bấm nút "Hiện
+      // Bộ Lọc" CHỈ KHI panel đang ẩn (nút này là TOGGLE — bấm khi đã mở từ bước test trước sẽ ẨN đi).
+      const filterPanelHidden = await page.evaluate(() => document.getElementById('shelfRecordRecentFilterPanel')?.classList.contains('hidden'));
+      if (filterPanelHidden) await page.click('#btnToggleShelfRecordRecentFilter');
       await page.fill('#srfMaHang', 'SP001');
       await page.waitForTimeout(120);
       info = (await page.locator('#pageInfoText_shelfRecordRecent').innerText()).trim();
