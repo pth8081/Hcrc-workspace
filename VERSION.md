@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**30.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.29 (2026-11): Kiểm Soát Hàng Hóa — Xuất Excel + bộ lọc khoảng ngày (Hạn Sử Dụng, Đối Chiếu, Báo Cáo)
+
+Theo yêu cầu người dùng muốn xuất Excel kèm bộ lọc ngày tháng cho các bảng còn lại của tab "🏪 Kiểm Soát
+Hàng Hóa". Trước khi làm, đã rà soát xem Báo Cáo (đã có Xuất Excel từ trước) có đủ thay thế nhu cầu của
+từng bảng hay không, thay vì làm trùng lặp:
+
+- **Ghi Nhận**: không làm nút Xuất Excel riêng — dữ liệu là tập con của Báo Cáo (cùng `DB.shelfRecords`,
+  không giới hạn dòng), chỉ thiếu đúng 1 cột nên gộp luôn vào mục dưới.
+- **Báo Cáo**: Export Excel đã có nay thêm cột **Mã Vạch**.
+- **Hạn Sử Dụng**: thêm mới nút "📥 Xuất Excel" + 4 ô lọc khoảng ngày ("Thời Gian Ghi Nhận Từ/Đến",
+  "Hạn Sử Dụng Từ/Đến", dùng `isInDateRange()` dùng chung `core.js`) — bộ lọc áp dụng ĐỒNG THỜI cho cả
+  bảng hiển thị trên màn hình lẫn file Excel xuất ra (tách `shelfExpiryComputedItems()` dùng chung).
+- **Đối Chiếu**: thêm mới nút "📥 Xuất Excel" — KHÔNG có bộ lọc ngày (bảng gộp theo mã hàng, không có 1
+  ngày cụ thể cho từng dòng để lọc — đã xác nhận với người dùng trước khi làm).
 
 ## v30.28 (2026-11): Kiểm Soát Hàng Hóa — bộ lọc tìm kiếm, phân trang, "Người Ghi Nhận"
 
