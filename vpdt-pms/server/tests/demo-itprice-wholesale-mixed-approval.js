@@ -111,13 +111,26 @@ async function main() {
     await shot(page, '04-them-dong-giam-doc-sieu-thi-qua-ui');
 
     // ===== 5) Kịch bản nghiệp vụ thật: GĐST A duyệt được đề xuất của A, GĐST B KHÔNG duyệt được =====
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu v30.27->v30.30, phát hiện lúc kiểm chứng lại báo cáo agent): appData
+    // dựng tay ở đây thiếu `storeJobTitles` — route THẬT (routes/workflow.js) luôn lấy appData qua
+    // getAllAppData() (đọc TOÀN BỘ dbo.AppData, LUÔN có storeJobTitles), thiếu field này khiến
+    // resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores() (lib/workflowEngine.js) hiểu NHẦM
+    // "Giám Đốc siêu thị" là chức danh cấp công ty (không ghép siêu thị) -> bỏ qua hẳn so khớp siêu thị,
+    // AI giữ chức danh đó cũng duyệt được — ĐÂY LÀ LỖI CỦA FILE TEST NÀY, không phải lỗi ứng dụng thật (đã
+    // tự kiểm chứng: dựng lại ĐÚNG dữ liệu như route thật cung cấp thì chặn đúng 403 như mong đợi). Thêm
+    // lại `storeJobTitles: state.storeJobTitles` (đã seed sẵn ở createMockState() nhưng trước đây KHÔNG
+    // được copy sang appData dựng tay này). Đồng thời sửa wholesaleItem(dept) dùng `storeScope: { stores:
+    // [dept] }` thay vì field `dept` thô — khớp ĐÚNG field thật resolveWfConfig() đọc cho WHOLESALE
+    // (item.storeScope?.stores, xem lib/workflowEngine.js) — dùng `dept` thô trước đây hoàn toàn không
+    // được đọc tới, khiến kịch bản test này vô tình kiểm tra SAI nhánh code.
     const appData = {
       workflows: state.workflows, users: state.users,
       itPriceTierWorkflows: state.itPriceTierWorkflows,
-      itPriceWholesaleStoreMixedApprovalRules: rulesAfterAdd
+      itPriceWholesaleStoreMixedApprovalRules: rulesAfterAdd,
+      storeJobTitles: state.storeJobTitles
     };
-    function wholesaleItem(dept) {
-      return { id: 1, priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', dept, creator: 'proposer', creatorName: 'Người Đề Xuất', status: 'PENDING', currentStep: 1, history: [], files: [], applied: false };
+    function wholesaleItem(stores) {
+      return { id: 1, priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', storeScope: { stores: [stores] }, creator: 'proposer', creatorName: 'Người Đề Xuất', status: 'PENDING', currentStep: 1, history: [], files: [], applied: false };
     }
     const resultA = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item: wholesaleItem('Siêu Thị Quận 1'), action: 'APPROVE', user: GD_A, comment: '', appData });
     console.log(`\n05a: GĐST Siêu Thị Quận 1 (gd.a) duyệt đề xuất CỦA ĐÚNG siêu thị mình -> ${resultA.item.status} ✅`);
