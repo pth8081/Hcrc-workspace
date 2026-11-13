@@ -686,6 +686,16 @@ function createDispatcher(state) {
         state.deptViewScopeConfig = body;
         return { status: 200, body: {} };
       }
+      // POST /api/data/carDeptWorkflows (11/2026, cần cho demo/test màn "Quy Trình & Phê Duyệt" lưu cấu
+      // hình thật qua syncStorage()) — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (chỉ Admin mới
+      // sửa quy trình phê duyệt theo phòng ban), cùng khuôn nhánh deptViewScopeConfig ngay trên.
+      if (pathName === '/api/data/carDeptWorkflows' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.carDeptWorkflows = body;
+        return { status: 200, body: {} };
+      }
 
       // POST /api/data/shelfThresholdDigestSchedule (Báo Cáo Ngưỡng Tồn, thiết kế lại lần 2, 11/2026) —
       // mirror ĐÚNG gate ADMIN_ONLY_KEYS + assertShelfThresholdDigestScheduleSafeToSave() ở routes/data.js

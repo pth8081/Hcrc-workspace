@@ -3223,10 +3223,16 @@ function appendExtraApprovalLayersClient(resolved, item) {
 // buildGenericDeptWorkflowPreviewHTML()). Mirror đúng fallback "WF mặc định 1 bước 'Duyệt'" của
 // flatWorkflowConfigToSteps() (server, lib/workflowEngine.js) khi wfConfig rỗng/mức chưa cấu hình — để
 // lớp phê duyệt thêm vẫn được gắn đúng làm bước 2 dù quy trình gốc trống, khớp hành vi server.
+// anyApprover (11/2026) — gắn vào MỖI step từ wfConfig.coApprovalMode[order], mirror ĐÚNG
+// flatWorkflowConfigToSteps() (server, lib/workflowEngine.js). Nhánh sớm (wfConfig.steps đã có sẵn, VD
+// đã qua appendExtraApprovalLayersClient()/insertOfficeFixTechStepClient() trước đó) giữ nguyên không
+// đụng vào — các hàm đó đã tự copy field này qua object spread.
 function withWfStepsClient(wfConfig) {
   if (wfConfig && Array.isArray(wfConfig.steps)) return wfConfig;
   const wf = (DB.workflows || []).find(w => w.id === wfConfig?.workflowId);
-  return { ...(wfConfig || {}), steps: wf ? wf.steps : [{ order: 1, name: 'Duyệt' }] };
+  const rawSteps = wf ? wf.steps : [{ order: 1, name: 'Duyệt' }];
+  const steps = rawSteps.map(s => ({ ...s, anyApprover: wfConfig?.coApprovalMode?.[s.order] === 'ANY' }));
+  return { ...(wfConfig || {}), steps };
 }
 
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): "Nhóm Phê Duyệt Cuối" đã đúng ở lúc TẠO
@@ -3932,20 +3938,26 @@ function canApproveStep(user, stepApprovers, history, step) {
 
 // Bước đã đủ TẤT CẢ người đồng duyệt bấm Duyệt hay chưa — quyết định có được chuyển sang bước tiếp
 // theo (hoặc hoàn tất quy trình) hay còn phải chờ.
-function isStepApprovalComplete(user, stepApprovers, history, step) {
+// anyApprover (11/2026, "cho phép 1 trong những người ở bước đấy duyệt là qua", tham số MỚI — PHẢI
+// giữ giống hệt bản mirror server isStepApprovalComplete() ở lib/workflowEngine.js) — mặc định
+// falsy = giữ NGUYÊN hành vi ĐỒNG PHÊ DUYỆT cũ.
+function isStepApprovalComplete(user, stepApprovers, history, step, anyApprover) {
   const approversList = normalizeApproversList(stepApprovers);
   if (approversList.length === 0) return true;
   const approved = getStepApprovedUsernames(history, step);
-  return approversList.every(u => approved.has(u));
+  return anyApprover ? approversList.some(u => approved.has(u)) : approversList.every(u => approved.has(u));
 }
 
 // Chuỗi hiển thị tiến độ đồng duyệt (VD: " (Đã 1/2 người duyệt)") — chỉ có nội dung khi bước được
 // gán từ 2 người đồng duyệt trở lên, để không đổi hiển thị của các bước 1-người-duyệt như cũ.
-function getStepApprovalProgressText(stepApprovers, history, step) {
+// anyApprover (11/2026) — thêm rõ "chỉ cần 1 là đủ" để không gây hiểu lầm tưởng vẫn cần đủ cả N người.
+function getStepApprovalProgressText(stepApprovers, history, step, anyApprover) {
   const approversList = normalizeApproversList(stepApprovers);
   if (approversList.length <= 1) return '';
   const approved = getStepApprovedUsernames(history, step);
-  return ` (Đã ${approved.size}/${approversList.length} người duyệt)`;
+  return anyApprover
+    ? ` (Đã ${approved.size}/${approversList.length} người duyệt — chỉ cần 1 người là đủ)`
+    : ` (Đã ${approved.size}/${approversList.length} người duyệt)`;
 }
 
 // Tỉ lệ "số BƯỚC đã xong / tổng số bước" của 1 quy trình nhiều bước (11/2026, yêu cầu người dùng:

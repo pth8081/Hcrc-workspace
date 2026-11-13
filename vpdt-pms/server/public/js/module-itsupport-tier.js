@@ -150,13 +150,21 @@ function onItPriceTierWorkflowTemplateChange(tierKey) {
 function collectWfStepModesAndPositions(selectedWf, stepKeyFn) {
   const approverMode = {};
   const approversByPosition = {};
+  // coApprovalMode (11/2026, "chỉ cần 1 người duyệt") — checkbox wfAnyApproverToggle_<stepKey> chỉ có
+  // mặt trong DOM khi WF_MODULE_CONFIG[activeWfMod].supportsAnyApprover===true (xem renderWorkflowTab()
+  // module-ngansach.js); module KHÔNG hỗ trợ -> getElementById trả null -> coApprovalMode[step]
+  // luôn 'ALL' -> GIỮ NGUYÊN hành vi cũ, không vô tình xoá mất coApprovalMode đã lưu trước đó cho module
+  // khác vì mỗi module ghi vào dbKey RIÊNG (writeDeptWorkflowConfig()), không lẫn nhau.
+  const coApprovalMode = {};
   (selectedWf?.steps || []).forEach(step => {
     const stepKey = stepKeyFn(step);
     const toggle = document.getElementById(`wfPosModeToggle_${stepKey}`);
     approverMode[step.order] = (toggle && toggle.checked) ? 'POSITION' : 'PEOPLE';
     approversByPosition[step.order] = getMultiSelectValues(`wfPositionPicker_${stepKey}`).map(decodeWfPositionPair).filter(Boolean);
+    const anyToggle = document.getElementById(`wfAnyApproverToggle_${stepKey}`);
+    coApprovalMode[step.order] = (anyToggle && anyToggle.checked) ? 'ANY' : 'ALL';
   });
-  return { approverMode, approversByPosition };
+  return { approverMode, approversByPosition, coApprovalMode };
 }
 
 // Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 tier — mirror collectDeptWorkflowConfig()
@@ -292,7 +300,7 @@ function collectDeptWorkflowConfig(dept) {
   });
 
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
-  const { approverMode, approversByPosition } = collectWfStepModesAndPositions(selectedWf, step => `${deptKey}_${step.order}`);
+  const { approverMode, approversByPosition, coApprovalMode } = collectWfStepModesAndPositions(selectedWf, step => `${deptKey}_${step.order}`);
   // "Chưa có người duyệt" — nay CŨNG kiểm bước "Theo vị trí", xem chú thích đầy đủ ở
   // collectItPriceTierWorkflowConfig().
   const emptySteps = selectedWf
@@ -300,7 +308,7 @@ function collectDeptWorkflowConfig(dept) {
         ? previewWfPositionApprovers(approversByPosition[s.order]).state !== 'CONFIGURED_RESOLVED'
         : !(approversObj[s.order] && approversObj[s.order].length > 0))
     : [];
-  return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition }, emptySteps };
+  return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition, coApprovalMode }, emptySteps };
 }
 
 // Ghi 1 cấu hình phòng ban đã đọc được (từ collectDeptWorkflowConfig()) vào đúng chỗ trong DB theo
