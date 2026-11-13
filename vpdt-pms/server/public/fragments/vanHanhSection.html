@@ -940,7 +940,11 @@
           <span class="text-xs font-bold text-gray-600">Danh sách ghi nhận</span>
           <button type="button" data-op="toggleShelfRecordRecentFilterPanel" id="btnToggleShelfRecordRecentFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
         </div>
-        <div id="shelfRecordRecentFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-6 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+        <div id="shelfRecordRecentFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-7 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+            <input id="srfShelfLocation" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded">
+          </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
             <input id="srfMaHang" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded">
@@ -965,7 +969,7 @@
             <label class="block text-gray-500 mb-0.5">Số Lượng Đến</label>
             <input type="number" id="srfQtyMax" data-op-input="onShelfRecordRecentFilterChanged" class="w-full border p-1 rounded">
           </div>
-          <div class="col-span-2 md:col-span-6 text-right">
+          <div class="col-span-2 md:col-span-7 text-right">
             <button type="button" data-op="clearShelfRecordRecentFilters" class="text-gray-500 hover:underline">✖ Xoá Bộ Lọc</button>
           </div>
         </div>

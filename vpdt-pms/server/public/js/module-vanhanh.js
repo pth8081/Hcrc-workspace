@@ -1388,6 +1388,7 @@ function shelfRecordRecentFilteredItems() {
   let items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id);
   if (!shelfRecordRecentHasActiveFilter()) return items;
   return items.filter(r => {
+    if (!shelfFilterTextMatch(`${r.shelfLocationCode || ''} ${r.shelfLocationName || ''}`, f.shelfLocation)) return false;
     if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
     if (!shelfFilterTextMatch(r.maVach, f.maVach)) return false;
     if (!shelfFilterTextMatch(r.productName, f.productName)) return false;
