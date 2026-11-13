@@ -15,6 +15,12 @@ let checklistActiveSubTab = 'EXECUTE';
 let checklistActiveSubmission = null; // bản ghi checklistSubmissions đang mở để làm bài
 let checklistActiveTemplateForSubmission = null;
 let checklistReportFilteredRows = [];
+// checklistReviewMode (11/2026, theo yêu cầu người dùng "trước khi ấn kết thúc thì có nút cho phép người
+// thực hiện checklist review lại từ trên xuống dưới... và có thể sửa trong lúc review") — bật khi bấm
+// "📋 Xem Lại Toàn Bộ Trước Khi Nộp", render LẠI ĐÚNG form làm bài hiện có (không tách màn riêng, không
+// lặp code) nhưng thêm banner tóm tắt ở đầu + đổi bộ nút cuối trang, xem renderChecklistSubmissionForm()/
+// renderChecklistDeductionSubmissionForm(). Luôn reset về false mỗi khi mở/đóng 1 bài làm khác.
+let checklistReviewMode = false;
 
 function setChecklistSubTab(tab) {
   checklistActiveSubTab = tab;
@@ -255,6 +261,7 @@ function openChecklistSubmissionForm(submissionId) {
   if (!template) return alert('⛔ Không tìm thấy checklist gốc của bài làm này');
   checklistActiveSubmission = sub;
   checklistActiveTemplateForSubmission = template;
+  checklistReviewMode = false;
   renderChecklistSubmissionForm();
   document.getElementById('checklistSubmissionFormWrap').classList.remove('hidden');
   document.getElementById('checklistSubmissionFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -264,6 +271,20 @@ function closeChecklistSubmissionForm() {
   document.getElementById('checklistSubmissionFormWrap').innerHTML = '';
   checklistActiveSubmission = null;
   checklistActiveTemplateForSubmission = null;
+  checklistReviewMode = false;
+}
+// enterChecklistReviewMode()/exitChecklistReviewMode() — xem chú thích đầy đủ tại khai báo
+// checklistReviewMode ở đầu file. Cuộn lên đầu form khi vào/thoát review để người dùng luôn bắt đầu xem
+// "từ trên xuống dưới" đúng ý yêu cầu, không ở lại đúng vị trí đang cuộn dở của màn làm bài.
+function enterChecklistReviewMode() {
+  checklistReviewMode = true;
+  renderChecklistSubmissionForm();
+  document.getElementById('checklistSubmissionFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function exitChecklistReviewMode() {
+  checklistReviewMode = false;
+  renderChecklistSubmissionForm();
+  document.getElementById('checklistSubmissionFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Mirror ĐÚNG computeVisibleQuestions() ở lib/checklist.js — chỉ để HIỂN THỊ đúng thứ tự/nhánh ngay lúc
@@ -281,19 +302,29 @@ function renderChecklistSubmissionForm() {
   const sub = checklistActiveSubmission;
   const visibleQuestions = computeChecklistVisibleQuestionsClient(template, sub.answers);
   const answersByQ = new Map((sub.answers || []).map(a => [a.questionId, a]));
+  // missingRequired (11/2026, cho banner review) — mirror ĐÚNG logic missingRequired ở
+  // computeChecklistScoring()/assertReadyToFinalize() (lib/checklist.js): câu bắt buộc nhưng chưa chọn
+  // đáp án nào — CHỈ để GỢI Ý trong lúc review (không chặn Nộp Bài, giữ đúng quyết định "không bắt buộc"
+  // đã chốt 9/2026 ở trên).
+  const missingRequired = visibleQuestions.filter(q => q.isRequired && !(answersByQ.get(q.id)?.optionIds || []).length);
   const el = document.getElementById('checklistSubmissionFormWrap');
   el.innerHTML = `
     <div class="flex items-center justify-between gap-2 flex-wrap border-b pb-2">
       <h3 class="font-bold text-gray-800 text-base">${escapeHtml(template.templateName)} — ${escapeHtml(sub.storeCode)}</h3>
       <button type="button" data-op="closeChecklistSubmissionForm" class="text-gray-500 text-xs font-bold hover:underline">Đóng</button>
     </div>
+    ${renderChecklistReviewBanner({ total: visibleQuestions.length, missing: missingRequired.length })}
     ${visibleQuestions.map(q => {
       const ans = answersByQ.get(q.id) || { optionIds: [], note: '', deadline: '', attachments: [] };
       const anySelectedFailing = q.options.some(o => ans.optionIds.includes(o.id) && !o.isPassing);
+      const noAnswerYet = !(ans.optionIds || []).length;
       const selectedFailingNoPhoto = anySelectedFailing && !(ans.attachments || []).length;
+      // Trong lúc review, câu bắt buộc mà CHƯA trả lời được viền đỏ nổi bật hơn hẳn gợi ý ảnh (hổ phách)
+      // — đúng ý "review từ trên xuống dưới" để không bỏ sót câu nào trước khi Nộp Bài.
+      const missingHighlight = checklistReviewMode && q.isRequired && noAnswerYet;
       return `
-      <div class="border rounded p-3 space-y-2 ${selectedFailingNoPhoto ? 'border-amber-300 bg-amber-50' : ''}">
-        <div class="font-semibold text-gray-800 text-sm">${escapeHtml(q.text)} ${q.isRequired ? '<span class="text-red-500">*</span>' : ''}</div>
+      <div class="border rounded p-3 space-y-2 ${missingHighlight ? 'border-red-400 bg-red-50' : (selectedFailingNoPhoto ? 'border-amber-300 bg-amber-50' : '')}">
+        <div class="font-semibold text-gray-800 text-sm">${escapeHtml(q.text)} ${q.isRequired ? '<span class="text-red-500">*</span>' : ''} ${missingHighlight ? '<span class="text-red-600 font-bold text-[11px]">— Chưa trả lời</span>' : ''}</div>
         <div class="space-y-1">
           ${q.options.map(o => `
             <label class="flex items-center gap-2 text-xs cursor-pointer">
@@ -319,17 +350,56 @@ function renderChecklistSubmissionForm() {
               <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>
               <button type="button" data-op="removeChecklistAnswerAttachment" data-arg0="${q.id}" data-arg1="${cspArgLiteral(a.fileUrl)}" title="Xoá ảnh này" class="text-red-500 hover:text-red-700 text-[11px] font-bold leading-none">✕</button>
             </span>`).join('')}
-          <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${q.id}" data-arg-el="1" class="text-[11px]">
+          ${renderChecklistPhotoInput(q.id)}
           ${(ans.attachments || []).length > 1 ? `<button type="button" data-op="removeAllChecklistAnswerAttachments" data-arg0="${q.id}" class="text-[11px] text-red-600 hover:underline font-semibold">🗑️ Xoá hết ảnh</button>` : ''}
-          <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
+          <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc${checklistReviewMode ? '; chụp ảnh mới hoặc chọn ảnh có sẵn trong máy' : '; mở camera chụp trực tiếp'})</span>
         </div>
       </div>`;
     }).join('')}
+    ${renderChecklistSubmissionFooterButtons()}
+  `;
+}
+// renderChecklistReviewBanner()/renderChecklistPhotoInput()/renderChecklistSubmissionFooterButtons()
+// (11/2026, theo yêu cầu người dùng "trước khi ấn kết thúc thì có nút cho phép review lại từ trên xuống
+// dưới... có thể sửa trong lúc review... ảnh chụp cũng cho phép chụp lại hoặc browse ảnh trong máy") —
+// DÙNG CHUNG cho cả renderChecklistSubmissionForm() (QA) lẫn renderChecklistDeductionSubmissionForm()
+// (DEDUCTION) ngay dưới, tránh lặp code 2 nơi.
+// requiredInfo: {total, missing} cho mẫu QA (có khái niệm câu bắt buộc) — null cho mẫu DEDUCTION (chấm
+// theo điểm trừ hạng mục, không có khái niệm "bắt buộc trả lời", chỉ hiện đoạn giới thiệu chung).
+function renderChecklistReviewBanner(requiredInfo) {
+  if (!checklistReviewMode) return '';
+  return `
+    <div class="bg-indigo-50 border border-indigo-300 rounded p-3 space-y-1">
+      <div class="font-bold text-indigo-800 text-sm">📋 Đang xem lại toàn bộ trước khi Nộp Bài</div>
+      <div class="text-[11px] text-indigo-700">Cuộn từ trên xuống dưới kiểm tra lại từng mục — vẫn sửa được đáp án/ghi chú/ảnh ngay tại đây. Xong thì bấm "✅ Xác Nhận Nộp Bài" ở cuối trang.</div>
+      ${requiredInfo ? (requiredInfo.missing > 0
+        ? `<div class="text-[11px] text-red-700 font-semibold">⚠️ Còn ${requiredInfo.missing}/${requiredInfo.total} câu bắt buộc chưa trả lời (viền đỏ bên dưới) — nên trả lời đủ trước khi nộp.</div>`
+        : `<div class="text-[11px] text-emerald-700 font-semibold">✅ Đã trả lời đủ ${requiredInfo.total}/${requiredInfo.total} câu bắt buộc.</div>`) : ''}
+    </div>`;
+}
+// Ô chọn ảnh minh chứng — LÚC LÀM BÀI (checklistReviewMode=false) giữ nguyên capture="environment" (mở
+// thẳng camera, nhanh tay khi đang đi kiểm tra thực tế, quyết định cũ không đổi); LÚC REVIEW
+// (checklistReviewMode=true) bỏ capture — trình duyệt/điện thoại tự hiện lựa chọn "Chụp ảnh"/"Thư viện
+// ảnh" để người dùng CHỤP LẠI ảnh lỗi hoặc BROWSE ảnh có sẵn trong máy, đúng yêu cầu người dùng.
+function renderChecklistPhotoInput(questionOrCriteriaId) {
+  const captureAttr = checklistReviewMode ? '' : 'capture="environment"';
+  return `<input type="file" accept="image/*" ${captureAttr} data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${questionOrCriteriaId}" data-arg-el="1" class="text-[11px]">`;
+}
+function renderChecklistSubmissionFooterButtons() {
+  if (checklistReviewMode) {
+    return `
+    <div class="flex justify-end gap-2 pt-2 border-t">
+      <button type="button" data-op="exitChecklistReviewMode" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">⬅️ Quay Lại Chỉnh Sửa</button>
+      <button type="button" data-op="saveChecklistAnswersDraft" class="bg-gray-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600">💾 Lưu Nháp</button>
+      <button type="button" data-op="finalizeChecklistSubmission" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">✅ Xác Nhận Nộp Bài</button>
+    </div>`;
+  }
+  return `
     <div class="flex justify-end gap-2 pt-2 border-t">
       <button type="button" data-op="saveChecklistAnswersDraft" class="bg-gray-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600">💾 Lưu Nháp</button>
+      <button type="button" data-op="enterChecklistReviewMode" class="bg-indigo-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📋 Xem Lại Toàn Bộ Trước Khi Nộp</button>
       <button type="button" data-op="finalizeChecklistSubmission" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">✅ Nộp Bài</button>
-    </div>
-  `;
+    </div>`;
 }
 // ===================== Làm bài — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", v21.0) =====================
 // Không có nhánh hiển thị (showIfOptionId) kiểu QA — hiện toàn bộ cây hạng mục/tiêu chí ngay từ đầu.
@@ -345,6 +415,7 @@ function renderChecklistDeductionSubmissionForm() {
       <h3 class="font-bold text-gray-800 text-base">${escapeHtml(template.templateName)} — ${escapeHtml(sub.storeCode)}</h3>
       <button type="button" data-op="closeChecklistSubmissionForm" class="text-gray-500 text-xs font-bold hover:underline">Đóng</button>
     </div>
+    ${renderChecklistReviewBanner(null)}
     ${(template.categories || []).map(cat => `
       <div class="bg-rose-50 border border-rose-200 rounded p-3 space-y-2">
         <div class="font-bold text-gray-800 text-sm">${escapeHtml(cat.name)} <span class="text-rose-600 font-normal">(tối đa ${cat.maxDeduction} điểm)</span></div>
@@ -373,9 +444,9 @@ function renderChecklistDeductionSubmissionForm() {
                       <a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>
                       <button type="button" data-op="removeChecklistAnswerAttachment" data-arg0="${c.id}" data-arg1="${cspArgLiteral(a.fileUrl)}" title="Xoá ảnh này" class="text-red-500 hover:text-red-700 text-[11px] font-bold leading-none">✕</button>
                     </span>`).join('')}
-                  <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${c.id}" data-arg-el="1" class="text-[11px]">
+                  ${renderChecklistPhotoInput(c.id)}
                   ${(d.attachments || []).length > 1 ? `<button type="button" data-op="removeAllChecklistAnswerAttachments" data-arg0="${c.id}" class="text-[11px] text-red-600 hover:underline font-semibold">🗑️ Xoá hết ảnh</button>` : ''}
-                  <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
+                  <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc${checklistReviewMode ? '; chụp ảnh mới hoặc chọn ảnh có sẵn trong máy' : '; mở camera chụp trực tiếp'})</span>
                 </div>
               </div>`;
             }).join('')}
@@ -383,10 +454,7 @@ function renderChecklistDeductionSubmissionForm() {
         `).join('')}
       </div>
     `).join('')}
-    <div class="flex justify-end gap-2 pt-2 border-t">
-      <button type="button" data-op="saveChecklistAnswersDraft" class="bg-gray-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600">💾 Lưu Nháp</button>
-      <button type="button" data-op="finalizeChecklistSubmission" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">✅ Nộp Bài</button>
-    </div>
+    ${renderChecklistSubmissionFooterButtons()}
   `;
 }
 function updateChecklistDeductionField(criteriaId, field, value) {
