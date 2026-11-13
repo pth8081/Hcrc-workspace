@@ -1,8 +1,18 @@
 # Phiên bản hiện tại
 
-**30.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.31 (2026-11): Fix - Xuất Excel Đối Chiếu có thể xuất báo cáo "lai" sai siêu thị
+
+Phát hiện qua đợt audit chuyên sâu (nhiều agent độc lập kiểm tra chéo) sau khi merge v30.28-v30.30:
+`_shelfReconLastArgs` (cache module-level dùng cho phân trang "📊 Đối Chiếu") không tự biết đổi siêu
+thị (`shelfAnyStoreAccess`, "🔑 Được Chọn Siêu Thị Bất Kỳ") — đổi siêu thị xong lần tải lại BỊ LỖI (chưa
+cấu hình Mã Điểm, mất mạng...) thì trước đây KHÔNG xoá cache cũ, bấm "📥 Xuất Excel" ngay lúc đó sẽ xuất
+báo cáo "lai" (Mã Hàng/Tồn Kho Hệ Thống của siêu thị CŨ, nhưng Trên Kệ Hôm Nay/Quá Khứ lại tính theo
+siêu thị MỚI) — sai lệch hoàn toàn mà không có cảnh báo. Đã vá 2 lớp: xoá cache ngay khi bắt đầu tải
+lại + kiểm tra khớp đúng siêu thị tại thời điểm xuất (chặn cả race-condition tinh vi).
 
 ## v30.30 (2026-11): Dashboard thẻ-bấm-để-lọc cho Vận Hành - Giá Bán Buôn và Mua Hàng - Giá Bán Lẻ
 
