@@ -22,6 +22,13 @@
 //     cũng phải tự nhận diện được (điền ngược lại Mã Vạch + Tên Sản Phẩm) — LỖI THẬT người dùng báo: ô này
 //     trước đây không có handler nào, gõ gì cũng không phản hồi vì Ghi Nhận không có nút "xác nhận" riêng
 //     như Kiểm Tra Giá.
+//  8. (11/2026, đối tác bổ sung field mới `dsMaVach` ở API "Tồn Kho" theo đúng yêu cầu của mình — 1 mã
+//     hàng có thể đăng ký NHIỀU mã vạch hợp lệ, `maVach` cũ chỉ là 1 mã MẶC ĐỊNH) "📷 Ghi Nhận": gõ ĐỦ 1
+//     mã vạch PHỤ (không phải mã vạch mặc định) vào ô Mã Vạch -> vẫn phải tự khớp đúng (trước đây báo sai
+//     "không khớp" vì chỉ so với đúng 1 giá trị `maVach`).
+//  9. "📷 Ghi Nhận": gõ 6 số cuối của 1 mã vạch PHỤ -> cũng phải khớp DUY NHẤT đúng mặt hàng đó.
+//  10. findSystemInventoryQtyForProduct() (dùng cho "⏰ Hạn Sử Dụng") — tra theo 1 mã vạch PHỤ cũng phải
+//      ra đúng số tồn kho hệ thống, không chỉ tra được với mã vạch mặc định.
 //
 // Chạy: node server/tests/test-shelf-barcode-suffix-match.js
 'use strict';
@@ -48,9 +55,12 @@ async function main() {
     { maHang: '2003330123', maVach: '8934567890123', tenHang: 'Sữa tươi TH True Milk 1L', soLuongTon: 50 },
     { maHang: '1000440456', maVach: '8934000112233', tenHang: 'Nước suối Aquafina 500ml', soLuongTon: 30 },
     { maHang: '2000440456', maVach: '8934999887766', tenHang: 'Nước khoáng Lavie 500ml', soLuongTon: 20 },
-    { maHang: '2002092675', maVach: '8935024912607', tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 },
-    { maHang: '2002092675', maVach: '8935024912607', tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 },
-    { maHang: '2002092675', maVach: '8935024912607', tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 }
+    // dsMaVach (11/2026, đối tác bổ sung — ĐÚNG ví dụ thật người dùng gửi, G7 Cà Phê 3in1 đăng ký 3 mã
+    // vạch): maVach "8935024912607" là mã MẶC ĐỊNH, 2 mã còn lại "8935024122310"/"8935024123096" là mã
+    // vạch PHỤ — dsMaVach LUÔN chứa cả giá trị đang có ở maVach, đúng tài liệu đối tác gửi.
+    { maHang: '2002092675', maVach: '8935024912607', dsMaVach: ['8935024122310', '8935024123096', '8935024912607'], tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 },
+    { maHang: '2002092675', maVach: '8935024912607', dsMaVach: ['8935024122310', '8935024123096', '8935024912607'], tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 },
+    { maHang: '2002092675', maVach: '8935024912607', dsMaVach: ['8935024122310', '8935024123096', '8935024912607'], tenHang: 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', soLuongTon: 14 }
   ];
   state.__mockPriceCheckResults = {
     '2003330123': { maHang: '2003330123', tenHang: 'Sữa tươi TH True Milk 1L', maVach: '8934567890123', giaThuong: 24000, giaKhuyenMai: null, coKhuyenMai: false, capNhatLuc: '2026-11-12T09:00:00.000Z' },
@@ -233,6 +243,45 @@ async function main() {
       assertEqual(r.productName, '', 'KHÔNG được tự điền Tên Sản Phẩm khi còn mơ hồ');
       assert(/2 mặt hàng/.test(r.note) && /picker/i.test(r.note), `Ghi chú phải báo rõ khớp 2 mặt hàng + hướng dẫn dùng picker, thực tế: ${r.note}`);
       await page.fill('#srMaHang', '');
+    });
+
+    await run.run('"📷 Ghi Nhận": gõ ĐỦ 1 mã vạch PHỤ (dsMaVach, KHÔNG phải mã vạch mặc định) vào ô Mã Vạch -> vẫn phải tự khớp đúng', async () => {
+      await page.fill('#srMaHang', '');
+      await page.fill('#srProductName', '');
+      await page.fill('#srSku', '8935024122310'); // mã vạch PHỤ — maVach mặc định của dòng này là 8935024912607
+      await page.dispatchEvent('#srSku', 'input');
+      await page.waitForTimeout(50);
+      const r = await page.evaluate(() => ({
+        maHang: document.getElementById('srMaHang').value,
+        productName: document.getElementById('srProductName').value,
+        note: document.getElementById('srMaHangMatchNote').textContent
+      }));
+      assertEqual(r.maHang, '2002092675', `Phải khớp đúng mã hàng dù gõ mã vạch PHỤ (không phải mặc định), thực tế: ${r.maHang}`);
+      assertEqual(r.productName, 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', `Phải tự điền đúng Tên Sản Phẩm, thực tế: ${r.productName}`);
+      assert(!/không khớp/i.test(r.note), `KHÔNG được báo "không khớp" với mã vạch PHỤ hợp lệ, thực tế: ${r.note}`);
+    });
+
+    await run.run('"📷 Ghi Nhận": gõ 6 số cuối của 1 mã vạch PHỤ (dsMaVach) -> khớp DUY NHẤT đúng mặt hàng', async () => {
+      await page.fill('#srMaHang', '');
+      await page.fill('#srSku', '');
+      await page.fill('#srProductName', '');
+      await page.fill('#srSku', '123096'); // 6 số cuối của mã vạch PHỤ 8935024123096
+      await page.dispatchEvent('#srSku', 'input');
+      await page.waitForTimeout(50);
+      const r = await page.evaluate(() => ({
+        maHang: document.getElementById('srMaHang').value,
+        productName: document.getElementById('srProductName').value
+      }));
+      assertEqual(r.maHang, '2002092675', `6 số cuối của mã vạch PHỤ phải khớp DUY NHẤT đúng mã hàng, thực tế: ${r.maHang}`);
+      assertEqual(r.productName, 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', `Phải tự điền đúng Tên Sản Phẩm, thực tế: ${r.productName}`);
+      await page.fill('#srSku', '');
+      await page.fill('#srMaHang', '');
+      await page.fill('#srProductName', '');
+    });
+
+    await run.run('findSystemInventoryQtyForProduct() (dùng cho "⏰ Hạn Sử Dụng"): tra theo 1 mã vạch PHỤ cũng phải ra đúng tồn kho hệ thống', async () => {
+      const qty = await page.evaluate(() => findSystemInventoryQtyForProduct(null, '8935024123096'));
+      assertEqual(qty, 42, `Tra theo mã vạch PHỤ phải ra đúng tổng tồn kho hệ thống (3 dòng x 14 đã gộp = 42), thực tế: ${qty}`);
     });
 
     assertEqual(jsErrors.length, 0, 'Không có lỗi JS/console nào phát sinh trong suốt kịch bản: ' + jsErrors.join('\n'));
