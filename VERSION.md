@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**30.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.26 (2026-11): Kiểm Soát Hàng Hóa — quyền "Ghi Nhận Trên Kệ" tự Sửa/Xóa/Cập Nhật/Bán Hết được
+
+Người dùng yêu cầu TRỰC TIẾP (kèm 2 ảnh chụp: màn Phân Quyền chỉ tick "📷 Ghi Nhận Trên Kệ" + màn Ghi
+Nhận có cụm nút Sửa/Xóa/SL hiện tại-Cập Nhật/Bán Hết): quyền `shelfRecordCreate` ĐƠN LẺ phải tự thao tác
+được cụm nút này, không bắt buộc phải có thêm quyền "🖥️ Quản Lý Danh Mục Quầy Kệ" (`shelfLocationManage`).
+
+Trước đây client đã luôn hiện sẵn cụm nút này cho mọi người có `shelfRecordCreate`
+(`renderShelfRecordActionsCell()` chỉ gác `canCreateShelfRecordClient()`) nhưng bấm vào đều bị SERVER 403
+vì `canManageShelfRecordEdits()` (`lib/shelfStockEdit.js`) trước đó chỉ nhận `shelfLocationManage`/admin —
+quyết định này từng được chốt sau khi phát hiện "lỗ hổng" tương tự ở đợt rà soát trước, nay người dùng
+(chủ hệ thống) xác nhận đây là hành vi MONG MUỐN cho nghiệp vụ hiện tại, không phải lỗ hổng.
+
+**Lưu ý phạm vi** (đã xác nhận với người dùng): từ nay bất kỳ ai có quyền "Ghi Nhận Trên Kệ" tại 1 siêu
+thị cũng sửa/xóa/đánh dấu bán hết được ghi nhận của bất kỳ đồng nghiệp nào khác tại CÙNG siêu thị đó
+(không chỉ ghi nhận do chính mình tạo) — vẫn giới hạn đúng trong phạm vi 1 siêu thị, không lan sang siêu
+thị khác (kiểm tra `dept` không đổi).
+
+`canManageShelfRecordEdits()` nay chấp nhận cả `shelfRecordCreate` lẫn `shelfLocationManage`/admin — áp
+dụng cho `applyShelfRecordEdit()` (Sửa/Cập Nhật/Bán Hết) và route `DELETE /records/:id` (Xóa). Sửa luôn 1
+lỗi mock phát hiện kèm: `tests/testHarness.js` mock `DELETE /records/:id` trước đây dùng nhầm
+`canManageShelfRecords()` (quyền TẠO) thay vì `canManageShelfRecordEdits()` (quyền SỬA/XOÁ) như route
+thật.
+
+Test mới `tests/test-shelf-record-create-can-edit.js` (6/6, click THẬT qua Playwright, user CHỈ có
+`shelfRecordCreate`) + demo `tests/demo-shelf-record-create-can-edit.js`. Chạy lại toàn bộ regression liên
+quan — không ảnh hưởng module khác.
 
 ## v30.25 (2026-11): Kiểm Soát Hàng Hóa — ô "SL hiện tại" rộng hơn + ô chọn siêu thị gõ-tìm
 
