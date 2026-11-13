@@ -312,6 +312,11 @@
          submitMhItPriceApproval()). Danh sách đầy đủ + Duyệt/Từ chối/Nhận xử lý/Áp giá vẫn ở Hỗ Trợ IT >
          Phê Duyệt Giá (nút "Xem danh sách đầy đủ" bên dưới). -->
     <div id="mhSubItprice" class="hidden space-y-4">
+      <!-- Dashboard thẻ-bấm-để-lọc (11/2026, theo yêu cầu người dùng "làm dashboard giống kiểu đơn đặt
+           hàng") — cùng khuôn #operationOrderDashboardCards (Đơn Hàng): buildDashboardCardsHTML()/
+           applyDashboardCardFilter() dùng chung (core.js), xem renderMhItPriceList()/
+           filterMhItPriceByCard() (module-itsupport-price.js). -->
+      <div id="mhItPriceDashboardCards"></div>
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <!-- Thu gọn form (10/2026, yêu cầu người dùng "thu gọn form nhập") — LOẠI B, cùng khuôn
              #itPriceCreateForm (module-vanhanh.js/module-itsupport-price.js): nút "+ Đề Xuất Mới"

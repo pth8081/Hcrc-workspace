@@ -629,6 +629,11 @@
          đầy đủ + Duyệt/Từ chối/Nhận xử lý/Áp giá vẫn ở Hỗ Trợ IT > Phê Duyệt Giá (nút "Xem danh sách
          đầy đủ" bên dưới dẫn thẳng tới đó, không nhân bản danh sách/modal ở đây). ===== -->
     <div id="vanHanhItPriceWrap" class="hidden space-y-4">
+      <!-- Dashboard thẻ-bấm-để-lọc (11/2026, theo yêu cầu người dùng "làm dashboard giống kiểu đơn đặt
+           hàng") — cùng khuôn #operationOrderDashboardCards (Đơn Hàng): buildDashboardCardsHTML()/
+           applyDashboardCardFilter() dùng chung (core.js), xem renderVanHanhItPriceList()/
+           filterVanHanhItPriceByCard() (module-itsupport-price.js). -->
+      <div id="vanHanhItPriceDashboardCards"></div>
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <!-- Thu gọn form (10/2026) — LOẠI B: nút "+ Đề Xuất Mới" (btnItPriceCreateNew) GÁC THEO ĐÚNG quyền
              canProposeItPriceType() (xem setItPriceSubTab(), module-itsupport-price.js — trước đây quyền
