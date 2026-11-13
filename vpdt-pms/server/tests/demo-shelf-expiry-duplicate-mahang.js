@@ -57,7 +57,7 @@ async function shot(page, selector, file) {
 
     const expiryStock = await page.evaluate(() => {
       const row = Array.from(document.querySelectorAll('#vhShelfExpiryBody tr')).find(tr => tr.children[1]?.textContent.trim() === 'Sữa tươi HCRC 1L');
-      return row ? row.children[5]?.textContent.trim() : null;
+      return row ? row.children[7]?.textContent.trim() : null;
     });
     console.log('Tab Hạn Sử Dụng — Tồn Kho Hệ Thống (phải là 8, tổng 0+8):', expiryStock);
     assert.strictEqual(expiryStock, '8', 'LỖI: tab Hạn Sử Dụng phải hiện 8 (tổng 0+8), không phải chỉ dòng đầu (0)');

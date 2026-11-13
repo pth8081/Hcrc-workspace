@@ -690,7 +690,18 @@ function setShelfReconHeader(maDiem, isError, errorMessage) {
   headerEl.className = 'bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800';
   headerEl.textContent = `📍 Đang đối chiếu Siêu Thị: ${getEffectiveShelfDept()} — Mã Điểm: ${maDiem || '(không rõ)'}`;
 }
+// _shelfReconLastArgs/renderShelfReconciliationTableFromCache() (11/2026, theo yêu cầu phân trang) —
+// renderShelfReconciliationTable() nhận 7 tham số (rows tải từ server, không đọc lại được từ DB.* như
+// các bảng khác), nhưng cơ chế phân trang dùng chung (goToListPage()/changeListPageSize(), core.js) LUÔN
+// gọi lại hàm render với ĐÚNG 0 tham số (xem renderCarRegs() làm mẫu). Lưu lại đúng 7 tham số của lần gọi
+// GẦN NHẤT vào đây, dùng hàm bọc 0-tham-số này làm renderFnName cho phân trang — không tải lại từ server
+// mỗi lần đổi trang.
+let _shelfReconLastArgs = null;
+function renderShelfReconciliationTableFromCache() {
+  if (_shelfReconLastArgs) renderShelfReconciliationTable(..._shelfReconLastArgs);
+}
 function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount) {
+  _shelfReconLastArgs = [rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount];
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
   setShelfReconHeader(maDiem, false);
@@ -713,7 +724,10 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
       pastByMaHang[r.maHang] = (pastByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
     }
   });
-  tbody.innerHTML = rows.length ? rows.map(r => {
+  const paginationEl = document.getElementById('paginationContainer_shelfRecon');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfRecon', 'renderShelfReconciliationTableFromCache');
+  const pageRows = paginateList('shelfRecon', rows, 'renderShelfReconciliationTableFromCache', 'mã hàng');
+  tbody.innerHTML = pageRows.length ? pageRows.map(r => {
     const shelfTotal = todayByMaHang[r.maHang] || 0;
     const pastTotal = pastByMaHang[r.maHang] || 0;
     const diff = shelfTotal - Number(r.soLuongTon || 0);
@@ -915,7 +929,7 @@ function populateShelfReportStoreFilter() {
   renderMultiSelectDropdown('shelfReportStoreFilterMultiSelect', depts, prevSelected, {
     placeholder: '🔍 Tìm siêu thị để lọc báo cáo (để trống = xem tất cả)...',
     emptyText: 'Đang xem TẤT CẢ siêu thị.',
-    onChange: () => renderShelfReportTable()
+    onChange: () => { resetListPage('shelfReport'); renderShelfReportTable(); }
   });
 }
 
@@ -962,9 +976,12 @@ function renderShelfReportTable() {
     <th class="border p-2">Tồn Kho Hệ Thống</th>
     <th class="border p-2">Người Ghi Nhận</th>
     <th class="border p-2">Cập Nhật Lúc</th>
-    <th class="border p-2">Người Cập Nhật Gần Nhất</th>`;
-  const items = shelfReportFilteredItems();
+    <th class="border p-2 max-w-[110px]">Người Cập Nhật Gần Nhất</th>`;
+  const filteredItems = shelfReportFilteredItems();
   const colCount = 11;
+  const paginationEl = document.getElementById('paginationContainer_shelfReport');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfReport', 'renderShelfReportTable');
+  const items = paginateList('shelfReport', filteredItems, 'renderShelfReportTable', 'dòng');
   tbody.innerHTML = items.length ? items.map(r => {
     const soldOut = Number(r.quantity) <= 0;
     const statusBadge = soldOut
@@ -1254,9 +1271,16 @@ async function quickUpdateShelfRecordQuantity(id, source) {
 // bất biến): field lastEditedBy/lastEditedByName/lastEditedAt (lib/shelfStockEdit.js
 // applyShelfRecordEdit()) chỉ có giá trị SAU LẦN Sửa/Cập Nhật/Bán Hết ĐẦU TIÊN — rỗng/"—" nếu chưa ai
 // từng sửa (kể cả chính người tạo).
+// max-w + break-words (11/2026, theo yêu cầu người dùng "cho responsive fit desktop và mobile") — tên
+// dài (VD "Nhân Viên Ghi Nhận Rất Dài Tên") trước đây không bị giới hạn chiều rộng, tự kéo dãn CẢ CỘT lẫn
+// NGUYÊN BẢNG rộng thêm — trên mobile (bảng đã có overflow-x-auto, chỉ cuộn ngang được, không tự thu nhỏ
+// chữ) khiến người dùng phải cuộn ngang XA HƠN mới thấy hết các cột còn lại (Thao Tác...). Giới hạn 1 cột
+// NÀY xuống tối đa 110px + tự xuống dòng (break-words) — không đụng CSS chung của bảng (vẫn
+// overflow-x-auto như cũ) — để tên dài xuống dòng thay vì kéo rộng cả bảng, giữ bảng gọn hơn trên MỌI
+// kích thước màn hình.
 function renderShelfRecordLastEditedCell(r) {
   if (!r.lastEditedByName) return '<span class="text-gray-400 italic">—</span>';
-  return `${escapeHtml(r.lastEditedByName)}<div class="text-[10px] text-gray-400">${escapeHtml(r.lastEditedAt || '')}</div>`;
+  return `<div class="max-w-[110px] break-words">${escapeHtml(r.lastEditedByName)}<div class="text-[10px] text-gray-400">${escapeHtml(r.lastEditedAt || '')}</div></div>`;
 }
 // Cụm nút Thao Tác dùng CHUNG cho cả 2 bảng (Ghi Nhận gần đây + Hạn Sử Dụng) — tách riêng để không lặp
 // HTML 2 nơi. r.quantity<=0 (đã bán hết) chỉ còn Xóa (không còn gì để Sửa/Bán Hết/Cập Nhật thêm nữa).
@@ -1340,21 +1364,28 @@ function onShelfRecordRecentFilterChanged() {
     qtyMin: document.getElementById('srfQtyMin')?.value ?? '',
     qtyMax: document.getElementById('srfQtyMax')?.value ?? ''
   };
+  resetListPage('shelfRecordRecent'); // lọc mới -> luôn về trang 1, tránh đứng ở trang rỗng
   renderShelfRecordRecentList();
 }
 function clearShelfRecordRecentFilters() {
   ['srfMaHang', 'srfMaVach', 'srfProductName', 'srfEditor', 'srfQtyMin', 'srfQtyMax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   shelfRecordRecentFilters = { maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
+  resetListPage('shelfRecordRecent');
   renderShelfRecordRecentList();
 }
 function shelfRecordRecentHasActiveFilter() {
   const f = shelfRecordRecentFilters;
   return !!(f.maHang || f.maVach || f.productName || f.editor || f.qtyMin !== '' || f.qtyMax !== '');
 }
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng: "cho phép ghi nhận ko giới hạn và bạn
+// phân trang giúp mình" — nhận ra "20 ghi nhận gần nhất" khiến Báo Cáo luôn hiện nhiều dòng hơn, không
+// tìm được ghi nhận cũ hơn 20 dòng gần nhất): bỏ hẳn giới hạn cứng "chỉ 20 dòng" — trả về TOÀN BỘ danh
+// sách đã lọc, PHÂN TRANG qua paginateList()/buildPaginationBoxHTML() dùng chung (core.js, cùng khuôn
+// mọi module danh sách khác — Đăng Ký Xe, Hợp Đồng...) ngay tại renderShelfRecordRecentList() bên dưới.
 function shelfRecordRecentFilteredItems() {
   const f = shelfRecordRecentFilters;
   let items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id);
-  if (!shelfRecordRecentHasActiveFilter()) return items.slice(0, 20);
+  if (!shelfRecordRecentHasActiveFilter()) return items;
   return items.filter(r => {
     if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
     if (!shelfFilterTextMatch(r.maVach, f.maVach)) return false;
@@ -1380,10 +1411,14 @@ function renderShelfRecordRecentList() {
       <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
       <td class="p-2 text-gray-400 italic">—</td>
       <td class="p-2 text-gray-400 italic">—</td>
+      <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
-  const items = shelfRecordRecentFilteredItems();
+  const filteredItems = shelfRecordRecentFilteredItems();
+  const paginationEl = document.getElementById('paginationContainer_shelfRecordRecent');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfRecordRecent', 'renderShelfRecordRecentList');
+  const items = paginateList('shelfRecordRecent', filteredItems, 'renderShelfRecordRecentList', 'ghi nhận');
   const rows = items.map(r => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 3, 'recent');
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 4, 'recent');
     const soldOutBadge = Number(r.quantity) <= 0 ? ' <span class="text-[10px] text-gray-400 italic">(đã bán hết)</span>' : '';
     return `
     <tr class="border-b ${Number(r.quantity) <= 0 ? 'opacity-60' : ''}">
@@ -1394,11 +1429,12 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}${soldOutBadge}</td>
       <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
+      <td class="p-2">${escapeHtml(r.creatorName || '')}</td>
       <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'recent')}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="9" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="10" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
   updateShelfOfflineQueueBanner();
 }
 // Banner "🔌 N bản ghi đang chờ đồng bộ" phía trên form Ghi Nhận — chỉ hiện khi hàng đợi offline
@@ -1519,11 +1555,13 @@ function onShelfLocationFilterChanged() {
     category: document.getElementById('slfCategory')?.value.trim() || '',
     active: document.getElementById('slfActive')?.value || ''
   };
+  resetListPage('shelfLocation');
   renderShelfLocationsList();
 }
 function clearShelfLocationFilters() {
   ['slfCode', 'slfName', 'slfCategory', 'slfActive'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   shelfLocationFilters = { code: '', name: '', category: '', active: '' };
+  resetListPage('shelfLocation');
   renderShelfLocationsList();
 }
 function shelfLocationFilteredItems() {
@@ -1541,7 +1579,13 @@ function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
   if (!tbody) return;
   const canManage = canManageShelfLocationsClient(currentUser);
-  const items = shelfLocationFilteredItems();
+  // Ngành Hàng là ô tìm-kiếm-gõ-chọn (sdd*, theo quy tắc chuẩn CLAUDE.md — KHÔNG dùng <datalist> native) —
+  // nạp lại gợi ý mỗi lần render để luôn khớp đúng các ngành hàng ĐANG có ở siêu thị mình (không cố định).
+  sddSetOptions('slfCategoryDropdown', [...new Set(shelfItemsForOwnStore(DB.shelfLocations).map(s => s.category).filter(Boolean))].sort());
+  const filteredItems = shelfLocationFilteredItems();
+  const paginationEl = document.getElementById('paginationContainer_shelfLocation');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfLocation', 'renderShelfLocationsList');
+  const items = paginateList('shelfLocation', filteredItems, 'renderShelfLocationsList', 'quầy kệ');
   tbody.innerHTML = items.length ? items.map(s => {
     if (canManage && editingShelfLocationId === s.id) {
       return `
@@ -1724,11 +1768,13 @@ function onShelfExpiryFilterChanged() {
     qtyMax: document.getElementById('sefQtyMax')?.value ?? '',
     status: document.getElementById('sefStatus')?.value || ''
   };
+  resetListPage('shelfExpiry');
   renderShelfExpiryGroups();
 }
 function clearShelfExpiryFilters() {
   ['sefShelfLocation', 'sefMaVach', 'sefMaHang', 'sefProductName', 'sefEditor', 'sefQtyMin', 'sefQtyMax', 'sefStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '' };
+  resetListPage('shelfExpiry');
   renderShelfExpiryGroups();
 }
 function shelfExpiryRecordMatchesFilters(r, now) {
@@ -1795,8 +1841,11 @@ function renderShelfExpiryGroups() {
     else badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Còn hạn</span>`;
     return { r, diffDays, badge };
   }).sort((a, b) => a.diffDays - b.diffDays);
-  tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 4, 'expiry');
+  const paginationEl = document.getElementById('paginationContainer_shelfExpiry');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfExpiry', 'renderShelfExpiryGroups');
+  const pageRows = paginateList('shelfExpiry', rows, 'renderShelfExpiryGroups', 'sản phẩm');
+  tbody.innerHTML = pageRows.length ? pageRows.map(({ r, badge }) => {
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 5, 'expiry');
     const soldOut = Number(r.quantity) <= 0;
     let rowClass = 'border-b';
     let stockCell = '<span class="text-gray-400 italic">—</span>';
@@ -1827,10 +1876,11 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
       <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge + renderShelfScanRecencyBadge(r)}</td>
       <td class="p-2">${stockCell}</td>
+      <td class="p-2">${escapeHtml(r.creatorName || '')}</td>
       <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'expiry')}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="10" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+  }).join('') : `<tr><td colspan="11" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
 }
 
 // ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====

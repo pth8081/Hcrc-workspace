@@ -49,7 +49,7 @@ const USER = { username: 'nv1', name: 'Nguyễn Thị Hàng', dept: 'Siêu thị
     await page.waitForTimeout(300);
     const stockA = await page.evaluate(() => {
       const row = Array.from(document.querySelectorAll('#vhShelfExpiryBody tr')).find(tr => tr.children[1]?.textContent.trim() === 'Sữa tươi HCRC 1L');
-      return row ? row.children[5]?.textContent.trim() : null;
+      return row ? row.children[7]?.textContent.trim() : null;
     });
     console.log('Lần mở đầu tiên — Tồn Kho Hệ Thống (phải là 3, snapshot A):', stockA);
     assert.strictEqual(stockA, '3', 'LỖI: lần mở đầu tiên phải hiện đúng snapshot A (3)');
@@ -68,7 +68,7 @@ const USER = { username: 'nv1', name: 'Nguyễn Thị Hàng', dept: 'Siêu thị
     await page.waitForTimeout(300);
     const stockB = await page.evaluate(() => {
       const row = Array.from(document.querySelectorAll('#vhShelfExpiryBody tr')).find(tr => tr.children[1]?.textContent.trim() === 'Sữa tươi HCRC 1L');
-      return row ? row.children[5]?.textContent.trim() : null;
+      return row ? row.children[7]?.textContent.trim() : null;
     });
     console.log('Mở lại lần 2 (sau khi server đồng bộ) — Tồn Kho Hệ Thống (phải là 9, snapshot B, KHÔNG được còn là 3 cũ):', stockB);
     assert.strictEqual(stockB, '9', 'LỖI (bug tái hiện): tab Hạn Sử Dụng vẫn hiện số CŨ từ cache (3) thay vì tải lại mới (9) — đúng lỗi người dùng báo cáo');
