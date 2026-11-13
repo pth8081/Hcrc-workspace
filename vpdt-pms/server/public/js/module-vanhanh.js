@@ -758,6 +758,45 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
     noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có điền Mã Hàng (nội bộ); "Trên kệ quá khứ" tính các ghi nhận TRƯỚC HÔM NAY của cùng mã hàng (chỉ để xem/theo dõi, không tính vào Kết Quả) — qua picker, camera tự khớp mã vạch, hoặc gõ tay trực tiếp đều tính; ghi nhận bỏ trống Mã Hàng không tham gia đối chiếu.${scopeNote}`;
   }
 }
+// exportShelfReconciliationExcel() (11/2026, theo yêu cầu người dùng) — dùng lại ĐÚNG dữ liệu của lần
+// tải gần nhất (_shelfReconLastArgs, KHÔNG gọi lại API) + tính lại CHÍNH XÁC cùng công thức
+// todayByMaHang/pastByMaHang như renderShelfReconciliationTable() ở trên, xuất TOÀN BỘ (không bị cắt
+// theo trang). KHÔNG có bộ lọc ngày tháng (theo xác nhận của người dùng — bảng này gộp theo mã hàng,
+// không có 1 ngày cụ thể cho từng dòng để lọc).
+function exportShelfReconciliationExcel() {
+  if (!_shelfReconLastArgs) return alert('Chưa có dữ liệu đối chiếu để xuất — mở lại tab "📊 Đối Chiếu" rồi thử lại.');
+  const [rows] = _shelfReconLastArgs;
+  if (!rows || !rows.length) return alert('Chưa có mã hàng nào để xuất.');
+  const todayByMaHang = {};
+  const pastByMaHang = {};
+  (DB.shelfRecords || []).forEach(r => {
+    if (!r.maHang || r.dept !== getEffectiveShelfDept()) return;
+    if (isShelfRecordCreatedToday(r.lastScannedAt || r.createdAt)) {
+      todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    } else {
+      pastByMaHang[r.maHang] = (pastByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    }
+  });
+  const columns = [
+    { header: 'Mã Hàng', key: 'maHang', width: 14 },
+    { header: 'Tên Hàng', key: 'tenHang', width: 30 },
+    { header: 'Tồn Kho Hệ Thống', key: 'soLuongTon', width: 16 },
+    { header: 'Trên Kệ Hôm Nay', key: 'shelfTotal', width: 16 },
+    { header: 'Trên Kệ Quá Khứ', key: 'pastTotal', width: 16 },
+    { header: 'Kết Quả', key: 'ketQua', width: 18 }
+  ];
+  const dataRows = rows.map(r => {
+    const shelfTotal = todayByMaHang[r.maHang] || 0;
+    const pastTotal = pastByMaHang[r.maHang] || 0;
+    const diff = shelfTotal - Number(r.soLuongTon || 0);
+    return {
+      maHang: r.maHang || '', tenHang: r.tenHang || '', soLuongTon: Number(r.soLuongTon) || 0,
+      shelfTotal, pastTotal,
+      ketQua: diff === 0 ? 'Khớp' : `Lệch ${diff > 0 ? '+' : ''}${diff}`
+    };
+  });
+  downloadXlsxFromServer(`DoiChieuKeHangHoa_${new Date().toISOString().slice(0, 10)}.xlsx`, 'DoiChieu', columns, dataRows);
+}
 async function loadShelfReconciliation() {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
@@ -1012,6 +1051,7 @@ function exportShelfReportExcel() {
   const columns = [
     { header: 'Siêu Thị', key: 'dept', width: 20 },
     { header: 'Mã Hàng', key: 'maHang', width: 14 },
+    { header: 'Mã Vạch', key: 'maVach', width: 18 },
     { header: 'Tên Hàng', key: 'productName', width: 30 },
     { header: 'Quầy Kệ', key: 'shelfLocation', width: 22 },
     { header: 'Số Lượng', key: 'quantity', width: 10 },
@@ -1026,7 +1066,7 @@ function exportShelfReportExcel() {
   const dataRows = items.map(r => {
     const sysStock = shelfReportSysStockFor(r);
     return {
-      dept: r.dept || '', maHang: r.maHang || '', productName: r.productName || '',
+      dept: r.dept || '', maHang: r.maHang || '', maVach: r.maVach || '', productName: r.productName || '',
       shelfLocation: `${r.shelfLocationCode || ''} — ${r.shelfLocationName || ''}`,
       quantity: Number(r.quantity) || 0,
       status: Number(r.quantity) <= 0 ? 'Đã bán hết' : 'Đang theo dõi',
@@ -1746,7 +1786,7 @@ async function ensureShelfSystemInventoryForExpiry() {
 // SOON/Còn ≤7 ngày, OK/Còn hạn). Mã Vạch/Mã Hàng (11/2026, theo yêu cầu người dùng: "thêm cột mã vạch và
 // mã hàng để có thể tham chiếu với ghi nhận" — tự đối chiếu 1 sản phẩm giữa 2 tab) nay CŨNG là cột hiện
 // trên bảng này (renderShelfExpiryGroups()), nên thêm luôn vào bộ lọc cho nhất quán.
-let shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '' };
+let shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '', createdFrom: '', createdTo: '', expiryFrom: '', expiryTo: '' };
 let _shelfExpiryFilterCollapsed = true;
 function applyShelfExpiryFilterPanelState() {
   const panel = document.getElementById('shelfExpiryFilterPanel');
@@ -1768,14 +1808,18 @@ function onShelfExpiryFilterChanged() {
     editor: document.getElementById('sefEditor')?.value.trim() || '',
     qtyMin: document.getElementById('sefQtyMin')?.value ?? '',
     qtyMax: document.getElementById('sefQtyMax')?.value ?? '',
-    status: document.getElementById('sefStatus')?.value || ''
+    status: document.getElementById('sefStatus')?.value || '',
+    createdFrom: document.getElementById('sefCreatedFrom')?.value || '',
+    createdTo: document.getElementById('sefCreatedTo')?.value || '',
+    expiryFrom: document.getElementById('sefExpiryFrom')?.value || '',
+    expiryTo: document.getElementById('sefExpiryTo')?.value || ''
   };
   resetListPage('shelfExpiry');
   renderShelfExpiryGroups();
 }
 function clearShelfExpiryFilters() {
-  ['sefShelfLocation', 'sefMaVach', 'sefMaHang', 'sefProductName', 'sefEditor', 'sefQtyMin', 'sefQtyMax', 'sefStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '' };
+  ['sefShelfLocation', 'sefMaVach', 'sefMaHang', 'sefProductName', 'sefEditor', 'sefQtyMin', 'sefQtyMax', 'sefStatus', 'sefCreatedFrom', 'sefCreatedTo', 'sefExpiryFrom', 'sefExpiryTo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '', createdFrom: '', createdTo: '', expiryFrom: '', expiryTo: '' };
   resetListPage('shelfExpiry');
   renderShelfExpiryGroups();
 }
@@ -1795,11 +1839,18 @@ function shelfExpiryRecordMatchesFilters(r, now) {
     const st = diffDays < 0 ? 'EXPIRED' : (diffDays <= 7 ? 'SOON' : 'OK');
     if (st !== f.status) return false;
   }
+  // Lọc theo khoảng ngày (11/2026, theo yêu cầu người dùng "lọc theo ngày tháng năm... thời gian ghi
+  // nhận. Thời gian hết hạn") — dùng isInDateRange() dùng chung (core.js, đã tự parse đúng định dạng
+  // "HH:MM:SS D/M/YYYY" của createdAt lẫn ISO của expiryDate).
+  if (!isInDateRange(r.createdAt, f.createdFrom, f.createdTo)) return false;
+  if (!isInDateRange(r.expiryDate, f.expiryFrom, f.expiryTo)) return false;
   return true;
 }
-function renderShelfExpiryGroups() {
-  const tbody = document.getElementById('vhShelfExpiryBody');
-  if (!tbody) return;
+// shelfExpiryComputedItems() (11/2026, tách ra từ renderShelfExpiryGroups() để dùng CHUNG cho cả render
+// màn hình LẪN exportShelfExpiryExcel() — tránh viết lại 2 lần cùng 1 logic nhóm lô/union-find + tính
+// Trạng Thái Hạn/so Tồn Kho Hệ Thống). Trả về TOÀN BỘ danh sách đã lọc + sắp xếp (CHƯA phân trang) kèm dữ
+// liệu tính sẵn (diffDays/badge/soldOut/groupTotal/systemQty/status) cho mỗi dòng.
+function shelfExpiryComputedItems() {
   const showSoldOut = !!document.getElementById('vhShelfExpiryShowSoldOut')?.checked;
   const now = new Date(); now.setHours(0, 0, 0, 0);
   const allTracked = shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate && Number(r.quantity) > 0);
@@ -1834,39 +1885,45 @@ function renderShelfExpiryGroups() {
   const groupTotalOf = (r) => groupTotals.get(dsuFind(recordNodeKey(r))) ?? (Number(r.quantity) || 0);
   const items = (showSoldOut ? shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate) : allTracked)
     .filter(r => shelfExpiryRecordMatchesFilters(r, now));
-  const rows = items.map(r => {
+  return items.map(r => {
     const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
     const diffDays = Math.round((exp - now) / 86400000);
     let badge;
     if (diffDays < 0) badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">Đã hết hạn</span>`;
     else if (diffDays <= 7) badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">Còn ${diffDays} ngày</span>`;
     else badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Còn hạn</span>`;
-    return { r, diffDays, badge };
-  }).sort((a, b) => a.diffDays - b.diffDays);
-  const paginationEl = document.getElementById('paginationContainer_shelfExpiry');
-  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfExpiry', 'renderShelfExpiryGroups');
-  const pageRows = paginateList('shelfExpiry', rows, 'renderShelfExpiryGroups', 'sản phẩm');
-  tbody.innerHTML = pageRows.length ? pageRows.map(({ r, badge }) => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 5, 'expiry');
     const soldOut = Number(r.quantity) <= 0;
-    let rowClass = 'border-b';
-    let stockCell = '<span class="text-gray-400 italic">—</span>';
     // Chỉ so Tồn Kho Hệ Thống cho dòng ĐÚNG siêu thị mình — shelfSystemInventoryCache tải từ
     // GET /system-inventory, server LUÔN tự tra theo req.freshUser.dept (xem routes/shelfStock.js), tức
     // CHỈ phản ánh đúng số liệu của siêu thị NGƯỜI ĐANG XEM. 1 Quản Lý Vùng xem được dòng của SIÊU THỊ
     // KHÁC qua shelfReportView (lib/recordViewScope.js) — nếu vẫn so dòng đó với cache này sẽ so nhầm
-    // với tồn kho hệ thống của SIÊU THỊ MÌNH, không phải của siêu thị dòng đó — lỗi thật đã xảy ra. Ẩn cột
-    // này (hiện "—") cho dòng khác siêu thị thay vì so sai.
+    // với tồn kho hệ thống của SIÊU THỊ MÌNH, không phải của siêu thị dòng đó — lỗi thật đã xảy ra. Để
+    // trống (null) cho dòng khác siêu thị thay vì so sai.
+    let groupTotal = null, systemQty = null, status = null;
     if (!soldOut && r.dept === getEffectiveShelfDept()) {
-      const groupTotal = groupTotalOf(r);
-      const systemQty = findSystemInventoryQtyForProduct(r.maHang, r.maVach);
-      if (systemQty !== null) {
-        const status = classifyShelfSystemStockDiscrepancy(systemQty, groupTotal);
-        const groupNote = groupTotal !== Number(r.quantity) ? ` <span class="text-[10px] text-gray-400">(tổng theo dõi mã này: ${groupTotal})</span>` : '';
-        if (status === 'RED') { rowClass += ' bg-red-50'; stockCell = `<span class="font-bold text-red-700">${systemQty}</span>${groupNote}`; }
-        else if (status === 'YELLOW') { rowClass += ' bg-amber-50'; stockCell = `<span class="font-bold text-amber-700">${systemQty}</span>${groupNote}`; }
-        else { stockCell = `<span class="text-gray-700">${systemQty}</span>${groupNote}`; }
-      }
+      groupTotal = groupTotalOf(r);
+      systemQty = findSystemInventoryQtyForProduct(r.maHang, r.maVach);
+      if (systemQty !== null) status = classifyShelfSystemStockDiscrepancy(systemQty, groupTotal);
+    }
+    return { r, diffDays, badge, soldOut, groupTotal, systemQty, status };
+  }).sort((a, b) => a.diffDays - b.diffDays);
+}
+function renderShelfExpiryGroups() {
+  const tbody = document.getElementById('vhShelfExpiryBody');
+  if (!tbody) return;
+  const rows = shelfExpiryComputedItems();
+  const paginationEl = document.getElementById('paginationContainer_shelfExpiry');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfExpiry', 'renderShelfExpiryGroups');
+  const pageRows = paginateList('shelfExpiry', rows, 'renderShelfExpiryGroups', 'sản phẩm');
+  tbody.innerHTML = pageRows.length ? pageRows.map(({ r, badge, soldOut, groupTotal, systemQty, status }) => {
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 5, 'expiry');
+    let rowClass = 'border-b';
+    let stockCell = '<span class="text-gray-400 italic">—</span>';
+    if (systemQty !== null) {
+      const groupNote = groupTotal !== Number(r.quantity) ? ` <span class="text-[10px] text-gray-400">(tổng theo dõi mã này: ${groupTotal})</span>` : '';
+      if (status === 'RED') { rowClass += ' bg-red-50'; stockCell = `<span class="font-bold text-red-700">${systemQty}</span>${groupNote}`; }
+      else if (status === 'YELLOW') { rowClass += ' bg-amber-50'; stockCell = `<span class="font-bold text-amber-700">${systemQty}</span>${groupNote}`; }
+      else { stockCell = `<span class="text-gray-700">${systemQty}</span>${groupNote}`; }
     }
     return `
     <tr class="${rowClass} ${soldOut ? 'opacity-60' : ''}">
@@ -1883,6 +1940,39 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${renderShelfRecordActionsCell(r, 'expiry')}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="11" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+}
+// exportShelfExpiryExcel() (11/2026, theo yêu cầu người dùng) — dùng CHUNG shelfExpiryComputedItems()
+// (toàn bộ danh sách đã lọc, KHÔNG bị cắt theo trang) để Excel xuất đủ, không chỉ đúng trang đang xem.
+function exportShelfExpiryExcel() {
+  const rows = shelfExpiryComputedItems();
+  if (!rows.length) return alert('Chưa có sản phẩm nào (khớp bộ lọc) để xuất.');
+  const columns = [
+    { header: 'Quầy Kệ', key: 'shelfLocation', width: 22 },
+    { header: 'Sản Phẩm', key: 'productName', width: 28 },
+    { header: 'Mã Vạch', key: 'maVach', width: 18 },
+    { header: 'Mã Hàng', key: 'maHang', width: 14 },
+    { header: 'Số Lượng', key: 'quantity', width: 10 },
+    { header: 'Hạn Sử Dụng', key: 'expiryDate', width: 14 },
+    { header: 'Trạng Thái Hạn', key: 'statusHan', width: 16 },
+    { header: 'Tồn Kho Hệ Thống', key: 'sysStock', width: 16 },
+    { header: 'Tổng Theo Dõi Mã Này', key: 'groupTotal', width: 20 },
+    { header: 'Người Ghi Nhận', key: 'creatorName', width: 20 },
+    { header: 'Thời Gian Ghi Nhận', key: 'createdAt', width: 18 },
+    { header: 'Người Cập Nhật Gần Nhất', key: 'lastEditedByName', width: 20 },
+    { header: 'Cập Nhật Gần Nhất Lúc', key: 'lastEditedAt', width: 18 }
+  ];
+  const dataRows = rows.map(({ r, diffDays, soldOut, groupTotal, systemQty }) => ({
+    shelfLocation: `${r.shelfLocationCode || ''} — ${r.shelfLocationName || ''}`,
+    productName: r.productName || '', maVach: r.maVach || '', maHang: r.maHang || '',
+    quantity: Number(r.quantity) || 0,
+    expiryDate: r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '',
+    statusHan: soldOut ? 'Đã bán hết' : (diffDays < 0 ? 'Đã hết hạn' : (diffDays <= 7 ? `Còn ${diffDays} ngày` : 'Còn hạn')),
+    sysStock: systemQty === null ? '' : systemQty,
+    groupTotal: groupTotal === null ? '' : groupTotal,
+    creatorName: r.creatorName || '', createdAt: r.createdAt || '',
+    lastEditedByName: r.lastEditedByName || '', lastEditedAt: r.lastEditedAt || ''
+  }));
+  downloadXlsxFromServer(`HanSuDung_${new Date().toISOString().slice(0, 10)}.xlsx`, 'HanSuDung', columns, dataRows);
 }
 
 // ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====
