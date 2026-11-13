@@ -1303,6 +1303,69 @@ function renderShelfRecordEditRow(r, colspanBefore, colspanAfter, source) {
       </td>
     </tr>`;
 }
+// ===== Bộ lọc 3 bảng Kiểm Soát Hàng Hóa (11/2026, theo yêu cầu người dùng kèm 3 ảnh chụp: "20 ghi nhận
+// gần nhất"/"⏰ Hạn Sử Dụng"/"🗄️ Quầy Kệ" đều cần bộ lọc tìm kiếm, thu gọn/mở ra được, trường lọc khác
+// nhau theo ĐÚNG cột đã có sẵn ở từng bảng) — mỗi bảng 1 khối state/hàm riêng (KHÔNG dùng chung 1
+// framework lọc tổng quát vì 3 bảng có tập trường hoàn toàn khác nhau), nhưng dùng CHUNG 1 hàm so khớp
+// văn bản shelfFilterTextMatch() (không dấu + không phân biệt hoa/thường, cùng cách stripVnDiacritics()
+// đã dùng cho sdd*/renderMultiSelectDropdown()) để nhất quán.
+function shelfFilterTextMatch(haystack, needle) {
+  if (!needle) return true;
+  if (!haystack) return false;
+  return stripVnDiacritics(String(haystack).toLowerCase()).includes(stripVnDiacritics(String(needle).toLowerCase()));
+}
+// --- Bộ lọc "📷 Ghi Nhận" (20 ghi nhận gần nhất): Mã Hàng/Mã Vạch/Tên Sản Phẩm/Người Cập Nhật Gần Nhất
+// (text) + Số Lượng (khoảng từ-đến). Mặc định ẨN (thu gọn) — bấm "🔍 Hiện Bộ Lọc" để mở. Có lọc ĐANG áp
+// dụng -> bỏ giới hạn "chỉ 20 dòng gần nhất" (người dùng đang CHỦ ĐỘNG tìm 1 dòng cụ thể, có thể cũ hơn
+// 20 dòng gần nhất) — không lọc thì vẫn giữ nguyên hành vi cũ (20 dòng mới nhất).
+let shelfRecordRecentFilters = { maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
+let _shelfRecordRecentFilterCollapsed = true;
+function applyShelfRecordRecentFilterPanelState() {
+  const panel = document.getElementById('shelfRecordRecentFilterPanel');
+  const btn = document.getElementById('btnToggleShelfRecordRecentFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _shelfRecordRecentFilterCollapsed);
+  if (btn) btn.textContent = _shelfRecordRecentFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleShelfRecordRecentFilterPanel() {
+  _shelfRecordRecentFilterCollapsed = !_shelfRecordRecentFilterCollapsed;
+  applyShelfRecordRecentFilterPanelState();
+}
+function onShelfRecordRecentFilterChanged() {
+  shelfRecordRecentFilters = {
+    maHang: document.getElementById('srfMaHang')?.value.trim() || '',
+    maVach: document.getElementById('srfMaVach')?.value.trim() || '',
+    productName: document.getElementById('srfProductName')?.value.trim() || '',
+    editor: document.getElementById('srfEditor')?.value.trim() || '',
+    qtyMin: document.getElementById('srfQtyMin')?.value ?? '',
+    qtyMax: document.getElementById('srfQtyMax')?.value ?? ''
+  };
+  renderShelfRecordRecentList();
+}
+function clearShelfRecordRecentFilters() {
+  ['srfMaHang', 'srfMaVach', 'srfProductName', 'srfEditor', 'srfQtyMin', 'srfQtyMax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  shelfRecordRecentFilters = { maHang: '', maVach: '', productName: '', editor: '', qtyMin: '', qtyMax: '' };
+  renderShelfRecordRecentList();
+}
+function shelfRecordRecentHasActiveFilter() {
+  const f = shelfRecordRecentFilters;
+  return !!(f.maHang || f.maVach || f.productName || f.editor || f.qtyMin !== '' || f.qtyMax !== '');
+}
+function shelfRecordRecentFilteredItems() {
+  const f = shelfRecordRecentFilters;
+  let items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id);
+  if (!shelfRecordRecentHasActiveFilter()) return items.slice(0, 20);
+  return items.filter(r => {
+    if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
+    if (!shelfFilterTextMatch(r.maVach, f.maVach)) return false;
+    if (!shelfFilterTextMatch(r.productName, f.productName)) return false;
+    if (!shelfFilterTextMatch(r.lastEditedByName, f.editor)) return false;
+    const qty = Number(r.quantity) || 0;
+    if (f.qtyMin !== '' && qty < Number(f.qtyMin)) return false;
+    if (f.qtyMax !== '' && qty > Number(f.qtyMax)) return false;
+    return true;
+  });
+}
 function renderShelfRecordRecentList() {
   const tbody = document.getElementById('vhShelfRecordRecentBody');
   if (!tbody) return;
@@ -1318,7 +1381,7 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-gray-400 italic">—</td>
       <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
-  const items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id).slice(0, 20);
+  const items = shelfRecordRecentFilteredItems();
   const rows = items.map(r => {
     if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 3, 'recent');
     const soldOutBadge = Number(r.quantity) <= 0 ? ' <span class="text-[10px] text-gray-400 italic">(đã bán hết)</span>' : '';
@@ -1434,11 +1497,51 @@ async function deleteShelfLocationClick(id) {
   populateShelfLocationPicker();
   cacheShelfLocationsOffline();
 }
+// --- Bộ lọc "🗄️ Quầy Kệ": Mã Quầy Kệ/Tên Quầy Kệ/Ngành Hàng (text) + Trạng Thái (danh sách), đúng khuôn
+// 2 bộ lọc ở trên nhưng đổi trường theo ĐÚNG cột đã có ở bảng này.
+let shelfLocationFilters = { code: '', name: '', category: '', active: '' };
+let _shelfLocationFilterCollapsed = true;
+function applyShelfLocationFilterPanelState() {
+  const panel = document.getElementById('shelfLocationFilterPanel');
+  const btn = document.getElementById('btnToggleShelfLocationFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _shelfLocationFilterCollapsed);
+  if (btn) btn.textContent = _shelfLocationFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleShelfLocationFilterPanel() {
+  _shelfLocationFilterCollapsed = !_shelfLocationFilterCollapsed;
+  applyShelfLocationFilterPanelState();
+}
+function onShelfLocationFilterChanged() {
+  shelfLocationFilters = {
+    code: document.getElementById('slfCode')?.value.trim() || '',
+    name: document.getElementById('slfName')?.value.trim() || '',
+    category: document.getElementById('slfCategory')?.value.trim() || '',
+    active: document.getElementById('slfActive')?.value || ''
+  };
+  renderShelfLocationsList();
+}
+function clearShelfLocationFilters() {
+  ['slfCode', 'slfName', 'slfCategory', 'slfActive'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  shelfLocationFilters = { code: '', name: '', category: '', active: '' };
+  renderShelfLocationsList();
+}
+function shelfLocationFilteredItems() {
+  const f = shelfLocationFilters;
+  return shelfItemsForOwnStore(DB.shelfLocations).filter(s => {
+    if (!shelfFilterTextMatch(s.code, f.code)) return false;
+    if (!shelfFilterTextMatch(s.name, f.name)) return false;
+    if (!shelfFilterTextMatch(s.category, f.category)) return false;
+    if (f.active === 'ACTIVE' && s.active === false) return false;
+    if (f.active === 'INACTIVE' && s.active !== false) return false;
+    return true;
+  }).sort((a, b) => a.code.localeCompare(b.code));
+}
 function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
   if (!tbody) return;
   const canManage = canManageShelfLocationsClient(currentUser);
-  const items = shelfItemsForOwnStore(DB.shelfLocations).sort((a, b) => a.code.localeCompare(b.code));
+  const items = shelfLocationFilteredItems();
   tbody.innerHTML = items.length ? items.map(s => {
     if (canManage && editingShelfLocationId === s.id) {
       return `
@@ -1464,10 +1567,10 @@ function renderShelfLocationsList() {
       <td class="p-2">${badge}</td>
       <td class="p-2 whitespace-nowrap">${canManage ? `<button type="button" data-op="enterShelfLocationEditMode" data-arg0="${s.id}" class="text-gray-500 hover:underline mr-2">Sửa</button><button type="button" data-op="deleteShelfLocationClick" data-arg0="${s.id}" class="text-red-600 hover:underline">🗑️ Xoá</button>` : ''}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
+  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">${shelfItemsForOwnStore(DB.shelfLocations).length ? 'Không có quầy kệ nào khớp bộ lọc' : 'Chưa khai báo quầy kệ nào'}</td></tr>`;
 }
 function exportShelfLocationsExcel() {
-  const items = shelfItemsForOwnStore(DB.shelfLocations).sort((a, b) => a.code.localeCompare(b.code));
+  const items = shelfLocationFilteredItems();
   if (!items.length) return alert('Chưa có quầy kệ nào để xuất.');
   const columns = [
     { header: 'Mã Quầy Kệ', key: 'code', width: 20 }, { header: 'Tên Quầy Kệ', key: 'name', width: 32 },
@@ -1592,6 +1695,60 @@ async function ensureShelfSystemInventoryForExpiry() {
     if (cached) shelfSystemInventoryCache = cached.rows || [];
   }
 }
+// --- Bộ lọc "⏰ Hạn Sử Dụng": Quầy Kệ/Mã Vạch/Mã Hàng/Tên Sản Phẩm/Người Cập Nhật Gần Nhất (text) + Số
+// Lượng (khoảng từ-đến) + Trạng Thái Hạn (danh sách — khớp đúng 3 mức badge đã có: EXPIRED/Đã hết hạn,
+// SOON/Còn ≤7 ngày, OK/Còn hạn). Mã Vạch/Mã Hàng (11/2026, theo yêu cầu người dùng: "thêm cột mã vạch và
+// mã hàng để có thể tham chiếu với ghi nhận" — tự đối chiếu 1 sản phẩm giữa 2 tab) nay CŨNG là cột hiện
+// trên bảng này (renderShelfExpiryGroups()), nên thêm luôn vào bộ lọc cho nhất quán.
+let shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '' };
+let _shelfExpiryFilterCollapsed = true;
+function applyShelfExpiryFilterPanelState() {
+  const panel = document.getElementById('shelfExpiryFilterPanel');
+  const btn = document.getElementById('btnToggleShelfExpiryFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _shelfExpiryFilterCollapsed);
+  if (btn) btn.textContent = _shelfExpiryFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleShelfExpiryFilterPanel() {
+  _shelfExpiryFilterCollapsed = !_shelfExpiryFilterCollapsed;
+  applyShelfExpiryFilterPanelState();
+}
+function onShelfExpiryFilterChanged() {
+  shelfExpiryFilters = {
+    shelfLocation: document.getElementById('sefShelfLocation')?.value.trim() || '',
+    maVach: document.getElementById('sefMaVach')?.value.trim() || '',
+    maHang: document.getElementById('sefMaHang')?.value.trim() || '',
+    productName: document.getElementById('sefProductName')?.value.trim() || '',
+    editor: document.getElementById('sefEditor')?.value.trim() || '',
+    qtyMin: document.getElementById('sefQtyMin')?.value ?? '',
+    qtyMax: document.getElementById('sefQtyMax')?.value ?? '',
+    status: document.getElementById('sefStatus')?.value || ''
+  };
+  renderShelfExpiryGroups();
+}
+function clearShelfExpiryFilters() {
+  ['sefShelfLocation', 'sefMaVach', 'sefMaHang', 'sefProductName', 'sefEditor', 'sefQtyMin', 'sefQtyMax', 'sefStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  shelfExpiryFilters = { shelfLocation: '', maVach: '', maHang: '', productName: '', editor: '', qtyMin: '', qtyMax: '', status: '' };
+  renderShelfExpiryGroups();
+}
+function shelfExpiryRecordMatchesFilters(r, now) {
+  const f = shelfExpiryFilters;
+  if (!shelfFilterTextMatch(`${r.shelfLocationCode || ''} ${r.shelfLocationName || ''}`, f.shelfLocation)) return false;
+  if (!shelfFilterTextMatch(r.maVach, f.maVach)) return false;
+  if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
+  if (!shelfFilterTextMatch(r.productName, f.productName)) return false;
+  if (!shelfFilterTextMatch(r.lastEditedByName, f.editor)) return false;
+  const qty = Number(r.quantity) || 0;
+  if (f.qtyMin !== '' && qty < Number(f.qtyMin)) return false;
+  if (f.qtyMax !== '' && qty > Number(f.qtyMax)) return false;
+  if (f.status) {
+    const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((exp - now) / 86400000);
+    const st = diffDays < 0 ? 'EXPIRED' : (diffDays <= 7 ? 'SOON' : 'OK');
+    if (st !== f.status) return false;
+  }
+  return true;
+}
 function renderShelfExpiryGroups() {
   const tbody = document.getElementById('vhShelfExpiryBody');
   if (!tbody) return;
@@ -1627,7 +1784,8 @@ function renderShelfExpiryGroups() {
     groupTotals.set(root, (groupTotals.get(root) || 0) + (Number(r.quantity) || 0));
   });
   const groupTotalOf = (r) => groupTotals.get(dsuFind(recordNodeKey(r))) ?? (Number(r.quantity) || 0);
-  const items = showSoldOut ? shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate) : allTracked;
+  const items = (showSoldOut ? shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate) : allTracked)
+    .filter(r => shelfExpiryRecordMatchesFilters(r, now));
   const rows = items.map(r => {
     const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
     const diffDays = Math.round((exp - now) / 86400000);
@@ -1638,7 +1796,7 @@ function renderShelfExpiryGroups() {
     return { r, diffDays, badge };
   }).sort((a, b) => a.diffDays - b.diffDays);
   tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 2, 4, 'expiry');
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 4, 'expiry');
     const soldOut = Number(r.quantity) <= 0;
     let rowClass = 'border-b';
     let stockCell = '<span class="text-gray-400 italic">—</span>';
@@ -1663,6 +1821,8 @@ function renderShelfExpiryGroups() {
     <tr class="${rowClass} ${soldOut ? 'opacity-60' : ''}">
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
+      <td class="p-2">${escapeHtml(r.maVach || '')}</td>
+      <td class="p-2">${escapeHtml(r.maHang || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
       <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge + renderShelfScanRecencyBadge(r)}</td>
@@ -1670,7 +1830,7 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'expiry')}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="8" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+  }).join('') : `<tr><td colspan="10" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
 }
 
 // ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====
