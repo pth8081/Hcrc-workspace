@@ -961,9 +961,10 @@ function renderShelfReportTable() {
     <th class="border p-2">Hạn Sử Dụng</th>
     <th class="border p-2">Tồn Kho Hệ Thống</th>
     <th class="border p-2">Người Ghi Nhận</th>
-    <th class="border p-2">Cập Nhật Lúc</th>`;
+    <th class="border p-2">Cập Nhật Lúc</th>
+    <th class="border p-2">Người Cập Nhật Gần Nhất</th>`;
   const items = shelfReportFilteredItems();
-  const colCount = 10;
+  const colCount = 11;
   tbody.innerHTML = items.length ? items.map(r => {
     const soldOut = Number(r.quantity) <= 0;
     const statusBadge = soldOut
@@ -982,6 +983,7 @@ function renderShelfReportTable() {
       <td class="p-2 text-right">${sysStock === null ? '—' : escapeHtml(String(sysStock))}</td>
       <td class="p-2">${escapeHtml(r.creatorName || '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
+      <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
 }
@@ -1000,7 +1002,9 @@ function exportShelfReportExcel() {
     { header: 'Hạn Sử Dụng', key: 'expiryDate', width: 14 },
     { header: 'Tồn Kho Hệ Thống', key: 'sysStock', width: 16 },
     { header: 'Người Ghi Nhận', key: 'creatorName', width: 20 },
-    { header: 'Cập Nhật Lúc', key: 'createdAt', width: 18 }
+    { header: 'Cập Nhật Lúc', key: 'createdAt', width: 18 },
+    { header: 'Người Cập Nhật Gần Nhất', key: 'lastEditedByName', width: 20 },
+    { header: 'Cập Nhật Gần Nhất Lúc', key: 'lastEditedAt', width: 18 }
   ];
   const dataRows = items.map(r => {
     const sysStock = shelfReportSysStockFor(r);
@@ -1011,7 +1015,8 @@ function exportShelfReportExcel() {
       status: Number(r.quantity) <= 0 ? 'Đã bán hết' : 'Đang theo dõi',
       expiryDate: r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '',
       sysStock: sysStock === null ? '' : sysStock,
-      creatorName: r.creatorName || '', createdAt: r.createdAt || ''
+      creatorName: r.creatorName || '', createdAt: r.createdAt || '',
+      lastEditedByName: r.lastEditedByName || '', lastEditedAt: r.lastEditedAt || ''
     };
   });
   downloadXlsxFromServer(`BaoCaoKiemSoatHangHoa_${new Date().toISOString().slice(0, 10)}.xlsx`, 'BaoCao', columns, dataRows);
@@ -1243,6 +1248,16 @@ async function quickUpdateShelfRecordQuantity(id, source) {
   const ok = await patchShelfRecordCore(numId, { quantity }, `Cập nhật SL hiện tại = ${quantity}`);
   if (ok) { if (input) input.value = ''; renderShelfRecordRecentList(); renderShelfExpiryGroups(); }
 }
+// Cột "Người Cập Nhật Gần Nhất" dùng CHUNG cho cả 3 bảng (Ghi Nhận gần đây/Hạn Sử Dụng/Báo Cáo, 11/2026,
+// theo yêu cầu người dùng NGAY SAU KHI mở quyền Sửa/Xóa/Cập Nhật/Bán Hết cho shelfRecordCreate — "lưu lại
+// ai là người ghi nhận [cập nhật gần nhất]") — khác hẳn "Người Ghi Nhận"/creatorName (người TẠO ĐẦU TIÊN,
+// bất biến): field lastEditedBy/lastEditedByName/lastEditedAt (lib/shelfStockEdit.js
+// applyShelfRecordEdit()) chỉ có giá trị SAU LẦN Sửa/Cập Nhật/Bán Hết ĐẦU TIÊN — rỗng/"—" nếu chưa ai
+// từng sửa (kể cả chính người tạo).
+function renderShelfRecordLastEditedCell(r) {
+  if (!r.lastEditedByName) return '<span class="text-gray-400 italic">—</span>';
+  return `${escapeHtml(r.lastEditedByName)}<div class="text-[10px] text-gray-400">${escapeHtml(r.lastEditedAt || '')}</div>`;
+}
 // Cụm nút Thao Tác dùng CHUNG cho cả 2 bảng (Ghi Nhận gần đây + Hạn Sử Dụng) — tách riêng để không lặp
 // HTML 2 nơi. r.quantity<=0 (đã bán hết) chỉ còn Xóa (không còn gì để Sửa/Bán Hết/Cập Nhật thêm nữa).
 // THAM SỐ source ('recent'/'expiry', BẮT BUỘC truyền đúng theo bảng gọi hàm này) — 2 bảng cùng vẽ hàng
@@ -1301,10 +1316,11 @@ function renderShelfRecordRecentList() {
       <td class="p-2">${escapeHtml(rec.payload.expiryDate ? new Date(rec.payload.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
       <td class="p-2 text-gray-400 italic">—</td>
+      <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
   const items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id).slice(0, 20);
   const rows = items.map(r => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 2, 'recent');
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 3, 'recent');
     const soldOutBadge = Number(r.quantity) <= 0 ? ' <span class="text-[10px] text-gray-400 italic">(đã bán hết)</span>' : '';
     return `
     <tr class="border-b ${Number(r.quantity) <= 0 ? 'opacity-60' : ''}">
@@ -1315,10 +1331,11 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}${soldOutBadge}</td>
       <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
+      <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'recent')}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="8" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="9" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
   updateShelfOfflineQueueBanner();
 }
 // Banner "🔌 N bản ghi đang chờ đồng bộ" phía trên form Ghi Nhận — chỉ hiện khi hàng đợi offline
@@ -1621,7 +1638,7 @@ function renderShelfExpiryGroups() {
     return { r, diffDays, badge };
   }).sort((a, b) => a.diffDays - b.diffDays);
   tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => {
-    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 2, 3, 'expiry');
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 2, 4, 'expiry');
     const soldOut = Number(r.quantity) <= 0;
     let rowClass = 'border-b';
     let stockCell = '<span class="text-gray-400 italic">—</span>';
@@ -1650,9 +1667,10 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
       <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge + renderShelfScanRecencyBadge(r)}</td>
       <td class="p-2">${stockCell}</td>
+      <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
       <td class="p-2">${renderShelfRecordActionsCell(r, 'expiry')}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="7" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
 }
 
 // ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====

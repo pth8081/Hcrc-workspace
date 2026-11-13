@@ -153,6 +153,15 @@ function applyShelfRecordEdit(item, body, user, allRecords) {
     throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
   }
   const next = { ...item };
+  // lastEditedBy/lastEditedByName/lastEditedAt (11/2026, theo yêu cầu người dùng NGAY SAU KHI mở quyền
+  // Sửa/Xóa/Cập Nhật/Bán Hết cho shelfRecordCreate ở trên — "lưu lại ai là người ghi nhận [cập nhật gần
+  // nhất]"): từ nay BẤT KỲ ai có shelfRecordCreate cũng sửa được ghi nhận của đồng nghiệp khác, nên
+  // `creator`/`creatorName` (người TẠO ĐẦU TIÊN, bất biến) không còn đủ để biết ai vừa thao tác gần nhất.
+  // Ghi lại NGƯỜI ĐANG THỰC HIỆN hành động này (Sửa/Cập Nhật nhanh/Bán Hết đều qua ĐÚNG hàm này) — KHÔNG
+  // đụng tới creator/creatorName gốc, chỉ thêm field mới song song để không mất lịch sử "ai tạo ra".
+  next.lastEditedBy = user.username;
+  next.lastEditedByName = user.name;
+  next.lastEditedAt = formatCreatedAt(new Date());
   const prevQuantity = Number(item.quantity) || 0;
   // body.quantity là ABSOLUTE (SET THẲNG) — dùng chung cho cả "✏️ Sửa" (full edit), "✅ Bán Hết" (set 0)
   // và nút tắt "💾 Cập Nhật" (set đúng SL vừa đếm trên kệ, thay thế hẳn hướng "➖ Trừ" tương đối cũ — set
