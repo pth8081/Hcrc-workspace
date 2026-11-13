@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**30.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.32 (2026-11): Thêm test audit cho đợt rà soát chuyên sâu v30.27→v30.31
+
+Theo yêu cầu người dùng "audit lại toàn bộ từ version 30.28 đến hiện tại, cho nhiều agent thực hiện" —
+3 agent độc lập đã kiểm tra chéo: (1) rà soát logic/bảo mật/phân quyền qua code, (2) thao tác thật bằng
+Playwright (phân trang ranh giới, lọc kết hợp nhiều điều kiện, bấm nút Xuất Excel/dashboard dồn dập,
+responsive mobile), (3) chạy lại 96 file test hồi quy liên quan. Kết quả: phát hiện 1 lỗi thật (đã vá ở
+v30.31), không phát hiện thêm lỗi nào khác ở các tính năng v30.28-v30.30 (3 file fail ở vòng hồi quy đã
+xác nhận qua `git worktree` là lỗi CÓ SẴN từ v30.27, không liên quan đợt vá này). Merge đợt này chỉ thêm
+2 file test mới (`audit-v30-pagination-filters-mobile.js`, `audit-v30-excel-dashboard-sdd.js`) làm
+bằng chứng + tăng độ phủ hồi quy cho tương lai — KHÔNG đổi hành vi ứng dụng.
 
 ## v30.31 (2026-11): Fix - Xuất Excel Đối Chiếu có thể xuất báo cáo "lai" sai siêu thị
 
