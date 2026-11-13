@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**30.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.28 (2026-11): Kiểm Soát Hàng Hóa — bộ lọc tìm kiếm, phân trang, "Người Ghi Nhận"
+
+Theo chuỗi yêu cầu liên tiếp của người dùng (kèm ảnh chụp 3 bảng Ghi Nhận/Hạn Sử Dụng/Quầy Kệ), tổng hợp
+nhiều cải tiến cho tab "🏪 Kiểm Soát Hàng Hóa":
+
+- **Bộ lọc tìm kiếm** (thu gọn/mở ra được) cho cả 3 bảng Ghi Nhận, Hạn Sử Dụng, Quầy Kệ — mỗi bảng lọc
+  theo đúng cột đã có (Mã Hàng, Mã Vạch, Tên Sản Phẩm, Người Cập Nhật, Số Lượng, Quầy Kệ...). Quầy Kệ:
+  lọc theo Ngành Hàng dùng ô tìm-kiếm-gõ-chọn (sdd*) thay vì gõ tự do. Ghi Nhận: bổ sung thêm ô lọc
+  "Quầy Kệ" (đợt sau, theo yêu cầu riêng) để khớp đủ các trường Hạn Sử Dụng đã có.
+- **Hạn Sử Dụng**: thêm cột Mã Vạch + Mã Hàng để tham chiếu chéo với bảng Ghi Nhận.
+- **"Người Ghi Nhận"**: thêm cột này (người TẠO ghi nhận đầu tiên, `creatorName`) vào cả Ghi Nhận và Hạn
+  Sử Dụng — trước đây chỉ có ở Báo Cáo.
+- **Bỏ giới hạn "20 ghi nhận gần nhất"** — Ghi Nhận giờ liệt kê TOÀN BỘ, **phân trang** (dùng chung
+  `paginateList()`/`buildPaginationBoxHTML()`, `core.js`) cho cả 5 bảng: Ghi Nhận, Hạn Sử Dụng, Quầy Kệ,
+  Đối Chiếu, Báo Cáo. Đối Chiếu dùng thêm 1 wrapper 0-tham-số (`renderShelfReconciliationTableFromCache()`)
+  để tương thích cơ chế phân trang (hàm gốc nhận 7 tham số tải từ server, không đọc lại được từ `DB.*`).
+- **Cột "Người Cập Nhật Gần Nhất"** làm responsive (`max-w-[110px]` + `break-words`) — tên dài tự xuống
+  dòng, không kéo dãn cả bảng trên màn hình hẹp (mobile).
+- Fix kèm 2 file test cũ bị lệch chỉ số cột (`test-shelf-expiry-system-inventory-refresh.js` và 2 demo
+  liên quan) do đợt thêm cột Mã Vạch/Mã Hàng trước đó chưa cập nhật theo — lỗi test, không phải lỗi
+  tính năng thật, đã xác nhận lại đúng hành vi khi sửa.
 
 ## v30.27 (2026-11): Kiểm Soát Hàng Hóa — lưu lại "Người Cập Nhật Gần Nhất"
 
