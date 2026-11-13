@@ -260,6 +260,17 @@ router.get('/system-inventory', async (req, res) => {
       return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
     }
     let rows = cached.rows;
+    // CỘNG GỘP theo maHang NGAY TỪ ĐÂY, áp dụng cho MỌI nơi gọi route này (11/2026, báo cáo người dùng
+    // kèm ảnh chụp thật ở "💲 Kiểm Tra Giá" + "📷 Ghi Nhận" — gõ 6 số cuối "912607" bị báo "khớp 3 mặt
+    // hàng" dù cả 3 dòng trả về HOÀN TOÀN GIỐNG NHAU, chỉ vì dữ liệu thô từ API đối tác có thể trả NHIỀU
+    // dòng cho CÙNG 1 mã hàng, xem lib/shelfInventoryAggregate.js). Trước đây việc gộp này CHỈ áp dụng cho
+    // nhánh scope=recon (màn "📊 Đối Chiếu") — 2 nơi gọi còn lại (picker "🔎 Chọn Từ Tồn Kho Hệ Thống" +
+    // gõ 6 số cuối ở Ghi Nhận/Kiểm Tra Giá, và màn Hạn Sử Dụng) nhận nguyên rows thô nên dính đúng lỗi
+    // trùng dòng này. Gộp ở ĐÚNG 1 điểm trước khi rẽ theo scope để nhất quán cho mọi nơi gọi — vẫn là
+    // "nguyên mảng đầy đủ" (đủ mọi mã hàng, không lọc bớt), chỉ không còn giữ nhiều dòng rời rạc của cùng
+    // 1 mã hàng nữa (đúng bản chất "tồn kho hệ thống của mã hàng này" là tổng các dòng con — client vốn
+    // đã tự làm việc này cho Hạn Sử Dụng qua findSystemInventoryQtyForProduct(), module-vanhanh.js).
+    rows = aggregateSystemInventoryRowsByMaHang(rows);
     let totalSystemSkuCount, scannedTodayCount, scannedEverCount;
     // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ, còn
     // không thì bỏ qua... siêu thị ấn cùng một lúc có thể gây treo ứng dụng") — CHỈ màn "📊 Đối Chiếu" gửi
@@ -269,7 +280,7 @@ router.get('/system-inventory', async (req, res) => {
     // thật). 2 nơi gọi còn lại (picker "🔎 Chọn Từ Tồn Kho Hệ Thống" ở Ghi Nhận, và màn Hạn Sử Dụng) vẫn
     // PHẢI nhận nguyên mảng đầy đủ — không truyền scope nên không bị lọc.
     if (req.query.scope === 'recon') {
-      totalSystemSkuCount = rows.length;
+      totalSystemSkuCount = rows.length; // rows đã gộp theo maHang ở trên -> đúng số MÃ HÀNG duy nhất
       const allShelfRecords = await getAllForCollection('shelfRecords');
       const now = new Date();
       const scannedMaHangToday = new Set();
@@ -291,11 +302,9 @@ router.get('/system-inventory', async (req, res) => {
       }
       scannedTodayCount = scannedMaHangToday.size;
       scannedEverCount = scannedMaHangEver.size;
+      // rows ĐÃ được gộp theo maHang ngay từ đầu route (xem chú thích ở trên) — chỉ cần lọc theo tập mã
+      // đã scan, không cần gộp lại lần 2 nữa.
       rows = rows.filter(r => r.maHang && scannedMaHangEver.has(String(r.maHang)));
-      // CỘNG GỘP theo maHang (11/2026, báo cáo người dùng kèm ảnh chụp — 1 mã hàng hiện 2 DÒNG với "Tồn
-      // Kho Hệ Thống" KHÁC NHAU, VD "0" và "8", khiến người kiểm đếm không biết tin số nào) — xem chú
-      // thích đầy đủ tại lib/shelfInventoryAggregate.js.
-      rows = aggregateSystemInventoryRowsByMaHang(rows);
     }
     // maDiem trả kèm (11/2026, theo yêu cầu người dùng: "đối chiếu sai tôi không biết được") — để client
     // hiện rõ ĐANG đối chiếu với Mã Điểm nào ngay trên màn Đối Chiếu, người dùng tự so lại với cột "Mã
