@@ -1,8 +1,17 @@
 # Phiên bản hiện tại
 
-**30.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.30 (2026-11): Dashboard thẻ-bấm-để-lọc cho Vận Hành - Giá Bán Buôn và Mua Hàng - Giá Bán Lẻ
+
+Theo yêu cầu người dùng kèm ảnh chụp "📦 Đơn Hàng": "làm cho vận hành --> giá bán buôn và mua hàng -->
+giá bán lẻ dashboard giống kiểu đơn đặt hàng". Dùng CHUNG `buildDashboardCardsHTML()`/
+`applyDashboardCardFilter()` (`core.js`) — cùng cơ chế dashboard "Tổng Đề Xuất/Đang Chờ Duyệt/Đã Phê
+Duyệt/Bị Từ Chối" đã có sẵn ở Hỗ Trợ IT, chỉ cố định `priceType` theo đúng màn (WHOLESALE cho Vận
+Hành, RETAIL cho Mua Hàng). Đặt ngay trên khung "+ Đề Xuất Mới", bấm 1 thẻ tự lọc đúng danh sách theo
+trạng thái đó, 2 màn hoàn toàn độc lập dữ liệu (không lẫn số liệu Bán Buôn/Bán Lẻ).
 
 ## v30.29 (2026-11): Kiểm Soát Hàng Hóa — Xuất Excel + bộ lọc khoảng ngày (Hạn Sử Dụng, Đối Chiếu, Báo Cáo)
 
