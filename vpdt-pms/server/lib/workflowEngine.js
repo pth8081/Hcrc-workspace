@@ -35,12 +35,19 @@ function canApproveStep(user, stepApprovers, history, step) {
   return !getStepApprovedUsernames(history, step).has(user.username);
 }
 
-function isStepApprovalComplete(user, stepApprovers, history, step) {
+// anyApprover (11/2026, theo yêu cầu người dùng: "cho phép một trong những người trong bước đấy phê
+// duyệt là có thể qua... phải là động, tôi chọn thì nó mới thực hiện như vậy, còn không thì thôi") —
+// tham số MỚI, mặc định falsy = giữ NGUYÊN hành vi "ĐỒNG PHÊ DUYỆT" cũ (mọi bước chưa ai bật tuỳ chọn
+// này ở cấu hình quy trình không đổi gì). Khi true (admin đã bật "chỉ cần 1 người duyệt" cho ĐÚNG bước
+// này ở màn Quy Trình & Phê Duyệt — coApprovalMode[step]==='ANY', xem flatWorkflowConfigToSteps() dưới),
+// chỉ cần ÍT NHẤT 1 trong danh sách approversList đã duyệt là coi bước hoàn tất, dùng .some() thay
+// .every(). PHẢI giữ giống hệt bản mirror client isStepApprovalComplete() ở public/js/core.js.
+function isStepApprovalComplete(user, stepApprovers, history, step, anyApprover) {
   // Xem chú thích ở canApproveStep() — đã bỏ `if (user?.perms?.admin) return true;`.
   const approversList = normalizeApproversList(stepApprovers);
   if (approversList.length === 0) return true;
   const approved = getStepApprovedUsernames(history, step);
-  return approversList.every(u => approved.has(u));
+  return anyApprover ? approversList.some(u => approved.has(u)) : approversList.every(u => approved.has(u));
 }
 
 // Đăng Ký Xe không có hàm kiểm tra trùng lịch tương đương findMeetingConflict() (Phòng Họp) — biển số
@@ -167,7 +174,14 @@ function flatWorkflowConfigToSteps(wfConfig, appData) {
   const wf = (appData.workflows || []).find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
   const approvers = {};
   wf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(wfConfig, s.order, appData.users); });
-  return { steps: wf.steps, approvers };
+  // anyApprover (11/2026, "cho phép 1 trong những người ở bước đấy duyệt là qua") — gắn thẳng vào MỖI
+  // step object từ coApprovalMode[order] (cấu hình phòng ban, cùng cấp với approvers/approverMode/
+  // approversByPosition — xem renderWorkflowTab() module-ngansach.js) để applyWorkflowAction() đọc thẳng
+  // steps[currentStep-1]?.anyApprover khi gọi isStepApprovalComplete(), không cần truyền thêm map riêng
+  // qua nhiều tầng gọi. MẶC ĐỊNH false/undefined khi admin CHƯA bật — giữ nguyên hành vi ĐỒNG PHÊ DUYỆT
+  // cũ cho MỌI bước chưa từng cấu hình tuỳ chọn này.
+  const steps = wf.steps.map(s => ({ ...s, anyApprover: wfConfig?.coApprovalMode?.[s.order] === 'ANY' }));
+  return { steps, approvers };
 }
 
 // ===== Hỗ Trợ IT — Phê Duyệt Giá: cấu hình duyệt theo phòng ban × LOẠI GIÁ (RETAIL/WHOLESALE) =====
@@ -1633,7 +1647,14 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot
   });
 
-  if (!isStepApprovalComplete(user, currentStepApprovers, item[historyField], currentStep)) {
+  // steps[currentStep-1]?.anyApprover — gắn sẵn từ flatWorkflowConfigToSteps() (Phase 1: docs/carRegs/
+  // officeReqs/vppRegistrations/contractsSignedFile/itPriceApprovals RETAIL/budgetEntries/paymentRequests
+  // — xem WF_MODULE_CONFIG.supportsAnyApprover ở module-workflow.js cho danh sách module ĐÃ hỗ trợ tuỳ
+  // chọn này qua UI). Module khác (submissions/contracts gốc — snapshot effectiveSteps,
+  // operationOrders/itPriceApprovals WHOLESALE — mixed-approval rule riêng) hiện CHƯA gắn field này vào
+  // steps -> luôn undefined -> isStepApprovalComplete() tự rơi về ĐÚNG hành vi ĐỒNG PHÊ DUYỆT cũ, không
+  // đổi gì cho các module đó.
+  if (!isStepApprovalComplete(user, currentStepApprovers, item[historyField], currentStep, steps[currentStep - 1]?.anyApprover)) {
     return { item, transition: { type: 'PARTIAL_APPROVE', stepApprovers: currentStepApprovers } };
   }
 

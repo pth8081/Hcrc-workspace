@@ -462,7 +462,7 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
     progressBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
   } else {
     const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
-    const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
+    const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep, wf.steps[doc.currentStep - 1]?.anyApprover);
     // "bước đã làm/tổng bước" (11/2026, yêu cầu người dùng) — tử số đổi từ "bước hiện tại" (currentStep,
     // số bước ĐANG CHỜ) sang "số bước đã xong" (workflowStepProgressText(), core.js), nên tách riêng
     // phần "đang chờ: tên bước" để không còn mâu thuẫn kiểu "Bước 1/2: <tên bước 2>".

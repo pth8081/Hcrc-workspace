@@ -1186,7 +1186,7 @@ function itPriceStatusBadge(p) {
   }
   if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 Chờ bổ sung</span>`;
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
-  return `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
+  return `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep, wfConfig?.steps?.[p.currentStep - 1]?.anyApprover))}</span>`;
 }
 
 function itPriceAppliedBadge(p) {

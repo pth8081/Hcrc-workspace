@@ -363,7 +363,7 @@ function renderOfficeReqs() {
     else if (o.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
     else if (o.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else if (o.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy</span>`;
-    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep, wfConfig?.steps?.[o.currentStep - 1]?.anyApprover))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
     const paymentCell = o.status === 'APPROVED'

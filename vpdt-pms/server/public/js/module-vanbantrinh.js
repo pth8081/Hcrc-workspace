@@ -531,7 +531,7 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="badge-info">📄 Chờ người trình xác nhận thay thế tờ trình</span>`;
     } else {
       const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
-      const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep);
+      const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep, wf.steps[sub.currentStep - 1]?.anyApprover);
       progressBadge = `<span class="badge-info">⏳ Bước ${stepRatioText} — đang chờ: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
     }
 

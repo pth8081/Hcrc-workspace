@@ -1001,7 +1001,7 @@ function renderCarRegs() {
     else if (c.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối${stepRatioText ? ` (bước ${stepRatioText})` : ''}</span>`;
     else if (c.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy chuyến</span>`;
     else if (c.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
-    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${stepRatioText}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep, wfConfig?.steps?.[c.currentStep - 1]?.anyApprover))}</span>`;
     // Vừa "Đổi Lộ Trình" (hành động cuối cùng trong lịch sử là ROUTE_CHANGED, chưa ai duyệt lại vòng
     // mới) — thêm nhãn phụ để người duyệt/người đăng ký phân biệt với 1 phiếu PENDING bình thường,
     // tránh nhầm là hồ sơ mới chưa từng đổi gì. Xem changeCarRegRoute() ở lib/recordActions.js.

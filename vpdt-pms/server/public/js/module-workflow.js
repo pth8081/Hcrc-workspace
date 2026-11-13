@@ -4,8 +4,18 @@
 // Bảng tra cứu module ↔ collection dữ liệu quy trình — thay cho chuỗi if lặp lại giống hệt nhau ở
 // switchWfModule/renderWorkflowTab/saveDeptWorkflowConfig/deleteWorkflowTemplate trước đây (thêm
 // module mới chỉ cần sửa 1 chỗ, tránh nguy cơ quên đồng bộ 1 trong nhiều hàm).
+// supportsAnyApprover (11/2026, theo yêu cầu người dùng: "cho phép 1 trong những người ở bước đấy
+// phê duyệt là có thể qua... phải động, tôi chọn thì nó mới thực hiện như vậy") — PHASE 1: CHỈ bật cho
+// các module đi qua flatWorkflowConfigToSteps() TRỰC TIẾP, KHÔNG snapshot (effectiveSteps) và KHÔNG
+// quy tắc duyệt hỗn hợp riêng (mixed-approval rule) — xem lib/workflowEngine.js MODULE_CONFIGS để xác
+// nhận đúng từng module trước khi thêm cờ này. Module CHƯA bật (SUBMISSION/CONTRACT_APPROVAL — snapshot
+// effectiveSteps lúc tạo; ITPRICE_WHOLESALE/OPERATION_ORDER_STORE/HO — tra người duyệt qua quy tắc hỗn
+// hợp riêng, GHI ĐÈ approvers sau flatWorkflowConfigToSteps(); BUDGET_APPROVE — không đi qua
+// applyWorkflowAction() đầy đủ, canDecideBudgetLineFinal() dùng cơ chế riêng) sẽ xét bổ sung ở ĐỢT SAU,
+// KHÔNG hiện checkbox "Chỉ cần 1 người duyệt" ở màn Quy Trình & Phê Duyệt cho tới khi được xác nhận an
+// toàn — tránh hiện 1 tuỳ chọn KHÔNG có tác dụng thật (gây hiểu lầm) cho các module này.
 const WF_MODULE_CONFIG = {
-  DOC: { dbKey: 'deptWorkflows', label: 'Tài liệu', title: '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban' },
+  DOC: { dbKey: 'deptWorkflows', supportsAnyApprover: true, label: 'Tài liệu', title: '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban' },
   // hasTypes: cấu hình quy trình theo phòng ban RIÊNG cho từng loại tờ trình (danh sách loại lấy từ
   // DB.submissionTypes, admin tự thêm/bớt được ở màn Biểu Mẫu — xem getWfModuleTypes()) — dbKey trỏ
   // tới cấu trúc LỒNG {loại: {phòng ban: config}}. legacyDbKey là cấu hình chung cũ (chỉ theo phòng
@@ -13,10 +23,10 @@ const WF_MODULE_CONFIG = {
   // chọn CHƯA được admin cấu hình riêng, để không đổi hành vi cho tới khi admin chủ động tuỳ chỉnh
   // (xem getSubmissionDeptWorkflowConfig()).
   SUBMISSION: { dbKey: 'submissionTypeDeptWorkflows', legacyDbKey: 'submissionDeptWorkflows', hasTypes: true, label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
-  CAR: { dbKey: 'carDeptWorkflows', label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
-  OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
-  OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
-  VPP: { dbKey: 'vppDeptWorkflows', label: 'Văn phòng phẩm', title: '🖇️ Cấu Hình Quy Trình Phê Duyệt Đăng Ký Văn Phòng Phẩm Theo Phòng Ban' },
+  CAR: { dbKey: 'carDeptWorkflows', supportsAnyApprover: true, label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
+  OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', supportsAnyApprover: true, label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
+  OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', supportsAnyApprover: true, label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
+  VPP: { dbKey: 'vppDeptWorkflows', supportsAnyApprover: true, label: 'Văn phòng phẩm', title: '🖇️ Cấu Hình Quy Trình Phê Duyệt Đăng Ký Văn Phòng Phẩm Theo Phòng Ban' },
   // Hợp đồng — 2 quy trình TÁCH RIÊNG (khớp lib/workflowEngine.js): CONTRACT_APPROVAL là quy trình GỐC
   // cho sub-tab "Phê Duyệt" (còn có thêm 4 lớp bổ sung tuỳ chọn cấu hình riêng ở "Nhóm Phê Duyệt HĐ",
   // khối Phân Quyền — không thuộc màn này); CONTRACT_MANAGE là quy trình đơn giản theo phòng ban cho
@@ -30,12 +40,12 @@ const WF_MODULE_CONFIG = {
   // DB.submissionTypes) báo cho getWfModuleTypes() đọc DB.contractTypes (mảng chuỗi phẳng — "Loại Pháp
   // Lý", Biểu Mẫu) thay vì DB.submissionTypes — xem getWfModuleTypes() ở module-ngansach.js.
   CONTRACT_APPROVAL: { dbKey: 'contractTypeApprovalDeptWorkflows', legacyDbKey: 'contractApprovalDeptWorkflows', hasTypes: true, typesFromContractCatalog: true, label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
-  CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' },
+  CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', supportsAnyApprover: true, label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' },
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt theo bước/
   // phòng ban (paymentDeptWorkflows) — cùng khuôn đơn giản CONTRACT_MANAGE/BUDGET ở trên (không snapshot,
   // không "types" lồng), thay cho quyền phẳng paymentManage/admin cũ. Xem lib/workflowEngine.js
   // MODULE_CONFIGS.paymentRequests.
-  PAYMENT: { dbKey: 'paymentDeptWorkflows', label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
+  PAYMENT: { dbKey: 'paymentDeptWorkflows', supportsAnyApprover: true, label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
   // MEETING (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối) ĐÃ BỊ GỠ (11/2026, theo yêu
   // cầu người dùng "đặt phòng họp không theo quy trình, bỏ luôn quy trình phòng họp cho đỡ nhầm" — màn
   // cấu hình theo phòng ban ở đây cho chọn mẫu "2 bước"/"3 bước" NHƯNG canDecideMeeting()
@@ -56,7 +66,7 @@ const WF_MODULE_CONFIG = {
   // (wfSubmissionTypeTabs) khi types.length <= 1 (đã sửa ở đó), nên KHÔNG hiện switcher thừa dù vẫn đi
   // qua đúng nhánh `priceTypeNested` cũ (an toàn tối đa — không đổi field/logic đọc-ghi nào).
   ITPRICE_RETAIL: {
-    dbKey: 'itPriceDeptWorkflows', hasTypes: true, priceTypeNested: true,
+    dbKey: 'itPriceDeptWorkflows', hasTypes: true, priceTypeNested: true, supportsAnyApprover: true,
     fixedTypes: [{ key: 'RETAIL', label: '🏷️ Bán Lẻ' }],
     label: 'Phê Duyệt Giá Bán Lẻ', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán Lẻ Theo Phòng Ban'
   },
@@ -81,7 +91,7 @@ const WF_MODULE_CONFIG = {
   // applyWorkflowAction() đầy đủ — cấu hình nhiều bước ở đây chỉ bước 1 có tác dụng thật). budgetManage/
   // admin vẫn LUÔN quyết định được mọi dòng bất kể cấu hình phòng ban (đã toàn quyền cả bước Phê Duyệt
   // cuối). Phòng ban CHƯA cấu hình = chỉ budgetManage/admin xử lý được Đề Xuất của phòng ban đó.
-  BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách - Đề Xuất', title: '📊 Cấu Hình Quy Trình Duyệt Đề Xuất Ngân Sách Theo Phòng Ban' },
+  BUDGET: { dbKey: 'budgetDeptWorkflows', supportsAnyApprover: true, label: 'Ngân Sách - Đề Xuất', title: '📊 Cấu Hình Quy Trình Duyệt Đề Xuất Ngân Sách Theo Phòng Ban' },
   // BUDGET_APPROVE (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): bước Phê Duyệt CUỐI
   // (stage=APPROVED, dòng nhập trực tiếp) — TÁCH RIÊNG khỏi BUDGET ở trên (bước Đề Xuất), map dbKey khác
   // hẳn (budgetApprovedDeptWorkflows) vì người duyệt 2 bước có thể khác nhau. Xem

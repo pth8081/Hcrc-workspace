@@ -896,6 +896,14 @@ function renderWorkflowTab() {
     const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
     const effectiveApproverMode = isPending ? {} : (savedConfig.approverMode || {});
     const effectiveApproversByPosition = isPending ? {} : (savedConfig.approversByPosition || {});
+    // coApprovalMode (11/2026, "cho phép 1 trong những người ở bước đấy phê duyệt là qua") — mirror ĐÚNG
+    // cùng khuôn approverMode/approversByPosition ở trên (map {stepOrder: 'ANY'}, thiếu/khác 'ANY' = ALL,
+    // tức hành vi ĐỒNG PHÊ DUYỆT cũ). CHỈ hiện checkbox tương ứng khi WF_MODULE_CONFIG[activeWfMod].
+    // supportsAnyApprover===true (PHASE 1, xem chú thích đầy đủ tại WF_MODULE_CONFIG) — các module khác
+    // (Văn Bản Trình/Hợp Đồng-Phê Duyệt/Bán Buôn/Đặt Hàng...) chưa wire tới engine, cố tình KHÔNG hiện
+    // checkbox để tránh 1 tuỳ chọn trông như hoạt động nhưng thật ra vô tác dụng.
+    const effectiveCoApprovalMode = isPending ? {} : (savedConfig.coApprovalMode || {});
+    const supportsAnyApprover = !!modConfig.supportsAnyApprover;
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
       const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
@@ -904,6 +912,7 @@ function renderWorkflowTab() {
       // dưới bất kể mode hiện tại — bật/tắt checkbox chỉ ẩn/hiện khối tương ứng (onWfStepApproverModeToggle()),
       // KHÔNG render lại toàn bộ tab, để không mất lựa chọn dở dang của các bước KHÁC khi đổi mode 1 bước.
       const isPositionMode = effectiveApproverMode[step.order] === 'POSITION';
+      const isAnyApproverMode = effectiveCoApprovalMode[step.order] === 'ANY';
 
       const currentApproversRaw = effectiveApprovers[step.order] || [];
       const currentApprovers = Array.isArray(currentApproversRaw) ? currentApproversRaw : (currentApproversRaw ? [currentApproversRaw] : []);
@@ -926,12 +935,19 @@ function renderWorkflowTab() {
 
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
-          <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
             <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-            <label class="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 cursor-pointer whitespace-nowrap" title="Bật để duyệt viên được tính THEO VỊ TRÍ (chức danh + phòng ban) thay vì chọn tay từng người">
-              <input type="checkbox" id="wfPosModeToggle_${stepKey}" data-op-change="onWfStepApproverModeToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
-              🧭 Theo vị trí
-            </label>
+            <div class="flex items-center gap-2 flex-wrap">
+              ${supportsAnyApprover ? `
+              <label class="flex items-center gap-1 text-[11px] font-semibold text-amber-700 cursor-pointer whitespace-nowrap" title="Bật để bước này chỉ cần ĐÚNG 1 trong số những người được gán duyệt là đủ (không cần tất cả) — chỉ có tác dụng khi bước gán từ 2 người duyệt trở lên.">
+                <input type="checkbox" id="wfAnyApproverToggle_${stepKey}" ${isAnyApproverMode ? 'checked' : ''}>
+                ⚡ Chỉ cần 1 người duyệt
+              </label>` : ''}
+              <label class="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 cursor-pointer whitespace-nowrap" title="Bật để duyệt viên được tính THEO VỊ TRÍ (chức danh + phòng ban) thay vì chọn tay từng người">
+                <input type="checkbox" id="wfPosModeToggle_${stepKey}" data-op-change="onWfStepApproverModeToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
+                🧭 Theo vị trí
+              </label>
+            </div>
           </div>
           <div id="wfPeopleBlock_${stepKey}" class="${isPositionMode ? 'hidden' : ''} space-y-1">
             <div id="${pickerId}"></div>
