@@ -205,9 +205,9 @@ router.patch('/records/:id', async (req, res) => {
 // shelfRecords là collection AppData thuần (chưa "tốt nghiệp" bảng riêng, xem lib/recordStore.js) — xoá ở
 // đây là XOÁ VĨNH VIỄN theo đúng quy ước đã có cho mọi collection AppData khác (KHÔNG qua Thùng Rác, xem
 // deleteRecordForCollection() nhánh else) — vẫn tự ghi Nhật Ký Hệ Thống qua logRecordDelete() bên trong.
-// canManageShelfRecordEdits() (shelfLocationManage/admin) — KHÔNG dùng canManageShelfRecords() nữa (lỗ
-// hổng thật: trước đây bất kỳ ai có shelfRecordCreate — scan được — cũng xoá VĨNH VIỄN được ghi nhận của
-// BẤT KỲ ai khác cùng siêu thị).
+// canManageShelfRecordEdits() (admin/shelfLocationManage/shelfRecordCreate, 11/2026 ĐỔI QUYẾT ĐỊNH theo
+// yêu cầu người dùng — xem chú thích đầy đủ tại định nghĩa hàm, lib/shelfStockEdit.js) — người chỉ có
+// shelfRecordCreate giờ CŨNG xoá được, vẫn luôn giới hạn ĐÚNG siêu thị của họ (kiểm tra dept ngay dưới).
 router.delete('/records/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });

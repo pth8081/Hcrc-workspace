@@ -965,12 +965,15 @@ function createDispatcher(state) {
         return { status: 200, body: { item: updated } };
       }
       if ((m = pathName.match(/^\/api\/shelf-stock\/records\/(\d+)$/)) && method === 'DELETE') {
-        const { canManageShelfRecords } = require('../lib/shelfStockEdit');
+        // LỖI MOCK tự phát hiện (không phải do đợt sửa này gây ra): trước đây dùng nhầm
+        // canManageShelfRecords() (= quyền TẠO) thay vì canManageShelfRecordEdits() (= quyền SỬA/XOÁ) như
+        // routes/shelfStock.js thật đang dùng — mirror ĐÚNG lại cho khớp route thật.
+        const { canManageShelfRecordEdits } = require('../lib/shelfStockEdit');
         const id = Number(m[1]);
         const list = state.shelfRecords || [];
         const idx = list.findIndex(x => x.id === id);
         if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
-        if (!canManageShelfRecords(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền ghi nhận trên kệ' } };
+        if (!canManageShelfRecordEdits(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền sửa/xóa Ghi Nhận Trên Kệ (cần quyền quản lý Quầy Kệ)' } };
         if (!freshUser.perms?.admin && list[idx].dept !== freshUser.dept) return { status: 403, body: { error: 'Ghi nhận này không thuộc siêu thị của bạn' } };
         list.splice(idx, 1);
         return { status: 200, body: { success: true } };

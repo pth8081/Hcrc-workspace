@@ -17,10 +17,9 @@ async function main() {
   const PORT = 8981;
   const USER = {
     username: 'cht1', name: 'Cửa Hàng Trưởng Q1', dept: 'Siêu thị Quận 1',
-    // shelfLocationManage BẮT BUỘC để test được Sửa/Xóa/Bán Hết/Cập Nhật (canManageShelfRecordEdits() ở
-    // lib/shelfStockEdit.js — gác CAO HƠN shelfRecordCreate từ sau đợt tách quyền Sửa/Xóa riêng, xem chú
-    // thích tại canManageShelfRecordEdits()) — thiếu field này mọi PATCH/DELETE sẽ bị server 403 ÂM THẦM
-    // (chỉ alert() phía client, không throw ra Playwright) khiến các bước sau tưởng là lỗi logic khác.
+    // shelfLocationManage (11/2026: canManageShelfRecordEdits() ở lib/shelfStockEdit.js nay CHẤP NHẬN CẢ
+    // shelfRecordCreate lẫn shelfLocationManage/admin cho Sửa/Xóa/Bán Hết/Cập Nhật — xem chú thích đầy đủ
+    // tại hàm đó — giữ thêm field này ở fixture không bắt buộc nữa nhưng vẫn vô hại, không cần bỏ).
     perms: { vanHanhShelfTab: true, shelfRecordCreate: true, shelfLocationManage: true }, active: true, totpEnabled: true, email: 'cht1@hcrc.vn'
   };
   const SHELF_LOCATION = { id: 501, code: 'KE-A1', name: 'Kệ A1', category: 'Thực phẩm', dept: 'Siêu thị Quận 1', active: true };
