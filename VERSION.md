@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**30.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.23 (2026-11): Kiểm Soát Hàng Hóa — sửa 2 lỗi "gõ 6 số cuối" (trùng dòng + ô Mã Hàng không khớp)
+
+Người dùng tự test tính năng "gõ tay 6 số cuối tự detect mã hàng" (v30.5) trên production, báo 2 lỗi
+thật kèm ảnh chụp (G7 Cà Phê 3in1, Mã Hàng 2002092675, Mã Vạch 8935024912607):
+
+1. **"💲 Kiểm Tra Giá"**: gõ 6 số cuối "912607" báo "khớp 3 mặt hàng" dù cả 3 dòng trả về HOÀN TOÀN
+   GIỐNG NHAU — dữ liệu thô từ API đối tác đôi khi trả nhiều dòng cho CÙNG 1 mã hàng (cùng bản chất lỗi
+   "Đối Chiếu" đã vá trước đây, xem `lib/shelfInventoryAggregate.js`). `routes/shelfStock.js` GET
+   `/system-inventory` trước đây chỉ gộp (`aggregateSystemInventoryRowsByMaHang()`) ở nhánh
+   `scope=recon` (màn Đối Chiếu) — nay gộp NGAY TỪ ĐẦU route, áp dụng cho MỌI nơi gọi (picker "🔎 Chọn Từ
+   Tồn Kho Hệ Thống" ở Ghi Nhận, gõ 6 số cuối ở Ghi Nhận/Kiểm Tra Giá, màn Hạn Sử Dụng).
+2. **"📷 Ghi Nhận"**: gõ 6 số cuối trực tiếp vào ô "Mã Hàng (nội bộ)" (`#srMaHang`) không phản hồi gì
+   (⚠️ "Không khớp tồn kho hệ thống") — ô này trước đây hoàn toàn KHÔNG có handler, logic khớp-6-số-cuối
+   chỉ gắn vào ô "Mã Vạch" (`onShelfMaVachTyped`), trong khi Ghi Nhận (khác Kiểm Tra Giá) không có nút
+   "xác nhận" riêng để kích hoạt khớp. Thêm `data-op-input="onShelfMaHangTyped"` cho `#srMaHang`
+   (`vanHanhSection.html`) + `applyShelfMaHangMatch()`/`matchShelfSystemInventoryByMaHang()`
+   (`module-vanhanh.js`) — gõ tay vào Mã Hàng giờ cũng tự khớp (chính xác hoặc 6 số cuối), tự điền ngược
+   lại Mã Vạch + Tên Sản Phẩm, y hệt cơ chế ô Mã Vạch đã có.
+
+Mở rộng `tests/test-shelf-barcode-suffix-match.js` (9/9 kịch bản) + mirror cùng logic gộp ở
+`tests/testHarness.js` (mock `GET /system-inventory`). Đã gửi demo ảnh tái hiện đúng dữ liệu người dùng
+báo, người dùng xác nhận. Chạy lại toàn bộ test liên quan (suffix-match, recon, report, expiry,
+threshold, ownstore-scope...) — không có regression.
 
 ## v30.22 (2026-11): Quy Trình & Phê Duyệt — cấu hình "Chỉ cần 1 người duyệt" theo từng bước (PHASE 1)
 
