@@ -1107,8 +1107,12 @@
           </div>
         </div>
         <!-- Bộ lọc "⏰ Hạn Sử Dụng" (11/2026, theo yêu cầu người dùng — cùng mẫu bộ lọc "📷 Ghi Nhận" ở
-             trên nhưng đổi trường theo ĐÚNG cột đã có ở bảng này). Mặc định THU GỌN. -->
-        <div class="text-right">
+             trên nhưng đổi trường theo ĐÚNG cột đã có ở bảng này). Mặc định THU GỌN. 2 ô lọc khoảng ngày
+             (Thời Gian Ghi Nhận + Hạn Sử Dụng, theo yêu cầu người dùng "trước khi xuất ra Excel tôi muốn
+             có bộ lọc... lọc theo ngày tháng năm") ÁP DỤNG CHO CẢ bảng hiện trên màn hình LẪN "📥 Xuất
+             Excel" ngay dưới (exportShelfExpiryExcel() dùng chung shelfExpiryComputedItems()). -->
+        <div class="flex items-center justify-between gap-2">
+          <button type="button" data-op="exportShelfExpiryExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
           <button type="button" data-op="toggleShelfExpiryFilterPanel" id="btnToggleShelfExpiryFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
         </div>
         <div id="shelfExpiryFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-7 gap-2 bg-gray-50 border rounded p-2 text-xs">
@@ -1148,6 +1152,22 @@
               <option value="SOON">Còn ≤7 ngày</option>
               <option value="OK">Còn hạn</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Thời Gian Ghi Nhận Từ</label>
+            <input type="date" id="sefCreatedFrom" data-op-change="onShelfExpiryFilterChanged" class="w-full border p-1 rounded">
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Thời Gian Ghi Nhận Đến</label>
+            <input type="date" id="sefCreatedTo" data-op-change="onShelfExpiryFilterChanged" class="w-full border p-1 rounded">
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Hạn Sử Dụng Từ</label>
+            <input type="date" id="sefExpiryFrom" data-op-change="onShelfExpiryFilterChanged" class="w-full border p-1 rounded">
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Hạn Sử Dụng Đến</label>
+            <input type="date" id="sefExpiryTo" data-op-change="onShelfExpiryFilterChanged" class="w-full border p-1 rounded">
           </div>
           <div class="col-span-2 md:col-span-7 text-right">
             <button type="button" data-op="clearShelfExpiryFilters" class="text-gray-500 hover:underline">✖ Xoá Bộ Lọc</button>
@@ -1266,6 +1286,9 @@
              client) — đối chiếu lại đúng giá trị này với cột "Mã Điểm" ở Hệ Thống → Quản Trị → Quản Lý
              Danh Mục → Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai. Xem setShelfReconHeader()/module-vanhanh.js. -->
         <div id="shelfReconHeader" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800"></div>
+        <div class="text-right">
+          <button type="button" data-op="exportShelfReconciliationExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
             <thead class="bg-gray-100">
