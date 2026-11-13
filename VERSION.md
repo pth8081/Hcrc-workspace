@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**30.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.27 (2026-11): Kiểm Soát Hàng Hóa — lưu lại "Người Cập Nhật Gần Nhất"
+
+Theo yêu cầu TRỰC TIẾP của người dùng ("Tôi đồng ý và bạn lưu lại ai là người ghi nhận là được") NGAY SAU
+KHI mở quyền Sửa/Xóa/Cập Nhật/Bán Hết cho `shelfRecordCreate` (v30.26) — từ nay bất kỳ ai cũng sửa được
+ghi nhận của đồng nghiệp khác nên `creator`/`creatorName` (người TẠO ĐẦU TIÊN, bất biến) không còn đủ để
+biết ai vừa thao tác gần nhất.
+
+- `lib/shelfStockEdit.js`: `applyShelfRecordEdit()` (dùng chung cho Sửa/Cập Nhật nhanh/Bán Hết) nay ghi
+  thêm `lastEditedBy`/`lastEditedByName`/`lastEditedAt` = người ĐANG thực hiện hành động, KHÔNG đụng
+  `creator`/`creatorName` gốc.
+- `public/js/module-vanhanh.js`: thêm `renderShelfRecordLastEditedCell()` dùng chung, thêm cột "Người Cập
+  Nhật Gần Nhất" vào cả 3 bảng hiện ghi nhận (📷 Ghi Nhận "20 gần nhất", ⏰ Hạn Sử Dụng, 📑 Báo Cáo + cột
+  tương ứng khi Xuất Excel) — rỗng/"—" nếu chưa ai từng sửa.
+
+Mở rộng `tests/test-shelf-record-create-can-edit.js` xác nhận field mới + cột hiện đúng tên sau Sửa/Cập
+Nhật. Chạy lại full regression liên quan — không có ảnh hưởng module khác.
 
 ## v30.26 (2026-11): Kiểm Soát Hàng Hóa — quyền "Ghi Nhận Trên Kệ" tự Sửa/Xóa/Cập Nhật/Bán Hết được
 
