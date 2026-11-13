@@ -63,7 +63,7 @@ async function shot(page, selector, file) {
 
     // ===== BƯỚC 1: trước khi Cập Nhật — badge "Lần cuối" (quá khứ), Đối Chiếu Quá Khứ=10 =====
     await shot(page, '#vanHanhShelfWrap', '01-han-su-dung-truoc-cap-nhat-badge-qua-khu.png');
-    const badgeBefore = await page.evaluate(() => document.querySelector('#vhShelfExpiryBody tr')?.children[4]?.textContent.trim());
+    const badgeBefore = await page.evaluate(() => document.querySelector('#vhShelfExpiryBody tr')?.children[6]?.textContent.trim());
     console.log('Badge trước Cập Nhật:', badgeBefore);
     assert.ok(badgeBefore.includes('Lần cuối'), `LỖI: badge trước Cập Nhật phải là "Lần cuối: ..." (quá khứ), thực tế: "${badgeBefore}"`);
 
@@ -88,7 +88,7 @@ async function shot(page, selector, file) {
     await page.click('#vhShelfExpiryBody [data-op="quickUpdateShelfRecordQuantity"][data-arg0="4"]');
     await page.waitForTimeout(300);
 
-    const badgeAfter = await page.evaluate(() => document.querySelector('#vhShelfExpiryBody tr')?.children[4]?.textContent.trim());
+    const badgeAfter = await page.evaluate(() => document.querySelector('#vhShelfExpiryBody tr')?.children[6]?.textContent.trim());
     console.log('Badge sau Cập Nhật:', badgeAfter);
     assert.ok(badgeAfter.includes('Đã kiểm hôm nay'), `LỖI ĐÃ VÁ chưa đúng: badge sau Cập Nhật phải là "🟢 Đã kiểm hôm nay", thực tế: "${badgeAfter}"`);
     await shot(page, '#vanHanhShelfWrap', '03-han-su-dung-sau-cap-nhat-badge-hom-nay.png');

@@ -937,7 +937,7 @@
              GỌN, bấm nút để mở ra. Có lọc đang áp dụng thì bỏ giới hạn 20 dòng gần nhất (xem
              shelfRecordRecentFilteredItems(), module-vanhanh.js). -->
         <div class="flex items-center justify-between mb-1">
-          <span class="text-xs font-bold text-gray-600">20 ghi nhận gần nhất</span>
+          <span class="text-xs font-bold text-gray-600">Danh sách ghi nhận</span>
           <button type="button" data-op="toggleShelfRecordRecentFilterPanel" id="btnToggleShelfRecordRecentFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
         </div>
         <div id="shelfRecordRecentFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-6 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
@@ -980,14 +980,19 @@
                 <th class="border p-2">Số Lượng</th>
                 <th class="border p-2">Hạn Sử Dụng</th>
                 <th class="border p-2">Thời Gian Ghi Nhận</th>
-                <th class="border p-2">Người Cập Nhật Gần Nhất</th>
+                <th class="border p-2">Người Ghi Nhận</th>
+                <th class="border p-2 max-w-[110px]">Người Cập Nhật Gần Nhất</th>
                 <th class="border p-2">Thao Tác</th>
               </tr>
             </thead>
             <tbody id="vhShelfRecordRecentBody"></tbody>
           </table>
         </div>
-        <p class="text-gray-400 text-[11px]">20 ghi nhận gần nhất của siêu thị bạn. Quầy kệ phải chọn từ danh mục đã khai báo ở tab "🗄️ Quầy Kệ" — không gõ tay tên quầy mới ở đây. Scan lại ĐÚNG Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng của 1 dòng đang theo dõi sẽ CẬP NHẬT số lượng dòng đó (không cộng dồn) — Hạn Sử Dụng khác sẽ tạo lô mới.</p>
+        <!-- Phân trang (11/2026, theo yêu cầu người dùng: "cho phép ghi nhận ko giới hạn và bạn phân
+             trang giúp mình") — dùng chung buildPaginationBoxHTML()/paginateList() (core.js), cùng khuôn
+             mọi module danh sách khác trong hệ thống. -->
+        <div id="paginationContainer_shelfRecordRecent"></div>
+        <p class="text-gray-400 text-[11px]">Toàn bộ ghi nhận của siêu thị bạn. Quầy kệ phải chọn từ danh mục đã khai báo ở tab "🗄️ Quầy Kệ" — không gõ tay tên quầy mới ở đây. Scan lại ĐÚNG Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng của 1 dòng đang theo dõi sẽ CẬP NHẬT số lượng dòng đó (không cộng dồn) — Hạn Sử Dụng khác sẽ tạo lô mới.</p>
       </div>
 
       <!-- Sub-tab 2: Quầy Kệ (danh mục) — CHỈ shelfLocationManage/admin thấy được form thêm/sửa/nhập Excel. -->
@@ -1031,7 +1036,8 @@
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Ngành Hàng</label>
-            <input id="slfCategory" data-op-input="onShelfLocationFilterChanged" placeholder="Tìm ngành hàng..." class="w-full border p-1 rounded">
+            <input id="slfCategory" data-sdd-list="slfCategoryDropdown" data-op-input="onShelfLocationFilterChanged" placeholder="Tìm ngành hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="slfCategoryDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Trạng Thái</label>
@@ -1059,6 +1065,7 @@
             <tbody id="vhShelfLocationsBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_shelfLocation"></div>
         <p class="text-gray-400 text-[11px]">Mỗi siêu thị chỉ quản lý được quầy kệ của chính mình. Siêu thị không đổi được sau khi tạo (đổi coi như tạo quầy kệ mới ở siêu thị khác). "Ngừng dùng" chỉ ẩn quầy khỏi danh sách chọn ở "Ghi Nhận", vẫn còn trong danh mục và không xoá lịch sử đã ghi nhận — dùng "🗑️ Xoá" nếu muốn xoá HẲN khỏi danh mục (lịch sử ghi nhận cũ vẫn giữ nguyên, không hoàn tác được).</p>
       </div>
 
@@ -1154,13 +1161,15 @@
                 <th class="border p-2">Hạn Sử Dụng</th>
                 <th class="border p-2">Trạng Thái Hạn</th>
                 <th class="border p-2">Tồn Kho Hệ Thống</th>
-                <th class="border p-2">Người Cập Nhật Gần Nhất</th>
+                <th class="border p-2">Người Ghi Nhận</th>
+                <th class="border p-2 max-w-[110px]">Người Cập Nhật Gần Nhất</th>
                 <th class="border p-2">Thao Tác</th>
               </tr>
             </thead>
             <tbody id="vhShelfExpiryBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_shelfExpiry"></div>
         <p class="text-gray-400 text-[11px]">Chỉ hiện sản phẩm đã ghi nhận có nhập Hạn Sử Dụng và còn đang theo dõi (Số Lượng &gt; 0), sắp theo hạn gần nhất lên đầu. Cột "Tồn Kho Hệ Thống" so sánh TỔNG số lượng đang theo dõi của cùng 1 mã hàng (cộng mọi lô/hạn sử dụng khác nhau) với tồn kho thật từ API đối tác — không liên quan Ngưỡng Tồn.</p>
       </div>
 
@@ -1273,6 +1282,7 @@
             <tbody id="vhShelfReconBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_shelfRecon"></div>
         <p id="shelfReconNote" class="text-gray-400 text-[11px]"></p>
 
         <!-- "✉️ Người Nhận Email Báo Cáo Lệch" (11/2026, theo yêu cầu người dùng "đối chiếu cũng sẽ đặt
@@ -1331,6 +1341,7 @@
             <tbody id="shelfReportBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_shelfReport"></div>
         <p class="text-gray-400 text-[11px]">Liệt kê TỪNG mã hàng đã ghi nhận lên kệ (không gộp theo mã như "📊 Đối Chiếu"). "Đã bán hết" = đã bấm "✅ Bán Hết" ở Ghi Nhận (Số Lượng về 0), vẫn giữ trong lịch sử. Cột "Tồn Kho Hệ Thống" chỉ có dữ liệu cho ĐÚNG siêu thị của bạn (đã cấu hình Mã Điểm) — dòng của siêu thị khác hiện "—".</p>
       </div>
 
