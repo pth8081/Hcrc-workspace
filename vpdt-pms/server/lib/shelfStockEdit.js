@@ -125,13 +125,22 @@ function applyShelfStockThresholdEdit(item, body, user, allUsers) {
 function canManageShelfRecords(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
 }
-// Sửa/Xóa/Bán Hết/Trừ (xoá VĨNH VIỄN hoặc đổi số liệu của ghi nhận NGƯỜI KHÁC đã tạo) đòi hỏi quyền CAO
-// HƠN tạo mới — đúng nguyên văn đã chốt: "gác theo shelfLocationManage/admin, giống mọi hành động quản lý
-// khác của Kiểm Soát Hàng Hóa" (Quầy Kệ/Ngưỡng Tồn), KHÔNG dùng chung canManageShelfRecords() ở trên (lỗ
-// hổng thật đã xảy ra: 1 nhân viên chỉ có shelfRecordCreate — scan được — lại xoá/sửa vĩnh viễn được ghi
-// nhận của BẤT KỲ ai khác trong cùng siêu thị).
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng kèm ảnh chụp 2 màn: "quyền Ghi Nhận Trên
+// Kệ [chỉ shelfRecordCreate] phải tự Sửa/Xóa/Cập Nhật nhanh/Bán Hết được ngay trên bảng ghi nhận, không
+// bắt buộc phải cấp thêm quyền Quản Lý Danh Mục Quầy Kệ"): client ĐÃ LUÔN hiện sẵn cụm nút Sửa/Xóa/SL
+// hiện tại-Cập Nhật/Bán Hết cho MỌI người có shelfRecordCreate (renderShelfRecordActionsCell() chỉ gác
+// canCreateShelfRecordClient(), xem module-vanhanh.js) — trước đợt này bấm vào đều bị server 403 vì hàm
+// dưới đây CHỈ nhận shelfLocationManage/admin, tạo ra trải nghiệm "thấy nút nhưng bấm không được".
+//
+// LỊCH SỬ (để tham chiếu, không còn áp dụng): trước đó hàm này CỐ Ý tách khỏi canManageShelfRecords() ở
+// trên sau khi phát hiện lỗ hổng "1 nhân viên chỉ có shelfRecordCreate — scan được — lại xoá/sửa vĩnh
+// viễn được ghi nhận của BẤT KỲ ai khác trong cùng siêu thị". Người dùng (chủ hệ thống) nay xác nhận đây
+// là hành vi MONG MUỐN, không phải lỗ hổng — nhân viên ghi nhận hằng ngày cần tự sửa luôn số liệu/đánh
+// dấu bán hết mà không phải chờ Cửa Hàng Trưởng (shelfLocationManage) — phạm vi vẫn luôn giới hạn ĐÚNG
+// siêu thị của người đó (kiểm tra item.dept !== user.dept ngay dưới mỗi hàm gọi tới đây), chỉ không còn
+// phân biệt "người tạo ra ghi nhận" nữa.
 function canManageShelfRecordEdits(user) {
-  return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
+  return !!(user?.perms?.admin || user?.perms?.shelfLocationManage || user?.perms?.shelfRecordCreate);
 }
 
 // quantity/expiryDate/note sửa được; shelfLocationId/maHang/maVach/dept BẤT BIẾN (đổi định danh sản phẩm
