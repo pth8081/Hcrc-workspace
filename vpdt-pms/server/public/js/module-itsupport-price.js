@@ -1266,10 +1266,26 @@ function buildItPriceRowHtml(p, context) {
 // giữ gọn, nhưng người dùng xác nhận vẫn cần tìm kiếm — chỉ cần gọn dạng thu gọn/mở ra khi cần, không
 // cần luôn hiện sẵn như Hỗ Trợ IT); sắp mới nhất lên đầu vì đây là danh sách "theo dõi phiếu của mình",
 // không phải hàng đợi xử lý.
+// Dashboard thẻ-bấm-để-lọc (11/2026, theo yêu cầu người dùng "làm dashboard giống kiểu đơn đặt hàng") —
+// MIRROR đúng khối scopedItPrice/itPriceDashCards ở renderItPriceApprovals() bên dưới (Hỗ Trợ IT), chỉ
+// khác đúng 1 chỗ: ĐÃ CỐ ĐỊNH priceType='RETAIL' (không đọc activeItPriceSubTab, màn Mua Hàng này luôn
+// chỉ có Bán Lẻ). Đếm theo scopedMhItPrice (CHỈ lọc theo quyền xem + priceType, KHÔNG áp bộ lọc trạng
+// thái/ngày/từ khoá đang gõ) để tổng số liệu ổn định dù đang lọc gì — bấm 1 thẻ chỉ ĐỔI bộ lọc trạng thái.
 function renderMhItPriceList() {
   const tbody = document.getElementById('mhItPriceTableBody');
   if (!tbody) return;
   const statusFilter = document.getElementById('filterStatusMhItPrice')?.value || '';
+  const dashCardsEl = document.getElementById('mhItPriceDashboardCards');
+  if (dashCardsEl) {
+    const scopedMhItPrice = DB.itPriceApprovals.filter(p => (p.priceType || 'RETAIL') === 'RETAIL' && canViewItPriceApproval(currentUser, p));
+    const mhItPriceDashCards = [
+      { key: '', label: 'Tổng Đề Xuất', count: scopedMhItPrice.length, colorClass: 'border-l-blue-500' },
+      { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedMhItPrice.filter(p => p.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
+      { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedMhItPrice.filter(p => p.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+      { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedMhItPrice.filter(p => p.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    ];
+    dashCardsEl.innerHTML = buildDashboardCardsHTML(mhItPriceDashCards, statusFilter, 'filterMhItPriceByCard');
+  }
   const appliedFilter = document.getElementById('filterAppliedMhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateMhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateMhItPrice')?.value || '';
@@ -1312,6 +1328,9 @@ function onMhItPriceFilterChange() {
   resetListPage('mhItPrice');
   renderMhItPriceList();
 }
+function filterMhItPriceByCard(status) {
+  applyDashboardCardFilter({ filterStatusMhItPrice: status }, 'mhItPrice', renderMhItPriceList);
+}
 function resetMhItPriceFilters() {
   document.getElementById('filterStatusMhItPrice').value = '';
   document.getElementById('filterAppliedMhItPrice').value = '';
@@ -1321,10 +1340,23 @@ function resetMhItPriceFilters() {
   resetListPage('mhItPrice');
   renderMhItPriceList();
 }
+// Dashboard thẻ-bấm-để-lọc (11/2026) — mirror đúng khối ở renderMhItPriceList() ngay trên, CỐ ĐỊNH
+// priceType='WHOLESALE' (màn Vận Hành này luôn chỉ có Bán Buôn).
 function renderVanHanhItPriceList() {
   const tbody = document.getElementById('vanHanhItPriceTableBody');
   if (!tbody) return;
   const statusFilter = document.getElementById('filterStatusVanHanhItPrice')?.value || '';
+  const dashCardsEl = document.getElementById('vanHanhItPriceDashboardCards');
+  if (dashCardsEl) {
+    const scopedVanHanhItPrice = DB.itPriceApprovals.filter(p => p.priceType === 'WHOLESALE' && canViewItPriceApproval(currentUser, p));
+    const vanHanhItPriceDashCards = [
+      { key: '', label: 'Tổng Đề Xuất', count: scopedVanHanhItPrice.length, colorClass: 'border-l-blue-500' },
+      { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedVanHanhItPrice.filter(p => p.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
+      { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedVanHanhItPrice.filter(p => p.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+      { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedVanHanhItPrice.filter(p => p.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    ];
+    dashCardsEl.innerHTML = buildDashboardCardsHTML(vanHanhItPriceDashCards, statusFilter, 'filterVanHanhItPriceByCard');
+  }
   const appliedFilter = document.getElementById('filterAppliedVanHanhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateVanHanhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateVanHanhItPrice')?.value || '';
@@ -1362,6 +1394,9 @@ async function refreshVanHanhItPriceList() {
 function onVanHanhItPriceFilterChange() {
   resetListPage('vanHanhItPrice');
   renderVanHanhItPriceList();
+}
+function filterVanHanhItPriceByCard(status) {
+  applyDashboardCardFilter({ filterStatusVanHanhItPrice: status }, 'vanHanhItPrice', renderVanHanhItPriceList);
 }
 function resetVanHanhItPriceFilters() {
   document.getElementById('filterStatusVanHanhItPrice').value = '';
