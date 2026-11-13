@@ -189,6 +189,63 @@ async function openReportTab(page) {
     await browser.close();
   }
 
+  // ===== Kịch bản 3: LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp: "lúc vào tab không hiện luôn báo
+  // cáo mặc dù có siêu thị đã thực hiện, phải chuyển qua lại mới hiển thị tất cả các siêu thị") — mô
+  // phỏng mạng CHẬM (route report-all cố tình trễ) để xác nhận bảng vẫn hiện ĐÚNG các dòng ghi nhận NGAY
+  // LẬP TỨC, không cần đợi xong lượt gọi mạng tra Tồn Kho Hệ Thống mới hiện. =====
+  {
+    const MANAGER = { username: 'qlv2', name: 'Phạm Thị Quản Lý Vùng 2', dept: 'Ban Điều Hành', perms: { vanHanhShelfTab: true, shelfReportView: { all: true, depts: [] } }, active: true, totpEnabled: true };
+    const state = createMockState({ depts: [], stores: ['Siêu thị Quận 1', 'Siêu thị Quận 3'], users: [MANAGER] });
+    seedShelfRecords(state);
+    state.__mockSystemInventoryByDept = {
+      'Siêu thị Quận 1': [{ maHang: 'SP001', tenHang: 'Bánh quy HCRC 200g', soLuongTon: 50 }],
+      'Siêu thị Quận 3': [{ maHang: 'SP001', tenHang: 'Bánh quy HCRC 200g', soLuongTon: 32 }]
+    };
+    const { browser, page } = await launchPage(PORT, state);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
+    // Mô phỏng mạng chậm — CHỈ trễ ĐÚNG route report-all (1.5s), giữ nguyên hành vi mọi route khác, để
+    // tái hiện đúng kịch bản "mạng di động chậm" người dùng mô tả.
+    await page.evaluate(() => {
+      const realFetch = window.fetch;
+      window.fetch = (url, opts) => {
+        if (String(url).includes('/system-inventory/report-all')) {
+          return new Promise((resolve) => setTimeout(() => resolve(realFetch(url, opts)), 1500));
+        }
+        return realFetch(url, opts);
+      };
+    });
+    await page.evaluate(() => { switchTab('vanHanh'); });
+    await page.click('[data-op="setVanHanhSubTab"][data-tab="SHELF"]');
+    await page.click('#btnVhShelfSubReport');
+    // Kiểm tra NGAY LẬP TỨC (100ms, còn lâu mới tới 1.5s của lượt gọi mạng giả lập) — bảng phải ĐÃ hiện
+    // đủ 5 dòng ghi nhận, Tồn Kho Hệ Thống tạm "—" (chưa có dữ liệu), KHÔNG được trống trơn.
+    await page.waitForTimeout(100);
+    const infoImmediate = await page.evaluate(() => ({
+      rowCount: document.querySelectorAll('#shelfReportBody tr').length,
+      headerText: document.getElementById('shelfReportHeader').textContent,
+      sysStockValues: Array.from(document.querySelectorAll('#shelfReportBody tr')).map(tr => tr.children[7]?.textContent.trim())
+    }));
+    console.log('[Kịch bản 3 - Ngay lập tức, mạng còn đang tải]', infoImmediate);
+    assert.strictEqual(infoImmediate.rowCount, 5, `LỖI (bug tái hiện): bảng phải hiện ĐỦ 5 dòng NGAY LẬP TỨC dù lượt gọi mạng tra Tồn Kho Hệ Thống còn đang chạy, thực tế: ${infoImmediate.rowCount} dòng`);
+    assert.strictEqual(infoImmediate.headerText, '📍 Đang xem báo cáo tổng hợp: 2 siêu thị (theo quyền "Xem Báo Cáo Kiểm Soát Hàng Hóa").');
+    assert.ok(infoImmediate.sysStockValues.every(v => v === '—'), 'LỖI: lúc mạng còn đang tải, Tồn Kho Hệ Thống phải tạm hiện "—" (chưa có dữ liệu), không phải lỗi/giá trị sai');
+
+    // Đợi lượt gọi mạng giả lập hoàn tất (1.5s) rồi kiểm tra lại — Tồn Kho Hệ Thống phải tự cập nhật đúng
+    // số thật, KHÔNG cần người dùng thao tác/chuyển qua lại gì thêm.
+    await page.waitForTimeout(1600);
+    const infoAfter = await page.evaluate(() => ({
+      rowCount: document.querySelectorAll('#shelfReportBody tr').length,
+      sysStockValues: Array.from(document.querySelectorAll('#shelfReportBody tr')).map(tr => ({ maHang: tr.children[1]?.textContent.trim(), dept: tr.children[0]?.textContent.trim(), sysStock: tr.children[7]?.textContent.trim() }))
+    }));
+    console.log('[Kịch bản 3 - Sau khi mạng tải xong, tự cập nhật]', infoAfter);
+    assert.strictEqual(infoAfter.rowCount, 5, 'LỖI: vẫn phải giữ đủ 5 dòng sau khi mạng tải xong');
+    const sp001Q1 = infoAfter.sysStockValues.find(r => r.dept === 'Siêu thị Quận 1' && r.maHang === 'SP001');
+    assert.strictEqual(sp001Q1.sysStock, '50', 'LỖI: Tồn Kho Hệ Thống phải TỰ cập nhật đúng số thật sau khi mạng tải xong, không cần chuyển qua lại');
+    console.log('✅ Kịch bản 3 PASS — bảng hiện ngay, tự cập nhật Tồn Kho Hệ Thống khi mạng chậm.');
+    await browser.close();
+  }
+
   server.close();
   console.log('\n✅ Demo preview hoàn tất — ảnh lưu tại:', OUT_DIR);
 })().catch((err) => { console.error(err); process.exit(1); });

@@ -765,8 +765,20 @@ let shelfReportSystemInventoryCache = null; // { multi:false, maDiem, dept, rows
 // vào DB.shelfRecords) giờ chạy TRƯỚC để quyết định gọi route nào: nhiều siêu thị (quyền shelfReportView)
 // gọi route MỚI /system-inventory/report-all (trả về theo TỪNG siêu thị được phép xem, 1 lượt SQL duy
 // nhất cho mọi siêu thị — xem routes/shelfStock.js), đúng 1 siêu thị vẫn giữ nguyên scope=recon như cũ.
+//
+// LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp: "lúc vào tab không hiện luôn báo cáo mặc dù có siêu thị
+// đã thực hiện, phải chuyển qua lại mới hiển thị tất cả các siêu thị"): TRƯỚC ĐÂY renderShelfReportTable()
+// CHỈ được gọi SAU KHI `await` xong lượt gọi mạng tra Tồn Kho Hệ Thống ở trên — trên mạng chậm/di động,
+// trong lúc chờ đó bảng vẫn TRỐNG TRƠN (kể cả khi DB.shelfRecords đã có sẵn đủ dữ liệu phía client, không
+// cần chờ mạng), người dùng tưởng nhầm là không có báo cáo; đổi bộ lọc "Siêu Thị" ở dưới vô tình kích hoạt
+// LẠI renderShelfReportTable() (qua data-op-change="renderShelfReportTable" của chính ô đó) nên mới thấy
+// dữ liệu. Giờ gọi renderShelfReportTable() NGAY LẬP TỨC (hiện đúng các dòng ghi nhận đã có, cột "Tồn Kho
+// Hệ Thống" tạm hiện "—" vì shelfReportSystemInventoryCache chưa có), rồi gọi LẠI 1 lần nữa sau khi có kết
+// quả tra Tồn Kho Hệ Thống để tự cập nhật đúng cột đó — hàm renderShelfReportTable() thuần đọc lại state
+// hiện tại (không có side-effect gì khác), gọi 2 lần an toàn tuyệt đối.
 async function loadShelfReportTab() {
   populateShelfReportStoreFilter();
+  renderShelfReportTable();
   const isMulti = shelfReportIsMultiStore();
   try {
     if (isMulti) {

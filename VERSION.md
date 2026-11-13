@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**30.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.20 (2026-11): "📑 Báo Cáo" Kiểm Soát Hàng Hóa — bảng trống lúc mới vào tab, phải đổi bộ lọc mới hiện
+
+Người dùng báo kèm ảnh chụp: "lúc vào tab không hiện luôn báo cáo mặc dù có siêu thị đã thực hiện, phải
+chuyển qua lại mới hiển thị tất cả các siêu thị". Nguyên nhân: `loadShelfReportTab()` CHỈ gọi
+`renderShelfReportTable()` SAU KHI `await` xong lượt gọi mạng tra Tồn Kho Hệ Thống (route `report-all`
+thêm ở v30.17, quét nhiều siêu thị cùng lúc nên có thể chậm hơn) — trên mạng chậm/di động, trong lúc chờ
+đó bảng vẫn trống trơn dù `DB.shelfRecords` phía client đã có sẵn đủ dữ liệu, không cần chờ mạng; đổi bộ
+lọc "Siêu Thị" vô tình kích hoạt lại `renderShelfReportTable()` (qua chính sự kiện đổi của ô đó) nên mới
+thấy dữ liệu, khiến người dùng tưởng phải "chuyển qua lại" mới xem được.
+
+**Đã vá**: gọi `renderShelfReportTable()` NGAY LẬP TỨC (hiện đúng các dòng ghi nhận đã có, cột "Tồn Kho
+Hệ Thống" tạm hiện "—"), rồi gọi lại 1 lần nữa sau khi có kết quả tra Tồn Kho Hệ Thống để tự cập nhật
+đúng cột đó — không cần người dùng thao tác gì thêm. `public/js/module-vanhanh.js`.
+
+**Test**: mở rộng `tests/test-shelf-report-tab.js` (kịch bản 3 mới, mô phỏng mạng chậm 1.5s ở route
+report-all — xác nhận bảng hiện đủ dòng NGAY trong 100ms đầu, tự cập nhật Tồn Kho Hệ Thống đúng số sau
+khi mạng tải xong; đã xác nhận test fail đúng như lỗi báo cáo nếu bỏ bản vá — git-stash so sánh) + chạy
+lại 12 test Kiểm Soát Hàng Hóa/Tồn Kho liên quan khác, không regression.
 
 ## v30.19 (2026-11): "🖼️ Cây Sơ Đồ Tổ Chức" — nút thu gọn khung khai báo Phòng Ban
 
