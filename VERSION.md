@@ -1,8 +1,53 @@
 # Phiên bản hiện tại
 
-**30.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.22 (2026-11): Quy Trình & Phê Duyệt — cấu hình "Chỉ cần 1 người duyệt" theo từng bước (PHASE 1)
+
+Theo yêu cầu người dùng: "ở các bước trong quy trình, cho phép cấu hình — có nhiều người thì cho phép
+MỘT TRONG NHỮNG NGƯỜI đó phê duyệt là có thể qua, chứ không phải bài toán AND (đồng phê duyệt) nữa —
+nhưng phải ĐỘNG, tôi chọn thì nó mới thực hiện như vậy, còn không thì thôi".
+
+**Tính năng mới**: thêm nút "⚡ Chỉ cần 1 người duyệt" ngay cạnh nút "🧭 Theo vị trí" đã có, ở từng bước
+tại màn Hệ Thống > Quy Trình & Phê Duyệt. **Mặc định TẮT** — giữ nguyên hành vi "đồng phê duyệt" cũ (cần
+đủ TẤT CẢ người được gán duyệt ở bước đó). **Bật lên** cho đúng bước nào thì bước đó chỉ cần 1 trong số
+người được gán duyệt bấm Duyệt là đủ, chuyển bước/kết thúc quy trình ngay — các bước khác không đụng tới.
+
+**Phạm vi PHASE 1 (đã wire xong engine + UI, test kỹ)**: Tài Liệu, Đăng Ký Xe, Mua Bán VP, Sửa Chữa VP,
+Văn Phòng Phẩm, Hợp Đồng (Quản Lý HĐ — Tài Liệu Ký), Thanh Toán, Ngân Sách (Đề Xuất), Phê Duyệt Giá Bán
+Lẻ — tất cả đi qua `flatWorkflowConfigToSteps()` trực tiếp (không snapshot, không quy tắc duyệt hỗn hợp
+theo ngành hàng/siêu thị).
+
+**CHƯA áp dụng (PHASE 2, để đợt sau)**: Văn Bản Trình, Hợp Đồng (Phê Duyệt gốc) — snapshot quy trình lúc
+tạo hồ sơ (`effectiveSteps`); Phê Duyệt Giá Bán Buôn, Đặt Hàng Tại Siêu Thị/HO — duyệt theo "Quy Tắc
+Duyệt Hỗn Hợp" (Ngành Hàng/Siêu Thị), KHÔNG dùng danh sách approver cố định theo phòng ban; Ngân Sách
+(Phê Duyệt cuối) — không đi qua `applyWorkflowAction()` đầy đủ. Nút "⚡ Chỉ cần 1 người duyệt" **cố tình
+KHÔNG hiện** ở màn cấu hình của các quy trình này — tránh 1 tuỳ chọn trông như hoạt động nhưng thực ra
+chưa có tác dụng. Các quy trình duyệt theo điều kiện Ngành Hàng/Siêu Thị hoàn toàn KHÔNG bị ảnh hưởng gì
+bởi đợt này.
+
+**Cơ chế**: cấu hình theo phòng ban (VD `carDeptWorkflows[dept]`) có thêm field mới `coApprovalMode`
+(map `{bước: 'ANY'}`, thiếu/khác `'ANY'` = hành vi ĐỒNG PHÊ DUYỆT cũ) — `flatWorkflowConfigToSteps()`
+(`lib/workflowEngine.js`) gắn thẳng thành `steps[i].anyApprover`, `applyWorkflowAction()` đọc
+`steps[currentStep-1]?.anyApprover` truyền vào `isStepApprovalComplete()` (cả server lẫn bản mirror
+client `core.js`) để quyết định dùng `.some()` (chỉ cần 1) hay `.every()` (cần đủ tất cả, mặc định).
+Badge tiến độ ở danh sách hồ sơ cũng hiện rõ "— chỉ cần 1 người là đủ" khi bước đó đã bật.
+
+`lib/workflowEngine.js`, `public/js/core.js`, `public/js/module-ngansach.js` (nút mới ở màn cấu hình),
+`public/js/module-itsupport-tier.js` (thu thập/lưu `coApprovalMode`), `public/js/module-workflow.js`
+(cờ `supportsAnyApprover` giới hạn đúng 9 module Phase 1), `public/js/module-dangkyxe.js`/
+`module-office.js`/`module-tailieu.js`/`module-vanbantrinh.js`/`module-itsupport-price.js` (badge tiến
+độ).
+
+**Test**: `tests/test-workflow-any-approver-config.js` (mới, 7 scenario qua route duyệt thật `routes/
+workflow.js` — xác nhận: không cấu hình/cấu hình "ALL" tường minh thì vẫn cần đủ mọi người (regression);
+bật "ANY" thì 1 người duyệt là đủ, chuyển bước/APPROVED ngay; người ngoài danh sách vẫn bị chặn 403 (không
+nới lỏng `canApproveStep()`); quy trình 2 bước xác nhận bước khác không bị ảnh hưởng) + chạy lại toàn bộ
+test Quy Trình/Đăng Ký Xe/Văn Phòng/Thanh Toán/Ngân Sách/Phê Duyệt Giá/Hợp Đồng liên quan (~180 scenario),
+không regression (1 lỗi `test-vpp.js` không liên quan — đã xác nhận tồn tại từ trước đợt này, không phải
+do thay đổi lần này).
 
 ## v30.21 (2026-11): Checklist — màn "Xem Lại Toàn Bộ Trước Khi Nộp" + ảnh minh chứng cho browse thư viện
 
