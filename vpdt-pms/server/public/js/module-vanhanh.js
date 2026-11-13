@@ -423,18 +423,36 @@ function resolveShelfLocationInput() {
 // Kết quả: shelfRecords.maHang CÓ GIÁ TRỊ dù gõ tay/picker/camera-tự-khớp (Đối Chiếu chỉ cần maHang
 // không rỗng, không quan tâm nguồn gốc) — khác hẳn thiết kế CŨ trước 11/2026 (chỉ gán được qua picker). =====
 let shelfSystemInventoryCache = [];
+// rowHasMaVach(r, code)/rowMaVachEndsWith(r, code) — 1 mã hàng có thể đăng ký NHIỀU mã vạch hợp lệ
+// (11/2026, đối tác bổ sung field `dsMaVach` ở API "Tồn Kho" theo đúng yêu cầu của mình — LỖI THẬT người
+// dùng báo kèm ảnh chụp: quét/gõ ĐÚNG 1 mã vạch hợp lệ nhưng KHÔNG PHẢI mã vạch mặc định, VD mã hàng G7
+// Cà Phê 3in1 đăng ký 3 mã vạch 8935024122310/8935024123096/8935024912607 nhưng trường `maVach` cũ chỉ
+// giữ đúng 1 mã mặc định — hệ thống báo sai "không khớp" dù mã vạch đó hoàn toàn hợp lệ). `dsMaVach`
+// (mảng, LUÔN chứa cả giá trị đang có ở `maVach`) là danh sách ĐẦY ĐỦ — dùng CHUNG 2 hàm này cho MỌI nơi
+// so khớp mã vạch bên dưới, tránh lặp lại/lệch nhau logic. Dữ liệu cũ/dòng thiếu field này (chưa đồng bộ
+// lại, hoặc đối tác chưa trả) vẫn hoạt động bình thường — rơi về đúng hành vi cũ (chỉ so `r.maVach`).
+function rowHasMaVach(r, code) {
+  if (!r || !code) return false;
+  if (r.maVach === code) return true;
+  return Array.isArray(r.dsMaVach) && r.dsMaVach.includes(code);
+}
+function rowMaVachEndsWith(r, code) {
+  if (!r) return false;
+  if (r.maVach && String(r.maVach).endsWith(code)) return true;
+  return Array.isArray(r.dsMaVach) && r.dsMaVach.some(v => v && String(v).endsWith(code));
+}
 // So khớp 1 mã vạch đã quét/gõ tay với tồn kho hệ thống ĐÃ TẢI (đúng siêu thị người dùng, cùng tập dữ
 // liệu picker đang dùng — KHÔNG gọi thêm route nào). code rỗng hoặc không khớp -> null.
 function matchShelfSystemInventoryByMaVach(code) {
   if (!code) return null;
-  return shelfSystemInventoryCache.find(r => r.maVach && r.maVach === code) || null;
+  return shelfSystemInventoryCache.find(r => rowHasMaVach(r, code)) || null;
 }
-// matchShelfSystemInventoryBySuffix(code) — hỗ trợ gõ tay CHỈ 6 SỐ CUỐI của Mã Vạch (NCC) hoặc Mã Hàng
-// (nội bộ) thay vì phải gõ đủ mã dài (Mã Vạch EAN-13 tới 13 số, dễ gõ sai/nhìn nhầm) — theo yêu cầu
-// người dùng (11/2026, "kiểm tra 6 số cuối theo mã ncc hoặc nội bộ"). Dùng chung cho CẢ "📷 Ghi Nhận"
-// (applyShelfBarcodeMatch()) lẫn "💲 Kiểm Tra Giá" (submitPriceCheck()) — CHỈ áp dụng khi input ĐÚNG 6
-// chữ số (không mò đoán với mã dài gõ sai 1-2 ký tự cuối — vẫn coi là "không khớp" như cũ, an toàn hơn
-// là tự ý đoán nhầm). Trả về:
+// matchShelfSystemInventoryBySuffix(code) — hỗ trợ gõ tay CHỈ 6 SỐ CUỐI của Mã Vạch (NCC, bất kỳ mã vạch
+// nào trong dsMaVach — không riêng mã mặc định) hoặc Mã Hàng (nội bộ) thay vì phải gõ đủ mã dài (Mã Vạch
+// EAN-13 tới 13 số, dễ gõ sai/nhìn nhầm) — theo yêu cầu người dùng (11/2026, "kiểm tra 6 số cuối theo mã
+// ncc hoặc nội bộ"). Dùng chung cho CẢ "📷 Ghi Nhận" (applyShelfBarcodeMatch()) lẫn "💲 Kiểm Tra Giá"
+// (submitPriceCheck()) — CHỈ áp dụng khi input ĐÚNG 6 chữ số (không mò đoán với mã dài gõ sai 1-2 ký tự
+// cuối — vẫn coi là "không khớp" như cũ, an toàn hơn là tự ý đoán nhầm). Trả về:
 //   - null nếu Tồn Kho Hệ Thống (shelfSystemInventoryCache) không có dòng nào khớp.
 //   - { unique: row } nếu khớp ĐÚNG 1 dòng duy nhất — đủ tin cậy để tự động điền/tra giá luôn.
 //   - { candidates: [rows...] } nếu khớp NHIỀU dòng (6 số cuối không đủ phân biệt) — KHÔNG được tự ý
@@ -443,7 +461,7 @@ function matchShelfSystemInventoryByMaVach(code) {
 function matchShelfSystemInventoryBySuffix(code) {
   if (!/^\d{6}$/.test(code)) return null;
   const matches = shelfSystemInventoryCache.filter(r =>
-    (r.maHang && String(r.maHang).endsWith(code)) || (r.maVach && String(r.maVach).endsWith(code))
+    (r.maHang && String(r.maHang).endsWith(code)) || rowMaVachEndsWith(r, code)
   );
   if (!matches.length) return null;
   if (matches.length === 1) return { unique: matches[0] };
@@ -1500,7 +1518,9 @@ function classifyShelfSystemStockDiscrepancy(systemStock, trackedTotal) {
 // "tồn kho hệ thống của mã hàng này = tổng mọi dòng con" đã áp dụng cho Đối Chiếu.
 function findSystemInventoryQtyForProduct(maHang, maVach) {
   if (!shelfSystemInventoryCache || !shelfSystemInventoryCache.length) return null;
-  const matches = shelfSystemInventoryCache.filter(r => (maHang && r.maHang === maHang) || (maVach && r.maVach === maVach));
+  // maVach đã ghi nhận có thể là mã vạch PHỤ (dsMaVach), không nhất thiết là mã mặc định — rowHasMaVach()
+  // so khớp CẢ danh sách, xem chú thích đầy đủ ở hàm đó.
+  const matches = shelfSystemInventoryCache.filter(r => (maHang && r.maHang === maHang) || (maVach && rowHasMaVach(r, maVach)));
   if (!matches.length) return null;
   return matches.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0);
 }
