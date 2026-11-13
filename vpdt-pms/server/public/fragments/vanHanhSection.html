@@ -840,17 +840,20 @@
       <!-- Picker "🔑 Được Chọn Siêu Thị Bất Kỳ" (shelfAnyStoreAccess, 11/2026) — thay THẲNG vào vị trí
            header cố định ở trên cho người có quyền này (admin luôn thấy, vì admin bypass mọi quyền chi
            tiết) — chọn xong, Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm Tra Giá bên
-           dưới áp dụng ĐÚNG siêu thị đã chọn (shelfStoreOverrideDept, module-vanhanh.js). Dùng SELECT
-           thường (KHÔNG phải ô tìm-kiếm-gõ-chọn sdd* — danh sách siêu thị đủ ngắn để duyệt tay, không cần
-           datalist/autocomplete, xem CLAUDE.md phần "Ô tìm-kiếm-gõ-chọn" chỉ áp dụng cho input gõ tay). -->
+           dưới áp dụng ĐÚNG siêu thị đã chọn (shelfStoreOverrideDept, module-vanhanh.js).
+           Ô tìm-kiếm-gõ-chọn ĐƠN (sdd*, 11/2026, theo yêu cầu người dùng — chỉ chọn ĐÚNG 1 siêu thị để
+           thao tác tại 1 thời điểm, khác bộ lọc "Siêu Thị" nhiều lựa chọn ở "📑 Báo Cáo" bên dưới): ĐỔI
+           từ SELECT thường sang widget này vì danh sách siêu thị đã dài hơn (phản hồi người dùng, kèm
+           ảnh chụp) — xem CLAUDE.md phần "Ô tìm-kiếm-gõ-chọn" (KHÔNG dùng datalist native). -->
       <div id="vanHanhShelfStoreOverrideWrap" class="hidden bg-orange-50 border border-orange-200 rounded px-3 py-2 text-xs space-y-2">
         <label class="flex items-center gap-2 font-bold text-orange-800">
           📍 Chọn Siêu Thị Để Thao Tác
           <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-300 rounded-full px-2 py-0.5 text-[10px] font-bold">🔑 Quyền đặc biệt</span>
         </label>
-        <select id="vanHanhShelfStoreOverrideSelect" data-op-change="onShelfStoreOverrideChange" class="w-full md:w-auto border p-1.5 rounded font-bold text-orange-900">
-          <option value="">-- Chọn siêu thị --</option>
-        </select>
+        <div class="relative w-full md:w-80">
+          <input id="vanHanhShelfStoreOverrideSearchInput" data-sdd-list="vanHanhShelfStoreOverrideDropdown" data-op-change="onShelfStoreOverrideSearchChanged" autocomplete="off" placeholder="Gõ tên siêu thị để tìm (để trống = dùng siêu thị của bạn)..." class="w-full border p-1.5 rounded font-bold text-orange-900">
+          <div id="vanHanhShelfStoreOverrideDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
         <div id="vanHanhShelfStoreOverrideConfirm" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 rounded px-2 py-1.5 text-[11px] leading-relaxed"></div>
       </div>
       <div class="flex gap-2 flex-wrap border-b pb-2">
@@ -1179,10 +1182,14 @@
       <div id="vanHanhShelfReportWrap" class="hidden space-y-4">
         <div id="shelfReportHeader" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800"></div>
         <!-- Bộ lọc "Siêu Thị" (CHỈ hiện khi đang xem NHIỀU siêu thị qua shelfReportView — 1 siêu thị thì ẩn
-             hẳn, không cần chọn gì, giống mọi sub-tab khác của Kiểm Soát Hàng Hóa). -->
-        <div id="shelfReportStoreFilterWrap" class="hidden flex items-center gap-2 text-xs">
-          <label class="font-semibold text-gray-600">Siêu Thị:</label>
-          <select id="shelfReportStoreFilter" data-op-change="renderShelfReportTable" class="border p-1.5 rounded"></select>
+             hẳn, không cần chọn gì, giống mọi sub-tab khác của Kiểm Soát Hàng Hóa). CHỌN NHIỀU (11/2026,
+             theo yêu cầu người dùng — "xem báo cáo nhiều siêu thị chọn") — ĐỔI từ SELECT đơn sang widget
+             renderMultiSelectDropdown() dùng chung (core.js, cùng khuôn itPriceStoreScopeStoresMultiSelect
+             ngay trong file này) thay vì tự dựng mới — để trống (không chọn gì) = xem TẤT CẢ siêu thị,
+             giữ ĐÚNG ngữ nghĩa "-- Tất cả siêu thị --" của SELECT cũ. -->
+        <div id="shelfReportStoreFilterWrap" class="hidden text-xs space-y-1">
+          <label class="font-semibold text-gray-600">Siêu Thị (có thể chọn nhiều, để trống = tất cả):</label>
+          <div id="shelfReportStoreFilterMultiSelect" class="border rounded p-2 bg-gray-50 max-w-md"></div>
         </div>
         <div class="flex gap-2">
           <button type="button" data-op="exportShelfReportExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>

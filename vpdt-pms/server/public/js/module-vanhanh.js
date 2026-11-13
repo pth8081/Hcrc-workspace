@@ -257,12 +257,14 @@ function renderVanHanhShelfStoreHeader() {
     }
     return;
   }
-  const select = document.getElementById('vanHanhShelfStoreOverrideSelect');
-  if (select) {
+  // Ô tìm-kiếm-gõ-chọn ĐƠN (sdd*, 11/2026 — đổi từ SELECT thường, xem chú thích đầy đủ ở
+  // vanHanhSection.html): nạp danh sách siêu thị vào dropdown gợi ý + đồng bộ lại giá trị đang hiển thị
+  // trong ô gõ theo ĐÚNG shelfStoreOverrideDept hiện tại (rỗng = chưa chọn, dùng siêu thị của chính mình).
+  const searchInput = document.getElementById('vanHanhShelfStoreOverrideSearchInput');
+  if (searchInput) {
     const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-    select.innerHTML = '<option value="">-- Chọn siêu thị --</option>' +
-      stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-    select.value = shelfStoreOverrideDept || '';
+    sddSetOptions('vanHanhShelfStoreOverrideDropdown', stores);
+    searchInput.value = shelfStoreOverrideDept || '';
   }
   renderShelfStoreOverrideConfirm();
 }
@@ -277,12 +279,27 @@ function renderShelfStoreOverrideConfirm() {
   confirmEl.classList.remove('hidden');
   confirmEl.textContent = `✅ Đang thao tác tại Siêu Thị: ${shelfStoreOverrideDept}. Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu/Báo Cáo/Kiểm Tra Giá bên dưới đều áp dụng cho ĐÚNG siêu thị này — chọn siêu thị khác ở ô trên bất cứ lúc nào để chuyển sang.`;
 }
-// onShelfStoreOverrideChange() — đổi siêu thị xong phải tải/vẽ lại ĐÚNG đúng sub-tab đang mở (giống
-// hệt lúc mở tab lần đầu — setVanHanhShelfSubTab() đã tự gọi đúng hàm nạp dữ liệu cho từng tab theo
-// getEffectiveShelfDept() mới), không chỉ đổi label suông.
-function onShelfStoreOverrideChange() {
-  const select = document.getElementById('vanHanhShelfStoreOverrideSelect');
-  shelfStoreOverrideDept = select ? select.value.trim() : '';
+// onShelfStoreOverrideSearchChanged() — đổi siêu thị xong phải tải/vẽ lại ĐÚNG đúng sub-tab đang mở
+// (giống hệt lúc mở tab lần đầu — setVanHanhShelfSubTab() đã tự gọi đúng hàm nạp dữ liệu cho từng tab
+// theo getEffectiveShelfDept() mới), không chỉ đổi label suông.
+//
+// Ô tìm-kiếm-gõ-chọn ĐƠN (sdd*, 11/2026, thay cho onShelfStoreOverrideChange() cũ đọc <select>.value) —
+// 'change' chỉ bắn khi BẤM CHỌN 1 gợi ý (hoặc Enter trên dòng đang tô sáng, xem sddHandleTrigger()/listener
+// click [data-sdd-idx] ở core.js) hoặc lúc rời ô (blur) sau khi gõ tay. Validate text đã gõ PHẢI khớp
+// NGUYÊN VĂN 1 tên siêu thị thật (cùng khuôn resolveShelfSystemInventoryInput()) — gõ dở/gõ sai KHÔNG
+// được coi là đã chọn, tránh xoá nhầm lựa chọn hợp lệ trước đó chỉ vì 1 lượt blur không chọn gì. Gõ RỖNG
+// là lựa chọn HỢP LỆ (= bỏ chọn, quay lại dùng siêu thị của chính mình) — giữ đúng ngữ nghĩa "-- Chọn
+// siêu thị --" của SELECT cũ.
+function onShelfStoreOverrideSearchChanged() {
+  const input = document.getElementById('vanHanhShelfStoreOverrideSearchInput');
+  const text = input ? input.value.trim() : '';
+  if (text) {
+    const matched = (DB.stores || []).find(s => s === text);
+    if (!matched) { if (input) input.value = shelfStoreOverrideDept || ''; return; }
+    shelfStoreOverrideDept = matched;
+  } else {
+    shelfStoreOverrideDept = '';
+  }
   renderShelfStoreOverrideConfirm();
   editingShelfLocationId = null;
   editingShelfRecordId = null;
@@ -873,11 +890,14 @@ async function loadShelfReportTab() {
   renderShelfReportTable();
 }
 
+// CHỌN NHIỀU (11/2026, theo yêu cầu người dùng "xem báo cáo nhiều siêu thị chọn") — ĐỔI từ SELECT đơn
+// sang renderMultiSelectDropdown() dùng chung (core.js). Để trống (không chọn gì) = xem TẤT CẢ siêu thị,
+// giữ ĐÚNG ngữ nghĩa "-- Tất cả siêu thị --" của SELECT cũ — xem shelfReportFilteredItems() bên dưới.
 function populateShelfReportStoreFilter() {
   const wrap = document.getElementById('shelfReportStoreFilterWrap');
-  const sel = document.getElementById('shelfReportStoreFilter');
+  const msEl = document.getElementById('shelfReportStoreFilterMultiSelect');
   const headerEl = document.getElementById('shelfReportHeader');
-  if (!wrap || !sel) return;
+  if (!wrap || !msEl) return;
   const depts = [...new Set((DB.shelfRecords || []).map(r => r.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
   // Chỉ hiện bộ lọc/cột Siêu Thị khi dữ liệu THỰC SỰ có nhiều hơn 1 siêu thị — nhân viên 1 siêu thị bình
   // thường sẽ luôn chỉ có đúng 1 dept trong DB.shelfRecords (đã lọc sẵn server-side), bộ lọc tự ẩn, KHÔNG
@@ -890,9 +910,13 @@ function populateShelfReportStoreFilter() {
       : `📍 Siêu Thị: ${getEffectiveShelfDept()}`;
   }
   if (!isMulti) return;
-  const prevValue = sel.value;
-  sel.innerHTML = '<option value="">-- Tất cả siêu thị --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  if (depts.includes(prevValue)) sel.value = prevValue;
+  // Giữ lại các lựa chọn CŨ vẫn còn hợp lệ (siêu thị bị đổi tên/mất giữa chừng tự rơi rụng, không giữ rác).
+  const prevSelected = getMultiSelectValues('shelfReportStoreFilterMultiSelect').filter(d => depts.includes(d));
+  renderMultiSelectDropdown('shelfReportStoreFilterMultiSelect', depts, prevSelected, {
+    placeholder: '🔍 Tìm siêu thị để lọc báo cáo (để trống = xem tất cả)...',
+    emptyText: 'Đang xem TẤT CẢ siêu thị.',
+    onChange: () => renderShelfReportTable()
+  });
 }
 
 function shelfReportIsMultiStore() {
@@ -911,8 +935,10 @@ function shelfReportSysStockFor(r) {
 }
 function shelfReportFilteredItems() {
   const isMulti = shelfReportIsMultiStore();
-  const storeFilter = isMulti ? (document.getElementById('shelfReportStoreFilter').value || '') : '';
-  return [...(DB.shelfRecords || [])].filter(r => !storeFilter || r.dept === storeFilter).sort((a, b) => b.id - a.id);
+  // CHỌN NHIỀU (11/2026) — rỗng (chưa chọn gì) = xem TẤT CẢ, giữ ĐÚNG ngữ nghĩa "-- Tất cả siêu thị --"
+  // của SELECT đơn cũ.
+  const storeFilters = isMulti ? getMultiSelectValues('shelfReportStoreFilterMultiSelect') : [];
+  return [...(DB.shelfRecords || [])].filter(r => !storeFilters.length || storeFilters.includes(r.dept)).sort((a, b) => b.id - a.id);
 }
 
 function renderShelfReportTable() {
@@ -1242,7 +1268,7 @@ function renderShelfRecordActionsCell(r, source) {
       <button type="button" data-op="enterShelfRecordEditMode" data-arg0="${r.id}" class="text-blue-600 hover:underline">✏️ Sửa</button>
       <button type="button" data-op="deleteShelfRecordClient" data-arg0="${r.id}" class="text-red-600 hover:underline">🗑️ Xóa</button>
       <span class="inline-flex items-center gap-1 border rounded px-1 py-0.5 bg-gray-50">
-        <input type="number" min="0" id="srQuickQty_${prefix}_${r.id}" placeholder="SL hiện tại" class="w-16 border rounded px-1 py-0.5 text-[11px]">
+        <input type="number" min="0" id="srQuickQty_${prefix}_${r.id}" placeholder="SL hiện tại" class="w-24 border rounded px-1 py-0.5 text-[11px]">
         <button type="button" data-op="quickUpdateShelfRecordQuantity" data-arg0="${r.id}" data-arg1="${source || 'recent'}" class="text-amber-700 font-bold text-[11px]">💾 Cập Nhật</button>
       </span>
       <button type="button" data-op="markShelfRecordSoldOut" data-arg0="${r.id}" class="text-gray-600 font-bold text-[11px] border rounded px-1.5 py-0.5 bg-gray-50 hover:bg-gray-100">✅ Bán Hết</button>

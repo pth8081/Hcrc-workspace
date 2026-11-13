@@ -163,8 +163,12 @@ async function openReportTab(page) {
     console.log('[Kịch bản 2 - Xuất Excel chưa lọc]', { rows: export2.rows.length, columns: export2.columns.map(c => c.key) });
     state.__xlsxExports.length = 0;
 
-    // Lọc riêng "Siêu thị Quận 3" — xác nhận bộ lọc hoạt động thật.
-    await page.selectOption('#shelfReportStoreFilter', 'Siêu thị Quận 3');
+    // Lọc riêng "Siêu thị Quận 3" — xác nhận bộ lọc hoạt động thật. ĐỔI sang widget CHỌN NHIỀU
+    // (renderMultiSelectDropdown(), 11/2026) — gõ tìm rồi bấm CHỌN THẬT đúng gợi ý, không còn
+    // page.selectOption() của <select> cũ.
+    await page.click('#shelfReportStoreFilterMultiSelect [data-pms-search]');
+    await page.fill('#shelfReportStoreFilterMultiSelect [data-pms-search]', 'Siêu thị Quận 3');
+    await page.click('#shelfReportStoreFilterMultiSelect [data-op="gmsAdd"]:has-text("Siêu thị Quận 3")');
     await page.waitForTimeout(150);
     await shot(page, '#vanHanhShelfWrap', '03-bao-cao-loc-rieng-1-sieu-thi.png');
     const info3 = await page.evaluate(() => ({
