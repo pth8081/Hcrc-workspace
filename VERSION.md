@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**30.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.24 (2026-11): Kiểm Soát Hàng Hóa — khớp mã vạch PHỤ (dsMaVach, 1 mã hàng nhiều mã vạch)
+
+Đối tác (BRGMART/DSMART) bổ sung field mới `dsMaVach` (mảng) ở API "Tồn Kho" (`GET
+/api/v1/reports/ton-kho/run`), theo đúng đề nghị gửi sau khi HCRC Workspace báo lỗi: 1 mã hàng trên hệ
+thống đối tác có thể đăng ký **nhiều mã vạch hợp lệ** (ví dụ G7 Cà Phê 3in1: 3 mã vạch
+8935024122310/8935024123096/8935024912607), trong khi trường `maVach` cũ chỉ lưu đúng 1 mã **mặc định**.
+Trước đây quét/nhập đúng 1 mã vạch KHÔNG phải mã mặc định bị hệ thống báo sai "không khớp" dù mã vạch đó
+hoàn toàn hợp lệ. `dsMaVach` LUÔN chứa cả giá trị đang có ở `maVach`; trường `maVach` giữ nguyên không
+đổi.
+
+**Đã sửa**: `lib/shelfInventoryAggregate.js` (`aggregateSystemInventoryRowsByMaHang()`) gộp luôn
+`dsMaVach` (hợp nhất + khử trùng) khi gộp các dòng trùng mã hàng. `public/js/module-vanhanh.js` thêm
+`rowHasMaVach()`/`rowMaVachEndsWith()` dùng chung cho mọi nơi so khớp mã vạch — `matchShelfSystemInventoryByMaVach()`
+(gõ/quét đủ mã ở "📷 Ghi Nhận"), `matchShelfSystemInventoryBySuffix()` (gõ 6 số cuối, cả Ghi Nhận lẫn
+Kiểm Tra Giá), `findSystemInventoryQtyForProduct()` (tra tồn kho hệ thống cho "⏰ Hạn Sử Dụng") — nay so
+khớp theo **toàn bộ** `dsMaVach` thay vì chỉ đúng 1 giá trị `maVach` mặc định. Dữ liệu cũ/dòng chưa có
+field này (đối tác/đồng bộ chưa kịp cập nhật) vẫn hoạt động bình thường, rơi về đúng hành vi cũ.
+
+**Không cần sửa**: `routes/shelfStock.js` (dữ liệu đi nguyên vẹn qua CSDL, không lọc field — field mới tự
+có sẵn ngay khi đối tác trả về) và "💲 Kiểm Tra Giá" (gọi trực tiếp API đối tác mỗi lượt quét, không qua
+dữ liệu đồng bộ sẵn — đối tác xác nhận đã tự sửa phía họ, hệ thống mình không cần đổi gì).
+
+Mở rộng `tests/test-shelf-barcode-suffix-match.js` (12/12 kịch bản, dùng đúng ví dụ G7 Cà Phê 3in1 đối
+tác gửi) + demo `tests/demo-shelf-dsmavach-multi-barcode.js`. Chạy lại toàn bộ test liên quan (recon, hạn
+sử dụng, ownstore-scope, threshold...) — không có regression.
 
 ## v30.23 (2026-11): Kiểm Soát Hàng Hóa — sửa 2 lỗi "gõ 6 số cuối" (trùng dòng + ô Mã Hàng không khớp)
 
