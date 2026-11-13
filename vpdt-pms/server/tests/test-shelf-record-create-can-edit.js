@@ -15,6 +15,10 @@
 //  5. REGRESSION: vẫn CHỈ giới hạn ĐÚNG siêu thị của người đó — ghi nhận của siêu thị KHÁC không hiện cụm
 //     nút này (renderShelfRecordActionsCell() đã ẩn sẵn, xem canViewShelfScopedItem()), không kiểm lại ở
 //     đây (đã có test-shelf-ownstore-scope-regression.js riêng).
+//  6. (11/2026, theo yêu cầu TRỰC TIẾP của người dùng NGAY SAU KHI mở quyền ở trên — "lưu lại ai là người
+//     ghi nhận [cập nhật gần nhất]"): mỗi lần Sửa/Cập Nhật/Bán Hết phải cập nhật đúng field
+//     lastEditedBy/lastEditedByName/lastEditedAt + cột "Người Cập Nhật Gần Nhất" trên bảng phải hiện đúng
+//     tên người vừa thao tác.
 //
 // Chạy: node server/tests/test-shelf-record-create-can-edit.js
 'use strict';
@@ -73,6 +77,10 @@ async function main() {
       await page.waitForTimeout(100);
       const [updated] = await getShelfRecords();
       assertEqual(updated.quantity, 15, `"✏️ Sửa" phải lưu đúng số lượng mới, thực tế: ${updated.quantity}`);
+      assertEqual(updated.lastEditedByName, USER.name, `"✏️ Sửa" phải ghi đúng tên người vừa thao tác vào lastEditedByName, thực tế: ${updated.lastEditedByName}`);
+      assert(!!updated.lastEditedAt, 'lastEditedAt phải được set sau khi Sửa');
+      const cellText = await page.evaluate((id) => document.querySelector(`[data-op="enterShelfRecordEditMode"][data-arg0="${id}"]`).closest('tr').children[7].textContent, record.id);
+      assert(cellText.includes(USER.name), `Cột "Người Cập Nhật Gần Nhất" trên bảng phải hiện đúng tên, thực tế: "${cellText}"`);
     });
 
     await run.run('"💾 Cập Nhật" (ô "SL hiện tại") -> lưu được, KHÔNG bị 403', async () => {
@@ -82,6 +90,7 @@ async function main() {
       await page.waitForTimeout(100);
       const [updated] = await getShelfRecords();
       assertEqual(updated.quantity, 9, `"💾 Cập Nhật" phải lưu đúng số lượng mới, thực tế: ${updated.quantity}`);
+      assertEqual(updated.lastEditedByName, USER.name, `"💾 Cập Nhật" phải ghi đúng tên người vừa thao tác vào lastEditedByName, thực tế: ${updated.lastEditedByName}`);
     });
 
     await run.run('"✅ Bán Hết" -> set quantity=0, dừng theo dõi, KHÔNG bị 403', async () => {
