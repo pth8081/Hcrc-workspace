@@ -696,12 +696,24 @@ function setShelfReconHeader(maDiem, isError, errorMessage) {
 // gọi lại hàm render với ĐÚNG 0 tham số (xem renderCarRegs() làm mẫu). Lưu lại đúng 7 tham số của lần gọi
 // GẦN NHẤT vào đây, dùng hàm bọc 0-tham-số này làm renderFnName cho phân trang — không tải lại từ server
 // mỗi lần đổi trang.
+// LỖI ĐÃ VÁ (11/2026, phát hiện qua đợt audit chuyên sâu): _shelfReconLastArgs là cache module-level,
+// KHÔNG tự biết đổi siêu thị (qua ô "Chọn Siêu Thị Để Thao Tác", shelfAnyStoreAccess) — nếu đổi sang
+// siêu thị B rồi loadShelfReconciliation() LỖI (siêu thị B chưa cấu hình Mã Điểm, mất mạng...), nhánh
+// lỗi trước đây chỉ hiện thông báo trên bảng rồi return, KHÔNG xoá cache cũ của A — bấm "📥 Xuất Excel"
+// (nút không tự disable lúc này) sẽ xuất "lai": Mã Hàng/Tồn Kho Hệ Thống CŨ của A nhưng Trên Kệ Hôm
+// Nay/Quá Khứ lại tính theo getEffectiveShelfDept() MỚI là B — báo cáo sai lặng lẽ, không cảnh báo.
+// Vá bằng 2 lớp: (1) _shelfReconLastArgsDept ghi lại ĐÚNG dept của cache, exportShelfReconciliationExcel()
+// so sánh với dept hiện tại trước khi xuất; (2) loadShelfReconciliation() xoá cache NGAY khi bắt đầu tải
+// (trước cả khi biết thành công hay lỗi) — vừa chặn luôn trường hợp lỗi phía trên, vừa chặn thêm trường
+// hợp bấm Xuất Excel đúng lúc đang tải (cache rỗng -> báo "chưa có dữ liệu" thay vì xuất nhầm).
 let _shelfReconLastArgs = null;
+let _shelfReconLastArgsDept = null;
 function renderShelfReconciliationTableFromCache() {
   if (_shelfReconLastArgs) renderShelfReconciliationTable(..._shelfReconLastArgs);
 }
 function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount) {
   _shelfReconLastArgs = [rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount];
+  _shelfReconLastArgsDept = getEffectiveShelfDept();
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
   setShelfReconHeader(maDiem, false);
@@ -765,6 +777,9 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
 // không có 1 ngày cụ thể cho từng dòng để lọc).
 function exportShelfReconciliationExcel() {
   if (!_shelfReconLastArgs) return alert('Chưa có dữ liệu đối chiếu để xuất — mở lại tab "📊 Đối Chiếu" rồi thử lại.');
+  // Chặn xuất "lai" siêu thị (xem chú thích tại _shelfReconLastArgsDept) — cache vẫn CÓ nhưng thuộc 1
+  // siêu thị KHÁC với siêu thị đang xem hiện tại (đổi siêu thị xong tải lỗi/đang tải dở).
+  if (_shelfReconLastArgsDept !== getEffectiveShelfDept()) return alert('Dữ liệu đối chiếu đang tải lại hoặc chưa khớp đúng siêu thị đang xem — đợi tải xong rồi thử lại.');
   const [rows] = _shelfReconLastArgs;
   if (!rows || !rows.length) return alert('Chưa có mã hàng nào để xuất.');
   const todayByMaHang = {};
@@ -803,6 +818,12 @@ async function loadShelfReconciliation() {
   if (!tbody) return;
   tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
   if (noteEl) noteEl.textContent = '';
+  // Xoá cache CŨ ngay khi bắt đầu tải lại (xem chú thích tại _shelfReconLastArgsDept) — nếu lần tải này
+  // lỗi (chưa cấu hình Mã Điểm, mất mạng không có fallback offline...) hoặc người dùng bấm "📥 Xuất Excel"
+  // đúng lúc đang tải dở, exportShelfReconciliationExcel() sẽ thấy cache rỗng và báo "chưa có dữ liệu"
+  // thay vì âm thầm xuất nhầm dữ liệu CŨ của siêu thị trước đó.
+  _shelfReconLastArgs = null;
+  _shelfReconLastArgsDept = null;
   try {
     // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ... không
     // thì quá nhiều khi siêu thị ấn cùng một lúc có thể gây treo ứng dụng", MỞ RỘNG cùng tháng sang "đã
