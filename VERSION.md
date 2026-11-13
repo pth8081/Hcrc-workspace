@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**30.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.25 (2026-11): Kiểm Soát Hàng Hóa — ô "SL hiện tại" rộng hơn + ô chọn siêu thị gõ-tìm
+
+Người dùng báo (kèm 2 ảnh chụp thật):
+
+1. Ô "SL hiện tại" (cụm nút Sửa/Xóa/Cập Nhật/Bán Hết ở "20 ghi nhận gần nhất" và "⏰ Hạn Sử Dụng") bị thu
+   gọn (`w-16` = 64px) khiến placeholder bị cắt cụt trên cả mobile lẫn desktop — nới rộng `w-24` = 96px.
+2. "📍 Chọn Siêu Thị Để Thao Tác" (quyền `shelfAnyStoreAccess`) — đổi từ `<select>` thường sang ô
+   tìm-kiếm-gõ-chọn ĐƠN (sdd*): gõ tên siêu thị để tìm, chỉ chọn đúng 1 siêu thị tại 1 thời điểm để thao
+   tác (Ghi Nhận/Quầy Kệ/Kiểm Tra Giá...).
+3. "📑 Báo Cáo" > bộ lọc "Siêu Thị" — đổi từ `<select>` đơn sang widget CHỌN NHIỀU
+   (`renderMultiSelectDropdown()`/`getMultiSelectValues()` dùng chung, `core.js`) — chọn nhiều siêu thị
+   cùng lúc để xem báo cáo tổng hợp đúng các siêu thị đã chọn, để trống = xem tất cả (giữ nguyên ngữ nghĩa
+   cũ).
+
+`public/fragments/vanHanhSection.html`, `public/js/module-vanhanh.js` (`onShelfStoreOverrideChange()` đổi
+tên thành `onShelfStoreOverrideSearchChanged()`, `populateShelfReportStoreFilter()`/
+`shelfReportFilteredItems()` đổi sang đọc `getMultiSelectValues()`). Cập nhật `tests/test-shelf-report-tab.js`
+(thao tác thật trên widget chọn nhiều mới) + demo `tests/demo-shelf-store-picker-and-sl-width.js`. Chạy
+lại toàn bộ test liên quan — không có regression.
 
 ## v30.24 (2026-11): Kiểm Soát Hàng Hóa — khớp mã vạch PHỤ (dsMaVach, 1 mã hàng nhiều mã vạch)
 
