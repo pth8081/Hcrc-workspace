@@ -552,6 +552,45 @@ function applyShelfBarcodeMatch(code) {
 function onShelfMaVachTyped() {
   applyShelfBarcodeMatch(document.getElementById('srSku').value.trim());
 }
+// matchShelfSystemInventoryByMaHang(code) — so khớp CHÍNH XÁC theo Mã Hàng (khác
+// matchShelfSystemInventoryByMaVach() ở trên vốn so theo Mã Vạch) — dùng cho applyShelfMaHangMatch() khi
+// gõ tay trực tiếp vào ô "Mã Hàng (nội bộ)".
+function matchShelfSystemInventoryByMaHang(code) {
+  if (!code) return null;
+  return shelfSystemInventoryCache.find(r => r.maHang && r.maHang === code) || null;
+}
+// applyShelfMaHangMatch(code) — BẢN ĐỐI XỨNG của applyShelfBarcodeMatch() nhưng cho ô "Mã Hàng (nội bộ)"
+// (#srMaHang) thay vì "Mã Vạch" (#srSku). LỖI THẬT người dùng báo (11/2026, kèm ảnh chụp): gõ tay 6 số
+// cuối vào ô Mã Hàng ở "📷 Ghi Nhận" không tự nhận diện được gì (⚠️ "Không khớp tồn kho hệ thống") — vì
+// trước đây logic khớp-6-số-cuối (matchShelfSystemInventoryBySuffix()) CHỈ được gọi từ onShelfMaVachTyped()
+// (ô Mã Vạch), ô Mã Hàng hoàn toàn không có handler nào. Khác applyShelfBarcodeMatch() ở điểm: khớp xong
+// tự điền NGƯỢC LẠI vào #srSku (Mã Vạch) + #srProductName (Tên Sản Phẩm) — không đụng tới #srMaHang vì đó
+// chính là ô người dùng đang gõ.
+function applyShelfMaHangMatch(code) {
+  const match = matchShelfSystemInventoryByMaHang(code);
+  if (match) {
+    document.getElementById('srSku').value = match.maVach || '';
+    document.getElementById('srProductName').value = match.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${match.tenHang}`, true);
+    return;
+  }
+  const suffixResult = matchShelfSystemInventoryBySuffix(code);
+  if (suffixResult?.unique) {
+    const row = suffixResult.unique;
+    document.getElementById('srSku').value = row.maVach || '';
+    document.getElementById('srProductName').value = row.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống theo 6 số cuối: ${row.tenHang}`, true);
+    return;
+  }
+  if (suffixResult?.candidates) {
+    setShelfMaHangMatchNote(`⚠️ 6 số cuối "${code}" khớp ${suffixResult.candidates.length} mặt hàng khác nhau — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để chọn đúng mặt hàng.`, false);
+    return;
+  }
+  setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
+}
+function onShelfMaHangTyped() {
+  applyShelfMaHangMatch(document.getElementById('srMaHang').value.trim());
+}
 // resetShelfRecordForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg0="srForm"
 // data-arg1="resetShelfRecordForm", vanHanhSection.html) chỉ xoá trắng form đang nhập dở, KHÔNG đụng tới
 // danh sách ghi nhận gần nhất/hàng đợi offline đã lưu. form.reset() tự đưa mọi input/hidden-input bên

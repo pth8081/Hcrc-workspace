@@ -1008,13 +1008,18 @@ function createDispatcher(state) {
         // maDiem (11/2026) — mirror ĐÚNG field mới routes/shelfStock.js trả thêm (xem chú thích ở đó);
         // test tự seed state.__mockSystemInventoryMaDiem khi cần kiểm riêng header "Đang đối chiếu...".
         let rows = state.__mockSystemInventoryRows;
+        // Cộng gộp trùng mã hàng NGAY TỪ ĐÂY, áp dụng cho MỌI lượt gọi (11/2026) — mirror ĐÚNG
+        // routes/shelfStock.js thật (đã chuyển từ "chỉ gộp ở scope=recon" sang "gộp luôn trước khi rẽ theo
+        // scope", để picker/gõ 6 số cuối ở Ghi Nhận + Kiểm Tra Giá cũng không còn dính dòng trùng mã hàng
+        // — xem lib/shelfInventoryAggregate.js).
+        rows = aggregateSystemInventoryRowsByMaHang(rows);
         let totalSystemSkuCount, scannedTodayCount, scannedEverCount;
         // scope=recon (11/2026, mở rộng cùng tháng theo yêu cầu "thêm cột trên kệ quá khứ") — mirror ĐÚNG
         // logic lọc server thật: trả về mã ĐÃ TỪNG scan (hôm nay hoặc trước đây) của ĐÚNG siêu thị mình,
         // không chỉ "hôm nay" như bản cũ, xem routes/shelfStock.js.
         if (new URL(url, 'http://x').searchParams.get('scope') === 'recon') {
           const freshUser = state.users.find(u => u.username === username);
-          totalSystemSkuCount = rows.length;
+          totalSystemSkuCount = rows.length; // rows đã gộp theo maHang ở trên -> đúng số MÃ HÀNG duy nhất
           const now = new Date();
           const scannedMaHangToday = new Set();
           const scannedMaHangEver = new Set();
@@ -1028,10 +1033,8 @@ function createDispatcher(state) {
           }
           scannedTodayCount = scannedMaHangToday.size;
           scannedEverCount = scannedMaHangEver.size;
+          // rows ĐÃ được gộp theo maHang ở trên — chỉ cần lọc theo tập mã đã scan, không gộp lại lần 2.
           rows = rows.filter(r => r.maHang && scannedMaHangEver.has(String(r.maHang)));
-          // Cộng gộp trùng mã hàng (11/2026) — mirror ĐÚNG routes/shelfStock.js thật, xem
-          // lib/shelfInventoryAggregate.js.
-          rows = aggregateSystemInventoryRowsByMaHang(rows);
         }
         return { status: 200, body: { rows, capNhatLuc: new Date().toISOString(), maDiem: state.__mockSystemInventoryMaDiem || null, totalSystemSkuCount, scannedTodayCount, scannedEverCount } };
       }
