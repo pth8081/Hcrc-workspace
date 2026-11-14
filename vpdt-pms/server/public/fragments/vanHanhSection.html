@@ -7,6 +7,14 @@
       <button data-op="setVanHanhSubTab" data-tab="ITPRICE" id="btnVanHanhSubItPrice" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💲 Phê Duyệt Giá Bán Buôn</button>
       <!-- "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — xem vanHanhShelfWrap cuối file. -->
       <button data-op="setVanHanhSubTab" data-tab="SHELF" id="btnVanHanhSubShelf" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Kiểm Soát Hàng Hóa</button>
+      <!-- "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — module riêng, phân quyền TÁCH KHỎI khối Vận Hành (xem
+           khối quyền "27. Kiểm Kê" ở systemSection.html + BUSINESS_MODULES key 'kiemKe' ở core.js).
+           Sống về điều hướng trong Vận Hành (cạnh Kiểm Soát Hàng Hóa) nhưng KHÔNG dùng chung quyền
+           vanHanhShelfTab — gác bằng hasModuleAccess(user,'kiemKe') ở vhKeyMap.STOCKTAKE. Xem
+           vanHanhStocktakeWrap cuối file. Đợt này CHỈ có Tab 1 "Kỳ Kiểm Kê" — 7 tab còn lại (Gom Mã/
+           Kiểm Đếm/Kiểm Soát/Cấu Hình Quầy Kệ/Xác Nhận/Báo Cáo/Cấu Hình Người Dùng) sẽ bổ sung ở các đợt
+           merge tiếp theo, xem vpdt-pms/docs/kiem-ke-sieu-thi.md. -->
+      <button data-op="setVanHanhSubTab" data-tab="STOCKTAKE" id="btnVanHanhSubStocktake" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Kiểm Kê</button>
     </div>
 
     <!-- ===== TAB 1: ĐƠN HÀNG (operationOrders) — 3 sub-tab lồng bên trong (đợt "Tách Đơn Hàng Siêu
@@ -1465,4 +1473,65 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ===== "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — 8 tab con theo tài liệu đề xuất
+         (vpdt-pms/docs/kiem-ke-sieu-thi.md). Đợt này CHỈ Tab 1 "Kỳ Kiểm Kê" có giao diện thật — 7 tab
+         còn lại hiện khung "🚧 Sắp ra mắt" (data-op vẫn gọi setKiemKeSubTab() đúng, KHÔNG để nút chết)
+         để không hứa hẹn sai chức năng chưa code, và để lần merge sau chỉ cần đổi nội dung panel, không
+         phải dựng lại khung điều hướng. ===== -->
+    <div id="vanHanhStocktakeWrap" class="hidden space-y-4">
+      <div class="flex gap-2 flex-wrap border-b pb-2">
+        <button data-op="setKiemKeSubTab" data-tab="PERIOD" id="btnKkSubPeriod" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📅 Kỳ Kiểm Kê</button>
+        <button data-op="setKiemKeSubTab" data-tab="GOMMA" id="btnKkSubGomMa" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📷 Gom Mã</button>
+        <button data-op="setKiemKeSubTab" data-tab="KIEMDEM" id="btnKkSubKiemDem" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔢 Kiểm Đếm</button>
+        <button data-op="setKiemKeSubTab" data-tab="KIEMSOAT" id="btnKkSubKiemSoat" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🛡️ Kiểm Soát</button>
+        <button data-op="setKiemKeSubTab" data-tab="SHELFCONFIG" id="btnKkSubShelfConfig" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Cấu Hình Quầy Kệ</button>
+        <button data-op="setKiemKeSubTab" data-tab="CONFIRM" id="btnKkSubConfirm" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận</button>
+        <button data-op="setKiemKeSubTab" data-tab="REPORT" id="btnKkSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+        <button data-op="setKiemKeSubTab" data-tab="USERACCESS" id="btnKkSubUserAccess" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 Cấu Hình Người Dùng</button>
+      </div>
+
+      <!-- Tab 1: Kỳ Kiểm Kê -->
+      <div id="kkPeriodWrap" class="space-y-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <div id="kkPeriodDeptRow" class="flex items-center gap-2 text-sm"></div>
+          <div class="flex gap-2 flex-wrap text-xs">
+            <button data-op="setKkPeriodLoaiFilter" data-arg0="" id="btnKkPeriodFilterAll" class="px-3 py-1 rounded-full font-semibold bg-cyan-700 text-white">Tất cả</button>
+            <button data-op="setKkPeriodLoaiFilter" data-arg0="GOM_MA" id="btnKkPeriodFilterGomMa" class="px-3 py-1 rounded-full font-semibold bg-gray-200 text-gray-700">Gom Mã</button>
+            <button data-op="setKkPeriodLoaiFilter" data-arg0="THONG_KE" id="btnKkPeriodFilterThongKe" class="px-3 py-1 rounded-full font-semibold bg-gray-200 text-gray-700">Thống Kê</button>
+          </div>
+        </div>
+
+        <div id="kkPeriodCreateBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+          <div class="font-bold text-sm text-cyan-800">+ Tạo Kỳ Mới</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <select id="kkNewLoaiKy" class="border rounded px-2 py-1.5">
+              <option value="GOM_MA">Loại: Gom Mã</option>
+              <option value="THONG_KE">Loại: Thống Kê</option>
+            </select>
+            <input type="text" id="kkNewTenKy" placeholder="Tên kỳ (VD: Thống Kê Q4/2026)" class="border rounded px-2 py-1.5">
+            <input type="date" id="kkNewBatDau" class="border rounded px-2 py-1.5">
+            <input type="date" id="kkNewKetThuc" class="border rounded px-2 py-1.5">
+          </div>
+          <div class="flex gap-2">
+            <button type="button" data-op="submitCreateKkPeriod" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Tạo (Nháp)</button>
+            <button type="button" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded border text-xs">Hủy</button>
+          </div>
+        </div>
+        <button type="button" id="btnKkPeriodOpenCreate" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">+ Tạo Kỳ Mới</button>
+
+        <div id="kkPeriodListBody" class="space-y-2">
+          <p class="text-gray-400 text-sm">Đang tải...</p>
+        </div>
+      </div>
+
+      <!-- Tab 2-8: chưa code — khung giữ chỗ, KHÔNG hứa hẹn sai chức năng -->
+      <div id="kkGomMaWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Gom Mã" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkKiemDemWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Kiểm Đếm" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkKiemSoatWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Kiểm Soát" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkShelfConfigWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Quầy Kệ" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkConfirmWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Xác Nhận" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <div id="kkUserAccessWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Người Dùng" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
     </div>

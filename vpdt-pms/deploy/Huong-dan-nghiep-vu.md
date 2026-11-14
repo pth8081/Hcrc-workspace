@@ -3613,6 +3613,42 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     bao giờ nhận mã siêu thị từ client, chặn store-spoofing cùng nguyên tắc
     mọi route khác của Kiểm Soát Hàng Hóa.
 
+**"📋 Kiểm Kê" (Phase 1 MVP, 11/2026 — CHỈ Tab "Kỳ Kiểm Kê" đã có giao diện
+thật, 7 tab còn lại đang "🚧 Đang phát triển")**: module kiểm kê thực tế
+theo **KỲ**, khác hẳn "Kiểm Soát Hàng Hóa" ở trên (ghi nhận liên tục theo lô,
+không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thuần UI) nhưng
+**phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập (Phân Quyền
+→ khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự kiến).
+
+- **2 loại Kỳ ĐỘC LẬP, mỗi siêu thị quản lý riêng**: "Gom Mã" (chuẩn hoá/
+  gắn mã hàng cho hàng chưa có mã trước khi kiểm) và "Thống Kê" (đếm số
+  lượng thực tế trên quầy kệ) — 1 siêu thị có thể có 1 kỳ Gom Mã VÀ 1 kỳ
+  Thống Kê cùng "Đang hoạt động" song song, không xung đột nhau.
+- **Vòng đời Kỳ**: Nháp (tạo xong, chưa có hiệu lực) → Đang hoạt động (bấm
+  "Kích Hoạt" — hệ thống CHẶN nếu siêu thị đó đã có 1 kỳ KHÁC CÙNG LOẠI đang
+  hoạt động) → Đã chốt (bấm "Đóng Kỳ", quyền quản lý kỳ bình thường làm
+  được) → Mở Lại (quay về Đang hoạt động — **CHỈ Admin**, quyền quản lý kỳ
+  thường KHÔNG mở lại được, chặn cả ở server nếu cố gọi thẳng API).
+- **Thao tác**: Hệ Thống → ⚙️ Vận Hành → tab "📋 Kiểm Kê" → sub-tab "📅 Kỳ
+  Kiểm Kê" → "+ Tạo Kỳ Mới" (chọn Loại Kỳ + đặt Tên Kỳ, tuỳ chọn khoảng thời
+  gian dự kiến) → "▶ Kích Hoạt" → "🔒 Đóng Kỳ" → (Admin) "↩️ Mở Lại". Người
+  có BẤT KỲ quyền Kiểm Kê nào (kể cả chỉ Gom Mã/Kiểm Đếm, chưa xây) vẫn vào
+  xem được danh sách kỳ (cần biết kỳ nào đang hoạt động trước khi thao tác ở
+  các tab sau), chỉ không thấy nút Tạo/Kích Hoạt/Đóng Kỳ nếu thiếu đúng
+  quyền "📅 Quản Lý Kỳ Kiểm Kê".
+- **Phạm vi xem**: mặc định mỗi kỳ chỉ hiện cho đúng siêu thị tạo ra nó
+  (dept) — Admin xem được mọi siêu thị. Chưa có khái niệm "xem chéo nhiều
+  siêu thị" (kiểu Quản lý vùng ở Kiểm Soát Hàng Hóa) cho Kiểm Kê ở Phase 1
+  này.
+- **Báo Cáo**: xem tại 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Kê — Kỳ Kiểm Kê"
+  (gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền module
+  phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
+- **Chưa làm ở đợt này** (các tab 2-8, sẽ bổ sung ở đợt merge sau): Gom Mã,
+  Kiểm Đếm, Kiểm Soát, Cấu Hình Quầy Kệ (dự kiến tái dùng danh mục Quầy Kệ
+  đã có ở Kiểm Soát Hàng Hóa), Xác Nhận, biểu đồ Báo Cáo chi tiết theo Kỳ +
+  xuất Excel nhiều sheet, Cấu Hình Người Dùng (phân quyền chi tiết theo
+  siêu thị/quầy kệ/hành động).
+
 ### 4.5. Nhân Sự
 
 Nhóm module đội Nhân Sự quản lý + toàn công ty tương tác gián tiếp (cơ cấu tổ

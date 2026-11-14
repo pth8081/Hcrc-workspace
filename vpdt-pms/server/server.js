@@ -62,6 +62,7 @@ const workflowExcelImportRoutes = require('./routes/workflowExcelImport');
 const approvalGroupsExcelImportRoutes = require('./routes/approvalGroupsExcelImport');
 const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
 const shelfStockRoutes = require('./routes/shelfStock');
+const stocktakeRoutes = require('./routes/stocktake');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
 const inventorySyncAdminRoutes = require('./routes/inventorySyncAdmin');
@@ -239,6 +240,7 @@ app.use('/api/stores', storeCatalogImportRoutes);
 // Kiểm Soát Hàng Hóa (Vận Hành, bổ sung sau Phase 1 MVP, 11/2026) — sửa/ngừng dùng Quầy Kệ + Ngưỡng Tồn
 // (withLockedRecordForCollection, tự đối chiếu dept trong lock) + nhập Excel Quầy Kệ (chỉ xem trước).
 app.use('/api/shelf-stock', shelfStockRoutes);
+app.use('/api/stocktake', stocktakeRoutes);
 app.use('/api/operation', operationImportRoutes);
 app.use('/api/operation', operationOrderApiSyncRoutes);
 app.use('/api/inventory', inventorySyncAdminRoutes);

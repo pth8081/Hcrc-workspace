@@ -164,4 +164,6 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
 Xem đầy đủ hướng dẫn triển khai tại `deploy/Huong-dan-trien-khai-PM2.md` (chỉ
 PM2, mạng nội bộ) hoặc `deploy/Huong-dan-trien-khai-PM2-Nginx.md` (PM2 +
 Nginx + HTTPS, khuyến nghị production), hướng dẫn nghiệp vụ/cấu hình tính
-năng tại `deploy/Huong-dan-nghiep-vu.md`.
+năng tại `deploy/Huong-dan-nghiep-vu.md`. Các tài liệu đề xuất/phân tích
+tính năng mới (chưa triển khai code, đang chờ xác nhận phương án) nằm ở
+`docs/` — xem danh sách tại `docs/README.md`.

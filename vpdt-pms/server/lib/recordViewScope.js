@@ -1017,6 +1017,21 @@ function canViewShelfStockThreshold(user, item) { return canViewShelfScopedItem(
 function filterShelfStockThresholdsForUser(items, user) {
   return (items || []).filter(o => canViewShelfStockThreshold(user, o));
 }
+// stocktakeSessions (📋 Kiểm Kê, Tab 1 "Kỳ Kiểm Kê", Phase 1 MVP, 11/2026) — PHÁT HIỆN lúc code Tab 1:
+// collection này KHÔNG nằm trong danh sách chặn ở routes/data.js (chỉ employeeProfiles/laborContracts/...
+// mới chặn hẳn), nên nếu không lọc ở đây, GET /api/data chung sẽ trả NGUYÊN mọi kỳ kiểm kê của MỌI siêu
+// thị cho MỌI tài khoản đã đăng nhập (kể cả không có bất kỳ quyền kiemKe* nào) — rò rỉ tên kỳ/thời gian
+// giữa các siêu thị, dù route /api/stocktake/sessions riêng (routes/stocktake.js) đã lọc đúng theo dept.
+// Chưa có khái niệm "xem chéo nhiều siêu thị" (kiểu shelfReportView {all,depts}) cho Kiểm Kê ở Phase 1
+// này — chỉ admin hoặc đúng siêu thị mình mới xem được, đơn giản hơn canViewShelfScopedItem() ở trên.
+function canViewStocktakeSession(user, item) {
+  if (!user || !item) return false;
+  if (user.perms?.admin) return true;
+  return item.dept === user.dept;
+}
+function filterStocktakeSessionsForUser(items, user) {
+  return (items || []).filter(o => canViewStocktakeSession(user, o));
+}
 // operationExecutionPeriods: mirror ĐÚNG phạm vi xem của hồ sơ NGUỒN (operationStoreOpenings/
 // operationRepairs) — 1 kỳ chỉ nên lộ cho đúng người xem được hồ sơ mà kỳ đó thuộc về.
 function canViewOperationExecutionPeriod(user, item, appData) {
@@ -1727,6 +1742,14 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // MODULE_ACCESS_GATED_COLLECTIONS) để tắt moduleAccess.vanHanh zero-out đúng 2 collection này + tự gác
   // route TẠO MỚI qua COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js), cùng khuôn operationOrders...
   vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'shelfLocations', 'shelfRecords', 'shelfStockThresholds'],
+  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — PHÁT HIỆN qua audit chéo trước merge: stocktakeSessions đã lọc
+  // đúng theo dept (filterStocktakeSessionsForUser(), KHÔNG lộ chéo siêu thị) nhưng THIẾU gate Khối 0 —
+  // tắt moduleAccess.kiemKe cho 1 tài khoản (đã gỡ tab/menu) vẫn đọc được nguyên các kỳ kiểm kê CỦA ĐÚNG
+  // SIÊU THỊ MÌNH qua GET /api/data chung nếu chưa gỡ hẳn quyền kiemKe* phẳng — cùng lớp lỗi "LỖI ĐÃ VÁ"
+  // lặp lại nhiều lần trong file này (budget/car/meeting/vpp/payment/checklist...). Key RIÊNG 'kiemKe'
+  // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
+  // hoàn toàn khỏi Vận Hành (xem core.js).
+  kiemKe: ['stocktakeSessions'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -1968,6 +1991,7 @@ module.exports = {
   canViewShelfLocation, filterShelfLocationsForUser, canViewShelfRecord, filterShelfRecordsForUser,
   resolveShelfReportViewScope, resolveShelfReportableDepts,
   canViewShelfStockThreshold, filterShelfStockThresholdsForUser,
+  canViewStocktakeSession, filterStocktakeSessionsForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,
   canViewOnboardingProgress, filterOnboardingProgressForUser,

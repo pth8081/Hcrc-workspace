@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**30.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.34 (2026-11): Module mới "📋 Kiểm Kê" — Phase 1 MVP, Tab 1 "Kỳ Kiểm Kê"
+
+Module kiểm kê thực tế theo KỲ (khác "Kiểm Soát Hàng Hóa" — ghi nhận liên tục theo lô, không có khái
+niệm kỳ), sống chung sidebar "⚙️ Vận Hành" nhưng phân quyền TÁCH RIÊNG hoàn toàn (khối "27. Kiểm Kê",
+8 quyền ứng đúng 8 tab dự kiến). **Đợt này CHỈ Tab 1 "📅 Kỳ Kiểm Kê" có giao diện/route/quyền thật**
+(tạo/kích hoạt/đóng/mở lại kỳ, 2 loại Gom Mã/Thống Kê độc lập mỗi siêu thị, mở lại kỳ đã chốt CHỈ
+Admin) — 7 tab còn lại (Gom Mã/Kiểm Đếm/Kiểm Soát/Cấu Hình Quầy Kệ/Xác Nhận/Báo Cáo/Cấu Hình Người
+Dùng) hiện "🚧 Đang phát triển", sẽ bổ sung ở các đợt merge sau.
+
+Trước khi merge đã cho 3 agent độc lập audit chéo (logic/quyền, Playwright thao tác thật, bảo mật/thử
+phá quyền) theo đúng "quy tắc sống còn" — phát hiện và vá ngay 2 lỗi thật trước khi merge:
+- **(Cao)** 8 nút sub-tab Kiểm Kê chưa đăng ký vào `OP_CLICK_ACTIONS` (module-vanhanh.js) — bấm bất kỳ
+  nút sub-tab nào (kể cả bấm lại Tab 1) làm cả màn Kiểm Kê trống trơn. Cùng lớp lỗi đã từng xảy ra với
+  `setVanHanhShelfSubTab` (v28.48).
+- **(Trung bình)** `kiemKe` thiếu trong `MODULE_ACCESS_GATED_COLLECTIONS` (recordViewScope.js) — tắt
+  module Kiểm Kê cho 1 tài khoản vẫn đọc được dữ liệu kỳ kiểm kê (đúng dept mình, không lộ chéo siêu
+  thị) qua `GET /api/data` chung nếu chưa gỡ hẳn quyền `kiemKe*` phẳng.
+
+Nối vào Báo Cáo quản trị + Hướng Dẫn (Nghiệp Vụ) theo đúng quy tắc "module mới phải thêm vào 2 màn
+dùng chung ngay cùng đợt merge". Thêm shortcut "📋 Kiểm Kê" vào dropdown sidebar "⚙️ Vận Hành" (4 module
+con khác đã có sẵn, đợt đầu thiếu). Đã gửi demo 21 màn hình (sidebar → vị trí trong Vận Hành → Tab 1 →
+7 tab placeholder → Báo Cáo → Hướng Dẫn) cho người dùng xác nhận trước khi merge.
 
 ## v30.33 (2026-11): Fix test báo động giả "GĐST siêu thị khác duyệt được Giá Bán Buôn"
 

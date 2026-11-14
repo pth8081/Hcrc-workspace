@@ -968,6 +968,12 @@ const DEFAULTS = {
   shelfLocations: [],
   shelfRecords: [],
   shelfStockThresholds: [],
+  // stocktakeSessions (📋 Kiểm Kê, Vận Hành, Phase 1 MVP 11/2026, Tab 1 "Kỳ Kiểm Kê") — ĐÃ học bài học
+  // từ lỗi shelfLocations/shelfRecords/shelfStockThresholds ngay phía trên (bị bỏ sót khỏi DEFAULTS gây
+  // lỗi 500 "Không thể tạo hồ sơ" lúc withLockedAppDataValue() throw "key không tồn tại") — thêm NGAY
+  // từ đầu, không để dành. routes/stocktake.js vẫn tự khởi tạo thêm 1 lớp an toàn
+  // (ensureStocktakeSessionsKey()) phòng trường hợp server chưa restart lại sau khi deploy bản này.
+  stocktakeSessions: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

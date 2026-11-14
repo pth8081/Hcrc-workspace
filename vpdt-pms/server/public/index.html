@@ -287,6 +287,11 @@
           <button id="btnVanHanhItPriceNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ITPRICE)" class="hidden sidebar-subitem">💲 Phê Duyệt Giá Bán Buôn</button>
           <!-- "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — cùng khuôn 3 nút trên, gác theo vanHanhShelfTab. -->
           <button id="btnVanHanhShelfNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(SHELF)" class="hidden sidebar-subitem">📋 Kiểm Soát Hàng Hóa</button>
+          <!-- "Kiểm Kê" (Phase 1 MVP, 11/2026) — PHÁT HIỆN lúc build demo tổng thể: 4 nút shortcut trên
+               đều có link tắt ngay trên dropdown sidebar này, Kiểm Kê lúc đầu CHỈ vào được qua switchTab(vanHanh)
+               rồi tự bấm sub-tab bên trong (thiếu nhất quán với 4 module con khác) — thêm cho ĐỦ, cùng khuôn,
+               gác theo updateVanHanhNavVisibility()/applyPermsToUI() (core.js). -->
+          <button id="btnVanHanhStocktakeNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(STOCKTAKE)" class="hidden sidebar-subitem">📋 Kiểm Kê</button>
         </div>
       </div>
 
