@@ -22,13 +22,18 @@ const {
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
-  isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
+  isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,
+  buildPriceMapFromRows, computeValueBreakdown
 } = require('../lib/stocktakeEngine');
 // Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
 // Soát Hàng Hóa" (routes/shelfStock.js) thay vì tự viết lại: cùng hàm đồng bộ/snapshot/gộp theo mã hàng,
 // không nhân bản logic nghiệp vụ đó ở module Kiểm Kê.
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
+// "💰 Giá Trị Thừa/Thiếu" (12/2026) — TÁI DÙNG đúng hạ tầng bảng giá offline đã có cho "💲 Kiểm Tra Giá"
+// (Kiểm Soát Hàng Hóa), KHÔNG tự gọi lại API đối tác riêng cho Kiểm Kê.
+const { getSnapshotForMaDiem, getSnapshotForMaDiemMerged } = require('../lib/priceSnapshotStore');
+const { syncStorePriceCatalog } = require('../jobs/priceSync');
 const { getSnapshotMapForMaDiems } = require('../lib/inventorySnapshotStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -683,7 +688,7 @@ router.get('/report', async (req, res) => {
     const maHangSet = new Set(baseRows.map(r => r.maHang));
     if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
     const baseByMaHang = new Map(baseRows.map(r => [r.maHang, r]));
-    const rows = [...maHangSet].map(maHang => {
+    let rows = [...maHangSet].map(maHang => {
       const base = baseByMaHang.get(maHang);
       const sysEntry = systemMap ? systemMap.get(maHang) : null;
       return {
@@ -697,6 +702,26 @@ router.get('/report', async (req, res) => {
 
     const totalSystemSkuCount = systemMap ? systemMap.size : null;
     const countedSkuCount = [...finalMap.values()].filter(v => v.total > 0).length;
+
+    // "💰 Giá Trị Thừa/Thiếu" (12/2026, theo yêu cầu người dùng) — CHỈ Kỳ Kiểm Kê (xem chú thích đầy đủ
+    // tại computeValueBreakdown(), lib/stocktakeEngine.js). TÁI DÙNG đúng bảng giá offline "💲 Kiểm Tra
+    // Giá" đã có (dbo.StorePriceSnapshots) — KHÔNG tự gọi API đối tác ngay lúc xem báo cáo (sẽ chậm nếu
+    // nhiều mã); chỉ đọc cache đang có + kích hoạt đồng bộ NỀN (fire-and-forget, không await) để lần xem
+    // báo cáo SAU đầy đủ hơn nếu siêu thị này chưa từng mở "Kiểm Tra Giá".
+    let valueReport = null;
+    if (session.loaiKy === LOAI_KY.THONG_KE) {
+      const maDiemRaw = storeExternalCodes[session.dept];
+      if (maDiemRaw) {
+        const priceEntry = await getSnapshotForMaDiemMerged(maDiemRaw);
+        const priceMap = buildPriceMapFromRows(priceEntry?.rows);
+        const breakdown = computeValueBreakdown(rows, priceMap);
+        rows = breakdown.rows;
+        valueReport = { tongGiaTri: breakdown.tongGiaTri, soMaThieuGia: breakdown.soMaThieuGia, giaCapNhatLuc: priceEntry?.capNhatLuc || null };
+        if (apiConfigured) syncStorePriceCatalog(maDiemRaw, { force: false }).catch((err) => {
+          console.error('⛔ GET /api/stocktake/report: lỗi kích hoạt đồng bộ ngầm bảng giá —', err.message);
+        });
+      }
+    }
 
     // So sánh GIỮA 2 KỲ bất kỳ (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với
     // nhau ấy, thì mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh") — người
@@ -732,21 +757,46 @@ router.get('/report', async (req, res) => {
       const allMaDiems = [...new Set(allowedDepts.map(d => storeExternalCodes[d]).filter(Boolean)
         .flatMap(raw => String(raw).split(',').map(s => s.trim()).filter(Boolean)))];
       const snapshotMap = apiConfigured && allMaDiems.length ? await getSnapshotMapForMaDiems(allMaDiems) : {};
+      // Giá — fetch SONG SONG giá đã cache của TỪNG Mã Điểm riêng (không có hàm bulk 1-query như Tồn
+      // Kho, nhưng số Mã Điểm thường không nhiều, đủ nhanh cho màn Admin xem ít khi) — KHÔNG tự đồng bộ
+      // API đối tác ở đây (chỉ đọc cache, giữ nguyên quyết định "không tự đồng bộ ngay lúc xem báo cáo").
+      const priceByMaDiem = {};
+      if (allMaDiems.length) {
+        await Promise.all(allMaDiems.map(async (code) => {
+          const entry = await getSnapshotForMaDiem(code);
+          if (entry) priceByMaDiem[code] = entry;
+        }));
+      }
       storeComparison = [...perDeptLatestThongKe.values()].map(s => {
         const raw = storeExternalCodes[s.dept];
         const codes = raw ? String(raw).split(',').map(c => c.trim()).filter(Boolean) : [];
         const entries = codes.map(c => snapshotMap[c]).filter(Boolean);
-        const sysRows = entries.length ? aggregateSystemInventoryRowsByMaHang(entries.flatMap(e => e.rows || [])) : [];
-        const systemQty = entries.length ? sysRows.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0) : null;
+        const sysRowsArr = entries.length ? aggregateSystemInventoryRowsByMaHang(entries.flatMap(e => e.rows || [])) : [];
+        const sysByMaHang = new Map(sysRowsArr.map(r => [String(r.maHang), Number(r.soLuongTon) || 0]));
+        const systemQty = entries.length ? sysRowsArr.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0) : null;
         const sessionCounts = sumCountsByMaHang(allCounts, s.id, c => finalCountQty(c));
         const finalQty = [...sessionCounts.values()].reduce((sum, v) => sum + v.total, 0);
-        return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty };
+
+        // Giá trị thừa/thiếu CỦA ĐÚNG siêu thị này — hợp nhất mã hàng (hệ thống + đã đếm) rồi tính
+        // ĐÚNG công thức computeValueBreakdown() (giống báo cáo 1 siêu thị ở trên), không suy diễn từ
+        // tổng SL (mỗi mã hàng có giá khác nhau, không cộng dồn được trước rồi mới nhân giá).
+        const priceEntries = codes.map(c => priceByMaDiem[c]).filter(Boolean);
+        const priceMap = buildPriceMapFromRows(priceEntries.flatMap(e => e.rows || []));
+        const storeMaHangSet = new Set([...sysByMaHang.keys(), ...sessionCounts.keys()]);
+        const storeRows = [...storeMaHangSet].map(maHang => ({
+          maHang,
+          systemQty: sysByMaHang.has(maHang) ? sysByMaHang.get(maHang) : null,
+          finalQty: sessionCounts.get(maHang)?.total || 0
+        }));
+        const { tongGiaTri, soMaThieuGia } = computeValueBreakdown(storeRows, priceMap);
+
+        return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty, tongGiaTri, soMaThieuGia };
       }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
     }
 
     res.json({
       session, compare,
-      systemConfigured: apiConfigured, rows, totalSystemSkuCount, countedSkuCount, storeComparison
+      systemConfigured: apiConfigured, rows, totalSystemSkuCount, countedSkuCount, storeComparison, valueReport
     });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/report');

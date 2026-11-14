@@ -82,6 +82,28 @@ stubModule('lib/inventorySnapshotStore.js', {
   }
 });
 
+// "💰 Giá Trị Thừa/Thiếu" (12/2026) — Mã Điểm "101" (DEPT1) ĐÃ có giá SP001/SP002 (mô phỏng siêu thị đã
+// từng mở "💲 Kiểm Tra Giá"); Mã Điểm "102" (DEPT2) CHƯA có giá nào (mô phỏng siêu thị chưa từng mở tab
+// đó) — test CẢ 2 nhánh "có giá" và "thiếu giá, báo rõ số mã".
+const FAKE_PRICE_SNAPSHOT = {
+  '101': { rows: [{ maHang: 'SP001', giaThuong: 10000 }, { maHang: 'SP002', giaThuong: 2000 }], capNhatLuc: '10:00 01/12/2026', fetchedAt: '2026-12-01T03:00:00.000Z' }
+};
+let priceSyncTriggeredFor = [];
+stubModule('lib/priceSnapshotStore.js', {
+  getSnapshotForMaDiem: async (maDiem) => FAKE_PRICE_SNAPSHOT[maDiem] || null,
+  getSnapshotForMaDiemMerged: async (maDiemRaw) => {
+    const codes = String(maDiemRaw || '').split(',').map(s => s.trim()).filter(Boolean);
+    const entries = codes.map(c => FAKE_PRICE_SNAPSHOT[c]).filter(Boolean);
+    if (!entries.length) return null;
+    return { rows: entries.flatMap(e => e.rows), capNhatLuc: entries[0].capNhatLuc, fetchedAt: entries[0].fetchedAt };
+  },
+  replaceSnapshotForMaDiem: async () => {},
+  getSnapshotStats: async () => ({ storeCount: 0, lastFetchedAt: null })
+});
+stubModule('jobs/priceSync.js', {
+  syncStorePriceCatalog: async (maDiemRaw) => { priceSyncTriggeredFor.push(maDiemRaw); return { skipped: true }; }
+});
+
 const express = require('express');
 const stocktakeRoutes = require('../routes/stocktake');
 
@@ -178,6 +200,14 @@ function request(port, method, urlPath, username, body) {
     check('Người KHÔNG phải Admin: không có storeComparison (Phase 1 không xem chéo nhiều siêu thị)', res.body.storeComparison === undefined, res.body.storeComparison);
     check('Không bật compareSessionId -> không có field compare', res.body.compare === undefined, res.body.compare);
 
+    // 6b) "💰 Giá Trị Thừa/Thiếu" (12/2026, MỚI): SP001 thiếu 2 (48-50) * 10.000đ = -20.000đ; SP002 thừa
+    // 78 (108-30) * 2.000đ = +156.000đ -> tổng +136.000đ, cả 2 mã đều có giá sẵn (soMaThieuGia=0).
+    check('SP001: giaThuong=10000, chenhLechQty=-2, giaTri=-20000', sp001.giaThuong === 10000 && sp001.chenhLechQty === -2 && sp001.giaTri === -20000, sp001);
+    check('SP002: giaThuong=2000, chenhLechQty=78, giaTri=156000', sp002.giaThuong === 2000 && sp002.chenhLechQty === 78 && sp002.giaTri === 156000, sp002);
+    check('valueReport: tongGiaTri=136000 (= -20000+156000), soMaThieuGia=0', res.body.valueReport && res.body.valueReport.tongGiaTri === 136000 && res.body.valueReport.soMaThieuGia === 0, res.body.valueReport);
+    check('Đã kích hoạt đồng bộ ngầm bảng giá (fire-and-forget) cho đúng Mã Điểm 101', priceSyncTriggeredFor.includes('101'), priceSyncTriggeredFor);
+    check('Kỳ Gom Mã KHÔNG tính giá trị thừa/thiếu (không áp dụng, valueReport=null)', (await request(port, 'GET', `/api/stocktake/report?sessionId=${GOMMA_SESSION_ID}`, 'qlA')).body.valueReport === null, null);
+
     // 7) Kỳ Gom Mã tự xem báo cáo của chính nó: dùng slGomMa làm finalQty, không có kiemDemQty/kiemSoatQty.
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${GOMMA_SESSION_ID}`, 'qlA');
     const gomMaSp001 = res.body.rows.find(r => r.maHang === 'SP001');
@@ -203,6 +233,11 @@ function request(port, method, urlPath, username, body) {
     const cmpDept2 = res.body.storeComparison.find(c => c.dept === DEPT2);
     check('storeComparison DEPT1: dùng ĐÚNG kỳ Thống Kê Q1 (systemQty=80, finalQty=48+108=156)', cmpDept1 && cmpDept1.sessionId === THONGKE_SESSION_ID && cmpDept1.systemQty === 80 && cmpDept1.finalQty === 156, cmpDept1);
     check('storeComparison DEPT2: systemQty=20 (SP003), finalQty=0 (chưa kiểm đếm gì)', cmpDept2 && cmpDept2.sessionId === THONGKE_DEPT2_ID && cmpDept2.systemQty === 20 && cmpDept2.finalQty === 0, cmpDept2);
+    // 8b) "💰 Giá Trị Thừa/Thiếu" trong storeComparison: DEPT1 đã có giá -> tongGiaTri=136000 ĐÚNG như
+    // báo cáo 1 siêu thị ở trên (6b); DEPT2 CHƯA có giá nào -> tongGiaTri=0, soMaThieuGia=1 (SP003 có
+    // systemQty nhưng thiếu giá, báo rõ chứ không tự đồng bộ ngay).
+    check('storeComparison DEPT1: tongGiaTri=136000 (khớp đúng báo cáo riêng của DEPT1)', cmpDept1.tongGiaTri === 136000 && cmpDept1.soMaThieuGia === 0, cmpDept1);
+    check('storeComparison DEPT2: CHƯA có giá nào -> tongGiaTri=0, soMaThieuGia=1 (SP003 thiếu giá)', cmpDept2.tongGiaTri === 0 && cmpDept2.soMaThieuGia === 1, cmpDept2);
 
     // 9) Thiếu sessionId -> 400.
     res = await request(port, 'GET', '/api/stocktake/report', 'qlA');

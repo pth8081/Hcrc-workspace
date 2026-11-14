@@ -388,6 +388,53 @@ function listUnconfirmedCountedShelfIds(counts, confirmations, sessionId) {
   return [...countedShelfIds].filter(id => !confirmedIds.has(id));
 }
 
+// ===== Báo Cáo "Giá Trị Thừa/Thiếu" (12/2026, theo yêu cầu người dùng: "lấy phần tồn kho với cả phần
+// giá sang để làm báo cáo xuất ra giá trị siêu thị thừa thiếu bao nhiêu") — CHỈ áp dụng Kỳ Kiểm Kê
+// (loại THONG_KE), vì khái niệm "thừa/thiếu" vốn đã là so sánh Tồn Kho Hệ Thống vs SL Cuối Cùng của
+// riêng loại kỳ này (Gom Mã không có baseline tồn kho để so). Người dùng xác nhận rõ 2 quyết định thiết
+// kế (không tự hỏi lại): (1) LUÔN dùng "Giá Thường" (giaThuong), KHÔNG dùng Giá Khuyến Mãi dù đang có —
+// tránh giá trị dao động theo đợt khuyến mãi ngắn hạn; (2) mã hàng CHƯA có giá lưu sẵn (siêu thị chưa
+// từng đồng bộ "💲 Kiểm Tra Giá" cho đúng mã đó) thì BỎ QUA khỏi tổng (không tự gọi API đồng bộ ngay lúc
+// xem báo cáo — sẽ làm báo cáo chậm nếu nhiều mã), chỉ đếm riêng để báo rõ còn thiếu bao nhiêu mã. =====
+
+// buildPriceMapFromRows() — rows lấy từ lib/priceSnapshotStore.js::getSnapshotForMaDiemMerged() (mảng
+// {maHang, giaThuong, ...} đã cache cho 1 siêu thị, xem jobs/priceSync.js). 1 siêu thị gộp nhiều Mã Điểm
+// (sáp nhập 2 siêu thị cũ) có thể có 2 dòng TRÙNG maHang — dòng SAU ghi đè dòng trước (đơn giản, chấp
+// nhận được vì trường hợp 1 mã có 2 giá khác nhau do gộp Mã Điểm là hiếm, không phải nghiệp vụ chính).
+function buildPriceMapFromRows(priceRows) {
+  const map = new Map();
+  (Array.isArray(priceRows) ? priceRows : []).forEach(r => {
+    if (r && r.maHang && typeof r.giaThuong === 'number') map.set(String(r.maHang), r.giaThuong);
+  });
+  return map;
+}
+
+// computeValueBreakdown(rows, priceMap) — rows: mảng {maHang, systemQty, finalQty, ...} (ĐÚNG rows đã
+// tính sẵn ở GET /report, KHÔNG tính lại SL để tránh lệch số với bảng Chi Tiết đang hiện). Chỉ tính được
+// giá trị cho mã hàng có ĐỦ 2 điều kiện: systemQty khác null (có baseline Tồn Kho Hệ Thống để so sánh) VÀ
+// có giá trong priceMap — thiếu 1 trong 2 thì BỎ QUA khỏi tổng (giaTri: null trên dòng đó), đếm riêng
+// qua soMaThieuGia (chỉ đếm mã có systemQty nhưng thiếu giá — mã không có cả systemQty thì vốn dĩ không
+// bao giờ tính được giá trị dù có giá hay không, không tính vào "thiếu giá").
+function computeValueBreakdown(rows, priceMap) {
+  let tongGiaTri = 0;
+  let soMaThieuGia = 0;
+  const enrichedRows = (Array.isArray(rows) ? rows : []).map(row => {
+    const gia = priceMap.get(row.maHang);
+    if (row.systemQty === null || row.systemQty === undefined) {
+      return { ...row, giaThuong: typeof gia === 'number' ? gia : null, chenhLechQty: null, giaTri: null };
+    }
+    const chenhLechQty = (Number(row.finalQty) || 0) - Number(row.systemQty);
+    if (typeof gia !== 'number') {
+      soMaThieuGia++;
+      return { ...row, giaThuong: null, chenhLechQty, giaTri: null };
+    }
+    const giaTri = chenhLechQty * gia;
+    tongGiaTri += giaTri;
+    return { ...row, giaThuong: gia, chenhLechQty, giaTri };
+  });
+  return { rows: enrichedRows, tongGiaTri, soMaThieuGia };
+}
+
 module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
@@ -398,5 +445,6 @@ module.exports = {
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
-  findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
+  findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,
+  buildPriceMapFromRows, computeValueBreakdown
 };
