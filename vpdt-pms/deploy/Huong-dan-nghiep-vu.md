@@ -3648,14 +3648,23 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
 → khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự kiến).
 
 - **2 loại Kỳ ĐỘC LẬP, mỗi siêu thị quản lý riêng**: "Gom Mã" (chuẩn hoá/
-  gắn mã hàng cho hàng chưa có mã trước khi kiểm) và "Thống Kê" (đếm số
-  lượng thực tế trên quầy kệ) — 1 siêu thị có thể có 1 kỳ Gom Mã VÀ 1 kỳ
-  Thống Kê cùng "Đang hoạt động" song song, không xung đột nhau.
+  gắn mã hàng cho hàng chưa có mã trước khi kiểm) và "Kiểm Kê" (đếm số
+  lượng thực tế trên quầy kệ — tên cũ "Thống Kê", đổi nhãn 12/2026 cho đúng
+  tên module, KHÔNG đổi gì về nghiệp vụ) — 1 siêu thị có thể có 1 kỳ Gom Mã
+  VÀ 1 kỳ Kiểm Kê cùng "Đang hoạt động" song song, không xung đột nhau.
 - **Vòng đời Kỳ**: Nháp (tạo xong, chưa có hiệu lực) → Đang hoạt động (bấm
   "Kích Hoạt" — hệ thống CHẶN nếu siêu thị đó đã có 1 kỳ KHÁC CÙNG LOẠI đang
   hoạt động) → Đã chốt (bấm "Đóng Kỳ", quyền quản lý kỳ bình thường làm
   được) → Mở Lại (quay về Đang hoạt động — **CHỈ Admin**, quyền quản lý kỳ
   thường KHÔNG mở lại được, chặn cả ở server nếu cố gọi thẳng API).
+- **Mỗi kỳ ĐỘC LẬP, không tạo được bản nháp chồng chéo (12/2026, theo yêu
+  cầu người dùng "trong 1 kỳ kiểm kê chỉ được 1 lần, không tạo bản nháp")**:
+  1 siêu thị đã có kỳ CÙNG LOẠI CHƯA ĐÓNG (Nháp hoặc Đang hoạt động) thì
+  KHÔNG tạo được kỳ MỚI nữa cho đúng siêu thị/loại đó — chặn NGAY lúc tạo
+  (cả trên giao diện lẫn server), không phải đợi tới lúc Kích Hoạt mới phát
+  hiện trùng như trước. Đóng kỳ (Đã chốt) xong thì tạo được kỳ MỚI bình
+  thường (mở vòng kiểm kê mới); muốn làm tiếp ĐÚNG kỳ cũ vừa đóng thì dùng
+  nút "↩️ Mở Lại" (chỉ Admin) ở trên, không tạo kỳ mới cho siêu thị đó.
 - **Thao tác**: Hệ Thống → ⚙️ Vận Hành → tab "📋 Kiểm Kê" → sub-tab "📅 Kỳ
   Kiểm Kê" → "+ Tạo Kỳ Mới" (chọn Loại Kỳ + đặt Tên Kỳ, tuỳ chọn khoảng thời
   gian dự kiến) → "▶ Kích Hoạt" → "🔒 Đóng Kỳ" → (Admin) "↩️ Mở Lại". Người
@@ -3663,6 +3672,17 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   xem được danh sách kỳ (cần biết kỳ nào đang hoạt động trước khi thao tác ở
   các tab sau), chỉ không thấy nút Tạo/Kích Hoạt/Đóng Kỳ nếu thiếu đúng
   quyền "📅 Quản Lý Kỳ Kiểm Kê".
+- **Chọn nhiều/tất cả siêu thị cùng lúc lúc Tạo Kỳ Mới (12/2026, CHỈ Admin
+  — người không cố định 1 siêu thị)**: ô "📍 Chọn Siêu Thị" là ô tìm-kiếm-
+  chọn-nhiều (gõ tên để thêm, bấm "×" trên từng thẻ để bỏ), kèm 2 nút
+  "Chọn Tất Cả"/"Bỏ Chọn" — tạo 1 lượt cho nhiều/tất cả siêu thị đã chọn,
+  mỗi siêu thị vẫn ra ĐÚNG 1 kỳ RIÊNG (không gộp số liệu giữa các siêu thị
+  với nhau). Siêu thị đã có kỳ CÙNG LOẠI CHƯA ĐÓNG (xem mục "Mỗi kỳ ĐỘC
+  LẬP" ở trên) tự ĐỘNG bị loại khỏi danh sách chọn được, kèm ghi chú rõ lý
+  do ngay dưới ô chọn — đổi Loại Kỳ ở dropdown bên cạnh thì danh sách loại
+  bỏ cũng tự cập nhật lại theo đúng loại đang chọn. Người dùng thường (cố
+  định 1 siêu thị) không thấy ô này — luôn tạo cho đúng siêu thị của mình,
+  giữ nguyên thao tác cũ.
 - **Phạm vi xem**: mặc định mỗi kỳ chỉ hiện cho đúng siêu thị tạo ra nó
   (dept) — Admin xem được mọi siêu thị. Chưa có khái niệm "xem chéo nhiều
   siêu thị" (kiểu Quản lý vùng ở Kiểm Soát Hàng Hóa) cho Kiểm Kê ở Phase 1
@@ -3683,7 +3703,7 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   vào tab, **bắt buộc chọn Quầy Kệ trước** (chỉ hiện quầy kệ mình đã được
   gán ở Tab 8 cho ĐÚNG hành động này) — chọn xong hệ thống tự kiểm tra kỳ
   đang hoạt động của siêu thị đó (Gom Mã cần kỳ loại "Gom Mã"; Kiểm Đếm +
-  Kiểm Soát cần kỳ loại "Thống Kê" đang hoạt động, chưa có thì báo rõ,
+  Kiểm Soát cần kỳ loại "Kiểm Kê" đang hoạt động, chưa có thì báo rõ,
   không cho quét). Có kỳ rồi mới hiện ô quét — quét/gõ mã (dùng chung cơ
   chế nhận diện như "📷 Ghi Nhận": Mã Vạch/Mã Hàng/6 số cuối) → số lượng TỰ
   CỘNG DỒN nếu quét trùng mã, mã vừa quét luôn nhảy lên đầu danh sách. Có ô
@@ -3700,35 +3720,35 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   (tái dùng ĐÚNG danh mục Quầy Kệ đã có, không tạo danh mục riêng cho Kiểm
   Kê) — nút này gác theo quyền `shelfLocationManage` RIÊNG của Kiểm Soát
   Hàng Hóa, báo lỗi rõ ràng (không âm thầm chuyển sang tab khác) nếu thiếu.
-  Tab 6 dùng để xác nhận số liệu Kiểm Đếm: hệ thống tự chọn kỳ "Thống Kê"
+  Tab 6 dùng để xác nhận số liệu Kiểm Đếm: hệ thống tự chọn kỳ "Kiểm Kê"
   đang hoạt động, liệt kê các quầy kệ ĐÃ có số Kiểm Đếm (> 0) → bấm "Xác
   Nhận" trên từng quầy khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
   Xác Nhận TỪNG quầy chỉ cần quyền Kiểm Đếm đúng quầy đó (KHÔNG cần quyền
   riêng — ai đếm quầy nào thì tự xác nhận quầy đó được); còn "Xác Nhận Toàn
-  Bộ Đợt" (đóng cả kỳ Thống Kê, chỉ mở khoá khi MỌI quầy đã Kiểm Đếm đều đã
+  Bộ Đợt" (đóng cả kỳ Kiểm Kê, chỉ mở khoá khi MỌI quầy đã Kiểm Đếm đều đã
   Xác Nhận) bắt buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC
   quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
   đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
   nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
-  chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Thống Kê, kể cả
+  chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều
   nhất — bảng Chi Tiết dưới cùng liệt kê ĐẦY ĐỦ mọi mã) + biểu đồ donut
   tiến độ + nút "📊 Xuất Excel". **Mỗi Kỳ có báo cáo RIÊNG, ĐỘC LẬP — không
-  còn tự trộn Gom Mã của 1 Kỳ khác vào báo cáo Kỳ Thống Kê như bản trước**
-  (lỗi nghiệp vụ thật đã sửa): chọn 1 Kỳ Thống Kê thì CHỈ so Tồn Kho Hệ
+  còn tự trộn Gom Mã của 1 Kỳ khác vào báo cáo Kỳ Kiểm Kê như bản trước**
+  (lỗi nghiệp vụ thật đã sửa): chọn 1 Kỳ Kiểm Kê thì CHỈ so Tồn Kho Hệ
   Thống/Kiểm Đếm (SL gốc)/Kiểm Soát (SL ghi đè nếu có)/SL Cuối Cùng của
   CHÍNH kỳ đó; chọn 1 Kỳ Gom Mã thì chỉ có 2 cột Tồn Kho Hệ Thống/SL Gom Mã.
   Màu biểu đồ CỐ ĐỊNH: Tồn Kho Hệ Thống xanh dương, Kiểm Đếm cam, Kiểm Soát/
   Cuối Cùng xanh ngọc (đã kiểm tra an toàn người mù màu).
-  **Muốn so sánh 2 Kỳ bất kỳ với nhau (VD Gom Mã với Thống Kê, hay 2 Kỳ
-  Thống Kê khác đợt) — tính năng MỚI**: dùng riêng khung "📊 So Sánh Với Kỳ
+  **Muốn so sánh 2 Kỳ bất kỳ với nhau (VD Gom Mã với Kiểm Kê, hay 2 Kỳ
+  Kiểm Kê khác đợt) — tính năng MỚI**: dùng riêng khung "📊 So Sánh Với Kỳ
   Khác" (mặc định ẩn, người dùng TỰ chọn Kỳ thứ 2 ở dropdown riêng) → hiện 1
   biểu đồ so sánh RIÊNG (màu tím/hổ phách, tách biệt khỏi báo cáo chính) —
   bấm Xuất Excel lúc này có thêm sheet "So Sánh Kỳ". **Phạm vi xem**:
   không-Admin chỉ xem đúng siêu thị mình (áp dụng cho CẢ Kỳ chính lẫn Kỳ so
   sánh); Admin xem được mọi siêu thị VÀ thấy thêm khung "So Sánh Giữa Các
-  Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Thống Kê gần nhất của chính nó, không
+  Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Kiểm Kê gần nhất của chính nó, không
   phụ thuộc Kỳ đang chọn) — Xuất Excel lúc này thêm sheet "So Sánh Siêu Thị".
 
 ### 4.5. Nhân Sự
