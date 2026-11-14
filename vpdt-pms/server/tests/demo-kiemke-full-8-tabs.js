@@ -129,12 +129,18 @@ const SHELF_A2 = { id: 71, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, Chá
     await page.waitForTimeout(300);
     await shot('tab6-xac-nhan');
 
-    // Tab 7 "📊 Báo Cáo"
+    // Tab 7 "📊 Báo Cáo" — kỳ Thống Kê giờ CHỈ so Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH nó (không
+    // trộn Gom Mã của kỳ khác vào — SỬA 11/2026 theo phản hồi người dùng).
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
     await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
     await page.waitForTimeout(300);
     await shot('tab7-bao-cao-quan-ly');
+
+    // Bật "So Sánh Với Kỳ Khác" (TÍNH NĂNG MỚI) -> so sánh kỳ Thống Kê đang xem với kỳ Gom Mã riêng.
+    await page.selectOption('#kkReportCompareSelect', String(GOMMA_SESSION.id));
+    await page.waitForTimeout(300);
+    await shot('tab7-bao-cao-so-sanh-voi-ky-khac');
 
     // Chuyển sang Admin — xem Tab 8 "🔑 Cấu Hình Người Dùng" (MANAGER không có kiemKeUserAccessManage,
     // đúng vai thực tế: chỉ Admin/người được cấp riêng quyền này mới quản lý allowlist) + Tab 7 Báo Cáo

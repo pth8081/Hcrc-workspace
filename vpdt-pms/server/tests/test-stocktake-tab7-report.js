@@ -160,25 +160,40 @@ function request(port, method, urlPath, username, body) {
     check('Chưa cấu hình API Tồn Kho: vẫn trả 200, không throw', res.status === 200, res);
     check('Chưa cấu hình API Tồn Kho: systemConfigured=false, totalSystemSkuCount=null', res.body.systemConfigured === false && res.body.totalSystemSkuCount === null, res.body);
     let sp002 = (res.body.rows || []).find(r => r.maHang === 'SP002');
-    check('Chưa cấu hình API Tồn Kho: systemQty null nhưng vẫn có finalQty/gomMaQty đúng', sp002 && sp002.systemQty === null && sp002.finalQty === 108 && sp002.gomMaQty === 118, sp002);
+    check('Chưa cấu hình API Tồn Kho: systemQty null nhưng vẫn có kiemDemQty/kiemSoatQty/finalQty đúng', sp002 && sp002.systemQty === null && sp002.kiemDemQty === 120 && sp002.kiemSoatQty === 108 && sp002.finalQty === 108, sp002);
 
-    // 6) BẬT cấu hình API Tồn Kho -> systemQty có giá trị đúng, Gom Mã tham khảo + Kiểm Soát ghi đè đúng
-    //    theo A6 (SP002: Kiểm Đếm 120 bị Kiểm Soát 108 ghi đè -> finalQty = 108, KHÔNG phải 120).
+    // 6) BẬT cấu hình API Tồn Kho -> systemQty có giá trị đúng, Kiểm Đếm/Kiểm Soát ghi đè đúng theo A6
+    //    (SP002: Kiểm Đếm 120 bị Kiểm Soát 108 ghi đè -> finalQty = 108, KHÔNG phải 120) — KHÔNG còn trộn
+    //    Gom Mã của kỳ khác vào (SỬA 11/2026 theo phản hồi người dùng: mỗi kỳ báo cáo độc lập).
     inventoryApiConfigured = true;
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}`, 'qlA');
     check('Đã cấu hình API Tồn Kho: 200, systemConfigured=true, totalSystemSkuCount=2', res.status === 200 && res.body.systemConfigured === true && res.body.totalSystemSkuCount === 2, res.body);
     const sp001 = res.body.rows.find(r => r.maHang === 'SP001');
     sp002 = res.body.rows.find(r => r.maHang === 'SP002');
-    check('SP001: Tồn Kho Hệ Thống=50, Gom Mã=46, Kiểm Đếm/Cuối Cùng=48 (chưa soát)', sp001 && sp001.systemQty === 50 && sp001.gomMaQty === 46 && sp001.finalQty === 48, sp001);
-    check('SP002: Tồn Kho Hệ Thống=30, Gom Mã=118, SL Cuối Cùng=108 (Kiểm Soát ghi đè ĐÚNG A6, không phải 120)', sp002 && sp002.systemQty === 30 && sp002.gomMaQty === 118 && sp002.finalQty === 108, sp002);
-    check('gomMaSession trả đúng kỳ Gom Mã Q1 tham khảo', res.body.gomMaSession && res.body.gomMaSession.id === GOMMA_SESSION_ID, res.body.gomMaSession);
+    check('SP001: Tồn Kho Hệ Thống=50, Kiểm Đếm=48, Kiểm Soát=null (chưa soát), SL Cuối Cùng=48', sp001 && sp001.systemQty === 50 && sp001.kiemDemQty === 48 && sp001.kiemSoatQty === null && sp001.finalQty === 48, sp001);
+    check('SP002: Tồn Kho Hệ Thống=30, Kiểm Đếm=120, Kiểm Soát=108, SL Cuối Cùng=108 (ghi đè ĐÚNG A6, không phải 120)', sp002 && sp002.systemQty === 30 && sp002.kiemDemQty === 120 && sp002.kiemSoatQty === 108 && sp002.finalQty === 108, sp002);
+    check('Báo cáo kỳ Thống Kê KHÔNG còn field gomMaQty nào (đã bỏ trộn Gom Mã)', sp001.gomMaQty === undefined && sp002.gomMaQty === undefined, { sp001, sp002 });
+    check('Báo cáo KHÔNG còn field gomMaSession (đã bỏ auto-lookup kỳ Gom Mã)', res.body.gomMaSession === undefined, res.body.gomMaSession);
     check('countedSkuCount = 2 (cả SP001/SP002 đều có finalQty > 0)', res.body.countedSkuCount === 2, res.body);
     check('Người KHÔNG phải Admin: không có storeComparison (Phase 1 không xem chéo nhiều siêu thị)', res.body.storeComparison === undefined, res.body.storeComparison);
+    check('Không bật compareSessionId -> không có field compare', res.body.compare === undefined, res.body.compare);
 
-    // 7) Kỳ Gom Mã tự xem báo cáo của chính nó: dùng slGomMa làm finalQty, KHÔNG có gomMaQty/companion.
+    // 7) Kỳ Gom Mã tự xem báo cáo của chính nó: dùng slGomMa làm finalQty, không có kiemDemQty/kiemSoatQty.
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${GOMMA_SESSION_ID}`, 'qlA');
     const gomMaSp001 = res.body.rows.find(r => r.maHang === 'SP001');
-    check('Kỳ Gom Mã tự xem báo cáo: finalQty = slGomMa của chính kỳ đó (46), không có gomMaSession', res.status === 200 && gomMaSp001 && gomMaSp001.finalQty === 46 && res.body.gomMaSession === null, res.body);
+    check('Kỳ Gom Mã tự xem báo cáo: finalQty = slGomMa của chính kỳ đó (46), không có kiemDemQty', res.status === 200 && gomMaSp001 && gomMaSp001.finalQty === 46 && gomMaSp001.kiemDemQty === undefined, res.body);
+
+    // 7b) So Sánh Với Kỳ Khác (TÍNH NĂNG MỚI 11/2026, theo đúng phản hồi người dùng): người dùng TỰ CHỌN
+    // so sánh kỳ Thống Kê với kỳ Gom Mã -> trả field `compare` RIÊNG, KHÔNG trộn vào `rows` chính.
+    res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${GOMMA_SESSION_ID}`, 'qlA');
+    check('So Sánh Với Kỳ Khác: 200, rows chính VẪN không có gomMaQty (độc lập)', res.status === 200 && res.body.rows.find(r => r.maHang === 'SP002').gomMaQty === undefined, res.body.rows);
+    check('So Sánh Với Kỳ Khác: trả đúng compare.session = kỳ Gom Mã đã chọn', res.body.compare && res.body.compare.session.id === GOMMA_SESSION_ID, res.body.compare);
+    const compareSp001 = res.body.compare && res.body.compare.rows.find(r => r.maHang === 'SP001');
+    check('So Sánh Với Kỳ Khác: compare.rows dùng ĐÚNG giá trị của kỳ Gom Mã (SP001 finalQty=46, tức slGomMa)', compareSp001 && compareSp001.finalQty === 46, compareSp001);
+    res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=999999`, 'qlA');
+    check('So Sánh Với Kỳ Khác: compareSessionId không tồn tại -> 404', res.status === 404, res);
+    res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${THONGKE_DEPT2_ID}`, 'qlA');
+    check('So Sánh Với Kỳ Khác: compareSessionId thuộc siêu thị khác, không có allowlist -> 403 (quyền xem áp dụng cho CẢ 2 kỳ độc lập)', res.status === 403, res);
 
     // 8) Admin xem được báo cáo của siêu thị KHÁC dept mình (DEPT2) -> 200, có storeComparison.
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_DEPT2_ID}`, 'admin');

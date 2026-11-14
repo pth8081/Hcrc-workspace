@@ -1208,25 +1208,36 @@ function createDispatcher(state) {
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
 
-      // ===== Tab 7 "📊 Báo Cáo" (11/2026) — mirror ĐƠN GIẢN HOÁ routes/stocktake.js GET /report bằng
-      // CHÍNH finalCountQty()/LOAI_KY/TRANG_THAI thật (lib/stocktakeEngine.js), cùng tinh thần mock
-      // "__mockSystemInventoryRows" đã dùng cho /api/shelf-stock/system-inventory ở trên — test tự seed
-      // state.__mockStocktakeReportInventoryByDept (dept -> rows thô chưa gộp) khi cần kiểm chứng cột Tồn
-      // Kho Hệ Thống; không seed thì systemConfigured=false (CHƯA cấu hình), giống đúng hành vi thật của
-      // route khi chưa cấu hình API Tồn Kho đối tác.
+      // ===== Tab 7 "📊 Báo Cáo" (11/2026, SỬA lại theo phản hồi người dùng: kỳ Thống Kê KHÔNG còn tự trộn
+      // Gom Mã của 1 kỳ khác vào — mỗi kỳ có báo cáo riêng, độc lập; so sánh 2 kỳ bất kỳ dùng riêng tham
+      // số compareSessionId, người dùng tự chọn) — mirror ĐƠN GIẢN HOÁ routes/stocktake.js GET /report
+      // bằng CHÍNH finalCountQty()/LOAI_KY/TRANG_THAI/userHasAnyStocktakeAccessToDept() thật (lib/
+      // stocktakeEngine.js), cùng tinh thần mock "__mockSystemInventoryRows" đã dùng cho /api/shelf-stock/
+      // system-inventory ở trên — test tự seed state.__mockStocktakeReportInventoryByDept (dept -> rows
+      // thô chưa gộp) khi cần kiểm chứng cột Tồn Kho Hệ Thống; không seed thì systemConfigured=false.
       if (pathName === '/api/stocktake/report' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
-        const { canViewStocktakeReport, finalCountQty, LOAI_KY, TRANG_THAI } = stockEngine2();
+        const { canViewStocktakeReport, finalCountQty, LOAI_KY, TRANG_THAI, userHasAnyStocktakeAccessToDept } = stockEngine2();
         if (!canViewStocktakeReport(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền "📊 Tab 7: Xem Báo Cáo" của Kiểm Kê' } };
-        const sessionId = Number(new URL(url, 'http://x').searchParams.get('sessionId'));
+        const qs = new URL(url, 'http://x').searchParams;
+        const sessionId = Number(qs.get('sessionId'));
         if (!Number.isFinite(sessionId)) return { status: 400, body: { error: 'Thiếu sessionId' } };
         const sessions = state.stocktakeSessions || [];
         const session = sessions.find(s => s.id === sessionId);
         if (!session) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
-        if (!freshUser.perms?.admin && session.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+        const assertCanView = (sess) => {
+          if (freshUser.perms?.admin || sess.dept === freshUser.dept) return null;
+          const access = state.stocktakeUserAccess || [];
+          if (!userHasAnyStocktakeAccessToDept(access, freshUser.username, sess.dept)) {
+            return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+          }
+          return null;
+        };
+        const denied = assertCanView(session);
+        if (denied) return denied;
         const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
         const invByDept = state.__mockStocktakeReportInventoryByDept || {};
         const getSystemMap = (dept) => {
@@ -1249,31 +1260,60 @@ function createDispatcher(state) {
           });
           return map;
         };
+        // computePrimaryRows(sess) -> { rows, finalMap } — ĐÚNG khuôn computeSessionPrimaryRows() thật,
+        // dùng chung cho cả kỳ chính lẫn kỳ so sánh (compareSessionId).
+        const computePrimaryRows = (sess) => {
+          if (sess.loaiKy === LOAI_KY.THONG_KE) {
+            const kiemDemMap = sumByMaHang(sess.id, c => Number(c.slKiemDem) || 0);
+            const kiemSoatMap = sumByMaHang(sess.id, c => (typeof c.slKiemSoat === 'number' ? c.slKiemSoat : 0));
+            const hasKiemSoat = new Map();
+            (state.stocktakeCounts || []).forEach(c => { if (c.sessionId === sess.id && c.maHang && typeof c.slKiemSoat === 'number') hasKiemSoat.set(String(c.maHang), true); });
+            const finalMap = sumByMaHang(sess.id, c => finalCountQty(c));
+            const maHangSet = new Set([...kiemDemMap.keys(), ...kiemSoatMap.keys()]);
+            const rows = [...maHangSet].map(maHang => {
+              const kd = kiemDemMap.get(maHang), ks = kiemSoatMap.get(maHang), fin = finalMap.get(maHang);
+              return {
+                maHang, tenHang: (kd && kd.tenHang) || (ks && ks.tenHang) || '',
+                kiemDemQty: kd ? kd.total : 0,
+                kiemSoatQty: hasKiemSoat.get(maHang) ? (ks ? ks.total : 0) : null,
+                finalQty: fin ? fin.total : 0
+              };
+            });
+            return { rows, finalMap };
+          }
+          const gomMaMap = sumByMaHang(sess.id, c => Number(c.slGomMa) || 0);
+          const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, finalQty: v.total }));
+          return { rows, finalMap: gomMaMap };
+        };
         const systemMap = getSystemMap(session.dept);
         const apiConfigured = !!invByDept[session.dept] || Object.keys(invByDept).length > 0;
-        let gomMaSession = null, gomMaMap = new Map(), finalMap;
-        if (session.loaiKy === LOAI_KY.THONG_KE) {
-          const candidates = sessions.filter(s => s.dept === session.dept && s.loaiKy === LOAI_KY.GOM_MA);
-          gomMaSession = candidates.find(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
-            || candidates.reduce((latest, s) => (!latest || s.id > latest.id) ? s : latest, null);
-          if (gomMaSession) gomMaMap = sumByMaHang(gomMaSession.id, c => Number(c.slGomMa) || 0);
-          finalMap = sumByMaHang(sessionId, c => finalCountQty(c));
-        } else {
-          finalMap = sumByMaHang(sessionId, c => Number(c.slGomMa) || 0);
-        }
-        const maHangSet = new Set([...finalMap.keys(), ...gomMaMap.keys()]);
+        const { rows: baseRows, finalMap } = computePrimaryRows(session);
+        const baseByMaHang = new Map(baseRows.map(r => [r.maHang, r]));
+        const maHangSet = new Set(baseRows.map(r => r.maHang));
         if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
         const rows = [...maHangSet].map(maHang => {
-          const finalEntry = finalMap.get(maHang);
-          const gomMaEntry = gomMaMap.get(maHang);
+          const base = baseByMaHang.get(maHang);
           const sysEntry = systemMap ? systemMap.get(maHang) : null;
           return {
-            maHang, tenHang: (finalEntry && finalEntry.tenHang) || (gomMaEntry && gomMaEntry.tenHang) || (sysEntry && sysEntry.tenHang) || '',
+            maHang, tenHang: (base && base.tenHang) || (sysEntry && sysEntry.tenHang) || '',
             systemQty: sysEntry ? sysEntry.soLuongTon : null,
-            gomMaQty: gomMaEntry ? gomMaEntry.total : null,
-            finalQty: finalEntry ? finalEntry.total : 0
+            kiemDemQty: base ? base.kiemDemQty : undefined,
+            kiemSoatQty: base ? base.kiemSoatQty : undefined,
+            finalQty: base ? base.finalQty : 0
           };
         }).sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+        let compare;
+        const compareSessionIdRaw = qs.get('compareSessionId');
+        if (compareSessionIdRaw !== null) {
+          const compareSessionId = Number(compareSessionIdRaw);
+          if (!Number.isFinite(compareSessionId)) return { status: 400, body: { error: 'compareSessionId không hợp lệ' } };
+          const compareSession = sessions.find(s => s.id === compareSessionId);
+          if (!compareSession) return { status: 404, body: { error: 'Không tìm thấy kỳ để so sánh' } };
+          const deniedCompare = assertCanView(compareSession);
+          if (deniedCompare) return deniedCompare;
+          const { rows: compareRows } = computePrimaryRows(compareSession);
+          compare = { session: compareSession, rows: compareRows };
+        }
         let storeComparison;
         if (freshUser.perms?.admin) {
           const allowedDepts = state.stores || [];
@@ -1293,7 +1333,7 @@ function createDispatcher(state) {
           }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
         }
         return { status: 200, body: {
-          session, gomMaSession: gomMaSession ? { id: gomMaSession.id, tenKy: gomMaSession.tenKy, trangThai: gomMaSession.trangThai } : null,
+          session, compare,
           systemConfigured: apiConfigured, rows,
           totalSystemSkuCount: systemMap ? systemMap.size : null,
           countedSkuCount: [...finalMap.values()].filter(v => v.total > 0).length,

@@ -1655,9 +1655,12 @@
         </div>
       </div>
       <!-- Tab 7 "📊 Báo Cáo" (11/2026, xem tài liệu đề xuất A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn ở bộ
-           chọn "📅 Kỳ" (không gộp số liệu nhiều kỳ). 3 biểu đồ CVD-safe (#2563eb Tồn Kho Hệ Thống/
-           #ea580c Gom Mã/#0d9488 Kiểm Đếm-Cuối Cùng, giữ cố định xuyên suốt — xem renderKkReportChart*()
-           module-vanhanh.js) — biểu đồ 3 "So Sánh Siêu Thị" CHỈ hiện cho Admin (Phase 1: Kiểm Kê chưa có
+           chọn "📅 Kỳ" (KHÔNG gộp số liệu nhiều kỳ/nhiều loại kỳ khác nhau vào 1 báo cáo — theo đúng phản
+           hồi người dùng 11/2026: kỳ Thống Kê CHỈ so sánh Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH
+           nó, KHÔNG tự trộn Gom Mã của 1 kỳ Gom Mã khác vào — đó là 2 kỳ ĐỘC LẬP). Muốn so sánh 2 kỳ bất
+           kỳ (VD Gom Mã vs Thống Kê) dùng riêng bộ chọn "📊 So Sánh Với Kỳ Khác" bên dưới — người dùng TỰ
+           CHỌN, không tự động trộn ngầm. 5 màu CVD-safe CỐ ĐỊNH xuyên suốt (xem renderKkReportChart*()
+           module-vanhanh.js) — biểu đồ "So Sánh Siêu Thị" CHỈ hiện cho Admin (Phase 1: Kiểm Kê chưa có
            khái niệm "xem chéo nhiều siêu thị" cho người không-Admin, xem tài liệu đề xuất mục A3 cuối). -->
       <div id="kkReportWrap" class="hidden space-y-3">
         <div id="kkReportDeptRow" class="flex items-center gap-2 text-sm"></div>
@@ -1682,6 +1685,16 @@
             <div id="kkReportChart3Card" class="hidden bg-white border rounded p-3">
               <div class="font-bold text-sm text-gray-800 mb-2">So Sánh Giữa Các Siêu Thị</div>
               <div id="kkReportChart3" class="overflow-x-auto"></div>
+            </div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
+            <label class="block text-xs font-semibold text-amber-800">📊 So Sánh Với Kỳ Khác (tuỳ chọn — VD so Gom Mã với Thống Kê, hoặc 2 kỳ Thống Kê khác đợt)</label>
+            <select id="kkReportCompareSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
+              <option value="">-- Không so sánh (mặc định) --</option>
+            </select>
+            <div id="kkReportCompareCard" class="hidden bg-white border rounded p-3 mt-2">
+              <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportCompareTitle">So Sánh 2 Kỳ</div>
+              <div id="kkReportCompareChart" class="overflow-x-auto"></div>
             </div>
           </div>
           <div class="bg-white border rounded p-3">
