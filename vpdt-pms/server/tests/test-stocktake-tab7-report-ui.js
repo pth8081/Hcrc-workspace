@@ -55,8 +55,7 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, STAFF);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
 
     await run.run('nv1 (KHÔNG kiemKeReportView) KHÔNG thấy nút Tab 7 "Báo Cáo"', async () => {
@@ -66,8 +65,7 @@ async function main() {
 
     // Chuyển sang qlA (có kiemKeReportView).
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, MANAGER);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
@@ -165,8 +163,7 @@ async function main() {
 
     // Chuyển sang Admin — thấy chéo siêu thị.
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);

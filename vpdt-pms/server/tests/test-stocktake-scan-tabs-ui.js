@@ -41,8 +41,7 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, USER);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(200);

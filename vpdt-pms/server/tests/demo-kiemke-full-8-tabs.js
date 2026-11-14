@@ -79,8 +79,7 @@ const SHELF_A2 = { id: 71, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, Chá
     console.log(`📸 ${file}`);
   };
   const gotoStocktake = async () => {
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
   };
 

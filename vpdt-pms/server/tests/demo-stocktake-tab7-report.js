@@ -61,8 +61,7 @@ const DEPT2 = 'Siêu thị Quận 2';
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
@@ -75,8 +74,7 @@ const DEPT2 = 'Siêu thị Quận 2';
     await shot('qla-gomma-rut-gon');
 
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);

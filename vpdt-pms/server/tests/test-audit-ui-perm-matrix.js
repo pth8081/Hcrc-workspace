@@ -80,8 +80,7 @@ async function main() {
   }
   async function goToKiemKe(user) {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, user);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
   }
 
@@ -138,7 +137,7 @@ async function main() {
       assert(alerts.length > alertsBefore, 'Phải có alert báo lỗi khi bấm mà thiếu quyền');
       const lastAlert = alerts[alerts.length - 1];
       assert(/quyền/i.test(lastAlert) && /Quầy Kệ/i.test(lastAlert), `Phải báo rõ thiếu quyền Quầy Kệ, thực tế: ${lastAlert}`);
-      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('vanHanhStocktakeWrap').classList.contains('hidden'));
+      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('kiemKeSection').classList.contains('hidden'));
       assert(stillOnKiemKe, 'Thiếu quyền -> KHÔNG được chuyển tab, vẫn đứng yên ở Kiểm Kê');
     });
 

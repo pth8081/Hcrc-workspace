@@ -48,8 +48,7 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
 
     // ===== 1) Double-click THẬT (2 click gần như đồng thời) trên "Thêm" (submitKkScan) — khoá chống

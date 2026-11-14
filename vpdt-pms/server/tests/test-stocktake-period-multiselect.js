@@ -25,8 +25,7 @@ const PORT = 8994;
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
 
     // ===== 1) Mở hộp Tạo Kỳ Mới — loại mặc định Gom Mã — Siêu thị B (đã có kỳ Gom Mã Nháp) bị LOẠI

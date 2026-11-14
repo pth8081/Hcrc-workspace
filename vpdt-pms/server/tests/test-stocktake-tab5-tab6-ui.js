@@ -58,8 +58,7 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
 
     await run.run('Tab 5 Cấu Hình Quầy Kệ: hiện ĐÚNG danh sách quầy kệ của siêu thị (chỉ xem)', async () => {
@@ -89,7 +88,7 @@ async function main() {
         currentUser.perms.shelfLocationManage = origPerm;
       }));
       assert(/quyền/i.test(alertMsg) && /Quầy Kệ/i.test(alertMsg), `Phải báo rõ thiếu quyền, thực tế: ${alertMsg}`);
-      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('vanHanhStocktakeWrap').classList.contains('hidden'));
+      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('kiemKeSection').classList.contains('hidden'));
       assert(stillOnKiemKe, 'Thiếu quyền thì KHÔNG được chuyển tab — vẫn phải đứng yên ở Kiểm Kê');
     });
 
@@ -103,7 +102,7 @@ async function main() {
     });
 
     // Quay lại Kiểm Kê, chuẩn bị dữ liệu Kiểm Đếm thật qua UI Tab 3 trước khi test Tab 6.
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
@@ -203,8 +202,7 @@ async function main() {
         await fetch(`/api/stocktake/sessions/${body.item.id}/activate`, { method: 'POST' });
       }, DEPT1);
       await page.evaluate(async (u) => { await proceedAfterAuth(u); }, STAFF);
-      await page.evaluate(() => switchTab('vanHanh'));
-      await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+      await page.evaluate(() => switchTab('kiemKe'));
       await page.waitForTimeout(150);
       const btnVisible = await page.evaluate(() => !document.getElementById('btnKkSubConfirm').classList.contains('hidden'));
       assert(btnVisible, 'Nhân viên CHỈ có kiemKeKiemDemDo vẫn phải THẤY nút Tab 6 (để tự xác nhận quầy kệ mình đếm)');

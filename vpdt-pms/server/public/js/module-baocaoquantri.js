@@ -198,20 +198,21 @@ const REPORT_NAV_TREE = [
       // được đã lọc đúng phạm vi thật qua filterShelfRecordsForUser() (xem routes/reports.js) nên vô hại
       // dù lỡ hiện sai; nhưng quyền HIỆN MỤC NAV (12/2026, vá lỗi hiện tràn cho mọi tài khoản đã đăng
       // nhập) vẫn cần gác riêng qua canViewShelfReportClient() — xem REPORT_KEY_ACCESS_FN ở dưới.
-      { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' },
-      // Kiểm Kê (📋, Phase 1 MVP, 11/2026, chỉ Tab 1 "Kỳ Kiểm Kê" đã code — Tab 2-8 "🚧 đang phát
-      // triển") — cùng khuôn checklist/shelfRecords ngay trên: quyền hiện tab RIÊNG (kiemKeReportView,
-      // Tab 7 "📊 Báo Cáo"), KHÔNG dùng hasModuleAccess() phẳng — xem canViewStocktakeReportClient()
-      // (core.js) + REPORT_KEY_ACCESS_FN dưới. Dữ liệu client nhận được đã lọc đúng dept thật qua
-      // filterStocktakeSessionsForUser() (routes/data.js) nên vô hại dù lỡ hiện sai nav.
-      { key: 'stocktakeSessions', label: '📋 Kiểm Kê — Kỳ Kiểm Kê' }
+      { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' }
     ]
   },
   // Mua Hàng > BAS (v23.30) — module TOP-LEVEL riêng (không nằm dưới dropdown nào, xem BUSINESS_MODULES
   // entry 'muaHang' ở core.js), CÙNG khuôn "checklist" ngay trên: quyền hiện tab MẶC ĐỊNH = rebateViewReport
   // (KHÔNG PHẢI quyền module 0 phẳng, xem REPORT_KEY_ACCESS_FN), dữ liệu là RebateCalculations (số liệu
   // ƯỚC TÍNH chiết khấu đã tính, không có khái niệm phòng ban) nên "xem chéo" đúng nghĩa thấy TOÀN BỘ.
-  { key: 'muaHang', label: '🛒 Mua Hàng (BAS)' }
+  { key: 'muaHang', label: '🛒 Mua Hàng (BAS)' },
+  // Kiểm Kê (📋, 12/2026) — module TOP-LEVEL riêng ở sidebar (PROMOTE khỏi "vanHanh" children ngay
+  // trên, theo yêu cầu người dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua
+  // hàng") — cùng khuôn flat node "muaHang" ngay trên. Quyền hiện tab RIÊNG (kiemKeReportView, Tab 7
+  // "📊 Báo Cáo"), KHÔNG dùng hasModuleAccess() phẳng — xem canViewStocktakeReportClient() (core.js) +
+  // REPORT_KEY_ACCESS_FN dưới (KHÔNG đổi khi promote — đã độc lập từ trước). Dữ liệu client nhận được đã
+  // lọc đúng dept thật qua filterStocktakeSessionsForUser() (routes/data.js) nên vô hại dù lỡ hiện sai nav.
+  { key: 'stocktakeSessions', label: '📋 Kiểm Kê — Kỳ Kiểm Kê' }
 ];
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): quyền admin-grant riêng "Xem Toàn Bộ Tab Báo Cáo"

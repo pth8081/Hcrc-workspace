@@ -27,8 +27,7 @@ const PORT = 8993;
     // ===== 1) Đăng nhập người KHÔNG có kiemKePeriodManage — thấy tab Kiểm Kê (module access default
     // ON) nhưng KHÔNG thấy nút "+ Tạo Kỳ Mới" (phải có quyền thật mới thao tác, không chỉ thấy tab). =====
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, PLAIN);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
     const createBtnVisiblePlain = await page.isVisible('#btnKkPeriodOpenCreate');
     assert.strictEqual(createBtnVisiblePlain, false, 'LỖI: người KHÔNG có kiemKePeriodManage không được thấy nút "+ Tạo Kỳ Mới"');
@@ -44,8 +43,7 @@ const PORT = 8993;
 
     // ===== 2) Đăng nhập Quản Lý (có kiemKePeriodManage) — tạo kỳ Gom Mã mới, Nháp. =====
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
     assert.strictEqual(await page.isVisible('#btnKkPeriodOpenCreate'), true, 'LỖI: Quản Lý có kiemKePeriodManage phải thấy nút Tạo Kỳ Mới');
     await page.click('#btnKkPeriodOpenCreate');
@@ -100,8 +98,7 @@ const PORT = 8993;
 
     // ===== 6) Đăng nhập Admin — thấy nút Mở Lại, mở lại thành công, quay về Đang hoạt động. =====
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
     assert.strictEqual(await page.isVisible('[data-op="reopenKkPeriod"]'), true, 'LỖI: Admin phải thấy nút Mở Lại Kỳ cho kỳ Đã chốt');
     await page.click('[data-op="reopenKkPeriod"]');

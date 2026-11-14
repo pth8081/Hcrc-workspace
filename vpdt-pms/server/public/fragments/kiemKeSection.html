@@ -1,0 +1,296 @@
+<!-- ===== "📋 Kiểm Kê" — fragment riêng (12/2026, tách ra khỏi vanHanhSection.html khi promote
+     thành module chính ở sidebar, theo yêu cầu người dùng "chuyển kiểm kê thành module chính ở
+     slide bar như vận hành, mua hàng"). Trước đây toàn bộ nội dung này nằm trong
+     #vanHanhStocktakeWrap bên trong vanHanhSection.html — phân quyền (khối "27. Kiểm Kê") vốn đã ĐỘC
+     LẬP với Vận Hành từ trước nên không đổi gì phần quyền, chỉ đổi điều hướng/giao diện. Nạp qua
+     TAB_SECTION_FRAGMENT.kiemKe (core.js), xem switchTab("kiemKe") + setKiemKeSubTab()
+     (module-vanhanh.js) cho luồng điều hướng đầy đủ. ===== -->
+  <!-- ===== "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — 8 tab con theo tài liệu đề xuất
+       (vpdt-pms/docs/kiem-ke-sieu-thi.md). Đợt này CHỈ Tab 1 "Kỳ Kiểm Kê" có giao diện thật — 7 tab
+       còn lại hiện khung "🚧 Sắp ra mắt" (data-op vẫn gọi setKiemKeSubTab() đúng, KHÔNG để nút chết)
+       để không hứa hẹn sai chức năng chưa code, và để lần merge sau chỉ cần đổi nội dung panel, không
+       phải dựng lại khung điều hướng. ===== -->
+    <div class="flex gap-2 flex-wrap border-b pb-2">
+      <button data-op="setKiemKeSubTab" data-tab="PERIOD" id="btnKkSubPeriod" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📅 Kỳ Kiểm Kê</button>
+      <button data-op="setKiemKeSubTab" data-tab="GOMMA" id="btnKkSubGomMa" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📷 Gom Mã</button>
+      <button data-op="setKiemKeSubTab" data-tab="KIEMDEM" id="btnKkSubKiemDem" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔢 Kiểm Đếm</button>
+      <button data-op="setKiemKeSubTab" data-tab="KIEMSOAT" id="btnKkSubKiemSoat" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🛡️ Kiểm Soát</button>
+      <button data-op="setKiemKeSubTab" data-tab="SHELFCONFIG" id="btnKkSubShelfConfig" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Cấu Hình Quầy Kệ</button>
+      <button data-op="setKiemKeSubTab" data-tab="CONFIRM" id="btnKkSubConfirm" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận</button>
+      <button data-op="setKiemKeSubTab" data-tab="REPORT" id="btnKkSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+      <button data-op="setKiemKeSubTab" data-tab="USERACCESS" id="btnKkSubUserAccess" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 Cấu Hình Người Dùng</button>
+    </div>
+
+    <!-- Tab 1: Kỳ Kiểm Kê -->
+    <div id="kkPeriodWrap" class="space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <div id="kkPeriodDeptRow" class="flex items-center gap-2 text-sm"></div>
+        <div class="flex gap-2 flex-wrap text-xs">
+          <button data-op="setKkPeriodLoaiFilter" data-arg0="" id="btnKkPeriodFilterAll" class="px-3 py-1 rounded-full font-semibold bg-cyan-700 text-white">Tất cả</button>
+          <button data-op="setKkPeriodLoaiFilter" data-arg0="GOM_MA" id="btnKkPeriodFilterGomMa" class="px-3 py-1 rounded-full font-semibold bg-gray-200 text-gray-700">Gom Mã</button>
+          <button data-op="setKkPeriodLoaiFilter" data-arg0="THONG_KE" id="btnKkPeriodFilterThongKe" class="px-3 py-1 rounded-full font-semibold bg-gray-200 text-gray-700">Kiểm Kê</button>
+        </div>
+      </div>
+
+      <div id="kkPeriodCreateBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+        <div class="font-bold text-sm text-cyan-800">+ Tạo Kỳ Mới</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <select id="kkNewLoaiKy" data-op-change="onKkNewLoaiKyChanged" class="border rounded px-2 py-1.5">
+            <option value="GOM_MA">Loại: Gom Mã</option>
+            <option value="THONG_KE">Loại: Kiểm Kê</option>
+          </select>
+          <input type="text" id="kkNewTenKy" placeholder="Tên kỳ (VD: Kiểm Kê Q4/2026)" class="border rounded px-2 py-1.5">
+          <input type="date" id="kkNewBatDau" class="border rounded px-2 py-1.5">
+          <input type="date" id="kkNewKetThuc" class="border rounded px-2 py-1.5">
+        </div>
+        <!-- "Chọn Siêu Thị" — CHỈ hiện cho admin (người không cố định 1 siêu thị, xem kkEffectiveDept()).
+             Người thường luôn tạo cho đúng siêu thị của mình, KHÔNG cần chọn gì (giữ nguyên hành vi cũ).
+             Searchable multi-select (renderMultiSelectDropdown() dùng chung core.js — KHÔNG dùng
+             <datalist> native theo đúng quy ước CLAUDE.md) thay vì 1 dropdown đơn — cho phép tạo 1 lượt
+             cho nhiều/tất cả siêu thị cùng lúc (12/2026, theo yêu cầu người dùng "kỳ kiểm kê có thể tạo
+             cho tất cả siêu thị, tạo cho 1 nhóm siêu thị"). Siêu thị đã có kỳ CÙNG LOẠI chưa đóng (Nháp/
+             Đang hoạt động) bị LOẠI khỏi danh sách chọn (không chọn lại được — "trong 1 kỳ kiểm kê chỉ
+             được 1 lần, trừ khi đóng kỳ rồi mở lại"), liệt kê rõ lý do ở ghi chú dưới. -->
+        <div id="kkNewStoresWrap" class="hidden space-y-1 bg-white border rounded p-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-gray-600">📍 Chọn Siêu Thị (có thể chọn nhiều/tất cả)</label>
+            <div class="flex gap-1">
+              <button type="button" data-op="selectAllKkNewStores" class="text-[11px] px-2 py-0.5 rounded border border-cyan-600 text-cyan-700 hover:bg-cyan-50">Chọn Tất Cả</button>
+              <button type="button" data-op="clearAllKkNewStores" class="text-[11px] px-2 py-0.5 rounded border text-gray-600 hover:bg-gray-50">Bỏ Chọn</button>
+            </div>
+          </div>
+          <div id="kkNewStoresMultiSelect"></div>
+          <p id="kkNewStoresBlockedNote" class="text-[11px] text-amber-700"></p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" data-op="submitCreateKkPeriod" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Tạo (Nháp)</button>
+          <button type="button" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded border text-xs">Hủy</button>
+        </div>
+      </div>
+      <button type="button" id="btnKkPeriodOpenCreate" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">+ Tạo Kỳ Mới</button>
+
+      <div id="kkPeriodListBody" class="space-y-2">
+        <p class="text-gray-400 text-sm">Đang tải...</p>
+      </div>
+    </div>
+
+    <!-- Tab 2 "Gom Mã" / Tab 3 "Kiểm Đếm" / Tab 4 "Kiểm Soát" (12/2026) — CÙNG 1 khuôn HTML, chỉ khác
+         id-prefix (kkGomMa/kkKiemDem/kkKiemSoat) + tabKey truyền qua data-arg0, dùng chung bộ hàm
+         KK_SCAN_TAB_CONFIG/loadKkScanTab()/submitKkScan()/... ở module-vanhanh.js. Thứ tự bắt buộc:
+         chọn Quầy Kệ (chỉ hiện quầy kệ user được allowlist Tab 8 đúng hành động này) -> hệ thống tự báo
+         kỳ đang hoạt động hoặc cảnh báo rõ nếu chưa có -> MỚI mở ô quét (ẩn hẳn tới lúc đó, đúng A5
+         "bắt buộc chọn Quầy Kệ trước"). -->
+    <div id="kkGomMaWrap" class="hidden space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+        <select id="kkGomMaShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="GOMMA" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn quầy kệ --</option>
+        </select>
+        <p id="kkGomMaSessionInfo" class="text-xs text-gray-500"></p>
+      </div>
+      <div id="kkGomMaScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+        <div class="flex gap-2">
+          <input type="text" id="kkGomMaBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+          <input type="number" id="kkGomMaQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+          <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="GOMMA" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+          <button type="button" data-op="submitKkScan" data-arg0="GOMMA" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+        </div>
+      </div>
+      <div class="bg-white border rounded p-3">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="GOMMA" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkGomMaListBody"></div>
+      </div>
+    </div>
+    <div id="kkKiemDemWrap" class="hidden space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+        <select id="kkKiemDemShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMDEM" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn quầy kệ --</option>
+        </select>
+        <p id="kkKiemDemSessionInfo" class="text-xs text-gray-500"></p>
+      </div>
+      <div id="kkKiemDemScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+        <div class="flex gap-2">
+          <input type="text" id="kkKiemDemBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+          <input type="number" id="kkKiemDemQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+          <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="KIEMDEM" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+          <button type="button" data-op="submitKkScan" data-arg0="KIEMDEM" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+        </div>
+      </div>
+      <div class="bg-white border rounded p-3">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMDEM" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkKiemDemListBody"></div>
+      </div>
+    </div>
+    <!-- Tab 4 "Kiểm Soát" — CÙNG khuôn quét/cộng dồn như Tab 2/3 (A5 áp dụng chung cho cả 3 hành động),
+         chỉ khác: danh sách hiện thêm cột "SL Kiểm Đếm" THAM KHẢO (showKiemDemRef, renderKkScanList())
+         để người soát so sánh ngay, và ghi vào field riêng slKiemSoat (ưu tiên hơn slKiemDem khi lên
+         Báo Cáo — xem finalCountQty()/lib/stocktakeEngine.js, đúng ví dụ A6). -->
+    <div id="kkKiemSoatWrap" class="hidden space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+        <select id="kkKiemSoatShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMSOAT" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn quầy kệ --</option>
+        </select>
+        <p id="kkKiemSoatSessionInfo" class="text-xs text-gray-500"></p>
+      </div>
+      <div id="kkKiemSoatScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+        <div class="flex gap-2">
+          <input type="text" id="kkKiemSoatBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+          <input type="number" id="kkKiemSoatQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+          <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="KIEMSOAT" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+          <button type="button" data-op="submitKkScan" data-arg0="KIEMSOAT" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+        </div>
+      </div>
+      <div class="bg-white border rounded p-3">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMSOAT" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkKiemSoatListBody"></div>
+      </div>
+    </div>
+    <!-- Tab 5 "Cấu Hình Quầy Kệ" (12/2026) — CHỈ XEM, trỏ sang màn quản lý THẬT đã có sẵn ở "📦 Kiểm
+         Soát Hàng Hóa" (tái dùng NGUYÊN danh mục shelfLocations, đúng câu hỏi mở #1 của tài liệu đề
+         xuất — "dùng chung danh mục đã có"). CỐ Ý không xây form Thêm/Sửa/Xoá/Nhập Excel RIÊNG ở đây —
+         tránh mở rộng canManageShelfStock() (đang dùng CHUNG cho cả Ngưỡng Tồn) sang thêm 1 nơi gọi
+         nữa, đúng nguyên tắc "không ảnh hưởng module khác đang hoạt động ổn định" khi không thật sự cần
+         thiết cho Phase này. -->
+    <div id="kkShelfConfigWrap" class="hidden space-y-3">
+      <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 flex items-center justify-between flex-wrap gap-2">
+        <span>ℹ️ Danh mục Quầy Kệ dùng CHUNG với "📦 Kiểm Soát Hàng Hóa" — xem đúng/đủ ở đây, muốn thêm/sửa/xoá/nhập Excel thì sang màn quản lý đầy đủ.</span>
+        <button type="button" data-op="goToShelfLocationsManagement" class="shrink-0 px-3 py-1 rounded bg-amber-700 text-white text-xs font-bold hover:bg-amber-800">Mở Quản Lý Quầy Kệ →</button>
+      </div>
+      <div id="kkShelfConfigDeptRow" class="flex items-center gap-2 text-sm"></div>
+      <div class="bg-white border rounded p-3">
+        <input type="text" id="kkShelfConfigFilter" placeholder="🔎 Tìm theo mã/tên quầy kệ..." data-op-input="renderKkShelfConfigList" data-arg-value="0" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkShelfConfigListBody"></div>
+      </div>
+    </div>
+    <!-- Tab 6 "Xác Nhận" (12/2026) — 2 khu vực: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy
+         kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Toàn Bộ Đợt (CHỈ người có quyền
+         Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận). -->
+    <div id="kkConfirmWrap" class="hidden space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Kiểm Kê</label>
+        <select id="kkConfirmSessionSelect" data-op-change="loadKkConfirmTab" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>
+        </select>
+      </div>
+      <div id="kkConfirmBody" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2">✅ Xác Nhận Từng Quầy Kệ</div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát vẫn thao tác được bình thường).</p>
+          <div id="kkConfirmShelfListBody"></div>
+        </div>
+        <div id="kkConfirmAllWrap" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+          <button type="button" data-op="submitKkConfirmAll" class="w-full px-3 py-2 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">🔒 Xác Nhận Toàn Bộ Đợt Kiểm Kê (Đóng Kỳ)</button>
+          <p id="kkConfirmAllNote" class="text-[11px] text-gray-500 mt-1"></p>
+        </div>
+      </div>
+    </div>
+    <!-- Tab 7 "📊 Báo Cáo" (11/2026, xem tài liệu đề xuất A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn ở bộ
+         chọn "📅 Kỳ" (KHÔNG gộp số liệu nhiều kỳ/nhiều loại kỳ khác nhau vào 1 báo cáo — theo đúng phản
+         hồi người dùng 11/2026: kỳ Thống Kê CHỈ so sánh Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH
+         nó, KHÔNG tự trộn Gom Mã của 1 kỳ Gom Mã khác vào — đó là 2 kỳ ĐỘC LẬP). Muốn so sánh 2 kỳ bất
+         kỳ (VD Gom Mã vs Thống Kê) dùng riêng bộ chọn "📊 So Sánh Với Kỳ Khác" bên dưới — người dùng TỰ
+         CHỌN, không tự động trộn ngầm. 5 màu CVD-safe CỐ ĐỊNH xuyên suốt (xem renderKkReportChart*()
+         module-vanhanh.js) — biểu đồ "So Sánh Siêu Thị" CHỈ hiện cho Admin (Phase 1: Kiểm Kê chưa có
+         khái niệm "xem chéo nhiều siêu thị" cho người không-Admin, xem tài liệu đề xuất mục A3 cuối). -->
+    <div id="kkReportWrap" class="hidden space-y-3">
+      <div id="kkReportDeptRow" class="flex items-center gap-2 text-sm"></div>
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📅 Kỳ</label>
+        <select id="kkReportSessionSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn kỳ để xem báo cáo --</option>
+        </select>
+      </div>
+      <div id="kkReportEmptyNote" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm"></div>
+      <div id="kkReportBody" class="hidden space-y-3">
+        <div id="kkReportStatCards" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+        <div class="bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportChart1Title">So Sánh Theo Mã Hàng</div>
+          <div id="kkReportChart1" class="overflow-x-auto"></div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportChart2Title">Tiến Độ</div>
+            <div id="kkReportChart2" class="flex items-center justify-center"></div>
+          </div>
+          <div id="kkReportChart3Card" class="hidden bg-white border rounded p-3">
+            <div class="font-bold text-sm text-gray-800 mb-2">So Sánh Giữa Các Siêu Thị</div>
+            <div id="kkReportChart3" class="overflow-x-auto"></div>
+          </div>
+        </div>
+        <!-- "💰 Giá Trị Thừa/Thiếu Theo Siêu Thị" (12/2026, CHỈ Admin — theo yêu cầu người dùng "lấy
+             phần tồn kho với cả phần giá sang để làm báo cáo xuất ra giá trị siêu thị thừa thiếu bao
+             nhiêu"). Bảng RIÊNG (không gộp vào biểu đồ cột So Sánh Giữa Các Siêu Thị phía trên — SL và
+             Tiền là 2 ĐƠN VỊ khác nhau, không vẽ chung 1 biểu đồ), xếp hạng từ thiếu NHIỀU nhất lên
+             đầu để admin thấy ngay siêu thị nào cần chú ý. -->
+        <div id="kkReportValueByStoreCard" class="hidden bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2">💰 Giá Trị Thừa/Thiếu Theo Siêu Thị</div>
+          <div id="kkReportValueByStoreBody" class="overflow-x-auto"></div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-amber-800">📊 So Sánh Với Kỳ Khác (tuỳ chọn — VD so Gom Mã với Kiểm Kê, hoặc 2 kỳ Kiểm Kê khác đợt)</label>
+          <select id="kkReportCompareSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Không so sánh (mặc định) --</option>
+          </select>
+          <div id="kkReportCompareCard" class="hidden bg-white border rounded p-3 mt-2">
+            <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportCompareTitle">So Sánh 2 Kỳ</div>
+            <div id="kkReportCompareChart" class="overflow-x-auto"></div>
+          </div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+            <div class="font-bold text-sm text-gray-800">Chi Tiết Theo Mã Hàng</div>
+            <button type="button" data-op="exportKkReportExcel" class="px-3 py-1.5 rounded bg-green-700 text-white text-xs font-bold hover:bg-green-800">📊 Xuất Excel</button>
+          </div>
+          <input type="text" id="kkReportFilter" placeholder="🔎 Tìm theo mã/tên hàng..." data-op-input="renderKkReportTable" data-arg-value="0" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+          <div class="overflow-x-auto"><table class="w-full text-xs">
+            <thead><tr class="text-left text-gray-500 border-b" id="kkReportTableHead"></tr></thead>
+            <tbody id="kkReportTableBody"></tbody>
+          </table></div>
+          <div id="paginationContainer_kkReport" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ),
+         xem tài liệu đề xuất mục B1. CHỈ hiện cho người có kiemKeUserAccessManage/admin (gác ở
+         setKiemKeSubTab(), module-vanhanh.js) — nút "+ Gán Quyền" không ẩn/hiện theo quyền phụ vì CẢ
+         TAB đã gác theo đúng quyền duy nhất cần (không giống Tab 1 có 2 mức quyền view/manage khác nhau). -->
+    <div id="kkUserAccessWrap" class="hidden space-y-3">
+      <div class="bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+        <div class="font-bold text-sm text-cyan-800">+ Gán Quyền Thao Tác Theo Quầy Kệ</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Người dùng</label>
+            <input type="text" id="kkUaUserInput" data-sdd-list="kkUaUserDatalist" autocomplete="off" placeholder="Gõ tên/username để tìm..." class="w-full border p-1.5 rounded">
+            <div id="kkUaUserDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Siêu thị</label>
+            <select id="kkUaDeptSelect" data-op-change="onKkUaDeptChanged" class="w-full border p-1.5 rounded">
+              <option value="">-- Chọn siêu thị --</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Quầy kệ (chọn nhiều)</label>
+          <input type="text" id="kkUaShelfFilter" data-op-input="renderKkUaShelfCheckboxes" data-arg-value="0" placeholder="Gõ để lọc quầy kệ..." class="w-full border p-1.5 rounded mb-1">
+          <div id="kkUaShelfCheckboxes" class="border rounded p-2 max-h-40 overflow-y-auto text-xs space-y-1 bg-white">
+            <p class="text-gray-400 italic">Chọn siêu thị trước để hiện danh sách quầy kệ.</p>
+          </div>
+        </div>
+        <div class="flex gap-4 text-sm">
+          <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanGomMa"> 📷 Gom Mã</label>
+          <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemDem"> 🔢 Kiểm Đếm</label>
+          <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemSoat"> 🛡️ Kiểm Soát</label>
+        </div>
+        <button type="button" data-op="submitKkUserAccess" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Lưu Quyền</button>
+      </div>
+
+      <div class="bg-white border rounded p-3">
+        <div class="font-bold text-sm text-gray-800 mb-2">Danh Sách Đã Gán</div>
+        <div id="kkUaListBody" class="space-y-1 text-sm">
+          <p class="text-gray-400 text-sm">Đang tải...</p>
+        </div>
+      </div>
+    </div>
