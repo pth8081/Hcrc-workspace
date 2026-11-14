@@ -2083,6 +2083,49 @@ let _shelfReconLastArgsDept = null;
 function renderShelfReconciliationTableFromCache() {
   if (_shelfReconLastArgs) renderShelfReconciliationTable(..._shelfReconLastArgs);
 }
+// Bộ lọc "📊 Đối Chiếu" (11/2026, theo yêu cầu người dùng — cùng đợt với Ghi Nhận/Hạn Sử Dụng/Ngưỡng
+// Tồn) — lọc trên ĐÚNG `rows` đã tải (cache _shelfReconLastArgs), KHÔNG gọi lại API. "Kết Quả" so khớp
+// theo đúng công thức diff ở renderShelfReconciliationTable() (shelfTotal hôm nay - soLuongTon).
+let shelfReconFilters = { maHang: '', tenHang: '', status: '' };
+let _shelfReconFilterCollapsed = true;
+function toggleShelfReconFilterPanel() {
+  _shelfReconFilterCollapsed = !_shelfReconFilterCollapsed;
+  const panel = document.getElementById('shelfReconFilterPanel');
+  const btn = document.getElementById('btnToggleShelfReconFilter');
+  if (panel) panel.classList.toggle('hidden', _shelfReconFilterCollapsed);
+  if (btn) btn.textContent = _shelfReconFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function onShelfReconFilterChanged() {
+  shelfReconFilters = {
+    maHang: document.getElementById('sconMaHang')?.value.trim() || '',
+    tenHang: document.getElementById('sconTenHang')?.value.trim() || '',
+    status: document.getElementById('sconStatus')?.value || ''
+  };
+  resetListPage('shelfRecon');
+  renderShelfReconciliationTableFromCache();
+}
+function clearShelfReconFilters() {
+  ['sconMaHang', 'sconTenHang'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const statusEl = document.getElementById('sconStatus'); if (statusEl) statusEl.value = '';
+  shelfReconFilters = { maHang: '', tenHang: '', status: '' };
+  resetListPage('shelfRecon');
+  renderShelfReconciliationTableFromCache();
+}
+function shelfReconHasActiveFilter() {
+  const f = shelfReconFilters;
+  return !!(f.maHang || f.tenHang || f.status);
+}
+function shelfReconRowMatchesFilters(r, todayByMaHang) {
+  const f = shelfReconFilters;
+  if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
+  if (!shelfFilterTextMatch(r.tenHang, f.tenHang)) return false;
+  if (f.status) {
+    const isMatch = ((todayByMaHang[r.maHang] || 0) - Number(r.soLuongTon || 0)) === 0;
+    if (f.status === 'match' && !isMatch) return false;
+    if (f.status === 'mismatch' && isMatch) return false;
+  }
+  return true;
+}
 function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount) {
   _shelfReconLastArgs = [rows, capNhatLuc, isOffline, maDiem, totalSystemSkuCount, scannedTodayCount, scannedEverCount];
   _shelfReconLastArgsDept = getEffectiveShelfDept();
@@ -2108,9 +2151,12 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
       pastByMaHang[r.maHang] = (pastByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
     }
   });
+  sddSetOptions('sconMaHangDropdown', [...new Set(rows.map(r => r.maHang).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')));
+  sddSetOptions('sconTenHangDropdown', [...new Set(rows.map(r => r.tenHang).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')));
+  const filteredRows = shelfReconHasActiveFilter() ? rows.filter(r => shelfReconRowMatchesFilters(r, todayByMaHang)) : rows;
   const paginationEl = document.getElementById('paginationContainer_shelfRecon');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfRecon', 'renderShelfReconciliationTableFromCache');
-  const pageRows = paginateList('shelfRecon', rows, 'renderShelfReconciliationTableFromCache', 'mã hàng');
+  const pageRows = paginateList('shelfRecon', filteredRows, 'renderShelfReconciliationTableFromCache', 'mã hàng');
   tbody.innerHTML = pageRows.length ? pageRows.map(r => {
     const shelfTotal = todayByMaHang[r.maHang] || 0;
     const pastTotal = pastByMaHang[r.maHang] || 0;
@@ -2127,7 +2173,7 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline, maDiem, tot
       <td class="p-2 text-right text-gray-500">${escapeHtml(String(pastTotal))}</td>
       <td class="p-2">${badge}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có mã hàng nào từng được scan lên kệ — chưa cần đối chiếu</td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">${rows.length ? 'Không có mã hàng khớp bộ lọc' : 'Chưa có mã hàng nào từng được scan lên kệ — chưa cần đối chiếu'}</td></tr>`;
   if (noteEl) {
     const asOf = capNhatLuc ? `Tồn kho hệ thống cập nhật lúc ${new Date(capNhatLuc).toLocaleString('vi-VN')}.` : '';
     const offlinePrefix = isOffline ? '🔌 Offline — dữ liệu có thể chưa phải số mới nhất. ' : '';
@@ -2379,12 +2425,55 @@ function shelfReportSysStockFor(r) {
     ? shelfReportSystemInventoryCache.rows.get(String(r.maHang))
     : null;
 }
+// Bộ lọc theo từng trường (11/2026, theo yêu cầu người dùng — cùng đợt với Ghi Nhận/Hạn Sử Dụng/Ngưỡng
+// Tồn/Đối Chiếu) — ĐỘC LẬP với bộ lọc Siêu Thị đã có sẵn (shelfReportStoreFilterMultiSelect), cả 2 cùng
+// áp dụng chung trong shelfReportFilteredItems().
+let shelfReportFieldFilters = { maHang: '', productName: '', shelfLocation: '', creator: '', status: '' };
+let _shelfReportFilterCollapsed = true;
+function toggleShelfReportFilterPanel() {
+  _shelfReportFilterCollapsed = !_shelfReportFilterCollapsed;
+  const panel = document.getElementById('shelfReportFilterPanel');
+  const btn = document.getElementById('btnToggleShelfReportFilter');
+  if (panel) panel.classList.toggle('hidden', _shelfReportFilterCollapsed);
+  if (btn) btn.textContent = _shelfReportFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function onShelfReportFilterChanged() {
+  shelfReportFieldFilters = {
+    maHang: document.getElementById('srpMaHang')?.value.trim() || '',
+    productName: document.getElementById('srpProductName')?.value.trim() || '',
+    shelfLocation: document.getElementById('srpShelfLocation')?.value.trim() || '',
+    creator: document.getElementById('srpCreator')?.value.trim() || '',
+    status: document.getElementById('srpStatus')?.value || ''
+  };
+  resetListPage('shelfReport');
+  renderShelfReportTable();
+}
+function clearShelfReportFilters() {
+  ['srpMaHang', 'srpProductName', 'srpShelfLocation', 'srpCreator'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const statusEl = document.getElementById('srpStatus'); if (statusEl) statusEl.value = '';
+  shelfReportFieldFilters = { maHang: '', productName: '', shelfLocation: '', creator: '', status: '' };
+  resetListPage('shelfReport');
+  renderShelfReportTable();
+}
+function shelfReportRecordMatchesFieldFilters(r) {
+  const f = shelfReportFieldFilters;
+  if (!shelfFilterTextMatch(r.maHang, f.maHang)) return false;
+  if (!shelfFilterTextMatch(r.productName, f.productName)) return false;
+  if (!shelfFilterTextMatch(`${r.shelfLocationCode || ''} ${r.shelfLocationName || ''}`, f.shelfLocation)) return false;
+  if (!shelfFilterTextMatch(r.creatorName, f.creator)) return false;
+  if (f.status === 'soldout' && Number(r.quantity) > 0) return false;
+  if (f.status === 'tracking' && Number(r.quantity) <= 0) return false;
+  return true;
+}
 function shelfReportFilteredItems() {
   const isMulti = shelfReportIsMultiStore();
   // CHỌN NHIỀU (11/2026) — rỗng (chưa chọn gì) = xem TẤT CẢ, giữ ĐÚNG ngữ nghĩa "-- Tất cả siêu thị --"
   // của SELECT đơn cũ.
   const storeFilters = isMulti ? getMultiSelectValues('shelfReportStoreFilterMultiSelect') : [];
-  return [...(DB.shelfRecords || [])].filter(r => !storeFilters.length || storeFilters.includes(r.dept)).sort((a, b) => b.id - a.id);
+  return [...(DB.shelfRecords || [])]
+    .filter(r => !storeFilters.length || storeFilters.includes(r.dept))
+    .filter(shelfReportRecordMatchesFieldFilters)
+    .sort((a, b) => b.id - a.id);
 }
 
 function renderShelfReportTable() {
@@ -2409,6 +2498,14 @@ function renderShelfReportTable() {
     <th class="border p-2">Người Ghi Nhận</th>
     <th class="border p-2">Cập Nhật Lúc</th>
     <th class="border p-2 max-w-[110px]">Người Cập Nhật Gần Nhất</th>`;
+  const isMulti = shelfReportIsMultiStore();
+  const storeFilters = isMulti ? getMultiSelectValues('shelfReportStoreFilterMultiSelect') : [];
+  const allInScope = [...(DB.shelfRecords || [])].filter(r => !storeFilters.length || storeFilters.includes(r.dept));
+  const distinct = (fn) => [...new Set(allInScope.map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  sddSetOptions('srpMaHangDropdown', distinct(r => r.maHang));
+  sddSetOptions('srpProductNameDropdown', distinct(r => r.productName));
+  sddSetOptions('srpShelfLocationDropdown', distinct(r => `${r.shelfLocationCode || ''} ${r.shelfLocationName || ''}`.trim()));
+  sddSetOptions('srpCreatorDropdown', distinct(r => r.creatorName));
   const filteredItems = shelfReportFilteredItems();
   const colCount = 11;
   const paginationEl = document.getElementById('paginationContainer_shelfReport');
@@ -2434,7 +2531,7 @@ function renderShelfReportTable() {
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
       <td class="p-2">${renderShelfRecordLastEditedCell(r)}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+  }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">${allInScope.length ? 'Không có ghi nhận khớp bộ lọc' : 'Chưa có ghi nhận nào'}</td></tr>`;
 }
 
 function exportShelfReportExcel() {
@@ -2816,6 +2913,23 @@ function shelfRecordRecentHasActiveFilter() {
 // tìm được ghi nhận cũ hơn 20 dòng gần nhất): bỏ hẳn giới hạn cứng "chỉ 20 dòng" — trả về TOÀN BỘ danh
 // sách đã lọc, PHÂN TRANG qua paginateList()/buildPaginationBoxHTML() dùng chung (core.js, cùng khuôn
 // mọi module danh sách khác — Đăng Ký Xe, Hợp Đồng...) ngay tại renderShelfRecordRecentList() bên dưới.
+// populateShelfFilterSuggestions(prefix, records) — nạp gợi ý CHO CẢ 5 ô tìm-kiếm-gõ-chọn dùng chung
+// giữa 2 màn Ghi Nhận (prefix "srf") và Hạn Sử Dụng (prefix "sef") (11/2026, theo yêu cầu người dùng —
+// "đối chiếu báo cáo, ghi nhận và ngưỡng tồn... nếu có thông tin trường bên dưới thì nó như là kiểu lọc
+// có thông tin, tìm kiếm là gợi ý"). Nguồn dữ liệu là TOÀN BỘ bản ghi hiện có của ĐÚNG siêu thị mình
+// (KHÔNG lọc theo filter hiện tại), đúng khuôn slfCategoryDropdown đã có sẵn trước đó.
+// LƯU Ý QUAN TRỌNG: nhãn gợi ý Quầy Kệ PHẢI khớp CHÍNH XÁC định dạng nối khoảng trắng dùng ở
+// shelfRecordRecentFilteredItems()/shelfExpiryRecordMatchesFilters() (`${code} ${name}`), KHÔNG dùng
+// gạch ngang "—" như cột hiển thị ở bảng (renderShelfRecordRecentList()) — nếu dùng sai định dạng, bấm
+// chọn 1 gợi ý sẽ khiến ô lọc không còn khớp lại ĐÚNG giá trị vừa chọn (lọc ra rỗng ngay sau khi chọn).
+function populateShelfFilterSuggestions(prefix, records) {
+  const distinct = (fn) => [...new Set(records.map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  sddSetOptions(`${prefix}ShelfLocationDropdown`, distinct(r => `${r.shelfLocationCode || ''} ${r.shelfLocationName || ''}`.trim()));
+  sddSetOptions(`${prefix}MaHangDropdown`, distinct(r => r.maHang));
+  sddSetOptions(`${prefix}MaVachDropdown`, distinct(r => r.maVach));
+  sddSetOptions(`${prefix}ProductNameDropdown`, distinct(r => r.productName));
+  sddSetOptions(`${prefix}EditorDropdown`, distinct(r => r.lastEditedByName));
+}
 function shelfRecordRecentFilteredItems() {
   const f = shelfRecordRecentFilters;
   let items = shelfItemsForOwnStore(DB.shelfRecords).sort((a, b) => b.id - a.id);
@@ -2848,6 +2962,7 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-gray-400 italic">—</td>
       <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
+  populateShelfFilterSuggestions('srf', shelfItemsForOwnStore(DB.shelfRecords));
   const filteredItems = shelfRecordRecentFilteredItems();
   const paginationEl = document.getElementById('paginationContainer_shelfRecordRecent');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfRecordRecent', 'renderShelfRecordRecentList');
@@ -3304,6 +3419,7 @@ function shelfExpiryComputedItems() {
 function renderShelfExpiryGroups() {
   const tbody = document.getElementById('vhShelfExpiryBody');
   if (!tbody) return;
+  populateShelfFilterSuggestions('sef', shelfItemsForOwnStore(DB.shelfRecords).filter(r => r.expiryDate));
   const rows = shelfExpiryComputedItems();
   const paginationEl = document.getElementById('paginationContainer_shelfExpiry');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('shelfExpiry', 'renderShelfExpiryGroups');
@@ -4192,10 +4308,59 @@ const SHELF_THRESHOLD_STATUS_BADGE = {
 const SHELF_THRESHOLD_ROW_BG = { RED: ' bg-red-50', YELLOW: ' bg-amber-50', GREEN: '' };
 const SHELF_THRESHOLD_SEVERITY = { RED: 2, YELLOW: 1, GREEN: 0 };
 
+// Bộ lọc "📋 Ngưỡng Tồn" (11/2026, theo yêu cầu người dùng — "đối chiếu báo cáo, ghi nhận và ngưỡng
+// tồn... nếu có thông tin trường bên dưới thì nó như là kiểu lọc có thông tin, tìm kiếm là gợi ý") —
+// cùng khuôn collapsible filter panel + sdd suggestions đã dùng ở Ghi Nhận/Hạn Sử Dụng, mặc định THU GỌN.
+let shelfThresholdFilters = { maHang: '', maVach: '', category: '', status: '' };
+let _shelfThresholdFilterCollapsed = true;
+function applyShelfThresholdFilterPanelState() {
+  const panel = document.getElementById('shelfThresholdFilterPanel');
+  const btn = document.getElementById('btnToggleShelfThresholdFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _shelfThresholdFilterCollapsed);
+  if (btn) btn.textContent = _shelfThresholdFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleShelfThresholdFilterPanel() {
+  _shelfThresholdFilterCollapsed = !_shelfThresholdFilterCollapsed;
+  applyShelfThresholdFilterPanelState();
+}
+function onShelfThresholdFilterChanged() {
+  shelfThresholdFilters = {
+    maHang: document.getElementById('stfMaHang')?.value.trim() || '',
+    maVach: document.getElementById('stfMaVach')?.value.trim() || '',
+    category: document.getElementById('stfCategory')?.value.trim() || '',
+    status: document.getElementById('stfStatus')?.value || ''
+  };
+  renderShelfStockThresholdsList();
+}
+function clearShelfThresholdFilters() {
+  ['stfMaHang', 'stfMaVach', 'stfCategory'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const statusEl = document.getElementById('stfStatus'); if (statusEl) statusEl.value = '';
+  shelfThresholdFilters = { maHang: '', maVach: '', category: '', status: '' };
+  renderShelfStockThresholdsList();
+}
+function shelfThresholdHasActiveFilter() {
+  const f = shelfThresholdFilters;
+  return !!(f.maHang || f.maVach || f.category || f.status);
+}
+function shelfThresholdMatchesFilters(t) {
+  const f = shelfThresholdFilters;
+  if (!shelfThresholdHasActiveFilter()) return true;
+  if (!shelfFilterTextMatch(t.maHang, f.maHang)) return false;
+  if (!shelfFilterTextMatch(t.maVach, f.maVach)) return false;
+  if (!shelfFilterTextMatch(t.category, f.category)) return false;
+  if (f.status === 'active' && t.active === false) return false;
+  if (f.status === 'inactive' && t.active !== false) return false;
+  return true;
+}
 function renderShelfStockThresholdsList() {
   const tbody = document.getElementById('vhShelfThresholdBody');
   if (!tbody) return;
-  const items = shelfItemsForOwnStore(DB.shelfStockThresholds).sort((a, b) => b.id - a.id);
+  const allItems = shelfItemsForOwnStore(DB.shelfStockThresholds);
+  sddSetOptions('stfMaHangDropdown', [...new Set(allItems.map(t => t.maHang).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')));
+  sddSetOptions('stfMaVachDropdown', [...new Set(allItems.map(t => t.maVach).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')));
+  sddSetOptions('stfCategoryDropdown', [...new Set(allItems.map(t => t.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')));
+  const items = allItems.filter(shelfThresholdMatchesFilters).sort((a, b) => b.id - a.id);
   const idLabel = (t) => [t.maHang ? `Mã Hàng: ${t.maHang}` : null, t.maVach ? `Mã Vạch: ${t.maVach}` : null, t.category ? `Ngành Hàng: ${t.category}` : null].filter(Boolean).join(' / ') || '(thiếu dữ liệu)';
   tbody.innerHTML = items.length ? items.map(t => {
     if (editingShelfStockThresholdId === t.id) {
