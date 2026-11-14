@@ -190,17 +190,46 @@ chuột/chạm vào từng cột, bộ lọc theo Kỳ/siêu thị ở trên bi�
 
 ## Phần B — Hướng Dẫn Hệ Thống
 
-### B1. Mô hình phân quyền (chi tiết Tab 8)
+### B1. Mô hình phân quyền (chi tiết Tab 8 + khối quyền riêng)
 
-> ⚠️ **2 lớp kiểm tra độc lập, phải qua cả 2 mới thao tác được:**
-> 1. **Tab 8 Cấu Hình Người Dùng** — user đó có được cấp quyền Gom
+> ✅ **Xác nhận: "📋 Kiểm Kê" có khối quyền riêng, tách khỏi khối Vận
+> Hành.** Theo yêu cầu: quyền của Kiểm Kê **không nằm chung/lẫn vào trong
+> khối quyền "Vận Hành"** đang có (nơi đang chứa quyền của Kiểm Soát Hàng
+> Hóa, Giá Bán Buôn/Lẻ...). Ở màn Nhân Sự → Phân Quyền → Cây Phân Quyền,
+> "📋 Kiểm Kê" là **1 khối lớn riêng, ngang hàng** với khối Vận
+> Hành/Nhân Sự/Mua Hàng — để admin tìm và gán quyền cho dễ. Khối này có
+> đúng **8 quyền, theo thứ tự Tab 1 → Tab 8**:
+>
+> | # | Khoá quyền (perm key) | Nhãn trên Cây Phân Quyền / Ma Trận |
+> |---|---|---|
+> | Tab 1 | `stocktakePeriodTab` | Kiểm Kê — Quản lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng/mở lại) |
+> | Tab 2 | `stocktakeGomMaTab` | Kiểm Kê — Gom Mã |
+> | Tab 3 | `stocktakeKiemDemTab` | Kiểm Kê — Kiểm Đếm |
+> | Tab 4 | `stocktakeKiemSoatTab` | Kiểm Kê — Kiểm Soát |
+> | Tab 5 | `stocktakeShelfConfigTab` | Kiểm Kê — Cấu Hình Quầy Kệ |
+> | Tab 6 | `stocktakeConfirmTab` | Kiểm Kê — Xác Nhận |
+> | Tab 7 | `stocktakeReportTab` | Kiểm Kê — Báo Cáo |
+> | Tab 8 | `stocktakeUserAccessTab` | Kiểm Kê — Cấu Hình Người Dùng |
+>
+> Đây là lớp **"được thấy/dùng tab nào"** (gán qua Cây Phân Quyền/Ma Trận
+> chuẩn của hệ thống, giống mọi module khác) — tách biệt với lớp **"được
+> thao tác đúng siêu thị/quầy kệ nào"** ở Tab 8 Cấu Hình Người Dùng bên
+> dưới. Có `stocktakeGomMaTab` mới thấy menu Tab 2, nhưng vào rồi vẫn cần
+> dòng cấu hình ở Tab 8 mới chọn được quầy kệ cụ thể để quét.
+
+> ⚠️ **3 lớp kiểm tra độc lập, phải qua đủ cả 3 mới thao tác được (với Gom
+> Mã/Kiểm Đếm/Kiểm Soát):**
+> 1. **Quyền tab** ở khối "📋 Kiểm Kê" trên Cây Phân Quyền — user có quyền
+>    `stocktake...Tab` tương ứng không.
+> 2. **Tab 8 Cấu Hình Người Dùng** — user đó có được cấp quyền Gom
 >    Mã/Kiểm Đếm/Kiểm Soát ở đúng siêu thị + quầy kệ này không.
-> 2. **Tab 1 Kỳ Kiểm Kê** — siêu thị đó có đang trong 1 kỳ **đúng loại**
+> 3. **Tab 1 Kỳ Kiểm Kê** — siêu thị đó có đang trong 1 kỳ **đúng loại**
 >    (Gom Mã cần Kỳ Gom Mã; Kiểm Đếm/Kiểm Soát cần Kỳ Thống Kê) ở trạng
 >    thái **Đang hoạt động** không.
 >
-> Có quyền ở (1) mà chưa có kỳ đúng loại hoạt động ở (2) thì vẫn không
-> thao tác được, và ngược lại.
+> Thiếu 1 trong 3 là không thao tác được. 5 tab còn lại (Kỳ Kiểm Kê, Cấu
+> Hình Quầy Kệ, Xác Nhận, Báo Cáo, Cấu Hình Người Dùng) chỉ cần qua lớp
+> (1) — không có khái niệm "theo quầy kệ" cho các tab quản trị này.
 
 > ✅ **Xác nhận: đóng kỳ = khoá tuyệt đối, Admin mở lại được.** Kỳ ở trạng
 > thái Đã chốt khoá hoàn toàn — không ai (kể cả người có đủ quyền ở Tab 8)
@@ -335,6 +364,11 @@ tên/tồn kho hệ thống lấy từ cache đồng bộ đối tác đã có s
    tác nào trên kỳ đó, kể cả người có đủ quyền. Chỉ **Admin** có nút "↩️
    Mở Lại Kỳ" để đưa kỳ về Đang hoạt động khi cần sửa/cập nhật lại thông
    tin.
+8. "📋 Kiểm Kê" có **khối quyền riêng** trên Cây Phân Quyền (không lẫn
+   vào khối Vận Hành), gồm đúng **8 quyền theo Tab 1 → Tab 8**
+   (`stocktakePeriodTab` … `stocktakeUserAccessTab`, xem bảng ở mục B1).
+   Đây là lớp "được thấy/dùng tab nào", tách biệt với lớp "theo siêu
+   thị/quầy kệ" ở Tab 8 Cấu Hình Người Dùng.
 
 ### Còn mở (cần bạn trả lời)
 
