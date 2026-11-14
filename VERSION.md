@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**30.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.37 (2026-12): "📋 Kiểm Kê" — thêm HTML thật cho Tab 2/3/4 (Gom Mã/Kiểm Đếm/Kiểm Soát)
+
+LỖI THẬT tự phát hiện khi tiếp tục phát triển: đợt v30.36 đã viết xong JS engine
+(`loadKkScanTab()`/`submitKkScan()`/`renderKkScanList()`/...) + route backend cho Tab 2/3, NHƯNG CHƯA
+từng thêm HTML thật (`#kkGomMaShelfSelect`/`#kkGomMaScanBox`/...) vào `vanHanhSection.html` — 2 tab đó
+trước đó vẫn chỉ hiện khung placeholder "🚧 Đang phát triển" dù phần xử lý phía sau đã sẵn sàng, dù đã
+từng báo cáo merge xong. Nay bổ sung đủ HTML cho CẢ Tab 2 "📷 Gom Mã"/Tab 3 "🔢 Kiểm Đếm"/Tab 4 "🛡️ Kiểm
+Soát" (làm luôn Tab 4 trong đợt này, tái dùng 100% cùng bộ hàm — chỉ thêm cột "SL Kiểm Đếm" tham khảo
+trong danh sách để người soát so sánh trước khi quyết định soát lại mã nào).
+
+- Luồng: bắt buộc chọn Quầy Kệ trước (chỉ hiện quầy kệ đã được allowlist ở Tab 8 cho đúng hành động) ->
+  hệ thống tự báo kỳ đang hoạt động hoặc cảnh báo rõ nếu chưa có -> quét/gõ mã (dùng chung cơ chế nhận
+  diện Mã Vạch/Mã Hàng/6-số-cuối) -> cộng dồn + MRU -> sửa tay/xoá qua ô tìm kiếm.
+- Test mới: `test-stocktake-scan-tabs-ui.js` (11 kịch bản Playwright thật — click/fill/select, không gọi
+  hàm nội bộ) xác nhận đủ luồng ẩn/hiện ô quét, cộng dồn, MRU, sửa tay không cộng dồn, Gom Mã/Kiểm Đếm
+  không lẫn số liệu, cột tham khảo Kiểm Soát. Cập nhật Hướng Dẫn Nghiệp Vụ phản ánh đúng trạng thái.
+- **Deploy**: không có biến `.env`/package npm/thay đổi `schema.sql` mới — chỉ copy code + `pm2 restart`.
 
 ## v30.36 (2026-12): "📋 Kiểm Kê" Tab 8 + Tab 2/3 Gom Mã/Kiểm Đếm + gộp ô nhận diện sản phẩm "Ghi Nhận"
 
