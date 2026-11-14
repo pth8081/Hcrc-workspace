@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**30.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.39 (2026-11): "📋 Kiểm Kê" — Tab 7 "📊 Báo Cáo" (hoàn tất đủ 8/8 tab)
+
+Hoàn thiện tab cuối cùng của module Kiểm Kê: chọn 1 Kỳ (Gom Mã hoặc Thống Kê) → bảng chi tiết theo mã
+hàng (Tồn Kho Hệ Thống/Gom Mã tham khảo/Kiểm Đếm-Cuối Cùng đã áp dụng đúng quy tắc Kiểm Soát ghi đè A6)
++ 3 biểu đồ CVD-safe (màu cố định xuyên suốt: Tồn Kho Hệ Thống xanh dương, Gom Mã cam, Kiểm Đếm/Cuối
+Cùng xanh ngọc) + Xuất Excel (tái dùng `POST /api/admin/export-xlsx` dùng chung).
+
+- Route mới `GET /api/stocktake/report?sessionId=` — tái dùng ĐÚNG hạ tầng Tồn Kho Hệ Thống (API
+  BRGMART) đã có ở Kiểm Soát Hàng Hóa (`jobs/inventorySync.js`/`lib/inventorySnapshotStore.js`), không
+  viết lại logic đồng bộ/gộp theo mã hàng.
+- Phạm vi xem đúng tài liệu đề xuất Phase 1: không-Admin chỉ xem báo cáo siêu thị mình, Admin xem được
+  mọi siêu thị + có thêm biểu đồ 3 "So Sánh Giữa Các Siêu Thị" (mỗi siêu thị dùng đúng kỳ Thống Kê gần
+  nhất của chính nó) — người không-Admin không có khái niệm xem chéo nhiều siêu thị ở Phase 1 này.
+  Admin xuất Excel ra 2 sheet (Chi Tiết + So Sánh Siêu Thị); không-Admin chỉ 1 sheet.
+  Kỳ Gom Mã tự xem báo cáo của chính nó (không có Kiểm Đếm/Kiểm Soát, dùng SL Gom Mã làm giá trị chính).
+- Test mới: `test-stocktake-tab7-report.js` (19 kịch bản HTTP thật qua Express app, bao gồm cả nhánh
+  CHƯA cấu hình API Tồn Kho), `test-stocktake-tab7-report-ui.js` (9 kịch bản Playwright thật). Toàn bộ
+  42 file test Kiểm Soát Hàng Hóa/Kiểm Kê liên quan đã chạy lại, pass hết.
+- Module "📋 Kiểm Kê" nay đã đủ 8/8 tab theo đúng tài liệu đề xuất (`vpdt-pms/docs/kiem-ke-sieu-thi.md`).
 
 ## v30.38 (2026-11): "📋 Kiểm Kê" — Tab 5 "Cấu Hình Quầy Kệ" + Tab 6 "Xác Nhận"
 

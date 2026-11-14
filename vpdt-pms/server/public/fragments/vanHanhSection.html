@@ -1654,7 +1654,50 @@
           </div>
         </div>
       </div>
-      <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <!-- Tab 7 "📊 Báo Cáo" (11/2026, xem tài liệu đề xuất A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn ở bộ
+           chọn "📅 Kỳ" (không gộp số liệu nhiều kỳ). 3 biểu đồ CVD-safe (#2563eb Tồn Kho Hệ Thống/
+           #ea580c Gom Mã/#0d9488 Kiểm Đếm-Cuối Cùng, giữ cố định xuyên suốt — xem renderKkReportChart*()
+           module-vanhanh.js) — biểu đồ 3 "So Sánh Siêu Thị" CHỈ hiện cho Admin (Phase 1: Kiểm Kê chưa có
+           khái niệm "xem chéo nhiều siêu thị" cho người không-Admin, xem tài liệu đề xuất mục A3 cuối). -->
+      <div id="kkReportWrap" class="hidden space-y-3">
+        <div id="kkReportDeptRow" class="flex items-center gap-2 text-sm"></div>
+        <div class="bg-white border rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">📅 Kỳ</label>
+          <select id="kkReportSessionSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Chọn kỳ để xem báo cáo --</option>
+          </select>
+        </div>
+        <div id="kkReportEmptyNote" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm"></div>
+        <div id="kkReportBody" class="hidden space-y-3">
+          <div id="kkReportStatCards" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+          <div class="bg-white border rounded p-3">
+            <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportChart1Title">So Sánh Theo Mã Hàng</div>
+            <div id="kkReportChart1" class="overflow-x-auto"></div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-3">
+            <div class="bg-white border rounded p-3">
+              <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportChart2Title">Tiến Độ</div>
+              <div id="kkReportChart2" class="flex items-center justify-center"></div>
+            </div>
+            <div id="kkReportChart3Card" class="hidden bg-white border rounded p-3">
+              <div class="font-bold text-sm text-gray-800 mb-2">So Sánh Giữa Các Siêu Thị</div>
+              <div id="kkReportChart3" class="overflow-x-auto"></div>
+            </div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+              <div class="font-bold text-sm text-gray-800">Chi Tiết Theo Mã Hàng</div>
+              <button type="button" data-op="exportKkReportExcel" class="px-3 py-1.5 rounded bg-green-700 text-white text-xs font-bold hover:bg-green-800">📊 Xuất Excel</button>
+            </div>
+            <input type="text" id="kkReportFilter" placeholder="🔎 Tìm theo mã/tên hàng..." data-op-input="renderKkReportTable" data-arg-value="0" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+            <div class="overflow-x-auto"><table class="w-full text-xs">
+              <thead><tr class="text-left text-gray-500 border-b" id="kkReportTableHead"></tr></thead>
+              <tbody id="kkReportTableBody"></tbody>
+            </table></div>
+            <div id="paginationContainer_kkReport" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
       <!-- Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ),
            xem tài liệu đề xuất mục B1. CHỈ hiện cho người có kiemKeUserAccessManage/admin (gác ở
            setKiemKeSubTab(), module-vanhanh.js) — nút "+ Gán Quyền" không ẩn/hiện theo quyền phụ vì CẢ

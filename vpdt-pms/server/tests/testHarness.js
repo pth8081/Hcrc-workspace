@@ -1200,6 +1200,99 @@ function createDispatcher(state) {
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
 
+      // ===== Tab 7 "📊 Báo Cáo" (11/2026) — mirror ĐƠN GIẢN HOÁ routes/stocktake.js GET /report bằng
+      // CHÍNH finalCountQty()/LOAI_KY/TRANG_THAI thật (lib/stocktakeEngine.js), cùng tinh thần mock
+      // "__mockSystemInventoryRows" đã dùng cho /api/shelf-stock/system-inventory ở trên — test tự seed
+      // state.__mockStocktakeReportInventoryByDept (dept -> rows thô chưa gộp) khi cần kiểm chứng cột Tồn
+      // Kho Hệ Thống; không seed thì systemConfigured=false (CHƯA cấu hình), giống đúng hành vi thật của
+      // route khi chưa cấu hình API Tồn Kho đối tác.
+      if (pathName === '/api/stocktake/report' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        const { canViewStocktakeReport, finalCountQty, LOAI_KY, TRANG_THAI } = stockEngine2();
+        if (!canViewStocktakeReport(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền "📊 Tab 7: Xem Báo Cáo" của Kiểm Kê' } };
+        const sessionId = Number(new URL(url, 'http://x').searchParams.get('sessionId'));
+        if (!Number.isFinite(sessionId)) return { status: 400, body: { error: 'Thiếu sessionId' } };
+        const sessions = state.stocktakeSessions || [];
+        const session = sessions.find(s => s.id === sessionId);
+        if (!session) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
+        if (!freshUser.perms?.admin && session.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+        const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
+        const invByDept = state.__mockStocktakeReportInventoryByDept || {};
+        const getSystemMap = (dept) => {
+          const raw = invByDept[dept];
+          if (!raw) return null;
+          const rows = aggregateSystemInventoryRowsByMaHang(raw);
+          const map = new Map();
+          rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '' }); });
+          return map;
+        };
+        const sumByMaHang = (sid, valueFn) => {
+          const map = new Map();
+          (state.stocktakeCounts || []).forEach(c => {
+            if (c.sessionId !== sid || !c.maHang) return;
+            const key = String(c.maHang);
+            const existing = map.get(key) || { tenHang: c.tenHang || '', total: 0 };
+            existing.total += valueFn(c);
+            if (!existing.tenHang && c.tenHang) existing.tenHang = c.tenHang;
+            map.set(key, existing);
+          });
+          return map;
+        };
+        const systemMap = getSystemMap(session.dept);
+        const apiConfigured = !!invByDept[session.dept] || Object.keys(invByDept).length > 0;
+        let gomMaSession = null, gomMaMap = new Map(), finalMap;
+        if (session.loaiKy === LOAI_KY.THONG_KE) {
+          const candidates = sessions.filter(s => s.dept === session.dept && s.loaiKy === LOAI_KY.GOM_MA);
+          gomMaSession = candidates.find(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
+            || candidates.reduce((latest, s) => (!latest || s.id > latest.id) ? s : latest, null);
+          if (gomMaSession) gomMaMap = sumByMaHang(gomMaSession.id, c => Number(c.slGomMa) || 0);
+          finalMap = sumByMaHang(sessionId, c => finalCountQty(c));
+        } else {
+          finalMap = sumByMaHang(sessionId, c => Number(c.slGomMa) || 0);
+        }
+        const maHangSet = new Set([...finalMap.keys(), ...gomMaMap.keys()]);
+        if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
+        const rows = [...maHangSet].map(maHang => {
+          const finalEntry = finalMap.get(maHang);
+          const gomMaEntry = gomMaMap.get(maHang);
+          const sysEntry = systemMap ? systemMap.get(maHang) : null;
+          return {
+            maHang, tenHang: (finalEntry && finalEntry.tenHang) || (gomMaEntry && gomMaEntry.tenHang) || (sysEntry && sysEntry.tenHang) || '',
+            systemQty: sysEntry ? sysEntry.soLuongTon : null,
+            gomMaQty: gomMaEntry ? gomMaEntry.total : null,
+            finalQty: finalEntry ? finalEntry.total : 0
+          };
+        }).sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+        let storeComparison;
+        if (freshUser.perms?.admin) {
+          const allowedDepts = state.stores || [];
+          const perDept = new Map();
+          sessions.forEach(s => {
+            if (s.loaiKy !== LOAI_KY.THONG_KE || !allowedDepts.includes(s.dept)) return;
+            const existing = perDept.get(s.dept);
+            const better = !existing || (s.trangThai === TRANG_THAI.DANG_HOAT_DONG && existing.trangThai !== TRANG_THAI.DANG_HOAT_DONG) || (s.trangThai === existing.trangThai && s.id > existing.id);
+            if (better) perDept.set(s.dept, s);
+          });
+          storeComparison = [...perDept.values()].map(s => {
+            const sMap = getSystemMap(s.dept);
+            const systemQty = sMap ? [...sMap.values()].reduce((sum, v) => sum + v.soLuongTon, 0) : null;
+            const fMap = sumByMaHang(s.id, c => finalCountQty(c));
+            const finalQty = [...fMap.values()].reduce((sum, v) => sum + v.total, 0);
+            return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty };
+          }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
+        }
+        return { status: 200, body: {
+          session, gomMaSession: gomMaSession ? { id: gomMaSession.id, tenKy: gomMaSession.tenKy, trangThai: gomMaSession.trangThai } : null,
+          systemConfigured: apiConfigured, rows,
+          totalSystemSkuCount: systemMap ? systemMap.size : null,
+          countedSkuCount: [...finalMap.values()].filter(v => v.total > 0).length,
+          storeComparison
+        } };
+      }
+
       // ===== Ghi Nhận Theo Lô (Kiểm Soát Hàng Hóa, 11/2026) — mirror ĐÚNG routes/shelfStock.js
       // (POST /records/upsert, PATCH/DELETE /records/:id) bằng CHÍNH các hàm thật lib/shelfRecordUpsert.js/
       // lib/shelfStockEdit.js, không tự đoán lại logic nghiệp vụ — cùng triết lý mọi nhánh khác ở trên. =====

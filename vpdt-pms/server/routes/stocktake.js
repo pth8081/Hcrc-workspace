@@ -18,11 +18,18 @@ const {
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake,
   buildNewSession, activateSession, closeSession, reopenSession, findActiveSession,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
+  canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
   upsertUserAccessRows, removeUserAccessRow,
-  upsertScanCount, editCountValue, deleteCountRow,
+  upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
 } = require('../lib/stocktakeEngine');
+// Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
+// Soát Hàng Hóa" (routes/shelfStock.js) thay vì tự viết lại: cùng hàm đồng bộ/snapshot/gộp theo mã hàng,
+// không nhân bản logic nghiệp vụ đó ở module Kiểm Kê.
+const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory } = require('../jobs/inventorySync');
+const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
+const { getSnapshotMapForMaDiems } = require('../lib/inventorySnapshotStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -494,6 +501,150 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/stocktake/sessions/:id/confirm-all');
+  }
+});
+
+// ===================== TAB 7 "📊 Báo Cáo" (11/2026) =====================
+// Phạm vi xem (tài liệu đề xuất mục A3 cuối): KHÔNG-Admin chỉ xem đúng siêu thị mình, Admin xem được
+// MỌI siêu thị — Kiểm Kê Phase 1 chỉ có 2 mức (KHÁC kiểu phân quyền "depts[] riêng theo từng người" như
+// shelfReportView.depts của Kiểm Soát Hàng Hóa).
+function resolveStocktakeReportableDepts(user, stores) {
+  return user?.perms?.admin ? (Array.isArray(stores) ? stores : []) : (user?.dept ? [user.dept] : []);
+}
+
+// Tồn Kho Hệ Thống CỘNG GỘP theo mã hàng cho ĐÚNG 1 siêu thị — trả Map(maHang -> {soLuongTon, tenHang})
+// hoặc null nếu chưa cấu hình Mã Điểm/chưa có dữ liệu (KHÔNG throw — Báo Cáo vẫn hiện được phần Kiểm
+// Đếm dù thiếu Tồn Kho Hệ Thống để so sánh, chỉ cột đó hiện "—").
+async function getDeptSystemInventoryMap(dept, storeExternalCodes) {
+  const maDiem = storeExternalCodes?.[dept];
+  if (!maDiem) return null;
+  const cached = await getSystemInventoryForMaDiem(maDiem);
+  if (!cached) return null;
+  const rows = aggregateSystemInventoryRowsByMaHang(cached.rows);
+  const map = new Map();
+  rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '' }); });
+  return map;
+}
+
+// Gom 1 danh sách stocktakeCounts CỦA ĐÚNG 1 sessionId theo maHang — dùng chung cho cả slGomMa (Gom Mã)
+// và finalCountQty (Kiểm Đếm/Kiểm Soát, A6 "quy tắc ghi đè") qua tham số valueFn.
+function sumCountsByMaHang(counts, sessionId, valueFn) {
+  const map = new Map();
+  (Array.isArray(counts) ? counts : []).forEach(c => {
+    if (c.sessionId !== sessionId || !c.maHang) return;
+    const key = String(c.maHang);
+    const existing = map.get(key) || { tenHang: c.tenHang || '', total: 0 };
+    existing.total += valueFn(c);
+    if (!existing.tenHang && c.tenHang) existing.tenHang = c.tenHang;
+    map.set(key, existing);
+  });
+  return map;
+}
+
+// Kỳ Gom Mã "tham khảo" đi kèm 1 kỳ Thống Kê đang xem ở Báo Cáo (A7 — cột "Gom Mã (tham khảo)") — ưu
+// tiên kỳ Gom Mã ĐANG hoạt động của CÙNG siêu thị, không còn thì lấy kỳ Gom Mã gần nhất (id lớn nhất).
+// Không có kỳ Gom Mã nào thì cột này để trống — KHÔNG báo lỗi (Gom Mã là bước TUỲ CHỌN).
+function findCompanionGomMaSession(sessions, dept) {
+  const candidates = (Array.isArray(sessions) ? sessions : []).filter(s => s.dept === dept && s.loaiKy === LOAI_KY.GOM_MA);
+  if (!candidates.length) return null;
+  const active = candidates.find(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG);
+  if (active) return active;
+  return candidates.reduce((latest, s) => (!latest || s.id > latest.id) ? s : latest, null);
+}
+
+router.get('/report', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canViewStocktakeReport(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền "📊 Tab 7: Xem Báo Cáo" của Kiểm Kê' });
+  }
+  try {
+    const sessionId = Number(req.query.sessionId);
+    if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    await ensureStocktakeSessionsKey();
+    const sessions = (await getAppDataValue('stocktakeSessions')) || [];
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+    }
+
+    const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
+    const apiConfigured = await isInventoryApiConfigured();
+    if (apiConfigured) await syncSystemInventory({ force: false });
+
+    await ensureStocktakeKey('stocktakeCounts');
+    const allCounts = (await getAppDataValue('stocktakeCounts')) || [];
+
+    const systemMap = apiConfigured ? await getDeptSystemInventoryMap(session.dept, storeExternalCodes) : null;
+
+    // Kỳ Thống Kê: cột chính "finalMap" = Kiểm Đếm/Kiểm Soát (A6), kèm Gom Mã tham khảo từ kỳ Gom Mã
+    // riêng cùng siêu thị. Kỳ Gom Mã tự xem báo cáo của chính nó: không có Kiểm Đếm/Kiểm Soát, dùng
+    // luôn slGomMa của CHÍNH kỳ này làm "finalMap" — tránh phải tách 2 nhánh render khác nhau ở client.
+    let gomMaSession = null, gomMaMap = new Map(), finalMap;
+    if (session.loaiKy === LOAI_KY.THONG_KE) {
+      gomMaSession = findCompanionGomMaSession(sessions, session.dept);
+      if (gomMaSession) gomMaMap = sumCountsByMaHang(allCounts, gomMaSession.id, c => Number(c.slGomMa) || 0);
+      finalMap = sumCountsByMaHang(allCounts, sessionId, c => finalCountQty(c));
+    } else {
+      finalMap = sumCountsByMaHang(allCounts, sessionId, c => Number(c.slGomMa) || 0);
+    }
+
+    const maHangSet = new Set([...finalMap.keys(), ...gomMaMap.keys()]);
+    if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
+    const rows = [...maHangSet].map(maHang => {
+      const finalEntry = finalMap.get(maHang);
+      const gomMaEntry = gomMaMap.get(maHang);
+      const sysEntry = systemMap ? systemMap.get(maHang) : null;
+      const tenHang = (finalEntry && finalEntry.tenHang) || (gomMaEntry && gomMaEntry.tenHang) || (sysEntry && sysEntry.tenHang) || '';
+      return {
+        maHang, tenHang,
+        systemQty: sysEntry ? sysEntry.soLuongTon : null,
+        gomMaQty: gomMaEntry ? gomMaEntry.total : null,
+        finalQty: finalEntry ? finalEntry.total : 0
+      };
+    }).sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+
+    const totalSystemSkuCount = systemMap ? systemMap.size : null;
+    const countedSkuCount = [...finalMap.values()].filter(v => v.total > 0).length;
+
+    // So sánh nhiều siêu thị (A7, biểu đồ 3) — CHỈ Admin (tài liệu đề xuất A3: "Chưa có khái niệm xem
+    // chéo nhiều siêu thị cho Kiểm Kê ở Phase 1" với không-Admin). Độc lập với kỳ đang chọn ở trên — mỗi
+    // siêu thị dùng ĐÚNG kỳ Thống Kê gần nhất của chính nó (ưu tiên đang hoạt động), không gộp theo kỳ.
+    let storeComparison;
+    if (req.freshUser.perms?.admin) {
+      const stores = (await getAppDataValue('stores')) || [];
+      const allowedDepts = resolveStocktakeReportableDepts(req.freshUser, stores);
+      const perDeptLatestThongKe = new Map();
+      sessions.forEach(s => {
+        if (s.loaiKy !== LOAI_KY.THONG_KE || !allowedDepts.includes(s.dept)) return;
+        const existing = perDeptLatestThongKe.get(s.dept);
+        const better = !existing
+          || (s.trangThai === TRANG_THAI.DANG_HOAT_DONG && existing.trangThai !== TRANG_THAI.DANG_HOAT_DONG)
+          || (s.trangThai === existing.trangThai && s.id > existing.id);
+        if (better) perDeptLatestThongKe.set(s.dept, s);
+      });
+      const allMaDiems = [...new Set(allowedDepts.map(d => storeExternalCodes[d]).filter(Boolean)
+        .flatMap(raw => String(raw).split(',').map(s => s.trim()).filter(Boolean)))];
+      const snapshotMap = apiConfigured && allMaDiems.length ? await getSnapshotMapForMaDiems(allMaDiems) : {};
+      storeComparison = [...perDeptLatestThongKe.values()].map(s => {
+        const raw = storeExternalCodes[s.dept];
+        const codes = raw ? String(raw).split(',').map(c => c.trim()).filter(Boolean) : [];
+        const entries = codes.map(c => snapshotMap[c]).filter(Boolean);
+        const sysRows = entries.length ? aggregateSystemInventoryRowsByMaHang(entries.flatMap(e => e.rows || [])) : [];
+        const systemQty = entries.length ? sysRows.reduce((sum, r) => sum + (Number(r.soLuongTon) || 0), 0) : null;
+        const sessionCounts = sumCountsByMaHang(allCounts, s.id, c => finalCountQty(c));
+        const finalQty = [...sessionCounts.values()].reduce((sum, v) => sum + v.total, 0);
+        return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty };
+      }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
+    }
+
+    res.json({
+      session,
+      gomMaSession: gomMaSession ? { id: gomMaSession.id, tenKy: gomMaSession.tenKy, trangThai: gomMaSession.trangThai } : null,
+      systemConfigured: apiConfigured, rows, totalSystemSkuCount, countedSkuCount, storeComparison
+    });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/report');
   }
 });
 
