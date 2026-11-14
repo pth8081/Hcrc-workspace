@@ -252,7 +252,21 @@ router.get('/active-session-for-shelf', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const sessions = (await getAppDataValue('stocktakeSessions')) || [];
     const activeSession = findActiveSession(sessions, loc.dept, requiredLoaiKyForMode(mode));
-    res.json({ session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+    // LỖI UX THẬT phát hiện qua audit chéo (11/2026): route này (quyết định MỞ/KHOÁ ô quét ngay lúc chọn
+    // quầy kệ) trước đây KHÔNG kiểm tra Lớp 4 (quầy kệ đã Xác Nhận ở Tab 6) — chỉ assertStocktakeScanAllowed()
+    // dùng cho scan/edit/delete mới kiểm tra lớp này. Hậu quả: chọn lại 1 quầy kệ ĐÃ Xác Nhận ở Tab 3 Kiểm
+    // Đếm vẫn hiện "Kỳ đang hoạt động" + MỞ ô quét bình thường — người dùng chỉ biết bị chặn SAU KHI gõ/
+    // quét mã và bấm "Thêm" (lỗi 409 ở POST /counts/scan). Không mất dữ liệu (server vẫn chặn đúng ở bước
+    // ghi), nhưng đúng kiểu "giao diện cho phép thao tác nhưng bấm xong mới biết không được việc" — trả
+    // thêm `shelfConfirmed` để client khoá/báo ngay lúc chọn quầy kệ, không đợi tới lúc quét. CHỈ áp dụng
+    // mode KIEM_DEM (đúng Lớp 4 gốc — Xác Nhận không khoá Gom Mã/Kiểm Soát).
+    let shelfConfirmed = false;
+    if (mode === 'KIEM_DEM' && activeSession) {
+      await ensureStocktakeKey('stocktakeShelfConfirmations');
+      const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+      shelfConfirmed = isShelfConfirmed(confirmations, activeSession.id, shelfLocationId);
+    }
+    res.json({ session: activeSession || null, shelfConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
   }

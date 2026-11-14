@@ -20,6 +20,13 @@ async function main() {
     depts: [DEPT1], stores: [DEPT1], users: [ADMIN],
     shelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [GOM_MA_SESSION, THONG_KE_SESSION],
+    // Allowlist TUYỆT ĐỐI (Tab 8) — kể cả Admin vẫn cần dòng allowlist riêng để quét/kiểm đếm trên quầy
+    // kệ cụ thể (my-shelf-locations lọc theo allowlist thật, admin chỉ bypass check quyền TAB, không
+    // bypass allowlist theo quầy kệ — xem routes/stocktake.js GET /my-shelf-locations).
+    stocktakeUserAccess: [
+      { id: 1, username: 'admin', dept: DEPT1, shelfLocationId: 30, canGomMa: true, canKiemDem: true, canKiemSoat: true },
+      { id: 2, username: 'admin', dept: DEPT1, shelfLocationId: 31, canGomMa: true, canKiemDem: true, canKiemSoat: true }
+    ],
     stocktakeCounts: []
   });
   state.storeExternalCodes = { [DEPT1]: '001' };
@@ -141,29 +148,18 @@ async function main() {
     // ===== 4) Double-click thật trên "Xác Nhận" quầy kệ (Tab 6) — xác nhận lại 1 quầy kệ ĐÃ xác nhận là
     // idempotent (theo chú thích confirmShelf() ở lib/stocktakeEngine.js), không lỗi/không tạo 2 dòng. =====
     await run.run('Double-click thật trên nút "Xác Nhận" quầy kệ (Tab 6) — idempotent, không tạo 2 dòng xác nhận trùng, không lỗi JS', async () => {
-      // Cần có hoạt động Kiểm Đếm thật trên A2 trước để quầy kệ này xuất hiện ở danh sách Tab 6.
-      await page.click('#btnKkSubKiemDem');
-      await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '31');
-      await page.waitForTimeout(200);
-      await page.fill('#kkKiemDemBarcodeInput', 'SP777');
-      await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
-      await page.waitForTimeout(200);
-
-      await page.click('#btnKkSubConfirm');
-      await page.waitForTimeout(200);
-      // Kỳ Thống Kê ĐÃ "Đã chốt" ở bước trước -> không còn trong dropdown "Đang hoạt động" của Tab 6 nữa.
-      // Kích hoạt lại 1 kỳ Thống Kê MỚI qua chính API thật để có quầy kệ A2 cần Xác Nhận.
+      // Kỳ Thống Kê 9302 ĐÃ "Đã chốt" ở bước trước -> không còn kỳ Thống Kê "Đang hoạt động" nào cho
+      // DEPT1 -> PHẢI kích hoạt 1 kỳ Thống Kê MỚI qua chính API thật TRƯỚC KHI quét, nếu không ô quét
+      // Kiểm Đếm sẽ bị khoá "chưa có kỳ đang hoạt động" (đúng Lớp 3, không phải race).
       const newSessionId = await page.evaluate(async (dept) => {
         const r = await fetch('/api/stocktake/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dept, loaiKy: 'THONG_KE', tenKy: 'Thống Kê Race 2' }) });
         const body = await r.json();
         await fetch(`/api/stocktake/sessions/${body.item.id}/activate`, { method: 'POST' });
         return body.item.id;
       }, DEPT1);
+      // Cần có hoạt động Kiểm Đếm thật trên A2 trước để quầy kệ này xuất hiện ở danh sách Tab 6.
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '');
-      await page.waitForTimeout(100);
       await page.selectOption('#kkKiemDemShelfSelect', '31');
       await page.waitForTimeout(200);
       await page.fill('#kkKiemDemBarcodeInput', 'SP777');

@@ -1093,7 +1093,15 @@ function createDispatcher(state) {
         }
         const requiredLoaiKy = mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE;
         const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
-        return { status: 200, body: { session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
+        // shelfConfirmed (11/2026, vá lỗi UX thật phát hiện qua audit chéo — mirror ĐÚNG routes/
+        // stocktake.js: CHỈ mode KIEM_DEM mới kiểm tra Lớp 4, để client khoá/báo ngay lúc chọn quầy kệ
+        // thay vì đợi tới lúc quét mới biết đã bị Xác Nhận).
+        let shelfConfirmed = false;
+        if (mode === 'KIEM_DEM' && activeSession) {
+          const { isShelfConfirmed } = stockEngine2();
+          shelfConfirmed = isShelfConfirmed(state.stocktakeShelfConfirmations || [], activeSession.id, shelfLocationId);
+        }
+        return { status: 200, body: { session: activeSession || null, shelfConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
       }
       if (pathName === '/api/stocktake/counts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);

@@ -661,6 +661,16 @@ async function onKkScanShelfChanged(tabKey) {
       renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
       return;
     }
+    // LỖI UX THẬT phát hiện qua audit chéo (11/2026): trước đây chỉ biết quầy kệ ĐÃ Xác Nhận (Lớp 4,
+    // Tab 6) khi bấm "Thêm" thật và nhận lỗi 409 — nay server trả kèm `shelfConfirmed` ngay lúc chọn quầy
+    // kệ, khoá/báo rõ NGAY thay vì mở ô quét cho người dùng quét xong mới biết không được việc.
+    if (body.shelfConfirmed) {
+      // Vẫn tải lại danh sách đã quét trước đó để quản lý XEM được (tham khảo), chỉ khoá Ô QUÉT (không quét
+      // thêm được) — không phải ẩn trắng toàn bộ nội dung đã có.
+      await loadKkScanCounts(tabKey);
+      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận ở tab "✅ Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa).`);
+      return;
+    }
     if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
     renderKkScanBoxUnlocked(tabKey);
     await loadKkScanCounts(tabKey);

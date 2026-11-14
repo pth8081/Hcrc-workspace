@@ -212,33 +212,22 @@ async function main() {
     // ===== LỖI THẬT phát hiện qua audit (không phải lỗi bảo mật — SERVER vẫn chặn đúng 409 ở lớp ghi,
     // xem assertStocktakeScanAllowed() Lớp 4/routes/stocktake.js): route GET /active-session-for-shelf
     // (dùng để quyết định hiện/ẩn ô quét khi CHỌN quầy kệ ở Tab 3) KHÔNG kiểm tra Lớp 4 (Xác Nhận) —
-    // route này chỉ check Lớp 1-3 (quyền/allowlist/kỳ đang hoạt động), khác hẳn assertStocktakeScanAllowed()
-    // (dùng bởi scan/edit/delete thật) có thêm Lớp 4. Hậu quả: CHỌN quầy kệ A1 đã Xác Nhận ở Tab 3 vẫn
-    // hiện "✅ Kỳ đang hoạt động" + MỞ ô quét như bình thường (giống hệt quầy kệ CHƯA xác nhận, không có
-    // dấu hiệu nào báo trước) — người dùng chỉ phát hiện bị chặn SAU KHI đã gõ/quét mã và bấm "Thêm" (lúc
-    // đó mới ăn alert 409 từ server). Đây ĐÚNG lớp "giao diện hiện cho phép thao tác nhưng bấm xong mới
-    // biết không được việc" CLAUDE.md nhắc tránh — chỉ khác ở chỗ áp dụng cho Ô QUÉT (luôn mở) thay vì 1
-    // NÚT (luôn hiện), thay vì tự ẩn/disable ngay khi chọn quầy kệ như Tab 6 (Gỡ Xác Nhận)/Tab 4 vẫn làm
-    // đúng. Nên SỬA: route active-session-for-shelf (hoặc onKkScanShelfChanged() phía client) cần tự biết
-    // trạng thái Xác Nhận của quầy kệ cho mode KIEM_DEM và tự khoá/báo rõ NGAY khi chọn, cùng khuôn Lớp 4
-    // đã có ở server, không chỉ chặn ở bước ghi.
-    await run.run('[PHÁT HIỆN] FULL: Tab 3 Kiểm Đếm — chọn lại quầy kệ A1 ĐÃ Xác Nhận vẫn hiện "Kỳ đang hoạt động" + MỞ ô quét (KHÔNG tự khoá ngay như kỳ vọng) — submit MỚI bị chặn ở bước ghi', async () => {
+    // route active-session-for-shelf nay trả kèm `shelfConfirmed` (vá 11/2026 sau phát hiện ban đầu của
+    // đợt audit này: trước đó chỉ check Lớp 1-3, khác assertStocktakeScanAllowed() có thêm Lớp 4, khiến
+    // CHỌN quầy kệ đã Xác Nhận ở Tab 3 vẫn mở ô quét bình thường, chỉ chặn SAU KHI quét+bấm "Thêm" — đúng
+    // kiểu "giao diện cho phép thao tác nhưng bấm xong mới biết không được việc"). Giờ xác nhận lại: ô
+    // quét phải KHOÁ NGAY lúc chọn quầy kệ, cùng khuôn Tab 6 (Gỡ Xác Nhận)/Tab 4 (chưa chọn quầy kệ).
+    await run.run('FIX: Tab 3 Kiểm Đếm — chọn lại quầy kệ A1 ĐÃ Xác Nhận -> ô quét KHOÁ NGAY (không đợi submit mới biết)', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
       await page.selectOption('#kkKiemDemShelfSelect', '20');
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
       const hiddenAtSelect = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
-      assert(!hiddenAtSelect, `[GHI NHẬN KHÔNG NHẤT QUÁN] Thực tế ô quét vẫn MỞ dù quầy kệ đã Xác Nhận (info: "${info}") — khác Tab 6 (Gỡ Xác Nhận) tự khoá ngay. Nếu hành vi này đã được sửa (ô quét tự ẨN ngay khi chọn), assertion này nên đổi ngược lại.`);
-      const alertsBefore = (await page.evaluate(() => (window.__alerts || []).length));
-      await page.fill('#kkKiemDemBarcodeInput', 'SP900');
-      await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
-      await page.waitForTimeout(200);
-      const alerts = await page.evaluate(() => window.__alerts || []);
-      assert(alerts.length > alertsBefore, 'Submit phải bị chặn và báo lỗi rõ (không treo im lặng)');
-      assert(/Xác Nhận/.test(alerts[alerts.length - 1]), `Lỗi submit phải nêu rõ lý do Đã Xác Nhận, thực tế: ${alerts[alerts.length - 1]}`);
+      assert(hiddenAtSelect, `LỖI: ô quét phải khoá NGAY khi chọn quầy kệ đã Xác Nhận, không đợi submit mới biết (info hiện tại: "${info}")`);
+      assert(/ĐÃ được Xác Nhận/.test(info), `LỖI: thông báo phải nêu rõ lý do "ĐÃ được Xác Nhận", thực tế: "${info}"`);
       const rowCount = await page.evaluate(() => document.querySelectorAll('#kkKiemDemListBody tbody tr').length);
-      assertEqual(rowCount, 1, `Submit bị chặn -> KHÔNG được cộng thêm dòng (chỉ còn đúng dòng SP900 cũ từ trước khi Xác Nhận), thực tế: ${rowCount} dòng`);
+      assertEqual(rowCount, 1, `Ô quét đã khoá -> danh sách vẫn giữ đúng dòng SP900 cũ từ trước khi Xác Nhận, không bị xoá/đổi, thực tế: ${rowCount} dòng`);
     });
 
     // ===== 4) Ma trận hiện/ẩn — ADMIN (nhanh, đối chiếu lại test-stocktake-tab8-ui.js) =====
