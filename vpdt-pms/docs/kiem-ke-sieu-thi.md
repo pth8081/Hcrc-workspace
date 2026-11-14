@@ -112,7 +112,20 @@ cùng — gộp cả 8 tab theo đúng trình tự thời gian thực tế sẽ 
 | 7 | 📊 **Báo Cáo** | Đầu màn có bộ chọn "📅 Kỳ" (liệt kê mọi kỳ Gom Mã/Thống Kê, kể cả đã chốt) — chọn đúng 1 kỳ để xem, mỗi kỳ ra báo cáo + biểu đồ độc lập. Tổng hợp theo mã hàng + 3 biểu đồ (xem A7). Xuất Excel — nhiều siêu thị thì mỗi siêu thị 1 sheet. | Theo quyền xem báo cáo |
 | 8 | 🔑 **Cấu Hình Người Dùng** | Gán cho từng user: được vào siêu thị/quầy kệ nào, được làm Gom Mã / Kiểm Đếm / Kiểm Soát. Không có dòng cấu hình = không vào được. | Quản trị hệ thống |
 
-### A5. Luồng quét & gộp số lượng (Gom Mã / Kiểm Đếm)
+### A5. Luồng quét & gộp số lượng (Gom Mã / Kiểm Đếm / Kiểm Soát)
+
+> ✅ **Xác nhận: bắt buộc chọn Quầy Kệ trước, mọi lần quét sau đó tự vào
+> đúng quầy kệ đã chọn.** Áp dụng CHO CẢ 3 hành động Gom Mã, Kiểm Đếm,
+> Kiểm Soát, không riêng gì Kiểm Đếm:
+> 1. **Bắt buộc chọn Quầy Kệ trước** mới cho quét/gõ mã — không chọn
+>    quầy kệ thì ô quét bị khoá/ẩn, không quét được.
+> 2. Sau khi chọn, **mọi lần quét tiếp theo tự động ghi nhận vào đúng
+>    quầy kệ đang chọn** — người quét không phải gõ lại quầy kệ cho từng
+>    mã, chỉ đổi quầy kệ khi chuyển sang khu vực khác.
+> 3. Bộ chọn "📍 Quầy Kệ" **chỉ hiện đúng những quầy kệ mà user đó được
+>    phân quyền** cho hành động đang thao tác (Gom Mã/Kiểm Đếm/Kiểm Soát
+>    riêng từng quyền — xem Tab 8 ở mục B1) — quầy kệ chưa được cấp quyền
+>    sẽ không hiện ra để chọn.
 
 **Quy tắc gộp:**
 - Quét/gõ mã đã có trong phiên → **cộng dồn** số lượng vào dòng đó (không
@@ -364,7 +377,11 @@ tên/tồn kho hệ thống lấy từ cache đồng bộ đối tác đã có s
    tác nào trên kỳ đó, kể cả người có đủ quyền. Chỉ **Admin** có nút "↩️
    Mở Lại Kỳ" để đưa kỳ về Đang hoạt động khi cần sửa/cập nhật lại thông
    tin.
-8. "📋 Kiểm Kê" có **khối quyền riêng** trên Cây Phân Quyền (không lẫn
+8. Bắt buộc **chọn Quầy Kệ trước** mới quét được, áp dụng cho cả Gom
+   Mã/Kiểm Đếm/Kiểm Soát — sau khi chọn, mọi lần quét tự động ghi vào
+   đúng quầy kệ đang chọn. Bộ chọn quầy kệ chỉ hiện đúng quầy kệ user
+   được phân quyền cho hành động đó (xem A5).
+9. "📋 Kiểm Kê" có **khối quyền riêng** trên Cây Phân Quyền (không lẫn
    vào khối Vận Hành), gồm đúng **8 quyền theo Tab 1 → Tab 8**
    (`stocktakePeriodTab` … `stocktakeUserAccessTab`, xem bảng ở mục B1).
    Đây là lớp "được thấy/dùng tab nào", tách biệt với lớp "theo siêu
