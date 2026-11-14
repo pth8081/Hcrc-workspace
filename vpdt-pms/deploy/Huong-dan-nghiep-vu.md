@@ -3641,8 +3641,8 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     bao giờ nhận mã siêu thị từ client, chặn store-spoofing cùng nguyên tắc
     mọi route khác của Kiểm Soát Hàng Hóa.
 
-**"📋 Kiểm Kê" (Phase 1 MVP, 11/2026 — CHỈ Tab "Kỳ Kiểm Kê" đã có giao diện
-thật, 7 tab còn lại đang "🚧 Đang phát triển")**: module kiểm kê thực tế
+**"📋 Kiểm Kê" (11/2026 — Tab 1/2/3/4/5/6/8 đã có giao diện thật, chỉ Tab 7
+"📊 Báo Cáo" còn đang "🚧 Đang phát triển")**: module kiểm kê thực tế
 theo **KỲ**, khác hẳn "Kiểm Soát Hàng Hóa" ở trên (ghi nhận liên tục theo lô,
 không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thuần UI) nhưng
 **phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập (Phân Quyền
@@ -3695,10 +3695,24 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   tiếp lên Kiểm Đếm) — danh sách Tab 4 hiện thêm cột "SL Kiểm Đếm" tham
   khảo để so sánh, mã ĐÃ soát (kể cả soát ra đúng 0) sẽ được ưu tiên thay
   số Kiểm Đếm khi lên Báo Cáo, mã chưa soát vẫn giữ nguyên số Kiểm Đếm.
-- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 5 Cấu Hình Quầy
-  Kệ (dự kiến tái dùng danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa), Tab 6
-  Xác Nhận, Tab 7 Báo Cáo chi tiết theo Kỳ (3 biểu đồ + xuất Excel nhiều
-  sheet).
+- **Tab 5 "🗄️ Cấu Hình Quầy Kệ" + Tab 6 "✅ Xác Nhận" (11/2026)**: Tab 5 chỉ
+  XEM danh sách quầy kệ đang áp dụng Kiểm Kê của siêu thị (lọc theo mã/tên),
+  kèm nút "Mở Quản Lý Quầy Kệ →" dẫn thẳng sang Kiểm Soát Hàng Hóa → Quầy Kệ
+  (tái dùng ĐÚNG danh mục Quầy Kệ đã có, không tạo danh mục riêng cho Kiểm
+  Kê) — nút này gác theo quyền `shelfLocationManage` RIÊNG của Kiểm Soát
+  Hàng Hóa, báo lỗi rõ ràng (không âm thầm chuyển sang tab khác) nếu thiếu.
+  Tab 6 dùng để xác nhận số liệu Kiểm Đếm: hệ thống tự chọn kỳ "Thống Kê"
+  đang hoạt động, liệt kê các quầy kệ ĐÃ có số Kiểm Đếm (> 0) → bấm "Xác
+  Nhận" trên từng quầy khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
+  Xác Nhận TỪNG quầy chỉ cần quyền Kiểm Đếm đúng quầy đó (KHÔNG cần quyền
+  riêng — ai đếm quầy nào thì tự xác nhận quầy đó được); còn "Xác Nhận Toàn
+  Bộ Đợt" (đóng cả kỳ Thống Kê, chỉ mở khoá khi MỌI quầy đã Kiểm Đếm đều đã
+  Xác Nhận) bắt buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC
+  quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
+  đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
+  nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
+- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 7 Báo Cáo chi
+  tiết theo Kỳ (chọn Kỳ + 3 biểu đồ + xuất Excel nhiều sheet).
 
 ### 4.5. Nhân Sự
 

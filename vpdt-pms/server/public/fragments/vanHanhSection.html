@@ -1615,8 +1615,45 @@
           <div id="kkKiemSoatListBody"></div>
         </div>
       </div>
-      <div id="kkShelfConfigWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Quầy Kệ" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
-      <div id="kkConfirmWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Xác Nhận" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <!-- Tab 5 "Cấu Hình Quầy Kệ" (12/2026) — CHỈ XEM, trỏ sang màn quản lý THẬT đã có sẵn ở "📦 Kiểm
+           Soát Hàng Hóa" (tái dùng NGUYÊN danh mục shelfLocations, đúng câu hỏi mở #1 của tài liệu đề
+           xuất — "dùng chung danh mục đã có"). CỐ Ý không xây form Thêm/Sửa/Xoá/Nhập Excel RIÊNG ở đây —
+           tránh mở rộng canManageShelfStock() (đang dùng CHUNG cho cả Ngưỡng Tồn) sang thêm 1 nơi gọi
+           nữa, đúng nguyên tắc "không ảnh hưởng module khác đang hoạt động ổn định" khi không thật sự cần
+           thiết cho Phase này. -->
+      <div id="kkShelfConfigWrap" class="hidden space-y-3">
+        <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 flex items-center justify-between flex-wrap gap-2">
+          <span>ℹ️ Danh mục Quầy Kệ dùng CHUNG với "📦 Kiểm Soát Hàng Hóa" — xem đúng/đủ ở đây, muốn thêm/sửa/xoá/nhập Excel thì sang màn quản lý đầy đủ.</span>
+          <button type="button" data-op="goToShelfLocationsManagement" class="shrink-0 px-3 py-1 rounded bg-amber-700 text-white text-xs font-bold hover:bg-amber-800">Mở Quản Lý Quầy Kệ →</button>
+        </div>
+        <div id="kkShelfConfigDeptRow" class="flex items-center gap-2 text-sm"></div>
+        <div class="bg-white border rounded p-3">
+          <input type="text" id="kkShelfConfigFilter" placeholder="🔎 Tìm theo mã/tên quầy kệ..." data-op-input="renderKkShelfConfigList" data-arg-value="0" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+          <div id="kkShelfConfigListBody"></div>
+        </div>
+      </div>
+      <!-- Tab 6 "Xác Nhận" (12/2026) — 2 khu vực: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy
+           kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Toàn Bộ Đợt (CHỈ người có quyền
+           Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận). -->
+      <div id="kkConfirmWrap" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Thống Kê</label>
+          <select id="kkConfirmSessionSelect" data-op-change="loadKkConfirmTab" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Chọn kỳ Thống Kê đang hoạt động --</option>
+          </select>
+        </div>
+        <div id="kkConfirmBody" class="hidden space-y-3">
+          <div class="bg-white border rounded p-3">
+            <div class="font-bold text-sm text-gray-800 mb-2">✅ Xác Nhận Từng Quầy Kệ</div>
+            <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát vẫn thao tác được bình thường).</p>
+            <div id="kkConfirmShelfListBody"></div>
+          </div>
+          <div id="kkConfirmAllWrap" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+            <button type="button" data-op="submitKkConfirmAll" class="w-full px-3 py-2 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">🔒 Xác Nhận Toàn Bộ Đợt Kiểm Kê (Đóng Kỳ)</button>
+            <p id="kkConfirmAllNote" class="text-[11px] text-gray-500 mt-1"></p>
+          </div>
+        </div>
+      </div>
       <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <!-- Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ),
            xem tài liệu đề xuất mục B1. CHỈ hiện cho người có kiemKeUserAccessManage/admin (gác ở

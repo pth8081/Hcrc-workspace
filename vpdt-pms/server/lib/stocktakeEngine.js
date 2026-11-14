@@ -281,6 +281,62 @@ function finalCountQty(row) {
   return typeof row.slKiemSoat === 'number' ? row.slKiemSoat : (Number(row.slKiemDem) || 0);
 }
 
+// ===== Tab 6 "Xác Nhận" (12/2026, tài liệu đề xuất mục A3 bước 3/5) — 2 lớp xác nhận ĐỘC LẬP:
+// (a) Xác Nhận QUẦY KỆ (khoá Kiểm Đếm của ĐÚNG quầy kệ đó, KHÔNG chặn Kiểm Soát — "Khoá ở Bước 3 KHÔNG
+//     chặn Kiểm Soát") — người làm: AI CÓ quyền Kiểm Đếm quầy kệ đó (3 lớp y hệt route quét, không cần
+//     quyền Tab 6 riêng).
+// (b) Xác Nhận TOÀN BỘ ĐỢT (đóng hẳn Kỳ Thống Kê) — người làm: "Quản lý siêu thị", dùng ĐÚNG quyền Tab 6
+//     `kiemKeConfirmDo` (canConfirmStocktake(), KHÁC quyền Tab 1 `kiemKePeriodManage` dùng cho nút
+//     "Đóng Kỳ" thủ công — 2 nút/2 quyền khác nhau dù CÙNG hiệu ứng chuyển trạng thái kỳ), CHỈ cho phép
+//     khi mọi quầy kệ ĐÃ THỰC SỰ KIỂM ĐẾM (có dòng slKiemDem > 0) trong đúng kỳ này đều đã được Xác Nhận
+//     Quầy Kệ — quầy kệ chưa hề đụng tới (không có hoạt động Kiểm Đếm nào) không bắt buộc xác nhận.
+function findShelfConfirmation(confirmations, sessionId, shelfLocationId) {
+  return (Array.isArray(confirmations) ? confirmations : []).find(
+    c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId
+  ) || null;
+}
+function isShelfConfirmed(confirmations, sessionId, shelfLocationId) {
+  return !!findShelfConfirmation(confirmations, sessionId, shelfLocationId);
+}
+// mutate "confirmations" (mảng đang khoá) — idempotent: xác nhận lại 1 quầy kệ ĐÃ xác nhận trả về đúng
+// dòng cũ, không tạo trùng.
+function confirmShelf(confirmations, input, user) {
+  const sessionId = Number(input?.sessionId);
+  const shelfLocationId = Number(input?.shelfLocationId);
+  if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) throw new HttpError(400, 'Thiếu sessionId/shelfLocationId');
+  const arr = Array.isArray(confirmations) ? confirmations : [];
+  const existing = findShelfConfirmation(arr, sessionId, shelfLocationId);
+  if (existing) return existing;
+  const row = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    sessionId, shelfLocationId,
+    dept: input?.dept || '', shelfLocationLabel: input?.shelfLocationLabel || '',
+    confirmedBy: user?.username || '', confirmedByName: user?.name || user?.username || '',
+    confirmedAt: new Date().toISOString()
+  };
+  arr.push(row);
+  return row;
+}
+function unconfirmShelf(confirmations, id) {
+  const arr = Array.isArray(confirmations) ? confirmations : [];
+  const idx = arr.findIndex(c => c.id === id);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
+  arr.splice(idx, 1);
+  return arr;
+}
+// Quầy kệ nào ĐÃ có hoạt động Kiểm Đếm thật (slKiemDem > 0) trong đúng kỳ này nhưng CHƯA được Xác Nhận —
+// danh sách rỗng = đủ điều kiện Xác Nhận Toàn Bộ Đợt.
+function listUnconfirmedCountedShelfIds(counts, confirmations, sessionId) {
+  const countedShelfIds = new Set();
+  (Array.isArray(counts) ? counts : []).forEach(c => {
+    if (c.sessionId === sessionId && Number(c.slKiemDem) > 0) countedShelfIds.add(c.shelfLocationId);
+  });
+  const confirmedIds = new Set(
+    (Array.isArray(confirmations) ? confirmations : []).filter(c => c.sessionId === sessionId).map(c => c.shelfLocationId)
+  );
+  return [...countedShelfIds].filter(id => !confirmedIds.has(id));
+}
+
 module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
@@ -290,5 +346,6 @@ module.exports = {
   activateSession, closeSession, reopenSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
   upsertUserAccessRows, removeUserAccessRow,
-  findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty
+  findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
+  findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
 };
