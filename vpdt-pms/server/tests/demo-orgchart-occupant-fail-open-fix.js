@@ -47,22 +47,24 @@ function startStaticServer(port) {
 }
 
 // ===== Cây mẫu đúng kịch bản người dùng mô tả: nhiều "Giám Đốc Siêu Thị", mỗi siêu thị phải chỉ hiện
-// đúng 1 người. Thêm 1 node DEPARTMENT "Khối Siêu Thị Miền Bắc" GIỮ VAI TRÒ NHÓM THUẦN TUÝ (không gắn
-// departmentRef — mô phỏng đúng tình huống thật: node nhóm/phòng ban cha KHÔNG có departmentRef) để lộ
-// rõ lỗi "lọt mở" trước khi vá. =====
+// đúng 1 người. Node "Siêu thị số 120 Hàng Trống" CỐ Ý để departmentRef null (mô phỏng đúng tình huống
+// thật: node Siêu Thị quên liên kết đúng mã siêu thị khi dựng cây) — vị trí "Giám Đốc Siêu Thị" nằm
+// TRỰC TIẾP dưới node này mới lộ rõ lỗi "lọt mở". Node "Siêu thị số 45 Láng Hạ" gắn departmentRef ĐÚNG
+// chuẩn, dùng làm đối chứng (phải luôn chỉ hiện đúng 1 người của chính nó, không bị ảnh hưởng gì). =====
 const VERSION = {
   id: 1, versionName: 'Cơ cấu tổ chức 2026', status: 'APPLIED',
   nodes: [
     { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'CÔNG TY HCRC', positionKey: null, displayOrder: 0 },
-    { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Khối Siêu Thị Miền Bắc', departmentRef: null, positionKey: null, displayOrder: 0 },
-    { nodeId: 3, parentNodeId: 2, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị số 120 Hàng Trống', departmentRef: 'ST120', positionKey: null, displayOrder: 0 },
-    { nodeId: 4, parentNodeId: 3, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true, positionKey: 'GD-ST120', displayOrder: 0 },
-    { nodeId: 5, parentNodeId: 2, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị số 45 Láng Hạ', departmentRef: 'ST45', positionKey: null, displayOrder: 1 },
-    { nodeId: 6, parentNodeId: 5, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true, positionKey: 'GD-ST45', displayOrder: 0 }
+    { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị số 120 Hàng Trống', departmentRef: null, positionKey: null, displayOrder: 0 },
+    { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true, positionKey: 'GD-ST120', displayOrder: 0 },
+    { nodeId: 4, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị số 45 Láng Hạ', departmentRef: 'ST45', positionKey: null, displayOrder: 1 },
+    { nodeId: 5, parentNodeId: 4, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true, positionKey: 'GD-ST45', displayOrder: 0 }
   ]
 };
 const STORE_CODES = ['ST120', 'ST45', 'ST07', 'ST12', 'ST19', 'ST23', 'ST31', 'ST38', 'ST44', 'ST50'];
-const USERS = [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true }, active: true, groupIds: [], permOverrides: null }];
+// canAccessOrgChartModule() (core.js) KHÔNG còn admin bypass (11/2026) — phải có đúng quyền
+// orgChartManage/nhanSuManage/kpiFlowConfigManage mới vào được module, admin:true không đủ.
+const USERS = [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true, orgChartManage: true }, active: true, groupIds: [], permOverrides: null }];
 STORE_CODES.forEach((code, i) => {
   USERS.push({ id: 10 + i, username: `gd.${code.toLowerCase()}`, name: `Giám Đốc Siêu Thị ${code}`, dept: code, jobTitle: 'Giám Đốc Siêu Thị', email: `gd${code}@test.local`, phone: '0900000000', perms: {}, active: true, groupIds: [], permOverrides: null });
 });
@@ -90,21 +92,7 @@ async function run(label, { beforeFix }) {
     window.confirm = () => true;
     window.prompt = () => '';
 
-    // Mô phỏng ĐÚNG hành vi trước khi vá (chỉ ghi đè tạm trong bộ nhớ trình duyệt của ảnh "before" —
-    // KHÔNG đụng gì tới file module-orgchart.js thật trên đĩa) để demo so sánh trước/sau cùng dữ liệu.
-    if (beforeFix) {
-      window.ocResolvePositionOccupants = function (nodes, node, users) {
-        if (!node || node.nodeType !== 'POSITION') return [];
-        const deptNode = node.requiresDept !== false ? ocFindNearestDeptAncestor(nodes, node) : null;
-        const deptRef = (deptNode && deptNode.departmentRef) || null;
-        return (users || []).filter(u => {
-          if (u.active === false) return false;
-          if (u.jobTitle !== node.jobTitle) return false;
-          if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
-          return true;
-        }).map(u => ({ username: u.username, name: u.name }));
-      };
-    }
+    window.__OC_DEMO_BEFORE_FIX__ = beforeFix;
 
     window.fetch = async (url, opts) => {
       const u = String(url);
@@ -158,6 +146,24 @@ async function run(label, { beforeFix }) {
   // orgchart-v2 là module JS tải LƯỜI (MODULE_LOAD_GROUPS ở core.js) — đợi script injection thật xong
   // (không chỉ sleep cố định) trước khi gọi hàm của nó, tránh ReferenceError do race.
   await page.waitForFunction(() => typeof setOrgChartSubTab === 'function', { timeout: 15000 });
+  // Mô phỏng ĐÚNG hành vi TRƯỚC khi vá — PHẢI ghi đè SAU khi module-orgchart.js (tải lười) đã thực thi
+  // xong (ngay phía trên), vì global function declaration của chính file đó sẽ GHI ĐÈ LẠI bất kỳ giá trị
+  // nào gán cho window.ocResolvePositionOccupants TRƯỚC lúc nó tải xong. Hoàn toàn trong bộ nhớ trình
+  // duyệt của tiến trình demo — KHÔNG đụng gì tới file module-orgchart.js thật trên đĩa.
+  await page.evaluate(() => {
+    if (!window.__OC_DEMO_BEFORE_FIX__) return;
+    window.ocResolvePositionOccupants = function (nodes, node, users) {
+      if (!node || node.nodeType !== 'POSITION') return [];
+      const deptNode = node.requiresDept !== false ? ocFindNearestDeptAncestor(nodes, node) : null;
+      const deptRef = (deptNode && deptNode.departmentRef) || null;
+      return (users || []).filter(u => {
+        if (u.active === false) return false;
+        if (u.jobTitle !== node.jobTitle) return false;
+        if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
+        return true;
+      }).map(u => ({ username: u.username, name: u.name }));
+    };
+  });
   await page.evaluate(() => setOrgChartSubTab('TREE'));
   await page.waitForFunction(() => {
     const el = document.getElementById('orgChartTreeContainer');
