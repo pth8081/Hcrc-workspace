@@ -35,6 +35,11 @@ async function main() {
     [DEPT1]: [{ maHang: 'SP001', tenHang: 'Hàng A1', soLuongTon: 50 }, { maHang: 'SP002', tenHang: 'Hàng A2', soLuongTon: 30 }],
     [DEPT2]: [{ maHang: 'SP003', tenHang: 'Hàng B1', soLuongTon: 20 }]
   };
+  // "💰 Giá Trị Thừa/Thiếu" (12/2026) — CHỈ DEPT1 có giá sẵn (mô phỏng đã từng mở "💲 Kiểm Tra Giá"),
+  // DEPT2 CHƯA có giá nào — test cả 2 nhánh "có giá" và "chưa có giá, báo rõ" ngay trên UI thật.
+  state.__mockStocktakeReportPriceByDept = {
+    [DEPT1]: [{ maHang: 'SP001', giaThuong: 10000 }, { maHang: 'SP002', giaThuong: 2000 }]
+  };
 
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
@@ -85,6 +90,22 @@ async function main() {
       assert(sp002Cells[3] === '120', `LỖI: cột Kiểm Đếm (SP002) phải là 120 (raw, chưa ghi đè) -- got: ${JSON.stringify(sp002Cells)}`);
       assert(sp002Cells[4] === '108', `LỖI: cột Kiểm Soát (SP002) phải là 108 -- got: ${JSON.stringify(sp002Cells)}`);
       assert(sp002Cells[5] === '108', `LỖI: cột SL Cuối Cùng (SP002) phải là 108 (Kiểm Soát ghi đè ĐÚNG A6, không phải 120) -- got: ${JSON.stringify(sp002Cells)}`);
+      // "💰 Giá Trị Thừa/Thiếu" (12/2026, MỚI) — cột Giá/Giá Trị nối thêm SAU "Chênh Lệch" (không chèn
+      // giữa, không đụng index các cột cũ đã kiểm ở trên). SP001: giá 10.000đ, chênh lệch 48-50=-2 ->
+      // giá trị -20.000đ. SP002: giá 2.000đ, chênh lệch 108-30=78 -> giá trị +156.000đ.
+      assert(sp002Cells[7] === '2.000 đ', `LỖI: cột Giá (SP002) phải là "2.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[8] === '+156.000 đ', `LỖI: cột Giá Trị (SP002) phải là "+156.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
+      const sp001Cells = await page.$$eval('#kkReportTableBody tr', (trs) => {
+        const row = trs.find(tr => tr.textContent.includes('SP001'));
+        return row ? [...row.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
+      });
+      assert(sp001Cells[7] === '10.000 đ' && sp001Cells[8] === '-20.000 đ', `LỖI: SP001 Giá/Giá Trị phải là "10.000 đ"/"-20.000 đ" -- got: ${JSON.stringify(sp001Cells)}`);
+    });
+
+    await run.run('qlA: thẻ "💰 Giá Trị Thừa/Thiếu" hiện đúng tổng (-20.000+156.000=+136.000đ), không mã nào thiếu giá', async () => {
+      const statsText = await page.textContent('#kkReportStatCards');
+      assert(statsText.includes('Giá Trị Thừa/Thiếu') && statsText.includes('+136.000 đ'), `LỖI: thẻ thống kê phải hiện đúng tổng giá trị -- got: ${statsText}`);
+      assert(!statsText.includes('chưa có giá'), `LỖI: SP001/SP002 đều có giá sẵn, KHÔNG được báo "chưa có giá" -- got: ${statsText}`);
     });
 
     await run.run('qlA: Chart 1 (SVG cột) + Chart 2 (SVG donut) render thật, có đủ 3 màu CVD-safe cố định', async () => {
@@ -159,13 +180,31 @@ async function main() {
       assert(text.includes(DEPT1) && text.includes(DEPT2), `LỖI: So Sánh Siêu Thị phải liệt kê CẢ 2 siêu thị -- got: ${text}`);
     });
 
-    await run.run('Admin: "📊 Xuất Excel" gửi 2 sheet (Chi Tiết + So Sánh Siêu Thị)', async () => {
+    await run.run('Admin: "💰 Giá Trị Thừa/Thiếu Theo Siêu Thị" hiện đúng — DEPT1 có giá trị, DEPT2 báo rõ "chưa có giá"', async () => {
+      const visible = await page.isVisible('#kkReportValueByStoreCard');
+      assert(visible, 'LỖI: Admin phải thấy #kkReportValueByStoreCard (có storeComparison kèm giá trị)');
+      const text = await page.textContent('#kkReportValueByStoreBody');
+      assert(text.includes(DEPT1) && text.includes('+136.000') && text.includes(DEPT2), `LỖI: bảng phải liệt kê CẢ 2 siêu thị, DEPT1 đúng +136.000đ -- got: ${text}`);
+      const dept2Row = await page.$$eval('#kkReportValueByStoreBody tr', (trs, dept2) => {
+        const row = trs.find(tr => tr.textContent.includes(dept2));
+        return row ? [...row.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
+      }, DEPT2);
+      assert(dept2Row && dept2Row[1] === '0 đ' && dept2Row[2] === '1', `LỖI: DEPT2 chưa có giá nào -> giá trị 0đ, 1 mã (SP003) chưa có giá -- got: ${JSON.stringify(dept2Row)}`);
+    });
+
+    await run.run('Admin: "📊 Xuất Excel" gửi 2 sheet (Chi Tiết + So Sánh Siêu Thị), có đủ cột Giá Trị', async () => {
       state.__xlsxExports = [];
       await page.click('[data-op="exportKkReportExcel"]');
       await page.waitForTimeout(150);
       assertEqual((state.__xlsxExports || []).length, 1, 'LỖI: bấm Xuất Excel phải gửi đúng 1 lần');
       const sent = state.__xlsxExports[0];
       assert(Array.isArray(sent.sheets) && sent.sheets.length === 2, `LỖI: Admin phải xuất 2 sheet -- got: ${JSON.stringify(sent.sheets && sent.sheets.map(s => s.sheetName))}`);
+      const detailSheet = sent.sheets.find(s => s.sheetName.startsWith('Chi Tiết'));
+      assert(detailSheet.columns.some(c => c.header === 'Giá Trị'), 'LỖI: sheet Chi Tiết phải có cột "Giá Trị"');
+      const cmpSheet = sent.sheets.find(s => s.sheetName === 'So Sánh Siêu Thị');
+      assert(cmpSheet.columns.some(c => c.header === 'Giá Trị Thừa/Thiếu'), 'LỖI: sheet So Sánh Siêu Thị phải có cột "Giá Trị Thừa/Thiếu"');
+      const cmpDept1Row = cmpSheet.rows.find(r => r.dept === DEPT1);
+      assert(cmpDept1Row && cmpDept1Row.tongGiaTri === 136000, `LỖI: dòng DEPT1 trong sheet So Sánh phải có tongGiaTri=136000 -- got: ${JSON.stringify(cmpDept1Row)}`);
     });
 
     await run.run('Không có lỗi JS/console nào phát sinh', async () => {

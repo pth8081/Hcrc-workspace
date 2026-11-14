@@ -3750,6 +3750,26 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   sánh); Admin xem được mọi siêu thị VÀ thấy thêm khung "So Sánh Giữa Các
   Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Kiểm Kê gần nhất của chính nó, không
   phụ thuộc Kỳ đang chọn) — Xuất Excel lúc này thêm sheet "So Sánh Siêu Thị".
+  **"💰 Giá Trị Thừa/Thiếu" (12/2026, MỚI — theo yêu cầu người dùng "lấy
+  phần tồn kho với cả phần giá sang để làm báo cáo xuất ra giá trị siêu
+  thị thừa thiếu bao nhiêu")**: CHỈ Kỳ Kiểm Kê (có baseline Tồn Kho Hệ
+  Thống để so — Kỳ Gom Mã không áp dụng) — tự tính thêm 1 thẻ tổng hợp +
+  2 cột "Giá (Thường)"/"Giá Trị" trong bảng Chi Tiết, công thức mỗi mã
+  hàng: (SL Cuối Cùng − Tồn Kho Hệ Thống) × Giá Thường, cộng dồn ra tổng
+  Giá Trị Thừa (dương, xanh)/Thiếu (âm, đỏ) của cả siêu thị. Dùng ĐÚNG
+  bảng giá offline đã có sẵn cho "💲 Kiểm Tra Giá" (Kiểm Soát Hàng Hóa) —
+  **luôn dùng Giá Thường, KHÔNG dùng Giá Khuyến Mãi** (tránh giá trị dao
+  động theo đợt khuyến mãi ngắn hạn). Mã hàng CHƯA có giá lưu sẵn (siêu
+  thị chưa từng mở "Kiểm Tra Giá" cho đúng mã đó) thì **BỎ QUA khỏi tổng**
+  (không suy diễn/mặc định giá 0), nêu rõ "chưa có giá" ngay trên dòng đó
+  + đếm số mã còn thiếu trên thẻ tổng hợp — hệ thống KHÔNG tự gọi API đối
+  tác đồng bộ ngay lúc xem báo cáo (sẽ chậm nếu nhiều mã), chỉ âm thầm
+  kích hoạt đồng bộ NỀN để lần xem SAU đầy đủ hơn (y hệt cơ chế "Kiểm Tra
+  Giá" đã có). Admin còn thấy thêm bảng xếp hạng "💰 Giá Trị Thừa/Thiếu
+  Theo Siêu Thị" (RIÊNG, không gộp vào biểu đồ cột "So Sánh Giữa Các Siêu
+  Thị" vì SL và Tiền khác đơn vị) — xếp từ siêu thị THIẾU nhiều nhất lên
+  đầu để thấy ngay cần chú ý siêu thị nào; Xuất Excel có thêm đúng 2 cột
+  này ở cả sheet Chi Tiết lẫn So Sánh Siêu Thị.
 
 ### 4.5. Nhân Sự
 

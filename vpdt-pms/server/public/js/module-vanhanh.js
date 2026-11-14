@@ -1079,6 +1079,7 @@ async function loadKkReportTab() {
   renderKkReportChart1();
   renderKkReportChart2();
   renderKkReportChart3();
+  renderKkReportValueByStoreTable();
   renderKkReportCompareChart();
   renderKkReportTable('');
 }
@@ -1101,6 +1102,19 @@ function renderKkReportStatCards() {
     { label: isGomMa ? 'Tổng SL Gom Mã' : 'Tổng SL Cuối Cùng', value: totalFinal.toLocaleString('vi-VN'), color: KK_REPORT_COLOR_FINAL },
     { label: 'Chênh Lệch So Hệ Thống', value: diff === null ? '—' : (diff > 0 ? '+' : '') + diff.toLocaleString('vi-VN'), color: diff === null ? '#6b7280' : (diff === 0 ? '#16a34a' : '#dc2626') }
   ];
+  // "💰 Giá Trị Thừa/Thiếu" (12/2026, theo yêu cầu người dùng "lấy phần tồn kho với cả phần giá sang
+  // để làm báo cáo xuất ra giá trị siêu thị thừa thiếu") — CHỈ Kỳ Kiểm Kê, CHỈ khi siêu thị có cấu hình
+  // Mã Điểm (server trả valueReport=null nếu không áp dụng/không có Mã Điểm, KHÔNG hiện thẻ này thay vì
+  // hiện "—" gây hiểu nhầm là lỗi). Mã chưa có giá được NÊU RÕ ngay trên thẻ, không âm thầm bỏ qua.
+  if (kkReportData.valueReport) {
+    const vr = kkReportData.valueReport;
+    const sign = vr.tongGiaTri > 0 ? '+' : '';
+    cards.push({
+      label: '💰 Giá Trị Thừa/Thiếu' + (vr.soMaThieuGia ? ` (⚠️ ${vr.soMaThieuGia} mã chưa có giá)` : ''),
+      value: sign + vr.tongGiaTri.toLocaleString('vi-VN') + ' đ',
+      color: vr.tongGiaTri > 0 ? '#16a34a' : (vr.tongGiaTri < 0 ? '#dc2626' : '#6b7280')
+    });
+  }
   wrap.innerHTML = cards.map(c => `<div class="bg-white border rounded p-3 text-center">
     <div class="text-[11px] text-gray-500">${escapeHtml(c.label)}</div>
     <div class="text-lg font-bold" data-style="color:${c.color}">${escapeHtml(String(c.value))}</div>
@@ -1248,6 +1262,31 @@ function renderKkReportChart3() {
   ]);
 }
 
+// "💰 Giá Trị Thừa/Thiếu Theo Siêu Thị" (12/2026, CHỈ Admin) — bảng RIÊNG, KHÔNG vẽ chung biểu đồ cột
+// với renderKkReportChart3() (SL và Tiền khác đơn vị, ghép chung 1 trục sẽ sai lệch thang đo — xem quy
+// tắc "không trộn đơn vị trong 1 biểu đồ"). Xếp từ THIẾU nhiều nhất lên đầu (giá trị âm trước) để admin
+// thấy ngay siêu thị cần chú ý mà không cần tự sắp xếp lại.
+function renderKkReportValueByStoreTable() {
+  const card = document.getElementById('kkReportValueByStoreCard');
+  const body = document.getElementById('kkReportValueByStoreBody');
+  if (!card || !body) return;
+  const list = kkReportData && Array.isArray(kkReportData.storeComparison) ? kkReportData.storeComparison : null;
+  const withValue = list ? list.filter(s => typeof s.tongGiaTri === 'number') : null;
+  if (!withValue || !withValue.length) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const sorted = withValue.slice().sort((a, b) => a.tongGiaTri - b.tongGiaTri);
+  body.innerHTML = `<table class="w-full text-sm">
+    <thead><tr class="border-b text-left text-gray-500">
+      <th class="py-1">Siêu Thị</th><th class="text-right">Giá Trị Thừa/Thiếu</th><th class="text-right">Mã Chưa Có Giá</th>
+    </tr></thead>
+    <tbody>${sorted.map(s => `<tr class="border-b last:border-0">
+      <td class="py-1">${escapeHtml(s.dept)}</td>
+      <td class="text-right font-semibold ${s.tongGiaTri > 0 ? 'text-green-600' : (s.tongGiaTri < 0 ? 'text-red-600' : '')}">${(s.tongGiaTri > 0 ? '+' : '') + s.tongGiaTri.toLocaleString('vi-VN')} đ</td>
+      <td class="text-right ${s.soMaThieuGia ? 'text-amber-600' : 'text-gray-400'}">${s.soMaThieuGia || 0}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
 // Hợp nhất 2 kỳ bất kỳ theo mã hàng (dùng chung cho biểu đồ So Sánh + sheet Excel "So Sánh Kỳ") — lấy
 // `finalQty` của MỖI kỳ làm giá trị chính (Kiểm Đếm/Cuối Cùng cho kỳ Thống Kê, SL Gom Mã cho kỳ Gom Mã),
 // hợp nhất ĐỦ mã hàng của CẢ 2 kỳ (không chỉ đúng kỳ đang xem chính) để không bỏ sót mã chỉ có ở kỳ kia.
@@ -1305,17 +1344,24 @@ function kkReportFilteredRows(filterText) {
   return rows.filter(r => stripVnDiacritics(`${r.maHang} ${r.tenHang || ''}`.toLowerCase()).includes(q));
 }
 
+// kkReportHasValueCols() — chỉ hiện 2 cột "Giá"/"Giá Trị" khi server trả valueReport (CHỈ Kỳ Kiểm Kê +
+// siêu thị có cấu hình Mã Điểm, xem GET /report). Ẩn hẳn 2 cột thay vì hiện toàn "—" cho đỡ rối bảng khi
+// không áp dụng (Kỳ Gom Mã, hoặc siêu thị chưa cấu hình Mã Điểm).
+function kkReportHasValueCols() { return !!(kkReportData && kkReportData.valueReport); }
+
 function renderKkReportTable(filterText) {
   const thead = document.getElementById('kkReportTableHead');
   const tbody = document.getElementById('kkReportTableBody');
   if (!thead || !tbody || !kkReportData) return;
   const isGomMa = kkReportIsGomMaKy();
+  const hasValue = kkReportHasValueCols();
   thead.innerHTML = `<th class="py-1">Mã Hàng</th><th>Tên Hàng</th>
     <th class="text-right">Tồn Kho Hệ Thống</th>
     ${isGomMa ? '<th class="text-right">SL Gom Mã</th>' : '<th class="text-right">Kiểm Đếm</th><th class="text-right">Kiểm Soát</th><th class="text-right">SL Cuối Cùng</th>'}
-    <th class="text-right">Chênh Lệch</th>`;
+    <th class="text-right">Chênh Lệch</th>
+    ${hasValue ? '<th class="text-right">Giá (Thường)</th><th class="text-right">Giá Trị</th>' : ''}`;
   const filtered = kkReportFilteredRows(filterText).slice().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
-  const colCount = isGomMa ? 5 : 7;
+  const colCount = (isGomMa ? 5 : 7) + (hasValue ? 2 : 0);
   const paginationEl = document.getElementById('paginationContainer_kkReport');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('kkReport', 'renderKkReportTable');
   const items = paginateList('kkReport', filtered, 'renderKkReportTable', 'mã hàng');
@@ -1330,6 +1376,9 @@ function renderKkReportTable(filterText) {
       <td class="text-right">${r.kiemSoatQty === null ? '—' : escapeHtml(String(r.kiemSoatQty))}</td>
       <td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>`}
       <td class="text-right ${diff === null ? '' : (diff === 0 ? 'text-green-600' : 'text-red-600')}">${diff === null ? '—' : (diff > 0 ? '+' : '') + diff}</td>
+      ${hasValue ? `
+      <td class="text-right">${typeof r.giaThuong === 'number' ? r.giaThuong.toLocaleString('vi-VN') + ' đ' : '<span class="text-amber-600">chưa có giá</span>'}</td>
+      <td class="text-right font-semibold ${r.giaTri === null ? '' : (r.giaTri > 0 ? 'text-green-600' : (r.giaTri < 0 ? 'text-red-600' : ''))}">${r.giaTri === null ? '—' : (r.giaTri > 0 ? '+' : '') + r.giaTri.toLocaleString('vi-VN') + ' đ'}</td>` : ''}
     </tr>`;
   }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có dữ liệu</td></tr>`;
 }
@@ -1341,13 +1390,15 @@ function renderKkReportTable(filterText) {
 function exportKkReportExcel() {
   if (!kkReportData) return;
   const isGomMa = kkReportIsGomMaKy();
+  const hasValue = kkReportHasValueCols();
   const detailColumns = [
     { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
     { header: 'Tồn Kho Hệ Thống', key: 'systemQty' },
     ...(isGomMa
       ? [{ header: 'SL Gom Mã', key: 'finalQty' }]
       : [{ header: 'Kiểm Đếm', key: 'kiemDemQty' }, { header: 'Kiểm Soát', key: 'kiemSoatQty' }, { header: 'SL Cuối Cùng', key: 'finalQty' }]),
-    { header: 'Chênh Lệch', key: 'diff' }
+    { header: 'Chênh Lệch', key: 'diff' },
+    ...(hasValue ? [{ header: 'Giá (Thường)', key: 'giaThuong' }, { header: 'Giá Trị', key: 'giaTri' }] : [])
   ];
   const detailRows = (kkReportData.rows || []).map(r => ({
     maHang: r.maHang, tenHang: r.tenHang || '',
@@ -1355,20 +1406,26 @@ function exportKkReportExcel() {
     kiemDemQty: r.kiemDemQty === undefined ? '' : r.kiemDemQty,
     kiemSoatQty: (r.kiemSoatQty === null || r.kiemSoatQty === undefined) ? '' : r.kiemSoatQty,
     finalQty: r.finalQty,
-    diff: r.systemQty === null ? '' : (r.finalQty - r.systemQty)
+    diff: r.systemQty === null ? '' : (r.finalQty - r.systemQty),
+    giaThuong: typeof r.giaThuong === 'number' ? r.giaThuong : '',
+    giaTri: typeof r.giaTri === 'number' ? r.giaTri : ''
   }));
   const sessionLabel = `${kkReportData.session.dept} - ${kkReportData.session.tenKy}`;
   const fileName = `BaoCaoKiemKe_${kkReportData.session.dept}_${kkReportData.session.tenKy}.xlsx`.replace(/[\\/:*?"<>|]/g, '_');
   const sheets = [{ sheetName: `Chi Tiết (${sessionLabel})`.slice(0, 31), columns: detailColumns, rows: detailRows }];
   if (Array.isArray(kkReportData.storeComparison) && kkReportData.storeComparison.length) {
+    const hasStoreValue = kkReportData.storeComparison.some(s => typeof s.tongGiaTri === 'number');
     const cmpColumns = [
       { header: 'Siêu Thị', key: 'dept' }, { header: 'Kỳ Kiểm Kê', key: 'sessionName' },
       { header: 'Trạng Thái', key: 'trangThai' },
-      { header: 'Tổng Tồn Kho Hệ Thống', key: 'systemQty' }, { header: 'Tổng Kiểm Đếm/Cuối Cùng', key: 'finalQty' }
+      { header: 'Tổng Tồn Kho Hệ Thống', key: 'systemQty' }, { header: 'Tổng Kiểm Đếm/Cuối Cùng', key: 'finalQty' },
+      ...(hasStoreValue ? [{ header: 'Giá Trị Thừa/Thiếu', key: 'tongGiaTri' }, { header: 'Số Mã Chưa Có Giá', key: 'soMaThieuGia' }] : [])
     ];
     const cmpRows = kkReportData.storeComparison.map(s => ({
       dept: s.dept, sessionName: s.sessionName, trangThai: TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai,
-      systemQty: s.systemQty === null ? '' : s.systemQty, finalQty: s.finalQty
+      systemQty: s.systemQty === null ? '' : s.systemQty, finalQty: s.finalQty,
+      tongGiaTri: typeof s.tongGiaTri === 'number' ? s.tongGiaTri : '',
+      soMaThieuGia: typeof s.soMaThieuGia === 'number' ? s.soMaThieuGia : ''
     }));
     sheets.push({ sheetName: 'So Sánh Siêu Thị', columns: cmpColumns, rows: cmpRows });
   }

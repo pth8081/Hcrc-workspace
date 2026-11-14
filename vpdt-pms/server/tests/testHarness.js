@@ -1232,7 +1232,7 @@ function createDispatcher(state) {
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
-        const { canViewStocktakeReport, finalCountQty, LOAI_KY, TRANG_THAI, userHasAnyStocktakeAccessToDept } = stockEngine2();
+        const { canViewStocktakeReport, finalCountQty, LOAI_KY, TRANG_THAI, userHasAnyStocktakeAccessToDept, buildPriceMapFromRows, computeValueBreakdown } = stockEngine2();
         if (!canViewStocktakeReport(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền "📊 Tab 7: Xem Báo Cáo" của Kiểm Kê' } };
         const qs = new URL(url, 'http://x').searchParams;
         const sessionId = Number(qs.get('sessionId'));
@@ -1303,7 +1303,7 @@ function createDispatcher(state) {
         const baseByMaHang = new Map(baseRows.map(r => [r.maHang, r]));
         const maHangSet = new Set(baseRows.map(r => r.maHang));
         if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
-        const rows = [...maHangSet].map(maHang => {
+        let rows = [...maHangSet].map(maHang => {
           const base = baseByMaHang.get(maHang);
           const sysEntry = systemMap ? systemMap.get(maHang) : null;
           return {
@@ -1314,6 +1314,19 @@ function createDispatcher(state) {
             finalQty: base ? base.finalQty : 0
           };
         }).sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+        // "💰 Giá Trị Thừa/Thiếu" — mirror ĐÚNG routes/stocktake.js (CHỈ Kỳ Kiểm Kê + siêu thị có cấu
+        // hình Mã Điểm — dùng ĐÚNG cờ apiConfigured đã có ở trên làm proxy "đã cấu hình", KHÔNG gate
+        // theo "đã có giá hay chưa": store cấu hình rồi nhưng CHƯA có giá nào vẫn phải tính ra 0đ/báo đủ
+        // số mã thiếu giá, KHÔNG được null — test tự seed state.__mockStocktakeReportPriceByDept[dept] =
+        // [{maHang, giaThuong}, ...] khi cần kiểm chứng có giá; không seed thì priceMap rỗng, vẫn tính.
+        let valueReport = null;
+        const priceByDept = state.__mockStocktakeReportPriceByDept || {};
+        if (session.loaiKy === LOAI_KY.THONG_KE && apiConfigured) {
+          const priceMap = buildPriceMapFromRows(priceByDept[session.dept]);
+          const breakdown = computeValueBreakdown(rows, priceMap);
+          rows = breakdown.rows;
+          valueReport = { tongGiaTri: breakdown.tongGiaTri, soMaThieuGia: breakdown.soMaThieuGia, giaCapNhatLuc: null };
+        }
         let compare;
         const compareSessionIdRaw = qs.get('compareSessionId');
         if (compareSessionIdRaw !== null) {
@@ -1341,7 +1354,17 @@ function createDispatcher(state) {
             const systemQty = sMap ? [...sMap.values()].reduce((sum, v) => sum + v.soLuongTon, 0) : null;
             const fMap = sumByMaHang(s.id, c => finalCountQty(c));
             const finalQty = [...fMap.values()].reduce((sum, v) => sum + v.total, 0);
-            return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty };
+            // tongGiaTri/soMaThieuGia (storeComparison) KHÔNG BAO GIỜ null (khác valueReport của báo
+            // cáo 1 siêu thị ở trên) — mirror ĐÚNG routes/stocktake.js: luôn tính, priceMap rỗng vẫn ra
+            // 0đ/đếm đủ số mã thiếu giá, không gate theo "đã cấu hình" hay "đã có giá" gì cả.
+            const storeMaHangSet = new Set([...(sMap ? sMap.keys() : []), ...fMap.keys()]);
+            const storeRows = [...storeMaHangSet].map(maHang => ({
+              maHang, systemQty: sMap && sMap.has(maHang) ? sMap.get(maHang).soLuongTon : null,
+              finalQty: fMap.get(maHang)?.total || 0
+            }));
+            const priceMap = buildPriceMapFromRows(priceByDept[s.dept]);
+            const { tongGiaTri, soMaThieuGia } = computeValueBreakdown(storeRows, priceMap);
+            return { dept: s.dept, sessionId: s.id, sessionName: s.tenKy, trangThai: s.trangThai, systemQty, finalQty, tongGiaTri, soMaThieuGia };
           }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
         }
         return { status: 200, body: {
@@ -1349,7 +1372,7 @@ function createDispatcher(state) {
           systemConfigured: apiConfigured, rows,
           totalSystemSkuCount: systemMap ? systemMap.size : null,
           countedSkuCount: [...finalMap.values()].filter(v => v.total > 0).length,
-          storeComparison
+          storeComparison, valueReport
         } };
       }
 

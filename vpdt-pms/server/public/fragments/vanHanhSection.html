@@ -1706,6 +1706,15 @@
               <div id="kkReportChart3" class="overflow-x-auto"></div>
             </div>
           </div>
+          <!-- "💰 Giá Trị Thừa/Thiếu Theo Siêu Thị" (12/2026, CHỈ Admin — theo yêu cầu người dùng "lấy
+               phần tồn kho với cả phần giá sang để làm báo cáo xuất ra giá trị siêu thị thừa thiếu bao
+               nhiêu"). Bảng RIÊNG (không gộp vào biểu đồ cột So Sánh Giữa Các Siêu Thị phía trên — SL và
+               Tiền là 2 ĐƠN VỊ khác nhau, không vẽ chung 1 biểu đồ), xếp hạng từ thiếu NHIỀU nhất lên
+               đầu để admin thấy ngay siêu thị nào cần chú ý. -->
+          <div id="kkReportValueByStoreCard" class="hidden bg-white border rounded p-3">
+            <div class="font-bold text-sm text-gray-800 mb-2">💰 Giá Trị Thừa/Thiếu Theo Siêu Thị</div>
+            <div id="kkReportValueByStoreBody" class="overflow-x-auto"></div>
+          </div>
           <div class="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
             <label class="block text-xs font-semibold text-amber-800">📊 So Sánh Với Kỳ Khác (tuỳ chọn — VD so Gom Mã với Kiểm Kê, hoặc 2 kỳ Kiểm Kê khác đợt)</label>
             <select id="kkReportCompareSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
