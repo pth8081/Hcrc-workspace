@@ -1135,6 +1135,22 @@ function createDispatcher(state) {
         if (hit.__error) return { status: hit.__error.status || 500, body: { error: hit.__error.error || 'Lỗi không xác định' } };
         return { status: 200, body: { ...hit, maDiem } };
       }
+      // GET /api/shelf-stock/price-catalog (12/2026, "💲 Kiểm Tra Giá" — bảng giá offline) — mirror ĐƠN
+      // GIẢN HOÁ routes/shelfStock.js thật: quyền canManageShelfRecords (CÙNG /price-check) ->
+      // storeExternalCodes[dept] -> maDiem -> trả state.__mockPriceCatalogByMaDiem[maDiem] (test tự seed
+      // {rows, capNhatLuc, fetchedAt} để giả lập "đã đồng bộ ngầm xong từ trước") hoặc rỗng nếu chưa có.
+      // KHÔNG mô phỏng việc kích hoạt đồng bộ nền thật (jobs/priceSync.js) — route thật fire-and-forget,
+      // không ảnh hưởng gì tới response trả về test này đang kiểm.
+      if (pathName === '/api/shelf-stock/price-catalog' && method === 'GET') {
+        const { canManageShelfRecords } = require('../lib/shelfStockEdit');
+        const freshUser = state.users.find(u => u.username === username);
+        if (!canManageShelfRecords(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền xem bảng giá trên Kiểm Soát Hàng Hóa' } };
+        const storeExternalCodes = state.storeExternalCodes || {};
+        const maDiem = storeExternalCodes[freshUser.dept];
+        if (!maDiem) return { status: 200, body: { rows: [], capNhatLuc: null, fetchedAt: null, maDiem: null } };
+        const snapshot = (state.__mockPriceCatalogByMaDiem || {})[maDiem];
+        return { status: 200, body: { rows: snapshot?.rows || [], capNhatLuc: snapshot?.capNhatLuc || null, fetchedAt: snapshot?.fetchedAt || null, maDiem } };
+      }
       // GET/PUT /api/shelf-stock/recon-recipients (11/2026) — mirror ĐƠN GIẢN HOÁ routes/shelfStock.js
       // thật: map state.shelfReconExtraRecipients {dept: [username,...]}, CHỈ đọc/sửa ĐÚNG key = dept
       // người gọi — đủ để test UI picker ở màn "📊 Đối Chiếu" (gate quyền thật/validate username đã có

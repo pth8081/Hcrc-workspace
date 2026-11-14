@@ -525,6 +525,14 @@ function reopenKkPeriod(id) {
 }
 
 function setVanHanhShelfSubTab(tab) {
+  // Đồng bộ ngầm bảng giá offline (💲 Kiểm Tra Giá, 12/2026) — kích hoạt NGAY khi vào bất kỳ sub-tab nào
+  // của "📋 Kiểm Soát Hàng Hóa" (không chỉ riêng PRICECHECK — theo đúng yêu cầu người dùng "vào phần kiểm
+  // soát này, vào phần kiểm tra giá này" đều tự đồng bộ), hoàn toàn ÂM THẦM (không hộp thoại, không chặn
+  // vẽ giao diện — fire-and-forget). Chỉ cho người CÓ quyền tra giá (canCreateShelfRecordClient, cùng
+  // quyền PRICECHECK) — người chỉ có quyền LOCATIONS/THRESHOLD không cần bảng giá này.
+  if (canCreateShelfRecordClient(currentUser)) {
+    (async () => { await ensureShelfOfflineReady(); await syncShelfPriceCatalogSilently(); })();
+  }
   const tabs = [
     ['RECORD', 'vanHanhShelfRecordWrap', 'btnVhShelfSubRecord', () => true],
     ['LOCATIONS', 'vanHanhShelfLocationsWrap', 'btnVhShelfSubLocations', canManageShelfLocationsClient],
@@ -2222,11 +2230,13 @@ function exportShelfExpiryExcel() {
 // ghi IndexedDB) — populateShelfLocationPicker()/renderShelfRecordRecentList() đọc trực tiếp 2 biến này
 // (đồng bộ, không await) thay vì phải await IndexedDB mỗi lần vẽ lại danh sách.
 const SHELF_OFFLINE_DB_NAME = 'hcrcShelfOfflineDb';
-// Version 2 (11/2026) — thêm store 'systemInventory' (cache kết quả GET /system-inventory lúc còn
-// online, dùng khi mất mạng cho cả picker "🔎 Chọn Từ Tồn Kho Hệ Thống" và màn "📊 Đối Chiếu") — nâng
-// version để onupgradeneeded chạy lại trên DB v1 đã có từ trước, bổ sung thêm store mới mà KHÔNG mất dữ
-// liệu 2 store cũ (mỗi dòng tạo store đều tự guard bằng objectStoreNames.contains()).
-const SHELF_OFFLINE_DB_VERSION = 2;
+// Version 3 (12/2026) — thêm store 'priceCatalog' (cache "bảng giá" offline cho "💲 Kiểm Tra Giá", đồng
+// bộ ngầm qua GET /api/shelf-stock/price-catalog — xem syncShelfPriceCatalogSilently()) — nâng version
+// để onupgradeneeded chạy lại trên DB v1/v2 đã có từ trước, bổ sung thêm store mới mà KHÔNG mất dữ liệu
+// các store cũ (mỗi dòng tạo store đều tự guard bằng objectStoreNames.contains()). Version 2 (11/2026) —
+// thêm store 'systemInventory' (cache kết quả GET /system-inventory lúc còn online, dùng khi mất mạng
+// cho cả picker "🔎 Chọn Từ Tồn Kho Hệ Thống" và màn "📊 Đối Chiếu").
+const SHELF_OFFLINE_DB_VERSION = 3;
 let shelfOfflineDbPromise = null;
 let shelfOfflineLocationsCache = [];
 let shelfOfflinePendingCache = [];
@@ -2236,6 +2246,11 @@ let shelfOfflineSystemInventoryCache = null; // {rows, capNhatLuc, cachedAt} ho�
 // nếu lẫn chung 1 slot cache với 2 nơi còn lại thì lúc mất mạng picker/Hạn Sử Dụng sẽ vô tình đọc nhầm
 // mảng đã bị lọc nhỏ của Đối Chiếu thay vì mảng đầy đủ mà chúng cần.
 let shelfOfflineReconCache = null;
+// Cache offline "bảng giá" (💲 Kiểm Tra Giá, 12/2026) — {rows, capNhatLuc, fetchedAt, maDiem, cachedAt}
+// hoặc null (chưa đồng bộ lần nào). rows là mảng kết quả giá TỪNG mã (đúng hình dạng checkPrice() trả về
+// — maHang/tenHang/maVach/giaThuong/giaKhuyenMai/coKhuyenMai/capNhatLuc), do server tự "dựng bulk giả"
+// (jobs/priceSync.js) — KHÁC shelfOfflineSystemInventoryCache (không có field giá).
+let shelfOfflinePriceCatalogCache = null;
 function openShelfOfflineDb() {
   if (!window.indexedDB) return Promise.reject(new Error('Trình duyệt không hỗ trợ IndexedDB'));
   if (shelfOfflineDbPromise) return shelfOfflineDbPromise;
@@ -2247,6 +2262,7 @@ function openShelfOfflineDb() {
       if (!db.objectStoreNames.contains('cachedLocations')) db.createObjectStore('cachedLocations', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pendingRecords')) db.createObjectStore('pendingRecords', { keyPath: 'clientRecordId' });
       if (!db.objectStoreNames.contains('systemInventory')) db.createObjectStore('systemInventory', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('priceCatalog')) db.createObjectStore('priceCatalog', { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -2279,12 +2295,14 @@ async function ensureShelfOfflineReady() {
       await shelfOfflineTx(db, 'cachedLocations', 'readwrite', s => s.clear());
       await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.clear());
       await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'priceCatalog', 'readwrite', s => s.clear());
     }
     await shelfOfflineTx(db, 'meta', 'readwrite', s => s.put({ key: 'dept', value: currentUser.dept }));
     shelfOfflineLocationsCache = await shelfOfflineTx(db, 'cachedLocations', 'readonly', s => s.getAll()) || [];
     shelfOfflinePendingCache = await shelfOfflineTx(db, 'pendingRecords', 'readonly', s => s.getAll()) || [];
     shelfOfflineSystemInventoryCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('cache')) || null;
     shelfOfflineReconCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('recon')) || null;
+    shelfOfflinePriceCatalogCache = await shelfOfflineTx(db, 'priceCatalog', 'readonly', s => s.get('cache')) || null;
   } catch (err) {
     // IndexedDB không dùng được (trình duyệt cũ/chế độ ẩn danh chặn...) — bỏ qua, màn vẫn hoạt động
     // ONLINE bình thường, chỉ mất khả năng offline (không chặn luồng chính).
@@ -2324,6 +2342,61 @@ async function cacheShelfSystemInventoryOffline(rows, capNhatLuc, maDiem, cacheK
 // cacheKey='recon' lấy đúng cache riêng của Đối Chiếu (mảng đã lọc) — xem shelfOfflineReconCache.
 function getShelfSystemInventoryOfflineFallback(cacheKey) {
   return cacheKey === 'recon' ? shelfOfflineReconCache : shelfOfflineSystemInventoryCache;
+}
+// ===== "💲 Kiểm Tra Giá" — bảng giá offline (12/2026) =====
+// Lưu lại bản bảng giá MỚI NHẤT nhận được từ GET /api/shelf-stock/price-catalog (cả lúc server trả bản
+// CŨ đã có sẵn lẫn lúc đồng bộ ngầm xong có bản MỚI hơn — route đó luôn trả nguyên snapshot hiện có,
+// không phân biệt "mới" hay "cũ" ở tầng HTTP) — CÙNG khuôn cacheShelfSystemInventoryOffline() ngay trên.
+async function cacheShelfPriceCatalogOffline(rows, capNhatLuc, fetchedAt, maDiem) {
+  const entry = { key: 'cache', rows: rows || [], capNhatLuc, fetchedAt, maDiem, cachedAt: new Date().toISOString() };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'priceCatalog', 'readwrite', s => s.put(entry));
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+  shelfOfflinePriceCatalogCache = entry;
+}
+// Tra 1 mã hàng/mã vạch trong bảng giá offline hiện có — trả object CÙNG HÌNH DẠNG checkPrice() trả về
+// (maHang/tenHang/maVach/giaThuong/giaKhuyenMai/coKhuyenMai/capNhatLuc) hoặc null nếu chưa có/chưa khớp.
+function findShelfPriceCatalogOffline(maHang, maVach) {
+  const rows = shelfOfflinePriceCatalogCache?.rows;
+  if (!rows || !rows.length) return null;
+  if (maHang) {
+    const hit = rows.find(r => r.maHang && String(r.maHang) === String(maHang));
+    if (hit) return hit;
+  }
+  if (maVach) {
+    const hit = rows.find(r => r.maVach && String(r.maVach) === String(maVach));
+    if (hit) return hit;
+  }
+  return null;
+}
+// Gộp/ghi đè 1 kết quả giá VỪA TRA ONLINE (fallback do offline chưa có đủ — xem submitPriceCheckForLookup())
+// vào bảng giá offline hiện có — để lần sau tra LẠI ĐÚNG mã này cũng có trong cache, dần dần "lấp đầy"
+// những mã ngoài đợt đồng bộ ngầm theo lô (SKU mới thêm giữa 2 lần đồng bộ, hoặc Mã Điểm chưa từng đồng
+// bộ xong). KHÔNG chờ đợt đồng bộ ngầm tiếp theo mới có — cập nhật NGAY sau mỗi lượt tra online thành công.
+async function mergeShelfPriceCatalogOfflineOneResult(result) {
+  if (!result || !result.maHang) return;
+  const current = shelfOfflinePriceCatalogCache;
+  const rows = current?.rows ? current.rows.slice() : [];
+  const idx = rows.findIndex(r => r.maHang && String(r.maHang) === String(result.maHang));
+  if (idx >= 0) rows[idx] = result; else rows.push(result);
+  await cacheShelfPriceCatalogOffline(rows, current?.capNhatLuc || null, current?.fetchedAt || null, current?.maDiem || null);
+}
+// Gọi NGAY khi vào tab "📋 Kiểm Soát Hàng Hóa"/"💲 Kiểm Tra Giá" (setVanHanhShelfSubTab(), KHÔNG chờ
+// người dùng thao tác gì) — tự kéo bản bảng giá ĐANG CÓ trên server về máy (nhanh, server trả ngay dù
+// cũ), ĐỒNG THỜI tự kích hoạt đồng bộ ngầm ở server nếu đã quá hạn (xem GET /price-catalog,
+// jobs/priceSync.js) — HOÀN TOÀN ÂM THẦM theo đúng yêu cầu người dùng, KHÔNG hộp thoại hỏi xác nhận gì
+// cả. Lỗi mạng (offline thật/chưa đăng nhập xong) chỉ bỏ qua — vẫn dùng được bản cache cũ đã có nếu có.
+async function syncShelfPriceCatalogSilently() {
+  try {
+    const res = await shelfFetch('/api/shelf-stock/price-catalog');
+    if (!res.ok) return; // lỗi nghiệp vụ (503 chưa cấu hình/403...) — im lặng, không chặn tra giá online bình thường
+    const body = await res.json();
+    await cacheShelfPriceCatalogOffline(body.rows, body.capNhatLuc, body.fetchedAt, body.maDiem);
+  } catch (err) {
+    // Lỗi mạng thật (offline) — bỏ qua, màn Kiểm Tra Giá vẫn hoạt động bằng cache cũ (nếu có) + fallback
+    // online khi có mạng lại, không cần báo lỗi gì cho người dùng ở bước "đồng bộ ngầm" này.
+  }
 }
 // Lưu tạm 1 ghi nhận vào hàng đợi offline (mất mạng lúc bấm "Lưu Ghi Nhận") — shelfLocationLabel chỉ để
 // HIỆN cho người dùng thấy ngay (tên quầy kệ), KHÔNG phải dữ liệu gửi lên server (server tự tra lại từ
@@ -2758,8 +2831,18 @@ function renderPriceCheckSuffixCandidates(code, candidates) {
 function selectPriceCheckSuffixCandidate(maHang) {
   return submitPriceCheckForLookup({ maHang });
 }
+// Bảng giá offline (12/2026) — ƯU TIÊN tra trong IndexedDB TRƯỚC (có rồi thì dùng ngay, không gọi mạng —
+// nhanh hơn hẳn + hoạt động được cả lúc mất mạng), CHƯA có mới gọi API đối tác như cũ (fallback), rồi
+// "lấp" luôn kết quả đó vào cache offline để lần tra lại ĐÚNG mã này cũng nhanh — đúng yêu cầu người
+// dùng "offline mà chưa có thì check online, có rồi thì lấy offline".
 async function submitPriceCheckForLookup(lookup) {
   renderPriceCheckState('LOADING');
+  const offlineHit = findShelfPriceCatalogOffline(lookup.maHang, lookup.maVach);
+  if (offlineHit) {
+    renderPriceCheckResult(offlineHit, true);
+    renderPriceCheckState('RESULT');
+    return;
+  }
   try {
     const res = await shelfFetch('/api/shelf-stock/price-check', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2773,15 +2856,16 @@ async function submitPriceCheckForLookup(lookup) {
       renderPriceCheckState('ERROR');
       return;
     }
-    renderPriceCheckResult(body);
+    renderPriceCheckResult(body, false);
     renderPriceCheckState('RESULT');
+    mergeShelfPriceCatalogOfflineOneResult(body);
   } catch (err) {
     const errEl = document.getElementById('priceCheckErrorText');
     if (errEl) errEl.textContent = '⛔ Không thể kết nối tới máy chủ để tra giá';
     renderPriceCheckState('ERROR');
   }
 }
-function renderPriceCheckResult(data) {
+function renderPriceCheckResult(data, fromOffline) {
   document.getElementById('pcResultTenHang').textContent = data.tenHang || '(Chưa có tên hàng)';
   const idParts = [`Mã Hàng: ${data.maHang || ''}`];
   if (data.maVach) idParts.push(`Mã Vạch: ${data.maVach}`);
@@ -2800,7 +2884,12 @@ function renderPriceCheckResult(data) {
     badgeEl.classList.add('hidden');
   }
   const capNhatEl = document.getElementById('pcResultCapNhat');
-  capNhatEl.textContent = data.capNhatLuc ? `Cập nhật giá lúc: ${new Date(data.capNhatLuc).toLocaleString('vi-VN')}` : '';
+  const capNhatText = data.capNhatLuc ? `Cập nhật giá lúc: ${new Date(data.capNhatLuc).toLocaleString('vi-VN')}` : '';
+  // Nguồn offline/online (12/2026) — ghi rõ để nhân viên biết giá vừa hiện là đọc từ bảng giá đã đồng bộ
+  // ngầm trên máy (có thể cũ hơn 1 ngày so với thực tế) hay vừa tra TRỰC TIẾP từ đối tác (luôn mới nhất).
+  capNhatEl.textContent = fromOffline
+    ? `📦 Ngoại tuyến (đã đồng bộ trên máy)${capNhatText ? ' — ' + capNhatText : ''}`
+    : capNhatText;
 }
 
 // ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026), THIẾT KẾ LẠI 11/2026 (xem khối

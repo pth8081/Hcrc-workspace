@@ -1530,5 +1530,25 @@ BEGIN
 END
 GO
 
+/* StorePriceSnapshots (12/2026, "💲 Kiểm Tra Giá" — đồng bộ ngầm bảng giá offline) — CÙNG KHUÔN
+   SystemInventorySnapshots ngay trên (1 dòng/Mã Điểm, Payload giữ NGUYÊN VẸN mảng kết quả giá, không
+   chuẩn hoá cột riêng), nhưng dữ liệu nguồn KHÁC HẲN: đối tác BRGMART KHÔNG có API bulk giá (chỉ có API
+   tra ĐÚNG 1 mã/lần, lib/priceCheckApiClient.js) — jobs/priceSync.js tự "dựng bulk giả" bằng cách LẶP
+   qua từng mã hàng đã biết của ĐÚNG Mã Điểm đó (lấy từ SystemInventorySnapshots sẵn có, không gọi thêm
+   API tồn kho) rồi gọi API giá TỪNG mã, gộp kết quả lại thành 1 Payload duy nhất. Vì vòng lặp này tốn
+   nhiều lượt gọi đối tác (có thể hàng nghìn mã/siêu thị), CHỈ chạy ngầm khi có người thật vào tab
+   "📋 Kiểm Soát Hàng Hóa"/"💲 Kiểm Tra Giá" của ĐÚNG siêu thị đó (không chạy mù cho mọi siêu thị theo
+   lịch cố định) — xem lib/priceSnapshotStore.js + jobs/priceSync.js. */
+IF OBJECT_ID('dbo.StorePriceSnapshots', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StorePriceSnapshots (
+        MaDiem      NVARCHAR(50)   NOT NULL CONSTRAINT PK_StorePriceSnapshots PRIMARY KEY,
+        FetchedAt   DATETIME2(3)   NOT NULL,
+        CapNhatLuc  NVARCHAR(100)  NULL,
+        Payload     NVARCHAR(MAX)  NOT NULL
+    );
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

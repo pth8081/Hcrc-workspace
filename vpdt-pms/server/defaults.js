@@ -974,6 +974,11 @@ const DEFAULTS = {
   // từ đầu, không để dành. routes/stocktake.js vẫn tự khởi tạo thêm 1 lớp an toàn
   // (ensureStocktakeSessionsKey()) phòng trường hợp server chưa restart lại sau khi deploy bản này.
   stocktakeSessions: [],
+  // priceSyncLocks (💲 Kiểm Tra Giá — đồng bộ ngầm bảng giá offline, 12/2026) — object nhỏ {maDiem:
+  // isoTimestampLúcGiànhChỗ}, dùng "giành chỗ" chống nhiều request/tiến trình PM2 cluster cùng lúc tự
+  // chạy vòng lặp đồng bộ giá cho ĐÚNG 1 Mã Điểm (xem jobs/priceSync.js claimPriceSyncSlot()) — CÙNG bài
+  // học thêm sẵn vào DEFAULTS như stocktakeSessions ngay trên, không để dành.
+  priceSyncLocks: {},
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

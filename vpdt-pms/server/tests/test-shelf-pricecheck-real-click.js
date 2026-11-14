@@ -170,8 +170,13 @@ async function main() {
       // phải gửi làm maVach (shelfSystemInventoryCache rỗng trong test này, không có cache nào để khớp
       // trước) — seed kết quả mock ĐÚNG theo key maVach này (testHarness ưu tiên maHang nếu có, ở đây
       // client CHỈ gửi maVach nên lookupKey === maVach).
-      state.__mockPriceCheckResults['8934696001589'] = { maHang: '2003330491', tenHang: 'Sữa tươi TH True Milk 1L (tra bằng mã vạch)', maVach: '8934696001589', giaThuong: 24000, giaKhuyenMai: null, coKhuyenMai: false, capNhatLuc: '2026-11-10T09:00:18.000Z' };
-      await page.fill('#pcMaHang', '8934696001589');
+      // DÙNG BARCODE KHÁC HẲN '8934696001589' của mã 2003330491 ở kịch bản trên (12/2026, bảng giá
+      // offline mới thêm: mỗi lượt tra ONLINE thành công tự "lấp" vào cache offline theo CẢ maHang LẪN
+      // maVach của chính kết quả đó — xem mergeShelfPriceCatalogOfflineOneResult()/module-vanhanh.js —
+      // dùng lại ĐÚNG maVach đã cache ở kịch bản trên sẽ đọc ra bản CŨ từ cache, không gọi lại online nữa,
+      // không còn phản ánh đúng ý định gốc của kịch bản này là kiểm tra ĐƯỜNG GỌI ONLINE qua maVach).
+      state.__mockPriceCheckResults['9998887776665'] = { maHang: '2003330491', tenHang: 'Sữa tươi TH True Milk 1L (tra bằng mã vạch)', maVach: '9998887776665', giaThuong: 24000, giaKhuyenMai: null, coKhuyenMai: false, capNhatLuc: '2026-11-10T09:00:18.000Z' };
+      await page.fill('#pcMaHang', '9998887776665');
       await page.click('#priceCheckForm button[type="submit"]');
       await page.waitForTimeout(150);
       const result = await page.evaluate(() => ({

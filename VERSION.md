@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**30.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.35 (2026-12): "💲 Kiểm Tra Giá" — đồng bộ ngầm bảng giá offline
+
+Theo yêu cầu người dùng: tự đồng bộ bảng giá của siêu thị xuống trình duyệt khi vào tab "📋 Kiểm Soát
+Hàng Hóa"/"💲 Kiểm Tra Giá", hoàn toàn ÂM THẦM (không hộp thoại hỏi xác nhận), để tra giá nhanh hơn và
+dùng được cả lúc mất mạng. Đối tác BRGMART KHÔNG có API bulk giá thật (chỉ tra được từng mã/lần, khác
+API Tồn Kho có phân trang) — server tự "dựng bulk giả" bằng cách lặp qua từng mã hàng đã biết của siêu
+thị (lấy từ Tồn Kho đã đồng bộ sẵn) rồi gọi API giá từng mã, CHỈ chạy ngầm cho siêu thị nào thực sự có
+người vào tab (không chạy mù cho mọi siêu thị), làm mới đầy đủ 1 lần/ngày, không bao giờ bắt người dùng
+chờ (luôn trả ngay bản đang có).
+
+- `jobs/priceSync.js` + `lib/priceSnapshotStore.js` (bảng SQL mới `dbo.StorePriceSnapshots`, cùng khuôn
+  `SystemInventorySnapshots` của Tồn Kho — xem bài học tách bảng riêng ở `sql/schema.sql`) — "giành chỗ"
+  chống nhiều request/tiến trình PM2 cùng chạy 1 Mã Điểm, dừng hẳn vòng lặp nếu gặp lỗi xác thực, bỏ qua
+  từng mã lỗi 404 mà không chặn cả lượt.
+- `routes/shelfStock.js` — `GET /price-catalog` (fire-and-forget, không chặn response).
+- Client (`module-vanhanh.js`): IndexedDB store `priceCatalog` mới (offline-first, tái dùng hạ tầng đã
+  có của "Ghi Nhận") — tra giá ưu tiên đọc offline trước, chưa có mới gọi online rồi tự "lấp" kết quả đó
+  vào cache cho lần sau.
+- Test: `test-price-sync-job.js` (17 kịch bản logic thuần) + `test-price-catalog-offline.js` (Playwright
+  thật, xác nhận đúng luồng offline-trước/online-dự-phòng/tự lấp cache) — phát hiện + sửa 1 test cũ
+  (`test-shelf-pricecheck-real-click.js`) bị ảnh hưởng do hành vi cache mới (dùng trùng mã vạch giữa 2
+  kịch bản). Hồi quy: 58/58 test liên quan Kiểm Soát Hàng Hóa/Tồn Kho/Kiểm Tra Giá pass.
+- **Deploy**: cần chạy lại `sql/schema.sql` (thêm bảng `StorePriceSnapshots`, script tự bọc
+  `IF OBJECT_ID(...) IS NULL` nên an toàn chạy lại) — không có biến `.env` mới, không có package npm mới.
 
 ## v30.34 (2026-11): Module mới "📋 Kiểm Kê" — Phase 1 MVP, Tab 1 "Kỳ Kiểm Kê"
 
