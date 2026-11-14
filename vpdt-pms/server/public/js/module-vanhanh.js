@@ -336,30 +336,432 @@ let kkPeriodDeptSelected = '';
 
 function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
 function canReopenKiemKePeriodClient(user) { return !!user?.perms?.admin; }
+// Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
+// (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
+// CLAUDE.md nhắc tránh — áp dụng NGAY từ đầu cho 7 tab còn lại khi build thật, không để dành sửa sau).
+function canDoStocktakeGomMaClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeGomMaDo); }
+function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemDemDo); }
+function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
+function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
+function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 function kkEffectiveDept() {
   return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
 }
 
 function setKiemKeSubTab(tab) {
   const tabs = [
-    ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod'],
-    ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa'],
-    ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem'],
-    ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat'],
-    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig'],
-    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm'],
-    ['REPORT', 'kkReportWrap', 'btnKkSubReport'],
-    ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess']
+    ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
+    ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
+    ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
+    ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],
+    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig', canManageStocktakeShelfConfigClient],
+    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm', canConfirmStocktakeClient],
+    ['REPORT', 'kkReportWrap', 'btnKkSubReport', canViewStocktakeReportClient],
+    ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess', canManageStocktakeUserAccessClient]
   ];
+  const found = tabs.find(([key]) => key === tab);
+  const stillAllowed = found && found[3](currentUser);
+  if (!stillAllowed) {
+    // CÙNG khuôn setVanHanhShelfSubTab() — không còn quyền ở tab đang chọn thì tự rơi về tab ĐẦU TIÊN
+    // còn quyền (KHÔNG mặc định PERIOD cứng — PERIOD luôn allowFn=true nên vẫn sẽ là lựa chọn cuối cùng
+    // nếu không còn tab nào khác, nhưng ưu tiên tab user THỰC SỰ thao tác được).
+    const fallback = tabs.find(([, , , allowFn]) => allowFn(currentUser));
+    tab = fallback ? fallback[0] : null;
+  }
   activeKiemKeSubTab = tab;
-  tabs.forEach(([key, wrapId, btnId]) => {
+  tabs.forEach(([key, wrapId, btnId, allowFn]) => {
     const isActive = key === tab;
+    const visible = allowFn(currentUser);
     const wrap = document.getElementById(wrapId);
     if (wrap) wrap.classList.toggle('hidden', !isActive);
     const btn = document.getElementById(btnId);
-    if (btn) btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+    if (btn) btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
   });
+  if (!tab) return;
   if (tab === 'PERIOD') loadKkPeriodSessions();
+  else if (tab === 'USERACCESS') loadKkUserAccessTab();
+  else if (tab === 'GOMMA') loadKkScanTab('GOMMA');
+  else if (tab === 'KIEMDEM') loadKkScanTab('KIEMDEM');
+}
+
+// ===== Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ) =====
+let kkUaAssignableUsers = []; // [{username, name, dept}]
+let kkUaShelfLocationsForDept = []; // shelfLocations của ĐÚNG siêu thị đang chọn ở form gán quyền
+let kkUaAccessList = []; // toàn bộ stocktakeUserAccess (để vẽ bảng danh sách)
+
+async function loadKkUserAccessTab() {
+  const listBody = document.getElementById('kkUaListBody');
+  if (listBody) listBody.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
+  // Siêu thị — tái dùng DB.stores (danh mục chung, KHÔNG phải danh mục riêng của Kiểm Kê).
+  const deptSelect = document.getElementById('kkUaDeptSelect');
+  if (deptSelect) {
+    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+    deptSelect.innerHTML = '<option value="">-- Chọn siêu thị --</option>' + stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  }
+  try {
+    const [usersRes, accessRes] = await Promise.all([
+      fetch('/api/stocktake/assignable-users'),
+      fetch('/api/stocktake/user-access')
+    ]);
+    if (usersRes.status === 401 || accessRes.status === 401) return handleSessionExpired();
+    const usersBody = await usersRes.json().catch(() => ({}));
+    const accessBody = await accessRes.json().catch(() => ({}));
+    kkUaAssignableUsers = usersRes.ok ? (usersBody.items || []) : [];
+    kkUaAccessList = accessRes.ok ? (accessBody.items || []) : [];
+    // Ô tìm-kiếm-gõ-chọn người dùng (CLAUDE.md: KHÔNG dùng <datalist> gốc) — label "Tên (username) — Siêu thị hồ sơ".
+    const ddItems = kkUaAssignableUsers.map(u => ({ value: u.username, label: `${u.name} (${u.username}) — ${u.dept || ''}` }));
+    if (typeof sddSetOptions === 'function') sddSetOptions('kkUaUserDatalist', ddItems);
+    renderKkUaList();
+  } catch (err) {
+    if (listBody) listBody.innerHTML = '<p class="text-red-600 text-sm">⛔ Không tải được danh sách — vui lòng thử lại.</p>';
+  }
+}
+
+async function onKkUaDeptChanged() {
+  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+  const box = document.getElementById('kkUaShelfCheckboxes');
+  const filterInput = document.getElementById('kkUaShelfFilter');
+  if (filterInput) filterInput.value = '';
+  if (!dept) {
+    kkUaShelfLocationsForDept = [];
+    if (box) box.innerHTML = '<p class="text-gray-400 italic">Chọn siêu thị trước để hiện danh sách quầy kệ.</p>';
+    return;
+  }
+  if (box) box.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  // Tái dùng DB.shelfLocations (danh mục ĐÃ ĐỒNG BỘ qua GET /api/data — không gọi route riêng), đúng
+  // tài liệu đề xuất "dùng chung danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa".
+  kkUaShelfLocationsForDept = (DB.shelfLocations || []).filter(l => l.dept === dept && l.active !== false);
+  renderKkUaShelfCheckboxes('');
+}
+
+function renderKkUaShelfCheckboxes(filterText) {
+  const box = document.getElementById('kkUaShelfCheckboxes');
+  if (!box) return;
+  if (!kkUaShelfLocationsForDept.length) {
+    box.innerHTML = '<p class="text-gray-400 italic">Siêu thị này chưa khai báo quầy kệ nào (vào Vận Hành → Kiểm Soát Hàng Hóa → Quầy Kệ để thêm).</p>';
+    return;
+  }
+  const q = stripVnDiacritics(String(filterText || '').trim().toLowerCase());
+  const matches = kkUaShelfLocationsForDept.filter(l => !q || stripVnDiacritics(`${l.code} ${l.name}`.toLowerCase()).includes(q));
+  box.innerHTML = matches.length
+    ? matches.map(l => `<label class="flex items-center gap-1"><input type="checkbox" class="kk-ua-shelf-cb" value="${l.id}"> ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</label>`).join('')
+    : '<p class="text-gray-400 italic">Không tìm thấy quầy kệ khớp.</p>';
+}
+
+// Ô "Người dùng" lưu LABEL (vd "Nguyễn Văn A (nv1) — Siêu thị Quận 1") theo đúng cơ chế sddSetOptions()
+// chung (input.value = item.label lúc chọn) — tra lại username thật bằng cách khớp ĐÚNG username có mặt
+// trong label đó (an toàn hơn parse chuỗi bằng regex vì username không chứa ký tự "(", ")" ).
+function resolveKkUaSelectedUsername() {
+  const raw = document.getElementById('kkUaUserInput')?.value || '';
+  const hit = kkUaAssignableUsers.find(u => raw === `${u.name} (${u.username}) — ${u.dept || ''}`);
+  return hit ? hit.username : '';
+}
+
+async function submitKkUserAccess() {
+  const username = resolveKkUaSelectedUsername();
+  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+  const shelfLocationIds = Array.from(document.querySelectorAll('.kk-ua-shelf-cb:checked')).map(cb => Number(cb.value));
+  const canGomMa = document.getElementById('kkUaCanGomMa')?.checked || false;
+  const canKiemDem = document.getElementById('kkUaCanKiemDem')?.checked || false;
+  const canKiemSoat = document.getElementById('kkUaCanKiemSoat')?.checked || false;
+  if (!username) return alert('Vui lòng chọn đúng 1 người dùng từ danh sách gợi ý.');
+  if (!dept) return alert('Vui lòng chọn siêu thị.');
+  if (!shelfLocationIds.length) return alert('Vui lòng chọn ít nhất 1 quầy kệ.');
+  if (!canGomMa && !canKiemDem && !canKiemSoat) return alert('Vui lòng chọn ít nhất 1 hành động (Gom Mã/Kiểm Đếm/Kiểm Soát).');
+  try {
+    const res = await fetch('/api/stocktake/user-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, dept, shelfLocationIds, canGomMa, canKiemDem, canKiemSoat })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || 'Không lưu được quyền');
+    kkUaAccessList = data.items || [];
+    renderKkUaList();
+    document.getElementById('kkUaUserInput').value = '';
+    document.getElementById('kkUaCanGomMa').checked = false;
+    document.getElementById('kkUaCanKiemDem').checked = false;
+    document.getElementById('kkUaCanKiemSoat').checked = false;
+    document.querySelectorAll('.kk-ua-shelf-cb:checked').forEach(cb => { cb.checked = false; });
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ');
+  }
+}
+
+function renderKkUaList() {
+  const body = document.getElementById('kkUaListBody');
+  if (!body) return;
+  if (!kkUaAccessList.length) {
+    body.innerHTML = '<p class="text-gray-400 text-sm">Chưa gán quyền cho ai.</p>';
+    return;
+  }
+  // Nhóm theo (username, dept) để hiện gọn — mỗi nhóm có thể nhiều dòng (nhiều quầy kệ khác nhau).
+  const sorted = kkUaAccessList.slice().sort((a, b) => (a.username + a.dept).localeCompare(b.username + b.dept, 'vi'));
+  body.innerHTML = sorted.map(a => {
+    const u = kkUaAssignableUsers.find(x => x.username === a.username);
+    const loc = (DB.shelfLocations || []).find(l => l.id === a.shelfLocationId);
+    const actions = [a.canGomMa && 'Gom Mã', a.canKiemDem && 'Kiểm Đếm', a.canKiemSoat && 'Kiểm Soát'].filter(Boolean).join(', ') || '(không có hành động nào)';
+    return `<div class="flex items-center justify-between gap-2 border-b pb-1">
+      <div class="min-w-0">
+        <span class="font-semibold">${escapeHtml(u ? u.name : a.username)}</span>
+        <span class="text-gray-500"> · ${escapeHtml(a.dept)} · ${escapeHtml(loc ? `${loc.code} — ${loc.name}` : 'Quầy kệ #' + a.shelfLocationId)}</span>
+        <span class="text-gray-500"> · ${escapeHtml(actions)}</span>
+      </div>
+      <button type="button" data-op="deleteKkUserAccess" data-arg0="${a.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">🗑️ Xoá</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteKkUserAccess(id) {
+  if (!confirm('Gỡ dòng cấu hình quyền này?')) return;
+  try {
+    const res = await fetch(`/api/stocktake/user-access/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || 'Không gỡ được');
+    kkUaAccessList = kkUaAccessList.filter(a => a.id !== id);
+    renderKkUaList();
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ');
+  }
+}
+
+// ===== Tab 2 "Gom Mã" + Tab 3 "Kiểm Đếm" — màn quét dùng CHUNG 1 bộ hàm, tham số hoá theo mode (12/2026)
+// — đúng A5 "Luồng quét & gộp số lượng": BẮT BUỘC chọn Quầy Kệ (chỉ hiện quầy kệ user được allowlist cho
+// đúng hành động, Tab 8) trước khi mở được ô quét, mọi lần quét sau tự vào đúng quầy kệ/kỳ đang chọn, mã
+// vừa quét nhảy lên đầu danh sách (MRU — sort theo lastScannedAt, KHÔNG đổi khi sửa tay, xem lib/
+// stocktakeEngine.js editCountValue()), sửa tay/xoá qua ô tìm kiếm riêng. Tab 4 "Kiểm Soát" (sẽ làm sau)
+// dùng lại ĐÚNG bộ hàm này — chỉ thêm KIEMSOAT vào KK_SCAN_TAB_CONFIG khi tới lượt, không cần viết lại.
+const KK_SCAN_TAB_CONFIG = Object.freeze({
+  GOMMA: { apiMode: 'GOM_MA', prefix: 'kkGomMa', qtyField: 'slGomMa', loaiKyLabel: 'Gom Mã' },
+  KIEMDEM: { apiMode: 'KIEM_DEM', prefix: 'kkKiemDem', qtyField: 'slKiemDem', loaiKyLabel: 'Thống Kê' },
+  KIEMSOAT: { apiMode: 'KIEM_SOAT', prefix: 'kkKiemSoat', qtyField: 'slKiemSoat', loaiKyLabel: 'Thống Kê' }
+});
+const kkScanState = {
+  GOMMA: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
+  KIEMDEM: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
+  KIEMSOAT: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' }
+};
+
+// Tải "Tồn Kho Hệ Thống" để tra mã quét — TÁI DÙNG shelfSystemInventoryCache đã có (dùng chung với "📷
+// Ghi Nhận" ở Kiểm Soát Hàng Hóa, KHÔNG gọi route riêng) nhưng KHÔNG đụng tới
+// renderShelfSystemInventoryPicker()/#srSystemInventoryPickerWrap (DOM của riêng Ghi Nhận) — nếu cache đã
+// có (user đã từng vào Ghi Nhận trong phiên này) thì dùng luôn, chưa có thì tự tải lấy, không phụ thuộc
+// thứ tự người dùng vào tab nào trước.
+async function ensureShelfSystemInventoryCacheLoaded() {
+  if (shelfSystemInventoryCache.length) return;
+  try {
+    const res = await shelfFetch('/api/shelf-stock/system-inventory');
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) return;
+    const data = await res.json();
+    shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
+    cacheShelfSystemInventoryOffline(shelfSystemInventoryCache, data.capNhatLuc);
+  } catch (err) {
+    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
+    if (cached) shelfSystemInventoryCache = cached.rows || [];
+  }
+}
+// Tra mã vừa quét/gõ ra đúng mã hàng tồn kho hệ thống — thử theo Mã Vạch (kể cả dsMaVach) trước, rồi Mã
+// Hàng nội bộ, rồi 6 số cuối (chỉ nhận khi khớp DUY NHẤT — khớp nhiều dòng thì coi là KHÔNG khớp, an toàn
+// hơn đoán đại, giống applyShelfBarcodeMatch()).
+function resolveKkScanItemFromCode(code) {
+  const byVach = matchShelfSystemInventoryByMaVach(code);
+  if (byVach) return byVach;
+  const byMaHang = matchShelfSystemInventoryByMaHang(code);
+  if (byMaHang) return byMaHang;
+  const suffixResult = matchShelfSystemInventoryBySuffix(code);
+  if (suffixResult?.unique) return suffixResult.unique;
+  return null;
+}
+
+async function loadKkScanTab(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  await ensureShelfSystemInventoryCacheLoaded();
+  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
+  if (selectEl) selectEl.innerHTML = '<option value="">-- Đang tải quầy kệ... --</option>';
+  try {
+    const res = await fetch(`/api/stocktake/my-shelf-locations?mode=${cfg.apiMode}`);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    st.shelves = res.ok ? (body.items || []) : [];
+  } catch (err) { st.shelves = []; }
+  renderKkScanShelfOptions(tabKey);
+  // Giữ lựa chọn quầy kệ đang có (nếu còn hợp lệ) khi chuyển qua tab khác rồi quay lại — không bắt chọn
+  // lại từ đầu vô lý.
+  if (st.selectedShelfId && st.shelves.some(l => l.id === st.selectedShelfId)) {
+    if (selectEl) selectEl.value = String(st.selectedShelfId);
+    await onKkScanShelfChanged(tabKey);
+  } else {
+    st.selectedShelfId = null;
+    renderKkScanBoxLocked(tabKey, st.shelves.length ? '📍 Vui lòng chọn quầy kệ để bắt đầu quét.' : null);
+  }
+}
+
+function renderKkScanShelfOptions(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
+  if (!selectEl) return;
+  if (!st.shelves.length) {
+    selectEl.innerHTML = '<option value="">-- Bạn chưa được cấp quyền quầy kệ nào --</option>';
+    return;
+  }
+  const opts = st.shelves.slice().sort((a, b) => `${a.dept} ${a.code}`.localeCompare(`${b.dept} ${b.code}`, 'vi'));
+  selectEl.innerHTML = '<option value="">-- Chọn quầy kệ --</option>' +
+    opts.map(l => `<option value="${l.id}">${escapeHtml(l.dept)} — ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('');
+}
+
+function renderKkScanBoxLocked(tabKey, infoText) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const box = document.getElementById(`${cfg.prefix}ScanBox`);
+  if (box) box.classList.add('hidden');
+  const infoEl = document.getElementById(`${cfg.prefix}SessionInfo`);
+  if (infoEl) infoEl.textContent = infoText == null ? '' : infoText;
+  renderKkScanList(tabKey);
+}
+function renderKkScanBoxUnlocked(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const box = document.getElementById(`${cfg.prefix}ScanBox`);
+  if (box) box.classList.remove('hidden');
+}
+
+async function onKkScanShelfChanged(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
+  const shelfId = Number(selectEl?.value || 0);
+  st.selectedShelfId = shelfId || null;
+  st.session = null;
+  st.counts = [];
+  if (!shelfId) { renderKkScanBoxLocked(tabKey, '📍 Vui lòng chọn quầy kệ để bắt đầu quét.'); return; }
+  const infoEl = document.getElementById(`${cfg.prefix}SessionInfo`);
+  if (infoEl) infoEl.textContent = 'Đang kiểm tra kỳ đang hoạt động...';
+  try {
+    const res = await fetch(`/api/stocktake/active-session-for-shelf?shelfLocationId=${shelfId}&mode=${cfg.apiMode}`);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { renderKkScanBoxLocked(tabKey, `⛔ ${body.error || 'Không kiểm tra được quyền/kỳ.'}`); return; }
+    st.session = body.session || null;
+    if (!st.session) {
+      renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
+      return;
+    }
+    if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
+    renderKkScanBoxUnlocked(tabKey);
+    await loadKkScanCounts(tabKey);
+  } catch (err) {
+    renderKkScanBoxLocked(tabKey, '⛔ Lỗi tải thông tin kỳ — vui lòng thử lại.');
+  }
+}
+
+async function loadKkScanCounts(tabKey) {
+  const st = kkScanState[tabKey];
+  if (!st.selectedShelfId || !st.session) { st.counts = []; renderKkScanList(tabKey); return; }
+  try {
+    const res = await fetch(`/api/stocktake/counts?sessionId=${st.session.id}&shelfLocationId=${st.selectedShelfId}`);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    st.counts = res.ok ? (body.items || []) : [];
+  } catch (err) { st.counts = []; }
+  renderKkScanList(tabKey);
+}
+
+async function submitKkScan(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  if (!st.selectedShelfId || !st.session) return alert('Vui lòng chọn quầy kệ (đã có kỳ đang hoạt động) trước khi quét.');
+  const barcodeInput = document.getElementById(`${cfg.prefix}BarcodeInput`);
+  const qtyInput = document.getElementById(`${cfg.prefix}QtyInput`);
+  const raw = (barcodeInput?.value || '').trim();
+  if (!raw) return alert('Vui lòng quét/gõ mã.');
+  const qty = Number(qtyInput?.value || 1);
+  if (!Number.isFinite(qty) || qty <= 0) return alert('Số lượng phải lớn hơn 0.');
+  const resolved = resolveKkScanItemFromCode(raw);
+  if (!resolved) return alert(`Không khớp tồn kho hệ thống với mã "${raw}" — vui lòng kiểm tra lại.`);
+  try {
+    const res = await fetch('/api/stocktake/counts/scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: st.session.id, shelfLocationId: st.selectedShelfId, mode: cfg.apiMode,
+        maHang: resolved.maHang, maVach: resolved.maVach || raw, tenHang: resolved.tenHang, qty
+      })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không ghi nhận được, vui lòng thử lại.'); return; }
+    if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); }
+    if (qtyInput) qtyInput.value = '1';
+    await loadKkScanCounts(tabKey);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.');
+  }
+}
+
+function renderKkScanList(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const listBody = document.getElementById(`${cfg.prefix}ListBody`);
+  if (!listBody) return;
+  const q = stripVnDiacritics(String(st.searchText || '').trim().toLowerCase());
+  const filtered = st.counts.filter(c => !q || stripVnDiacritics(`${c.maHang} ${c.tenHang}`.toLowerCase()).includes(q));
+  // MRU: mã vừa QUÉT (lastScannedAt) nhảy lên đầu — sửa tay (lastEditedAt) KHÔNG đổi vị trí, đúng A5.
+  const sorted = filtered.slice().sort((a, b) => new Date(b.lastScannedAt || b.createdAt) - new Date(a.lastScannedAt || a.createdAt));
+  if (!st.selectedShelfId) { listBody.innerHTML = ''; return; }
+  if (!sorted.length) {
+    listBody.innerHTML = `<p class="text-gray-400 text-sm">${st.counts.length ? 'Không tìm thấy mã khớp tìm kiếm.' : 'Chưa quét mã nào ở quầy kệ này.'}</p>`;
+    return;
+  }
+  listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
+    <th class="py-1">Mã Hàng</th><th>Tên</th><th class="text-right">SL</th><th></th></tr></thead><tbody>` +
+    sorted.map(c => `<tr class="border-b last:border-0">
+      <td class="py-1 font-mono">${escapeHtml(c.maHang)}</td>
+      <td>${escapeHtml(c.tenHang || '')}</td>
+      <td class="text-right">
+        <input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">
+      </td>
+      <td class="text-right"><button type="button" data-op="deleteKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" class="text-red-600 hover:underline">🗑️</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+function onKkScanSearchInput(tabKey, text) {
+  kkScanState[tabKey].searchText = text || '';
+  renderKkScanList(tabKey);
+}
+
+async function editKkScanCount(tabKey, id, newQtyStr) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const qty = Number(newQtyStr);
+  if (!Number.isFinite(qty) || qty < 0) { alert('Số lượng phải là số không âm.'); await loadKkScanCounts(tabKey); return; }
+  try {
+    const res = await fetch(`/api/stocktake/counts/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: cfg.apiMode, qty })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không sửa được, vui lòng thử lại.'); }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.');
+  }
+  await loadKkScanCounts(tabKey);
+}
+
+async function deleteKkScanCount(tabKey, id) {
+  if (!confirm('Xoá dòng kiểm kê này?')) return;
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  try {
+    const res = await fetch(`/api/stocktake/counts/${id}?mode=${cfg.apiMode}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không xoá được, vui lòng thử lại.'); }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.');
+  }
+  await loadKkScanCounts(tabKey);
 }
 
 function renderKkPeriodDeptRow() {
@@ -600,8 +1002,8 @@ function setVanHanhShelfSubTab(tab) {
     // Nạp Tồn Kho Hệ Thống CÙNG cache dùng ở "📷 Ghi Nhận" (11/2026, phục vụ gõ tay 6 số cuối — xem
     // matchShelfSystemInventoryBySuffix()/submitPriceCheck()) — KHÔNG phục vụ tra giá (vẫn gọi API đối
     // tác trực tiếp như cũ, không đổi), chỉ dùng để nhận diện đúng mã hàng từ 6 số cuối gõ tay TRƯỚC khi
-    // gọi API. Gọi lại hàm có sẵn của "Ghi Nhận" — tác dụng phụ duy nhất là toggle ẩn/hiện
-    // #srSystemInventoryPickerWrap (nằm trong #vanHanhShelfRecordWrap đang ẩn khi ở tab này), vô hại.
+    // gọi API. Gọi lại hàm có sẵn của "Ghi Nhận" — vô hại khi gọi từ tab khác (chỉ nạp shelfSystemInventoryCache,
+    // không còn đụng DOM nào thuộc riêng #vanHanhShelfRecordWrap từ 12/2026).
     loadShelfSystemInventoryForRecordPicker();
   }
 }
@@ -719,13 +1121,13 @@ function setShelfMaHangMatchNote(text, ok) {
 function buildShelfSystemInventoryLabel(r) {
   return `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})${r.maVach ? ` [${r.maVach}]` : ''}`;
 }
-// Gọi 1 lần mỗi khi vào tab "📷 Ghi Nhận" — 503 (chưa cấu hình API)/404 (siêu thị chưa có Mã Điểm/chưa
-// có dữ liệu) thì ẨN HẲN khối chọn này, KHÔNG báo lỗi gây rối (ghi nhận tay/camera vẫn hoạt động y cũ).
+// Gọi 1 lần mỗi khi vào tab "📷 Ghi Nhận"/"💲 Kiểm Tra Giá" — populate cache + gợi ý tìm theo tên cho ô
+// quét gộp (#srScanInput). KHÔNG còn ẩn/hiện khối nào theo 503/404 (12/2026, đổi cùng đợt gộp ô quét) —
+// ô Nhận Diện Sản Phẩm LUÔN hiện, 503/404 chỉ đơn giản là cache rỗng (gõ tay vẫn hoạt động bình thường,
+// không khớp gợi ý/tự động điền gì — y hệt trước đây khi "chưa cấu hình Mã Điểm").
 function renderShelfSystemInventoryPicker(rows, offlineCapNhatLuc) {
-  const wrap = document.getElementById('srSystemInventoryPickerWrap');
   const noteEl = document.getElementById('srSystemInventoryOfflineNote');
   shelfSystemInventoryCache = rows;
-  wrap.classList.remove('hidden');
   sddSetOptions('srSystemInventoryDropdown', rows.map(r => ({
     value: buildShelfSystemInventoryLabel(r), label: buildShelfSystemInventoryLabel(r)
   })));
@@ -736,12 +1138,10 @@ function renderShelfSystemInventoryPicker(rows, offlineCapNhatLuc) {
   }
 }
 async function loadShelfSystemInventoryForRecordPicker() {
-  const wrap = document.getElementById('srSystemInventoryPickerWrap');
-  if (!wrap) return;
   try {
     const res = await shelfFetch('/api/shelf-stock/system-inventory');
     if (res.status === 401) return handleSessionExpired();
-    if (!res.ok) { wrap.classList.add('hidden'); shelfSystemInventoryCache = []; return; }
+    if (!res.ok) { shelfSystemInventoryCache = []; return; }
     const data = await res.json();
     const rows = Array.isArray(data.rows) ? data.rows : [];
     renderShelfSystemInventoryPicker(rows, null);
@@ -749,102 +1149,98 @@ async function loadShelfSystemInventoryForRecordPicker() {
   } catch (err) {
     // fetch() throw (không phải response lỗi 503/404 ở trên) = LỖI MẠNG THẬT (cùng cách phân biệt
     // err instanceof TypeError đã dùng ở trySyncPendingShelfRecords()) — thử dùng bản cache offline gần
-    // nhất trước khi ẩn hẳn khối chọn này.
+    // nhất trước khi để cache rỗng hẳn.
     const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
     if (cached) {
       renderShelfSystemInventoryPicker(cached.rows, cached.capNhatLuc);
     } else {
-      wrap.classList.add('hidden');
       shelfSystemInventoryCache = [];
     }
   }
 }
-// Chọn xong tự điền CẢ Mã Hàng + Mã Vạch (có thể rỗng nếu dòng đó maVach null) + Tên Sản Phẩm — người
-// dùng vẫn sửa lại tay bất kỳ ô nào sau khi chọn (kể cả Mã Hàng/Mã Vạch — không khoá).
-function resolveShelfSystemInventoryInput() {
-  const text = document.getElementById('srSystemInventoryInput').value.trim();
-  const match = shelfSystemInventoryCache.find(r => buildShelfSystemInventoryLabel(r) === text);
-  document.getElementById('srMaHang').value = match ? match.maHang : '';
-  document.getElementById('srSku').value = match ? (match.maVach || '') : '';
-  if (match) {
-    document.getElementById('srProductName').value = match.tenHang;
-    setShelfMaHangMatchNote(`✅ Đã chọn từ tồn kho hệ thống: ${match.tenHang}`, true);
-  } else {
-    setShelfMaHangMatchNote('', false);
-  }
-}
-// Camera quét (onShelfBarcodeDecoded) HOẶC gõ tay trực tiếp vào ô Mã Vạch (data-op-input) đều gọi hàm
-// này — LUÔN giữ nguyên giá trị đã điền vào #srSku (dù khớp hay không, lưu lại để tham chiếu), chỉ khác
-// nhau ở việc có TỰ điền thêm #srMaHang/Tên Sản Phẩm hay không.
-function applyShelfBarcodeMatch(code) {
-  const match = matchShelfSystemInventoryByMaVach(code);
-  if (match) {
-    document.getElementById('srMaHang').value = match.maHang;
-    document.getElementById('srProductName').value = match.tenHang;
-    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${match.tenHang}`, true);
-    return;
-  }
-  // Gõ tay ĐÚNG 6 chữ số (11/2026, yêu cầu người dùng) — thử khớp theo ĐUÔI (6 số cuối) của Mã Hàng/Mã
-  // Vạch trước khi báo "không khớp" hẳn — xem matchShelfSystemInventoryBySuffix() ở trên. Khớp NHIỀU dòng
-  // thì KHÔNG tự ý điền (rủi ro sai mã) — chỉ báo số lượng, hướng người dùng qua picker đã có sẵn tìm
-  // kiếm theo tên/mã (substring, đã khớp được cả trường hợp này).
-  const suffixResult = matchShelfSystemInventoryBySuffix(code);
-  if (suffixResult?.unique) {
-    const row = suffixResult.unique;
-    document.getElementById('srMaHang').value = row.maHang;
-    document.getElementById('srProductName').value = row.tenHang;
-    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống theo 6 số cuối: ${row.tenHang}`, true);
-    return;
-  }
-  if (suffixResult?.candidates) {
-    setShelfMaHangMatchNote(`⚠️ 6 số cuối "${code}" khớp ${suffixResult.candidates.length} mặt hàng khác nhau — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để chọn đúng mặt hàng.`, false);
-    return;
-  }
-  // KHÔNG khớp — mã vạch mờ/sai/mặt hàng chưa khai mã vạch trong hệ thống nguồn. KHÔNG xoá Mã Hàng đã
-  // có (phòng trường hợp người dùng đã tự gõ/chọn trước đó) — chỉ báo rõ để họ biết cần tự bấm picker.
-  setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
-}
-function onShelfMaVachTyped() {
-  applyShelfBarcodeMatch(document.getElementById('srSku').value.trim());
-}
 // matchShelfSystemInventoryByMaHang(code) — so khớp CHÍNH XÁC theo Mã Hàng (khác
-// matchShelfSystemInventoryByMaVach() ở trên vốn so theo Mã Vạch) — dùng cho applyShelfMaHangMatch() khi
-// gõ tay trực tiếp vào ô "Mã Hàng (nội bộ)".
+// matchShelfSystemInventoryByMaVach() ở trên vốn so theo Mã Vạch).
 function matchShelfSystemInventoryByMaHang(code) {
   if (!code) return null;
   return shelfSystemInventoryCache.find(r => r.maHang && r.maHang === code) || null;
 }
-// applyShelfMaHangMatch(code) — BẢN ĐỐI XỨNG của applyShelfBarcodeMatch() nhưng cho ô "Mã Hàng (nội bộ)"
-// (#srMaHang) thay vì "Mã Vạch" (#srSku). LỖI THẬT người dùng báo (11/2026, kèm ảnh chụp): gõ tay 6 số
-// cuối vào ô Mã Hàng ở "📷 Ghi Nhận" không tự nhận diện được gì (⚠️ "Không khớp tồn kho hệ thống") — vì
-// trước đây logic khớp-6-số-cuối (matchShelfSystemInventoryBySuffix()) CHỈ được gọi từ onShelfMaVachTyped()
-// (ô Mã Vạch), ô Mã Hàng hoàn toàn không có handler nào. Khác applyShelfBarcodeMatch() ở điểm: khớp xong
-// tự điền NGƯỢC LẠI vào #srSku (Mã Vạch) + #srProductName (Tên Sản Phẩm) — không đụng tới #srMaHang vì đó
-// chính là ô người dùng đang gõ.
-function applyShelfMaHangMatch(code) {
-  const match = matchShelfSystemInventoryByMaHang(code);
-  if (match) {
-    document.getElementById('srSku').value = match.maVach || '';
-    document.getElementById('srProductName').value = match.tenHang;
-    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${match.tenHang}`, true);
+// applyUnifiedScanMatch(code)/onUnifiedScanInputChanged() (12/2026, thay applyShelfBarcodeMatch()/
+// onShelfMaVachTyped()/applyShelfMaHangMatch()/onShelfMaHangTyped()/resolveShelfSystemInventoryInput() —
+// GỘP LÀM 1, theo phản hồi người dùng kèm ảnh chụp: tách riêng "Mã Vạch"/"Mã Hàng (nội bộ)" khiến quét
+// camera xong không rõ thông tin đã vào đúng ô nào, dễ hiểu lầm). Dùng CHUNG 1 ô #srScanInput cho CẢ 4
+// cách nhận diện cũ (quét camera / gõ Mã Vạch / gõ Mã Hàng nội bộ / tìm theo tên), giống hệt cơ chế
+// "💲 Kiểm Tra Giá" (#pcMaHang) — thử khớp theo thứ tự: (1) đúng nhãn 1 gợi ý vừa CHỌN từ dropdown tìm
+// theo tên (sddSetOptions() gán input.value = item.label lúc chọn — xem chú thích buildShelfSystemInventoryLabel()),
+// (2) Mã Vạch (kể cả dsMaVach), (3) Mã Hàng nội bộ CHÍNH XÁC, (4) đúng 6 số cuối (chỉ nhận khi khớp DUY
+// NHẤT). Khớp được thì điền CẢ #srSku (ẩn) + #srMaHang (ẩn) + Tên Sản Phẩm — không còn phân biệt "ô nào
+// gõ" vì giờ chỉ còn 1 ô duy nhất.
+function applyUnifiedScanMatch(code) {
+  const trimmed = String(code || '').trim();
+  // Mặc định tạm coi là Mã Vạch "thô" (đa số lượt gõ/quét LÀ mã vạch) — các nhánh khớp bên dưới sẽ TỰ ghi
+  // đè đúng cả 2 ô theo dữ liệu thật; nhánh "không khớp" ở cuối hàm tự đoán lại theo định dạng (có thể đổi
+  // sang Mã Hàng nếu không phải dãy số dài).
+  document.getElementById('srSku').value = trimmed;
+  document.getElementById('srMaHang').value = '';
+  if (!trimmed) { setShelfMaHangMatchNote('', false); return; }
+  const byVach = matchShelfSystemInventoryByMaVach(trimmed);
+  if (byVach) {
+    document.getElementById('srMaHang').value = byVach.maHang;
+    document.getElementById('srSku').value = byVach.maVach || trimmed;
+    document.getElementById('srProductName').value = byVach.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${byVach.tenHang}`, true);
     return;
   }
-  const suffixResult = matchShelfSystemInventoryBySuffix(code);
+  const byMaHang = matchShelfSystemInventoryByMaHang(trimmed);
+  if (byMaHang) {
+    document.getElementById('srMaHang').value = byMaHang.maHang;
+    document.getElementById('srSku').value = byMaHang.maVach || '';
+    document.getElementById('srProductName').value = byMaHang.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${byMaHang.tenHang}`, true);
+    return;
+  }
+  // Gõ tay ĐÚNG 6 chữ số (11/2026, yêu cầu người dùng) — thử khớp theo ĐUÔI (6 số cuối) của Mã Hàng/Mã
+  // Vạch trước khi báo "không khớp" hẳn. Khớp NHIỀU dòng thì KHÔNG tự ý điền (rủi ro sai mã) — chỉ báo số
+  // lượng, hướng người dùng gõ thêm vài ký tự tên để thu hẹp gợi ý dropdown.
+  const suffixResult = matchShelfSystemInventoryBySuffix(trimmed);
   if (suffixResult?.unique) {
     const row = suffixResult.unique;
-    document.getElementById('srSku').value = row.maVach || '';
+    document.getElementById('srMaHang').value = row.maHang;
+    document.getElementById('srSku').value = row.maVach || trimmed;
     document.getElementById('srProductName').value = row.tenHang;
     setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống theo 6 số cuối: ${row.tenHang}`, true);
     return;
   }
   if (suffixResult?.candidates) {
-    setShelfMaHangMatchNote(`⚠️ 6 số cuối "${code}" khớp ${suffixResult.candidates.length} mặt hàng khác nhau — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để chọn đúng mặt hàng.`, false);
+    setShelfMaHangMatchNote(`⚠️ 6 số cuối "${trimmed}" khớp ${suffixResult.candidates.length} mặt hàng khác nhau — gõ thêm vài ký tự tên sản phẩm để thu hẹp gợi ý.`, false);
     return;
   }
-  setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
+  // KHÔNG khớp tồn kho hệ thống — mã vạch mờ/sai, HOẶC hàng MỚI/mã tự quy ước nội bộ chưa có trong hệ
+  // thống nguồn (cả 2 trường hợp vẫn ghi nhận thủ công được, Tên Sản Phẩm gõ tay). Tự đoán mã vừa gõ nên
+  // vào Mã Vạch hay Mã Hàng THEO ĐỊNH DẠNG (12/2026, giữ lại khả năng gõ tay mã nội bộ tự đặt của bản 2-ô
+  // cũ — mã dài ≥8 chữ số TOÀN SỐ khớp khuôn EAN/UPC thật -> Mã Vạch; còn lại (có chữ cái, hoặc ngắn hơn,
+  // VD "SP001") -> Mã Hàng nội bộ tự đặt).
+  if (/^\d{8,}$/.test(trimmed)) {
+    document.getElementById('srSku').value = trimmed;
+  } else {
+    document.getElementById('srSku').value = '';
+    document.getElementById('srMaHang').value = trimmed;
+  }
+  setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — vẫn có thể tự gõ Tên Sản Phẩm bên dưới để ghi nhận thủ công.', false);
 }
-function onShelfMaHangTyped() {
-  applyShelfMaHangMatch(document.getElementById('srMaHang').value.trim());
+function onUnifiedScanInputChanged(rawValue) {
+  const text = String(rawValue || '').trim();
+  // Vừa CHỌN 1 gợi ý từ dropdown tìm theo tên (input.value = item.label, xem chú thích
+  // buildShelfSystemInventoryLabel() ở trên) — khớp THẲNG theo đúng nhãn, không cần đi qua
+  // Mã Vạch/Mã Hàng/6-số-cuối (nhãn không phải mã thật, các bước đó chắc chắn không khớp).
+  const bySelectedLabel = shelfSystemInventoryCache.find(r => buildShelfSystemInventoryLabel(r) === text);
+  if (bySelectedLabel) {
+    document.getElementById('srMaHang').value = bySelectedLabel.maHang;
+    document.getElementById('srSku').value = bySelectedLabel.maVach || '';
+    document.getElementById('srProductName').value = bySelectedLabel.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã chọn từ tồn kho hệ thống: ${bySelectedLabel.tenHang}`, true);
+    return;
+  }
+  applyUnifiedScanMatch(text);
 }
 // resetShelfRecordForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg0="srForm"
 // data-arg1="resetShelfRecordForm", vanHanhSection.html) chỉ xoá trắng form đang nhập dở, KHÔNG đụng tới
@@ -856,9 +1252,13 @@ function onShelfMaHangTyped() {
 function resetShelfRecordForm() {
   document.getElementById('srForm').reset();
   // form.reset() không đáng tin cậy cho <input type="hidden"> được GÁN GIÁ TRỊ BẰNG JS (không qua thuộc
-  // tính value="..." tĩnh trong HTML) ở 1 số trình duyệt — tự xoá tay cho chắc, tránh lưu nhầm đúng
-  // shelfLocationId CŨ dù ô "Quầy Kệ" hiển thị đã về rỗng.
+  // tính value="..." tĩnh trong HTML) ở 1 số trình duyệt — tự xoá tay cho chắc. #srSku/#srMaHang (12/2026,
+  // đổi thành hidden khi gộp ô Nhận Diện Sản Phẩm) CÙNG lớp lỗi với #srShelfLocationId — LỖI THẬT phát
+  // hiện qua test hồi quy (test-shelf-subtab-real-click.js): không tự xoá tay thì vẫn còn sót giá trị cũ
+  // dù ô "Nhận Diện Sản Phẩm" hiển thị đã về rỗng, dẫn tới lưu nhầm đúng Mã Vạch/Mã Hàng CŨ.
   document.getElementById('srShelfLocationId').value = '';
+  document.getElementById('srSku').value = '';
+  document.getElementById('srMaHang').value = '';
   setShelfMaHangMatchNote('', false);
 }
 // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp — "vừa scan kệ hôm nay mà Trên Kệ Hôm Nay vẫn
@@ -2485,12 +2885,20 @@ let shelfBarcodeVisibilityHandler = null; // listener document.visibilitychange 
 // submitPriceCheck() luôn) — CHỈ đổi NHÁNH xử lý ở onShelfBarcodeDecoded() theo biến này, giữ NGUYÊN
 // 100% luồng/thứ tự xử lý cũ của 'RECORD' (không đụng tới hành vi Ghi Nhận đang hoạt động ổn định).
 let shelfBarcodeModalMode = 'RECORD';
+// kkBarcodeScanTabKey (12/2026, phục vụ Tab 2/3/4 Kiểm Kê — 'KK_SCAN') — NHỚ đúng tab (GOMMA/KIEMDEM/
+// KIEMSOAT) đang mở modal quét, vì cả 3 tab dùng CHUNG 1 modal camera này (chỉ 1 modal trong DOM).
+let kkBarcodeScanTabKey = null;
 async function openShelfBarcodeModal() {
   shelfBarcodeModalMode = 'RECORD';
   return openShelfBarcodeModalCore();
 }
 function openShelfBarcodeModalForPriceCheck() {
   shelfBarcodeModalMode = 'PRICECHECK';
+  return openShelfBarcodeModalCore();
+}
+function openShelfBarcodeModalForKkScan(tabKey) {
+  shelfBarcodeModalMode = 'KK_SCAN';
+  kkBarcodeScanTabKey = tabKey;
   return openShelfBarcodeModalCore();
 }
 async function openShelfBarcodeModalCore() {
@@ -2627,8 +3035,21 @@ function onShelfBarcodeDecoded(text) {
     submitPriceCheck();
     return;
   }
-  document.getElementById('srSku').value = text;
-  applyShelfBarcodeMatch(text);
+  if (shelfBarcodeModalMode === 'KK_SCAN') {
+    closeShelfBarcodeModal();
+    // Tự quét-là-ghi-nhận-luôn (giống Kiểm Tra Giá, khác Ghi Nhận) — đúng nhịp "quét nhanh" của A5, số
+    // lượng lấy đúng giá trị đang có ở ô SL (mặc định 1, người dùng có thể chỉnh trước khi quét liên tiếp
+    // mã trùng số lượng > 1 lần 1).
+    const cfg = KK_SCAN_TAB_CONFIG[kkBarcodeScanTabKey];
+    if (cfg) {
+      const input = document.getElementById(`${cfg.prefix}BarcodeInput`);
+      if (input) input.value = text;
+      submitKkScan(kkBarcodeScanTabKey);
+    }
+    return;
+  }
+  document.getElementById('srScanInput').value = text;
+  applyUnifiedScanMatch(text);
   closeShelfBarcodeModal();
 }
 // Danh sách định dạng mã vạch cần đọc cho Ghi Nhận/Kiểm Tra Giá — ĐỔI (11/2026, theo yêu cầu người dùng

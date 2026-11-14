@@ -114,7 +114,10 @@ function createMockState(seed) {
     // dùng tới) nhưng seed rỗng SẴN ở đây để test KHÔNG cần tự khai báo khi không liên quan, tránh lặp
     // lại đúng bug "key chưa seed" đã gặp ở defaults.js thật (shelfLocations/shelfRecords/
     // shelfStockThresholds).
-    stocktakeSessions: []
+    stocktakeSessions: [],
+    // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng) / stocktakeCounts (Tab 2/3/4) — CÙNG lý do
+    // stocktakeSessions ngay trên.
+    stocktakeUserAccess: [], stocktakeCounts: []
   }, seed || {});
 }
 
@@ -990,6 +993,144 @@ function createDispatcher(state) {
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
         }
+      }
+
+      // ===== "📋 Kiểm Kê" Tab 8 Cấu Hình Người Dùng + Tab 2/3/4 Gom Mã/Kiểm Đếm/Kiểm Soát (12/2026) —
+      // mirror ĐÚNG routes/stocktake.js bằng CHÍNH các hàm thật lib/stocktakeEngine.js, kể cả 3-LỚP kiểm
+      // tra (quyền tab / allowlist theo quầy kệ / kỳ đang hoạt động đúng loại) — xem assertStocktakeScanAllowed()
+      // (routes/stocktake.js, không export được nên lặp lại ĐÚNG logic ở đây bằng các hàm thật đã export).
+      const stockEngine2 = () => require('../lib/stocktakeEngine');
+      function kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId) {
+        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canUserDoStocktakeOnShelf, findActiveSession, LOAI_KY } = stockEngine2();
+        const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
+        if (!checkFn) { const e = new Error('Hành động không hợp lệ'); e.status = 400; throw e; }
+        if (!checkFn(freshUser)) { const e = new Error('Bạn không có quyền thực hiện hành động này (Lớp 1 — quyền tab)'); e.status = 403; throw e; }
+        const loc = (state.shelfLocations || []).find(l => l.id === shelfLocationId);
+        if (!loc) { const e = new Error('Không tìm thấy quầy kệ'); e.status = 404; throw e; }
+        const access = state.stocktakeUserAccess || [];
+        if (!canUserDoStocktakeOnShelf(access, freshUser.username, loc.dept, shelfLocationId, mode)) {
+          const e = new Error('Bạn chưa được cấp quyền thao tác hành động này trên quầy kệ này (Lớp 2 — Cấu Hình Người Dùng)'); e.status = 403; throw e;
+        }
+        const requiredLoaiKy = mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE;
+        const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
+        if (!activeSession) { const e = new Error(`Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKy === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Thống Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`); e.status = 409; throw e; }
+        if (activeSession.id !== sessionId) { const e = new Error('Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang'); e.status = 409; throw e; }
+        return loc;
+      }
+
+      if (pathName === '/api/stocktake/user-access' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakeUserAccess } = stockEngine2();
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        if (!canManageStocktakeUserAccess(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' } };
+        return { status: 200, body: { items: state.stocktakeUserAccess || [] } };
+      }
+      if (pathName === '/api/stocktake/user-access' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakeUserAccess, upsertUserAccessRows } = stockEngine2();
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        if (!canManageStocktakeUserAccess(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' } };
+        try {
+          const { access } = upsertUserAccessRows(state.stocktakeUserAccess || [], body, freshUser);
+          state.stocktakeUserAccess = access;
+          return { status: 200, body: { items: access } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkUserAccessDelMatch = pathName.match(/^\/api\/stocktake\/user-access\/(\d+)$/);
+      if (kkUserAccessDelMatch && method === 'DELETE') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canManageStocktakeUserAccess, removeUserAccessRow } = stockEngine2();
+        if (!canManageStocktakeUserAccess(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' } };
+        try {
+          state.stocktakeUserAccess = removeUserAccessRow(state.stocktakeUserAccess || [], Number(kkUserAccessDelMatch[1]));
+          return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      if (pathName === '/api/stocktake/assignable-users' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canManageStocktakeUserAccess } = stockEngine2();
+        if (!canManageStocktakeUserAccess(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' } };
+        return { status: 200, body: { items: (state.users || []).filter(u => u.active !== false).map(u => ({ username: u.username, name: u.name, dept: u.dept })) } };
+      }
+      if (pathName === '/api/stocktake/my-shelf-locations' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, MODE_ACCESS_FIELD } = stockEngine2();
+        const mode = new URL(url, 'http://x').searchParams.get('mode');
+        const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
+        if (!checkFn) return { status: 400, body: { error: 'Hành động không hợp lệ' } };
+        if (!checkFn(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện hành động này' } };
+        const allowedIds = new Set((state.stocktakeUserAccess || []).filter(a => a.username === freshUser.username && a[MODE_ACCESS_FIELD[mode]] === true).map(a => a.shelfLocationId));
+        const items = (state.shelfLocations || []).filter(l => allowedIds.has(l.id) && l.active !== false);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/active-session-for-shelf' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canUserDoStocktakeOnShelf, findActiveSession, LOAI_KY } = stockEngine2();
+        const q = new URL(url, 'http://x').searchParams;
+        const shelfLocationId = Number(q.get('shelfLocationId'));
+        const mode = q.get('mode');
+        const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
+        if (!checkFn) return { status: 400, body: { error: 'Hành động không hợp lệ' } };
+        if (!checkFn(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện hành động này' } };
+        const loc = (state.shelfLocations || []).find(l => l.id === shelfLocationId);
+        if (!loc) return { status: 404, body: { error: 'Không tìm thấy quầy kệ' } };
+        if (!canUserDoStocktakeOnShelf(state.stocktakeUserAccess || [], freshUser.username, loc.dept, shelfLocationId, mode)) {
+          return { status: 403, body: { error: 'Bạn chưa được cấp quyền thao tác hành động này trên quầy kệ này' } };
+        }
+        const requiredLoaiKy = mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE;
+        const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
+        return { status: 200, body: { session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
+      }
+      if (pathName === '/api/stocktake/counts' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const q = new URL(url, 'http://x').searchParams;
+        const sessionId = Number(q.get('sessionId'));
+        const shelfLocationId = Number(q.get('shelfLocationId'));
+        const items = (state.stocktakeCounts || []).filter(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/counts/scan' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        try {
+          const sessionId = Number(body?.sessionId);
+          const shelfLocationId = Number(body?.shelfLocationId);
+          const mode = String(body?.mode || '').trim();
+          const loc = kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId);
+          const { upsertScanCount } = stockEngine2();
+          const arr = state.stocktakeCounts || (state.stocktakeCounts = []);
+          const row = upsertScanCount(arr, body, { dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`, maVach: body?.maVach, tenHang: body?.tenHang }, freshUser);
+          return { status: 200, body: { item: row } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkCountMatch = pathName.match(/^\/api\/stocktake\/counts\/(\d+)$/);
+      if (kkCountMatch && (method === 'PUT' || method === 'DELETE')) {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const id = Number(kkCountMatch[1]);
+        try {
+          const existingRow = (state.stocktakeCounts || []).find(c => c.id === id);
+          if (!existingRow) return { status: 404, body: { error: 'Không tìm thấy dòng kiểm kê' } };
+          const mode = method === 'PUT' ? String(body?.mode || '').trim() : String(new URL(url, 'http://x').searchParams.get('mode') || '').trim();
+          kkAssertScanAllowedMock(freshUser, mode, existingRow.shelfLocationId, existingRow.sessionId);
+          if (method === 'PUT') {
+            const { editCountValue } = stockEngine2();
+            const updated = editCountValue(state.stocktakeCounts, id, mode, body?.qty, freshUser);
+            return { status: 200, body: { item: updated } };
+          }
+          const { deleteCountRow } = stockEngine2();
+          state.stocktakeCounts = deleteCountRow(state.stocktakeCounts, id);
+          return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
 
       // ===== Ghi Nhận Theo Lô (Kiểm Soát Hàng Hóa, 11/2026) — mirror ĐÚNG routes/shelfStock.js

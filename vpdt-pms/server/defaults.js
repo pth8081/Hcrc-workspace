@@ -979,6 +979,10 @@ const DEFAULTS = {
   // chạy vòng lặp đồng bộ giá cho ĐÚNG 1 Mã Điểm (xem jobs/priceSync.js claimPriceSyncSlot()) — CÙNG bài
   // học thêm sẵn vào DEFAULTS như stocktakeSessions ngay trên, không để dành.
   priceSyncLocks: {},
+  // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng) / stocktakeCounts (Tab 2/3/4 Gom Mã/Kiểm Đếm/Kiểm
+  // Soát) — thêm NGAY từ đầu (bài học shelfLocations/stocktakeSessions ở trên), không để dành.
+  stocktakeUserAccess: [],
+  stocktakeCounts: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

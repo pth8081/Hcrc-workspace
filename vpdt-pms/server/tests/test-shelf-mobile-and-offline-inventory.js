@@ -102,11 +102,12 @@ async function main() {
       });
       await page.evaluate(() => loadShelfSystemInventoryForRecordPicker());
       const result = await page.evaluate(() => ({
-        hidden: document.getElementById('srSystemInventoryPickerWrap').classList.contains('hidden'),
         note: document.getElementById('srSystemInventoryOfflineNote').textContent,
         cacheLen: shelfSystemInventoryCache.length
       }));
-      assert(!result.hidden, 'Mất mạng nhưng CÓ cache -> picker vẫn phải hiện (không ẩn)');
+      // Ô "Nhận Diện Sản Phẩm" (#srScanInput) LUÔN hiện bất kể mất mạng/còn cache hay không (12/2026, gộp
+      // chung — không còn khối picker riêng để ẩn/hiện như trước) — chỉ còn cần xác nhận cache offline vẫn
+      // nạp đúng + ghi chú 🔌 Offline vẫn hiện.
       assertEqual(result.cacheLen, 1, 'Phải nạp đúng 1 dòng từ cache offline vào picker');
       assert(result.note.includes('🔌 Offline'), `Phải hiện banner 🔌 Offline, thực tế: "${result.note}"`);
       await page.evaluate(() => { window.fetch = window.__origFetch; delete window.__origFetch; });

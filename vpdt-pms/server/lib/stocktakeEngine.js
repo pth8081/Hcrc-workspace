@@ -124,11 +124,171 @@ function reopenSession(sessions, id, user) {
   return item;
 }
 
+// ===================== Tab 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
+// stocktakeUserAccess: mỗi dòng {id, username, dept, shelfLocationId, canGomMa, canKiemDem, canKiemSoat,
+// createdBy, createdByName, createdAt}. Theo tài liệu đề xuất mục B1: ĐÂY LÀ ALLOWLIST TUYỆT ĐỐI, không
+// có cờ "tất cả/bất kỳ" nào bỏ qua — kể cả admin khi THAO TÁC quét (admin vẫn bypass được 2 lớp quyền
+// kia — "quyền tab" + "kỳ đang hoạt động" — nhưng lớp allowlist theo quầy kệ này áp dụng cho MỌI
+// người, kể cả admin, đúng y nguyên tinh thần "allowlist tuyệt đối" tài liệu đã nêu).
+const MODE_ACCESS_FIELD = Object.freeze({ GOM_MA: 'canGomMa', KIEM_DEM: 'canKiemDem', KIEM_SOAT: 'canKiemSoat' });
+
+function canUserDoStocktakeOnShelf(access, username, dept, shelfLocationId, mode) {
+  const field = MODE_ACCESS_FIELD[mode];
+  if (!field) return false;
+  return (Array.isArray(access) ? access : []).some(
+    a => a.username === username && a.dept === dept && a.shelfLocationId === shelfLocationId && a[field] === true
+  );
+}
+
+// Danh sách shelfLocationId user được phép thao tác ĐÚNG hành động này tại ĐÚNG siêu thị — dùng để lọc
+// bộ chọn "📍 Quầy Kệ" (chỉ hiện quầy kệ đã có dòng allowlist, xem A5 tài liệu đề xuất).
+function listAllowedShelfLocationIds(access, username, dept, mode) {
+  const field = MODE_ACCESS_FIELD[mode];
+  if (!field) return [];
+  return (Array.isArray(access) ? access : [])
+    .filter(a => a.username === username && a.dept === dept && a[field] === true)
+    .map(a => a.shelfLocationId);
+}
+
+// Gán quyền HÀNG LOẠT cho 1 user × nhiều quầy kệ cùng lúc (tiện nhập liệu, xem tài liệu đề xuất mục B1 —
+// "vẫn lưu lại từng dòng tường minh, không lưu 1 cờ tất cả nào"). Với MỖI shelfLocationId: tìm dòng đã
+// có (username+dept+shelfLocationId) để CẬP NHẬT 3 cờ (không tạo trùng), chưa có thì tạo mới. flags chỉ
+// chứa field nào ĐƯỢC truyền vào mới ghi đè (undefined = giữ nguyên giá trị cũ nếu dòng đã tồn tại, mặc
+// định false nếu là dòng mới) — cho phép form chỉ tick "Kiểm Đếm" mà không vô tình tắt "Gom Mã" đã gán
+// trước đó cho CÙNG quầy kệ đó.
+function upsertUserAccessRows(access, { username, dept, shelfLocationIds, canGomMa, canKiemDem, canKiemSoat }, user) {
+  const arr = Array.isArray(access) ? access.slice() : [];
+  const uname = String(username || '').trim();
+  const d = String(dept || '').trim();
+  if (!uname) throw new HttpError(400, 'Vui lòng chọn người dùng');
+  if (!d) throw new HttpError(400, 'Vui lòng chọn siêu thị');
+  const ids = Array.isArray(shelfLocationIds) ? [...new Set(shelfLocationIds.map(Number).filter(Number.isFinite))] : [];
+  if (!ids.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 quầy kệ');
+  if (canGomMa === undefined && canKiemDem === undefined && canKiemSoat === undefined) {
+    throw new HttpError(400, 'Vui lòng chọn ít nhất 1 hành động (Gom Mã/Kiểm Đếm/Kiểm Soát)');
+  }
+  const touched = [];
+  for (const shelfLocationId of ids) {
+    let row = arr.find(a => a.username === uname && a.dept === d && a.shelfLocationId === shelfLocationId);
+    if (!row) {
+      row = {
+        id: Date.now() + Math.floor(Math.random() * 1000), // tránh trùng id khi tạo nhiều dòng liên tiếp trong 1 vòng lặp đồng bộ
+        username: uname, dept: d, shelfLocationId,
+        canGomMa: false, canKiemDem: false, canKiemSoat: false,
+        createdBy: user?.username || '', createdByName: user?.name || user?.username || '', createdAt: new Date().toISOString()
+      };
+      arr.push(row);
+    }
+    if (canGomMa !== undefined) row.canGomMa = !!canGomMa;
+    if (canKiemDem !== undefined) row.canKiemDem = !!canKiemDem;
+    if (canKiemSoat !== undefined) row.canKiemSoat = !!canKiemSoat;
+    touched.push(row);
+  }
+  return { access: arr, touched };
+}
+
+function removeUserAccessRow(access, id) {
+  const arr = Array.isArray(access) ? access : [];
+  const idx = arr.findIndex(a => a.id === id);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy dòng cấu hình quyền');
+  arr.splice(idx, 1);
+  return arr;
+}
+
+// ===================== Tab 2/3/4 — Gom Mã/Kiểm Đếm/Kiểm Soát: gộp số lượng theo (kỳ, quầy kệ, mã hàng) =====
+// stocktakeCounts: mỗi dòng {id, sessionId, dept, shelfLocationId, shelfLocationLabel, maHang, maVach,
+// tenHang, slGomMa, slKiemDem, slKiemSoat (undefined = CHƯA soát, khác 0 = đã soát ra 0), lastScannedAt,
+// lastScannedBy, lastScannedByName, createdAt}. 1 dòng/mã hàng/quầy kệ/kỳ (xem tài liệu đề xuất mục B3)
+// — CÙNG mã hàng ở 2 quầy kệ khác nhau trong CÙNG kỳ là 2 dòng riêng biệt.
+function findCountRow(counts, sessionId, shelfLocationId, maHang) {
+  return (Array.isArray(counts) ? counts : []).find(
+    c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId && c.maHang === maHang
+  ) || null;
+}
+
+function validateScanInput(body) {
+  const sessionId = Number(body?.sessionId);
+  const shelfLocationId = Number(body?.shelfLocationId);
+  const maHang = String(body?.maHang || '').trim();
+  const mode = String(body?.mode || '').trim();
+  const qty = Number(body?.qty);
+  if (!Number.isFinite(sessionId)) throw new HttpError(400, 'Thiếu kỳ kiểm kê');
+  if (!Number.isFinite(shelfLocationId)) throw new HttpError(400, 'Vui lòng chọn quầy kệ trước khi quét');
+  if (!maHang) throw new HttpError(400, 'Thiếu mã hàng');
+  if (!MODE_ACCESS_FIELD[mode]) throw new HttpError(400, 'Hành động không hợp lệ (phải là GOM_MA/KIEM_DEM/KIEM_SOAT)');
+  if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, 'Số lượng phải là số dương');
+  return { sessionId, shelfLocationId, maHang, mode, qty };
+}
+
+// Quét/gõ mã — CỘNG DỒN vào đúng field theo mode (slGomMa/slKiemDem/slKiemSoat), đúng A5 "Quy tắc gộp"
+// áp dụng chung cho cả 3 hành động — mã chưa có ở quầy kệ này thì tạo dòng mới (các field còn lại = 0).
+function upsertScanCount(counts, input, extra, user) {
+  const { sessionId, shelfLocationId, maHang, mode, qty } = validateScanInput(input);
+  const arr = Array.isArray(counts) ? counts : [];
+  const field = MODE_ACCESS_FIELD[mode] === 'canGomMa' ? 'slGomMa' : (MODE_ACCESS_FIELD[mode] === 'canKiemDem' ? 'slKiemDem' : 'slKiemSoat');
+  let row = findCountRow(arr, sessionId, shelfLocationId, maHang);
+  if (!row) {
+    row = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      sessionId, dept: extra?.dept || '', shelfLocationId, shelfLocationLabel: extra?.shelfLocationLabel || '',
+      maHang, maVach: extra?.maVach || null, tenHang: extra?.tenHang || '',
+      slGomMa: 0, slKiemDem: 0, slKiemSoat: undefined,
+      createdAt: new Date().toISOString()
+    };
+    arr.push(row);
+  }
+  row[field] = (Number(row[field]) || 0) + qty;
+  // Cập nhật tên/mã vạch mới nhất nếu lần quét sau cung cấp thêm thông tin trước đó dòng chưa có (VD
+  // Gom Mã quét trước không rõ tên, Kiểm Đếm sau tra được tên đầy đủ).
+  if (extra?.tenHang && !row.tenHang) row.tenHang = extra.tenHang;
+  if (extra?.maVach && !row.maVach) row.maVach = extra.maVach;
+  row.lastScannedAt = new Date().toISOString();
+  row.lastScannedBy = user?.username || '';
+  row.lastScannedByName = user?.name || user?.username || '';
+  return row;
+}
+
+// Sửa tay 1 dòng (A5 "Thanh tìm kiếm" — tăng/giảm/gõ số trực tiếp, KHÔNG đẩy dòng lên đầu vì không tính
+// là "quét gần nhất") — chỉ sửa ĐÚNG field của mode đang thao tác, không đụng 2 field còn lại.
+function editCountValue(counts, id, mode, newQty, user) {
+  const field = MODE_ACCESS_FIELD[mode] === 'canGomMa' ? 'slGomMa' : (MODE_ACCESS_FIELD[mode] === 'canKiemDem' ? 'slKiemDem' : 'slKiemSoat');
+  const arr = Array.isArray(counts) ? counts : [];
+  const row = arr.find(c => c.id === id);
+  if (!row) throw new HttpError(404, 'Không tìm thấy dòng kiểm kê');
+  const qty = Number(newQty);
+  if (!Number.isFinite(qty) || qty < 0) throw new HttpError(400, 'Số lượng phải là số không âm');
+  row[field] = qty;
+  // CỐ Ý KHÔNG đụng row.lastScannedAt (field này dùng để sắp MRU ở client — "mã vừa quét luôn nhảy lên
+  // đầu danh sách") — sửa tay KHÔNG được tính là "vừa quét" (đúng A5), nên dùng field RIÊNG để vẫn ghi
+  // nhận ai/khi nào sửa tay (phục vụ hiển thị/kiểm tra sau), không lẫn vào field quyết định thứ tự.
+  row.lastEditedAt = new Date().toISOString();
+  row.lastEditedBy = user?.username || '';
+  row.lastEditedByName = user?.name || user?.username || '';
+  return row;
+}
+
+function deleteCountRow(counts, id) {
+  const arr = Array.isArray(counts) ? counts : [];
+  const idx = arr.findIndex(c => c.id === id);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy dòng kiểm kê');
+  arr.splice(idx, 1);
+  return arr;
+}
+
+// Số lượng CUỐI CÙNG lên Báo Cáo (tài liệu đề xuất mục A6): ưu tiên slKiemSoat NẾU đã soát (là number,
+// kể cả 0), ngược lại dùng slKiemDem.
+function finalCountQty(row) {
+  return typeof row.slKiemSoat === 'number' ? row.slKiemSoat : (Number(row.slKiemDem) || 0);
+}
+
 module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
   canManageStocktakeShelfConfig, canConfirmStocktake, canViewStocktakeReport, canManageStocktakeUserAccess,
   canReopenStocktakeSession,
   isValidLoaiKy, findActiveSession, validateCreateSessionInput, buildNewSession,
-  activateSession, closeSession, reopenSession
+  activateSession, closeSession, reopenSession,
+  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
+  upsertUserAccessRows, removeUserAccessRow,
+  findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty
 };

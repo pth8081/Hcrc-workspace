@@ -10,21 +10,18 @@
 //     -> PHẢI hiện danh sách chọn, KHÔNG tự ý tra giá đại 1 mặt hàng — bấm chọn đúng 1 dòng mới tra giá.
 //  3. "💲 Kiểm Tra Giá": gõ 6 số cuối KHÔNG khớp mặt hàng nào -> rơi về hành vi CŨ (gửi nguyên làm Mã
 //     Vạch), server/đối tác báo không tìm thấy — không bị lỗi JS/treo.
-//  4. "📷 Ghi Nhận": gõ tay vào ô Mã Vạch (#srSku) ĐÚNG 6 số cuối khớp DUY NHẤT -> tự điền Mã Hàng + Tên
-//     Sản Phẩm, có ghi chú "theo 6 số cuối".
+//  4. "📷 Ghi Nhận": gõ tay vào ô quét gộp (#srScanInput, 12/2026 — GỘP Mã Vạch/Mã Hàng/tìm theo tên làm 1,
+//     xem applyUnifiedScanMatch()) ĐÚNG 6 số cuối khớp DUY NHẤT -> tự điền Mã Hàng + Tên Sản Phẩm, có ghi
+//     chú "theo 6 số cuối".
 //  5. "📷 Ghi Nhận": gõ tay 6 số cuối khớp NHIỀU mặt hàng -> KHÔNG tự điền Mã Hàng (tránh sai), chỉ báo rõ
-//     số lượng khớp + hướng dẫn dùng picker.
+//     số lượng khớp.
 //  6. (11/2026, 2 LỖI THẬT người dùng báo kèm ảnh chụp trên production, SAU khi tính năng ở trên đã merge)
 //     "💲 Kiểm Tra Giá": dữ liệu tồn kho hệ thống có 3 dòng HOÀN TOÀN GIỐNG NHAU (cùng Mã Hàng/Mã Vạch —
 //     dữ liệu thô từ API đối tác lặp dòng, xem lib/shelfInventoryAggregate.js) -> gõ 6 số cuối phải khớp
 //     DUY NHẤT 1 mặt hàng (đã gộp ở server, routes/shelfStock.js), KHÔNG được hiện "khớp 3 mặt hàng" giả.
-//  7. "📷 Ghi Nhận": gõ tay 6 số cuối TRỰC TIẾP vào ô "Mã Hàng (nội bộ)" (#srMaHang, KHÔNG phải #srSku) ->
-//     cũng phải tự nhận diện được (điền ngược lại Mã Vạch + Tên Sản Phẩm) — LỖI THẬT người dùng báo: ô này
-//     trước đây không có handler nào, gõ gì cũng không phản hồi vì Ghi Nhận không có nút "xác nhận" riêng
-//     như Kiểm Tra Giá.
-//  8. (11/2026, đối tác bổ sung field mới `dsMaVach` ở API "Tồn Kho" theo đúng yêu cầu của mình — 1 mã
+//  7. (11/2026, đối tác bổ sung field mới `dsMaVach` ở API "Tồn Kho" theo đúng yêu cầu của mình — 1 mã
 //     hàng có thể đăng ký NHIỀU mã vạch hợp lệ, `maVach` cũ chỉ là 1 mã MẶC ĐỊNH) "📷 Ghi Nhận": gõ ĐỦ 1
-//     mã vạch PHỤ (không phải mã vạch mặc định) vào ô Mã Vạch -> vẫn phải tự khớp đúng (trước đây báo sai
+//     mã vạch PHỤ (không phải mã vạch mặc định) vào ô quét gộp -> vẫn phải tự khớp đúng (trước đây báo sai
 //     "không khớp" vì chỉ so với đúng 1 giá trị `maVach`).
 //  9. "📷 Ghi Nhận": gõ 6 số cuối của 1 mã vạch PHỤ -> cũng phải khớp DUY NHẤT đúng mặt hàng đó.
 //  10. findSystemInventoryQtyForProduct() (dùng cho "⏰ Hạn Sử Dụng") — tra theo 1 mã vạch PHỤ cũng phải
@@ -158,11 +155,11 @@ async function main() {
       await page.waitForTimeout(50);
     });
 
-    await run.run('"📷 Ghi Nhận": gõ tay 6 số cuối khớp DUY NHẤT vào ô Mã Vạch -> tự điền Mã Hàng + Tên Sản Phẩm', async () => {
+    await run.run('"📷 Ghi Nhận": gõ tay 6 số cuối khớp DUY NHẤT vào ô quét gộp (#srScanInput) -> tự điền Mã Hàng + Tên Sản Phẩm', async () => {
       await page.click('#btnVhShelfSubRecord');
       await page.waitForTimeout(200); // chờ loadShelfSystemInventoryForRecordPicker() nạp lại (cũng chạy khi vào RECORD)
-      await page.fill('#srSku', '890123');
-      await page.dispatchEvent('#srSku', 'input');
+      await page.fill('#srScanInput', '890123');
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.waitForTimeout(50);
       const r = await page.evaluate(() => ({
         maHang: document.getElementById('srMaHang').value,
@@ -175,10 +172,9 @@ async function main() {
     });
 
     await run.run('"📷 Ghi Nhận": gõ tay 6 số cuối khớp NHIỀU mặt hàng -> KHÔNG tự điền Mã Hàng (tránh sai), chỉ báo rõ số lượng khớp', async () => {
-      await page.fill('#srMaHang', '');
       await page.fill('#srProductName', '');
-      await page.fill('#srSku', '440456');
-      await page.dispatchEvent('#srSku', 'input');
+      await page.fill('#srScanInput', '440456');
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.waitForTimeout(50);
       const r = await page.evaluate(() => ({
         maHang: document.getElementById('srMaHang').value,
@@ -187,7 +183,7 @@ async function main() {
       }));
       assertEqual(r.maHang, '', `KHÔNG được tự điền Mã Hàng khi còn mơ hồ (2 mặt hàng cùng 6 số cuối), thực tế: ${r.maHang}`);
       assertEqual(r.productName, '', 'KHÔNG được tự điền Tên Sản Phẩm khi còn mơ hồ');
-      assert(/2 mặt hàng/.test(r.note) && /picker/i.test(r.note), `Ghi chú phải báo rõ khớp 2 mặt hàng + hướng dẫn dùng picker, thực tế: ${r.note}`);
+      assert(/2 mặt hàng/.test(r.note), `Ghi chú phải báo rõ khớp 2 mặt hàng, thực tế: ${r.note}`);
     });
 
     await run.run('"💲 Kiểm Tra Giá": gõ 6 số cuối của mã hàng có 3 dòng TRÙNG LẶP (G7 Cà Phê) -> phải khớp DUY NHẤT (đã gộp ở server), KHÔNG báo "khớp 3 mặt hàng" giả', async () => {
@@ -210,46 +206,12 @@ async function main() {
       await page.waitForTimeout(50);
     });
 
-    await run.run('"📷 Ghi Nhận": gõ tay 6 số cuối TRỰC TIẾP vào ô "Mã Hàng (nội bộ)" (#srMaHang) -> tự điền Mã Vạch + Tên Sản Phẩm', async () => {
+    await run.run('"📷 Ghi Nhận": gõ ĐỦ 1 mã vạch PHỤ (dsMaVach, KHÔNG phải mã vạch mặc định) vào ô quét gộp -> vẫn phải tự khớp đúng', async () => {
       await page.click('#btnVhShelfSubRecord');
       await page.waitForTimeout(200);
-      await page.fill('#srSku', '');
       await page.fill('#srProductName', '');
-      await page.fill('#srMaHang', '912607');
-      await page.dispatchEvent('#srMaHang', 'input');
-      await page.waitForTimeout(50);
-      const r = await page.evaluate(() => ({
-        maVach: document.getElementById('srSku').value,
-        productName: document.getElementById('srProductName').value,
-        note: document.getElementById('srMaHangMatchNote').textContent
-      }));
-      assertEqual(r.maVach, '8935024912607', `Phải tự điền đúng Mã Vạch khi gõ 6 số cuối vào ô Mã Hàng, thực tế: ${r.maVach}`);
-      assertEqual(r.productName, 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', `Phải tự điền đúng Tên Sản Phẩm, thực tế: ${r.productName}`);
-      assert(/6 số cuối/.test(r.note), `Ghi chú phải nêu rõ khớp theo 6 số cuối, thực tế: ${r.note}`);
-    });
-
-    await run.run('"📷 Ghi Nhận": gõ tay 6 số cuối khớp NHIỀU mặt hàng vào ô "Mã Hàng (nội bộ)" -> KHÔNG tự điền (tránh sai), chỉ báo rõ số lượng khớp', async () => {
-      await page.fill('#srSku', '');
-      await page.fill('#srProductName', '');
-      await page.fill('#srMaHang', '440456');
-      await page.dispatchEvent('#srMaHang', 'input');
-      await page.waitForTimeout(50);
-      const r = await page.evaluate(() => ({
-        maVach: document.getElementById('srSku').value,
-        productName: document.getElementById('srProductName').value,
-        note: document.getElementById('srMaHangMatchNote').textContent
-      }));
-      assertEqual(r.maVach, '', `KHÔNG được tự điền Mã Vạch khi còn mơ hồ (2 mặt hàng cùng 6 số cuối), thực tế: ${r.maVach}`);
-      assertEqual(r.productName, '', 'KHÔNG được tự điền Tên Sản Phẩm khi còn mơ hồ');
-      assert(/2 mặt hàng/.test(r.note) && /picker/i.test(r.note), `Ghi chú phải báo rõ khớp 2 mặt hàng + hướng dẫn dùng picker, thực tế: ${r.note}`);
-      await page.fill('#srMaHang', '');
-    });
-
-    await run.run('"📷 Ghi Nhận": gõ ĐỦ 1 mã vạch PHỤ (dsMaVach, KHÔNG phải mã vạch mặc định) vào ô Mã Vạch -> vẫn phải tự khớp đúng', async () => {
-      await page.fill('#srMaHang', '');
-      await page.fill('#srProductName', '');
-      await page.fill('#srSku', '8935024122310'); // mã vạch PHỤ — maVach mặc định của dòng này là 8935024912607
-      await page.dispatchEvent('#srSku', 'input');
+      await page.fill('#srScanInput', '8935024122310'); // mã vạch PHỤ — maVach mặc định của dòng này là 8935024912607
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.waitForTimeout(50);
       const r = await page.evaluate(() => ({
         maHang: document.getElementById('srMaHang').value,
@@ -262,11 +224,10 @@ async function main() {
     });
 
     await run.run('"📷 Ghi Nhận": gõ 6 số cuối của 1 mã vạch PHỤ (dsMaVach) -> khớp DUY NHẤT đúng mặt hàng', async () => {
-      await page.fill('#srMaHang', '');
-      await page.fill('#srSku', '');
+      await page.fill('#srScanInput', '');
       await page.fill('#srProductName', '');
-      await page.fill('#srSku', '123096'); // 6 số cuối của mã vạch PHỤ 8935024123096
-      await page.dispatchEvent('#srSku', 'input');
+      await page.fill('#srScanInput', '123096'); // 6 số cuối của mã vạch PHỤ 8935024123096
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.waitForTimeout(50);
       const r = await page.evaluate(() => ({
         maHang: document.getElementById('srMaHang').value,
@@ -274,8 +235,7 @@ async function main() {
       }));
       assertEqual(r.maHang, '2002092675', `6 số cuối của mã vạch PHỤ phải khớp DUY NHẤT đúng mã hàng, thực tế: ${r.maHang}`);
       assertEqual(r.productName, 'G7_Cà phê 3 in 1 - Hộp 18×16g T24', `Phải tự điền đúng Tên Sản Phẩm, thực tế: ${r.productName}`);
-      await page.fill('#srSku', '');
-      await page.fill('#srMaHang', '');
+      await page.fill('#srScanInput', '');
       await page.fill('#srProductName', '');
     });
 

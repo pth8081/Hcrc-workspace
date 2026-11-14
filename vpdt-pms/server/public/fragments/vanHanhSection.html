@@ -892,18 +892,6 @@
              được, xem updateShelfOfflineQueueBanner()/module-vanhanh.js. -->
         <div id="shelfOfflineQueueBanner" class="hidden bg-amber-50 border border-amber-200 text-amber-700 rounded p-2 text-[11px] font-semibold"></div>
         <form id="srForm" data-op-submit="submitShelfRecord" class="bg-white p-3 rounded border text-xs space-y-3">
-          <!-- "🔎 Chọn Từ Tồn Kho Hệ Thống" (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1,
-               11/2026) — ẨN mặc định, chỉ hiện khi siêu thị đã cấu hình Mã Điểm + có dữ liệu (xem
-               loadShelfSystemInventoryForRecordPicker()/module-vanhanh.js). Chọn ở đây điền sẵn CẢ "Mã
-               Hàng (nội bộ)" + "Mã Vạch" bên dưới — nhưng 2 ô đó VẪN sửa tay được độc lập (không khoá),
-               vì mã vạch in trên sản phẩm có lúc mờ/quét sai, nhân viên cần đường dự phòng gõ tay theo
-               tên/mã hàng (11/2026, API v1.3 bổ sung maVach). -->
-          <div id="srSystemInventoryPickerWrap" class="hidden relative">
-            <label class="block font-semibold text-gray-600 mb-1">🔎 Chọn Từ Tồn Kho Hệ Thống (để đối chiếu được)</label>
-            <input id="srSystemInventoryInput" data-sdd-list="srSystemInventoryDropdown" data-op-change="resolveShelfSystemInventoryInput" autocomplete="off" placeholder="Gõ mã hàng hoặc tên sản phẩm..." class="w-full border p-1.5 rounded">
-            <div id="srSystemInventoryDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-            <p id="srSystemInventoryOfflineNote" class="text-amber-600 text-[11px] mt-1"></p>
-          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="relative">
               <label class="block font-semibold text-gray-600 mb-1">Quầy Kệ *</label>
@@ -911,17 +899,33 @@
               <input type="hidden" id="srShelfLocationId">
               <div id="vhShelfLocationDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Mã Vạch</label>
-              <div class="flex gap-1">
-                <input id="srSku" data-op-input="onShelfMaVachTyped" class="w-full border p-1.5 rounded" placeholder="Quét camera hoặc gõ tay...">
+            <!-- Ô "Nhận Diện Sản Phẩm" gộp lại (12/2026, theo phản hồi người dùng kèm ảnh chụp: tách 2 ô
+                 "Mã Vạch"/"Mã Hàng (nội bộ)" riêng gây hiểu lầm — quét xong không rõ thông tin vào đúng ô
+                 nào) — GỘP CẢ 3 cách nhận diện cũ (quét camera / gõ Mã Vạch / gõ Mã Hàng nội bộ / tìm theo
+                 tên ở "🔎 Chọn Từ Tồn Kho Hệ Thống") vào ĐÚNG 1 ô + 1 nút quét duy nhất, giống hệt cơ chế
+                 "💲 Kiểm Tra Giá" (#pcMaHang) đã quen thuộc — xem onUnifiedScanInputChanged()/
+                 applyUnifiedScanMatch()/module-vanhanh.js. #srSku/#srMaHang giờ là 2 Ô ẨN, hệ thống TỰ
+                 điền cả 2 phía sau khi khớp được (vẫn gửi lên server y hệt payload cũ, không đổi API) —
+                 người dùng không còn thao tác trực tiếp vào 2 field đó nữa. Chưa khớp được tồn kho hệ
+                 thống (hàng mới/mã lỗi) vẫn ghi nhận thủ công bình thường: gõ thẳng Tên Sản Phẩm bên dưới,
+                 #srMaHang để trống hợp lệ (optional, xem submitShelfRecord()). -->
+            <div class="relative md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Nhận Diện Sản Phẩm (Mã Hàng / Mã Vạch / Tên)</label>
+              <!-- <span> (KHÔNG phải <div>) bọc input+nút quét — CỐ Ý (12/2026): applyCoreFieldCustomizations()/
+                   applyFieldOrder() (core.js) định vị field qua input.parentElement.closest('div') để tìm
+                   ĐÚNG <label> cùng khối — nếu bọc bằng <div> thì .closest('div') khớp NGAY khối bọc này
+                   (không có <label> bên trong nó), rơi vào nhánh dự phòng ghi đè nhầm lên placeholder thay
+                   vì nhãn thật. <span class="flex gap-1"> vẫn lên layout flex y hệt <div> (chỉ đổi thẻ,
+                   không đổi hiển thị) nhưng KHÔNG bị .closest('div') khớp nhầm, cho .closest('div') trèo
+                   tiếp lên đúng khối ngoài có <label> — ĐÂY LÀ FIELD ĐẦU TIÊN trong CORE_FIELD_MANIFEST có
+                   kèm nút bên cạnh input, nên lỗi này trước đây CHƯA TỪNG xảy ra ở field nào khác. -->
+              <span class="flex gap-1">
+                <input id="srScanInput" data-sdd-list="srSystemInventoryDropdown" data-op-input="onUnifiedScanInputChanged" data-arg-value="0" autocomplete="off" placeholder="Quét camera, gõ mã, hoặc gõ tên sản phẩm để tìm..." class="w-full border p-1.5 rounded" required>
                 <button type="button" data-op="openShelfBarcodeModal" title="Quét mã vạch bằng camera" class="shrink-0 min-h-[44px] px-3 flex items-center justify-center gap-1.5 bg-white border rounded hover:bg-gray-50 text-xs font-bold whitespace-nowrap">📷 Quét Mã</button>
-              </div>
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Mã Hàng (nội bộ)</label>
-              <input id="srMaHang" data-op-input="onShelfMaHangTyped" class="w-full border p-1.5 rounded" placeholder="VD 2003330491 — gõ tay nếu mã vạch mờ không quét/khớp được">
+              </span>
+              <div id="srSystemInventoryDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
               <p id="srMaHangMatchNote" class="text-[11px] mt-1"></p>
+              <p id="srSystemInventoryOfflineNote" class="text-amber-600 text-[11px] mt-1"></p>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Tên Sản Phẩm *</label>
@@ -940,6 +944,14 @@
               <input id="srNote" class="w-full border p-1.5 rounded">
             </div>
           </div>
+          <!-- srSku/srMaHang: 2 Ô ẨN nằm NGOÀI mọi div-bọc-có-label (12/2026) — CỐ Ý đặt tại đây (ngoài
+               khối grid), KHÔNG lồng chung div với bất kỳ field nào trong CORE_FIELD_MANIFEST.SHELF_RECORD
+               — tránh applyCoreFieldCustomizations()/applyFieldOrder() (closest('div')/querySelector
+               ('label') theo đúng id) lỡ khớp nhầm label/order của field khác nếu sau này lại có field mới
+               vô tình dùng chung div. 2 ô này KHÔNG còn trong manifest (xem chú thích SHELF_RECORD ở
+               core.js) nên không bị 2 hàm trên đụng tới nữa — tách div riêng chỉ để phòng xa thêm 1 lớp. -->
+          <input type="hidden" id="srSku">
+          <input type="hidden" id="srMaHang">
           <div id="dynamicFieldsContainer_SHELF_RECORD"></div>
           <div class="flex gap-2">
             <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">💾 Lưu Ghi Nhận</button>
@@ -1443,7 +1455,11 @@
             <button type="button" data-op="cancelPriceCheck" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50 text-xs font-bold">✖️ Hủy</button>
           </div>
         </div>
-        <p class="text-gray-400 text-[11px]">Tra giá trực tiếp từ hệ thống giá trung tâm (đồng bộ mỗi 15 phút phía đối tác) — KHÔNG lưu lại giá đã tra ở bất kỳ đâu trong hệ thống.</p>
+        <!-- Cập nhật nội dung (12/2026, bảng giá offline) — câu cũ "KHÔNG lưu lại giá đã tra ở bất kỳ
+             đâu" nay SAI vì đã có cache offline trên máy (xem syncShelfPriceCatalogSilently()/
+             module-vanhanh.js) — chỉ còn đúng ở chỗ KHÔNG lưu LỊCH SỬ các lượt tra (ai tra mã gì lúc
+             nào), cache chỉ giữ giá trị MỚI NHẤT của từng mã. -->
+        <p class="text-gray-400 text-[11px]">Đã đồng bộ ngầm bảng giá trên máy (tra nhanh, hoạt động được cả lúc mất mạng) — mã chưa có trong bảng sẽ tự tra trực tuyến. Hệ thống KHÔNG lưu lại lịch sử các lượt tra (ai tra mã gì lúc nào).</p>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
@@ -1533,5 +1549,46 @@
       <div id="kkShelfConfigWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Quầy Kệ" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkConfirmWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Xác Nhận" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
-      <div id="kkUserAccessWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Người Dùng" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <!-- Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ),
+           xem tài liệu đề xuất mục B1. CHỈ hiện cho người có kiemKeUserAccessManage/admin (gác ở
+           setKiemKeSubTab(), module-vanhanh.js) — nút "+ Gán Quyền" không ẩn/hiện theo quyền phụ vì CẢ
+           TAB đã gác theo đúng quyền duy nhất cần (không giống Tab 1 có 2 mức quyền view/manage khác nhau). -->
+      <div id="kkUserAccessWrap" class="hidden space-y-3">
+        <div class="bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+          <div class="font-bold text-sm text-cyan-800">+ Gán Quyền Thao Tác Theo Quầy Kệ</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Người dùng</label>
+              <input type="text" id="kkUaUserInput" data-sdd-list="kkUaUserDatalist" autocomplete="off" placeholder="Gõ tên/username để tìm..." class="w-full border p-1.5 rounded">
+              <div id="kkUaUserDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Siêu thị</label>
+              <select id="kkUaDeptSelect" data-op-change="onKkUaDeptChanged" class="w-full border p-1.5 rounded">
+                <option value="">-- Chọn siêu thị --</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Quầy kệ (chọn nhiều)</label>
+            <input type="text" id="kkUaShelfFilter" data-op-input="renderKkUaShelfCheckboxes" data-arg-value="0" placeholder="Gõ để lọc quầy kệ..." class="w-full border p-1.5 rounded mb-1">
+            <div id="kkUaShelfCheckboxes" class="border rounded p-2 max-h-40 overflow-y-auto text-xs space-y-1 bg-white">
+              <p class="text-gray-400 italic">Chọn siêu thị trước để hiện danh sách quầy kệ.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanGomMa"> 📷 Gom Mã</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemDem"> 🔢 Kiểm Đếm</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemSoat"> 🛡️ Kiểm Soát</label>
+          </div>
+          <button type="button" data-op="submitKkUserAccess" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Lưu Quyền</button>
+        </div>
+
+        <div class="bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2">Danh Sách Đã Gán</div>
+          <div id="kkUaListBody" class="space-y-1 text-sm">
+            <p class="text-gray-400 text-sm">Đang tải...</p>
+          </div>
+        </div>
+      </div>
     </div>

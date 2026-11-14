@@ -1032,6 +1032,32 @@ function canViewStocktakeSession(user, item) {
 function filterStocktakeSessionsForUser(items, user) {
   return (items || []).filter(o => canViewStocktakeSession(user, o));
 }
+// stocktakeCounts (Tab 2/3/4 Gom Mã/Kiểm Đếm/Kiểm Soát, 12/2026) — CÙNG lý do/khuôn stocktakeSessions
+// ngay trên. Lưu ý: phạm vi THẬT của Kiểm Kê là allowlist theo (user × siêu thị × quầy kệ), có thể vượt
+// ra ngoài "đúng dept hồ sơ của mình" (VD Giám Sát Vùng được cấp quyền nhiều siêu thị khác dept gốc) —
+// nhưng đó là phạm vi phục vụ bởi route RIÊNG /api/stocktake/counts (tự tra allowlist thật). Ở ĐÂY chỉ
+// cần chặn ĐÚNG lớp "không lộ chéo siêu thị qua GET /api/data chung" (an toàn, không phải lớp phân quyền
+// đầy đủ) — admin/đúng dept hồ sơ mới thấy qua kênh GET /api/data chung, giống mức bảo vệ tối thiểu đã
+// áp dụng cho stocktakeSessions.
+function canViewStocktakeCount(user, item) {
+  if (!user || !item) return false;
+  if (user.perms?.admin) return true;
+  return item.dept === user.dept;
+}
+function filterStocktakeCountsForUser(items, user) {
+  return (items || []).filter(o => canViewStocktakeCount(user, o));
+}
+// stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng, 12/2026) — đây là DỮ LIỆU CẤU HÌNH QUYỀN (ai được quét
+// quầy kệ nào), không phải hồ sơ nghiệp vụ theo dept — lộ ra cho nhân viên quét hàng thường sẽ cho họ
+// biết đồng nghiệp khác được cấp quyền gì (không nguy hiểm bằng dữ liệu cá nhân nhưng vẫn không nên lộ
+// tràn lan). CHỈ admin/kiemKeUserAccessManage mới xem được qua GET /api/data chung — khớp ĐÚNG quyền
+// quản lý màn Tab 8 thật (canManageStocktakeUserAccess(), routes/stocktake.js).
+function canViewStocktakeUserAccess(user) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage);
+}
+function filterStocktakeUserAccessForUser(items, user) {
+  return canViewStocktakeUserAccess(user) ? (items || []) : [];
+}
 // operationExecutionPeriods: mirror ĐÚNG phạm vi xem của hồ sơ NGUỒN (operationStoreOpenings/
 // operationRepairs) — 1 kỳ chỉ nên lộ cho đúng người xem được hồ sơ mà kỳ đó thuộc về.
 function canViewOperationExecutionPeriod(user, item, appData) {
@@ -1749,7 +1775,7 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // lặp lại nhiều lần trong file này (budget/car/meeting/vpp/payment/checklist...). Key RIÊNG 'kiemKe'
   // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
   // hoàn toàn khỏi Vận Hành (xem core.js).
-  kiemKe: ['stocktakeSessions'],
+  kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -1992,6 +2018,8 @@ module.exports = {
   resolveShelfReportViewScope, resolveShelfReportableDepts,
   canViewShelfStockThreshold, filterShelfStockThresholdsForUser,
   canViewStocktakeSession, filterStocktakeSessionsForUser,
+  canViewStocktakeCount, filterStocktakeCountsForUser,
+  canViewStocktakeUserAccess, filterStocktakeUserAccessForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,
   canViewOnboardingProgress, filterOnboardingProgressForUser,

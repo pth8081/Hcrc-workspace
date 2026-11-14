@@ -35,7 +35,8 @@ async function main() {
   async function fillShelfRecordForm({ maHang, productName, quantity, expiryDate }) {
     await page.fill('#srShelfLocationInput', `${SHELF_LOCATION.code} — ${SHELF_LOCATION.name}`);
     await page.evaluate(() => resolveShelfLocationInput());
-    await page.fill('#srMaHang', maHang);
+    await page.fill('#srScanInput', maHang);
+    await page.dispatchEvent('#srScanInput', 'input');
     await page.fill('#srProductName', productName);
     await page.fill('#srQuantity', String(quantity));
     await page.fill('#srExpiryDate', expiryDate || '');

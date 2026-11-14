@@ -1104,11 +1104,16 @@ const CORE_FIELD_MANIFEST = {
   // SHELF_RECORD: #srForm (Vận Hành > Kiểm Soát Hàng Hóa > Ghi Nhận, Phase 1 MVP 11/2026). srShelfLocationInput
   // (ô tìm-kiếm-gõ-chọn "sdd*") KHÔNG đưa vào — cùng lý do mọi picker sdd* khác (vsoPersonInChargeInput...)
   // chưa từng vào diện Biểu Mẫu (ô hiển thị, không phải field lưu trực tiếp — giá trị thật nằm ở hidden
-  // srShelfLocationId).
+  // srShelfLocationId). srSku/srMaHang ĐÃ BỎ KHỎI manifest (12/2026, gộp thành 1 ô "Nhận Diện Sản Phẩm"
+  // #srScanInput — xem applyUnifiedScanMatch()/module-vanhanh.js): LỖI THẬT tự phát hiện lúc build demo —
+  // 2 field đó giờ là <input type="hidden"> NẰM CHUNG div bọc với nhãn của #srScanInput, applyCoreField
+  // Customizations()/applyFieldOrder() (closest('div')/querySelector('label') theo ĐÚNG id field) vẫn tìm
+  // thấy chúng (id không đổi) rồi ghi ĐÈ nhầm lên nhãn/order của #srScanInput (field hiển thị thật duy
+  // nhất) bằng nhãn cũ "Mã Vạch"/"Mã Hàng (nội bộ)" — để lại trong manifest sẽ LUÔN tái diễn lỗi này dù
+  // admin chưa từng tùy biến gì (manifest có field là ĐỦ để cross-contaminate, không cần override thật).
   SHELF_RECORD: [
     { id: 'srProductName', label: 'Tên Sản Phẩm', required: true },
-    { id: 'srSku', label: 'Mã Vạch', required: false },
-    { id: 'srMaHang', label: 'Mã Hàng (nội bộ)', required: false },
+    { id: 'srScanInput', label: 'Nhận Diện Sản Phẩm (Mã Hàng / Mã Vạch / Tên)', required: true },
     { id: 'srQuantity', label: 'Số Lượng Trên Kệ', required: true },
     { id: 'srExpiryDate', label: 'Hạn Sử Dụng', required: false },
     { id: 'srNote', label: 'Ghi Chú', required: false }

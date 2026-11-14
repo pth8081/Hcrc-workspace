@@ -1,10 +1,14 @@
 // tests/test-shelf-mavach-match.js — "📋 Kiểm Soát Hàng Hóa" > Ghi Nhận Trên Kệ, thiết kế lại khi API
-// Tồn Kho BRGMART bổ sung field maVach (mã vạch EAN-13) ở bản 1.3 (11/2026). Test đúng hành vi MỚI:
-// camera quét (hoặc gõ tay vào ô Mã Vạch) LUÔN điền #srSku, rồi TỰ khớp với maVach trong tồn kho hệ
-// thống đã tải — khớp được thì tự điền thêm Mã Hàng/Tên Sản Phẩm, KHÔNG khớp thì giữ nguyên Mã Hàng
-// (không xoá), không chặn UI. Picker "Chọn Từ Tồn Kho Hệ Thống" điền CẢ 2 ô (Mã Hàng luôn có, Mã Vạch
-// theo đúng dòng đã chọn, có thể rỗng). Dùng Playwright thật (gọi hàm browser-side thật ở
-// module-vanhanh.js qua page.evaluate(), KHÔNG mock/giả lập lại logic) — cùng khuôn
+// Tồn Kho BRGMART bổ sung field maVach (mã vạch EAN-13) ở bản 1.3 (11/2026). ĐỔI (12/2026, theo phản hồi
+// người dùng kèm ảnh chụp: tách Mã Vạch/Mã Hàng 2 ô riêng gây hiểu lầm quét xong không rõ vào đâu) — GỘP
+// cả quét camera/gõ tay/tìm theo tên vào ĐÚNG 1 ô #srScanInput (xem applyUnifiedScanMatch()/
+// onUnifiedScanInputChanged(), module-vanhanh.js). Test đúng hành vi MỚI: #srSku/#srMaHang giờ là 2 ô ẨN,
+// hệ thống TỰ điền sau khi khớp — khớp maVach/maHang/6-số-cuối thì điền thêm Mã Hàng/Tên Sản Phẩm, KHÔNG
+// khớp thì CHỦ ĐỘNG xoá cả Mã Hàng lẫn Mã Vạch cũ (mỗi lần gõ/quét vào ô gộp là 1 lượt nhận diện MỚI hoàn
+// toàn — không còn khái niệm "giữ Mã Hàng cũ" như bản 2-ô trước đây, tránh submit nhầm Mã Vạch mới khớp
+// với Mã Hàng cũ không liên quan). Picker "Chọn Từ Tồn Kho Hệ Thống" (nay dùng chung ô #srScanInput) điền
+// CẢ 2 ô ẩn (Mã Hàng luôn có, Mã Vạch theo đúng dòng đã chọn, có thể rỗng). Dùng Playwright thật (gọi hàm
+// browser-side thật ở module-vanhanh.js qua page.evaluate(), KHÔNG mock/giả lập lại logic) — cùng khuôn
 // tests/test-shelf-kehang-offline.js.
 'use strict';
 const { createRunner, assert, assertEqual } = require('./testHarness');
@@ -53,7 +57,7 @@ async function main() {
     assert(noteText.includes('Đã khớp') && noteText.includes('Sữa tươi'), `phải hiện ghi chú đã khớp, thực tế: "${noteText}"`);
   });
 
-  await run.run('camera quét KHÔNG khớp maVach -> vẫn điền Mã Vạch, Mã Hàng cũ KHÔNG bị xoá, hiện ghi chú chưa khớp', async () => {
+  await run.run('camera quét KHÔNG khớp -> vẫn điền "mã thô" vào Mã Vạch ẩn, CHỦ ĐỘNG xoá Mã Hàng cũ (mỗi lượt quét là 1 lần nhận diện mới), hiện ghi chú chưa khớp', async () => {
     await page.evaluate(() => {
       document.getElementById('srSku').value = '';
       document.getElementById('srMaHang').value = '2003330491'; // giả lập đã có Mã Hàng từ trước (gõ tay/picker)
@@ -62,15 +66,15 @@ async function main() {
     const sku = await page.evaluate(() => document.getElementById('srSku').value);
     const maHang = await page.evaluate(() => document.getElementById('srMaHang').value);
     const noteText = await page.evaluate(() => document.getElementById('srMaHangMatchNote').textContent);
-    assertEqual(sku, '0000000000000', 'Mã Vạch phải vẫn được điền dù không khớp (lưu lại để tham chiếu)');
-    assertEqual(maHang, '2003330491', 'KHÔNG khớp -> không được xoá Mã Hàng đã có sẵn trước đó');
+    assertEqual(sku, '0000000000000', 'Mã Vạch ẩn phải vẫn được điền dù không khớp (lưu lại để tham chiếu)');
+    assertEqual(maHang, '', 'KHÔNG khớp -> PHẢI xoá Mã Hàng cũ (tránh submit nhầm Mã Vạch mới + Mã Hàng cũ không liên quan)');
     assert(noteText.includes('Không khớp'), `phải hiện ghi chú không khớp, thực tế: "${noteText}"`);
   });
 
-  await run.run('picker chọn dòng CÓ maVach -> điền cả Mã Hàng + Mã Vạch', async () => {
+  await run.run('picker (ô gộp) chọn dòng CÓ maVach -> điền cả Mã Hàng + Mã Vạch', async () => {
     await page.evaluate(() => {
-      document.getElementById('srSystemInventoryInput').value = buildShelfSystemInventoryLabel(shelfSystemInventoryCache[0]);
-      resolveShelfSystemInventoryInput();
+      document.getElementById('srScanInput').value = buildShelfSystemInventoryLabel(shelfSystemInventoryCache[0]);
+      onUnifiedScanInputChanged(document.getElementById('srScanInput').value);
     });
     const maHang = await page.evaluate(() => document.getElementById('srMaHang').value);
     const sku = await page.evaluate(() => document.getElementById('srSku').value);
@@ -78,10 +82,10 @@ async function main() {
     assertEqual(sku, '8934696001589', 'picker phải điền đúng Mã Vạch của dòng đã chọn');
   });
 
-  await run.run('picker chọn dòng maVach null -> Mã Hàng có, Mã Vạch để TRỐNG (không ghi chữ "null")', async () => {
+  await run.run('picker (ô gộp) chọn dòng maVach null -> Mã Hàng có, Mã Vạch để TRỐNG (không ghi chữ "null")', async () => {
     await page.evaluate(() => {
-      document.getElementById('srSystemInventoryInput').value = buildShelfSystemInventoryLabel(shelfSystemInventoryCache[1]);
-      resolveShelfSystemInventoryInput();
+      document.getElementById('srScanInput').value = buildShelfSystemInventoryLabel(shelfSystemInventoryCache[1]);
+      onUnifiedScanInputChanged(document.getElementById('srScanInput').value);
     });
     const maHang = await page.evaluate(() => document.getElementById('srMaHang').value);
     const sku = await page.evaluate(() => document.getElementById('srSku').value);
@@ -89,12 +93,12 @@ async function main() {
     assertEqual(sku, '', 'maVach null -> ô Mã Vạch phải để trống, không hiện chữ "null"');
   });
 
-  await run.run('gõ tay trực tiếp vào ô Mã Vạch (onShelfMaVachTyped) -> cũng tự khớp như camera', async () => {
+  await run.run('gõ tay trực tiếp vào ô gộp (onUnifiedScanInputChanged) -> cũng tự khớp như camera', async () => {
     await page.evaluate(() => {
       document.getElementById('srMaHang').value = '';
       document.getElementById('srProductName').value = '';
-      document.getElementById('srSku').value = '8934696001589';
-      onShelfMaVachTyped();
+      document.getElementById('srScanInput').value = '8934696001589';
+      onUnifiedScanInputChanged('8934696001589');
     });
     const maHang = await page.evaluate(() => document.getElementById('srMaHang').value);
     assertEqual(maHang, '2003330491', 'gõ tay mã vạch khớp -> phải tự khớp giống hành vi camera');

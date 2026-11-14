@@ -87,8 +87,8 @@ async function main() {
     await page.click('#btnVhShelfSubRecord');
     await page.waitForTimeout(200);
     await shot(page, '#vanHanhShelfWrap', '3-ghi-nhan-truoc-khi-go.png');
-    await page.fill('#srMaHang', '912607');
-    await page.dispatchEvent('#srMaHang', 'input');
+    await page.fill('#srScanInput', '912607');
+    await page.dispatchEvent('#srScanInput', 'input');
     await page.waitForTimeout(100);
     await shot(page, '#vanHanhShelfWrap', '4-ghi-nhan-DA-VA-tu-dien-ma-vach-va-ten.png');
     const bug2 = await page.evaluate(() => ({
