@@ -7804,6 +7804,12 @@ const OP_CLICK_ACTIONS = {
   // lại bằng Playwright bấm THẬT vào nút (không gọi hàm trực tiếp) trước khi vá — không có lỗi CSP/JS nào
   // bị ném ra, chỉ là thiếu đăng ký. Đúng loại lỗi đã tự cảnh báo ở chú thích phía trên (OP_CLICK_ACTIONS).
   setVanHanhShelfSubTab: el => setVanHanhShelfSubTab(el.dataset.tab),
+  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — CÙNG LỚP LỖI vừa nêu ở setVanHanhShelfSubTab ngay trên, phát
+  // hiện qua audit chéo (agent độc lập bấm thử THẬT 8 nút sub-tab btnKkSub* trước khi merge, không chỉ
+  // gọi setKiemKeSubTab() trực tiếp như test cũ): 8 nút data-op="setKiemKeSubTab" data-tab="..." ở
+  // vanHanhSection.html cũng CHƯA đăng ký ở đây -> rơi fallback cspDispatchOp(), data-tab bị bỏ qua, tab
+  // luôn nhận undefined -> cả 8 khung con đều ẩn, màn Kiểm Kê trống trơn khi bấm bất kỳ nút sub-tab nào.
+  setKiemKeSubTab: el => setKiemKeSubTab(el.dataset.tab),
   addOperationOrderItemRow: () => addOperationOrderItemRow(),
   removeOperationOrderItemRow: el => removeOperationOrderItemRow(Number(el.dataset.idx)),
   toggleOperationOrderPoDetailsBox: el => toggleOperationOrderPoDetailsBox(el),

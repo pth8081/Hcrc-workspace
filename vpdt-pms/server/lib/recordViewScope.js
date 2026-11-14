@@ -1742,6 +1742,14 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // MODULE_ACCESS_GATED_COLLECTIONS) để tắt moduleAccess.vanHanh zero-out đúng 2 collection này + tự gác
   // route TẠO MỚI qua COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js), cùng khuôn operationOrders...
   vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'shelfLocations', 'shelfRecords', 'shelfStockThresholds'],
+  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — PHÁT HIỆN qua audit chéo trước merge: stocktakeSessions đã lọc
+  // đúng theo dept (filterStocktakeSessionsForUser(), KHÔNG lộ chéo siêu thị) nhưng THIẾU gate Khối 0 —
+  // tắt moduleAccess.kiemKe cho 1 tài khoản (đã gỡ tab/menu) vẫn đọc được nguyên các kỳ kiểm kê CỦA ĐÚNG
+  // SIÊU THỊ MÌNH qua GET /api/data chung nếu chưa gỡ hẳn quyền kiemKe* phẳng — cùng lớp lỗi "LỖI ĐÃ VÁ"
+  // lặp lại nhiều lần trong file này (budget/car/meeting/vpp/payment/checklist...). Key RIÊNG 'kiemKe'
+  // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
+  // hoàn toàn khỏi Vận Hành (xem core.js).
+  kiemKe: ['stocktakeSessions'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/

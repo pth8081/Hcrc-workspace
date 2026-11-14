@@ -10842,6 +10842,13 @@ function applyNavVisibility(user) {
     !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
       || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
       || user.perms?.shelfAnyStoreAccess));
+  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — cùng khuôn btnVanHanhShelfNav ngay trên: hiện nút shortcut nếu
+  // có BẤT KỲ 1 trong 8 quyền kiemKe* (hoặc admin) — ĐÚNG y hệt OR-list đã thêm vào
+  // canAccessOperationModule() (không tự nghĩ điều kiện khác, 2 nơi phải khớp nhau).
+  document.getElementById('btnVanHanhStocktakeNav').classList.toggle('hidden',
+    !(user.perms?.admin || user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
+      || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
+      || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage));
   updateVanHanhNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
@@ -11469,7 +11476,8 @@ function updateVanHanhNavVisibility() {
   const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
   const itPriceVisible = !document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden');
   const shelfVisible = !document.getElementById('btnVanHanhShelfNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible && !shelfVisible);
+  const stocktakeVisible = !document.getElementById('btnVanHanhStocktakeNav').classList.contains('hidden');
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible && !shelfVisible && !stocktakeVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();
