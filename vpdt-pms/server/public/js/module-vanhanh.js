@@ -336,30 +336,193 @@ let kkPeriodDeptSelected = '';
 
 function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
 function canReopenKiemKePeriodClient(user) { return !!user?.perms?.admin; }
+// Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
+// (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
+// CLAUDE.md nhắc tránh — áp dụng NGAY từ đầu cho 7 tab còn lại khi build thật, không để dành sửa sau).
+function canDoStocktakeGomMaClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeGomMaDo); }
+function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemDemDo); }
+function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
+function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
+function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 function kkEffectiveDept() {
   return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
 }
 
 function setKiemKeSubTab(tab) {
   const tabs = [
-    ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod'],
-    ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa'],
-    ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem'],
-    ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat'],
-    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig'],
-    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm'],
-    ['REPORT', 'kkReportWrap', 'btnKkSubReport'],
-    ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess']
+    ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
+    ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
+    ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
+    ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],
+    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig', canManageStocktakeShelfConfigClient],
+    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm', canConfirmStocktakeClient],
+    ['REPORT', 'kkReportWrap', 'btnKkSubReport', canViewStocktakeReportClient],
+    ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess', canManageStocktakeUserAccessClient]
   ];
+  const found = tabs.find(([key]) => key === tab);
+  const stillAllowed = found && found[3](currentUser);
+  if (!stillAllowed) {
+    // CÙNG khuôn setVanHanhShelfSubTab() — không còn quyền ở tab đang chọn thì tự rơi về tab ĐẦU TIÊN
+    // còn quyền (KHÔNG mặc định PERIOD cứng — PERIOD luôn allowFn=true nên vẫn sẽ là lựa chọn cuối cùng
+    // nếu không còn tab nào khác, nhưng ưu tiên tab user THỰC SỰ thao tác được).
+    const fallback = tabs.find(([, , , allowFn]) => allowFn(currentUser));
+    tab = fallback ? fallback[0] : null;
+  }
   activeKiemKeSubTab = tab;
-  tabs.forEach(([key, wrapId, btnId]) => {
+  tabs.forEach(([key, wrapId, btnId, allowFn]) => {
     const isActive = key === tab;
+    const visible = allowFn(currentUser);
     const wrap = document.getElementById(wrapId);
     if (wrap) wrap.classList.toggle('hidden', !isActive);
     const btn = document.getElementById(btnId);
-    if (btn) btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+    if (btn) btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
   });
+  if (!tab) return;
   if (tab === 'PERIOD') loadKkPeriodSessions();
+  else if (tab === 'USERACCESS') loadKkUserAccessTab();
+}
+
+// ===== Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ) =====
+let kkUaAssignableUsers = []; // [{username, name, dept}]
+let kkUaShelfLocationsForDept = []; // shelfLocations của ĐÚNG siêu thị đang chọn ở form gán quyền
+let kkUaAccessList = []; // toàn bộ stocktakeUserAccess (để vẽ bảng danh sách)
+
+async function loadKkUserAccessTab() {
+  const listBody = document.getElementById('kkUaListBody');
+  if (listBody) listBody.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
+  // Siêu thị — tái dùng DB.stores (danh mục chung, KHÔNG phải danh mục riêng của Kiểm Kê).
+  const deptSelect = document.getElementById('kkUaDeptSelect');
+  if (deptSelect) {
+    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+    deptSelect.innerHTML = '<option value="">-- Chọn siêu thị --</option>' + stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  }
+  try {
+    const [usersRes, accessRes] = await Promise.all([
+      fetch('/api/stocktake/assignable-users'),
+      fetch('/api/stocktake/user-access')
+    ]);
+    if (usersRes.status === 401 || accessRes.status === 401) return handleSessionExpired();
+    const usersBody = await usersRes.json().catch(() => ({}));
+    const accessBody = await accessRes.json().catch(() => ({}));
+    kkUaAssignableUsers = usersRes.ok ? (usersBody.items || []) : [];
+    kkUaAccessList = accessRes.ok ? (accessBody.items || []) : [];
+    // Ô tìm-kiếm-gõ-chọn người dùng (CLAUDE.md: KHÔNG dùng <datalist> gốc) — label "Tên (username) — Siêu thị hồ sơ".
+    const ddItems = kkUaAssignableUsers.map(u => ({ value: u.username, label: `${u.name} (${u.username}) — ${u.dept || ''}` }));
+    if (typeof sddSetOptions === 'function') sddSetOptions('kkUaUserDatalist', ddItems);
+    renderKkUaList();
+  } catch (err) {
+    if (listBody) listBody.innerHTML = '<p class="text-red-600 text-sm">⛔ Không tải được danh sách — vui lòng thử lại.</p>';
+  }
+}
+
+async function onKkUaDeptChanged() {
+  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+  const box = document.getElementById('kkUaShelfCheckboxes');
+  const filterInput = document.getElementById('kkUaShelfFilter');
+  if (filterInput) filterInput.value = '';
+  if (!dept) {
+    kkUaShelfLocationsForDept = [];
+    if (box) box.innerHTML = '<p class="text-gray-400 italic">Chọn siêu thị trước để hiện danh sách quầy kệ.</p>';
+    return;
+  }
+  if (box) box.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  // Tái dùng DB.shelfLocations (danh mục ĐÃ ĐỒNG BỘ qua GET /api/data — không gọi route riêng), đúng
+  // tài liệu đề xuất "dùng chung danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa".
+  kkUaShelfLocationsForDept = (DB.shelfLocations || []).filter(l => l.dept === dept && l.active !== false);
+  renderKkUaShelfCheckboxes('');
+}
+
+function renderKkUaShelfCheckboxes(filterText) {
+  const box = document.getElementById('kkUaShelfCheckboxes');
+  if (!box) return;
+  if (!kkUaShelfLocationsForDept.length) {
+    box.innerHTML = '<p class="text-gray-400 italic">Siêu thị này chưa khai báo quầy kệ nào (vào Vận Hành → Kiểm Soát Hàng Hóa → Quầy Kệ để thêm).</p>';
+    return;
+  }
+  const q = stripVnDiacritics(String(filterText || '').trim().toLowerCase());
+  const matches = kkUaShelfLocationsForDept.filter(l => !q || stripVnDiacritics(`${l.code} ${l.name}`.toLowerCase()).includes(q));
+  box.innerHTML = matches.length
+    ? matches.map(l => `<label class="flex items-center gap-1"><input type="checkbox" class="kk-ua-shelf-cb" value="${l.id}"> ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</label>`).join('')
+    : '<p class="text-gray-400 italic">Không tìm thấy quầy kệ khớp.</p>';
+}
+
+// Ô "Người dùng" lưu LABEL (vd "Nguyễn Văn A (nv1) — Siêu thị Quận 1") theo đúng cơ chế sddSetOptions()
+// chung (input.value = item.label lúc chọn) — tra lại username thật bằng cách khớp ĐÚNG username có mặt
+// trong label đó (an toàn hơn parse chuỗi bằng regex vì username không chứa ký tự "(", ")" ).
+function resolveKkUaSelectedUsername() {
+  const raw = document.getElementById('kkUaUserInput')?.value || '';
+  const hit = kkUaAssignableUsers.find(u => raw === `${u.name} (${u.username}) — ${u.dept || ''}`);
+  return hit ? hit.username : '';
+}
+
+async function submitKkUserAccess() {
+  const username = resolveKkUaSelectedUsername();
+  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+  const shelfLocationIds = Array.from(document.querySelectorAll('.kk-ua-shelf-cb:checked')).map(cb => Number(cb.value));
+  const canGomMa = document.getElementById('kkUaCanGomMa')?.checked || false;
+  const canKiemDem = document.getElementById('kkUaCanKiemDem')?.checked || false;
+  const canKiemSoat = document.getElementById('kkUaCanKiemSoat')?.checked || false;
+  if (!username) return alert('Vui lòng chọn đúng 1 người dùng từ danh sách gợi ý.');
+  if (!dept) return alert('Vui lòng chọn siêu thị.');
+  if (!shelfLocationIds.length) return alert('Vui lòng chọn ít nhất 1 quầy kệ.');
+  if (!canGomMa && !canKiemDem && !canKiemSoat) return alert('Vui lòng chọn ít nhất 1 hành động (Gom Mã/Kiểm Đếm/Kiểm Soát).');
+  try {
+    const res = await fetch('/api/stocktake/user-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, dept, shelfLocationIds, canGomMa, canKiemDem, canKiemSoat })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || 'Không lưu được quyền');
+    kkUaAccessList = data.items || [];
+    renderKkUaList();
+    document.getElementById('kkUaUserInput').value = '';
+    document.getElementById('kkUaCanGomMa').checked = false;
+    document.getElementById('kkUaCanKiemDem').checked = false;
+    document.getElementById('kkUaCanKiemSoat').checked = false;
+    document.querySelectorAll('.kk-ua-shelf-cb:checked').forEach(cb => { cb.checked = false; });
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ');
+  }
+}
+
+function renderKkUaList() {
+  const body = document.getElementById('kkUaListBody');
+  if (!body) return;
+  if (!kkUaAccessList.length) {
+    body.innerHTML = '<p class="text-gray-400 text-sm">Chưa gán quyền cho ai.</p>';
+    return;
+  }
+  // Nhóm theo (username, dept) để hiện gọn — mỗi nhóm có thể nhiều dòng (nhiều quầy kệ khác nhau).
+  const sorted = kkUaAccessList.slice().sort((a, b) => (a.username + a.dept).localeCompare(b.username + b.dept, 'vi'));
+  body.innerHTML = sorted.map(a => {
+    const u = kkUaAssignableUsers.find(x => x.username === a.username);
+    const loc = (DB.shelfLocations || []).find(l => l.id === a.shelfLocationId);
+    const actions = [a.canGomMa && 'Gom Mã', a.canKiemDem && 'Kiểm Đếm', a.canKiemSoat && 'Kiểm Soát'].filter(Boolean).join(', ') || '(không có hành động nào)';
+    return `<div class="flex items-center justify-between gap-2 border-b pb-1">
+      <div class="min-w-0">
+        <span class="font-semibold">${escapeHtml(u ? u.name : a.username)}</span>
+        <span class="text-gray-500"> · ${escapeHtml(a.dept)} · ${escapeHtml(loc ? `${loc.code} — ${loc.name}` : 'Quầy kệ #' + a.shelfLocationId)}</span>
+        <span class="text-gray-500"> · ${escapeHtml(actions)}</span>
+      </div>
+      <button type="button" data-op="deleteKkUserAccess" data-arg0="${a.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">🗑️ Xoá</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteKkUserAccess(id) {
+  if (!confirm('Gỡ dòng cấu hình quyền này?')) return;
+  try {
+    const res = await fetch(`/api/stocktake/user-access/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || 'Không gỡ được');
+    kkUaAccessList = kkUaAccessList.filter(a => a.id !== id);
+    renderKkUaList();
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ');
+  }
 }
 
 function renderKkPeriodDeptRow() {

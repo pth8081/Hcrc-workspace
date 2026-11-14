@@ -1537,5 +1537,46 @@
       <div id="kkShelfConfigWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Quầy Kệ" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkConfirmWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Xác Nhận" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
-      <div id="kkUserAccessWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Người Dùng" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <!-- Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ),
+           xem tài liệu đề xuất mục B1. CHỈ hiện cho người có kiemKeUserAccessManage/admin (gác ở
+           setKiemKeSubTab(), module-vanhanh.js) — nút "+ Gán Quyền" không ẩn/hiện theo quyền phụ vì CẢ
+           TAB đã gác theo đúng quyền duy nhất cần (không giống Tab 1 có 2 mức quyền view/manage khác nhau). -->
+      <div id="kkUserAccessWrap" class="hidden space-y-3">
+        <div class="bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
+          <div class="font-bold text-sm text-cyan-800">+ Gán Quyền Thao Tác Theo Quầy Kệ</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Người dùng</label>
+              <input type="text" id="kkUaUserInput" data-sdd-list="kkUaUserDatalist" autocomplete="off" placeholder="Gõ tên/username để tìm..." class="w-full border p-1.5 rounded">
+              <div id="kkUaUserDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Siêu thị</label>
+              <select id="kkUaDeptSelect" data-op-change="onKkUaDeptChanged" class="w-full border p-1.5 rounded">
+                <option value="">-- Chọn siêu thị --</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Quầy kệ (chọn nhiều)</label>
+            <input type="text" id="kkUaShelfFilter" data-op-input="renderKkUaShelfCheckboxes" data-arg-value="0" placeholder="Gõ để lọc quầy kệ..." class="w-full border p-1.5 rounded mb-1">
+            <div id="kkUaShelfCheckboxes" class="border rounded p-2 max-h-40 overflow-y-auto text-xs space-y-1 bg-white">
+              <p class="text-gray-400 italic">Chọn siêu thị trước để hiện danh sách quầy kệ.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanGomMa"> 📷 Gom Mã</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemDem"> 🔢 Kiểm Đếm</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="kkUaCanKiemSoat"> 🛡️ Kiểm Soát</label>
+          </div>
+          <button type="button" data-op="submitKkUserAccess" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Lưu Quyền</button>
+        </div>
+
+        <div class="bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2">Danh Sách Đã Gán</div>
+          <div id="kkUaListBody" class="space-y-1 text-sm">
+            <p class="text-gray-400 text-sm">Đang tải...</p>
+          </div>
+        </div>
+      </div>
     </div>
