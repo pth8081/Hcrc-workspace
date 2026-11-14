@@ -75,12 +75,14 @@ async function run(label, { beforeFix }) {
   const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
   const page = await browser.newPage();
+  page.setDefaultTimeout(20000);
   await page.setViewportSize({ width: 1400, height: 900 });
 
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(String(err && err.message || err)));
+  page.on('console', (msg) => { if (msg.type() === 'error') pageErrors.push('console.error: ' + msg.text()); });
 
-  await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'load' });
+  await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
   await page.evaluate(({ version, beforeFix, users }) => {
     window.__alerts = [];
