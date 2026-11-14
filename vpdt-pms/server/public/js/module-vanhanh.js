@@ -547,8 +547,8 @@ async function deleteKkUserAccess(id) {
 // dùng lại ĐÚNG bộ hàm này — chỉ thêm KIEMSOAT vào KK_SCAN_TAB_CONFIG khi tới lượt, không cần viết lại.
 const KK_SCAN_TAB_CONFIG = Object.freeze({
   GOMMA: { apiMode: 'GOM_MA', prefix: 'kkGomMa', qtyField: 'slGomMa', loaiKyLabel: 'Gom Mã' },
-  KIEMDEM: { apiMode: 'KIEM_DEM', prefix: 'kkKiemDem', qtyField: 'slKiemDem', loaiKyLabel: 'Thống Kê' },
-  KIEMSOAT: { apiMode: 'KIEM_SOAT', prefix: 'kkKiemSoat', qtyField: 'slKiemSoat', loaiKyLabel: 'Thống Kê' }
+  KIEMDEM: { apiMode: 'KIEM_DEM', prefix: 'kkKiemDem', qtyField: 'slKiemDem', loaiKyLabel: 'Kiểm Kê' },
+  KIEMSOAT: { apiMode: 'KIEM_SOAT', prefix: 'kkKiemSoat', qtyField: 'slKiemSoat', loaiKyLabel: 'Kiểm Kê' }
 });
 const kkScanState = {
   GOMMA: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
@@ -860,7 +860,7 @@ async function enterKkConfirmTab() {
     const sessions = res.ok ? (body.items || []) : [];
     const activeThongKe = sessions.filter(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
     if (sel) {
-      sel.innerHTML = '<option value="">-- Chọn kỳ Thống Kê đang hoạt động --</option>' +
+      sel.innerHTML = '<option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>' +
         activeThongKe.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
       // Thường chỉ có ĐÚNG 1 kỳ Thống Kê "Đang hoạt động" / siêu thị (đúng ràng buộc Tab 1) — tự chọn
       // luôn cho đỡ phải bấm thêm 1 bước, vẫn để trống nếu chưa có kỳ nào.
@@ -1019,7 +1019,7 @@ async function enterKkReportTab() {
     const body = await res.json().catch(() => ({}));
     const sessions = res.ok ? (body.items || []) : [];
     sessions.sort((a, b) => b.id - a.id);
-    const optionLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})`;
+    const optionLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})`;
     if (sel) {
       sel.innerHTML = '<option value="">-- Chọn kỳ để xem báo cáo --</option>' +
         sessions.map(s => `<option value="${s.id}">${optionLabel(s)}</option>`).join('');
@@ -1234,7 +1234,7 @@ function renderKkReportChart3() {
   const list = kkReportData && Array.isArray(kkReportData.storeComparison) ? kkReportData.storeComparison : null;
   if (!list) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
-  if (!list.length) { el.innerHTML = '<p class="text-gray-400 text-sm">Chưa có siêu thị nào có Kỳ Thống Kê.</p>'; return; }
+  if (!list.length) { el.innerHTML = '<p class="text-gray-400 text-sm">Chưa có siêu thị nào có Kỳ Kiểm Kê.</p>'; return; }
   const items = list.map(s => ({
     label: s.dept,
     values: [
@@ -1264,7 +1264,7 @@ function kkReportMergeCompareRows() {
 }
 
 function kkReportSessionLabel(s) {
-  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${s.tenKy}`;
+  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy}`;
 }
 
 // So Sánh Với Kỳ Khác (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với nhau ấy, thì
@@ -1362,7 +1362,7 @@ function exportKkReportExcel() {
   const sheets = [{ sheetName: `Chi Tiết (${sessionLabel})`.slice(0, 31), columns: detailColumns, rows: detailRows }];
   if (Array.isArray(kkReportData.storeComparison) && kkReportData.storeComparison.length) {
     const cmpColumns = [
-      { header: 'Siêu Thị', key: 'dept' }, { header: 'Kỳ Thống Kê', key: 'sessionName' },
+      { header: 'Siêu Thị', key: 'dept' }, { header: 'Kỳ Kiểm Kê', key: 'sessionName' },
       { header: 'Trạng Thái', key: 'trangThai' },
       { header: 'Tổng Tồn Kho Hệ Thống', key: 'systemQty' }, { header: 'Tổng Kiểm Đếm/Cuối Cùng', key: 'finalQty' }
     ];
@@ -1436,7 +1436,7 @@ async function loadKkPeriodSessions() {
   }
 }
 
-const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Thống Kê' };
+const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
 const KK_TRANG_THAI_BADGE = {
   NHAP: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">📝 Nháp</span>',
   DANG_HOAT_DONG: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">🟢 Đang hoạt động</span>',
@@ -1504,8 +1504,54 @@ function toggleKkPeriodCreateBox() {
     if (tenKy) tenKy.value = '';
     if (batDau) batDau.value = '';
     if (ketThuc) ketThuc.value = '';
+    renderKkNewStoresPicker();
   }
 }
+
+// renderKkNewStoresPicker() (12/2026, MỚI — theo yêu cầu người dùng "cho phép chọn nhiều/tất cả siêu
+// thị lúc Tạo Kỳ Mới, siêu thị nào đã kiểm kê trong kỳ chưa đóng rồi thì không chọn lại được"): CHỈ hiện
+// cho admin (người thường luôn tạo cho đúng 1 siêu thị của mình — kkEffectiveDept(), giữ nguyên hành vi
+// cũ, không cần chọn gì). Dùng renderMultiSelectDropdown() (core.js, searchable — ĐÚNG quy ước CLAUDE.md
+// "không dùng <datalist> native") thay vì 1 dropdown đơn. Siêu thị đã có kỳ CÙNG loaiKy đang chọn mà
+// CHƯA ĐÓNG (Nháp/Đang hoạt động — GET /sessions/open-depts) bị LOẠI khỏi danh sách chọn được, liệt kê
+// rõ ở ghi chú dưới để admin hiểu tại sao thiếu — không phải lỗi/thiếu dữ liệu.
+async function renderKkNewStoresPicker() {
+  const wrap = document.getElementById('kkNewStoresWrap');
+  if (!wrap) return;
+  if (!currentUser.perms?.admin) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const loaiKy = document.getElementById('kkNewLoaiKy')?.value || 'GOM_MA';
+  const noteEl = document.getElementById('kkNewStoresBlockedNote');
+  if (noteEl) noteEl.textContent = 'Đang tải danh sách siêu thị...';
+  let blockedItems = [];
+  try {
+    const res = await fetch(`/api/stocktake/sessions/open-depts?loaiKy=${encodeURIComponent(loaiKy)}`);
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json();
+    if (res.ok) blockedItems = Array.isArray(data.items) ? data.items : [];
+  } catch (err) { /* lỗi mạng — không chặn, chỉ không loại được siêu thị nào (an toàn hơn cho phép tạo
+    nhầm hơn là chặn hẳn không tạo được kỳ nào — server vẫn tự chặn lại ở buildNewSession() nếu có). */ }
+  const blockedDepts = new Set(blockedItems.map(it => it.dept));
+  const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+  const selectableStores = stores.filter(s => !blockedDepts.has(s));
+  renderMultiSelectDropdown('kkNewStoresMultiSelect', selectableStores, [], {
+    placeholder: '🔍 Tìm siêu thị để thêm...',
+    emptyText: 'Chưa chọn siêu thị nào.'
+  });
+  if (noteEl) {
+    noteEl.textContent = blockedItems.length
+      ? `⚠️ ${blockedItems.length} siêu thị đã có kỳ ${KK_LOAI_KY_LABEL[loaiKy] || loaiKy} chưa đóng, không chọn lại được ở đây: ${blockedItems.map(it => `${escapeHtml(it.dept)} (${escapeHtml(TRANG_THAI_LABEL_VN[it.trangThai] || it.trangThai)})`).join(', ')}. Muốn làm tiếp đúng kỳ cũ thì vào danh sách kỳ bên dưới, không tạo kỳ mới cho siêu thị đó.`
+      : '';
+  }
+}
+function onKkNewLoaiKyChanged() { renderKkNewStoresPicker(); }
+function selectAllKkNewStores() {
+  const c = document.getElementById('kkNewStoresMultiSelect');
+  if (!c || !c._gmsItems) return;
+  c._gmsItems.forEach(it => c._gmsSelected.add(it.value));
+  c._gmsRenderChips();
+}
+function clearAllKkNewStores() { gmsClear('kkNewStoresMultiSelect'); }
 
 async function submitCreateKkPeriod() {
   const loaiKy = document.getElementById('kkNewLoaiKy')?.value;
@@ -1513,6 +1559,32 @@ async function submitCreateKkPeriod() {
   const thoiGianBatDau = document.getElementById('kkNewBatDau')?.value || '';
   const thoiGianKetThuc = document.getElementById('kkNewKetThuc')?.value || '';
   if (!tenKy) { alert('Vui lòng nhập tên kỳ'); return; }
+  // admin: tạo cho NHIỀU/TẤT CẢ siêu thị đã chọn ở ô multi-select (12/2026, MỚI) — lần lượt gọi đúng
+  // route POST /sessions hiện có cho TỪNG siêu thị (không đổi API, chỉ gọi nhiều lần phía client), để
+  // không phải thêm route bulk riêng + giữ nguyên validate/log mỗi lần tạo như khi tạo tay từng cái.
+  if (currentUser.perms?.admin) {
+    const depts = getMultiSelectValues('kkNewStoresMultiSelect');
+    if (!depts.length) { alert('Vui lòng chọn ít nhất 1 siêu thị'); return; }
+    let okCount = 0;
+    const failures = [];
+    for (const dept of depts) {
+      try {
+        const res = await fetch('/api/stocktake/sessions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc })
+        });
+        if (res.status === 401) return handleSessionExpired();
+        const data = await res.json();
+        if (res.ok) okCount++; else failures.push(`${dept}: ${data.error || 'lỗi không rõ'}`);
+      } catch (err) { failures.push(`${dept}: lỗi kết nối`); }
+    }
+    if (okCount) toggleKkPeriodCreateBox();
+    await loadKkPeriodSessions();
+    if (failures.length) {
+      alert(`Đã tạo ${okCount}/${depts.length} kỳ thành công.\n\nKhông tạo được cho:\n${failures.join('\n')}`);
+    }
+    return;
+  }
   try {
     const res = await fetch('/api/stocktake/sessions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

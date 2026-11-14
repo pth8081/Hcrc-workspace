@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**30.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.42 (2026-12): "📋 Kiểm Kê" Tab 1 Kỳ Kiểm Kê — đổi nhãn "Kiểm Kê", chọn nhiều siêu thị, chặn tạo kỳ chồng chéo
+
+Theo yêu cầu người dùng:
+
+- **Đổi nhãn hiển thị** loại kỳ "Thống Kê" → "Kiểm Kê" (2 loại kỳ của module giờ gọi là "Gom Mã" và
+  "Kiểm Kê") — chỉ đổi nhãn, giữ nguyên key nội bộ `THONG_KE`, không đụng dữ liệu đã lưu.
+- **Chọn nhiều/tất cả siêu thị cùng lúc** khi Tạo Kỳ Mới (Admin): ô chọn siêu thị đổi từ 1 dropdown đơn
+  sang ô tìm-kiếm-chọn-nhiều (searchable multi-select) + nút "Chọn Tất Cả"/"Bỏ Chọn" — tạo 1 lượt cho
+  nhiều/tất cả siêu thị, mỗi siêu thị vẫn có 1 kỳ RIÊNG (không gộp số liệu giữa các siêu thị).
+- **Mỗi kỳ độc lập, không tạo bản nháp chồng chéo** (xác nhận rõ với người dùng): 1 siêu thị đã có kỳ
+  CÙNG loại CHƯA ĐÓNG (Nháp hoặc Đang hoạt động) thì KHÔNG tạo được kỳ MỚI nữa cho đúng siêu thị/loại đó
+  — chặn ngay lúc TẠO (cả trên giao diện lẫn server, trước đây chỉ chặn muộn lúc Kích Hoạt). Đóng kỳ
+  (Đã chốt) xong thì mở vòng kỳ MỚI bình thường; muốn làm tiếp đúng kỳ cũ thì dùng nút "Mở Lại" có sẵn
+  (chỉ Admin), không tạo kỳ mới cho siêu thị đó.
 
 ## v30.41 (2026-11): Sơ Đồ Tổ Chức — sửa lỗi 1 vị trí hiện LẪN người của MỌI đơn vị khi thiếu liên kết mã phòng/siêu thị
 

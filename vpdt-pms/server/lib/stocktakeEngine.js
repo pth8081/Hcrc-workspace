@@ -30,11 +30,14 @@ function canReopenStocktakeSession(user) { return !!user?.perms?.admin; }
 function isValidLoaiKy(v) { return v === LOAI_KY.GOM_MA || v === LOAI_KY.THONG_KE; }
 
 // Nhãn tiếng Việt cho loại kỳ/trạng thái — dùng chung cho cả client lẫn log server, tránh lặp chuỗi.
-const LOAI_KY_LABEL = Object.freeze({ GOM_MA: 'Gom Mã', THONG_KE: 'Thống Kê' });
+// LOAI_KY_LABEL: nhãn HIỂN THỊ thôi (key nội bộ THONG_KE giữ nguyên, không đổi — tránh phải migrate dữ
+// liệu stocktakeSessions đã lưu). 12/2026, theo yêu cầu người dùng: đổi nhãn "Thống Kê" thành "Kiểm Kê"
+// cho đúng tên module (2 loại kỳ của module "📋 Kiểm Kê" giờ gọi là "Gom Mã" và "Kiểm Kê").
+const LOAI_KY_LABEL = Object.freeze({ GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' });
 const TRANG_THAI_LABEL = Object.freeze({ NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' });
 
 // Mỗi (siêu thị, loại kỳ) chỉ được 1 kỳ "Đang hoạt động" tại 1 thời điểm (xác nhận trong tài liệu đề
-// xuất, Câu hỏi #5 cũ) — 2 loại kỳ độc lập nên 1 siêu thị có thể có tối đa 1 Kỳ Gom Mã + 1 Kỳ Thống Kê
+// xuất, Câu hỏi #5 cũ) — 2 loại kỳ độc lập nên 1 siêu thị có thể có tối đa 1 Kỳ Gom Mã + 1 Kỳ Kiểm Kê
 // cùng hoạt động, nhưng không được 2 kỳ CÙNG loại cùng hoạt động.
 function findActiveSession(sessions, dept, loaiKy) {
   return (Array.isArray(sessions) ? sessions : []).find(
@@ -42,12 +45,34 @@ function findActiveSession(sessions, dept, loaiKy) {
   ) || null;
 }
 
+// findOpenSession() (12/2026, theo yêu cầu người dùng "1 siêu thị đã kiểm kê trong 1 kỳ rồi thì không
+// được kiểm kê tiếp — trong 1 kỳ chỉ được 1 lần, trừ khi đóng kỳ rồi mở lại mới xử lý tiếp"): KHÁC
+// findActiveSession() ở trên (chỉ xét Đang hoạt động) — hàm này còn xét CẢ Nháp, vì 1 siêu thị có 1 kỳ
+// NHÁP (chưa kích hoạt) của đúng loại đó cũng coi như "đang xử lý dở", chưa nên cho tạo kỳ MỚI chồng lên
+// (tránh 2 kỳ cùng loại/cùng siêu thị lẫn lộn ngay từ lúc tạo, không phải đợi tới lúc kích hoạt mới phát
+// hiện). Kỳ ĐÃ CHỐT (DA_CHOT) KHÔNG tính — siêu thị đã chốt xong 1 vòng kiểm kê thì được mở vòng MỚI
+// (tạo kỳ mới) bình thường; muốn xử lý tiếp ĐÚNG kỳ cũ vừa chốt thì dùng nút "Mở Lại" (reopenSession),
+// không phải tạo kỳ mới.
+function findOpenSession(sessions, dept, loaiKy) {
+  return (Array.isArray(sessions) ? sessions : []).find(
+    s => s.dept === dept && s.loaiKy === loaiKy && (s.trangThai === TRANG_THAI.NHAP || s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
+  ) || null;
+}
+
+// listOpenSessionsByLoaiKy() — dùng cho GET /sessions/open-depts (client vẽ ô chọn nhiều siêu thị lúc
+// Tạo Kỳ Mới, loại bớt siêu thị đã có kỳ đang xử lý dở khỏi danh sách chọn được).
+function listOpenSessionsByLoaiKy(sessions, loaiKy) {
+  return (Array.isArray(sessions) ? sessions : []).filter(
+    s => s.loaiKy === loaiKy && (s.trangThai === TRANG_THAI.NHAP || s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
+  );
+}
+
 function validateCreateSessionInput(body) {
   const dept = String(body?.dept || '').trim();
   const loaiKy = String(body?.loaiKy || '').trim();
   const tenKy = String(body?.tenKy || '').trim();
   if (!dept) throw new HttpError(400, 'Vui lòng chọn siêu thị');
-  if (!isValidLoaiKy(loaiKy)) throw new HttpError(400, 'Loại kỳ không hợp lệ (phải là Gom Mã hoặc Thống Kê)');
+  if (!isValidLoaiKy(loaiKy)) throw new HttpError(400, 'Loại kỳ không hợp lệ (phải là Gom Mã hoặc Kiểm Kê)');
   if (!tenKy) throw new HttpError(400, 'Vui lòng nhập tên kỳ');
   const thoiGianBatDau = body?.thoiGianBatDau ? String(body.thoiGianBatDau).trim() : '';
   const thoiGianKetThuc = body?.thoiGianKetThuc ? String(body.thoiGianKetThuc).trim() : '';
@@ -57,8 +82,20 @@ function validateCreateSessionInput(body) {
   return { dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc };
 }
 
-function buildNewSession(input, user) {
+// buildNewSession(input, user, existingSessions) — existingSessions (12/2026, THAM SỐ MỚI, tuỳ chọn):
+// danh sách kỳ hiện có để kiểm tra findOpenSession() ngay lúc TẠO (không đợi tới lúc kích hoạt mới chặn
+// như activateSession() vốn đã làm) — đóng đúng lỗ hổng "tạo được nhiều kỳ Nháp chồng chéo cùng 1 siêu
+// thị/loại, chỉ phát hiện trùng khi kích hoạt". Bỏ qua tham số này (hoặc truyền mảng rỗng) thì KHÔNG
+// kiểm tra gì thêm — chỉ dùng khi caller có sẵn danh sách kỳ hiện có (route thật/test), không bắt buộc
+// để không phá vỡ lời gọi cũ nào khác lỡ chưa truyền.
+function buildNewSession(input, user, existingSessions) {
   const { dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc } = validateCreateSessionInput(input);
+  if (existingSessions) {
+    const openConflict = findOpenSession(existingSessions, dept, loaiKy);
+    if (openConflict) {
+      throw new HttpError(409, `Siêu thị "${dept}" đã có 1 kỳ ${LOAI_KY_LABEL[loaiKy]} chưa đóng ("${openConflict.tenKy}", ${TRANG_THAI_LABEL[openConflict.trangThai]}) — phải xử lý xong (đóng kỳ) rồi mới tạo kỳ mới cho siêu thị này. Muốn làm tiếp đúng kỳ cũ thì dùng kỳ đó, không tạo kỳ mới.`);
+    }
+  }
   return {
     id: Date.now(),
     dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc,
@@ -356,7 +393,7 @@ module.exports = {
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
   canManageStocktakeShelfConfig, canConfirmStocktake, canViewStocktakeReport, canManageStocktakeUserAccess,
   canReopenStocktakeSession,
-  isValidLoaiKy, findActiveSession, validateCreateSessionInput, buildNewSession,
+  isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
   activateSession, closeSession, reopenSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,

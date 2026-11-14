@@ -19,6 +19,12 @@ function stubModule(relPath, exportsObj) {
 
 const DEPT1 = 'Siêu thị Quận 1';
 const DEPT2 = 'Siêu thị Quận 2';
+// DEPT3 (12/2026, MỚI — chỉ dùng cho kịch bản 9 dept-spoofing): buildNewSession() giờ chặn NGAY lúc tạo
+// nếu dept đã có kỳ CÙNG loại chưa đóng (xem lib/stocktakeEngine.js findOpenSession()) — DEPT1 tới kịch
+// bản 9 đã có SẴN cả S1_THONGKE_DEPT1 (THONG_KE) lẫn S4_GOMMA_DEPT1 (GOM_MA) đang Đang hoạt động, nên
+// không dùng được DEPT1 cho kịch bản 9 nữa (sẽ luôn 409 "chưa đóng" bất kể có giả mạo dept hay không,
+// che mất đúng cái cần test là hành vi ép dept thật). Dùng 1 dept HOÀN TOÀN SẠCH riêng cho kịch bản này.
+const DEPT3 = 'Siêu thị Quận 3';
 const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
 const SHELF_B1 = { id: 20, dept: DEPT2, code: 'B1', name: 'Kệ B1 — Sữa, nước', active: true };
 
@@ -29,14 +35,15 @@ let appDataStore = {
   stocktakeCounts: [],
   stocktakeShelfConfirmations: [],
   storeExternalCodes: {},
-  stores: [DEPT1, DEPT2],
+  stores: [DEPT1, DEPT2, DEPT3],
   users: [
     // nv1: quyền tab Kiểm Đếm + Kiểm Soát + Gom Mã, dept DEPT1 — CHƯA có allowlist gì lúc khởi đầu.
     { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeGomMaDo: true }, active: true },
     // qlA: Quản Lý Siêu Thị DEPT1 — CHỈ có quyền Tab 6 (kiemKeConfirmDo), KHÔNG có kiemKeKiemDemDo.
     { username: 'qlA', name: 'Quản Lý A', dept: DEPT1, perms: { kiemKeConfirmDo: true, kiemKeReportView: true }, active: true },
-    // tt1: "Người Quản Lý Kỳ" DEPT1 — có kiemKePeriodManage (Tab 1), KHÔNG phải admin. Dùng để test dept-spoofing ở kịch bản 9.
-    { username: 'tt1', name: 'Trưởng Tầng 1', dept: DEPT1, perms: { kiemKePeriodManage: true }, active: true },
+    // tt1: "Người Quản Lý Kỳ" DEPT3 (12/2026, đổi từ DEPT1 — xem chú thích DEPT3 ở trên) — có
+    // kiemKePeriodManage (Tab 1), KHÔNG phải admin. Dùng để test dept-spoofing ở kịch bản 9.
+    { username: 'tt1', name: 'Trưởng Tầng 1', dept: DEPT3, perms: { kiemKePeriodManage: true }, active: true },
     // qlB: Quản Lý Siêu Thị DEPT2 — có kiemKeReportView (dùng để test lộ báo cáo chéo siêu thị).
     { username: 'qlB', name: 'Quản Lý B', dept: DEPT2, perms: { kiemKeReportView: true }, active: true },
     { username: 'admin', name: 'Admin', dept: DEPT1, perms: { admin: true }, active: true }
@@ -191,7 +198,7 @@ function request(port, method, urlPath, username, body) {
 
     console.log('\n===== KỊCH BẢN 9: tạo kỳ với dept giả mạo (user thường, không phải admin) =====');
     res = await request(port, 'POST', '/api/stocktake/sessions', 'tt1', { dept: DEPT2, loaiKy: 'THONG_KE', tenKy: 'Kỳ giả mạo dept' });
-    check('9) tt1 (dept1, có kiemKePeriodManage, KHÔNG admin) gửi dept=DEPT2 -> server PHẢI ép về đúng dept thật (DEPT1), KHÔNG tạo kỳ cho DEPT2', res.status === 200 && res.body.item?.dept === DEPT1, res.body);
+    check('9) tt1 (dept3, có kiemKePeriodManage, KHÔNG admin) gửi dept=DEPT2 -> server PHẢI ép về đúng dept thật (DEPT3), KHÔNG tạo kỳ cho DEPT2', res.status === 200 && res.body.item?.dept === DEPT3, res.body);
 
     console.log('\n===== KỊCH BẢN 10: chưa đăng nhập — toàn bộ route /api/stocktake/* =====');
     const unauthedCalls = [

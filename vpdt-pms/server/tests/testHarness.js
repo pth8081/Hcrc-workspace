@@ -954,6 +954,18 @@ function createDispatcher(state) {
         const items = (state.stocktakeSessions || []).filter(s => s.dept === dept);
         return { status: 200, body: { items } };
       }
+      if (pathName === '/api/stocktake/sessions/open-depts' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakePeriod, listOpenSessionsByLoaiKy, LOAI_KY } = require('../lib/stocktakeEngine');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Kỳ Kiểm Kê' } };
+        const loaiKy = new URL(url, 'http://x').searchParams.get('loaiKy') || '';
+        if (![LOAI_KY.GOM_MA, LOAI_KY.THONG_KE].includes(loaiKy)) return { status: 400, body: { error: 'Loại kỳ không hợp lệ (phải là Gom Mã hoặc Kiểm Kê)' } };
+        const items = listOpenSessionsByLoaiKy(state.stocktakeSessions || [], loaiKy).map(s => ({ dept: s.dept, tenKy: s.tenKy, trangThai: s.trangThai }));
+        return { status: 200, body: { items } };
+      }
       if (pathName === '/api/stocktake/sessions' && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
@@ -963,8 +975,8 @@ function createDispatcher(state) {
         if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Kỳ Kiểm Kê' } };
         try {
           const dept = (freshUser.perms?.admin && body?.dept) ? String(body.dept).trim() : freshUser.dept;
-          const item = buildNewSession({ ...body, dept }, freshUser);
           if (!state.stocktakeSessions) state.stocktakeSessions = [];
+          const item = buildNewSession({ ...body, dept }, freshUser, state.stocktakeSessions);
           state.stocktakeSessions.unshift(item);
           return { status: 200, body: { item } };
         } catch (err) {
@@ -1013,7 +1025,7 @@ function createDispatcher(state) {
         }
         const requiredLoaiKy = mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE;
         const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
-        if (!activeSession) { const e = new Error(`Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKy === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Thống Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`); e.status = 409; throw e; }
+        if (!activeSession) { const e = new Error(`Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKy === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Kiểm Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`); e.status = 409; throw e; }
         if (activeSession.id !== sessionId) { const e = new Error('Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang'); e.status = 409; throw e; }
         if (mode === 'KIEM_DEM' && !opts?.skipConfirmedCheck) {
           const confirmations = state.stocktakeShelfConfirmations || [];
@@ -1193,7 +1205,7 @@ function createDispatcher(state) {
         const session = (state.stocktakeSessions || []).find(s => s.id === id);
         if (!session) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
         if (!freshUser.perms?.admin && session.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
-        if (session.loaiKy !== LOAI_KY.THONG_KE) return { status: 400, body: { error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Thống Kê' } };
+        if (session.loaiKy !== LOAI_KY.THONG_KE) return { status: 400, body: { error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Kiểm Kê' } };
         const unconfirmedIds = listUnconfirmedCountedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfConfirmations || [], id);
         if (unconfirmedIds.length) {
           const labels = unconfirmedIds.map(sid => {

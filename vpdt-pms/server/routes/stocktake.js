@@ -16,7 +16,7 @@ const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const {
   LOAI_KY, TRANG_THAI,
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake,
-  buildNewSession, activateSession, closeSession, reopenSession, findActiveSession,
+  buildNewSession, activateSession, closeSession, reopenSession, findActiveSession, listOpenSessionsByLoaiKy,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
@@ -71,6 +71,31 @@ router.get('/sessions', async (req, res) => {
   }
 });
 
+// GET /sessions/open-depts?loaiKy=... (12/2026, MỚI — theo yêu cầu người dùng "chọn nhiều/tất cả siêu
+// thị lúc Tạo Kỳ Mới, siêu thị nào đã kiểm kê rồi thì không chọn lại được"): liệt kê CÁC SIÊU THỊ (toàn
+// công ty, không lọc theo freshUser.dept như GET /sessions ở trên) đang có kỳ CHƯA ĐÓNG (Nháp/Đang hoạt
+// động) của đúng loaiKy — client dùng để LOẠI những siêu thị này khỏi ô chọn nhiều. Gác đúng quyền
+// canManageStocktakePeriod (chỉ người tạo được kỳ mới cần biết danh sách này, không phải ai xem Tab 1
+// cũng cần) — cùng quyền với POST /sessions ngay dưới.
+router.get('/sessions/open-depts', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canManageStocktakePeriod(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Kỳ Kiểm Kê' });
+  }
+  const loaiKy = String(req.query.loaiKy || '').trim();
+  if (![LOAI_KY.GOM_MA, LOAI_KY.THONG_KE].includes(loaiKy)) {
+    return res.status(400).json({ error: 'Loại kỳ không hợp lệ (phải là Gom Mã hoặc Kiểm Kê)' });
+  }
+  try {
+    const all = (await getAppDataValue('stocktakeSessions')) || [];
+    const items = listOpenSessionsByLoaiKy(all, loaiKy)
+      .map(s => ({ dept: s.dept, tenKy: s.tenKy, trangThai: s.trangThai }));
+    res.json({ items });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/sessions/open-depts');
+  }
+});
+
 router.post('/sessions', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   if (!canManageStocktakePeriod(req.freshUser)) {
@@ -81,7 +106,7 @@ router.post('/sessions', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const newItem = await withLockedAppDataValue('stocktakeSessions', (list) => {
       const arr = Array.isArray(list) ? list : [];
-      const item = buildNewSession({ ...req.body, dept }, req.freshUser);
+      const item = buildNewSession({ ...req.body, dept }, req.freshUser, arr);
       arr.unshift(item);
       return arr;
     }).then(arr => arr[0]);
@@ -300,7 +325,7 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
   const sessions = (await getAppDataValue('stocktakeSessions')) || [];
   const activeSession = findActiveSession(sessions, loc.dept, requiredLoaiKyForMode(mode));
   if (!activeSession) {
-    throw new HttpError(409, `Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKyForMode(mode) === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Thống Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`);
+    throw new HttpError(409, `Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKyForMode(mode) === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Kiểm Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`);
   }
   if (activeSession.id !== sessionId) {
     throw new HttpError(409, 'Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang');
@@ -524,7 +549,7 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
       return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     if (session.loaiKy !== LOAI_KY.THONG_KE) {
-      return res.status(400).json({ error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Thống Kê' });
+      return res.status(400).json({ error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Kiểm Kê' });
     }
     await ensureStocktakeKey('stocktakeCounts');
     await ensureStocktakeKey('stocktakeShelfConfirmations');
