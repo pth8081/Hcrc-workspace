@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**30.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.40 (2026-11): "📋 Kiểm Kê" — sửa Tab 7 "📊 Báo Cáo" theo đúng nghiệp vụ: Kỳ Thống Kê KHÔNG còn trộn Gom Mã
+
+LỖI NGHIỆP VỤ THẬT phát hiện qua phản hồi người dùng sau khi xem demo v30.39: bản trước TỰ Ý trộn thêm
+cột "Gom Mã (tham khảo)" từ 1 Kỳ Gom Mã RIÊNG vào báo cáo của Kỳ Thống Kê đang xem — vi phạm đúng quy tắc
+"mỗi Kỳ có Báo Cáo riêng, độc lập, không cộng gộp số giữa 2 kỳ khác loại" (tài liệu đề xuất mục A3). Đã
+sửa lại đúng nghiệp vụ:
+
+- **Kỳ Thống Kê** giờ CHỈ so sánh Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH nó — bảng Chi Tiết + biểu
+  đồ cột tách riêng 2 cột "Kiểm Đếm" (SL gốc) và "Kiểm Soát" (SL ghi đè nếu có) thay vì gộp sẵn 1 cột
+  "Kiểm Đếm/Cuối Cùng" như trước — minh bạch hơn, vẫn giữ cột "SL Cuối Cùng" áp dụng đúng quy tắc A6.
+- **Kỳ Gom Mã** tự xem báo cáo của chính nó — không đổi (vốn đã độc lập, không bị ảnh hưởng).
+- Thêm tính năng mới **"📊 So Sánh Với Kỳ Khác"** (tuỳ chọn) — bộ chọn riêng, người dùng TỰ CHỌN 1 Kỳ bất
+  kỳ khác (kể cả khác loại, VD Gom Mã) để so sánh với Kỳ đang xem, hiện thành 1 khung biểu đồ RIÊNG hoàn
+  toàn tách biệt khỏi báo cáo chính — đúng đáp ứng "nếu so sánh giữa các kỳ với nhau thì mới có phần Gom
+  Mã... phải có thêm option để lựa chọn so sánh". Route `GET /report` nhận thêm tham số `compareSessionId`
+  (kiểm tra quyền xem độc lập với kỳ chính), Xuất Excel thêm sheet "So Sánh Kỳ" khi tính năng này được bật.
+- Thêm 2 màu CVD-safe mới (tím/hổ phách) riêng cho biểu đồ So Sánh, không tái dùng ý nghĩa 3 màu
+  Tồn Kho/Kiểm Đếm/Kiểm Soát đã cố định — tránh gây hiểu nhầm màu giữa 2 biểu đồ trên cùng màn hình.
+- Vá thêm 1 lỗi hiển thị phát hiện lúc build lại demo: legend biểu đồ dùng khoảng cách CỐ ĐỊNH 160px/mục
+  nên 2 nhãn dài (tên đầy đủ của Kỳ ở biểu đồ So Sánh) bị CHỒNG CHỮ lên nhau — nay tính độ rộng legend
+  theo ký tự thật, tự xuống dòng khi cần.
+- Cập nhật `test-stocktake-tab7-report.js` (+7 kịch bản mới cho so sánh kỳ), `test-stocktake-tab7-report-
+  ui.js` (+1 kịch bản UI thật), `demo-kiemke-full-8-tabs.js`.
 
 ## v30.39 (2026-11): "📋 Kiểm Kê" — Tab 7 "📊 Báo Cáo" (hoàn tất đủ 8/8 tab)
 

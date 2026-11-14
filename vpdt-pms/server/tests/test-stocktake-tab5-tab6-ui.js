@@ -138,18 +138,21 @@ async function main() {
       assert(btnDisabled, 'Còn A2 chưa xác nhận -> nút Toàn Bộ Đợt vẫn phải khoá');
     });
 
-    await run.run('Tab 6: quầy kệ A1 đã Xác Nhận -> sang Tab 3 Kiểm Đếm TIẾP trên A1 bị chặn rõ ràng', async () => {
+    await run.run('Tab 6: quầy kệ A1 đã Xác Nhận -> sang Tab 3 Kiểm Đếm TIẾP trên A1 bị chặn rõ ràng NGAY lúc chọn (không đợi quét/submit mới biết)', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
       await page.selectOption('#kkKiemDemShelfSelect', '10');
-      await page.waitForTimeout(150);
-      page.once('dialog', (d) => d.accept());
-      await page.fill('#kkKiemDemBarcodeInput', 'SP001');
-      await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
       await page.waitForTimeout(200);
-      // alert() đã được tự accept ở trên — xác nhận KHÔNG cộng dồn thêm (vẫn còn đúng 1 dòng, SL không đổi).
+      // LỖI UX THẬT phát hiện qua audit chéo (11/2026) đã vá: trước đây ô quét vẫn MỞ bình thường, chỉ
+      // chặn SAU KHI gõ mã + bấm "Thêm" (ăn alert 409) — nay route active-session-for-shelf trả kèm
+      // `shelfConfirmed`, ô quét KHOÁ NGAY lúc chọn quầy kệ, không cần quét thử mới biết.
+      const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
+      assert(/ĐÃ được Xác Nhận/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
+      const scanBoxHidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
+      assert(scanBoxHidden, 'Ô quét phải KHOÁ (ẩn) ngay khi chọn quầy kệ đã Xác Nhận, không mở rồi mới chặn ở bước submit');
+      // Vẫn XEM được danh sách đã quét trước đó (tham khảo) — chỉ khoá Ô QUÉT, không ẩn trắng dữ liệu cũ.
       const rowCount = await page.evaluate(() => document.querySelectorAll('#kkKiemDemListBody tbody tr').length);
-      assertEqual(rowCount, 1, `Quét bị chặn -> KHÔNG được tạo/cộng dồn thêm dòng nào, thực tế: ${rowCount} dòng`);
+      assertEqual(rowCount, 1, `Quầy kệ đã khoá vẫn phải XEM được đúng 1 dòng đã quét trước đó (tham khảo), thực tế: ${rowCount} dòng`);
     });
 
     await run.run('Tab 4 Kiểm Soát: quầy kệ A1 (đã Xác Nhận Kiểm Đếm) VẪN Kiểm Soát được bình thường', async () => {

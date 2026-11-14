@@ -19,7 +19,7 @@ const {
   buildNewSession, activateSession, closeSession, reopenSession, findActiveSession,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
-  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
+  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
@@ -252,7 +252,21 @@ router.get('/active-session-for-shelf', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const sessions = (await getAppDataValue('stocktakeSessions')) || [];
     const activeSession = findActiveSession(sessions, loc.dept, requiredLoaiKyForMode(mode));
-    res.json({ session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+    // LỖI UX THẬT phát hiện qua audit chéo (11/2026): route này (quyết định MỞ/KHOÁ ô quét ngay lúc chọn
+    // quầy kệ) trước đây KHÔNG kiểm tra Lớp 4 (quầy kệ đã Xác Nhận ở Tab 6) — chỉ assertStocktakeScanAllowed()
+    // dùng cho scan/edit/delete mới kiểm tra lớp này. Hậu quả: chọn lại 1 quầy kệ ĐÃ Xác Nhận ở Tab 3 Kiểm
+    // Đếm vẫn hiện "Kỳ đang hoạt động" + MỞ ô quét bình thường — người dùng chỉ biết bị chặn SAU KHI gõ/
+    // quét mã và bấm "Thêm" (lỗi 409 ở POST /counts/scan). Không mất dữ liệu (server vẫn chặn đúng ở bước
+    // ghi), nhưng đúng kiểu "giao diện cho phép thao tác nhưng bấm xong mới biết không được việc" — trả
+    // thêm `shelfConfirmed` để client khoá/báo ngay lúc chọn quầy kệ, không đợi tới lúc quét. CHỈ áp dụng
+    // mode KIEM_DEM (đúng Lớp 4 gốc — Xác Nhận không khoá Gom Mã/Kiểm Soát).
+    let shelfConfirmed = false;
+    if (mode === 'KIEM_DEM' && activeSession) {
+      await ensureStocktakeKey('stocktakeShelfConfirmations');
+      const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+      shelfConfirmed = isShelfConfirmed(confirmations, activeSession.id, shelfLocationId);
+    }
+    res.json({ session: activeSession || null, shelfConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
   }
@@ -316,6 +330,26 @@ router.get('/counts', async (req, res) => {
     const sessionId = Number(req.query.sessionId);
     if (!Number.isFinite(sessionId)) {
       return res.status(400).json({ error: 'Thiếu sessionId' });
+    }
+    // LỖI THẬT phát hiện qua audit chéo (11/2026): route này trước đây CHỈ kiểm tra "có quyền module Kiểm
+    // Kê" (gần như mọi user đăng nhập) rồi trả thẳng toàn bộ dòng theo sessionId — KHÔNG xác nhận kỳ đó có
+    // THUỘC phạm vi người gọi được xem hay không, khác hẳn mọi route ghi khác đã tự tra lại dept thật qua
+    // findShelfLocationOrThrow(). Vì sessionId sinh từ Date.now() (đoán/liệt kê được), bất kỳ user đăng
+    // nhập nào cũng dò được số liệu Kiểm Đếm/Kiểm Soát của siêu thị KHÁC. Vá bằng: admin bypass, HOẶC
+    // đúng dept hồ sơ (home dept) của người gọi, HOẶC người gọi có BẤT KỲ dòng allowlist Tab 8 nào tại
+    // ĐÚNG siêu thị của kỳ đó (userHasAnyStocktakeAccessToDept) — nhánh thứ 3 này BẮT BUỘC phải có, vì
+    // route này được Tab 2/3/4 gọi cho "Giám Sát Vùng" (user được gán allowlist thao tác ở siêu thị KHÁC
+    // dept hồ sơ của chính họ, xem tài liệu đề xuất mục B1) — nếu chỉ so sánh session.dept === user.dept
+    // suông sẽ chặn NHẦM chính luồng hợp lệ này.
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
     }
     const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
     await ensureStocktakeKey('stocktakeCounts');
@@ -407,6 +441,19 @@ router.get('/shelf-confirmations', async (req, res) => {
   try {
     const sessionId = Number(req.query.sessionId);
     if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    // Cùng lỗi + cách vá như GET /counts ở trên (audit chéo 11/2026) — tự tra lại dept thật của kỳ, không
+    // tin sessionId suông (đoán/liệt kê được vì sinh từ Date.now()); vẫn phải cho qua nhánh "Giám Sát
+    // Vùng" (allowlist ở siêu thị khác dept hồ sơ) như GET /counts, không so sánh dept suông.
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
     await ensureStocktakeKey('stocktakeShelfConfirmations');
     const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
     res.json({ items: all.filter(c => c.sessionId === sessionId) });
@@ -541,15 +588,47 @@ function sumCountsByMaHang(counts, sessionId, valueFn) {
   return map;
 }
 
-// Kỳ Gom Mã "tham khảo" đi kèm 1 kỳ Thống Kê đang xem ở Báo Cáo (A7 — cột "Gom Mã (tham khảo)") — ưu
-// tiên kỳ Gom Mã ĐANG hoạt động của CÙNG siêu thị, không còn thì lấy kỳ Gom Mã gần nhất (id lớn nhất).
-// Không có kỳ Gom Mã nào thì cột này để trống — KHÔNG báo lỗi (Gom Mã là bước TUỲ CHỌN).
-function findCompanionGomMaSession(sessions, dept) {
-  const candidates = (Array.isArray(sessions) ? sessions : []).filter(s => s.dept === dept && s.loaiKy === LOAI_KY.GOM_MA);
-  if (!candidates.length) return null;
-  const active = candidates.find(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG);
-  if (active) return active;
-  return candidates.reduce((latest, s) => (!latest || s.id > latest.id) ? s : latest, null);
+// Mỗi Kỳ (dù loại nào) có Báo Cáo RIÊNG, ĐỘC LẬP — tài liệu đề xuất mục A3 điểm 65: "không cộng gộp số
+// giữa 2 kỳ khác loại". SỬA (11/2026, theo đúng phản hồi người dùng): bản trước đó TỰ ý gộp thêm cột
+// "Gom Mã (tham khảo)" từ 1 kỳ Gom Mã RIÊNG vào báo cáo của kỳ Thống Kê đang xem — VI PHẠM đúng quy tắc
+// "độc lập" này. Kỳ Thống Kê giờ CHỈ so sánh Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH nó (không đụng
+// gì tới Gom Mã). Muốn so sánh Gom Mã với Thống Kê (hay so sánh 2 kỳ bất kỳ khác nhau) thì dùng tham số
+// `compareSessionId` riêng (xem computeSessionPrimaryRows()) — người dùng tự CHỌN kỳ muốn so sánh, không
+// tự động trộn ngầm.
+function computeSessionPrimaryRows(session, allCounts) {
+  if (session.loaiKy === LOAI_KY.THONG_KE) {
+    const kiemDemMap = sumCountsByMaHang(allCounts, session.id, c => Number(c.slKiemDem) || 0);
+    const kiemSoatMap = sumCountsByMaHang(allCounts, session.id, c => (typeof c.slKiemSoat === 'number' ? c.slKiemSoat : 0));
+    const hasKiemSoatMap = new Map();
+    allCounts.forEach(c => { if (c.sessionId === session.id && c.maHang && typeof c.slKiemSoat === 'number') hasKiemSoatMap.set(String(c.maHang), true); });
+    const finalMap = sumCountsByMaHang(allCounts, session.id, c => finalCountQty(c));
+    const maHangSet = new Set([...kiemDemMap.keys(), ...kiemSoatMap.keys()]);
+    const rows = [...maHangSet].map(maHang => {
+      const kd = kiemDemMap.get(maHang), ks = kiemSoatMap.get(maHang), fin = finalMap.get(maHang);
+      return {
+        maHang, tenHang: (kd && kd.tenHang) || (ks && ks.tenHang) || '',
+        kiemDemQty: kd ? kd.total : 0,
+        kiemSoatQty: hasKiemSoatMap.get(maHang) ? (ks ? ks.total : 0) : null,
+        finalQty: fin ? fin.total : 0
+      };
+    });
+    return { rows, finalMap };
+  }
+  // Kỳ Gom Mã tự xem báo cáo của chính nó: không có Kiểm Đếm/Kiểm Soát.
+  const gomMaMap = sumCountsByMaHang(allCounts, session.id, c => Number(c.slGomMa) || 0);
+  const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, finalQty: v.total }));
+  return { rows, finalMap: gomMaMap };
+}
+
+// Quyền xem 1 session CỤ THỂ (dùng chung cho cả sessionId chính lẫn compareSessionId) — ĐÚNG khuôn đã có:
+// admin, hoặc đúng dept hồ sơ, hoặc có allowlist Tab 8 tại dept của session đó.
+async function assertCanViewSession(req, session) {
+  if (req.freshUser.perms?.admin || session.dept === req.freshUser.dept) return;
+  await ensureStocktakeKey('stocktakeUserAccess');
+  const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+  if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+    throw new HttpError(403, 'Kỳ kiểm kê không thuộc siêu thị của bạn');
+  }
 }
 
 router.get('/report', async (req, res) => {
@@ -564,9 +643,7 @@ router.get('/report', async (req, res) => {
     const sessions = (await getAppDataValue('stocktakeSessions')) || [];
     const session = sessions.find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-    }
+    await assertCanViewSession(req, session);
 
     const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
     const apiConfigured = await isInventoryApiConfigured();
@@ -577,35 +654,39 @@ router.get('/report', async (req, res) => {
 
     const systemMap = apiConfigured ? await getDeptSystemInventoryMap(session.dept, storeExternalCodes) : null;
 
-    // Kỳ Thống Kê: cột chính "finalMap" = Kiểm Đếm/Kiểm Soát (A6), kèm Gom Mã tham khảo từ kỳ Gom Mã
-    // riêng cùng siêu thị. Kỳ Gom Mã tự xem báo cáo của chính nó: không có Kiểm Đếm/Kiểm Soát, dùng
-    // luôn slGomMa của CHÍNH kỳ này làm "finalMap" — tránh phải tách 2 nhánh render khác nhau ở client.
-    let gomMaSession = null, gomMaMap = new Map(), finalMap;
-    if (session.loaiKy === LOAI_KY.THONG_KE) {
-      gomMaSession = findCompanionGomMaSession(sessions, session.dept);
-      if (gomMaSession) gomMaMap = sumCountsByMaHang(allCounts, gomMaSession.id, c => Number(c.slGomMa) || 0);
-      finalMap = sumCountsByMaHang(allCounts, sessionId, c => finalCountQty(c));
-    } else {
-      finalMap = sumCountsByMaHang(allCounts, sessionId, c => Number(c.slGomMa) || 0);
-    }
-
-    const maHangSet = new Set([...finalMap.keys(), ...gomMaMap.keys()]);
+    const { rows: baseRows, finalMap } = computeSessionPrimaryRows(session, allCounts);
+    const maHangSet = new Set(baseRows.map(r => r.maHang));
     if (systemMap) systemMap.forEach((_, k) => maHangSet.add(k));
+    const baseByMaHang = new Map(baseRows.map(r => [r.maHang, r]));
     const rows = [...maHangSet].map(maHang => {
-      const finalEntry = finalMap.get(maHang);
-      const gomMaEntry = gomMaMap.get(maHang);
+      const base = baseByMaHang.get(maHang);
       const sysEntry = systemMap ? systemMap.get(maHang) : null;
-      const tenHang = (finalEntry && finalEntry.tenHang) || (gomMaEntry && gomMaEntry.tenHang) || (sysEntry && sysEntry.tenHang) || '';
       return {
-        maHang, tenHang,
+        maHang, tenHang: (base && base.tenHang) || (sysEntry && sysEntry.tenHang) || '',
         systemQty: sysEntry ? sysEntry.soLuongTon : null,
-        gomMaQty: gomMaEntry ? gomMaEntry.total : null,
-        finalQty: finalEntry ? finalEntry.total : 0
+        kiemDemQty: base ? base.kiemDemQty : undefined,
+        kiemSoatQty: base ? base.kiemSoatQty : undefined,
+        finalQty: base ? base.finalQty : 0
       };
     }).sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
 
     const totalSystemSkuCount = systemMap ? systemMap.size : null;
     const countedSkuCount = [...finalMap.values()].filter(v => v.total > 0).length;
+
+    // So sánh GIỮA 2 KỲ bất kỳ (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với
+    // nhau ấy, thì mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh") — người
+    // dùng TỰ CHỌN kỳ thứ 2 muốn so sánh (bất kỳ loại nào, kể cả Gom Mã), KHÔNG tự động trộn ngầm như
+    // trước. Mỗi kỳ vẫn qua ĐÚNG 1 lớp kiểm tra quyền xem (assertCanViewSession) độc lập.
+    let compare;
+    const compareSessionId = req.query.compareSessionId !== undefined ? Number(req.query.compareSessionId) : null;
+    if (compareSessionId !== null) {
+      if (!Number.isFinite(compareSessionId)) return res.status(400).json({ error: 'compareSessionId không hợp lệ' });
+      const compareSession = sessions.find(s => s.id === compareSessionId);
+      if (!compareSession) return res.status(404).json({ error: 'Không tìm thấy kỳ để so sánh' });
+      await assertCanViewSession(req, compareSession);
+      const { rows: compareRows } = computeSessionPrimaryRows(compareSession, allCounts);
+      compare = { session: compareSession, rows: compareRows };
+    }
 
     // So sánh nhiều siêu thị (A7, biểu đồ 3) — CHỈ Admin (tài liệu đề xuất A3: "Chưa có khái niệm xem
     // chéo nhiều siêu thị cho Kiểm Kê ở Phase 1" với không-Admin). Độc lập với kỳ đang chọn ở trên — mỗi
@@ -639,8 +720,7 @@ router.get('/report', async (req, res) => {
     }
 
     res.json({
-      session,
-      gomMaSession: gomMaSession ? { id: gomMaSession.id, tenKy: gomMaSession.tenKy, trangThai: gomMaSession.trangThai } : null,
+      session, compare,
       systemConfigured: apiConfigured, rows, totalSystemSkuCount, countedSkuCount, storeComparison
     });
   } catch (err) {

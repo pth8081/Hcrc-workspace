@@ -3710,19 +3710,26 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
   đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
   nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
-- **Tab 7 "📊 Báo Cáo" (11/2026)**: chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn
-  (liệt kê mọi Kỳ Gom Mã/Thống Kê, kể cả đã chốt) → 4 thẻ tổng hợp + biểu đồ
-  cột so sánh theo mã hàng (Tồn Kho Hệ Thống/Gom Mã tham khảo/Kiểm Đếm-Cuối
-  Cùng, Top 12 lệch nhiều nhất — bảng Chi Tiết dưới cùng liệt kê ĐẦY ĐỦ mọi
-  mã) + biểu đồ donut tiến độ + nút "📊 Xuất Excel" (tái dùng route xuất
-  Excel dùng chung). Màu biểu đồ CỐ ĐỊNH xuyên suốt: Tồn Kho Hệ Thống xanh
-  dương, Gom Mã cam, Kiểm Đếm/Cuối Cùng xanh ngọc (đã kiểm tra an toàn người
-  mù màu). Chọn 1 Kỳ Gom Mã thì không có cột Kiểm Đếm/Kiểm Soát, dùng SL Gom
-  Mã của chính kỳ đó làm giá trị chính. **Phạm vi xem**: không-Admin chỉ xem
-  đúng siêu thị mình; Admin xem được mọi siêu thị VÀ thấy thêm khung "So
-  Sánh Giữa Các Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Thống Kê gần nhất của
-  chính nó, không phụ thuộc Kỳ đang chọn) — Xuất Excel lúc này ra 2 sheet
-  (Chi Tiết + So Sánh Siêu Thị), không-Admin chỉ 1 sheet.
+- **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
+  chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Thống Kê, kể cả
+  đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều
+  nhất — bảng Chi Tiết dưới cùng liệt kê ĐẦY ĐỦ mọi mã) + biểu đồ donut
+  tiến độ + nút "📊 Xuất Excel". **Mỗi Kỳ có báo cáo RIÊNG, ĐỘC LẬP — không
+  còn tự trộn Gom Mã của 1 Kỳ khác vào báo cáo Kỳ Thống Kê như bản trước**
+  (lỗi nghiệp vụ thật đã sửa): chọn 1 Kỳ Thống Kê thì CHỈ so Tồn Kho Hệ
+  Thống/Kiểm Đếm (SL gốc)/Kiểm Soát (SL ghi đè nếu có)/SL Cuối Cùng của
+  CHÍNH kỳ đó; chọn 1 Kỳ Gom Mã thì chỉ có 2 cột Tồn Kho Hệ Thống/SL Gom Mã.
+  Màu biểu đồ CỐ ĐỊNH: Tồn Kho Hệ Thống xanh dương, Kiểm Đếm cam, Kiểm Soát/
+  Cuối Cùng xanh ngọc (đã kiểm tra an toàn người mù màu).
+  **Muốn so sánh 2 Kỳ bất kỳ với nhau (VD Gom Mã với Thống Kê, hay 2 Kỳ
+  Thống Kê khác đợt) — tính năng MỚI**: dùng riêng khung "📊 So Sánh Với Kỳ
+  Khác" (mặc định ẩn, người dùng TỰ chọn Kỳ thứ 2 ở dropdown riêng) → hiện 1
+  biểu đồ so sánh RIÊNG (màu tím/hổ phách, tách biệt khỏi báo cáo chính) —
+  bấm Xuất Excel lúc này có thêm sheet "So Sánh Kỳ". **Phạm vi xem**:
+  không-Admin chỉ xem đúng siêu thị mình (áp dụng cho CẢ Kỳ chính lẫn Kỳ so
+  sánh); Admin xem được mọi siêu thị VÀ thấy thêm khung "So Sánh Giữa Các
+  Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Thống Kê gần nhất của chính nó, không
+  phụ thuộc Kỳ đang chọn) — Xuất Excel lúc này thêm sheet "So Sánh Siêu Thị".
 
 ### 4.5. Nhân Sự
 

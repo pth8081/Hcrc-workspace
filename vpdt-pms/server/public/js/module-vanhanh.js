@@ -661,6 +661,16 @@ async function onKkScanShelfChanged(tabKey) {
       renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
       return;
     }
+    // LỖI UX THẬT phát hiện qua audit chéo (11/2026): trước đây chỉ biết quầy kệ ĐÃ Xác Nhận (Lớp 4,
+    // Tab 6) khi bấm "Thêm" thật và nhận lỗi 409 — nay server trả kèm `shelfConfirmed` ngay lúc chọn quầy
+    // kệ, khoá/báo rõ NGAY thay vì mở ô quét cho người dùng quét xong mới biết không được việc.
+    if (body.shelfConfirmed) {
+      // Vẫn tải lại danh sách đã quét trước đó để quản lý XEM được (tham khảo), chỉ khoá Ô QUÉT (không quét
+      // thêm được) — không phải ẩn trắng toàn bộ nội dung đã có.
+      await loadKkScanCounts(tabKey);
+      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận ở tab "✅ Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa).`);
+      return;
+    }
     if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
     renderKkScanBoxUnlocked(tabKey);
     await loadKkScanCounts(tabKey);
@@ -974,18 +984,25 @@ async function submitKkConfirmAll() {
   await enterKkConfirmTab();
 }
 
-// ===== Tab 7 "📊 Báo Cáo" (11/2026, tài liệu đề xuất mục A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn, không
-// gộp số liệu nhiều kỳ. 3 màu CỐ ĐỊNH xuyên suốt mọi biểu đồ (đã kiểm tra an toàn người mù màu — CVD ΔE
-// 13.8/protan, 28.8/normal, xem dataviz skill validate_palette.js): Tồn Kho Hệ Thống=xanh dương, Gom
-// Mã=cam, Kiểm Đếm/Cuối Cùng=xanh ngọc. Biểu đồ 3 "So Sánh Siêu Thị" CHỈ Admin (server chỉ trả
-// storeComparison cho Admin — xem routes/stocktake.js GET /report, Phase 1 chưa có "xem chéo nhiều siêu
-// thị" cho người không-Admin).
-const KK_REPORT_COLOR_SYSTEM = '#2563eb', KK_REPORT_COLOR_GOMMA = '#ea580c', KK_REPORT_COLOR_FINAL = '#0d9488';
+// ===== Tab 7 "📊 Báo Cáo" (11/2026, tài liệu đề xuất mục A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn, KHÔNG
+// gộp số liệu nhiều kỳ/nhiều loại kỳ (SỬA 11/2026 theo phản hồi người dùng: bản trước tự ý trộn thêm cột
+// "Gom Mã (tham khảo)" từ 1 kỳ Gom Mã RIÊNG vào báo cáo kỳ Thống Kê — VI PHẠM đúng quy tắc "mỗi kỳ có
+// Báo Cáo riêng, độc lập" của tài liệu đề xuất A3 điểm 65. Kỳ Thống Kê giờ CHỈ so sánh Tồn Kho Hệ Thống/
+// Kiểm Đếm/Kiểm Soát của CHÍNH nó). Muốn so sánh 2 kỳ bất kỳ (VD Gom Mã vs Thống Kê, hay 2 kỳ Thống Kê
+// khác đợt) dùng riêng bộ chọn "📊 So Sánh Với Kỳ Khác" (renderKkReportCompareChart()) — người dùng TỰ
+// CHỌN, không tự động trộn ngầm. 5 màu CVD-safe CỐ ĐỊNH xuyên suốt (đã kiểm tra qua dataviz skill
+// validate_palette.js): Tồn Kho Hệ Thống=xanh dương, Kiểm Đếm=cam, Kiểm Soát/Cuối Cùng=xanh ngọc, Kỳ A/
+// Kỳ B (so sánh)=tím/hổ phách. Biểu đồ "So Sánh Siêu Thị" CHỈ Admin (server chỉ trả storeComparison cho
+// Admin — xem routes/stocktake.js GET /report, Phase 1 chưa có "xem chéo nhiều siêu thị" cho không-Admin).
+const KK_REPORT_COLOR_SYSTEM = '#2563eb', KK_REPORT_COLOR_KIEMDEM = '#ea580c', KK_REPORT_COLOR_FINAL = '#0d9488';
+const KK_REPORT_COLOR_COMPARE_A = '#7c3aed', KK_REPORT_COLOR_COMPARE_B = '#b45309';
 let kkReportSessionId = null;
-let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/3 biểu đồ/Xuất Excel
+let kkReportCompareSessionId = null;
+let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/biểu đồ/Xuất Excel
 
 async function enterKkReportTab() {
   kkReportSessionId = null;
+  kkReportCompareSessionId = null;
   kkReportData = null;
   const row = document.getElementById('kkReportDeptRow');
   const dept = kkEffectiveDept();
@@ -994,6 +1011,7 @@ async function enterKkReportTab() {
       (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
   }
   const sel = document.getElementById('kkReportSessionSelect');
+  const compareSel = document.getElementById('kkReportCompareSelect');
   try {
     const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
     const res = await fetch(url);
@@ -1001,11 +1019,18 @@ async function enterKkReportTab() {
     const body = await res.json().catch(() => ({}));
     const sessions = res.ok ? (body.items || []) : [];
     sessions.sort((a, b) => b.id - a.id);
+    const optionLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})`;
     if (sel) {
       sel.innerHTML = '<option value="">-- Chọn kỳ để xem báo cáo --</option>' +
-        sessions.map(s => `<option value="${s.id}">${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})</option>`).join('');
+        sessions.map(s => `<option value="${s.id}">${optionLabel(s)}</option>`).join('');
       const activeThongKe = sessions.find(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
       if (activeThongKe) sel.value = String(activeThongKe.id);
+    }
+    // "So Sánh Với Kỳ Khác" (tuỳ chọn) — liệt kê MỌI kỳ (kể cả khác loại), KHÔNG tự chọn mặc định (so
+    // sánh là hành động người dùng CHỦ ĐỘNG bật, không phải trạng thái ngầm định).
+    if (compareSel) {
+      compareSel.innerHTML = '<option value="">-- Không so sánh (mặc định) --</option>' +
+        sessions.map(s => `<option value="${s.id}">${optionLabel(s)}</option>`).join('');
     }
   } catch (err) {
     if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
@@ -1016,10 +1041,13 @@ const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt độ
 
 async function loadKkReportTab() {
   const sel = document.getElementById('kkReportSessionSelect');
+  const compareSel = document.getElementById('kkReportCompareSelect');
   const sessionId = Number(sel?.value || 0);
+  const compareSessionId = Number(compareSel?.value || 0);
   const emptyNote = document.getElementById('kkReportEmptyNote');
   const bodyWrap = document.getElementById('kkReportBody');
   kkReportSessionId = sessionId || null;
+  kkReportCompareSessionId = compareSessionId || null;
   kkReportData = null;
   if (!sessionId) {
     if (bodyWrap) bodyWrap.classList.add('hidden');
@@ -1027,7 +1055,8 @@ async function loadKkReportTab() {
     return;
   }
   try {
-    const res = await fetch(`/api/stocktake/report?sessionId=${sessionId}`);
+    const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionId ? `&compareSessionId=${compareSessionId}` : '');
+    const res = await fetch(url);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -1050,6 +1079,7 @@ async function loadKkReportTab() {
   renderKkReportChart1();
   renderKkReportChart2();
   renderKkReportChart3();
+  renderKkReportCompareChart();
   renderKkReportTable('');
 }
 
@@ -1083,20 +1113,38 @@ function kkReportTruncateLabel(label, maxLen) {
   return label.length > maxLen ? label.slice(0, maxLen - 1) + '…' : label;
 }
 
+// Xếp legend THEO ĐỘ RỘNG THẬT ước lượng (không dùng khoảng cách cố định 160px/mục) — tự XUỐNG DÒNG khi
+// nhãn dài (VD tên Kỳ đầy đủ ở biểu đồ So Sánh Với Kỳ Khác) để không bị CHỒNG CHỮ lên nhau (lỗi thật phát
+// hiện lúc build demo: 2 nhãn dài "🔢 Thống Kê — ..." + "📷 Gom Mã — ..." đè lên nhau ở khoảng cách cũ).
+function kkReportLegendLayout(legendEntries, startX, availW) {
+  const estCharW = 6.3, itemGap = 20, rowH = 18;
+  let x = startX, row = 0;
+  const html = legendEntries.map(e => {
+    const itemW = 10 + 4 + e.label.length * estCharW + itemGap;
+    if (x > startX && x + itemW > startX + availW) { x = startX; row += 1; }
+    const y = 4 + row * rowH;
+    const piece = `<rect x="${x}" y="${y}" width="10" height="10" fill="${e.color}" rx="2"></rect>
+      <text x="${x + 14}" y="${y + 9}" fill="currentColor">${escapeHtml(e.label)}</text>`;
+    x += itemW;
+    return piece;
+  }).join('');
+  return { html, rows: row + 1 };
+}
+
 function kkReportHBarChartSvg(items, legendEntries) {
   if (!items.length) return '<p class="text-gray-400 text-sm">Không có dữ liệu để vẽ biểu đồ.</p>';
   const maxVal = Math.max(1, ...items.flatMap(it => it.values.map(v => v.value === null ? 0 : Number(v.value) || 0)));
-  const rowH = 20, groupGap = 10, barGap = 2, leftW = 230, chartW = 380, topPad = 26;
+  const rowH = 20, groupGap = 10, barGap = 2, leftW = 230, chartW = 380;
+  const totalW = leftW + chartW + 50;
+  const legend = kkReportLegendLayout(legendEntries, leftW, totalW - leftW);
+  const topPad = 8 + legend.rows * 18 + 8;
   const barsPerGroup = items[0].values.length;
   const groupH = rowH * barsPerGroup + groupGap;
   const totalH = topPad + items.length * groupH;
-  const totalW = leftW + chartW + 50;
   const scale = (v) => (Math.max(0, Number(v) || 0) / maxVal) * chartW;
   let svg = `<svg viewBox="0 0 ${totalW} ${totalH}" class="w-full" data-style="max-width:${totalW}px" role="img" aria-label="Biểu đồ cột so sánh">`;
   svg += `<g font-family="inherit" font-size="11">`;
-  // Legend.
-  svg += legendEntries.map((e, i) => `<rect x="${leftW + i * 160}" y="4" width="10" height="10" fill="${e.color}" rx="2"></rect>
-    <text x="${leftW + i * 160 + 14}" y="13" fill="currentColor">${escapeHtml(e.label)}</text>`).join('');
+  svg += legend.html;
   items.forEach((it, gi) => {
     const groupY = topPad + gi * groupH;
     svg += `<text x="${leftW - 8}" y="${groupY + (groupH - groupGap) / 2 + 4}" text-anchor="end" fill="currentColor">${escapeHtml(it.label)}</text>`;
@@ -1112,15 +1160,16 @@ function kkReportHBarChartSvg(items, legendEntries) {
   return svg;
 }
 
-// Chart 1 (A7 biểu đồ 1): Tồn Kho Hệ Thống/Gom Mã/Kiểm Đếm-Cuối Cùng theo mã hàng — giới hạn TOP 12 mã
-// lệch nhiều nhất so Tồn Kho Hệ Thống (hoặc SL cao nhất nếu chưa có Tồn Kho Hệ Thống để so) để biểu đồ
-// không bị quá dài — bảng Chi Tiết bên dưới vẫn liệt kê ĐẦY ĐỦ mọi mã hàng.
+// Chart 1 (A7 biểu đồ 1): Kỳ Thống Kê so sánh Tồn Kho Hệ Thống/Kiểm Đếm/Kiểm Soát của CHÍNH nó (KHÔNG
+// Gom Mã — xem chú thích đầu khối Tab 7 phía trên); Kỳ Gom Mã so Tồn Kho Hệ Thống/Gom Mã của chính nó.
+// Giới hạn TOP 12 mã lệch nhiều nhất so Tồn Kho Hệ Thống để biểu đồ không bị quá dài — bảng Chi Tiết bên
+// dưới vẫn liệt kê ĐẦY ĐỦ mọi mã hàng.
 function renderKkReportChart1() {
   const el = document.getElementById('kkReportChart1');
   const titleEl = document.getElementById('kkReportChart1Title');
   if (!el || !kkReportData) return;
   const isGomMa = kkReportIsGomMaKy();
-  if (titleEl) titleEl.textContent = isGomMa ? 'Tồn Kho Hệ Thống vs Gom Mã (Top 12 lệch nhiều nhất)' : 'Tồn Kho Hệ Thống vs Gom Mã (tham khảo) vs Kiểm Đếm/Cuối Cùng (Top 12 lệch nhiều nhất)';
+  if (titleEl) titleEl.textContent = isGomMa ? 'Tồn Kho Hệ Thống vs Gom Mã (Top 12 lệch nhiều nhất)' : 'Tồn Kho Hệ Thống vs Kiểm Đếm vs Kiểm Soát (Top 12 lệch nhiều nhất)';
   const rows = (kkReportData.rows || []).slice();
   rows.sort((a, b) => {
     const da = a.systemQty === null ? a.finalQty : Math.abs(a.finalQty - a.systemQty);
@@ -1129,14 +1178,21 @@ function renderKkReportChart1() {
   });
   const top = rows.slice(0, 12);
   const legendEntries = [{ label: 'Tồn Kho Hệ Thống', color: KK_REPORT_COLOR_SYSTEM }];
-  if (!isGomMa) legendEntries.push({ label: 'Gom Mã (tham khảo)', color: KK_REPORT_COLOR_GOMMA });
-  legendEntries.push({ label: isGomMa ? 'Gom Mã' : 'Kiểm Đếm/Cuối Cùng', color: KK_REPORT_COLOR_FINAL });
+  if (isGomMa) {
+    legendEntries.push({ label: 'Gom Mã', color: KK_REPORT_COLOR_KIEMDEM });
+  } else {
+    legendEntries.push({ label: 'Kiểm Đếm', color: KK_REPORT_COLOR_KIEMDEM });
+    legendEntries.push({ label: 'Kiểm Soát', color: KK_REPORT_COLOR_FINAL });
+  }
   const items = top.map(r => ({
     label: kkReportTruncateLabel(`${r.maHang}${r.tenHang ? ' — ' + r.tenHang : ''}`, 34),
-    values: [
+    values: isGomMa ? [
       { value: r.systemQty, color: KK_REPORT_COLOR_SYSTEM },
-      ...(isGomMa ? [] : [{ value: r.gomMaQty, color: KK_REPORT_COLOR_GOMMA }]),
-      { value: r.finalQty, color: KK_REPORT_COLOR_FINAL }
+      { value: r.finalQty, color: KK_REPORT_COLOR_KIEMDEM }
+    ] : [
+      { value: r.systemQty, color: KK_REPORT_COLOR_SYSTEM },
+      { value: r.kiemDemQty, color: KK_REPORT_COLOR_KIEMDEM },
+      { value: r.kiemSoatQty, color: KK_REPORT_COLOR_FINAL }
     ]
   }));
   el.innerHTML = kkReportHBarChartSvg(items, legendEntries);
@@ -1192,6 +1248,56 @@ function renderKkReportChart3() {
   ]);
 }
 
+// Hợp nhất 2 kỳ bất kỳ theo mã hàng (dùng chung cho biểu đồ So Sánh + sheet Excel "So Sánh Kỳ") — lấy
+// `finalQty` của MỖI kỳ làm giá trị chính (Kiểm Đếm/Cuối Cùng cho kỳ Thống Kê, SL Gom Mã cho kỳ Gom Mã),
+// hợp nhất ĐỦ mã hàng của CẢ 2 kỳ (không chỉ đúng kỳ đang xem chính) để không bỏ sót mã chỉ có ở kỳ kia.
+function kkReportMergeCompareRows() {
+  const compare = kkReportData && kkReportData.compare;
+  if (!compare) return [];
+  const mapA = new Map((kkReportData.rows || []).map(r => [r.maHang, r]));
+  const mapB = new Map((compare.rows || []).map(r => [r.maHang, r]));
+  const maHangSet = new Set([...mapA.keys(), ...mapB.keys()]);
+  return [...maHangSet].map(maHang => {
+    const a = mapA.get(maHang), b = mapB.get(maHang);
+    return { maHang, tenHang: (a && a.tenHang) || (b && b.tenHang) || '', valueA: a ? a.finalQty : 0, valueB: b ? b.finalQty : 0 };
+  });
+}
+
+function kkReportSessionLabel(s) {
+  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${s.tenKy}`;
+}
+
+// So Sánh Với Kỳ Khác (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với nhau ấy, thì
+// mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh") — CHỈ hiện khi người dùng TỰ
+// CHỌN kỳ thứ 2 ở bộ chọn riêng, hoàn toàn tách biệt khỏi báo cáo chính (Chart 1/bảng Chi Tiết) để không
+// lặp lại lỗi trộn ngầm Gom Mã vào kỳ Thống Kê.
+function renderKkReportCompareChart() {
+  const card = document.getElementById('kkReportCompareCard');
+  const el = document.getElementById('kkReportCompareChart');
+  const titleEl = document.getElementById('kkReportCompareTitle');
+  if (!card || !el) return;
+  const compare = kkReportData && kkReportData.compare;
+  if (!compare) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const sessionA = kkReportData.session, sessionB = compare.session;
+  if (titleEl) titleEl.textContent = `So Sánh: ${sessionA.tenKy} vs ${sessionB.tenKy}`;
+  const combined = kkReportMergeCompareRows()
+    .sort((x, y) => Math.abs(y.valueA - y.valueB) - Math.abs(x.valueA - x.valueB))
+    .slice(0, 12);
+  if (!combined.length) { el.innerHTML = '<p class="text-gray-400 text-sm">Không có mã hàng nào để so sánh.</p>'; return; }
+  const items = combined.map(r => ({
+    label: kkReportTruncateLabel(`${r.maHang}${r.tenHang ? ' — ' + r.tenHang : ''}`, 34),
+    values: [
+      { value: r.valueA, color: KK_REPORT_COLOR_COMPARE_A },
+      { value: r.valueB, color: KK_REPORT_COLOR_COMPARE_B }
+    ]
+  }));
+  el.innerHTML = kkReportHBarChartSvg(items, [
+    { label: kkReportSessionLabel(sessionA), color: KK_REPORT_COLOR_COMPARE_A },
+    { label: kkReportSessionLabel(sessionB), color: KK_REPORT_COLOR_COMPARE_B }
+  ]);
+}
+
 function kkReportFilteredRows(filterText) {
   const rows = (kkReportData && kkReportData.rows) || [];
   const q = stripVnDiacritics((filterText || '').trim().toLowerCase());
@@ -1206,11 +1312,10 @@ function renderKkReportTable(filterText) {
   const isGomMa = kkReportIsGomMaKy();
   thead.innerHTML = `<th class="py-1">Mã Hàng</th><th>Tên Hàng</th>
     <th class="text-right">Tồn Kho Hệ Thống</th>
-    ${isGomMa ? '' : '<th class="text-right">Gom Mã (tham khảo)</th>'}
-    <th class="text-right">${isGomMa ? 'SL Gom Mã' : 'Kiểm Đếm/Cuối Cùng'}</th>
+    ${isGomMa ? '<th class="text-right">SL Gom Mã</th>' : '<th class="text-right">Kiểm Đếm</th><th class="text-right">Kiểm Soát</th><th class="text-right">SL Cuối Cùng</th>'}
     <th class="text-right">Chênh Lệch</th>`;
   const filtered = kkReportFilteredRows(filterText).slice().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
-  const colCount = isGomMa ? 5 : 6;
+  const colCount = isGomMa ? 5 : 7;
   const paginationEl = document.getElementById('paginationContainer_kkReport');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('kkReport', 'renderKkReportTable');
   const items = paginateList('kkReport', filtered, 'renderKkReportTable', 'mã hàng');
@@ -1220,38 +1325,41 @@ function renderKkReportTable(filterText) {
       <td class="py-1 font-mono">${escapeHtml(r.maHang)}</td>
       <td>${escapeHtml(r.tenHang || '')}</td>
       <td class="text-right">${r.systemQty === null ? '—' : escapeHtml(String(r.systemQty))}</td>
-      ${isGomMa ? '' : `<td class="text-right">${r.gomMaQty === null ? '—' : escapeHtml(String(r.gomMaQty))}</td>`}
-      <td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>
+      ${isGomMa ? `<td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>` : `
+      <td class="text-right">${escapeHtml(String(r.kiemDemQty))}</td>
+      <td class="text-right">${r.kiemSoatQty === null ? '—' : escapeHtml(String(r.kiemSoatQty))}</td>
+      <td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>`}
       <td class="text-right ${diff === null ? '' : (diff === 0 ? 'text-green-600' : 'text-red-600')}">${diff === null ? '—' : (diff > 0 ? '+' : '') + diff}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có dữ liệu</td></tr>`;
 }
 
 // Xuất Excel — tái dùng ĐÚNG route dùng chung POST /api/admin/export-xlsx (CLAUDE.md: không tự viết
-// route riêng). Admin (có storeComparison) xuất THÊM sheet 2 "So Sánh Siêu Thị" — đúng yêu cầu tài liệu
-// đề xuất A4 Tab 7 "nhiều siêu thị thì mỗi siêu thị 1 sheet": sheet 1 vẫn luôn là chi tiết của ĐÚNG kỳ
-// đang xem, sheet 2 (khi có) liệt kê MỖI siêu thị 1 DÒNG tổng hợp (không phải 1 sheet/siêu thị riêng lẻ
-// — hợp lý hơn cho đúng 2 cột tổng của biểu đồ 3, tránh phải mở nhiều chục sheet nếu hệ thống có nhiều
-// siêu thị).
+// route riêng). Sheet 1 LUÔN là chi tiết của ĐÚNG kỳ đang xem (không trộn Gom Mã nếu đang xem kỳ Thống
+// Kê). Admin (có storeComparison) xuất thêm sheet "So Sánh Siêu Thị" (mỗi siêu thị 1 DÒNG tổng hợp, đúng
+// yêu cầu tài liệu đề xuất A4 Tab 7). Có bật "So Sánh Với Kỳ Khác" thì xuất thêm sheet "So Sánh Kỳ".
 function exportKkReportExcel() {
   if (!kkReportData) return;
   const isGomMa = kkReportIsGomMaKy();
   const detailColumns = [
     { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
     { header: 'Tồn Kho Hệ Thống', key: 'systemQty' },
-    ...(isGomMa ? [] : [{ header: 'Gom Mã (tham khảo)', key: 'gomMaQty' }]),
-    { header: isGomMa ? 'SL Gom Mã' : 'Kiểm Đếm/Cuối Cùng', key: 'finalQty' },
+    ...(isGomMa
+      ? [{ header: 'SL Gom Mã', key: 'finalQty' }]
+      : [{ header: 'Kiểm Đếm', key: 'kiemDemQty' }, { header: 'Kiểm Soát', key: 'kiemSoatQty' }, { header: 'SL Cuối Cùng', key: 'finalQty' }]),
     { header: 'Chênh Lệch', key: 'diff' }
   ];
   const detailRows = (kkReportData.rows || []).map(r => ({
     maHang: r.maHang, tenHang: r.tenHang || '',
     systemQty: r.systemQty === null ? '' : r.systemQty,
-    gomMaQty: r.gomMaQty === null ? '' : r.gomMaQty,
+    kiemDemQty: r.kiemDemQty === undefined ? '' : r.kiemDemQty,
+    kiemSoatQty: (r.kiemSoatQty === null || r.kiemSoatQty === undefined) ? '' : r.kiemSoatQty,
     finalQty: r.finalQty,
     diff: r.systemQty === null ? '' : (r.finalQty - r.systemQty)
   }));
   const sessionLabel = `${kkReportData.session.dept} - ${kkReportData.session.tenKy}`;
   const fileName = `BaoCaoKiemKe_${kkReportData.session.dept}_${kkReportData.session.tenKy}.xlsx`.replace(/[\\/:*?"<>|]/g, '_');
+  const sheets = [{ sheetName: `Chi Tiết (${sessionLabel})`.slice(0, 31), columns: detailColumns, rows: detailRows }];
   if (Array.isArray(kkReportData.storeComparison) && kkReportData.storeComparison.length) {
     const cmpColumns = [
       { header: 'Siêu Thị', key: 'dept' }, { header: 'Kỳ Thống Kê', key: 'sessionName' },
@@ -1262,12 +1370,20 @@ function exportKkReportExcel() {
       dept: s.dept, sessionName: s.sessionName, trangThai: TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai,
       systemQty: s.systemQty === null ? '' : s.systemQty, finalQty: s.finalQty
     }));
-    downloadMultiSheetXlsxFromServer(fileName, [
-      { sheetName: `Chi Tiết (${sessionLabel})`.slice(0, 31), columns: detailColumns, rows: detailRows },
-      { sheetName: 'So Sánh Siêu Thị', columns: cmpColumns, rows: cmpRows }
-    ]);
+    sheets.push({ sheetName: 'So Sánh Siêu Thị', columns: cmpColumns, rows: cmpRows });
+  }
+  if (kkReportData.compare) {
+    const compareColumns = [
+      { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
+      { header: kkReportData.session.tenKy, key: 'valueA' }, { header: kkReportData.compare.session.tenKy, key: 'valueB' }
+    ];
+    const compareRowsOut = kkReportMergeCompareRows().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+    sheets.push({ sheetName: 'So Sánh Kỳ', columns: compareColumns, rows: compareRowsOut });
+  }
+  if (sheets.length > 1) {
+    downloadMultiSheetXlsxFromServer(fileName, sheets);
   } else {
-    downloadXlsxFromServer(fileName, `Chi Tiết (${sessionLabel})`.slice(0, 31), detailColumns, detailRows);
+    downloadXlsxFromServer(fileName, sheets[0].sheetName, sheets[0].columns, sheets[0].rows);
   }
 }
 
