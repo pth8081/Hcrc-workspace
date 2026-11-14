@@ -139,7 +139,17 @@ function resolvePositionOccupantsDetailed(version, node, users, employeeProfiles
     if (u.active === false) return false;
     if (inactiveProfileUsernames && inactiveProfileUsernames.has(u.username)) return false;
     if (u.jobTitle !== node.jobTitle) return false;
-    if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
+    // LỖI ĐÃ VÁ (11/2026, người dùng phản hồi "siêu thị chỉ có 1 giám đốc mà hiện ra 30 giám đốc" —
+    // 1 vị trí Giám Đốc Siêu Thị của 1 cửa hàng lại hiện TẤT CẢ giám đốc mọi cửa hàng khác): điều kiện
+    // CŨ `deptRef && u.dept !== deptRef` dùng && nên khi deptRef null (phòng ban cha gần nhất CHƯA gắn
+    // departmentRef — node nhóm thuần tuý, hoặc quên gắn khi tạo cây) thì TOÀN BỘ điều kiện lọc dept bị
+    // bỏ qua (short-circuit ra false), khớp NHẦM mọi user chỉ cần đúng jobTitle bất kể dept nào — "lọt
+    // mở" (fail-open). ĐÚNG phải "lọt đóng" (fail-closed): vị trí requiresDept mà không xác định được
+    // deptRef thì KHÔNG khớp ai (hiện "chưa có ai giữ"), giống lib/headcountReport.js
+    // countSecondaryHolders() đã làm đúng từ đầu (`return !!deptRef && sp.dept === deptRef`).
+    if (node.requiresDept !== false) {
+      if (!deptRef || u.dept !== deptRef) return false;
+    }
     return true;
   }).map(u => ({ username: u.username, name: u.name }));
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): 1 hồ sơ Hồ Sơ Nhân Sự có thể đã được GÁN ĐÚNG vị trí

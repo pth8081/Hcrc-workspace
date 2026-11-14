@@ -3857,6 +3857,15 @@ theo đúng vị trí trong cây**.
     lại ở các dòng Vị Trí con; không có dòng Phòng Ban riêng thì Phòng Ban đó
     vẫn được TỰ TẠO (ngầm định) khi có Vị Trí nào nhắc tới, chỉ là không gắn
     được Mã Phòng Ban Hệ Thống cho nó.
+    **Lưu ý quan trọng (v30.41)**: 1 Phòng Ban/Siêu Thị THIẾU "Mã Phòng Ban Hệ
+    Thống" thì MỌI Vị Trí nằm trực tiếp dưới nó sẽ hiện **"chưa có ai giữ"**
+    trên "🌳 Sơ Đồ Tổ Chức" dù thực tế đã có người đúng Chức Danh + Phòng Ban
+    đó (hệ thống không đoán bừa được đơn vị nào để so khớp — xem lỗi đã vá
+    bên dưới). Nếu thấy 1 vị trí lẽ ra phải có người mà lại hiện "chưa có ai
+    giữ", việc đầu tiên cần kiểm tra là Phòng Ban/Siêu Thị chứa nó đã gắn
+    đúng "Mã Phòng Ban Hệ Thống" (khớp đúng mã Phòng Ban/Siêu Thị thật trong
+    hệ thống) chưa — sửa trực tiếp trên cây (nút "✏️ Sửa" node đó) là xong,
+    không cần nhập lại cả cây.
   - **Tên "Công Ty" (gốc cây) KHÔNG điền được qua file này** — bản Nháp mới
     luôn có gốc tên mặc định "Công Ty" (giống hệt nút "✨ Tạo Bản Mới
     (Trống)"), sửa lại tên gốc bằng nút "✏️ Sửa" trên cây sau khi nhập xong,
@@ -3934,6 +3943,15 @@ theo đúng vị trí trong cây**.
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
   danh của 1 nhân viên ở màn Người Dùng là đủ để họ "chuyển vị trí" trong cây.
+  Việc so khớp này chỉ dùng dữ liệu hồ sơ/tài khoản (Phòng Ban + Chức Danh,
+  hoặc Hồ Sơ Nhân Sự gán chức vụ trực tiếp) — **không liên quan gì tới Phân
+  Quyền**, 2 việc hoàn toàn tách biệt.
+  **LỖI ĐÃ VÁ (v30.41)**: trước đây, nếu Phòng Ban/Siêu Thị chứa vị trí đó
+  CHƯA gắn "Mã Phòng Ban Hệ Thống" (xem lưu ý ở mục nhập Excel phía trên),
+  hệ thống lại hiện ra TẤT CẢ người có cùng Chức Danh trên TOÀN CÔNG TY (VD 1
+  siêu thị hiện ra hàng chục "Giám Đốc Siêu Thị" của mọi siêu thị khác) thay
+  vì hiện đúng "chưa có ai giữ" — đã sửa lại đúng: không xác định được đúng
+  Phòng Ban/Siêu Thị thì không khớp ai, không suy diễn bừa.
 - **Quản Lý Trực Tiếp tự động cập nhật khi Áp Dụng 1 phiên bản** — ngay khi
   bấm "Áp dụng", hệ thống tự tính lại `managerUsername` cho từng nhân viên
   (= ai đang giữ vị trí CHA của vị trí họ đang giữ), CHỈ khi tra ra được ĐÚNG

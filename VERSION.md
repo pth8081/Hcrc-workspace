@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**30.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.41 (2026-11): Sơ Đồ Tổ Chức — sửa lỗi 1 vị trí hiện LẪN người của MỌI đơn vị khi thiếu liên kết mã phòng/siêu thị
+
+LỖI THẬT phát hiện qua phản hồi người dùng (ảnh chụp "Siêu Thị số 120 Hàng Trống" hiện ra ~30 "Giám Đốc
+Siêu Thị" thay vì đúng 1 người): `resolvePositionOccupants()` (`lib/orgChart.js`) và mirror phía client
+(`ocResolvePositionOccupants()`, `public/js/module-orgchart.js`) dùng điều kiện lọc Phòng Ban/Siêu Thị
+dạng `deptRef && u.dept !== deptRef` — khi node Phòng Ban/Siêu Thị cha gần nhất CHƯA liên kết đúng mã đơn
+vị (`departmentRef` null/trống), biểu thức này tự ngắt mạch bỏ qua LUÔN việc lọc, khiến vị trí đó hiện ra
+MỌI người có cùng Chức Danh trên toàn công ty (không riêng gì "Giám Đốc Siêu Thị" — áp dụng cho mọi Chức
+Danh ở mọi loại đơn vị: Phòng Ban, Siêu Thị, Bar...). Đã sửa sang "lọt đóng": không xác định được đơn vị
+thì vị trí đó hiện "chưa có ai giữ" (đúng thực tế) thay vì hiện bừa — khớp cách HỒ SƠ NHÂN SỰ gán chức vụ
+trực tiếp (`positionKey`) vốn đã luôn làm đúng. Hoàn toàn không liên quan/không đụng tới phân quyền —
+việc so khớp chỉ dùng field hồ sơ/tài khoản (`dept`/`jobTitle`/`positionKey`).
+
+**Cách khắc phục dữ liệu cũ (nếu có đơn vị nào đang thiếu liên kết)**: vào Nhân Sự → Cơ Cấu Tổ Chức → sửa
+node Phòng Ban/Siêu Thị bị thiếu, chọn đúng mã đơn vị ở ô "Mã Phòng/Siêu Thị" rồi lưu lại — vị trí dưới
+node đó sẽ tự hiện đúng người ngay, không cần sửa gì thêm.
 
 ## v30.40 (2026-11): "📋 Kiểm Kê" — sửa Tab 7 "📊 Báo Cáo" theo đúng nghiệp vụ: Kỳ Thống Kê KHÔNG còn trộn Gom Mã
 
