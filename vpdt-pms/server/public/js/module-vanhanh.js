@@ -394,6 +394,7 @@ function setKiemKeSubTab(tab) {
   else if (tab === 'KIEMSOAT') loadKkScanTab('KIEMSOAT');
   else if (tab === 'SHELFCONFIG') loadKkShelfConfigTab();
   else if (tab === 'CONFIRM') enterKkConfirmTab();
+  else if (tab === 'REPORT') enterKkReportTab();
 }
 
 // ===== Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ) =====
@@ -971,6 +972,303 @@ async function submitKkConfirmAll() {
     alert('⛔ Không thể kết nối tới máy chủ.'); return;
   }
   await enterKkConfirmTab();
+}
+
+// ===== Tab 7 "📊 Báo Cáo" (11/2026, tài liệu đề xuất mục A7) — LUÔN gắn với ĐÚNG 1 Kỳ đang chọn, không
+// gộp số liệu nhiều kỳ. 3 màu CỐ ĐỊNH xuyên suốt mọi biểu đồ (đã kiểm tra an toàn người mù màu — CVD ΔE
+// 13.8/protan, 28.8/normal, xem dataviz skill validate_palette.js): Tồn Kho Hệ Thống=xanh dương, Gom
+// Mã=cam, Kiểm Đếm/Cuối Cùng=xanh ngọc. Biểu đồ 3 "So Sánh Siêu Thị" CHỈ Admin (server chỉ trả
+// storeComparison cho Admin — xem routes/stocktake.js GET /report, Phase 1 chưa có "xem chéo nhiều siêu
+// thị" cho người không-Admin).
+const KK_REPORT_COLOR_SYSTEM = '#2563eb', KK_REPORT_COLOR_GOMMA = '#ea580c', KK_REPORT_COLOR_FINAL = '#0d9488';
+let kkReportSessionId = null;
+let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/3 biểu đồ/Xuất Excel
+
+async function enterKkReportTab() {
+  kkReportSessionId = null;
+  kkReportData = null;
+  const row = document.getElementById('kkReportDeptRow');
+  const dept = kkEffectiveDept();
+  if (row) {
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
+      (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
+  }
+  const sel = document.getElementById('kkReportSessionSelect');
+  try {
+    const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
+    const res = await fetch(url);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    const sessions = res.ok ? (body.items || []) : [];
+    sessions.sort((a, b) => b.id - a.id);
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Chọn kỳ để xem báo cáo --</option>' +
+        sessions.map(s => `<option value="${s.id}">${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Thống Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})</option>`).join('');
+      const activeThongKe = sessions.find(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
+      if (activeThongKe) sel.value = String(activeThongKe.id);
+    }
+  } catch (err) {
+    if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
+  }
+  await loadKkReportTab();
+}
+const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' };
+
+async function loadKkReportTab() {
+  const sel = document.getElementById('kkReportSessionSelect');
+  const sessionId = Number(sel?.value || 0);
+  const emptyNote = document.getElementById('kkReportEmptyNote');
+  const bodyWrap = document.getElementById('kkReportBody');
+  kkReportSessionId = sessionId || null;
+  kkReportData = null;
+  if (!sessionId) {
+    if (bodyWrap) bodyWrap.classList.add('hidden');
+    if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = 'Chưa có kỳ nào để xem báo cáo — tạo kỳ ở tab "📅 Kỳ Kiểm Kê" trước.'; }
+    return;
+  }
+  try {
+    const res = await fetch(`/api/stocktake/report?sessionId=${sessionId}`);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (bodyWrap) bodyWrap.classList.add('hidden');
+      if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ ' + (body.error || 'Không tải được báo cáo.'); }
+      return;
+    }
+    kkReportData = body;
+  } catch (err) {
+    if (bodyWrap) bodyWrap.classList.add('hidden');
+    if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ Không thể kết nối tới máy chủ.'; }
+    return;
+  }
+  if (emptyNote) emptyNote.classList.add('hidden');
+  if (bodyWrap) bodyWrap.classList.remove('hidden');
+  resetListPage('kkReport');
+  const filterInput = document.getElementById('kkReportFilter');
+  if (filterInput) filterInput.value = '';
+  renderKkReportStatCards();
+  renderKkReportChart1();
+  renderKkReportChart2();
+  renderKkReportChart3();
+  renderKkReportTable('');
+}
+
+function kkReportIsGomMaKy() {
+  return !!(kkReportData && kkReportData.session && kkReportData.session.loaiKy === 'GOM_MA');
+}
+
+function renderKkReportStatCards() {
+  const wrap = document.getElementById('kkReportStatCards');
+  if (!wrap || !kkReportData) return;
+  const rows = kkReportData.rows || [];
+  const totalFinal = rows.reduce((sum, r) => sum + (Number(r.finalQty) || 0), 0);
+  const totalSystem = rows.reduce((sum, r) => sum + (r.systemQty === null ? 0 : Number(r.systemQty) || 0), 0);
+  const diff = kkReportData.totalSystemSkuCount !== null ? (totalFinal - totalSystem) : null;
+  const isGomMa = kkReportIsGomMaKy();
+  const cards = [
+    { label: 'Tổng Mã Tồn Kho Hệ Thống', value: kkReportData.totalSystemSkuCount === null ? '—' : kkReportData.totalSystemSkuCount, color: KK_REPORT_COLOR_SYSTEM },
+    { label: isGomMa ? 'Mã Đã Gom' : 'Mã Đã Kiểm Đếm', value: kkReportData.countedSkuCount, color: KK_REPORT_COLOR_FINAL },
+    { label: isGomMa ? 'Tổng SL Gom Mã' : 'Tổng SL Cuối Cùng', value: totalFinal.toLocaleString('vi-VN'), color: KK_REPORT_COLOR_FINAL },
+    { label: 'Chênh Lệch So Hệ Thống', value: diff === null ? '—' : (diff > 0 ? '+' : '') + diff.toLocaleString('vi-VN'), color: diff === null ? '#6b7280' : (diff === 0 ? '#16a34a' : '#dc2626') }
+  ];
+  wrap.innerHTML = cards.map(c => `<div class="bg-white border rounded p-3 text-center">
+    <div class="text-[11px] text-gray-500">${escapeHtml(c.label)}</div>
+    <div class="text-lg font-bold" data-style="color:${c.color}">${escapeHtml(String(c.value))}</div>
+  </div>`).join('');
+}
+
+// Biểu đồ cột nhóm nằm ngang dùng chung cho Chart 1 (theo mã hàng) + Chart 3 (theo siêu thị, Admin).
+// items: [{label, values:[{value, color}]}] — value null bị BỎ QUA (không vẽ cột, không tính vào scale).
+function kkReportTruncateLabel(label, maxLen) {
+  return label.length > maxLen ? label.slice(0, maxLen - 1) + '…' : label;
+}
+
+function kkReportHBarChartSvg(items, legendEntries) {
+  if (!items.length) return '<p class="text-gray-400 text-sm">Không có dữ liệu để vẽ biểu đồ.</p>';
+  const maxVal = Math.max(1, ...items.flatMap(it => it.values.map(v => v.value === null ? 0 : Number(v.value) || 0)));
+  const rowH = 20, groupGap = 10, barGap = 2, leftW = 230, chartW = 380, topPad = 26;
+  const barsPerGroup = items[0].values.length;
+  const groupH = rowH * barsPerGroup + groupGap;
+  const totalH = topPad + items.length * groupH;
+  const totalW = leftW + chartW + 50;
+  const scale = (v) => (Math.max(0, Number(v) || 0) / maxVal) * chartW;
+  let svg = `<svg viewBox="0 0 ${totalW} ${totalH}" class="w-full" data-style="max-width:${totalW}px" role="img" aria-label="Biểu đồ cột so sánh">`;
+  svg += `<g font-family="inherit" font-size="11">`;
+  // Legend.
+  svg += legendEntries.map((e, i) => `<rect x="${leftW + i * 160}" y="4" width="10" height="10" fill="${e.color}" rx="2"></rect>
+    <text x="${leftW + i * 160 + 14}" y="13" fill="currentColor">${escapeHtml(e.label)}</text>`).join('');
+  items.forEach((it, gi) => {
+    const groupY = topPad + gi * groupH;
+    svg += `<text x="${leftW - 8}" y="${groupY + (groupH - groupGap) / 2 + 4}" text-anchor="end" fill="currentColor">${escapeHtml(it.label)}</text>`;
+    it.values.forEach((v, vi) => {
+      if (v.value === null) return;
+      const y = groupY + vi * rowH;
+      const w = scale(v.value);
+      svg += `<rect x="${leftW}" y="${y}" width="${Math.max(2, w)}" height="${rowH - barGap}" fill="${v.color}" rx="3"></rect>
+        <text x="${leftW + w + 6}" y="${y + (rowH - barGap) / 2 + 4}" fill="currentColor" font-weight="600">${escapeHtml(String(v.value))}</text>`;
+    });
+  });
+  svg += '</g></svg>';
+  return svg;
+}
+
+// Chart 1 (A7 biểu đồ 1): Tồn Kho Hệ Thống/Gom Mã/Kiểm Đếm-Cuối Cùng theo mã hàng — giới hạn TOP 12 mã
+// lệch nhiều nhất so Tồn Kho Hệ Thống (hoặc SL cao nhất nếu chưa có Tồn Kho Hệ Thống để so) để biểu đồ
+// không bị quá dài — bảng Chi Tiết bên dưới vẫn liệt kê ĐẦY ĐỦ mọi mã hàng.
+function renderKkReportChart1() {
+  const el = document.getElementById('kkReportChart1');
+  const titleEl = document.getElementById('kkReportChart1Title');
+  if (!el || !kkReportData) return;
+  const isGomMa = kkReportIsGomMaKy();
+  if (titleEl) titleEl.textContent = isGomMa ? 'Tồn Kho Hệ Thống vs Gom Mã (Top 12 lệch nhiều nhất)' : 'Tồn Kho Hệ Thống vs Gom Mã (tham khảo) vs Kiểm Đếm/Cuối Cùng (Top 12 lệch nhiều nhất)';
+  const rows = (kkReportData.rows || []).slice();
+  rows.sort((a, b) => {
+    const da = a.systemQty === null ? a.finalQty : Math.abs(a.finalQty - a.systemQty);
+    const db = b.systemQty === null ? b.finalQty : Math.abs(b.finalQty - b.systemQty);
+    return db - da;
+  });
+  const top = rows.slice(0, 12);
+  const legendEntries = [{ label: 'Tồn Kho Hệ Thống', color: KK_REPORT_COLOR_SYSTEM }];
+  if (!isGomMa) legendEntries.push({ label: 'Gom Mã (tham khảo)', color: KK_REPORT_COLOR_GOMMA });
+  legendEntries.push({ label: isGomMa ? 'Gom Mã' : 'Kiểm Đếm/Cuối Cùng', color: KK_REPORT_COLOR_FINAL });
+  const items = top.map(r => ({
+    label: kkReportTruncateLabel(`${r.maHang}${r.tenHang ? ' — ' + r.tenHang : ''}`, 34),
+    values: [
+      { value: r.systemQty, color: KK_REPORT_COLOR_SYSTEM },
+      ...(isGomMa ? [] : [{ value: r.gomMaQty, color: KK_REPORT_COLOR_GOMMA }]),
+      { value: r.finalQty, color: KK_REPORT_COLOR_FINAL }
+    ]
+  }));
+  el.innerHTML = kkReportHBarChartSvg(items, legendEntries);
+}
+
+// Chart 2 (A7 biểu đồ 2): donut tiến độ — % mã hàng ĐÃ kiểm đếm/gom trên tổng mã Tồn Kho Hệ Thống.
+function renderKkReportChart2() {
+  const el = document.getElementById('kkReportChart2');
+  const titleEl = document.getElementById('kkReportChart2Title');
+  if (!el || !kkReportData) return;
+  const isGomMa = kkReportIsGomMaKy();
+  if (titleEl) titleEl.textContent = isGomMa ? 'Tiến Độ Gom Mã' : 'Tiến Độ Kiểm Đếm';
+  const total = kkReportData.totalSystemSkuCount;
+  const counted = kkReportData.countedSkuCount || 0;
+  if (total === null || total === 0) {
+    el.innerHTML = '<p class="text-gray-400 text-sm text-center">Chưa cấu hình/chưa có dữ liệu Tồn Kho Hệ Thống để tính tiến độ.</p>';
+    return;
+  }
+  const pct = Math.min(100, Math.round((counted / total) * 100));
+  const r = 54, circumference = 2 * Math.PI * r;
+  const doneLen = circumference * (pct / 100);
+  el.innerHTML = `<svg viewBox="0 0 140 140" width="160" height="160" role="img" aria-label="Biểu đồ tiến độ ${pct}%">
+    <circle cx="70" cy="70" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.12" stroke-width="16"></circle>
+    <circle cx="70" cy="70" r="${r}" fill="none" stroke="${KK_REPORT_COLOR_FINAL}" stroke-width="16"
+      stroke-dasharray="${doneLen} ${circumference - doneLen}" stroke-linecap="round"
+      transform="rotate(-90 70 70)"></circle>
+    <text x="70" y="66" text-anchor="middle" font-size="22" font-weight="700" fill="currentColor">${pct}%</text>
+    <text x="70" y="86" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">${counted}/${total} mã</text>
+  </svg>`;
+}
+
+// Chart 3 (A7 biểu đồ 3): so sánh tổng SL giữa các siêu thị — CHỈ Admin (server chỉ trả storeComparison
+// cho Admin), mỗi siêu thị dùng ĐÚNG kỳ Thống Kê gần nhất của chính nó (không nhất thiết là kỳ đang chọn
+// ở trên — xem chú thích routes/stocktake.js GET /report).
+function renderKkReportChart3() {
+  const card = document.getElementById('kkReportChart3Card');
+  const el = document.getElementById('kkReportChart3');
+  if (!card || !el) return;
+  const list = kkReportData && Array.isArray(kkReportData.storeComparison) ? kkReportData.storeComparison : null;
+  if (!list) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  if (!list.length) { el.innerHTML = '<p class="text-gray-400 text-sm">Chưa có siêu thị nào có Kỳ Thống Kê.</p>'; return; }
+  const items = list.map(s => ({
+    label: s.dept,
+    values: [
+      { value: s.systemQty, color: KK_REPORT_COLOR_SYSTEM },
+      { value: s.finalQty, color: KK_REPORT_COLOR_FINAL }
+    ]
+  }));
+  el.innerHTML = kkReportHBarChartSvg(items, [
+    { label: 'Tồn Kho Hệ Thống', color: KK_REPORT_COLOR_SYSTEM },
+    { label: 'Kiểm Đếm/Cuối Cùng', color: KK_REPORT_COLOR_FINAL }
+  ]);
+}
+
+function kkReportFilteredRows(filterText) {
+  const rows = (kkReportData && kkReportData.rows) || [];
+  const q = stripVnDiacritics((filterText || '').trim().toLowerCase());
+  if (!q) return rows;
+  return rows.filter(r => stripVnDiacritics(`${r.maHang} ${r.tenHang || ''}`.toLowerCase()).includes(q));
+}
+
+function renderKkReportTable(filterText) {
+  const thead = document.getElementById('kkReportTableHead');
+  const tbody = document.getElementById('kkReportTableBody');
+  if (!thead || !tbody || !kkReportData) return;
+  const isGomMa = kkReportIsGomMaKy();
+  thead.innerHTML = `<th class="py-1">Mã Hàng</th><th>Tên Hàng</th>
+    <th class="text-right">Tồn Kho Hệ Thống</th>
+    ${isGomMa ? '' : '<th class="text-right">Gom Mã (tham khảo)</th>'}
+    <th class="text-right">${isGomMa ? 'SL Gom Mã' : 'Kiểm Đếm/Cuối Cùng'}</th>
+    <th class="text-right">Chênh Lệch</th>`;
+  const filtered = kkReportFilteredRows(filterText).slice().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+  const colCount = isGomMa ? 5 : 6;
+  const paginationEl = document.getElementById('paginationContainer_kkReport');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('kkReport', 'renderKkReportTable');
+  const items = paginateList('kkReport', filtered, 'renderKkReportTable', 'mã hàng');
+  tbody.innerHTML = items.length ? items.map(r => {
+    const diff = r.systemQty === null ? null : (r.finalQty - r.systemQty);
+    return `<tr class="border-b last:border-0">
+      <td class="py-1 font-mono">${escapeHtml(r.maHang)}</td>
+      <td>${escapeHtml(r.tenHang || '')}</td>
+      <td class="text-right">${r.systemQty === null ? '—' : escapeHtml(String(r.systemQty))}</td>
+      ${isGomMa ? '' : `<td class="text-right">${r.gomMaQty === null ? '—' : escapeHtml(String(r.gomMaQty))}</td>`}
+      <td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>
+      <td class="text-right ${diff === null ? '' : (diff === 0 ? 'text-green-600' : 'text-red-600')}">${diff === null ? '—' : (diff > 0 ? '+' : '') + diff}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400">Chưa có dữ liệu</td></tr>`;
+}
+
+// Xuất Excel — tái dùng ĐÚNG route dùng chung POST /api/admin/export-xlsx (CLAUDE.md: không tự viết
+// route riêng). Admin (có storeComparison) xuất THÊM sheet 2 "So Sánh Siêu Thị" — đúng yêu cầu tài liệu
+// đề xuất A4 Tab 7 "nhiều siêu thị thì mỗi siêu thị 1 sheet": sheet 1 vẫn luôn là chi tiết của ĐÚNG kỳ
+// đang xem, sheet 2 (khi có) liệt kê MỖI siêu thị 1 DÒNG tổng hợp (không phải 1 sheet/siêu thị riêng lẻ
+// — hợp lý hơn cho đúng 2 cột tổng của biểu đồ 3, tránh phải mở nhiều chục sheet nếu hệ thống có nhiều
+// siêu thị).
+function exportKkReportExcel() {
+  if (!kkReportData) return;
+  const isGomMa = kkReportIsGomMaKy();
+  const detailColumns = [
+    { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
+    { header: 'Tồn Kho Hệ Thống', key: 'systemQty' },
+    ...(isGomMa ? [] : [{ header: 'Gom Mã (tham khảo)', key: 'gomMaQty' }]),
+    { header: isGomMa ? 'SL Gom Mã' : 'Kiểm Đếm/Cuối Cùng', key: 'finalQty' },
+    { header: 'Chênh Lệch', key: 'diff' }
+  ];
+  const detailRows = (kkReportData.rows || []).map(r => ({
+    maHang: r.maHang, tenHang: r.tenHang || '',
+    systemQty: r.systemQty === null ? '' : r.systemQty,
+    gomMaQty: r.gomMaQty === null ? '' : r.gomMaQty,
+    finalQty: r.finalQty,
+    diff: r.systemQty === null ? '' : (r.finalQty - r.systemQty)
+  }));
+  const sessionLabel = `${kkReportData.session.dept} - ${kkReportData.session.tenKy}`;
+  const fileName = `BaoCaoKiemKe_${kkReportData.session.dept}_${kkReportData.session.tenKy}.xlsx`.replace(/[\\/:*?"<>|]/g, '_');
+  if (Array.isArray(kkReportData.storeComparison) && kkReportData.storeComparison.length) {
+    const cmpColumns = [
+      { header: 'Siêu Thị', key: 'dept' }, { header: 'Kỳ Thống Kê', key: 'sessionName' },
+      { header: 'Trạng Thái', key: 'trangThai' },
+      { header: 'Tổng Tồn Kho Hệ Thống', key: 'systemQty' }, { header: 'Tổng Kiểm Đếm/Cuối Cùng', key: 'finalQty' }
+    ];
+    const cmpRows = kkReportData.storeComparison.map(s => ({
+      dept: s.dept, sessionName: s.sessionName, trangThai: TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai,
+      systemQty: s.systemQty === null ? '' : s.systemQty, finalQty: s.finalQty
+    }));
+    downloadMultiSheetXlsxFromServer(fileName, [
+      { sheetName: `Chi Tiết (${sessionLabel})`.slice(0, 31), columns: detailColumns, rows: detailRows },
+      { sheetName: 'So Sánh Siêu Thị', columns: cmpColumns, rows: cmpRows }
+    ]);
+  } else {
+    downloadXlsxFromServer(fileName, `Chi Tiết (${sessionLabel})`.slice(0, 31), detailColumns, detailRows);
+  }
 }
 
 function renderKkPeriodDeptRow() {

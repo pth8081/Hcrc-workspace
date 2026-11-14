@@ -3641,8 +3641,7 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     bao giờ nhận mã siêu thị từ client, chặn store-spoofing cùng nguyên tắc
     mọi route khác của Kiểm Soát Hàng Hóa.
 
-**"📋 Kiểm Kê" (11/2026 — Tab 1/2/3/4/5/6/8 đã có giao diện thật, chỉ Tab 7
-"📊 Báo Cáo" còn đang "🚧 Đang phát triển")**: module kiểm kê thực tế
+**"📋 Kiểm Kê" (11/2026 — đủ 8/8 tab đã hoạt động)**: module kiểm kê thực tế
 theo **KỲ**, khác hẳn "Kiểm Soát Hàng Hóa" ở trên (ghi nhận liên tục theo lô,
 không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thuần UI) nhưng
 **phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập (Phân Quyền
@@ -3711,8 +3710,19 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
   đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
   nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
-- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 7 Báo Cáo chi
-  tiết theo Kỳ (chọn Kỳ + 3 biểu đồ + xuất Excel nhiều sheet).
+- **Tab 7 "📊 Báo Cáo" (11/2026)**: chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn
+  (liệt kê mọi Kỳ Gom Mã/Thống Kê, kể cả đã chốt) → 4 thẻ tổng hợp + biểu đồ
+  cột so sánh theo mã hàng (Tồn Kho Hệ Thống/Gom Mã tham khảo/Kiểm Đếm-Cuối
+  Cùng, Top 12 lệch nhiều nhất — bảng Chi Tiết dưới cùng liệt kê ĐẦY ĐỦ mọi
+  mã) + biểu đồ donut tiến độ + nút "📊 Xuất Excel" (tái dùng route xuất
+  Excel dùng chung). Màu biểu đồ CỐ ĐỊNH xuyên suốt: Tồn Kho Hệ Thống xanh
+  dương, Gom Mã cam, Kiểm Đếm/Cuối Cùng xanh ngọc (đã kiểm tra an toàn người
+  mù màu). Chọn 1 Kỳ Gom Mã thì không có cột Kiểm Đếm/Kiểm Soát, dùng SL Gom
+  Mã của chính kỳ đó làm giá trị chính. **Phạm vi xem**: không-Admin chỉ xem
+  đúng siêu thị mình; Admin xem được mọi siêu thị VÀ thấy thêm khung "So
+  Sánh Giữa Các Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Thống Kê gần nhất của
+  chính nó, không phụ thuộc Kỳ đang chọn) — Xuất Excel lúc này ra 2 sheet
+  (Chi Tiết + So Sánh Siêu Thị), không-Admin chỉ 1 sheet.
 
 ### 4.5. Nhân Sự
 
