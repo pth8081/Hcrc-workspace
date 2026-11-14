@@ -219,6 +219,37 @@ router.get('/my-shelf-locations', async (req, res) => {
 // quầy kệ nhưng vẫn báo rõ "chưa có kỳ đang hoạt động" thay vì cho chọn rồi quét lỗi).
 function requiredLoaiKyForMode(mode) { return mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE; }
 
+// Tab 2/3/4 (màn quét) cần biết kỳ đang hoạt động của ĐÚNG quầy kệ vừa chọn để lấy sessionId gửi kèm mỗi
+// lần quét — KHÔNG tái dùng GET /sessions ở trên vì route đó CHỈ cho phép override ?dept= khi là Admin
+// (đúng cho Tab 1 — nơi chỉ Admin/quản lý mới cần xem kỳ của siêu thị khác), còn ở đây 1 user THƯỜNG có
+// thể được allowlist (Tab 8) cho quầy kệ thuộc siêu thị KHÁC với dept hồ sơ của mình (VD Giám Sát Vùng
+// không phải Admin) — route riêng này tự xác nhận LẠI Lớp 1+2 (không tin bất kỳ điều gì từ query ngoài
+// shelfLocationId/mode) rồi mới trả kỳ đang hoạt động của ĐÚNG siêu thị quầy kệ đó, không lệ thuộc dept
+// hồ sơ của người gọi.
+router.get('/active-session-for-shelf', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const shelfLocationId = Number(req.query.shelfLocationId);
+    const mode = String(req.query.mode || '').trim();
+    if (!Number.isFinite(shelfLocationId)) return res.status(400).json({ error: 'Thiếu shelfLocationId' });
+    const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
+    if (!checkFn) return res.status(400).json({ error: 'Hành động không hợp lệ' });
+    if (!checkFn(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này' });
+    const loc = await findShelfLocationOrThrow(shelfLocationId);
+    await ensureStocktakeKey('stocktakeUserAccess');
+    const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+    if (!canUserDoStocktakeOnShelf(access, req.freshUser.username, loc.dept, shelfLocationId, mode)) {
+      return res.status(403).json({ error: 'Bạn chưa được cấp quyền thao tác hành động này trên quầy kệ này' });
+    }
+    await ensureStocktakeSessionsKey();
+    const sessions = (await getAppDataValue('stocktakeSessions')) || [];
+    const activeSession = findActiveSession(sessions, loc.dept, requiredLoaiKyForMode(mode));
+    res.json({ session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
+  }
+});
+
 async function findShelfLocationOrThrow(shelfLocationId) {
   const allLocations = await getAllForCollection('shelfLocations');
   const loc = allLocations.find(l => l.id === shelfLocationId);

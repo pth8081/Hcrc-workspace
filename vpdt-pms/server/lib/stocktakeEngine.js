@@ -258,9 +258,12 @@ function editCountValue(counts, id, mode, newQty, user) {
   const qty = Number(newQty);
   if (!Number.isFinite(qty) || qty < 0) throw new HttpError(400, 'Số lượng phải là số không âm');
   row[field] = qty;
-  row.lastScannedAt = new Date().toISOString();
-  row.lastScannedBy = user?.username || '';
-  row.lastScannedByName = user?.name || user?.username || '';
+  // CỐ Ý KHÔNG đụng row.lastScannedAt (field này dùng để sắp MRU ở client — "mã vừa quét luôn nhảy lên
+  // đầu danh sách") — sửa tay KHÔNG được tính là "vừa quét" (đúng A5), nên dùng field RIÊNG để vẫn ghi
+  // nhận ai/khi nào sửa tay (phục vụ hiển thị/kiểm tra sau), không lẫn vào field quyết định thứ tự.
+  row.lastEditedAt = new Date().toISOString();
+  row.lastEditedBy = user?.username || '';
+  row.lastEditedByName = user?.name || user?.username || '';
   return row;
 }
 
