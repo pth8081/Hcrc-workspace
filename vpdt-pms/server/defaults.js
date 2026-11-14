@@ -983,6 +983,8 @@ const DEFAULTS = {
   // Soát) — thêm NGAY từ đầu (bài học shelfLocations/stocktakeSessions ở trên), không để dành.
   stocktakeUserAccess: [],
   stocktakeCounts: [],
+  // stocktakeShelfConfirmations (Tab 6 Xác Nhận, 12/2026) — CÙNG lý do/khuôn 2 key ngay trên.
+  stocktakeShelfConfirmations: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

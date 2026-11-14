@@ -117,7 +117,7 @@ function createMockState(seed) {
     stocktakeSessions: [],
     // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng) / stocktakeCounts (Tab 2/3/4) — CÙNG lý do
     // stocktakeSessions ngay trên.
-    stocktakeUserAccess: [], stocktakeCounts: []
+    stocktakeUserAccess: [], stocktakeCounts: [], stocktakeShelfConfirmations: []
   }, seed || {});
 }
 
@@ -1000,8 +1000,8 @@ function createDispatcher(state) {
       // tra (quyền tab / allowlist theo quầy kệ / kỳ đang hoạt động đúng loại) — xem assertStocktakeScanAllowed()
       // (routes/stocktake.js, không export được nên lặp lại ĐÚNG logic ở đây bằng các hàm thật đã export).
       const stockEngine2 = () => require('../lib/stocktakeEngine');
-      function kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId) {
-        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canUserDoStocktakeOnShelf, findActiveSession, LOAI_KY } = stockEngine2();
+      function kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId, opts) {
+        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canUserDoStocktakeOnShelf, findActiveSession, isShelfConfirmed, LOAI_KY } = stockEngine2();
         const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
         if (!checkFn) { const e = new Error('Hành động không hợp lệ'); e.status = 400; throw e; }
         if (!checkFn(freshUser)) { const e = new Error('Bạn không có quyền thực hiện hành động này (Lớp 1 — quyền tab)'); e.status = 403; throw e; }
@@ -1015,6 +1015,12 @@ function createDispatcher(state) {
         const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
         if (!activeSession) { const e = new Error(`Siêu thị "${loc.dept}" chưa có kỳ ${requiredLoaiKy === LOAI_KY.GOM_MA ? 'Gom Mã' : 'Thống Kê'} đang hoạt động (Lớp 3 — Kỳ Kiểm Kê)`); e.status = 409; throw e; }
         if (activeSession.id !== sessionId) { const e = new Error('Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang'); e.status = 409; throw e; }
+        if (mode === 'KIEM_DEM' && !opts?.skipConfirmedCheck) {
+          const confirmations = state.stocktakeShelfConfirmations || [];
+          if (isShelfConfirmed(confirmations, sessionId, shelfLocationId)) {
+            const e = new Error('Quầy kệ này đã được Xác Nhận ở Tab "Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa)'); e.status = 409; throw e;
+          }
+        }
         return loc;
       }
 
@@ -1094,8 +1100,8 @@ function createDispatcher(state) {
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const q = new URL(url, 'http://x').searchParams;
         const sessionId = Number(q.get('sessionId'));
-        const shelfLocationId = Number(q.get('shelfLocationId'));
-        const items = (state.stocktakeCounts || []).filter(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId);
+        const shelfLocationId = q.has('shelfLocationId') ? Number(q.get('shelfLocationId')) : null;
+        const items = (state.stocktakeCounts || []).filter(c => c.sessionId === sessionId && (shelfLocationId === null || c.shelfLocationId === shelfLocationId));
         return { status: 200, body: { items } };
       }
       if (pathName === '/api/stocktake/counts/scan' && method === 'POST') {
@@ -1130,6 +1136,67 @@ function createDispatcher(state) {
           const { deleteCountRow } = stockEngine2();
           state.stocktakeCounts = deleteCountRow(state.stocktakeCounts, id);
           return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+
+      // ===== Tab 6 "Xác Nhận" (12/2026) — mirror ĐÚNG routes/stocktake.js bằng CHÍNH các hàm thật
+      // lib/stocktakeEngine.js, cùng khuôn Tab 2/3/4 ngay trên. =====
+      if (pathName === '/api/stocktake/shelf-confirmations' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const sessionId = Number(new URL(url, 'http://x').searchParams.get('sessionId'));
+        const items = (state.stocktakeShelfConfirmations || []).filter(c => c.sessionId === sessionId);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/shelf-confirmations' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        try {
+          const sessionId = Number(body?.sessionId);
+          const shelfLocationId = Number(body?.shelfLocationId);
+          const loc = kkAssertScanAllowedMock(freshUser, 'KIEM_DEM', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+          const { confirmShelf } = stockEngine2();
+          const arr = state.stocktakeShelfConfirmations || (state.stocktakeShelfConfirmations = []);
+          const row = confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, freshUser);
+          return { status: 200, body: { item: row } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkShelfConfirmDelMatch = pathName.match(/^\/api\/stocktake\/shelf-confirmations\/(\d+)$/);
+      if (kkShelfConfirmDelMatch && method === 'DELETE') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const id = Number(kkShelfConfirmDelMatch[1]);
+        try {
+          const existingRow = (state.stocktakeShelfConfirmations || []).find(c => c.id === id);
+          if (!existingRow) return { status: 404, body: { error: 'Không tìm thấy xác nhận quầy kệ này' } };
+          kkAssertScanAllowedMock(freshUser, 'KIEM_DEM', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+          const { unconfirmShelf } = stockEngine2();
+          state.stocktakeShelfConfirmations = unconfirmShelf(state.stocktakeShelfConfirmations, id);
+          return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkConfirmAllMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)\/confirm-all$/);
+      if (kkConfirmAllMatch && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canConfirmStocktake, closeSession, listUnconfirmedCountedShelfIds, LOAI_KY } = stockEngine2();
+        if (!canConfirmStocktake(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền Xác Nhận Toàn Bộ Đợt Kiểm Kê' } };
+        const id = Number(kkConfirmAllMatch[1]);
+        const session = (state.stocktakeSessions || []).find(s => s.id === id);
+        if (!session) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
+        if (!freshUser.perms?.admin && session.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+        if (session.loaiKy !== LOAI_KY.THONG_KE) return { status: 400, body: { error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Thống Kê' } };
+        const unconfirmedIds = listUnconfirmedCountedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfConfirmations || [], id);
+        if (unconfirmedIds.length) {
+          const labels = unconfirmedIds.map(sid => {
+            const loc = (state.shelfLocations || []).find(l => l.id === sid);
+            return loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+          });
+          return { status: 409, body: { error: `Còn ${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${labels.join(', ')}` } };
+        }
+        try {
+          const updated = closeSession(state.stocktakeSessions, id, freshUser);
+          return { status: 200, body: { item: updated } };
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
 

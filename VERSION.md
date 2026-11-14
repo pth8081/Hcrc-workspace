@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**30.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.38 (2026-11): "📋 Kiểm Kê" — Tab 5 "Cấu Hình Quầy Kệ" + Tab 6 "Xác Nhận"
+
+Hoàn thiện Tab 5 (xem danh sách quầy kệ đang áp dụng Kiểm Kê, lọc theo mã/tên, nút "Mở Quản Lý
+Quầy Kệ →" dẫn thẳng sang Kiểm Soát Hàng Hóa > Quầy Kệ cho đúng quyền `shelfLocationManage`) và
+Tab 6 (xác nhận từng quầy kệ đã Kiểm Đếm xong, rồi Xác Nhận Toàn Bộ Đợt để đóng kỳ Thống Kê).
+
+- Mô hình quyền 2 tầng cho Tab 6 (theo đúng tài liệu thiết kế A2/A3): **Xác Nhận Quầy Kệ** (từng
+  quầy riêng) chỉ cần quyền Kiểm Đếm đúng quầy đó — KHÔNG cần quyền riêng; **Xác Nhận Toàn Bộ Đợt**
+  (đóng cả kỳ) bắt buộc quyền `kiemKeConfirmDo` riêng, khác quyền `kiemKePeriodManage` dùng cho
+  "Đóng Kỳ" thủ công ở Tab 1.
+- Lớp khoá mới (Layer 4): quầy kệ đã Xác Nhận thì bị chặn Kiểm Đếm tiếp (phải gỡ Xác Nhận trước nếu
+  cần sửa) — nhưng KHÔNG chặn Kiểm Soát trên cùng quầy đó (đúng thiết kế "khoá quầy kệ không khoá
+  Kiểm Soát").
+- Route mới: `GET/POST /api/stocktake/shelf-confirmations`, `DELETE
+  /api/stocktake/shelf-confirmations/:id`, `POST /api/stocktake/sessions/:id/confirm-all` (409 kèm
+  danh sách tên quầy kệ chưa xác nhận nếu đóng kỳ khi chưa đủ).
+- Fix 1 lỗi gác quyền thật phát hiện khi code: Tab 6 trước đó chỉ hiện cho người có
+  `kiemKeConfirmDo`, khiến nhân viên Kiểm Đếm thường (không có quyền đóng kỳ) không thấy tab để tự
+  xác nhận quầy mình đếm — đã sửa để hiện tab cho CẢ 2 nhóm quyền, chỉ nút "Xác Nhận Toàn Bộ Đợt"
+  mới gác riêng theo `kiemKeConfirmDo`.
+- Fix 1 lỗi điều hướng âm thầm: bấm "Mở Quản Lý Quầy Kệ" khi thiếu quyền `shelfLocationManage`
+  trước đó tự rơi vào sub-tab khác không rõ lý do — đã thêm cảnh báo rõ ràng, không tự chuyển tab.
+- Test mới: `test-stocktake-tab6-confirm.js` (18 kịch bản HTTP thật qua Express app), `test-
+  stocktake-tab5-tab6-ui.js` (11 kịch bản Playwright thật — click/fill/select, không gọi thẳng hàm
+  nội bộ). Toàn bộ 40 file test Kiểm Soát Hàng Hóa/Kiểm Kê liên quan đã chạy lại, pass hết.
 
 ## v30.37 (2026-12): "📋 Kiểm Kê" — thêm HTML thật cho Tab 2/3/4 (Gom Mã/Kiểm Đếm/Kiểm Soát)
 

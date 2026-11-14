@@ -1047,6 +1047,15 @@ function canViewStocktakeCount(user, item) {
 function filterStocktakeCountsForUser(items, user) {
   return (items || []).filter(o => canViewStocktakeCount(user, o));
 }
+// stocktakeShelfConfirmations (Tab 6 Xác Nhận, 12/2026) — CÙNG lý do/khuôn stocktakeCounts ngay trên.
+function canViewStocktakeShelfConfirmation(user, item) {
+  if (!user || !item) return false;
+  if (user.perms?.admin) return true;
+  return item.dept === user.dept;
+}
+function filterStocktakeShelfConfirmationsForUser(items, user) {
+  return (items || []).filter(o => canViewStocktakeShelfConfirmation(user, o));
+}
 // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng, 12/2026) — đây là DỮ LIỆU CẤU HÌNH QUYỀN (ai được quét
 // quầy kệ nào), không phải hồ sơ nghiệp vụ theo dept — lộ ra cho nhân viên quét hàng thường sẽ cho họ
 // biết đồng nghiệp khác được cấp quyền gì (không nguy hiểm bằng dữ liệu cá nhân nhưng vẫn không nên lộ
@@ -1775,7 +1784,7 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // lặp lại nhiều lần trong file này (budget/car/meeting/vpp/payment/checklist...). Key RIÊNG 'kiemKe'
   // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
   // hoàn toàn khỏi Vận Hành (xem core.js).
-  kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess'],
+  kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess', 'stocktakeShelfConfirmations'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -2019,6 +2028,7 @@ module.exports = {
   canViewShelfStockThreshold, filterShelfStockThresholdsForUser,
   canViewStocktakeSession, filterStocktakeSessionsForUser,
   canViewStocktakeCount, filterStocktakeCountsForUser,
+  canViewStocktakeShelfConfirmation, filterStocktakeShelfConfirmationsForUser,
   canViewStocktakeUserAccess, filterStocktakeUserAccessForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,

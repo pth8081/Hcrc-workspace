@@ -344,6 +344,14 @@ function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || use
 function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
 function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
 function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canSeeStocktakeConfirmTabClient (12/2026) — Tab 6 có 2 vai ĐỘC LẬP (xem chú thích #kkConfirmWrap/
+// vanHanhSection.html): Xác Nhận TỪNG quầy kệ chỉ cần quyền Kiểm Đếm (KHÔNG cần kiemKeConfirmDo), Xác
+// Nhận TOÀN BỘ ĐỢT mới cần kiemKeConfirmDo riêng. Nếu CHỈ gác tab theo canConfirmStocktakeClient (như 7
+// tab kia dùng đúng 1 quyền/tab), nhân viên Kiểm Đếm thường (không có kiemKeConfirmDo) sẽ KHÔNG THẤY
+// được Tab 6 để tự xác nhận quầy kệ mình vừa đếm xong — sai đúng vai trò tài liệu đề xuất mô tả. Nên
+// hiện tab này cho CẢ 2 vai, phần UI bên trong (updateKkConfirmAllVisibility()) tự ẩn nút Toàn Bộ Đợt
+// theo đúng quyền riêng của nó.
+function canSeeStocktakeConfirmTabClient(user) { return canConfirmStocktakeClient(user) || canDoStocktakeKiemDemClient(user); }
 function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 function kkEffectiveDept() {
   return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
@@ -356,7 +364,7 @@ function setKiemKeSubTab(tab) {
     ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
     ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],
     ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig', canManageStocktakeShelfConfigClient],
-    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm', canConfirmStocktakeClient],
+    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm', canSeeStocktakeConfirmTabClient],
     ['REPORT', 'kkReportWrap', 'btnKkSubReport', canViewStocktakeReportClient],
     ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess', canManageStocktakeUserAccessClient]
   ];
@@ -384,6 +392,8 @@ function setKiemKeSubTab(tab) {
   else if (tab === 'GOMMA') loadKkScanTab('GOMMA');
   else if (tab === 'KIEMDEM') loadKkScanTab('KIEMDEM');
   else if (tab === 'KIEMSOAT') loadKkScanTab('KIEMSOAT');
+  else if (tab === 'SHELFCONFIG') loadKkShelfConfigTab();
+  else if (tab === 'CONFIRM') enterKkConfirmTab();
 }
 
 // ===== Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ) =====
@@ -768,6 +778,199 @@ async function deleteKkScanCount(tabKey, id) {
     alert('⛔ Không thể kết nối tới máy chủ.');
   }
   await loadKkScanCounts(tabKey);
+}
+
+// ===== Tab 5 "Cấu Hình Quầy Kệ" (12/2026) — CHỈ XEM, dùng chung danh mục shelfLocations đã đồng bộ sẵn
+// (DB.shelfLocations, KHÔNG gọi route riêng) — xem chú thích đầy đủ tại #kkShelfConfigWrap/
+// vanHanhSection.html lý do không xây form Thêm/Sửa/Xoá riêng ở đây. =====
+let kkShelfConfigFilterText = '';
+function loadKkShelfConfigTab() {
+  const row = document.getElementById('kkShelfConfigDeptRow');
+  const dept = kkEffectiveDept();
+  if (row) {
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
+      (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
+  }
+  const filterInput = document.getElementById('kkShelfConfigFilter');
+  if (filterInput) filterInput.value = '';
+  renderKkShelfConfigList('');
+}
+function renderKkShelfConfigList(filterText) {
+  kkShelfConfigFilterText = filterText || '';
+  const listBody = document.getElementById('kkShelfConfigListBody');
+  if (!listBody) return;
+  const dept = kkEffectiveDept();
+  const q = stripVnDiacritics(kkShelfConfigFilterText.trim().toLowerCase());
+  const items = (DB.shelfLocations || []).filter(l => l.dept === dept && l.active !== false &&
+    (!q || stripVnDiacritics(`${l.code} ${l.name}`.toLowerCase()).includes(q)));
+  if (!items.length) {
+    listBody.innerHTML = `<p class="text-gray-400 text-sm">${q ? 'Không tìm thấy quầy kệ khớp.' : 'Siêu thị này chưa khai báo quầy kệ nào — vào "Mở Quản Lý Quầy Kệ" phía trên để thêm.'}</p>`;
+    return;
+  }
+  listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
+    <th class="py-1">Mã</th><th>Tên</th><th>Ngành Hàng</th></tr></thead><tbody>` +
+    items.map(l => `<tr class="border-b last:border-0">
+      <td class="py-1 font-mono">${escapeHtml(l.code)}</td>
+      <td>${escapeHtml(l.name)}</td>
+      <td>${escapeHtml(l.category || '')}</td>
+    </tr>`).join('') + '</tbody></table>';
+}
+function goToShelfLocationsManagement() {
+  // LỖI THẬT tự phát hiện lúc build demo: quyền Tab 5 Kiểm Kê (kiemKeShelfConfigManage) KHÔNG đảm bảo
+  // user cũng có quyền quản lý Quầy Kệ thật ở Kiểm Soát Hàng Hóa (shelfLocationManage) — 2 quyền hoàn
+  // toàn độc lập. Thiếu kiểm tra này, setVanHanhShelfSubTab('LOCATIONS') sẽ ÂM THẦM rơi về tab khác
+  // (đúng cơ chế allowFn của nó) mà KHÔNG báo gì — đúng kiểu "nút hiện nhưng bấm không đúng việc" cần
+  // tránh. Báo rõ ngay tại đây thay vì để người dùng tự hỏi vì sao bị "đá" sang màn khác.
+  if (!canManageShelfLocationsClient(currentUser)) {
+    alert('⛔ Bạn chưa có quyền "Quản Lý Danh Mục Quầy Kệ" ở Kiểm Soát Hàng Hóa — liên hệ quản trị hệ thống để được cấp thêm quyền này nếu cần thêm/sửa/xoá quầy kệ.');
+    return;
+  }
+  setVanHanhSubTab('SHELF');
+  setVanHanhShelfSubTab('LOCATIONS');
+}
+
+// ===== Tab 6 "Xác Nhận" (12/2026) — 2 khu vực độc lập, xem chú thích đầy đủ tại #kkConfirmWrap/
+// vanHanhSection.html: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy kệ đó đều bấm được) khoá
+// Kiểm Đếm tiếp trên quầy kệ đó (KHÔNG khoá Kiểm Soát) — (b) Xác Nhận Toàn Bộ Đợt (CHỈ kiemKeConfirmDo)
+// đóng hẳn Kỳ Thống Kê, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận. =====
+let kkConfirmSessionId = null;
+let kkConfirmCounts = [];
+let kkConfirmConfirmations = [];
+
+async function enterKkConfirmTab() {
+  kkConfirmSessionId = null;
+  const sel = document.getElementById('kkConfirmSessionSelect');
+  const dept = kkEffectiveDept();
+  try {
+    const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
+    const res = await fetch(url);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    const sessions = res.ok ? (body.items || []) : [];
+    const activeThongKe = sessions.filter(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Chọn kỳ Thống Kê đang hoạt động --</option>' +
+        activeThongKe.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
+      // Thường chỉ có ĐÚNG 1 kỳ Thống Kê "Đang hoạt động" / siêu thị (đúng ràng buộc Tab 1) — tự chọn
+      // luôn cho đỡ phải bấm thêm 1 bước, vẫn để trống nếu chưa có kỳ nào.
+      if (activeThongKe.length === 1) sel.value = String(activeThongKe[0].id);
+    }
+  } catch (err) {
+    if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
+  }
+  await loadKkConfirmTab();
+}
+
+async function loadKkConfirmTab() {
+  const sel = document.getElementById('kkConfirmSessionSelect');
+  const sessionId = Number(sel?.value || 0);
+  const bodyWrap = document.getElementById('kkConfirmBody');
+  kkConfirmSessionId = sessionId || null;
+  if (!sessionId) { if (bodyWrap) bodyWrap.classList.add('hidden'); return; }
+  if (bodyWrap) bodyWrap.classList.remove('hidden');
+  try {
+    const [countsRes, confirmRes] = await Promise.all([
+      fetch(`/api/stocktake/counts?sessionId=${sessionId}`),
+      fetch(`/api/stocktake/shelf-confirmations?sessionId=${sessionId}`)
+    ]);
+    if (countsRes.status === 401 || confirmRes.status === 401) return handleSessionExpired();
+    const countsBody = await countsRes.json().catch(() => ({}));
+    const confirmBody = await confirmRes.json().catch(() => ({}));
+    kkConfirmCounts = countsRes.ok ? (countsBody.items || []) : [];
+    kkConfirmConfirmations = confirmRes.ok ? (confirmBody.items || []) : [];
+  } catch (err) {
+    kkConfirmCounts = []; kkConfirmConfirmations = [];
+  }
+  renderKkConfirmShelfList();
+}
+
+function renderKkConfirmShelfList() {
+  const listBody = document.getElementById('kkConfirmShelfListBody');
+  if (!listBody) return;
+  // CHỈ hiện quầy kệ CÓ hoạt động Kiểm Đếm thật (slKiemDem > 0) trong đúng kỳ này — đúng khuôn
+  // listUnconfirmedCountedShelfIds() phía server (lib/stocktakeEngine.js).
+  const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
+  if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Đếm trong kỳ này.</p>';
+    updateKkConfirmAllVisibility(false);
+    return;
+  }
+  const allLocations = DB.shelfLocations || [];
+  listBody.innerHTML = shelfIds.map(sid => {
+    const loc = allLocations.find(l => l.id === sid);
+    const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+    const confirmedRow = kkConfirmConfirmations.find(c => c.shelfLocationId === sid);
+    if (confirmedRow) {
+      return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
+        <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
+        <button type="button" data-op="unconfirmKkShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
+      </div>`;
+    }
+    return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
+      <span>${escapeHtml(label)}</span>
+      <button type="button" data-op="confirmKkShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
+    </div>`;
+  }).join('');
+  updateKkConfirmAllVisibility(shelfIds.every(sid => kkConfirmConfirmations.some(c => c.shelfLocationId === sid)));
+}
+
+async function confirmKkShelf(shelfLocationId) {
+  if (!kkConfirmSessionId) return;
+  try {
+    const res = await fetch('/api/stocktake/shelf-confirmations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: kkConfirmSessionId, shelfLocationId })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmTab();
+}
+
+async function unconfirmKkShelf(id) {
+  if (!confirm('Gỡ Xác Nhận quầy kệ này? Quầy kệ sẽ mở lại cho Kiểm Đếm.')) return;
+  try {
+    const res = await fetch(`/api/stocktake/shelf-confirmations/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmTab();
+}
+
+function updateKkConfirmAllVisibility(allConfirmed) {
+  const wrap = document.getElementById('kkConfirmAllWrap');
+  if (!wrap) return;
+  const canSeeButton = canConfirmStocktakeClient(currentUser);
+  wrap.classList.toggle('hidden', !canSeeButton);
+  if (!canSeeButton) return;
+  const note = document.getElementById('kkConfirmAllNote');
+  if (note) note.textContent = allConfirmed ? '' : 'Còn quầy kệ đã Kiểm Đếm nhưng chưa Xác Nhận — chưa thể đóng kỳ.';
+  const btn = wrap.querySelector('button[data-op="submitKkConfirmAll"]');
+  if (btn) {
+    btn.disabled = !allConfirmed;
+    btn.className = `w-full px-3 py-2 rounded text-xs font-bold ${allConfirmed ? 'bg-cyan-700 text-white hover:bg-cyan-800' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`;
+  }
+}
+
+async function submitKkConfirmAll() {
+  if (!kkConfirmSessionId) return;
+  if (!confirm('Xác Nhận TOÀN BỘ đợt kiểm kê? Kỳ sẽ chuyển sang Đã chốt — khoá tuyệt đối, không ai thao tác thêm được (trừ Admin mở lại).')) return;
+  try {
+    const res = await fetch(`/api/stocktake/sessions/${kkConfirmSessionId}/confirm-all`, { method: 'POST' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
+    alert('✅ Đã chốt kỳ kiểm kê thành công.');
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await enterKkConfirmTab();
 }
 
 function renderKkPeriodDeptRow() {

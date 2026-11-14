@@ -15,12 +15,13 @@ const { getAllForCollection } = require('../lib/recordStore');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const {
   LOAI_KY, TRANG_THAI,
-  canManageStocktakePeriod, canReopenStocktakeSession,
+  canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake,
   buildNewSession, activateSession, closeSession, reopenSession, findActiveSession,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
   upsertUserAccessRows, removeUserAccessRow,
-  upsertScanCount, editCountValue, deleteCountRow
+  upsertScanCount, editCountValue, deleteCountRow,
+  isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
 } = require('../lib/stocktakeEngine');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -261,7 +262,7 @@ async function findShelfLocationOrThrow(shelfLocationId) {
 // KHÔNG tin shelfLocationId/dept/sessionId client gửi — tự tra lại quầy kệ thật để lấy ĐÚNG dept của nó
 // (1 user có thể thao tác NHIỀU siêu thị khác nhau tuỳ allowlist, không có "siêu thị của req.freshUser"
 // cố định như mọi route Kiểm Soát Hàng Hóa khác).
-async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId) {
+async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId, opts) {
   const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
   if (!checkFn) throw new HttpError(400, 'Hành động không hợp lệ');
   if (!checkFn(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền thực hiện hành động này (Lớp 1 — quyền tab)');
@@ -283,21 +284,36 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId)
   if (activeSession.id !== sessionId) {
     throw new HttpError(409, 'Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang');
   }
+  // Lớp 4 (CHỈ áp dụng cho Kiểm Đếm, tài liệu đề xuất A3 bước 3): quầy kệ ĐÃ được Xác Nhận ở Tab 6 thì
+  // khoá hẳn thao tác Kiểm Đếm (quét mới/sửa tay/xoá) trên quầy kệ đó — "Khoá ở Bước 3 KHÔNG chặn Kiểm
+  // Soát" (bước 4 cùng tài liệu), nên CHỈ chặn mode === 'KIEM_DEM', Gom Mã/Kiểm Soát không bị ảnh hưởng.
+  // skipConfirmedCheck: dùng bởi chính route Xác Nhận/Gỡ Xác Nhận quầy kệ (Tab 6) — xác nhận LẠI 1 quầy
+  // kệ đã xác nhận là hành động idempotent vô hại, không phải "cố quét tiếp sau khi khoá".
+  if (mode === 'KIEM_DEM' && !opts?.skipConfirmedCheck) {
+    await ensureStocktakeKey('stocktakeShelfConfirmations');
+    const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    if (isShelfConfirmed(confirmations, sessionId, shelfLocationId)) {
+      throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận ở Tab "Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa)');
+    }
+  }
   return { loc, activeSession };
 }
 
 // ===================== TAB 2/3/4 — danh sách đã quét theo (kỳ, quầy kệ) =====================
+// shelfLocationId OPTIONAL (12/2026, phục vụ Tab 6 "Xác Nhận" cần TOÀN BỘ dòng đã quét của 1 kỳ để biết
+// quầy kệ nào đã Kiểm Đếm — Tab 2/3/4 vẫn luôn truyền kèm shelfLocationId như cũ, hành vi KHÔNG đổi cho
+// các nơi gọi hiện có) — bỏ trống thì trả hết mọi dòng của ĐÚNG sessionId đó, không lọc theo quầy kệ.
 router.get('/counts', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {
     const sessionId = Number(req.query.sessionId);
-    const shelfLocationId = Number(req.query.shelfLocationId);
-    if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) {
-      return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
+    if (!Number.isFinite(sessionId)) {
+      return res.status(400).json({ error: 'Thiếu sessionId' });
     }
+    const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
     await ensureStocktakeKey('stocktakeCounts');
     const all = (await getAppDataValue('stocktakeCounts')) || [];
-    const items = all.filter(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId);
+    const items = all.filter(c => c.sessionId === sessionId && (shelfLocationId === null || c.shelfLocationId === shelfLocationId));
     res.json({ items });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/counts');
@@ -372,6 +388,112 @@ router.delete('/counts/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/counts/:id');
+  }
+});
+
+// ===================== TAB 6 "Xác Nhận" =====================
+// Danh sách xác nhận quầy kệ của 1 kỳ — mở cho MỌI user có quyền module Kiểm Kê (không riêng
+// kiemKeConfirmDo): Tab 6 cần hiện được trạng thái "đã xác nhận/chưa" của TỪNG quầy kệ cho người Kiểm
+// Đếm xem, không chỉ Quản lý siêu thị.
+router.get('/shelf-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.query.sessionId);
+    if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    await ensureStocktakeKey('stocktakeShelfConfirmations');
+    const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/shelf-confirmations');
+  }
+});
+
+// Xác Nhận 1 quầy kệ — ĐÚNG người có quyền Kiểm Đếm quầy kệ đó (3 lớp y hệt route quét Kiểm Đếm, KHÔNG
+// cần quyền Tab 6 riêng — khác hẳn route confirm-all bên dưới).
+router.post('/shelf-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.body?.sessionId);
+    const shelfLocationId = Number(req.body?.shelfLocationId);
+    if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) {
+      return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
+    }
+    const { loc } = await assertStocktakeScanAllowed(req, 'KIEM_DEM', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+    await ensureStocktakeKey('stocktakeShelfConfirmations');
+    const saved = await withLockedAppDataValue('stocktakeShelfConfirmations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
+      return arr;
+    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    res.json({ item: saved });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/shelf-confirmations');
+  }
+});
+
+// Gỡ Xác Nhận 1 quầy kệ (sửa sai/cần Kiểm Đếm lại) — CÙNG quyền với xác nhận (Kiểm Đếm quầy kệ đó), tự
+// tra lại ĐÚNG shelfLocationId/sessionId thật của dòng đang gỡ (không tin id suông).
+router.delete('/shelf-confirmations/:id', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await ensureStocktakeKey('stocktakeShelfConfirmations');
+    const existingAll = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    const existingRow = existingAll.find(c => c.id === id);
+    if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
+    await assertStocktakeScanAllowed(req, 'KIEM_DEM', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+    await withLockedAppDataValue('stocktakeShelfConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/stocktake/shelf-confirmations/:id');
+  }
+});
+
+// Xác Nhận TOÀN BỘ ĐỢT — "Quản lý siêu thị" (quyền RIÊNG Tab 6 kiemKeConfirmDo, KHÁC quyền Tab 1
+// kiemKePeriodManage dùng cho nút "Đóng Kỳ" thủ công ở Tab Kỳ Kiểm Kê) — CHỈ cho phép khi mọi quầy kệ đã
+// THỰC SỰ Kiểm Đếm (slKiemDem > 0) trong đúng kỳ này đều đã Xác Nhận. Hiệu ứng cuối: CHUYỂN TRẠNG THÁI
+// kỳ giống hệt closeSession() (dùng lại ĐÚNG hàm đó, không viết lại logic chuyển trạng thái).
+router.post('/sessions/:id/confirm-all', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canConfirmStocktake(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền Xác Nhận Toàn Bộ Đợt Kiểm Kê' });
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await ensureStocktakeSessionsKey();
+    const sessions = (await getAppDataValue('stocktakeSessions')) || [];
+    const session = sessions.find(s => s.id === id);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+    }
+    if (session.loaiKy !== LOAI_KY.THONG_KE) {
+      return res.status(400).json({ error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Thống Kê' });
+    }
+    await ensureStocktakeKey('stocktakeCounts');
+    await ensureStocktakeKey('stocktakeShelfConfirmations');
+    const counts = (await getAppDataValue('stocktakeCounts')) || [];
+    const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    const unconfirmedIds = listUnconfirmedCountedShelfIds(counts, confirmations, id);
+    if (unconfirmedIds.length) {
+      const allLocations = await getAllForCollection('shelfLocations');
+      const labels = unconfirmedIds.map(sid => {
+        const loc = allLocations.find(l => l.id === sid);
+        return loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      });
+      return res.status(409).json({ error: `Còn ${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${labels.join(', ')}` });
+    }
+    let updated = null;
+    await withLockedAppDataValue('stocktakeSessions', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      updated = closeSession(arr, id, req.freshUser);
+      return arr;
+    });
+    res.json({ item: updated });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/sessions/:id/confirm-all');
   }
 });
 

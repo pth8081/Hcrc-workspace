@@ -29,6 +29,7 @@ const {
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterShelfLocationsForUser, filterShelfRecordsForUser, filterShelfStockThresholdsForUser,
   filterStocktakeSessionsForUser, filterStocktakeCountsForUser, filterStocktakeUserAccessForUser,
+  filterStocktakeShelfConfirmationsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
@@ -1877,6 +1878,7 @@ router.get('/', async (req, res) => {
     // ngay trên: chặn lộ chéo siêu thị / lộ cấu hình quyền người khác qua GET /api/data chung.
     if (data.stocktakeCounts) data.stocktakeCounts = filterStocktakeCountsForUser(data.stocktakeCounts, req.freshUser);
     if (data.stocktakeUserAccess) data.stocktakeUserAccess = filterStocktakeUserAccessForUser(data.stocktakeUserAccess, req.freshUser);
+    if (data.stocktakeShelfConfirmations) data.stocktakeShelfConfirmations = filterStocktakeShelfConfirmationsForUser(data.stocktakeShelfConfirmations, req.freshUser);
     // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
     // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
     // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/
