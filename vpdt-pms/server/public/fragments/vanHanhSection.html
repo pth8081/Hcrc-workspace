@@ -1443,7 +1443,11 @@
             <button type="button" data-op="cancelPriceCheck" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50 text-xs font-bold">✖️ Hủy</button>
           </div>
         </div>
-        <p class="text-gray-400 text-[11px]">Tra giá trực tiếp từ hệ thống giá trung tâm (đồng bộ mỗi 15 phút phía đối tác) — KHÔNG lưu lại giá đã tra ở bất kỳ đâu trong hệ thống.</p>
+        <!-- Cập nhật nội dung (12/2026, bảng giá offline) — câu cũ "KHÔNG lưu lại giá đã tra ở bất kỳ
+             đâu" nay SAI vì đã có cache offline trên máy (xem syncShelfPriceCatalogSilently()/
+             module-vanhanh.js) — chỉ còn đúng ở chỗ KHÔNG lưu LỊCH SỬ các lượt tra (ai tra mã gì lúc
+             nào), cache chỉ giữ giá trị MỚI NHẤT của từng mã. -->
+        <p class="text-gray-400 text-[11px]">Đã đồng bộ ngầm bảng giá trên máy (tra nhanh, hoạt động được cả lúc mất mạng) — mã chưa có trong bảng sẽ tự tra trực tuyến. Hệ thống KHÔNG lưu lại lịch sử các lượt tra (ai tra mã gì lúc nào).</p>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
