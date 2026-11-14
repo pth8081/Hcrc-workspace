@@ -66,18 +66,20 @@ const PORT = 8993;
     assert.strictEqual(await page.isVisible('[data-op="closeKkPeriod"]'), true, 'LỖI: kỳ Đang hoạt động phải có nút Đóng Kỳ');
     console.log('PASS: Kích Hoạt chuyển kỳ sang Đang hoạt động, hiện nút Đóng Kỳ');
 
-    // ===== 4) Tạo thêm 1 kỳ Gom Mã thứ 2 cho ĐÚNG siêu thị này — kích hoạt PHẢI bị chặn (chỉ 1 kỳ
-    // Đang hoạt động/loại/siêu thị), có thông báo rõ ràng. =====
+    // ===== 4) Tạo thêm 1 kỳ Gom Mã thứ 2 cho ĐÚNG siêu thị này khi kỳ đầu đang Đang hoạt động — PHẢI bị
+    // chặn NGAY LÚC TẠO (12/2026, SIẾT LẠI theo yêu cầu người dùng "trong 1 kỳ kiểm kê chỉ được 1 lần,
+    // trừ khi đóng kỳ rồi mở lại" — TRƯỚC ĐÂY chỉ chặn muộn lúc Kích Hoạt, tạo được thoải mái nhiều bản
+    // Nháp chồng nhau), có thông báo rõ ràng, KHÔNG tạo ra bản ghi rác trong danh sách. =====
     await page.click('#btnKkPeriodOpenCreate');
     await page.selectOption('#kkNewLoaiKy', 'GOM_MA');
     await page.fill('#kkNewTenKy', 'Gom Mã tuần 47 (trùng loại)');
     await page.click('[data-op="submitCreateKkPeriod"]');
-    await page.waitForTimeout(250);
-    await page.click('[data-op="activateKkPeriod"] >> nth=-1'); // nút Kích Hoạt của kỳ vừa tạo (dòng mới nhất)
     await page.waitForTimeout(200);
     const alertsAfterConflict = await page.evaluate(() => window.__alerts || []);
-    assert.ok(alertsAfterConflict.some(a => a.includes('đang hoạt động')), 'LỖI: phải cảnh báo rõ đã có 1 kỳ Gom Mã khác đang hoạt động');
-    console.log('PASS: Chặn đúng khi kích hoạt 2 kỳ CÙNG loại CÙNG siêu thị đồng thời, có cảnh báo rõ');
+    assert.ok(alertsAfterConflict.some(a => a.includes('chưa đóng')), 'LỖI: phải cảnh báo rõ đã có 1 kỳ Gom Mã khác CHƯA ĐÓNG, chặn ngay lúc tạo');
+    rowText = await page.textContent('#kkPeriodListBody');
+    assert.ok(!rowText.includes('Gom Mã tuần 47 (trùng loại)'), 'LỖI: kỳ bị chặn tạo không được xuất hiện trong danh sách');
+    console.log('PASS: Chặn đúng NGAY LÚC TẠO khi siêu thị đã có 1 kỳ CÙNG loại CHƯA ĐÓNG, có cảnh báo rõ, không tạo bản ghi rác');
 
     // ===== 5) Đóng kỳ đang hoạt động — chuyển Đã chốt, Quản Lý (không phải Admin) KHÔNG thấy nút Mở Lại. =====
     await page.click('[data-op="closeKkPeriod"]');

@@ -5,7 +5,7 @@
 const assert = require('assert');
 const {
   canManageStocktakePeriod, canReopenStocktakeSession,
-  findActiveSession, buildNewSession, activateSession, closeSession, reopenSession
+  findActiveSession, findOpenSession, buildNewSession, activateSession, closeSession, reopenSession
 } = require('../lib/stocktakeEngine');
 
 const USER_MANAGER = { username: 'nv1', name: 'Quản Lý A', dept: 'Siêu thị Quận 1', perms: { kiemKePeriodManage: true } };
@@ -17,9 +17,11 @@ const USER_ADMIN = { username: 'admin', name: 'Admin', dept: 'HO', perms: { admi
 // ms nên không đụng nhau). Test này tạo NHIỀU session liên tiếp trong 1 vòng lặp JS đồng bộ (không có
 // độ trễ thật), có thể trùng id nếu 2 lệnh gọi rơi vào cùng 1 millisecond — bọc qua hàm này để LUÔN có
 // id riêng biệt, tách rủi ro "test tự đụng nhau vì chạy quá nhanh" khỏi logic thật đang kiểm.
+// existingSessions (THAM SỐ MỚI, tuỳ chọn, 12/2026) — truyền để exercise đúng findOpenSession() mới ở
+// buildNewSession(), mặc định [] (không có gì xung đột) nếu không truyền, GIỮ NGUYÊN hành vi gọi cũ.
 let __testIdSeq = 1;
-function buildNewSessionUniqueId(input, user) {
-  const item = buildNewSession(input, user);
+function buildNewSessionUniqueId(input, user, existingSessions) {
+  const item = buildNewSession(input, user, existingSessions);
   item.id = __testIdSeq++;
   return item;
 }
@@ -78,10 +80,41 @@ function buildNewSessionUniqueId(input, user) {
   assert.strictEqual(draftItem.trangThai, 'DANG_HOAT_DONG');
   assert.strictEqual(findActiveSession(sessions2, 'Siêu thị Quận 1', 'GOM_MA').id, item.id);
   assert.strictEqual(findActiveSession(sessions2, 'Siêu thị Quận 1', 'THONG_KE').id, draftItem.id);
+  console.log('PASS: 2 loại kỳ (Gom Mã/Kiểm Kê) độc lập, nhưng CÙNG loại thì chỉ 1 kỳ active/siêu thị');
+
+  // 7b) LỖI ĐÃ VÁ (12/2026, theo yêu cầu người dùng "1 siêu thị đã kiểm kê trong 1 kỳ rồi thì không
+  // được kiểm kê tiếp — trong 1 kỳ chỉ được 1 lần"): TRƯỚC ĐÂY tạo được 1 kỳ GOM_MA THỨ 2 cho CÙNG siêu
+  // thị dù kỳ GOM_MA đầu (item) đang Đang hoạt động — chỉ bị chặn MUỘN lúc kích hoạt. Giờ phải chặn NGAY
+  // lúc TẠO (buildNewSession() nhận thêm existingSessions) — không tạo được kỳ Nháp thứ 2 chồng lên kỳ
+  // CÙNG loại CHƯA ĐÓNG của CÙNG siêu thị.
+  assert.throws(
+    () => buildNewSessionUniqueId({ dept: 'Siêu thị Quận 1', loaiKy: 'GOM_MA', tenKy: 'Gom Mã tuần 47 (trùng loại)' }, USER_MANAGER, sessions2),
+    /chưa đóng/
+  );
+  console.log('PASS: LỖI ĐÃ VÁ — chặn NGAY lúc tạo kỳ mới nếu siêu thị đã có kỳ cùng loại CHƯA ĐÓNG (Nháp hoặc Đang hoạt động), không đợi tới lúc kích hoạt mới chặn');
+
+  // 7c) Tạo được 2 kỳ Nháp CÙNG loại/CÙNG siêu thị chồng nhau cũng phải bị chặn (không chỉ khi 1 bên
+  // đang Đang hoạt động như 7b) — cả 2 đều NHAP vẫn tính là "chưa đóng".
+  const draftQuan5a = buildNewSessionUniqueId({ dept: 'Siêu thị Quận 5', loaiKy: 'GOM_MA', tenKy: 'Gom Mã A' }, USER_MANAGER, []);
+  assert.throws(
+    () => buildNewSessionUniqueId({ dept: 'Siêu thị Quận 5', loaiKy: 'GOM_MA', tenKy: 'Gom Mã B' }, USER_MANAGER, [draftQuan5a]),
+    /chưa đóng/
+  );
+  console.log('PASS: 2 kỳ CÙNG đang Nháp (chưa kích hoạt bên nào) vẫn bị chặn tạo chồng — "chưa đóng" không chỉ riêng Đang hoạt động');
+
+  // 7d) Đóng (DA_CHOT) rồi thì tạo kỳ MỚI cho lại đúng siêu thị/loại đó được bình thường (không bị chặn
+  // vĩnh viễn) — khác hẳn trường hợp 7b/7c (Nháp/Đang hoạt động).
+  activateSession([draftQuan5a], draftQuan5a.id, USER_MANAGER);
+  closeSession([draftQuan5a], draftQuan5a.id, USER_MANAGER);
+  assert.strictEqual(draftQuan5a.trangThai, 'DA_CHOT');
+  const newRoundQuan5 = buildNewSessionUniqueId({ dept: 'Siêu thị Quận 5', loaiKy: 'GOM_MA', tenKy: 'Gom Mã vòng mới' }, USER_MANAGER, [draftQuan5a]);
+  assert.strictEqual(newRoundQuan5.trangThai, 'NHAP');
+  console.log('PASS: Kỳ cũ ĐÃ CHỐT (đóng) không chặn tạo kỳ MỚI cho cùng siêu thị/loại — chỉ Nháp/Đang hoạt động mới chặn');
+
   const secondGomMa = buildNewSessionUniqueId({ dept: 'Siêu thị Quận 1', loaiKy: 'GOM_MA', tenKy: 'Gom Mã tuần 47 (trùng loại)' }, USER_MANAGER);
   sessions2.push(secondGomMa);
   assert.throws(() => activateSession(sessions2, secondGomMa.id, USER_MANAGER), /đang hoạt động/);
-  console.log('PASS: 2 loại kỳ (Gom Mã/Thống Kê) độc lập, nhưng CÙNG loại thì chỉ 1 kỳ active/siêu thị');
+  console.log('PASS: activateSession() vẫn tự chặn riêng (phòng khi existingSessions không truyền vào buildNewSession ở 1 caller nào đó)');
 
   // 8) Siêu thị khác không bị ảnh hưởng (findActiveSession lọc đúng theo dept).
   const otherStoreItem = buildNewSessionUniqueId({ dept: 'Siêu thị Quận 2', loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q2' }, USER_MANAGER);
@@ -95,5 +128,5 @@ function buildNewSessionUniqueId(input, user) {
   assert.throws(() => reopenSession([draft2], draft2.id, USER_ADMIN), /Đã chốt/);
   console.log('PASS: chặn mở lại kỳ không ở trạng thái Đã chốt');
 
-  console.log('\n==== 9/9 scenario(s) passed ====');
+  console.log('\n==== 13/13 scenario(s) passed ====');
 })();
