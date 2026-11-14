@@ -26,8 +26,7 @@ const OUT_DIR = process.env.KK_MULTISELECT_DEMO_OUT_DIR || path.join(__dirname, 
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
 
     // Ảnh 1: nhãn đổi "Thống Kê" -> "Kiểm Kê" (nút lọc + dropdown Loại kỳ).

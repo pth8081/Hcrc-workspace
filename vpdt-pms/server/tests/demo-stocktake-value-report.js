@@ -48,8 +48,7 @@ const OUT_DIR = process.env.KK_VALUE_DEMO_OUT_DIR || path.join(__dirname, '..', 
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(150);
@@ -61,8 +60,7 @@ const OUT_DIR = process.env.KK_VALUE_DEMO_OUT_DIR || path.join(__dirname, '..', 
 
     // Admin: xem thêm khung "Giá Trị Thừa/Thiếu Theo Siêu Thị".
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => switchTab('vanHanh'));
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(150);

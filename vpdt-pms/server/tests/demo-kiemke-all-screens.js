@@ -43,23 +43,12 @@ const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'kiemke-all-scree
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);
     await page.waitForTimeout(150);
 
-    // 1) Sidebar mặc định (chưa mở dropdown Vận Hành) — thấy icon "⚙️ Vận Hành ▾" trên menu bar.
+    // 1) Sidebar mặc định — thấy mục riêng "📋 Kiểm Kê" trên menu bar (12/2026, module TOP-LEVEL,
+    //    KHÔNG còn nằm trong dropdown "⚙️ Vận Hành ▾" như lúc mới build).
     await shot('sidebar-mac-dinh');
 
-    // 2) Mở dropdown "⚙️ Vận Hành ▾" trên sidebar — xem đủ shortcut, trong đó có "📋 Kiểm Kê" (MỚI thêm
-    //    đợt này, mirror đúng các shortcut Đơn Hàng/QLDA/Checklist/Kiểm Soát Hàng Hóa đã có).
-    await page.click('#btnVanHanhTab');
-    await page.waitForTimeout(150);
-    await shot('sidebar-mo-dropdown-van-hanh');
-
-    // 3) Bấm vào Vận Hành (qua tab trong trang, không qua shortcut) — xem thanh sub-tab chính bên trong
-    //    Vận Hành: Đơn Hàng / QLDA / Phê Duyệt Giá Bán Buôn / Kiểm Soát Hàng Hóa / Kiểm Kê.
-    await page.evaluate(() => { closeVanHanhDropdown(); switchTab('vanHanh'); });
-    await page.waitForTimeout(150);
-    await shot('vanhanh-thanh-subtab-chinh');
-
-    // 4) Bấm "📋 Kiểm Kê" — vào Tab 1 "📅 Kỳ Kiểm Kê", CHƯA có kỳ nào (trạng thái rỗng).
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    // 2) Bấm thẳng "📋 Kiểm Kê" trên sidebar — vào Tab 1 "📅 Kỳ Kiểm Kê", CHƯA có kỳ nào (trạng thái rỗng).
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(200);
     await shot('kiemke-tab1-rong');
 
@@ -122,8 +111,7 @@ const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'kiemke-all-scree
 
     // ===== Đăng nhập Admin — xem nút "↩️ Mở Lại" cho kỳ Đã chốt + Báo Cáo + Phân Quyền =====
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => { switchTab('kiemKe'); });
     await page.waitForTimeout(200);
     await shot('kiemke-tab1-admin-thay-mo-lai');
     await page.click('[data-op="reopenKkPeriod"]');

@@ -3422,11 +3422,12 @@
           </div>
         </details>
 
-        <!-- 27. Kiểm Kê: MỤC MỚI, khối TOP-LEVEL riêng (11/2026) — đúng khuôn "23. Checklist Đánh Giá
-             Siêu Thị" (module sống về điều hướng trong "22. Vận Hành" — setVanHanhSubTab(), nút cạnh
-             "📦 Kiểm Soát Hàng Hóa" — nhưng phân quyền KHÔNG lẫn vào khối Vận Hành, theo đúng yêu cầu
-             người dùng "cho riêng ra một mục to" — xem BUSINESS_MODULES key 'kiemKe' không có parent ở
-             core.js). 8 quyền PHẲNG dưới đây đúng 8 tab trong tài liệu đề xuất
+        <!-- 27. Kiểm Kê: khối TOP-LEVEL riêng (11/2026, khối quyền; 12/2026 PROMOTE điều hướng thành
+             module chính riêng ở sidebar — trước đó từng sống về điều hướng trong "22. Vận Hành" qua
+             setVanHanhSubTab(), nay vào thẳng qua switchTab('kiemKe')/canAccessStocktakeModule() —
+             core.js). Phân quyền KHÔNG lẫn vào khối Vận Hành TỪ TRƯỚC đợt promote này, theo đúng yêu cầu
+             người dùng gốc "cho riêng ra một mục to" — xem BUSINESS_MODULES key 'kiemKe' không có parent
+             ở core.js. 8 quyền PHẲNG dưới đây đúng 8 tab trong tài liệu đề xuất
              (vpdt-pms/docs/kiem-ke-sieu-thi.md mục B1) — xem lib/stocktakeEngine.js cho logic kiểm tra
              (admin luôn bypass toàn bộ 8 quyền này). Phase 1 MVP (11/2026): CHỈ Tab 1 "Kỳ Kiểm Kê" đã có
              giao diện thật (setKiemKeSubTab() ở module-vanhanh.js) — 7 quyền còn lại khai báo sẵn ở đây
@@ -3438,7 +3439,7 @@
             <span id="permTreeBadge_kiemKe" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Module "📋 Kiểm Kê" (Vận Hành) — kiểm kê định kỳ toàn bộ quầy kệ siêu thị, TÁCH RIÊNG hẳn khỏi khối quyền "22. Vận Hành" ở trên để dễ cấp/soát quyền. 8 quyền dưới đây tương ứng đúng 8 tab của module; thiếu quyền nào thì KHÔNG thấy/dùng được đúng tab đó, kể cả khi đã có quyền ở Tab 8 Cấu Hình Người Dùng (lớp phân quyền theo siêu thị/quầy kệ bên trong module — độc lập với 8 quyền PHẲNG này).</p>
+            <p class="text-[11px] text-gray-500 italic">Module "📋 Kiểm Kê" — module chính riêng ở sidebar (từ 12/2026), kiểm kê định kỳ toàn bộ quầy kệ siêu thị, TÁCH RIÊNG hẳn khỏi khối quyền "22. Vận Hành" ở trên để dễ cấp/soát quyền. 8 quyền dưới đây tương ứng đúng 8 tab của module; thiếu quyền nào thì KHÔNG thấy/dùng được đúng tab đó, kể cả khi đã có quyền ở Tab 8 Cấu Hình Người Dùng (lớp phân quyền theo siêu thị/quầy kệ bên trong module — độc lập với 8 quyền PHẲNG này).</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pKiemKePeriodManage"> 📅 Tab 1 — Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã &amp; Thống Kê — mở lại kỳ đã chốt luôn cần quyền Admin, không nằm trong quyền này)
             </label>

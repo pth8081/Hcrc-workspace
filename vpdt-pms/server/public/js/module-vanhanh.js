@@ -142,11 +142,10 @@ const VAN_HANH_SUBTAB_TO_KIND = { ORDERS: 'operationOrders' };
 function setVanHanhSubTab(subTab) {
   // Mục 0 (10/2026): AND thêm checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab. SHELF (Kiểm
   // Soát Hàng Hóa, Phase 1 MVP 11/2026) thêm vanHanhShelfTab, cùng khuôn.
-  // STOCKTAKE ("📋 Kiểm Kê", 11/2026) — gác bằng key 'kiemKe' (KHÔNG dùng 'vanHanhShelfTab'), vì phân
-  // quyền của Kiểm Kê TÁCH RIÊNG hẳn khỏi khối Vận Hành theo yêu cầu người dùng (xem BUSINESS_MODULES ở
-  // core.js + khối "27. Kiểm Kê" ở systemSection.html).
-  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab', SHELF: 'vanHanhShelfTab', STOCKTAKE: 'kiemKe' };
-  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE', 'SHELF', 'STOCKTAKE'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
+  // "📋 Kiểm Kê" (12/2026) — ĐÃ promote thành module chính riêng ở sidebar (xem switchTab('kiemKe') +
+  // setKiemKeSubTab() ở core.js/module-vanhanh.js), KHÔNG còn là sub-tab của Vận Hành nữa.
+  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab', SHELF: 'vanHanhShelfTab' };
+  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE', 'SHELF'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
   const curVhTab = vhTabOrder.find(([k]) => k === subTab);
   if (!curVhTab || !curVhTab[1]) {
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
@@ -165,9 +164,7 @@ function setVanHanhSubTab(subTab) {
     // "Phê Duyệt Giá Bán Buôn" (10/2026) — chỉ form tạo đề xuất, xem chú thích ở vanHanhItPriceWrap.
     ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice'],
     // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — xem setVanHanhShelfSubTab() bên dưới.
-    ['SHELF', 'vanHanhShelfWrap', 'btnVanHanhSubShelf'],
-    // "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — xem setKiemKeSubTab() bên dưới.
-    ['STOCKTAKE', 'vanHanhStocktakeWrap', 'btnVanHanhSubStocktake']
+    ['SHELF', 'vanHanhShelfWrap', 'btnVanHanhSubShelf']
   ];
   const vhAllowedMap = Object.fromEntries(vhTabOrder);
   tabs.forEach(([key, wrapId, btnId]) => {
@@ -202,8 +199,6 @@ function setVanHanhSubTab(subTab) {
     // đúng 1 trong 2 khối header tĩnh/picker chọn siêu thị bất kỳ, theo quyền shelfAnyStoreAccess).
     renderVanHanhShelfStoreHeader();
     setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
-  } else if (subTab === 'STOCKTAKE') {
-    setKiemKeSubTab(activeKiemKeSubTab);
   }
 }
 
@@ -319,13 +314,13 @@ function canManageShelfLocationsClient(user) {
 function canCreateShelfRecordClient(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
 }
-// ===== "📋 Kiểm Kê" — Phase 1 MVP (11/2026): Tab 1 "Kỳ Kiểm Kê" (tạo/kích hoạt/đóng/mở lại kỳ, 2 loại
-// độc lập Gom Mã/Thống Kê — mỗi siêu thị tối đa 1 kỳ "Đang hoạt động" MỖI loại, xem
-// lib/stocktakeEngine.js phía server). Phân quyền khối RIÊNG "27. Kiểm Kê" (core.js BUSINESS_MODULES
-// key 'kiemKe' không có parent — KHÔNG lẫn vào khối Vận Hành, theo đúng yêu cầu người dùng), gác ở
-// setVanHanhSubTab() (vhKeyMap.STOCKTAKE). 7 tab còn lại (Gom Mã/Kiểm Đếm/Kiểm Soát/Cấu Hình Quầy Kệ/
-// Xác Nhận/Báo Cáo/Cấu Hình Người Dùng) chỉ có khung giữ chỗ "🚧 Đang phát triển" — xem
-// vpdt-pms/docs/kiem-ke-sieu-thi.md, sẽ bổ sung ở các đợt merge tiếp theo. =====
+// ===== "📋 Kiểm Kê" — module chính riêng ở sidebar (12/2026, PROMOTE khỏi Vận Hành theo yêu cầu người
+// dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng" — trước đó từng sống như
+// 1 sub-tab của Vận Hành, bản thân trang fragment đã dời sang public/fragments/kiemKeSection.html).
+// Phân quyền khối RIÊNG "27. Kiểm Kê" (core.js BUSINESS_MODULES key 'kiemKe' không có parent — đã độc
+// lập với Vận Hành TỪ TRƯỚC đợt promote này, nên không đổi gì phần quyền) — gác bằng
+// canAccessStocktakeModule() (core.js) ở switchTab('kiemKe'), dispatch trực tiếp setKiemKeSubTab()
+// (KHÔNG còn qua setVanHanhSubTab()/vhKeyMap.STOCKTAKE nữa). =====
 let activeKiemKeSubTab = 'PERIOD';
 let kkPeriodLoaiFilter = ''; // '' = tất cả, 'GOM_MA' | 'THONG_KE'
 let kkPeriodSessionsCache = [];
@@ -9581,5 +9576,10 @@ function bindOperationDelegation(rootId) {
 // gì"): 'operationWorkItemContractModal' (C2, Giá Trị Đầu Tư tự động theo Danh Mục Đầu Tư + Giá Trị Hợp
 // Đồng + tệp đính kèm nhiều file) CŨNG là 1 <div> độc lập cấp cao, bị bỏ sót khỏi mảng này — cùng lớp lỗi
 // editOperationRepairModal/operationWorkItemReassignModal ở trên.
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal', 'operationWorkItemContractModal', 'editOperationStoreOpeningModal'].forEach(bindOperationDelegation);
+// 'kiemKeSection' (12/2026) — thêm vào đây khi Kiểm Kê promote thành module TOP-LEVEL riêng, tách khỏi
+// #vanHanhSection: nút "setKiemKeSubTab" (8 sub-tab) đọc data-tab qua wrapper riêng trong
+// OP_CLICK_ACTIONS ngay trên (el => setKiemKeSubTab(el.dataset.tab)) — generic cspDispatchOp() không tự
+// đọc data-tab, PHẢI qua đúng bindOperationDelegation() này (KHÔNG gọi thêm bindCspDelegation() song
+// song cho root này, xem chú thích tại core.js — sẽ double-dispatch mọi nút khác).
+['vanHanhSection', 'kiemKeSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal', 'operationWorkItemReassignModal', 'editOperationRepairModal', 'operationWorkItemContractModal', 'editOperationStoreOpeningModal'].forEach(bindOperationDelegation);
 

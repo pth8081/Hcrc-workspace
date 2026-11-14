@@ -39,9 +39,7 @@ function check(label, cond) {
     // ===== 1) User chỉ có kiemKeGomMaDo: vào Kiểm Kê, CHỈ thấy nút PERIOD + GOMMA, 6 nút còn lại ẨN =====
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, GOMMA_ONLY);
     await page.waitForTimeout(150);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.waitForTimeout(100);
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(200);
 
     const visibility = await page.evaluate(() => {
@@ -66,9 +64,7 @@ function check(label, cond) {
     // ===== 2) Admin: thấy ĐỦ 8 nút =====
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
     await page.waitForTimeout(150);
-    await page.evaluate(() => { switchTab('vanHanh'); });
-    await page.waitForTimeout(100);
-    await page.click('[data-op="setVanHanhSubTab"][data-tab="STOCKTAKE"]');
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(200);
     const adminVisibility = await page.evaluate(() => {
       const ids = ['btnKkSubPeriod', 'btnKkSubGomMa', 'btnKkSubKiemDem', 'btnKkSubKiemSoat', 'btnKkSubShelfConfig', 'btnKkSubConfirm', 'btnKkSubReport', 'btnKkSubUserAccess'];

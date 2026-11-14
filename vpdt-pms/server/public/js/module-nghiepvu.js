@@ -50,11 +50,6 @@ const NGHIEP_VU_NAV = [
     { key: 'vanHanh', icon: '⚙️', label: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị' },
     { key: 'checklist', icon: '✅', label: 'Checklist Đánh Giá Siêu Thị' },
     { key: 'vanHanhShelf', icon: '📋', label: 'Kiểm Soát Hàng Hóa' },
-    // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — khối quyền RIÊNG ("27. Kiểm Kê" ở systemSection.html), nhưng
-    // vẫn nằm trong nhóm nav "Vận Hành" ở đây vì sống NGAY trong sidebar "⚙️ Vận Hành ▾" (thuần UI, cùng
-    // tinh thần checklist/vanHanhShelf ngay trên) — xem NGHIEP_VU_DOCS.kiemKe cho chi tiết đợt này CHỈ
-    // Tab 1 "Kỳ Kiểm Kê" có giao diện thật.
-    { key: 'kiemKe', icon: '📋', label: 'Kiểm Kê (Kỳ Kiểm Kê — Phase 1)' },
   ]},
   { group: 'Nhân Sự', items: [
     { key: 'orgChart', icon: '🌳', label: 'Cơ Cấu Tổ Chức' },
@@ -73,6 +68,13 @@ const NGHIEP_VU_NAV = [
   ]},
   { group: 'Mua Hàng', items: [
     { key: 'muaHang', icon: '🔗', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
+  ]},
+  // Kiểm Kê (📋, 12/2026) — module TOP-LEVEL riêng ở sidebar (PROMOTE khỏi "⚙️ Vận Hành ▾" theo yêu cầu
+  // người dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng") — tách thành
+  // group riêng, cùng khuôn group "Mua Hàng" ngay trên (cũng 1 module-đơn ngang hàng). Khối quyền vốn đã
+  // RIÊNG ("27. Kiểm Kê" ở systemSection.html) từ trước đợt promote này.
+  { group: 'Kiểm Kê', items: [
+    { key: 'kiemKe', icon: '📋', label: 'Kiểm Kê (Kỳ Kiểm Kê — Phase 1)' },
   ]},
   // 2 nhóm cuối (10/2026, đợt rà soát đối chiếu tài liệu với UI thật): 3 màn DÙNG CHUNG cho mọi module
   // trước đây thiếu hẳn entry dù đã có nút sidebar thật — "✅ Phê Duyệt" (core-approvalhub.js, 17 entry
@@ -1196,7 +1198,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Mở Lại (chỉ Admin)', sub: 'Quay về "Đang hoạt động" nếu cần sửa tiếp' },
     ] },
     steps: [
-      { role: 'Quản Lý Kiểm Kê (quyền "📅 Tab 1: Quản Lý Kỳ Kiểm Kê")', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"📋 Kiểm Kê"</b> → sub-tab "📅 Kỳ Kiểm Kê" (mặc định) → bấm <b>"+ Tạo Kỳ Mới"</b> → chọn Loại Kỳ (Gom Mã/Thống Kê) + đặt Tên Kỳ (+ tuỳ chọn khoảng thời gian dự kiến) → Lưu — kỳ mới luôn bắt đầu ở trạng thái "Nháp" (chưa có hiệu lực, chưa chặn tạo kỳ khác cùng loại).' },
+      { role: 'Quản Lý Kiểm Kê (quyền "📅 Tab 1: Quản Lý Kỳ Kiểm Kê")', text: 'vào <b>📋 Kiểm Kê</b> (sidebar) → sub-tab "📅 Kỳ Kiểm Kê" (mặc định) → bấm <b>"+ Tạo Kỳ Mới"</b> → chọn Loại Kỳ (Gom Mã/Thống Kê) + đặt Tên Kỳ (+ tuỳ chọn khoảng thời gian dự kiến) → Lưu — kỳ mới luôn bắt đầu ở trạng thái "Nháp" (chưa có hiệu lực, chưa chặn tạo kỳ khác cùng loại).' },
       { role: 'Quản Lý Kiểm Kê', text: 'bấm <b>"Kích Hoạt"</b> trên 1 kỳ đang Nháp để chuyển "Đang hoạt động" — hệ thống TỰ CHẶN nếu siêu thị đó đã có 1 kỳ KHÁC CÙNG LOẠI (Gom Mã hoặc Thống Kê) đang hoạt động (báo rõ tên kỳ đang chạy, không kích hoạt đè); 2 loại Gom Mã/Thống Kê hoàn toàn độc lập — vẫn kích hoạt được 1 kỳ Thống Kê dù đang có 1 kỳ Gom Mã khác chạy song song.' },
       { role: 'Quản Lý Kiểm Kê', text: 'xong việc (hết hạn, đã thống kê/gom mã xong) → bấm <b>"Đóng Kỳ"</b> trên kỳ đang "Đang hoạt động" để chuyển "Đã chốt". Chỉ Quản Lý Kiểm Kê (không cần Admin) đóng được kỳ — nhưng KHÔNG tự mở lại được.' },
       { role: 'Admin', text: 'kỳ đã "Đã chốt" lỡ cần sửa tiếp (đóng nhầm/cần gom mã bổ sung) → CHỈ Admin mới thấy nút <b>"Mở Lại"</b> → bấm để quay về "Đang hoạt động" (vẫn phải qua đúng chặn "1 kỳ/loại/siêu thị" như Kích Hoạt — không mở lại được nếu đã có 1 kỳ khác cùng loại đang chạy). Quản Lý Kiểm Kê (không phải Admin) KHÔNG thấy nút này, kể cả gọi thẳng API cũng bị chặn ở server.' },
@@ -1215,7 +1217,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Khối quyền RIÊNG, 8 quyền = 8 tab (Phân Quyền khối "27. Kiểm Kê")', text: 'khác hẳn đa số module khác (1 quyền module phẳng), Kiểm Kê có 8 quyền thật tương ứng ĐÚNG 8 tab (kiemKePeriodManage/kiemKeGomMaDo/kiemKeKiemDemDo/kiemKeKiemSoatDo/kiemKeShelfConfigManage/kiemKeConfirmDo/kiemKeReportView/kiemKeUserAccessManage) — cấp đúng quyền tab nào thì chỉ THẤY ĐÚNG tab đó (nút sub-tab tự ẩn nếu thiếu quyền). Riêng Tab 2/3/4 (Gom Mã/Kiểm Đếm/Kiểm Soát) còn thêm LỚP allowlist Tab 8 — có quyền tab vẫn phải được gán allowlist đúng quầy kệ mới quét được.' },
       { label: 'Mở Lại Kỳ: CHỈ Admin, không phải "quyền quản lý kỳ"', text: 'cố ý tách riêng — người có quyền "📅 Tab 1: Quản Lý Kỳ Kiểm Kê" tạo/kích hoạt/đóng kỳ bình thường được, nhưng KHÔNG mở lại được kỳ đã chốt (tránh sửa lại số liệu đã khoá mà không qua Admin xác nhận).' },
     ], right: [
-      { label: 'Sống trong "⚙️ Vận Hành" nhưng phân quyền TÁCH RIÊNG', text: 'Kiểm Kê chỉ nằm chung sidebar/tab điều hướng với Vận Hành (thuần UI, giống cách Checklist/Kiểm Soát Hàng Hóa đã gộp vào trước đó) — còn phân quyền là khối RIÊNG HOÀN TOÀN, không dùng chung quyền nào với Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị.' },
+      { label: 'Module TOP-LEVEL riêng ở sidebar (từ 12/2026)', text: 'Kiểm Kê có mục riêng ngay trên sidebar ("📋 Kiểm Kê", ngang hàng "⚙️ Vận Hành"/"🔗 Mua Hàng") — trước đó từng sống chung tab điều hướng với Vận Hành, nay đã tách hẳn ra module chính theo yêu cầu người dùng. Phân quyền vẫn là khối RIÊNG HOÀN TOÀN như từ đầu, không dùng chung quyền nào với Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị.' },
       { label: 'Chỉ xem đúng siêu thị mình', text: 'mặc định mỗi kỳ chỉ hiện cho đúng siêu thị tạo ra nó (dept) — Admin xem được mọi siêu thị. Chưa có khái niệm "xem chéo nhiều siêu thị" (kiểu Quản lý vùng ở Kiểm Soát Hàng Hóa) cho Kiểm Kê ở Phase 1 này.' },
     ] },
   },
@@ -2386,12 +2388,12 @@ const NV_KEY_ACCESS_FN = {
   // admin || shelfRecordCreate || shelfLocationManage || shelfReportView.all/.depts || shelfReportViewAll
   // cũ), không tự nghĩ ra điều kiện mới.
   vanHanhShelf: 'canViewShelfReportClient',
-  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — dùng ĐÚNG hàm đang gác cả nút sidebar/tab "⚙️ Vận Hành" thật
-  // (canAccessOperationModule(), core.js — đã thêm đủ 8 quyền kiemKe* vào OR-list đợt này) vì Kiểm Kê
-  // sống NGAY trong module Vận Hành về mặt điều hướng, dù có khối quyền riêng — cùng khuôn 'vanHanh'
-  // ngay trên. KHÔNG được bỏ sót mục này (xem 2 LỖI ĐÃ VÁ ngay trên — vanHanhShelf/muaHang từng bị ẩn
-  // hẳn/hiện tràn do quên nối vào NV_KEY_ACCESS_FN).
-  kiemKe: 'canAccessOperationModule',
+  // Kiểm Kê (📋, 12/2026) — module TOP-LEVEL riêng ở sidebar (PROMOTE khỏi Vận Hành), dùng ĐÚNG hàm mới
+  // tách riêng canAccessStocktakeModule() (core.js) đang gác chính nút sidebar/tab "📋 Kiểm Kê" thật —
+  // KHÔNG còn dùng canAccessOperationModule() như lúc còn sống bên trong Vận Hành. KHÔNG được bỏ sót mục
+  // này (xem 2 LỖI ĐÃ VÁ ngay trên — vanHanhShelf/muaHang từng bị ẩn hẳn/hiện tràn do quên nối vào
+  // NV_KEY_ACCESS_FN).
+  kiemKe: 'canAccessStocktakeModule',
   orgChart: 'canAccessOrgChartModule', hrLifecycle: 'canAccessHrLifecycleModule', hrProfile: 'canAccessHrProfileModule',
   hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAudit: 'canAccessHrAuditModule', hrAttendance: 'canAccessHrAttendanceModule',
   hrPayroll: 'canAccessHrPayrollModule', hr: 'canAccessHrModule',

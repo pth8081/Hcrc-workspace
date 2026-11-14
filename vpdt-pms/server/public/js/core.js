@@ -316,7 +316,10 @@ const TAB_SECTION_FRAGMENT = {
   //   bindCspDelegation rieng, gay double-dispatch, da go het).
   system: 'systemSection', internal: 'internalSection',
   // muaHang (v23.30) — 1 section đơn giản, không section con lồng bên trong, cùng khuôn checklist ở trên.
-  muaHang: 'muaHangSection'
+  muaHang: 'muaHangSection',
+  // kiemKe (12/2026) — PROMOTE khỏi sub-tab của Vận Hành thành module chính riêng (theo yêu cầu người
+  // dùng), fragment dời từ bên trong vanHanhSection.html sang kiemKeSection.html, cùng khuôn muaHang.
+  kiemKe: 'kiemKeSection'
 };
 
 const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
@@ -2741,12 +2744,12 @@ const BUSINESS_MODULES = [
   // subtab nào" (10/2026) để đủ cả 6/6 tab con, không riêng 4 tab đã có trước đó.
   { key: 'vanHanhStoreOpen', label: 'Vận Hành — Siêu Thị > Mở Mới', parent: 'vanHanhStoreGroup' },
   { key: 'vanHanhRepair', label: 'Vận Hành — Siêu Thị > Sửa Chữa', parent: 'vanHanhStoreGroup' },
-  // "📋 Kiểm Kê" (Vận Hành, Phase 1 MVP 11/2026) — tab con thứ 5 của Vận Hành về mặt ĐIỀU HƯỚNG (nút
-  // bấm nằm trong setVanHanhSubTab(), cạnh "📦 Kiểm Soát Hàng Hóa" — xem vhKeyMap.STOCKTAKE ở
-  // module-vanhanh.js), NHƯNG về PHÂN QUYỀN lại tách THÀNH 1 KHỐI RIÊNG không có `parent` (theo đúng
-  // yêu cầu người dùng "cho riêng ra một mục to" — không lẫn vào khối Vận Hành như vanHanhShelfTab ở
-  // trên), đúng khuôn "Checklist Đánh Giá Siêu Thị" ngay dưới (cũng TOP-LEVEL dù sống trong UI của module
-  // khác). 8 entry con tương ứng ĐÚNG 8 tab trong tài liệu đề xuất
+  // "📋 Kiểm Kê" — module TOP-LEVEL riêng ở sidebar (12/2026, PROMOTE khỏi sub-tab Vận Hành theo yêu
+  // cầu người dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng" — trước đó
+  // từng sống về điều hướng bên trong setVanHanhSubTab(), xem switchTab('kiemKe') + setKiemKeSubTab() ở
+  // core.js/module-vanhanh.js hiện tại). Khối quyền RIÊNG không có `parent` (theo đúng yêu cầu người
+  // dùng gốc "cho riêng ra một mục to" khi mới tạo module — ĐÃ độc lập với Vận Hành TỪ TRƯỚC đợt promote
+  // này nên không đổi gì phần quyền). 8 entry con tương ứng ĐÚNG 8 tab trong tài liệu đề xuất
   // (vpdt-pms/docs/kiem-ke-sieu-thi.md mục B1) — đây là lớp "được THẤY/dùng tab nào" (default ON, như
   // mọi entry khác trong mảng này); lớp "được LÀM gì" (default OFF) là 8 quyền thật riêng
   // (kiemKePeriodManage...kiemKeUserAccessManage, xem lib/stocktakeEngine.js + systemSection.html khối
@@ -10847,14 +10850,10 @@ function applyNavVisibility(user) {
     !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
       || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
       || user.perms?.shelfAnyStoreAccess));
-  // Kiểm Kê (📋, Phase 1 MVP, 11/2026) — cùng khuôn btnVanHanhShelfNav ngay trên: hiện nút shortcut nếu
-  // có BẤT KỲ 1 trong 8 quyền kiemKe* (hoặc admin) — ĐÚNG y hệt OR-list đã thêm vào
-  // canAccessOperationModule() (không tự nghĩ điều kiện khác, 2 nơi phải khớp nhau).
-  document.getElementById('btnVanHanhStocktakeNav').classList.toggle('hidden',
-    !(user.perms?.admin || user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
-      || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
-      || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage));
   updateVanHanhNavVisibility();
+  // Kiểm Kê (📋, 12/2026) — module TOP-LEVEL riêng (PROMOTE khỏi sub-tab Vận Hành), nút đơn giản không
+  // dropdown — gác bằng canAccessStocktakeModule() (core.js), cùng khuôn btnDocTab/btnTaskTab ở trên.
+  document.getElementById('btnKiemKeTab').classList.toggle('hidden', !canAccessStocktakeModule(user));
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
   updateOperationStoreSubTabVisibility(user);
@@ -11481,8 +11480,7 @@ function updateVanHanhNavVisibility() {
   const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
   const itPriceVisible = !document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden');
   const shelfVisible = !document.getElementById('btnVanHanhShelfNav').classList.contains('hidden');
-  const stocktakeVisible = !document.getElementById('btnVanHanhStocktakeNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible && !shelfVisible && !stocktakeVisible);
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible && !shelfVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();
@@ -11853,6 +11851,10 @@ async function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Mua Hàng!');
     return;
   }
+  if (tabName === 'kiemKe' && !canAccessStocktakeModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Kiểm Kê!');
+    return;
+  }
   if (tabName === 'nghiepVu' && !canAccessNghiepVuModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Nghiệp Vụ!');
     return;
@@ -11915,6 +11917,7 @@ async function switchTab(tabName) {
   document.getElementById('vanHanhSection').classList.toggle('hidden', tabName !== 'vanHanh');
   document.getElementById('checklistSection').classList.toggle('hidden', tabName !== 'checklist');
   document.getElementById('muaHangSection').classList.toggle('hidden', tabName !== 'muaHang');
+  document.getElementById('kiemKeSection').classList.toggle('hidden', tabName !== 'kiemKe');
   document.getElementById('hrSection').classList.toggle('hidden', tabName !== 'hr');
   document.getElementById('orgChartSection').classList.toggle('hidden', tabName !== 'orgChart');
   document.getElementById('hrLifecycleSection').classList.toggle('hidden', tabName !== 'hrLifecycle');
@@ -12065,6 +12068,9 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'hrAttendance') { renderHrAttendanceModule(); }
   if (tabName === 'checklist') { updateChecklistSubTabVisibility(); }
   if (tabName === 'muaHang') { renderPurchasingModule(); }
+  // "📋 Kiểm Kê" (12/2026) — module TOP-LEVEL riêng, dispatch TRỰC TIẾP setKiemKeSubTab() (KHÔNG còn
+  // qua setVanHanhSubTab() như lúc còn là sub-tab của Vận Hành).
+  if (tabName === 'kiemKe') { setKiemKeSubTab(activeKiemKeSubTab); }
   if (tabName === 'nghiepVu') { renderNghiepVuModule(); }
 }
 
@@ -12639,15 +12645,6 @@ function canAccessOperationModule(user) {
     || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
     || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
     || user.perms?.shelfAnyStoreAccess
-    // "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — ĐÚNG lớp lỗi vừa vá ở shelfRecordCreate/shelfLocationManage
-    // ngay trên: người CHỈ có 1 trong 8 quyền Kiểm Kê (VD chỉ kiemKeGomMaDo, không có bất kỳ quyền Đơn
-    // Hàng/Mở Mới/Sửa Chữa/Giá Buôn/Kiểm Soát Hàng Hóa nào) vẫn phải vào được tab Vận Hành để thấy
-    // sub-tab "📋 Kiểm Kê" — phát hiện qua demo Playwright thật (tests/demo-stocktake-period.js), không
-    // chỉ đọc code suông: hasModuleAccess(user,'kiemKe') mặc định TRUE nhưng KHÔNG đủ (xem chú thích
-    // canViewShelfReportClient() ngay dưới giải thích rõ lý do không dùng hasModuleAccess() phẳng ở đây).
-    || user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
-    || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
-    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage
     // LỖI ĐÃ VÁ (11/2026, người dùng báo "có người trong Nhóm Quyền Vận Hành thấy menu, có người không"):
     // operationOrderReceiptManageHO/Store ("🧾 Quyền Phê Duyệt Đặt Hàng HO/Siêu Thị" — xác nhận NHẬN
     // HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong, xem renderOperationOrderReceiptScopeCheckboxes()/
@@ -12679,6 +12676,21 @@ function canAccessOperationModule(user) {
   // không đổi).
   return (DB.operationWorkItems || []).some(w => isWorkItemAssignee(w, user.username) || w.acceptorUsername === user.username
     || workItemAssignees(w).some(u => isManagerOf(user.username, u, DB.users)) || isManagerOf(user.username, w.acceptorUsername, DB.users));
+}
+// canAccessStocktakeModule() — gác tab "📋 Kiểm Kê" (12/2026, module chính riêng ở sidebar, PROMOTE khỏi
+// sub-tab Vận Hành theo yêu cầu người dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành,
+// mua hàng"). TÁCH RA thành hàm riêng (trước đây gộp vào OR-list của canAccessOperationModule() ở trên
+// vì Kiểm Kê từng "sống" về điều hướng bên trong tab Vận Hành) — cùng khuôn canAccessPurchasingModule()
+// ở trên: admin luôn qua, còn lại cần hasModuleAccess(user,'kiemKe') (mặc định TRUE, xem BUSINESS_MODULES)
+// VÀ có ít nhất 1 trong 8 quyền thao tác/xem của module (không hiện module rỗng cho người không có quyền
+// nào bên trong, dù hasModuleAccess() mặc định cho qua).
+function canAccessStocktakeModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'kiemKe')) return false;
+  return !!(user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
+    || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
+    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage);
 }
 // canViewShelfReportClient() (12/2026) — gác mục "📋 Kiểm Soát Hàng Hóa" trong REPORT_NAV_TREE
 // (module-baocaoquantri.js, REPORT_KEY_ACCESS_FN), cùng khuôn canViewChecklistReportsClient(): quyền
@@ -14442,6 +14454,12 @@ bindCspDelegation('hrpReopenModal');
 bindCspDelegation('hrpPayslipViewModal');
 bindCspDelegation('checklistSection');
 bindCspDelegation('muaHangSection');
+// kiemKeSection (12/2026) — KHÔNG gọi bindCspDelegation() ở đây: nút "setKiemKeSubTab" (8 sub-tab) đọc
+// data-tab qua 1 wrapper RIÊNG trong OP_CLICK_ACTIONS (module-vanhanh.js, cùng lớp setVanHanhSubTab/
+// setVanHanhShelfSubTab — generic cspDispatchOp() không biết đọc data-tab, chỉ data-argN), nên root này
+// PHẢI bind qua bindOperationDelegation() (xem forEach(bindOperationDelegation) ở module-vanhanh.js,
+// đã thêm 'kiemKeSection' vào mảng đó) — gọi CẢ 2 cùng lúc sẽ double-dispatch mọi nút khác (đúng lỗi đã
+// vá cho vanHanhSection, xem chú thích tại bindOperationDelegation()).
 // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — nút "👁️ Chi tiết" ở bảng "Danh Sách Đề Xuất Bán Buôn" (Vận
 // Hành > Hỗ Trợ IT) không phản hồi khi bấm, kể cả admin): #vanHanhSection là 1 fragment lazy-load
 // (TAB_SECTION_FRAGMENT) giống hệt checklistSection/muaHangSection ở trên, nhưng CHƯA TỪNG được gọi
