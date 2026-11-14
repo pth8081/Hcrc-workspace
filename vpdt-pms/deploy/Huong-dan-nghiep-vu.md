@@ -3585,25 +3585,47 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
 - **"💲 Kiểm Tra Giá" (sub-tab thứ 6, 11/2026, theo yêu cầu người dùng "siêu
   thị có thể kt nhanh giá của mặt hàng")**: gõ tay hoặc bấm "📷 Quét Mã" quét
   Mã Hàng nội bộ HOẶC Mã Vạch (EAN-13) của 1 mặt hàng → bấm "💲 Kiểm Tra Giá"
-  → gọi TRỰC TIẾP API "Giá bán theo mã hàng" đối tác BRGMART (bản 1.1, CÙNG
-  đối tác/CÙNG Base URL/X-API-Key với API Tồn Kho đã cấu hình sẵn ở "🔌 Cấu
-  Hình API Đối Tác" — **không cần cấu hình thêm gì ở hệ thống mình cả**, vì
-  quyền gọi API này được BRGMART bật sẵn phía họ ngay trên CÙNG API Key đang
-  dùng — nếu gọi bị lỗi 403 "chưa được cấp quyền gọi báo cáo này" thì liên hệ
-  IT BRGMART xác nhận lại, không phải lỗi cấu hình ở hệ thống mình) → hiện
-  ngay Tên Hàng + Giá Áp Dụng (tự chọn đúng giá khuyến mại nếu
+  → (12/2026) tra TRONG BẢNG GIÁ ĐÃ ĐỒNG BỘ NGẦM TRÊN TRÌNH DUYỆT trước — có
+  rồi thì hiện NGAY (nhãn "📦 Ngoại tuyến", hoạt động được cả lúc mất mạng);
+  CHƯA có mới gọi TRỰC TIẾP API "Giá bán theo mã hàng" đối tác BRGMART (bản
+  1.1, CÙNG đối tác/CÙNG Base URL/X-API-Key với API Tồn Kho đã cấu hình sẵn ở
+  "🔌 Cấu Hình API Đối Tác" — **không cần cấu hình thêm gì ở hệ thống mình
+  cả**, vì quyền gọi API này được BRGMART bật sẵn phía họ ngay trên CÙNG API
+  Key đang dùng — nếu gọi bị lỗi 403 "chưa được cấp quyền gọi báo cáo này"
+  thì liên hệ IT BRGMART xác nhận lại, không phải lỗi cấu hình ở hệ thống
+  mình) → hiện ngay Tên Hàng + Giá Áp Dụng (tự chọn đúng giá khuyến mại nếu
   `coKhuyenMai=true`, kèm giá thường gạch ngang để đối chiếu) + thời điểm đối
   tác đồng bộ giá gần nhất. Sau khi xem xong, bấm "🔄 Quét Lại" để kiểm tiếp
   mã khác ngay (mở lại camera), hoặc "✖️ Hủy" để quay về form trống.
-  - **KHÁC HẲN "⏰ Hạn Sử Dụng"/"📊 Đối Chiếu"**: 2 tab kia đọc snapshot tồn
-    kho đã đồng bộ sẵn qua job nền (mỗi 20 phút) — "Kiểm Tra Giá" gọi API
-    đối tác TRỰC TIẾP mỗi lần bấm nút (tra giá tức thời theo đúng nhịp "quét
-    tới đâu, hỏi giá tới đó" của API đối tác), không qua bất kỳ job đồng bộ
-    nào.
-  - **TUYỆT ĐỐI KHÔNG LƯU kết quả tra giá vào bất kỳ đâu** trong hệ thống —
-    không AppData, không DB, không log có giá, không cache phía trình duyệt
-    — chỉ hiển thị tạm trên màn hình, rời tab/đóng trình duyệt là mất, đúng
-    yêu cầu gốc của người dùng.
+  - **Đồng bộ ngầm bảng giá offline (12/2026, theo yêu cầu người dùng "tự
+    đồng bộ giá xuống trình duyệt khi vào tab Kiểm Soát/Kiểm Tra Giá, offline
+    cả bảng giá, không hỏi gì cả")**: ngay khi vào bất kỳ sub-tab nào của
+    "📋 Kiểm Soát Hàng Hóa" (không riêng Kiểm Tra Giá), hệ thống TỰ kéo bảng
+    giá siêu thị mình về máy (IndexedDB trình duyệt), HOÀN TOÀN ÂM THẦM,
+    KHÔNG hộp thoại xác nhận. Vì đối tác KHÔNG có API tải nguyên bảng giá
+    (chỉ tra được từng mã/lần, khác hẳn API Tồn Kho có phân trang bulk), máy
+    chủ tự "dựng bulk giả" bằng cách lặp qua từng mã hàng ĐÃ BIẾT của siêu
+    thị đó (lấy từ dữ liệu Tồn Kho đã đồng bộ sẵn) rồi gọi API giá TỪNG mã —
+    **CHỈ chạy khi có người thật vào tab của ĐÚNG siêu thị đó** (siêu thị
+    không ai dùng hôm đó không tốn lượt gọi đối tác), làm mới đầy đủ **1
+    LẦN/NGÀY** (giá đổi ít hơn tồn kho nhiều, không cần mịn như 20 phút của
+    Tồn Kho), và KHÔNG BAO GIỜ bắt người dùng chờ — luôn trả ngay bản đang
+    có (dù cũ tới 1 ngày) trong lúc âm thầm làm mới ở nền. Mỗi lần tra giá
+    ONLINE thành công (mã vừa thêm, chưa kịp có trong đợt đồng bộ ngầm) cũng
+    tự "lấp" luôn vào bảng giá offline để lần tra lại mã đó không cần mạng
+    nữa. Lưu ở bảng SQL riêng `dbo.StorePriceSnapshots` (1 dòng/Mã Điểm,
+    CÙNG khuôn `dbo.SystemInventorySnapshots` của Tồn Kho — xem
+    `sql/schema.sql`), không gộp vào `dbo.AppData` dùng chung.
+  - **KHÁC HẲN "⏰ Hạn Sử Dụng"/"📊 Đối Chiếu"**: 2 tab kia đọc snapshot TỒN
+    KHO đã đồng bộ sẵn qua job nền (mỗi 20 phút), lưu trên SERVER dùng chung
+    cho mọi máy — "Kiểm Tra Giá" lưu bảng GIÁ ngay trên trình duyệt TỪNG MÁY
+    (IndexedDB), và trước 12/2026 từng gọi API đối tác trực tiếp mỗi lần bấm
+    nút (không cache gì) — nay đã đổi sang ưu tiên đọc cache offline trước.
+  - **Vẫn KHÔNG LƯU LỊCH SỬ các lượt tra** trong hệ thống — không AppData,
+    không DB, không log ghi lại "ai tra mã gì lúc nào". Bảng giá offline chỉ
+    giữ giá trị MỚI NHẤT của từng mã để tra nhanh/offline, không phải nhật
+    ký theo dõi — đúng tinh thần yêu cầu gốc của người dùng ("tra xong là
+    xong", không cần lưu vết).
   - **Quyền**: dùng chung `shelfRecordCreate` (CÙNG quyền "📷 Ghi Nhận") —
     không có checkbox phân quyền riêng, vì đây cũng là thao tác tra cứu hằng
     ngày của nhân viên quét hàng, không phải hành động quản lý.

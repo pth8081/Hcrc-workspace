@@ -31,6 +31,8 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured, syncSystemInventory, resolveInventoryApiCreds } = require('../jobs/inventorySync');
+const { syncStorePriceCatalog } = require('../jobs/priceSync');
+const { getSnapshotForMaDiemMerged } = require('../lib/priceSnapshotStore');
 const { checkPrice, PriceCheckApiAuthError, PriceCheckApiNotFoundError } = require('../lib/priceCheckApiClient');
 const { parseVNDateTime } = require('../lib/recordActions');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
@@ -408,6 +410,45 @@ router.post('/price-check', async (req, res) => {
       return res.status(502).json({ error: 'Hệ thống không xác thực được với API đối tác (liên hệ quản trị hệ thống kiểm tra lại API Key)' });
     }
     sendCatchError(res, err, 'POST /api/shelf-stock/price-check');
+  }
+});
+
+// ===================== BẢNG GIÁ OFFLINE: đọc snapshot đã đồng bộ ngầm + tự kích hoạt đồng bộ =====================
+// Theo yêu cầu người dùng (12/2026): "tự đồng bộ giá của siêu thị xuống trình duyệt người dùng khi vào
+// tab Kiểm Soát/Kiểm Tra Giá, tra nhanh hơn, offline cả bảng giá, không cần hỏi gì cả". Đối tác KHÔNG có
+// API bulk giá thật (chỉ tra từng mã, xem lib/priceCheckApiClient.js) — jobs/priceSync.js tự "dựng bulk
+// giả" bằng cách lặp qua từng mã hàng CỦA ĐÚNG SIÊU THỊ này (tốn nhiều lượt gọi đối tác, có thể vài phút
+// với siêu thị nhiều mã) nên route này KHÔNG BAO GIỜ await syncStorePriceCatalog() — trả NGAY snapshot
+// đang có trong CSDL (có thể null nếu lần đầu) rồi mới kích hoạt đồng bộ ở NỀN (fire-and-forget, tự nuốt
+// lỗi — lỗi đã log đủ bên trong jobs/priceSync.js). Quyền/chống store-spoofing CÙNG khuôn /price-check
+// ngay trên — không cần quyền riêng.
+router.get('/price-catalog', async (req, res) => {
+  try {
+    if (!canManageShelfRecords(req.freshUser)) {
+      throw new HttpError(403, 'Bạn không có quyền xem bảng giá trên Kiểm Soát Hàng Hóa');
+    }
+    const effectiveUser = await getShelfEffectiveUserFromReq(req);
+    const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
+    const maDiem = storeExternalCodes[effectiveUser.dept];
+    if (!maDiem) {
+      // Chưa cấu hình Mã Điểm — trả rỗng thay vì lỗi cứng, client tự hiểu "chưa có bảng giá offline cho
+      // siêu thị này" và vẫn tra giá online bình thường như trước đây (không có gì để đồng bộ ngầm).
+      return res.json({ rows: [], capNhatLuc: null, fetchedAt: null, maDiem: null });
+    }
+    const cached = await getSnapshotForMaDiemMerged(maDiem);
+    // Fire-and-forget — KHÔNG await, không chặn response. syncStorePriceCatalog() tự quyết định có thật
+    // sự cần chạy không (force:false, so lastFetchedAt với chu kỳ 1 ngày) + tự khoá chống trùng lặp.
+    syncStorePriceCatalog(maDiem, { force: false }).catch((err) => {
+      console.error('⛔ GET /api/shelf-stock/price-catalog: lỗi kích hoạt đồng bộ ngầm bảng giá —', err.message);
+    });
+    res.json({
+      rows: cached?.rows || [],
+      capNhatLuc: cached?.capNhatLuc || null,
+      fetchedAt: cached?.fetchedAt || null,
+      maDiem
+    });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/shelf-stock/price-catalog');
   }
 });
 
