@@ -28,7 +28,7 @@ const {
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterShelfLocationsForUser, filterShelfRecordsForUser, filterShelfStockThresholdsForUser,
-  filterStocktakeSessionsForUser,
+  filterStocktakeSessionsForUser, filterStocktakeCountsForUser, filterStocktakeUserAccessForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
@@ -1873,6 +1873,10 @@ router.get('/', async (req, res) => {
     // lọc ở đây sẽ lộ kỳ kiểm kê của MỌI siêu thị cho MỌI tài khoản qua GET /api/data chung — xem
     // filterStocktakeSessionsForUser() ở lib/recordViewScope.js.
     if (data.stocktakeSessions) data.stocktakeSessions = filterStocktakeSessionsForUser(data.stocktakeSessions, req.freshUser);
+    // stocktakeCounts/stocktakeUserAccess (Tab 2/3/4 + Tab 8, 12/2026) — CÙNG lý do stocktakeSessions
+    // ngay trên: chặn lộ chéo siêu thị / lộ cấu hình quyền người khác qua GET /api/data chung.
+    if (data.stocktakeCounts) data.stocktakeCounts = filterStocktakeCountsForUser(data.stocktakeCounts, req.freshUser);
+    if (data.stocktakeUserAccess) data.stocktakeUserAccess = filterStocktakeUserAccessForUser(data.stocktakeUserAccess, req.freshUser);
     // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
     // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
     // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/
