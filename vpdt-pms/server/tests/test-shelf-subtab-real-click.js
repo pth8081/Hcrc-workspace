@@ -107,6 +107,7 @@ async function main() {
         // Giả lập người dùng đang nhập dở — kể cả state picker riêng (match note) không nằm trong form.reset().
         document.getElementById('srShelfLocationInput').value = 'A1 — Quầy A1';
         document.getElementById('srShelfLocationId').value = '1';
+        document.getElementById('srScanInput').value = '8938501234567';
         document.getElementById('srSku').value = '8938501234567';
         document.getElementById('srMaHang').value = '2003330491';
         document.getElementById('srProductName').value = 'Coca-Cola lon 330ml';
@@ -123,6 +124,7 @@ async function main() {
       const after = await page.evaluate(() => ({
         shelfLocationInput: document.getElementById('srShelfLocationInput').value,
         shelfLocationId: document.getElementById('srShelfLocationId').value,
+        scanInput: document.getElementById('srScanInput').value,
         sku: document.getElementById('srSku').value,
         maHang: document.getElementById('srMaHang').value,
         productName: document.getElementById('srProductName').value,
@@ -133,7 +135,8 @@ async function main() {
       }));
       assertEqual(after.shelfLocationInput, '', 'Ô Quầy Kệ phải về rỗng');
       assertEqual(after.shelfLocationId, '', 'Hidden srShelfLocationId phải về rỗng');
-      assertEqual(after.sku, '', 'Ô Mã Vạch phải về rỗng');
+      assertEqual(after.scanInput, '', 'Ô Nhận Diện Sản Phẩm (quét gộp) phải về rỗng');
+      assertEqual(after.sku, '', 'Ô Mã Vạch (ẩn) phải về rỗng');
       assertEqual(after.maHang, '', 'Ô Mã Hàng (nội bộ) phải về rỗng');
       assertEqual(after.productName, '', 'Ô Tên Sản Phẩm phải về rỗng');
       assertEqual(after.quantity, '', 'Ô Số Lượng phải về rỗng');

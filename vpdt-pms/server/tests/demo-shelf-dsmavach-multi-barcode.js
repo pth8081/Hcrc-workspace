@@ -65,8 +65,8 @@ async function main() {
     await shot(page, '#vanHanhShelfWrap', '1-truoc-khi-go.png');
 
     // Gõ ĐỦ 1 mã vạch PHỤ (8935024123096) — KHÔNG phải mã mặc định (8935024912607).
-    await page.fill('#srSku', '8935024123096');
-    await page.dispatchEvent('#srSku', 'input');
+    await page.fill('#srScanInput', '8935024123096');
+    await page.dispatchEvent('#srScanInput', 'input');
     await page.waitForTimeout(150);
     await shot(page, '#vanHanhShelfWrap', '2-go-ma-vach-PHU-tu-nhan-dien-dung.png');
 

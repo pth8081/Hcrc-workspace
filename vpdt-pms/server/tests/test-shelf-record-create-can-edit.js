@@ -59,7 +59,8 @@ async function main() {
     await run.run('Ghi nhận mới (shelfRecordCreate) -> tạo được, không lỗi', async () => {
       await page.fill('#srShelfLocationInput', `${SHELF_LOCATION.code} — ${SHELF_LOCATION.name}`);
       await page.evaluate(() => resolveShelfLocationInput());
-      await page.fill('#srMaHang', 'SP001');
+      await page.fill('#srScanInput', 'SP001');
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.fill('#srProductName', 'Sản phẩm test 1');
       await page.fill('#srQuantity', '20');
       await page.click('#srForm button[type="submit"]');
@@ -106,7 +107,8 @@ async function main() {
     await run.run('Chuẩn bị: tạo thêm 1 ghi nhận để test "🗑️ Xóa"', async () => {
       await page.fill('#srShelfLocationInput', `${SHELF_LOCATION.code} — ${SHELF_LOCATION.name}`);
       await page.evaluate(() => resolveShelfLocationInput());
-      await page.fill('#srMaHang', 'SP002');
+      await page.fill('#srScanInput', 'SP002');
+      await page.dispatchEvent('#srScanInput', 'input');
       await page.fill('#srProductName', 'Sản phẩm test 2');
       await page.fill('#srQuantity', '5');
       await page.click('#srForm button[type="submit"]');

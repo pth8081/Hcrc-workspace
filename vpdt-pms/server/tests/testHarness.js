@@ -1070,6 +1070,25 @@ function createDispatcher(state) {
         const items = (state.shelfLocations || []).filter(l => allowedIds.has(l.id) && l.active !== false);
         return { status: 200, body: { items } };
       }
+      if (pathName === '/api/stocktake/active-session-for-shelf' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canUserDoStocktakeOnShelf, findActiveSession, LOAI_KY } = stockEngine2();
+        const q = new URL(url, 'http://x').searchParams;
+        const shelfLocationId = Number(q.get('shelfLocationId'));
+        const mode = q.get('mode');
+        const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
+        if (!checkFn) return { status: 400, body: { error: 'Hành động không hợp lệ' } };
+        if (!checkFn(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện hành động này' } };
+        const loc = (state.shelfLocations || []).find(l => l.id === shelfLocationId);
+        if (!loc) return { status: 404, body: { error: 'Không tìm thấy quầy kệ' } };
+        if (!canUserDoStocktakeOnShelf(state.stocktakeUserAccess || [], freshUser.username, loc.dept, shelfLocationId, mode)) {
+          return { status: 403, body: { error: 'Bạn chưa được cấp quyền thao tác hành động này trên quầy kệ này' } };
+        }
+        const requiredLoaiKy = mode === 'GOM_MA' ? LOAI_KY.GOM_MA : LOAI_KY.THONG_KE;
+        const activeSession = findActiveSession(state.stocktakeSessions || [], loc.dept, requiredLoaiKy);
+        return { status: 200, body: { session: activeSession || null, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
+      }
       if (pathName === '/api/stocktake/counts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
