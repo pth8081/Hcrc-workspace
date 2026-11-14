@@ -968,23 +968,28 @@
         <div id="shelfRecordRecentFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-7 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
           <div>
             <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
-            <input id="srfShelfLocation" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded">
+            <input id="srfShelfLocation" data-sdd-list="srfShelfLocationDropdown" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srfShelfLocationDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
-            <input id="srfMaHang" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded">
+            <input id="srfMaHang" data-sdd-list="srfMaHangDropdown" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srfMaHangDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Mã Vạch</label>
-            <input id="srfMaVach" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm mã vạch..." class="w-full border p-1 rounded">
+            <input id="srfMaVach" data-sdd-list="srfMaVachDropdown" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm mã vạch..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srfMaVachDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Tên Sản Phẩm</label>
-            <input id="srfProductName" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm tên sản phẩm..." class="w-full border p-1 rounded">
+            <input id="srfProductName" data-sdd-list="srfProductNameDropdown" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm tên sản phẩm..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srfProductNameDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Người Cập Nhật Gần Nhất</label>
-            <input id="srfEditor" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm theo tên..." class="w-full border p-1 rounded">
+            <input id="srfEditor" data-sdd-list="srfEditorDropdown" data-op-input="onShelfRecordRecentFilterChanged" placeholder="Tìm theo tên..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srfEditorDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Số Lượng Từ</label>
@@ -1143,23 +1148,28 @@
         <div id="shelfExpiryFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-7 gap-2 bg-gray-50 border rounded p-2 text-xs">
           <div>
             <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
-            <input id="sefShelfLocation" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded">
+            <input id="sefShelfLocation" data-sdd-list="sefShelfLocationDropdown" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sefShelfLocationDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Mã Vạch</label>
-            <input id="sefMaVach" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm mã vạch..." class="w-full border p-1 rounded">
+            <input id="sefMaVach" data-sdd-list="sefMaVachDropdown" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm mã vạch..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sefMaVachDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
-            <input id="sefMaHang" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded">
+            <input id="sefMaHang" data-sdd-list="sefMaHangDropdown" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sefMaHangDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Tên Sản Phẩm</label>
-            <input id="sefProductName" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm tên sản phẩm..." class="w-full border p-1 rounded">
+            <input id="sefProductName" data-sdd-list="sefProductNameDropdown" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm tên sản phẩm..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sefProductNameDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Người Cập Nhật Gần Nhất</label>
-            <input id="sefEditor" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm theo tên..." class="w-full border p-1 rounded">
+            <input id="sefEditor" data-sdd-list="sefEditorDropdown" data-op-input="onShelfExpiryFilterChanged" placeholder="Tìm theo tên..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sefEditorDropdown" class="hidden" data-sdd-dropdown></div>
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Số Lượng Từ</label>
@@ -1258,6 +1268,38 @@
             <a href="/api/shelf-stock/thresholds/import-template" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50 inline-block">⬇️ Tải Mẫu Excel</a>
           </div>
         </form>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-bold text-gray-600">Danh sách ngưỡng tồn</span>
+          <button type="button" data-op="toggleShelfThresholdFilterPanel" id="btnToggleShelfThresholdFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+        </div>
+        <div id="shelfThresholdFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
+            <input id="stfMaHang" data-sdd-list="stfMaHangDropdown" data-op-input="onShelfThresholdFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="stfMaHangDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Mã Vạch</label>
+            <input id="stfMaVach" data-sdd-list="stfMaVachDropdown" data-op-input="onShelfThresholdFilterChanged" placeholder="Tìm mã vạch..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="stfMaVachDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Ngành Hàng</label>
+            <input id="stfCategory" data-sdd-list="stfCategoryDropdown" data-op-input="onShelfThresholdFilterChanged" placeholder="Tìm ngành hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="stfCategoryDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Trạng Thái</label>
+            <select id="stfStatus" data-op-change="onShelfThresholdFilterChanged" class="w-full border p-1 rounded">
+              <option value="">-- Tất cả --</option>
+              <option value="active">Đang áp dụng</option>
+              <option value="inactive">Ngừng dùng</option>
+            </select>
+          </div>
+          <div class="col-span-2 md:col-span-4 text-right">
+            <button type="button" data-op="clearShelfThresholdFilters" class="text-gray-500 hover:underline">✖ Xoá Bộ Lọc</button>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
             <thead class="bg-gray-100">
@@ -1311,8 +1353,32 @@
              client) — đối chiếu lại đúng giá trị này với cột "Mã Điểm" ở Hệ Thống → Quản Trị → Quản Lý
              Danh Mục → Danh Mục Siêu Thị nếu nghi ngờ cấu hình sai. Xem setShelfReconHeader()/module-vanhanh.js. -->
         <div id="shelfReconHeader" class="bg-cyan-50 border border-cyan-200 rounded px-3 py-2 text-xs font-bold text-cyan-800"></div>
-        <div class="text-right">
+        <div class="flex items-center justify-between">
+          <button type="button" data-op="toggleShelfReconFilterPanel" id="btnToggleShelfReconFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
           <button type="button" data-op="exportShelfReconciliationExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
+        </div>
+        <div id="shelfReconFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-3 gap-2 bg-gray-50 border rounded p-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
+            <input id="sconMaHang" data-sdd-list="sconMaHangDropdown" data-op-input="onShelfReconFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sconMaHangDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tên Hàng</label>
+            <input id="sconTenHang" data-sdd-list="sconTenHangDropdown" data-op-input="onShelfReconFilterChanged" placeholder="Tìm tên hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="sconTenHangDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Kết Quả</label>
+            <select id="sconStatus" data-op-change="onShelfReconFilterChanged" class="w-full border p-1 rounded">
+              <option value="">-- Tất cả --</option>
+              <option value="match">Khớp</option>
+              <option value="mismatch">Lệch</option>
+            </select>
+          </div>
+          <div class="col-span-2 md:col-span-3 text-right">
+            <button type="button" data-op="clearShelfReconFilters" class="text-gray-500 hover:underline">✖ Xoá Bộ Lọc</button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
@@ -1371,8 +1437,42 @@
           <label class="font-semibold text-gray-600">Siêu Thị (có thể chọn nhiều, để trống = tất cả):</label>
           <div id="shelfReportStoreFilterMultiSelect" class="border rounded p-2 bg-gray-50 max-w-md"></div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex items-center justify-between">
+          <button type="button" data-op="toggleShelfReportFilterPanel" id="btnToggleShelfReportFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
           <button type="button" data-op="exportShelfReportExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
+        </div>
+        <div id="shelfReportFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-5 gap-2 bg-gray-50 border rounded p-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Mã Hàng</label>
+            <input id="srpMaHang" data-sdd-list="srpMaHangDropdown" data-op-input="onShelfReportFilterChanged" placeholder="Tìm mã hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srpMaHangDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tên Hàng</label>
+            <input id="srpProductName" data-sdd-list="srpProductNameDropdown" data-op-input="onShelfReportFilterChanged" placeholder="Tìm tên hàng..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srpProductNameDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+            <input id="srpShelfLocation" data-sdd-list="srpShelfLocationDropdown" data-op-input="onShelfReportFilterChanged" placeholder="Tìm quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srpShelfLocationDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Người Ghi Nhận</label>
+            <input id="srpCreator" data-sdd-list="srpCreatorDropdown" data-op-input="onShelfReportFilterChanged" placeholder="Tìm theo tên..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="srpCreatorDropdown" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Trạng Thái</label>
+            <select id="srpStatus" data-op-change="onShelfReportFilterChanged" class="w-full border p-1 rounded">
+              <option value="">-- Tất cả --</option>
+              <option value="tracking">Đang theo dõi</option>
+              <option value="soldout">Đã bán hết</option>
+            </select>
+          </div>
+          <div class="col-span-2 md:col-span-5 text-right">
+            <button type="button" data-op="clearShelfReportFilters" class="text-gray-500 hover:underline">✖ Xoá Bộ Lọc</button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
