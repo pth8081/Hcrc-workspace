@@ -3656,11 +3656,15 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     bao giờ nhận mã siêu thị từ client, chặn store-spoofing cùng nguyên tắc
     mọi route khác của Kiểm Soát Hàng Hóa.
 
-**"📋 Kiểm Kê" (11/2026 — đủ 8/8 tab đã hoạt động)**: module kiểm kê thực tế
-theo **KỲ**, khác hẳn "Kiểm Soát Hàng Hóa" ở trên (ghi nhận liên tục theo lô,
-không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thuần UI) nhưng
-**phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập (Phân Quyền
-→ khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự kiến).
+**"📋 Kiểm Kê" (11/2026 — đủ 8/8 tab đã hoạt động; 12/2026 — promote thành
+module chính riêng ở sidebar)**: module kiểm kê thực tế theo **KỲ**, khác
+hẳn "Kiểm Soát Hàng Hóa" ở trên (ghi nhận liên tục theo lô, không có khái
+niệm kỳ) — có mục RIÊNG ngay trên sidebar (ngang hàng "⚙️ Vận Hành"/"🔗 Mua
+Hàng", theo yêu cầu người dùng "chuyển kiểm kê thành module chính ở slide
+bar như vận hành, mua hàng"; trước đó từng sống chung sidebar "⚙️ Vận Hành"
+thuần UI). **Phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập
+(Phân Quyền → khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự
+kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hành từ trước.
 
 - **2 loại Kỳ ĐỘC LẬP, mỗi siêu thị quản lý riêng**: "Gom Mã" (chuẩn hoá/
   gắn mã hàng cho hàng chưa có mã trước khi kiểm) và "Kiểm Kê" (đếm số
@@ -3680,7 +3684,7 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   hiện trùng như trước. Đóng kỳ (Đã chốt) xong thì tạo được kỳ MỚI bình
   thường (mở vòng kiểm kê mới); muốn làm tiếp ĐÚNG kỳ cũ vừa đóng thì dùng
   nút "↩️ Mở Lại" (chỉ Admin) ở trên, không tạo kỳ mới cho siêu thị đó.
-- **Thao tác**: Hệ Thống → ⚙️ Vận Hành → tab "📋 Kiểm Kê" → sub-tab "📅 Kỳ
+- **Thao tác**: 📋 Kiểm Kê (sidebar) → sub-tab "📅 Kỳ
   Kiểm Kê" → "+ Tạo Kỳ Mới" (chọn Loại Kỳ + đặt Tên Kỳ, tuỳ chọn khoảng thời
   gian dự kiến) → "▶ Kích Hoạt" → "🔒 Đóng Kỳ" → (Admin) "↩️ Mở Lại". Người
   có BẤT KỲ quyền Kiểm Kê nào (kể cả chỉ Gom Mã/Kiểm Đếm, chưa xây) vẫn vào
@@ -3702,9 +3706,10 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   (dept) — Admin xem được mọi siêu thị. Chưa có khái niệm "xem chéo nhiều
   siêu thị" (kiểu Quản lý vùng ở Kiểm Soát Hàng Hóa) cho Kiểm Kê ở Phase 1
   này.
-- **Báo Cáo**: xem tại 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Kê — Kỳ Kiểm Kê"
-  (gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền module
-  phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
+- **Báo Cáo**: xem tại 📊 Báo Cáo → mục riêng "📋 Kiểm Kê — Kỳ Kiểm Kê"
+  (12/2026, đã tách khỏi nhóm "Vận Hành" thành mục riêng cùng đợt promote
+  sidebar — gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền
+  module phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
 - **Tab 8 "🔑 Cấu Hình Người Dùng" (12/2026)**: trước khi dùng được Tab 2/3
   dưới đây, Admin/người có quyền "🔑 Tab 8: Cấu Hình Người Dùng" phải vào
   đây GÁN TRƯỚC cho từng người: được thao tác Gom Mã/Kiểm Đếm/Kiểm Soát ở

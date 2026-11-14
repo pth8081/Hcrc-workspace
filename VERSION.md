@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**30.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.45 (2026-11): "📋 Kiểm Kê" — promote thành module chính riêng ở sidebar
+
+Theo yêu cầu người dùng: "Tôi muốn chuyển kiểm kê thành module chình ở slide bar như vận hành, mua hàng
+có được không?" — "📋 Kiểm Kê" trước đây sống như 1 sub-tab BÊN TRONG "⚙️ Vận Hành" (cạnh Đơn Hàng/QLDA/
+Phê Duyệt Giá Bán Buôn/Kiểm Soát Hàng Hóa), nay có mục RIÊNG ngay trên sidebar, ngang hàng "⚙️ Vận
+Hành"/"🔗 Mua Hàng" — nút đơn giản (không dropdown, module đã có sẵn 8 tab con riêng bên trong).
+
+Phân quyền module này đã độc lập hoàn toàn với Vận Hành TỪ TRƯỚC đợt này (khối quyền riêng "27. Kiểm
+Kê" ở Phân Quyền, không phải con của Vận Hành) nên việc promote này KHÔNG đổi gì về phân quyền đã cấp —
+chỉ đổi điều hướng/giao diện: tách khung HTML ra fragment riêng, gỡ khỏi dropdown/thanh sub-tab của Vận
+Hành, thêm hàm kiểm tra truy cập riêng (tách khỏi điều kiện đang dùng chung với Vận Hành), và cập nhật
+lại 2 mục đã nối sẵn trước đó ở "📊 Báo Cáo" (nhóm Vận Hành → mục riêng) và "📘 Hướng Dẫn" (nhóm Vận Hành
+→ nhóm "Kiểm Kê" riêng).
 
 ## v30.44 (2026-11): "📋 Kiểm Soát Hàng Hóa" — ô lọc tìm-kiếm-gõ-chọn, gợi ý THẬT từ dữ liệu
 
