@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**30.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.36 (2026-12): "📋 Kiểm Kê" Tab 8 + Tab 2/3 Gom Mã/Kiểm Đếm + gộp ô nhận diện sản phẩm "Ghi Nhận"
+
+**Tab 8 "🔑 Cấu Hình Người Dùng"**: gán allowlist TUYỆT ĐỐI (không có cờ "tất cả"/"bất kỳ", kể cả Admin)
+theo (user × siêu thị × quầy kệ × hành động Gom Mã/Kiểm Đếm/Kiểm Soát) — UI chọn người dùng (ô tìm-kiếm-
+gõ-chọn), chọn siêu thị, tick nhiều quầy kệ, tick hành động, danh sách đã gán + xoá. Vá luôn 1 lỗ hổng UX
+thật phát hiện cùng đợt: cả 8 nút sub-tab Kiểm Kê trước đó LUÔN hiện bất kể quyền thật của user (nút hiện
+nhưng bấm vào bị 403) — nay ẩn/hiện đúng theo quyền `kiemKe*` của từng người, tự rơi về tab còn quyền nếu
+đang đứng ở tab vừa mất quyền.
+
+**Tab 2 "📷 Gom Mã" + Tab 3 "🔢 Kiểm Đếm"**: chọn quầy kệ (chỉ hiện quầy kệ được allowlist đúng hành động)
+→ hiện kỳ đang hoạt động hoặc cảnh báo rõ nếu siêu thị chưa có kỳ → quét/gõ mã (dùng lại cơ chế khớp Mã
+Vạch/Mã Hàng/6-số-cuối đã có, kể cả `dsMaVach`) → danh sách MRU (mã vừa quét nhảy lên đầu) kèm tìm kiếm +
+sửa tay + xoá, 3 lớp kiểm tra (quyền tab/allowlist/kỳ đang hoạt động) đều xác nhận lại ở server. Route mới
+`GET /api/stocktake/active-session-for-shelf` lấy đúng kỳ của siêu thị thuộc quầy kệ đã chọn (không lệ
+thuộc dept hồ sơ người gọi — cần thiết cho Giám Sát Vùng allowlist liên siêu thị). Vá 1 lỗi logic: sửa
+tay (`editCountValue()`) từng vô tình đẩy dòng lên đầu MRU giống quét mới — tách field `lastEditedAt`
+riêng khỏi `lastScannedAt`, đúng quy tắc A5. Tab 4 "🛡️ Kiểm Soát" để đợt sau (đã có sẵn bộ hàm dùng chung,
+chỉ cần thêm cấu hình UI).
+
+**"📷 Ghi Nhận" (Kiểm Soát Hàng Hóa) — gộp ô nhận diện sản phẩm**: theo phản hồi người dùng kèm ảnh chụp
+thực tế ("quét mã sao lại ko có thông tin, mã nội bộ lại hiện lên mã vạch") — 3 cách nhận diện cũ (ô "Mã
+Vạch" + ô "Mã Hàng (nội bộ)" + picker "🔎 Chọn Từ Tồn Kho Hệ Thống", mỗi ô có logic khớp riêng, dễ gây
+hiểu lầm quét xong không rõ vào ô nào) GỘP THÀNH ĐÚNG 1 ô "Nhận Diện Sản Phẩm" + 1 nút 📷 Quét Mã, giống
+hệt cơ chế "💲 Kiểm Tra Giá" đã quen thuộc — khớp theo Mã Vạch (kể cả `dsMaVach` phụ đối tác cung cấp),
+Mã Hàng nội bộ, 6 số cuối, hoặc tìm theo tên (dropdown gợi ý). `#srSku`/`#srMaHang` giờ là 2 ô ẩn do hệ
+thống tự điền (payload gửi server không đổi). Mã không khớp tồn kho hệ thống (hàng mới/mã tự đặt) vẫn ghi
+nhận thủ công được — tự đoán nên vào Mã Vạch hay Mã Hàng theo định dạng (dãy số dài ≥8 chữ số = Mã Vạch,
+còn lại = Mã Hàng), giữ nguyên năng lực của bản 2-ô cũ. Phát hiện + vá thêm 1 lỗi thật lúc build demo: để
+`srSku`/`srMaHang` trong `CORE_FIELD_MANIFEST.SHELF_RECORD` (hệ thống "Biểu Mẫu" cho admin đổi nhãn) khiến
+`applyCoreFieldCustomizations()`/`applyFieldOrder()` ghi đè NHẦM nhãn/thứ tự lên ô mới (cùng id, cùng div)
+— đã bỏ 2 field cũ khỏi manifest, thêm `srScanInput` thay thế.
+
+- Cập nhật 9 test + 2 demo hiện có cho đúng hành vi mới, thêm 4 test/demo mới (`test-stocktake-counts-
+  engine.js`, `test-stocktake-scan-routes-security.js`, `test-stocktake-tab8-ui.js`,
+  `demo-shelf-record-unified-scan-input.js`). Hồi quy: 169/169 kịch bản qua 16 file test liên quan pass.
+- **Deploy**: không có biến `.env`/package npm/thay đổi `schema.sql` mới — chỉ copy code + `pm2 restart`.
 
 ## v30.35 (2026-12): "💲 Kiểm Tra Giá" — đồng bộ ngầm bảng giá offline
 

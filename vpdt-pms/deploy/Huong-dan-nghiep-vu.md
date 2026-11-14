@@ -3192,28 +3192,34 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
 
 - **5 sub-tab**:
   - "📷 Ghi Nhận" — nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục đã khai
-    báo + nhập Tên Sản Phẩm/Số Lượng/Hạn Sử Dụng, cùng **2 ô mã RIÊNG, độc
-    lập, sửa tay được cả 2** (API Tồn Kho đối tác BRGMART bản 1.3, 11/2026,
-    bổ sung mã vạch thật EAN-13 bên cạnh mã nội bộ cũ):
-    - **"Mã Vạch"** — gõ tay HOẶC **bấm nút "📷 Quét Mã" quét bằng camera**
-      (ưu tiên quét sẵn trên Android/Chrome, các trình duyệt khác tự tải
-      thêm bộ quét khi bấm nút, chỉ cần camera + HTTPS). LUÔN lưu lại giá
-      trị quét/gõ được (dù khớp tồn kho hệ thống hay không, để tham chiếu
-      sau này). Nếu siêu thị đã cấu hình "Mã Điểm" (xem dưới) và có dữ
-      liệu, mã vạch vừa nhập tự so khớp với tồn kho hệ thống đã tải —
-      khớp được thì tự điền thêm ô "Mã Hàng" + Tên Sản Phẩm (hiện ghi chú
-      "✅ Đã khớp..."); không khớp (mã vạch mờ/in sai/mặt hàng chưa khai
-      báo mã vạch trong hệ thống đối tác) thì chỉ báo "⚠️ Không khớp...",
-      KHÔNG xoá Mã Hàng đã có.
-    - **"Mã Hàng (nội bộ)"** — gõ tay trực tiếp HOẶC dùng picker **"🔎 Chọn
-      Từ Tồn Kho Hệ Thống"** (tìm theo mã hàng/tên/mã vạch, điền cả 2 ô
-      cùng lúc) — đây là **đường dự phòng** khi mã vạch không quét/khớp
-      được: nhân viên tự tìm đúng mặt hàng theo tên/mã hàng để vẫn xác
-      định đúng sản phẩm cần theo dõi.
-    - Đối Chiếu (xem sub-tab "📊 Đối Chiếu" dưới) chỉ cần ô "Mã Hàng" không
-      rỗng — không quan tâm điền bằng cách nào (gõ tay/picker/camera tự
-      khớp đều tính). `shelfRecords` lưu CẢ 2 field `maHang` và `maVach`,
-      cả 2 đều optional, không field nào bắt buộc field kia.
+    báo + nhập Tên Sản Phẩm/Số Lượng/Hạn Sử Dụng, cùng **1 ô "Nhận Diện Sản
+    Phẩm" DUY NHẤT** (GỘP LẠI 12/2026, theo phản hồi người dùng kèm ảnh chụp
+    thực tế: trước đó tách 2 ô "Mã Vạch"/"Mã Hàng (nội bộ)" độc lập + 1
+    picker riêng khiến quét xong không rõ thông tin vào đúng ô nào — nay
+    dùng ĐÚNG 1 ô + 1 nút 📷 Quét Mã, giống hệt cơ chế "💲 Kiểm Tra Giá" bên
+    dưới):
+    - **Gõ tay HOẶC bấm "📷 Quét Mã" quét bằng camera** (ưu tiên quét sẵn
+      trên Android/Chrome, các trình duyệt khác tự tải thêm bộ quét khi bấm
+      nút, chỉ cần camera + HTTPS) — giá trị vừa quét/gõ tự so khớp lần
+      lượt: Mã Vạch (kể cả mã vạch PHỤ, 1 mặt hàng có thể đăng ký nhiều mã
+      vạch), Mã Hàng nội bộ, hoặc 6 số cuối của 1 trong 2 mã trên (chỉ nhận
+      khi khớp DUY NHẤT 1 mặt hàng) — khớp được thì tự điền Tên Sản Phẩm
+      (hiện ghi chú "✅ Đã khớp..."). Cũng gõ được TÊN sản phẩm để tìm theo
+      dropdown gợi ý (thay cho picker "🔎 Chọn Từ Tồn Kho Hệ Thống" cũ, nay
+      gộp chung vào đúng ô này) — chọn 1 dòng gợi ý tự điền đủ cả Mã Hàng/Mã
+      Vạch/Tên.
+    - **Mã không khớp tồn kho hệ thống** (mã vạch mờ/sai, hoặc hàng MỚI/mã
+      nội bộ tự đặt chưa có trong hệ thống đối tác) vẫn ghi nhận thủ công
+      bình thường: hệ thống tự đoán mã vừa gõ nên tính là Mã Vạch hay Mã
+      Hàng theo ĐỊNH DẠNG (dãy số dài ≥8 chữ số = Mã Vạch kiểu EAN/UPC, còn
+      lại — có chữ cái hoặc ngắn hơn, VD "SP001" — = Mã Hàng nội bộ tự đặt),
+      Tên Sản Phẩm vẫn gõ tay được bình thường.
+    - Đối Chiếu (xem sub-tab "📊 Đối Chiếu" dưới) chỉ cần Mã Hàng không
+      rỗng — không quan tâm điền bằng cách nào (gõ tay/chọn gợi ý/camera tự
+      khớp đều tính). `shelfRecords` lưu CẢ 2 field `maHang` và `maVach`
+      (phía sau, người dùng không còn thao tác trực tiếp vào 2 field này
+      nữa), cả 2 đều optional, không field nào bắt buộc field kia, payload
+      gửi server không đổi so với trước.
     - **Mất mạng vẫn bấm "💾 Lưu Ghi Nhận" được bình thường** — máy tự lưu
       tạm (hiện badge "🔌 Chưa đồng bộ" + dòng thông báo số bản ghi đang
       chờ), tự gửi lên lại ngay khi có mạng trở lại, không cần làm gì
@@ -3665,11 +3671,31 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
 - **Báo Cáo**: xem tại 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Kê — Kỳ Kiểm Kê"
   (gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền module
   phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
-- **Chưa làm ở đợt này** (các tab 2-8, sẽ bổ sung ở đợt merge sau): Gom Mã,
-  Kiểm Đếm, Kiểm Soát, Cấu Hình Quầy Kệ (dự kiến tái dùng danh mục Quầy Kệ
-  đã có ở Kiểm Soát Hàng Hóa), Xác Nhận, biểu đồ Báo Cáo chi tiết theo Kỳ +
-  xuất Excel nhiều sheet, Cấu Hình Người Dùng (phân quyền chi tiết theo
-  siêu thị/quầy kệ/hành động).
+- **Tab 8 "🔑 Cấu Hình Người Dùng" (12/2026)**: trước khi dùng được Tab 2/3
+  dưới đây, Admin/người có quyền "🔑 Tab 8: Cấu Hình Người Dùng" phải vào
+  đây GÁN TRƯỚC cho từng người: được thao tác Gom Mã/Kiểm Đếm/Kiểm Soát ở
+  ĐÚNG những quầy kệ nào — **allowlist TUYỆT ĐỐI, không có cờ "tất cả"/"bất
+  kỳ" nào, kể cả Admin cũng phải có dòng allowlist riêng mới quét được**.
+  Thao tác: chọn người dùng (gõ tên/username để tìm) → chọn siêu thị → tick
+  1 hoặc nhiều quầy kệ → tick hành động (📷 Gom Mã/🔢 Kiểm Đếm/🛡️ Kiểm Soát)
+  → "Lưu Quyền". Xem lại/xoá ở "Danh Sách Đã Gán" bên dưới. 1 người có thể
+  được gán nhiều siêu thị khác nhau (VD Giám Sát Vùng).
+- **Tab 2 "📷 Gom Mã" + Tab 3 "🔢 Kiểm Đếm" (12/2026)**: vào tab, **bắt buộc
+  chọn Quầy Kệ trước** (chỉ hiện quầy kệ mình đã được gán ở Tab 8 cho ĐÚNG
+  hành động này) — chọn xong hệ thống tự kiểm tra kỳ đang hoạt động của
+  siêu thị đó (Gom Mã cần kỳ loại "Gom Mã", Kiểm Đếm cần kỳ loại "Thống Kê"
+  đang hoạt động, chưa có thì báo rõ, không cho quét). Có kỳ rồi mới hiện ô
+  quét — quét/gõ mã (dùng chung cơ chế nhận diện như "📷 Ghi Nhận": Mã Vạch/
+  Mã Hàng/6 số cuối) → số lượng TỰ CỘNG DỒN nếu quét trùng mã, mã vừa quét
+  luôn nhảy lên đầu danh sách. Có ô tìm kiếm riêng để sửa tay/xoá 1 dòng đã
+  quét nhầm (sửa tay KHÔNG đẩy dòng đó lên đầu, chỉ quét mới mới tính). Đổi
+  quầy kệ khác thì quay lại bước chọn quầy kệ. Gom Mã chỉ để tham khảo
+  (không lên Báo Cáo cuối), Kiểm Đếm là số liệu CHÍNH THỨC trừ khi Tab 4
+  Kiểm Soát ghi đè.
+- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 4 Kiểm Soát (soát
+  lại các mã nghi vấn, ghi đè Kiểm Đếm), Tab 5 Cấu Hình Quầy Kệ (dự kiến tái
+  dùng danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa), Tab 6 Xác Nhận, Tab 7
+  Báo Cáo chi tiết theo Kỳ (3 biểu đồ + xuất Excel nhiều sheet).
 
 ### 4.5. Nhân Sự
 
