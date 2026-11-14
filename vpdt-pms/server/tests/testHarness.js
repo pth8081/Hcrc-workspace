@@ -108,7 +108,13 @@ function createMockState(seed) {
     operationWorkItems: [], operationExecutionPeriods: [],
     // hrProcesses/hrTaskTemplates (Nhân Sự > Onboarding/Offboarding v2) + storeJobTitles (nguồn tra cứu
     // employeeJobTitle khi employeePosType==='STORE') — xem lib/createValidation.js/lib/recordActions.js.
-    hrProcesses: [], hrTaskTemplates: [], storeJobTitles: []
+    hrProcesses: [], hrTaskTemplates: [], storeJobTitles: [],
+    // stocktakeSessions ("📋 Kiểm Kê" Tab 1 "Kỳ Kiểm Kê", Phase 1 MVP 11/2026) — cùng khuôn
+    // shelfLocations/shelfRecords (không có trong danh sách này, seed trực tiếp qua `seed` ở từng test
+    // dùng tới) nhưng seed rỗng SẴN ở đây để test KHÔNG cần tự khai báo khi không liên quan, tránh lặp
+    // lại đúng bug "key chưa seed" đã gặp ở defaults.js thật (shelfLocations/shelfRecords/
+    // shelfStockThresholds).
+    stocktakeSessions: []
   }, seed || {});
 }
 
@@ -930,6 +936,60 @@ function createDispatcher(state) {
           }
         }
         return { status: 200, body: { ok: true, item: updated } };
+      }
+
+      // ===== "📋 Kiểm Kê" Tab 1 "Kỳ Kiểm Kê" (Phase 1 MVP, 11/2026) — mirror ĐÚNG routes/stocktake.js
+      // bằng CHÍNH các hàm thật lib/stocktakeEngine.js (không tự đoán lại logic state-machine/quyền),
+      // cùng triết lý mọi nhánh khác trong file này. =====
+      if (pathName === '/api/stocktake/sessions' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        const qsDept = new URL(url, 'http://x').searchParams.get('dept');
+        const dept = (freshUser.perms?.admin && qsDept) ? qsDept : freshUser.dept;
+        const items = (state.stocktakeSessions || []).filter(s => s.dept === dept);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/sessions' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakePeriod, buildNewSession } = require('../lib/stocktakeEngine');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Kỳ Kiểm Kê' } };
+        try {
+          const dept = (freshUser.perms?.admin && body?.dept) ? String(body.dept).trim() : freshUser.dept;
+          const item = buildNewSession({ ...body, dept }, freshUser);
+          if (!state.stocktakeSessions) state.stocktakeSessions = [];
+          state.stocktakeSessions.unshift(item);
+          return { status: 200, body: { item } };
+        } catch (err) {
+          return { status: err.status || 500, body: { error: err.message } };
+        }
+      }
+      const kkTransitionMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)\/(activate|close|reopen)$/);
+      if (kkTransitionMatch && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakePeriod, canReopenStocktakeSession, activateSession, closeSession, reopenSession } = require('../lib/stocktakeEngine');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        const id = Number(kkTransitionMatch[1]);
+        const action = kkTransitionMatch[2];
+        const fnMap = { activate: activateSession, close: closeSession, reopen: reopenSession };
+        const permOk = action === 'reopen' ? canReopenStocktakeSession(freshUser) : canManageStocktakePeriod(freshUser);
+        if (!permOk) return { status: 403, body: { error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' } };
+        try {
+          const arr = state.stocktakeSessions || [];
+          const item = arr.find(s => s.id === id);
+          if (!item) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
+          if (!freshUser.perms?.admin && item.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+          const updated = fnMap[action](arr, id, freshUser);
+          return { status: 200, body: { item: updated } };
+        } catch (err) {
+          return { status: err.status || 500, body: { error: err.message } };
+        }
       }
 
       // ===== Ghi Nhận Theo Lô (Kiểm Soát Hàng Hóa, 11/2026) — mirror ĐÚNG routes/shelfStock.js

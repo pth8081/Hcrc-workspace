@@ -28,6 +28,7 @@ const {
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterShelfLocationsForUser, filterShelfRecordsForUser, filterShelfStockThresholdsForUser,
+  filterStocktakeSessionsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
@@ -1867,6 +1868,11 @@ router.get('/', async (req, res) => {
     if (data.shelfLocations) data.shelfLocations = filterShelfLocationsForUser(data.shelfLocations, req.freshUser);
     if (data.shelfRecords) data.shelfRecords = filterShelfRecordsForUser(data.shelfRecords, req.freshUser);
     if (data.shelfStockThresholds) data.shelfStockThresholds = filterShelfStockThresholdsForUser(data.shelfStockThresholds, req.freshUser);
+    // stocktakeSessions (📋 Kiểm Kê Tab 1, Phase 1 MVP 11/2026) — PHÁT HIỆN lúc code Tab 1: collection
+    // KHÔNG nằm trong danh sách chặn hẳn ở trên (chỉ employeeProfiles/.../payrollPeriods), nên nếu không
+    // lọc ở đây sẽ lộ kỳ kiểm kê của MỌI siêu thị cho MỌI tài khoản qua GET /api/data chung — xem
+    // filterStocktakeSessionsForUser() ở lib/recordViewScope.js.
+    if (data.stocktakeSessions) data.stocktakeSessions = filterStocktakeSessionsForUser(data.stocktakeSessions, req.freshUser);
     // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
     // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
     // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/

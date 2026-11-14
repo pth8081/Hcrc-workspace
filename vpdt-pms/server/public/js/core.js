@@ -2736,6 +2736,25 @@ const BUSINESS_MODULES = [
   // subtab nào" (10/2026) để đủ cả 6/6 tab con, không riêng 4 tab đã có trước đó.
   { key: 'vanHanhStoreOpen', label: 'Vận Hành — Siêu Thị > Mở Mới', parent: 'vanHanhStoreGroup' },
   { key: 'vanHanhRepair', label: 'Vận Hành — Siêu Thị > Sửa Chữa', parent: 'vanHanhStoreGroup' },
+  // "📋 Kiểm Kê" (Vận Hành, Phase 1 MVP 11/2026) — tab con thứ 5 của Vận Hành về mặt ĐIỀU HƯỚNG (nút
+  // bấm nằm trong setVanHanhSubTab(), cạnh "📦 Kiểm Soát Hàng Hóa" — xem vhKeyMap.STOCKTAKE ở
+  // module-vanhanh.js), NHƯNG về PHÂN QUYỀN lại tách THÀNH 1 KHỐI RIÊNG không có `parent` (theo đúng
+  // yêu cầu người dùng "cho riêng ra một mục to" — không lẫn vào khối Vận Hành như vanHanhShelfTab ở
+  // trên), đúng khuôn "Checklist Đánh Giá Siêu Thị" ngay dưới (cũng TOP-LEVEL dù sống trong UI của module
+  // khác). 8 entry con tương ứng ĐÚNG 8 tab trong tài liệu đề xuất
+  // (vpdt-pms/docs/kiem-ke-sieu-thi.md mục B1) — đây là lớp "được THẤY/dùng tab nào" (default ON, như
+  // mọi entry khác trong mảng này); lớp "được LÀM gì" (default OFF) là 8 quyền thật riêng
+  // (kiemKePeriodManage...kiemKeUserAccessManage, xem lib/stocktakeEngine.js + systemSection.html khối
+  // mới + module-admin-permtree.js + PERM_KEY_VN_LABELS).
+  { key: 'kiemKe', label: 'Kiểm Kê' },
+  { key: 'kiemKePeriod', label: 'Kiểm Kê — Kỳ Kiểm Kê', parent: 'kiemKe' },
+  { key: 'kiemKeGomMa', label: 'Kiểm Kê — Gom Mã', parent: 'kiemKe' },
+  { key: 'kiemKeKiemDem', label: 'Kiểm Kê — Kiểm Đếm', parent: 'kiemKe' },
+  { key: 'kiemKeKiemSoat', label: 'Kiểm Kê — Kiểm Soát', parent: 'kiemKe' },
+  { key: 'kiemKeShelfConfig', label: 'Kiểm Kê — Cấu Hình Quầy Kệ', parent: 'kiemKe' },
+  { key: 'kiemKeConfirm', label: 'Kiểm Kê — Xác Nhận', parent: 'kiemKe' },
+  { key: 'kiemKeReport', label: 'Kiểm Kê — Báo Cáo', parent: 'kiemKe' },
+  { key: 'kiemKeUserAccess', label: 'Kiểm Kê — Cấu Hình Người Dùng', parent: 'kiemKe' },
   // "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL mới, đúng khuôn "Đồng Phục"/"Giấy Phép"/"Vận Hành":
   // module không mở sẵn cho ai, quyền thật nằm ở 4 quyền PHẲNG checklistExecute/checklistReportView/
   // checklistAtvstpExecute/checklistAtvstpReportView (khối 23 cây phân quyền) — xem
@@ -12607,6 +12626,15 @@ function canAccessOperationModule(user) {
     || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
     || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
     || user.perms?.shelfAnyStoreAccess
+    // "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — ĐÚNG lớp lỗi vừa vá ở shelfRecordCreate/shelfLocationManage
+    // ngay trên: người CHỈ có 1 trong 8 quyền Kiểm Kê (VD chỉ kiemKeGomMaDo, không có bất kỳ quyền Đơn
+    // Hàng/Mở Mới/Sửa Chữa/Giá Buôn/Kiểm Soát Hàng Hóa nào) vẫn phải vào được tab Vận Hành để thấy
+    // sub-tab "📋 Kiểm Kê" — phát hiện qua demo Playwright thật (tests/demo-stocktake-period.js), không
+    // chỉ đọc code suông: hasModuleAccess(user,'kiemKe') mặc định TRUE nhưng KHÔNG đủ (xem chú thích
+    // canViewShelfReportClient() ngay dưới giải thích rõ lý do không dùng hasModuleAccess() phẳng ở đây).
+    || user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
+    || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
+    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage
     // LỖI ĐÃ VÁ (11/2026, người dùng báo "có người trong Nhóm Quyền Vận Hành thấy menu, có người không"):
     // operationOrderReceiptManageHO/Store ("🧾 Quyền Phê Duyệt Đặt Hàng HO/Siêu Thị" — xác nhận NHẬN
     // HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong, xem renderOperationOrderReceiptScopeCheckboxes()/
@@ -12665,6 +12693,13 @@ function canViewShelfReportClient(user) {
   if (scope?.all) return true;
   if (Array.isArray(scope?.depts) && scope.depts.length > 0) return true;
   return false;
+}
+// Kiểm Kê (📋, Phase 1 MVP, 11/2026) — MIRROR đúng canViewStocktakeReport() ở lib/stocktakeEngine.js
+// (bản server), dùng cho REPORT_KEY_ACCESS_FN ở module-baocaoquantri.js (nút nav "Báo Cáo Kiểm Kê" chỉ
+// hiện cho đúng người có quyền "📊 Tab 7: Xem Báo Cáo" hoặc admin, không mở tràn cho mọi quyền kiemKe*
+// khác — Tab 7 là quyền RIÊNG, không giống shelfReportView gộp chung với quyền tạo/quản lý ở trên).
+function canViewStocktakeReportClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKeReportView);
 }
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;

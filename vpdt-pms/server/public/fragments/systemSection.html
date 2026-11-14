@@ -3421,6 +3421,50 @@
             </label>
           </div>
         </details>
+
+        <!-- 27. Kiểm Kê: MỤC MỚI, khối TOP-LEVEL riêng (11/2026) — đúng khuôn "23. Checklist Đánh Giá
+             Siêu Thị" (module sống về điều hướng trong "22. Vận Hành" — setVanHanhSubTab(), nút cạnh
+             "📦 Kiểm Soát Hàng Hóa" — nhưng phân quyền KHÔNG lẫn vào khối Vận Hành, theo đúng yêu cầu
+             người dùng "cho riêng ra một mục to" — xem BUSINESS_MODULES key 'kiemKe' không có parent ở
+             core.js). 8 quyền PHẲNG dưới đây đúng 8 tab trong tài liệu đề xuất
+             (vpdt-pms/docs/kiem-ke-sieu-thi.md mục B1) — xem lib/stocktakeEngine.js cho logic kiểm tra
+             (admin luôn bypass toàn bộ 8 quyền này). Phase 1 MVP (11/2026): CHỈ Tab 1 "Kỳ Kiểm Kê" đã có
+             giao diện thật (setKiemKeSubTab() ở module-vanhanh.js) — 7 quyền còn lại khai báo sẵn ở đây
+             để admin cấu hình trước, UI tương ứng sẽ bổ sung ở các đợt merge tiếp theo (không xoá/rename
+             quyền đã cấp cho user khi UI ra mắt sau). -->
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📋 27. Kiểm Kê</span></span>
+            <span id="permTreeBadge_kiemKe" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Module "📋 Kiểm Kê" (Vận Hành) — kiểm kê định kỳ toàn bộ quầy kệ siêu thị, TÁCH RIÊNG hẳn khỏi khối quyền "22. Vận Hành" ở trên để dễ cấp/soát quyền. 8 quyền dưới đây tương ứng đúng 8 tab của module; thiếu quyền nào thì KHÔNG thấy/dùng được đúng tab đó, kể cả khi đã có quyền ở Tab 8 Cấu Hình Người Dùng (lớp phân quyền theo siêu thị/quầy kệ bên trong module — độc lập với 8 quyền PHẲNG này).</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKePeriodManage"> 📅 Tab 1 — Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã &amp; Thống Kê — mở lại kỳ đã chốt luôn cần quyền Admin, không nằm trong quyền này)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeGomMaDo"> 📷 Tab 2 — Gom Mã
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeKiemDemDo"> 🔢 Tab 3 — Kiểm Đếm
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeKiemSoatDo"> 🛡️ Tab 4 — Kiểm Soát
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeShelfConfigManage"> 🗄️ Tab 5 — Cấu Hình Quầy Kệ
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeConfirmDo"> ✅ Tab 6 — Xác Nhận
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeReportView"> 📊 Tab 7 — Báo Cáo
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeUserAccessManage"> 🔑 Tab 8 — Cấu Hình Người Dùng
+            </label>
+          </div>
+        </details>
         </div>
         </div>
       </form>

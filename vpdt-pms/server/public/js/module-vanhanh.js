@@ -142,8 +142,11 @@ const VAN_HANH_SUBTAB_TO_KIND = { ORDERS: 'operationOrders' };
 function setVanHanhSubTab(subTab) {
   // Mục 0 (10/2026): AND thêm checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab. SHELF (Kiểm
   // Soát Hàng Hóa, Phase 1 MVP 11/2026) thêm vanHanhShelfTab, cùng khuôn.
-  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab', SHELF: 'vanHanhShelfTab' };
-  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE', 'SHELF'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
+  // STOCKTAKE ("📋 Kiểm Kê", 11/2026) — gác bằng key 'kiemKe' (KHÔNG dùng 'vanHanhShelfTab'), vì phân
+  // quyền của Kiểm Kê TÁCH RIÊNG hẳn khỏi khối Vận Hành theo yêu cầu người dùng (xem BUSINESS_MODULES ở
+  // core.js + khối "27. Kiểm Kê" ở systemSection.html).
+  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab', SHELF: 'vanHanhShelfTab', STOCKTAKE: 'kiemKe' };
+  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE', 'SHELF', 'STOCKTAKE'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
   const curVhTab = vhTabOrder.find(([k]) => k === subTab);
   if (!curVhTab || !curVhTab[1]) {
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
@@ -162,7 +165,9 @@ function setVanHanhSubTab(subTab) {
     // "Phê Duyệt Giá Bán Buôn" (10/2026) — chỉ form tạo đề xuất, xem chú thích ở vanHanhItPriceWrap.
     ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice'],
     // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — xem setVanHanhShelfSubTab() bên dưới.
-    ['SHELF', 'vanHanhShelfWrap', 'btnVanHanhSubShelf']
+    ['SHELF', 'vanHanhShelfWrap', 'btnVanHanhSubShelf'],
+    // "📋 Kiểm Kê" (Phase 1 MVP, 11/2026) — xem setKiemKeSubTab() bên dưới.
+    ['STOCKTAKE', 'vanHanhStocktakeWrap', 'btnVanHanhSubStocktake']
   ];
   const vhAllowedMap = Object.fromEntries(vhTabOrder);
   tabs.forEach(([key, wrapId, btnId]) => {
@@ -197,6 +202,8 @@ function setVanHanhSubTab(subTab) {
     // đúng 1 trong 2 khối header tĩnh/picker chọn siêu thị bất kỳ, theo quyền shelfAnyStoreAccess).
     renderVanHanhShelfStoreHeader();
     setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
+  } else if (subTab === 'STOCKTAKE') {
+    setKiemKeSubTab(activeKiemKeSubTab);
   }
 }
 
@@ -312,6 +319,211 @@ function canManageShelfLocationsClient(user) {
 function canCreateShelfRecordClient(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
 }
+// ===== "📋 Kiểm Kê" — Phase 1 MVP (11/2026): Tab 1 "Kỳ Kiểm Kê" (tạo/kích hoạt/đóng/mở lại kỳ, 2 loại
+// độc lập Gom Mã/Thống Kê — mỗi siêu thị tối đa 1 kỳ "Đang hoạt động" MỖI loại, xem
+// lib/stocktakeEngine.js phía server). Phân quyền khối RIÊNG "27. Kiểm Kê" (core.js BUSINESS_MODULES
+// key 'kiemKe' không có parent — KHÔNG lẫn vào khối Vận Hành, theo đúng yêu cầu người dùng), gác ở
+// setVanHanhSubTab() (vhKeyMap.STOCKTAKE). 7 tab còn lại (Gom Mã/Kiểm Đếm/Kiểm Soát/Cấu Hình Quầy Kệ/
+// Xác Nhận/Báo Cáo/Cấu Hình Người Dùng) chỉ có khung giữ chỗ "🚧 Đang phát triển" — xem
+// vpdt-pms/docs/kiem-ke-sieu-thi.md, sẽ bổ sung ở các đợt merge tiếp theo. =====
+let activeKiemKeSubTab = 'PERIOD';
+let kkPeriodLoaiFilter = ''; // '' = tất cả, 'GOM_MA' | 'THONG_KE'
+let kkPeriodSessionsCache = [];
+// kkPeriodDeptSelected — CHỈ dùng khi admin (người không cố định 1 siêu thị) chọn siêu thị để quản lý
+// kỳ; người thường luôn dùng đúng currentUser.dept, KHÔNG có cờ "chọn siêu thị bất kỳ" nào ở đây (đúng
+// yêu cầu "allowlist tuyệt đối, không có cờ bất kỳ" — khác hẳn shelfAnyStoreAccess ở Kiểm Soát Hàng Hóa).
+let kkPeriodDeptSelected = '';
+
+function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
+function canReopenKiemKePeriodClient(user) { return !!user?.perms?.admin; }
+function kkEffectiveDept() {
+  return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
+}
+
+function setKiemKeSubTab(tab) {
+  const tabs = [
+    ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod'],
+    ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa'],
+    ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem'],
+    ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat'],
+    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig'],
+    ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm'],
+    ['REPORT', 'kkReportWrap', 'btnKkSubReport'],
+    ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess']
+  ];
+  activeKiemKeSubTab = tab;
+  tabs.forEach(([key, wrapId, btnId]) => {
+    const isActive = key === tab;
+    const wrap = document.getElementById(wrapId);
+    if (wrap) wrap.classList.toggle('hidden', !isActive);
+    const btn = document.getElementById(btnId);
+    if (btn) btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+  });
+  if (tab === 'PERIOD') loadKkPeriodSessions();
+}
+
+function renderKkPeriodDeptRow() {
+  const row = document.getElementById('kkPeriodDeptRow');
+  if (!row) return;
+  if (currentUser.perms?.admin) {
+    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+    if (!kkPeriodDeptSelected) kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
+      <select id="kkPeriodDeptSelect" data-op-change="onKkPeriodDeptChanged" class="border rounded px-2 py-1">
+        ${stores.map(s => `<option value="${escapeHtml(s)}" ${s === kkPeriodDeptSelected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
+      </select>`;
+  } else {
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(currentUser.dept || '')}</span>`;
+  }
+}
+function onKkPeriodDeptChanged() {
+  const sel = document.getElementById('kkPeriodDeptSelect');
+  kkPeriodDeptSelected = sel ? sel.value : '';
+  loadKkPeriodSessions();
+}
+
+async function loadKkPeriodSessions() {
+  renderKkPeriodDeptRow();
+  // Nút "+ Tạo Kỳ Mới" — CHỈ hiện cho người có kiemKePeriodManage/admin (LỖI THẬT phát hiện qua demo
+  // Playwright — tests/demo-stocktake-period.js: trước đây nút này luôn hiện tĩnh trong HTML, không bị
+  // ẩn theo quyền, để người chỉ có quyền Gom Mã/Kiểm Đếm vẫn bấm được "Tạo"/"Kích Hoạt" dù server sẽ
+  // chặn 403 — đúng lớp lỗi "nút hiện nhưng bấm không được" CLAUDE.md đã nhắc tránh).
+  const canManage = canManageKiemKePeriodClient(currentUser);
+  const openBtn = document.getElementById('btnKkPeriodOpenCreate');
+  if (openBtn) openBtn.classList.toggle('hidden', !canManage);
+  if (!canManage) {
+    const box = document.getElementById('kkPeriodCreateBox');
+    if (box) box.classList.add('hidden');
+  }
+  const body = document.getElementById('kkPeriodListBody');
+  if (body) body.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
+  try {
+    const dept = kkEffectiveDept();
+    const qs = currentUser.perms?.admin ? `?dept=${encodeURIComponent(dept)}` : '';
+    const res = await fetch(`/api/stocktake/sessions${qs}`);
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) { if (body) body.innerHTML = '<p class="text-red-500 text-sm">Không tải được danh sách kỳ kiểm kê.</p>'; return; }
+    const data = await res.json();
+    kkPeriodSessionsCache = Array.isArray(data.items) ? data.items : [];
+    renderKkPeriodList();
+  } catch (err) {
+    if (body) body.innerHTML = '<p class="text-red-500 text-sm">Lỗi kết nối — thử lại.</p>';
+  }
+}
+
+const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Thống Kê' };
+const KK_TRANG_THAI_BADGE = {
+  NHAP: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">📝 Nháp</span>',
+  DANG_HOAT_DONG: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">🟢 Đang hoạt động</span>',
+  DA_CHOT: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã chốt</span>'
+};
+function renderKkPeriodList() {
+  const body = document.getElementById('kkPeriodListBody');
+  if (!body) return;
+  const canManage = canManageKiemKePeriodClient(currentUser);
+  const canReopenKk = canReopenKiemKePeriodClient(currentUser);
+  const items = kkPeriodSessionsCache
+    .filter(s => !kkPeriodLoaiFilter || s.loaiKy === kkPeriodLoaiFilter)
+    .slice()
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (!items.length) {
+    body.innerHTML = '<p class="text-gray-400 text-sm">Chưa có kỳ kiểm kê nào — bấm "+ Tạo Kỳ Mới" ở trên để bắt đầu.</p>';
+    return;
+  }
+  body.innerHTML = items.map(s => {
+    const actions = [];
+    if (canManage && s.trangThai === 'NHAP') {
+      actions.push(`<button type="button" data-op="activateKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold">▶ Kích Hoạt</button>`);
+    }
+    if (canManage && s.trangThai === 'DANG_HOAT_DONG') {
+      actions.push(`<button type="button" data-op="closeKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded border border-red-300 text-red-700 text-xs font-bold">🔒 Đóng Kỳ</button>`);
+    }
+    if (canReopenKk && s.trangThai === 'DA_CHOT') {
+      actions.push(`<button type="button" data-op="reopenKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded border border-cyan-400 text-cyan-700 text-xs font-bold">↩️ Mở Lại</button>`);
+    }
+    const thoiGian = [s.thoiGianBatDau, s.thoiGianKetThuc].filter(Boolean).join(' – ');
+    return `<div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
+      <div class="min-w-0">
+        <div class="font-bold text-sm">${escapeHtml(s.tenKy || '')}</div>
+        <div class="text-xs text-gray-500">Loại: ${KK_LOAI_KY_LABEL[s.loaiKy] || escapeHtml(s.loaiKy || '')}${thoiGian ? ' · ' + escapeHtml(thoiGian) : ''}</div>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        ${KK_TRANG_THAI_BADGE[s.trangThai] || ''}
+        ${actions.join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setKkPeriodLoaiFilter(loai) {
+  kkPeriodLoaiFilter = loai || '';
+  const map = { '': 'btnKkPeriodFilterAll', GOM_MA: 'btnKkPeriodFilterGomMa', THONG_KE: 'btnKkPeriodFilterThongKe' };
+  Object.entries(map).forEach(([l, id]) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.className = `px-3 py-1 rounded-full font-semibold ${l === kkPeriodLoaiFilter ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+  });
+  renderKkPeriodList();
+}
+
+function toggleKkPeriodCreateBox() {
+  const box = document.getElementById('kkPeriodCreateBox');
+  const openBtn = document.getElementById('btnKkPeriodOpenCreate');
+  if (!box) return;
+  const show = box.classList.contains('hidden');
+  box.classList.toggle('hidden', !show);
+  if (openBtn) openBtn.classList.toggle('hidden', show);
+  if (show) {
+    const tenKy = document.getElementById('kkNewTenKy');
+    const batDau = document.getElementById('kkNewBatDau');
+    const ketThuc = document.getElementById('kkNewKetThuc');
+    if (tenKy) tenKy.value = '';
+    if (batDau) batDau.value = '';
+    if (ketThuc) ketThuc.value = '';
+  }
+}
+
+async function submitCreateKkPeriod() {
+  const loaiKy = document.getElementById('kkNewLoaiKy')?.value;
+  const tenKy = (document.getElementById('kkNewTenKy')?.value || '').trim();
+  const thoiGianBatDau = document.getElementById('kkNewBatDau')?.value || '';
+  const thoiGianKetThuc = document.getElementById('kkNewKetThuc')?.value || '';
+  if (!tenKy) { alert('Vui lòng nhập tên kỳ'); return; }
+  try {
+    const res = await fetch('/api/stocktake/sessions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dept: kkEffectiveDept(), loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Không tạo được kỳ kiểm kê'); return; }
+    toggleKkPeriodCreateBox();
+    await loadKkPeriodSessions();
+  } catch (err) {
+    alert('Lỗi kết nối — thử lại.');
+  }
+}
+
+async function postKkPeriodAction(id, action) {
+  try {
+    const res = await fetch(`/api/stocktake/sessions/${Number(id)}/${action}`, { method: 'POST' });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Thao tác không thành công'); return; }
+    await loadKkPeriodSessions();
+  } catch (err) {
+    alert('Lỗi kết nối — thử lại.');
+  }
+}
+function activateKkPeriod(id) { return postKkPeriodAction(id, 'activate'); }
+function closeKkPeriod(id) {
+  if (!confirm('Đóng kỳ này? Sau khi đóng, mọi thao tác trên kỳ đều dừng — chỉ Admin mới mở lại được.')) return;
+  return postKkPeriodAction(id, 'close');
+}
+function reopenKkPeriod(id) {
+  if (!confirm('Mở lại kỳ đã chốt này để cập nhật/sửa lại thông tin?')) return;
+  return postKkPeriodAction(id, 'reopen');
+}
+
 function setVanHanhShelfSubTab(tab) {
   const tabs = [
     ['RECORD', 'vanHanhShelfRecordWrap', 'btnVhShelfSubRecord', () => true],

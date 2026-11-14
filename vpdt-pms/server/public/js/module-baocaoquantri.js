@@ -198,7 +198,13 @@ const REPORT_NAV_TREE = [
       // được đã lọc đúng phạm vi thật qua filterShelfRecordsForUser() (xem routes/reports.js) nên vô hại
       // dù lỡ hiện sai; nhưng quyền HIỆN MỤC NAV (12/2026, vá lỗi hiện tràn cho mọi tài khoản đã đăng
       // nhập) vẫn cần gác riêng qua canViewShelfReportClient() — xem REPORT_KEY_ACCESS_FN ở dưới.
-      { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' }
+      { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' },
+      // Kiểm Kê (📋, Phase 1 MVP, 11/2026, chỉ Tab 1 "Kỳ Kiểm Kê" đã code — Tab 2-8 "🚧 đang phát
+      // triển") — cùng khuôn checklist/shelfRecords ngay trên: quyền hiện tab RIÊNG (kiemKeReportView,
+      // Tab 7 "📊 Báo Cáo"), KHÔNG dùng hasModuleAccess() phẳng — xem canViewStocktakeReportClient()
+      // (core.js) + REPORT_KEY_ACCESS_FN dưới. Dữ liệu client nhận được đã lọc đúng dept thật qua
+      // filterStocktakeSessionsForUser() (routes/data.js) nên vô hại dù lỡ hiện sai nav.
+      { key: 'stocktakeSessions', label: '📋 Kiểm Kê — Kỳ Kiểm Kê' }
     ]
   },
   // Mua Hàng > BAS (v23.30) — module TOP-LEVEL riêng (không nằm dưới dropdown nào, xem BUSINESS_MODULES
@@ -223,7 +229,7 @@ const REPORT_NAV_TREE = [
 // quyền thật là checklistReportView (KHÔNG PHẢI quyền "vào module" phẳng như đa số module khác) — tái
 // dùng canViewChecklistReportsClient() để mặc định (chưa có reportViewAll/reportExtraKeys) chỉ hiện cho
 // đúng người có quyền xem báo cáo checklist thật, không mở tràn cho mọi người có quyền module 0.
-const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient', shelfRecords: 'canViewShelfReportClient' };
+const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient', shelfRecords: 'canViewShelfReportClient', stocktakeSessions: 'canViewStocktakeReportClient' };
 function isReportKeyVisible(key) {
   if (currentUser?.perms?.reportViewAll) return true;
   if (getEffectiveReportExtraKeys(currentUser).includes(key)) return true;
@@ -789,6 +795,17 @@ const REPORT_MODULE_CONFIGS = {
     title: '📋 Báo Cáo Kiểm Soát Hàng Hóa',
     getRecords: (dept, from, to) => fetchReportRecords('shelfRecords', dept, from, to,
       () => DB.shelfRecords.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
+  },
+  // Kiểm Kê (Phase 1 MVP, 11/2026) — CHỈ Tab 1 "Kỳ Kiểm Kê" đã code (stocktakeSessions), dùng field
+  // "dept" chuẩn (= tên siêu thị) giống shelfRecords ngay trên. statusOf/statusBuckets theo đúng 3 trạng
+  // thái thật của vòng đời Kỳ (xem TRANG_THAI/TRANG_THAI_LABEL ở lib/stocktakeEngine.js) — KHÔNG phải
+  // vòng đời phê duyệt như đa số module khác.
+  stocktakeSessions: {
+    title: '📋 Báo Cáo Kiểm Kê — Kỳ Kiểm Kê',
+    getRecords: (dept, from, to) => fetchReportRecords('stocktakeSessions', dept, from, to,
+      () => DB.stocktakeSessions.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
+    statusOf: r => r.trangThai,
+    statusBuckets: [['NHAP', 'Nháp', 'bg-gray-400'], ['DANG_HOAT_DONG', 'Đang hoạt động', 'bg-green-500'], ['DA_CHOT', 'Đã chốt', 'bg-sky-600']]
   },
   // Mua Hàng > BAS (v23.30) — CÙNG khuôn "checklist" ngay trên: "xem chéo" thấy TOÀN BỘ (dept='' luôn),
   // RebateCalculations không có field Dept/status (mỗi bản ghi là 1 lần TÍNH XONG, không có vòng đời

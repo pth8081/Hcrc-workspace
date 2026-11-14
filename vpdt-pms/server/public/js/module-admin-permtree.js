@@ -344,6 +344,17 @@ function collectPermsFromForm() {
     checklistReportView: document.getElementById('pChecklistReportView').checked,
     checklistAtvstpExecute: document.getElementById('pChecklistAtvstpExecute').checked,
     checklistAtvstpReportView: document.getElementById('pChecklistAtvstpReportView').checked,
+    // Kiểm Kê (11/2026, 8 quyền PHẲNG đúng 8 tab — xem lib/stocktakeEngine.js + systemSection.html khối
+    // "27. Kiểm Kê"). Admin luôn bypass (kiểm tra ở lib/stocktakeEngine.js), 8 quyền này KHÔNG mặc định
+    // bật cho ai.
+    kiemKePeriodManage: document.getElementById('pKiemKePeriodManage').checked,
+    kiemKeGomMaDo: document.getElementById('pKiemKeGomMaDo').checked,
+    kiemKeKiemDemDo: document.getElementById('pKiemKeKiemDemDo').checked,
+    kiemKeKiemSoatDo: document.getElementById('pKiemKeKiemSoatDo').checked,
+    kiemKeShelfConfigManage: document.getElementById('pKiemKeShelfConfigManage').checked,
+    kiemKeConfirmDo: document.getElementById('pKiemKeConfirmDo').checked,
+    kiemKeReportView: document.getElementById('pKiemKeReportView').checked,
+    kiemKeUserAccessManage: document.getElementById('pKiemKeUserAccessManage').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
@@ -471,6 +482,14 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
   document.getElementById('pChecklistAtvstpExecute').checked = !!perms.checklistAtvstpExecute;
   document.getElementById('pChecklistAtvstpReportView').checked = !!perms.checklistAtvstpReportView;
+  document.getElementById('pKiemKePeriodManage').checked = !!perms.kiemKePeriodManage;
+  document.getElementById('pKiemKeGomMaDo').checked = !!perms.kiemKeGomMaDo;
+  document.getElementById('pKiemKeKiemDemDo').checked = !!perms.kiemKeKiemDemDo;
+  document.getElementById('pKiemKeKiemSoatDo').checked = !!perms.kiemKeKiemSoatDo;
+  document.getElementById('pKiemKeShelfConfigManage').checked = !!perms.kiemKeShelfConfigManage;
+  document.getElementById('pKiemKeConfirmDo').checked = !!perms.kiemKeConfirmDo;
+  document.getElementById('pKiemKeReportView').checked = !!perms.kiemKeReportView;
+  document.getElementById('pKiemKeUserAccessManage').checked = !!perms.kiemKeUserAccessManage;
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;
