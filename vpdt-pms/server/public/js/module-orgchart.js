@@ -222,7 +222,11 @@ function ocResolvePositionOccupants(nodes, node, users) {
   return (users || []).filter(u => {
     if (u.active === false) return false;
     if (u.jobTitle !== node.jobTitle) return false;
-    if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
+    // LỖI ĐÃ VÁ (11/2026) — mirror ĐÚNG lib/orgChart.js resolvePositionOccupantsDetailed(): fail-closed
+    // khi deptRef null, không fail-open khớp mọi jobTitle toàn công ty (xem chú thích đầy đủ ở server).
+    if (node.requiresDept !== false) {
+      if (!deptRef || u.dept !== deptRef) return false;
+    }
     return true;
   }).map(u => ({ username: u.username, name: u.name }));
 }

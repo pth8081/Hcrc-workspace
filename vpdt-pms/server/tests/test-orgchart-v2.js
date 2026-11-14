@@ -388,6 +388,37 @@ async function main() {
     assertEqual(unresolvedNv1?.reason, 'Chưa có ai giữ vị trí quản lý cấp trên', 'Phải rơi vào unresolved đúng lý do (occupant thật = 0 sau khi lọc INACTIVE)');
   });
 
+  // LỖI ĐÃ VÁ (11/2026, người dùng phản hồi thực tế: "siêu thị chỉ có 1 giám đốc mà hiện ra 30 giám đốc,
+  // lấy hết giám đốc các siêu thị khác luôn"): resolvePositionOccupantsDetailed() TRƯỚC ĐÂY dùng điều
+  // kiện `deptRef && u.dept !== deptRef` (&&) nên khi deptRef null (DEPARTMENT cha gần nhất CHƯA gắn
+  // departmentRef) thì bỏ qua LUÔN cả việc lọc dept, khớp NHẦM mọi user chỉ cần đúng jobTitle bất kể
+  // dept/siêu thị nào — "lọt mở". Phải "lọt đóng": requiresDept mà không xác định được deptRef thì
+  // KHÔNG khớp ai.
+  await run.run('LỖI ĐÃ VÁ: resolvePositionOccupants() KHÔNG được lộ occupant toàn công ty khi DEPARTMENT cha chưa gắn departmentRef (fail-closed, không fail-open)', () => {
+    const version = { nodes: [
+      { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty' },
+      // Nhóm thuần tuý KHÔNG gắn departmentRef (đúng thiết kế — xem chú thích addNode() "nhóm thuần
+      // tuý không cần departmentRef"), VD lỡ tạo trực tiếp vị trí dưới đây mà quên gắn departmentRef
+      // cho đúng node Phòng Ban/Siêu Thị thật.
+      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Khối Siêu Thị (nhóm, chưa gắn departmentRef)', departmentRef: null },
+      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true },
+      // Siêu thị khác CÓ gắn departmentRef đúng chuẩn, dùng để xác nhận occupant của siêu thị THẬT
+      // không hề bị lẫn vào trường hợp lỗi ở trên.
+      { nodeId: 4, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị số 120 Hàng Trống', departmentRef: 'ST120' },
+      { nodeId: 5, parentNodeId: 4, nodeType: 'POSITION', jobTitle: 'Giám Đốc Siêu Thị', requiresDept: true }
+    ], kpiFlow: [] };
+    const users = [
+      { username: 'gd1', name: 'Giám Đốc Siêu Thị 1', dept: 'ST1', jobTitle: 'Giám Đốc Siêu Thị', active: true },
+      { username: 'gd2', name: 'Giám Đốc Siêu Thị 2', dept: 'ST2', jobTitle: 'Giám Đốc Siêu Thị', active: true },
+      { username: 'gd120', name: 'Giám Đốc 120 Hàng Trống', dept: 'ST120', jobTitle: 'Giám Đốc Siêu Thị', active: true }
+    ];
+    const occWithoutDeptRef = orgChart.resolvePositionOccupants(version, version.nodes[2], users);
+    assertEqual(occWithoutDeptRef.length, 0, 'Vị trí dưới DEPARTMENT thiếu departmentRef phải hiện "chưa có ai giữ", KHÔNG được khớp mọi giám đốc toàn công ty');
+    const occ120 = orgChart.resolvePositionOccupants(version, version.nodes[4], users);
+    assertEqual(occ120.length, 1, 'Siêu thị 120 Hàng Trống (có departmentRef đúng) chỉ khớp đúng 1 giám đốc của chính nó');
+    assertEqual(occ120[0].username, 'gd120');
+  });
+
   await run.run('computeValidationIssues(): phát hiện 2 node "Trưởng phòng" CÙNG phòng ban đều có người giữ', () => {
     const version = { nodes: [
       { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty' },
