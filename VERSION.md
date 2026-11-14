@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**30.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.43 (2026-12): "📋 Kiểm Kê" Tab 7 Báo Cáo — thêm "💰 Giá Trị Thừa/Thiếu" (tồn kho × giá)
+
+Theo yêu cầu người dùng ("lấy phần tồn kho với cả phần giá sang để làm báo cáo xuất ra giá trị siêu thị
+thừa thiếu bao nhiêu"): thêm tính năng tính GIÁ TRỊ (tiền VNĐ) chênh lệch thừa/thiếu, CHỈ áp dụng Kỳ
+Kiểm Kê (có baseline Tồn Kho Hệ Thống để so sánh) — công thức: Σ (SL Cuối Cùng − Tồn Kho Hệ Thống) ×
+Giá Thường của từng mã hàng. Tái dùng đúng bảng giá offline đã có cho "💲 Kiểm Tra Giá" (Kiểm Soát Hàng
+Hóa, `dbo.StorePriceSnapshots`) — KHÔNG tự gọi thêm API đối tác riêng cho Kiểm Kê.
+
+Quyết định thiết kế đã xác nhận với người dùng:
+- Luôn dùng **Giá Thường**, không dùng Giá Khuyến Mãi (tránh giá trị dao động theo đợt khuyến mãi).
+- Mã hàng CHƯA có giá lưu sẵn (siêu thị chưa từng mở "Kiểm Tra Giá" cho đúng mã đó) thì BỎ QUA khỏi
+  tổng, báo rõ số mã còn thiếu giá — KHÔNG tự đồng bộ ngay lúc xem báo cáo (sẽ chậm nếu nhiều mã); chỉ
+  âm thầm kích hoạt đồng bộ NỀN để lần xem báo cáo SAU đầy đủ hơn.
+
+Thêm vào Tab 7: thẻ thống kê "💰 Giá Trị Thừa/Thiếu" + 2 cột "Giá (Thường)"/"Giá Trị" trong bảng Chi
+Tiết, bảng xếp hạng "💰 Giá Trị Thừa/Thiếu Theo Siêu Thị" (CHỈ Admin, so sánh nhiều siêu thị cùng lúc,
+siêu thị thiếu nhiều nhất lên đầu), và cột tương ứng trong Xuất Excel (cả sheet Chi Tiết lẫn So Sánh
+Siêu Thị).
 
 ## v30.42 (2026-12): "📋 Kiểm Kê" Tab 1 Kỳ Kiểm Kê — đổi nhãn "Kiểm Kê", chọn nhiều siêu thị, chặn tạo kỳ chồng chéo
 
