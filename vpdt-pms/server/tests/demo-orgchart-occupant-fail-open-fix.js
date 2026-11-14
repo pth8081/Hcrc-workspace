@@ -153,9 +153,15 @@ async function run(label, { beforeFix }) {
   }, { version: VERSION, beforeFix, users: USERS });
 
   await page.evaluate(() => switchTab('orgChart'));
-  await page.waitForTimeout(300);
+  // orgchart-v2 là module JS tải LƯỜI (MODULE_LOAD_GROUPS ở core.js) — đợi script injection thật xong
+  // (không chỉ sleep cố định) trước khi gọi hàm của nó, tránh ReferenceError do race.
+  await page.waitForFunction(() => typeof setOrgChartSubTab === 'function', { timeout: 15000 });
   await page.evaluate(() => setOrgChartSubTab('TREE'));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => {
+    const el = document.getElementById('orgChartTreeContainer');
+    return !!el && el.textContent.trim().length > 0;
+  }, { timeout: 15000 });
+  await page.waitForTimeout(150);
 
   await page.screenshot({ path: path.join(outDir, '1-cay-so-do-to-chuc.png'), fullPage: true });
   console.log(`[${label}] Đã chụp: 1-cay-so-do-to-chuc.png`);
