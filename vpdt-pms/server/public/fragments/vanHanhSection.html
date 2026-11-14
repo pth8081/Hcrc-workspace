@@ -1542,10 +1542,79 @@
         </div>
       </div>
 
-      <!-- Tab 2-8: chưa code — khung giữ chỗ, KHÔNG hứa hẹn sai chức năng -->
-      <div id="kkGomMaWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Gom Mã" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
-      <div id="kkKiemDemWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Kiểm Đếm" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
-      <div id="kkKiemSoatWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Kiểm Soát" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
+      <!-- Tab 2 "Gom Mã" / Tab 3 "Kiểm Đếm" / Tab 4 "Kiểm Soát" (12/2026) — CÙNG 1 khuôn HTML, chỉ khác
+           id-prefix (kkGomMa/kkKiemDem/kkKiemSoat) + tabKey truyền qua data-arg0, dùng chung bộ hàm
+           KK_SCAN_TAB_CONFIG/loadKkScanTab()/submitKkScan()/... ở module-vanhanh.js. Thứ tự bắt buộc:
+           chọn Quầy Kệ (chỉ hiện quầy kệ user được allowlist Tab 8 đúng hành động này) -> hệ thống tự báo
+           kỳ đang hoạt động hoặc cảnh báo rõ nếu chưa có -> MỚI mở ô quét (ẩn hẳn tới lúc đó, đúng A5
+           "bắt buộc chọn Quầy Kệ trước"). -->
+      <div id="kkGomMaWrap" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+          <select id="kkGomMaShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="GOMMA" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Chọn quầy kệ --</option>
+          </select>
+          <p id="kkGomMaSessionInfo" class="text-xs text-gray-500"></p>
+        </div>
+        <div id="kkGomMaScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+          <div class="flex gap-2">
+            <input type="text" id="kkGomMaBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+            <input type="number" id="kkGomMaQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+            <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="GOMMA" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+            <button type="button" data-op="submitKkScan" data-arg0="GOMMA" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+          </div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="GOMMA" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+          <div id="kkGomMaListBody"></div>
+        </div>
+      </div>
+      <div id="kkKiemDemWrap" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+          <select id="kkKiemDemShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMDEM" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Chọn quầy kệ --</option>
+          </select>
+          <p id="kkKiemDemSessionInfo" class="text-xs text-gray-500"></p>
+        </div>
+        <div id="kkKiemDemScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+          <div class="flex gap-2">
+            <input type="text" id="kkKiemDemBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+            <input type="number" id="kkKiemDemQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+            <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="KIEMDEM" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+            <button type="button" data-op="submitKkScan" data-arg0="KIEMDEM" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+          </div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMDEM" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+          <div id="kkKiemDemListBody"></div>
+        </div>
+      </div>
+      <!-- Tab 4 "Kiểm Soát" — CÙNG khuôn quét/cộng dồn như Tab 2/3 (A5 áp dụng chung cho cả 3 hành động),
+           chỉ khác: danh sách hiện thêm cột "SL Kiểm Đếm" THAM KHẢO (showKiemDemRef, renderKkScanList())
+           để người soát so sánh ngay, và ghi vào field riêng slKiemSoat (ưu tiên hơn slKiemDem khi lên
+           Báo Cáo — xem finalCountQty()/lib/stocktakeEngine.js, đúng ví dụ A6). -->
+      <div id="kkKiemSoatWrap" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3 space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
+          <select id="kkKiemSoatShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMSOAT" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">-- Chọn quầy kệ --</option>
+          </select>
+          <p id="kkKiemSoatSessionInfo" class="text-xs text-gray-500"></p>
+        </div>
+        <div id="kkKiemSoatScanBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
+          <div class="flex gap-2">
+            <input type="text" id="kkKiemSoatBarcodeInput" placeholder="Quét/gõ mã vạch hoặc mã hàng..." class="flex-1 border rounded px-2 py-1.5 text-sm">
+            <input type="number" id="kkKiemSoatQtyInput" value="1" min="1" class="w-16 border rounded px-2 py-1.5 text-sm text-right">
+            <button type="button" data-op="openShelfBarcodeModalForKkScan" data-arg0="KIEMSOAT" title="Quét mã vạch bằng camera" class="shrink-0 px-3 py-1.5 rounded bg-white border text-xs font-bold hover:bg-gray-50">📷</button>
+            <button type="button" data-op="submitKkScan" data-arg0="KIEMSOAT" class="shrink-0 px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Thêm</button>
+          </div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMSOAT" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+          <div id="kkKiemSoatListBody"></div>
+        </div>
+      </div>
       <div id="kkShelfConfigWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Cấu Hình Quầy Kệ" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkConfirmWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Xác Nhận" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>
       <div id="kkReportWrap" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm">🚧 Tab "Báo Cáo" đang được phát triển — sẽ có trong bản cập nhật tiếp theo.</div>

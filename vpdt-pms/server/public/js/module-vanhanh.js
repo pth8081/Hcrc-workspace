@@ -383,6 +383,7 @@ function setKiemKeSubTab(tab) {
   else if (tab === 'USERACCESS') loadKkUserAccessTab();
   else if (tab === 'GOMMA') loadKkScanTab('GOMMA');
   else if (tab === 'KIEMDEM') loadKkScanTab('KIEMDEM');
+  else if (tab === 'KIEMSOAT') loadKkScanTab('KIEMSOAT');
 }
 
 // ===== Tab 8: Cấu Hình Người Dùng (12/2026) — allowlist TUYỆT ĐỐI theo (user × siêu thị × quầy kệ) =====
@@ -714,11 +715,16 @@ function renderKkScanList(tabKey) {
     listBody.innerHTML = `<p class="text-gray-400 text-sm">${st.counts.length ? 'Không tìm thấy mã khớp tìm kiếm.' : 'Chưa quét mã nào ở quầy kệ này.'}</p>`;
     return;
   }
+  // Tab 4 "Kiểm Soát" (A2: "chọn ra các mã cần kiểm tra kỹ") — hiện thêm cột SL Kiểm Đếm THAM KHẢO
+  // (field slKiemDem, KHÔNG sửa được ở đây) để người soát so sánh ngay số đã đếm trước khi quyết định có
+  // cần soát lại mã đó hay không — 2 tab Gom Mã/Kiểm Đếm không cần cột này.
+  const showKiemDemRef = tabKey === 'KIEMSOAT';
   listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1">Mã Hàng</th><th>Tên</th><th class="text-right">SL</th><th></th></tr></thead><tbody>` +
+    <th class="py-1">Mã Hàng</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
     sorted.map(c => `<tr class="border-b last:border-0">
       <td class="py-1 font-mono">${escapeHtml(c.maHang)}</td>
       <td>${escapeHtml(c.tenHang || '')}</td>
+      ${showKiemDemRef ? `<td class="text-right text-gray-500">${Number(c.slKiemDem) || 0}</td>` : ''}
       <td class="text-right">
         <input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">
       </td>
