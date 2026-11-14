@@ -3680,22 +3680,25 @@ không có khái niệm kỳ) — sống chung sidebar "⚙️ Vận Hành" (thu
   1 hoặc nhiều quầy kệ → tick hành động (📷 Gom Mã/🔢 Kiểm Đếm/🛡️ Kiểm Soát)
   → "Lưu Quyền". Xem lại/xoá ở "Danh Sách Đã Gán" bên dưới. 1 người có thể
   được gán nhiều siêu thị khác nhau (VD Giám Sát Vùng).
-- **Tab 2 "📷 Gom Mã" + Tab 3 "🔢 Kiểm Đếm" (12/2026)**: vào tab, **bắt buộc
-  chọn Quầy Kệ trước** (chỉ hiện quầy kệ mình đã được gán ở Tab 8 cho ĐÚNG
-  hành động này) — chọn xong hệ thống tự kiểm tra kỳ đang hoạt động của
-  siêu thị đó (Gom Mã cần kỳ loại "Gom Mã", Kiểm Đếm cần kỳ loại "Thống Kê"
-  đang hoạt động, chưa có thì báo rõ, không cho quét). Có kỳ rồi mới hiện ô
-  quét — quét/gõ mã (dùng chung cơ chế nhận diện như "📷 Ghi Nhận": Mã Vạch/
-  Mã Hàng/6 số cuối) → số lượng TỰ CỘNG DỒN nếu quét trùng mã, mã vừa quét
-  luôn nhảy lên đầu danh sách. Có ô tìm kiếm riêng để sửa tay/xoá 1 dòng đã
-  quét nhầm (sửa tay KHÔNG đẩy dòng đó lên đầu, chỉ quét mới mới tính). Đổi
-  quầy kệ khác thì quay lại bước chọn quầy kệ. Gom Mã chỉ để tham khảo
-  (không lên Báo Cáo cuối), Kiểm Đếm là số liệu CHÍNH THỨC trừ khi Tab 4
-  Kiểm Soát ghi đè.
-- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 4 Kiểm Soát (soát
-  lại các mã nghi vấn, ghi đè Kiểm Đếm), Tab 5 Cấu Hình Quầy Kệ (dự kiến tái
-  dùng danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa), Tab 6 Xác Nhận, Tab 7
-  Báo Cáo chi tiết theo Kỳ (3 biểu đồ + xuất Excel nhiều sheet).
+- **Tab 2 "📷 Gom Mã" + Tab 3 "🔢 Kiểm Đếm" + Tab 4 "🛡️ Kiểm Soát" (12/2026)**:
+  vào tab, **bắt buộc chọn Quầy Kệ trước** (chỉ hiện quầy kệ mình đã được
+  gán ở Tab 8 cho ĐÚNG hành động này) — chọn xong hệ thống tự kiểm tra kỳ
+  đang hoạt động của siêu thị đó (Gom Mã cần kỳ loại "Gom Mã"; Kiểm Đếm +
+  Kiểm Soát cần kỳ loại "Thống Kê" đang hoạt động, chưa có thì báo rõ,
+  không cho quét). Có kỳ rồi mới hiện ô quét — quét/gõ mã (dùng chung cơ
+  chế nhận diện như "📷 Ghi Nhận": Mã Vạch/Mã Hàng/6 số cuối) → số lượng TỰ
+  CỘNG DỒN nếu quét trùng mã, mã vừa quét luôn nhảy lên đầu danh sách. Có ô
+  tìm kiếm riêng để sửa tay/xoá 1 dòng đã quét nhầm (sửa tay KHÔNG đẩy dòng
+  đó lên đầu, chỉ quét mới mới tính). Đổi quầy kệ khác thì quay lại bước
+  chọn quầy kệ. Gom Mã chỉ để tham khảo (không lên Báo Cáo cuối); Kiểm Đếm
+  là số liệu CHÍNH THỨC; Tab 4 Kiểm Soát ghi vào field RIÊNG (không đè trực
+  tiếp lên Kiểm Đếm) — danh sách Tab 4 hiện thêm cột "SL Kiểm Đếm" tham
+  khảo để so sánh, mã ĐÃ soát (kể cả soát ra đúng 0) sẽ được ưu tiên thay
+  số Kiểm Đếm khi lên Báo Cáo, mã chưa soát vẫn giữ nguyên số Kiểm Đếm.
+- **Chưa làm ở đợt này** (sẽ bổ sung ở đợt merge sau): Tab 5 Cấu Hình Quầy
+  Kệ (dự kiến tái dùng danh mục Quầy Kệ đã có ở Kiểm Soát Hàng Hóa), Tab 6
+  Xác Nhận, Tab 7 Báo Cáo chi tiết theo Kỳ (3 biểu đồ + xuất Excel nhiều
+  sheet).
 
 ### 4.5. Nhân Sự
 
