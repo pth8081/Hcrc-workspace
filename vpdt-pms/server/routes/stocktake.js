@@ -19,7 +19,7 @@ const {
   buildNewSession, activateSession, closeSession, reopenSession, findActiveSession,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
-  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
+  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
@@ -317,6 +317,26 @@ router.get('/counts', async (req, res) => {
     if (!Number.isFinite(sessionId)) {
       return res.status(400).json({ error: 'Thiếu sessionId' });
     }
+    // LỖI THẬT phát hiện qua audit chéo (11/2026): route này trước đây CHỈ kiểm tra "có quyền module Kiểm
+    // Kê" (gần như mọi user đăng nhập) rồi trả thẳng toàn bộ dòng theo sessionId — KHÔNG xác nhận kỳ đó có
+    // THUỘC phạm vi người gọi được xem hay không, khác hẳn mọi route ghi khác đã tự tra lại dept thật qua
+    // findShelfLocationOrThrow(). Vì sessionId sinh từ Date.now() (đoán/liệt kê được), bất kỳ user đăng
+    // nhập nào cũng dò được số liệu Kiểm Đếm/Kiểm Soát của siêu thị KHÁC. Vá bằng: admin bypass, HOẶC
+    // đúng dept hồ sơ (home dept) của người gọi, HOẶC người gọi có BẤT KỲ dòng allowlist Tab 8 nào tại
+    // ĐÚNG siêu thị của kỳ đó (userHasAnyStocktakeAccessToDept) — nhánh thứ 3 này BẮT BUỘC phải có, vì
+    // route này được Tab 2/3/4 gọi cho "Giám Sát Vùng" (user được gán allowlist thao tác ở siêu thị KHÁC
+    // dept hồ sơ của chính họ, xem tài liệu đề xuất mục B1) — nếu chỉ so sánh session.dept === user.dept
+    // suông sẽ chặn NHẦM chính luồng hợp lệ này.
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
     const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
     await ensureStocktakeKey('stocktakeCounts');
     const all = (await getAppDataValue('stocktakeCounts')) || [];
@@ -407,6 +427,19 @@ router.get('/shelf-confirmations', async (req, res) => {
   try {
     const sessionId = Number(req.query.sessionId);
     if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    // Cùng lỗi + cách vá như GET /counts ở trên (audit chéo 11/2026) — tự tra lại dept thật của kỳ, không
+    // tin sessionId suông (đoán/liệt kê được vì sinh từ Date.now()); vẫn phải cho qua nhánh "Giám Sát
+    // Vùng" (allowlist ở siêu thị khác dept hồ sơ) như GET /counts, không so sánh dept suông.
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
     await ensureStocktakeKey('stocktakeShelfConfirmations');
     const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
     res.json({ items: all.filter(c => c.sessionId === sessionId) });

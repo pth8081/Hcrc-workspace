@@ -127,9 +127,12 @@ function reopenSession(sessions, id, user) {
 // ===================== Tab 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
 // stocktakeUserAccess: mỗi dòng {id, username, dept, shelfLocationId, canGomMa, canKiemDem, canKiemSoat,
 // createdBy, createdByName, createdAt}. Theo tài liệu đề xuất mục B1: ĐÂY LÀ ALLOWLIST TUYỆT ĐỐI, không
-// có cờ "tất cả/bất kỳ" nào bỏ qua — kể cả admin khi THAO TÁC quét (admin vẫn bypass được 2 lớp quyền
-// kia — "quyền tab" + "kỳ đang hoạt động" — nhưng lớp allowlist theo quầy kệ này áp dụng cho MỌI
-// người, kể cả admin, đúng y nguyên tinh thần "allowlist tuyệt đối" tài liệu đã nêu).
+// có cờ "tất cả/bất kỳ" nào bỏ qua — kể cả admin khi THAO TÁC quét. Admin CHỈ bypass đúng Lớp 1 (quyền
+// tab — canDoStocktakeGomMa/KiemDem/KiemSoat đều `|| user?.perms?.admin`); Lớp 2 (allowlist quầy kệ,
+// chính bảng này) và Lớp 3 (kỳ đang hoạt động, `findActiveSession()` ở assertStocktakeScanAllowed() của
+// routes/stocktake.js) áp dụng VÔ ĐIỀU KIỆN cho MỌI người, KỂ CẢ ADMIN — không có nhánh bypass nào cho
+// admin ở 2 lớp đó (đã xác nhận lại qua audit chéo 11/2026, sửa chú thích cũ ghi nhầm "admin bypass luôn
+// cả lớp kỳ đang hoạt động" — hành vi thật chặt hơn thế, chỉ chú thích cũ gây hiểu nhầm).
 const MODE_ACCESS_FIELD = Object.freeze({ GOM_MA: 'canGomMa', KIEM_DEM: 'canKiemDem', KIEM_SOAT: 'canKiemSoat' });
 
 function canUserDoStocktakeOnShelf(access, username, dept, shelfLocationId, mode) {
@@ -148,6 +151,17 @@ function listAllowedShelfLocationIds(access, username, dept, mode) {
   return (Array.isArray(access) ? access : [])
     .filter(a => a.username === username && a.dept === dept && a[field] === true)
     .map(a => a.shelfLocationId);
+}
+
+// User có BẤT KỲ dòng allowlist nào (bất kỳ quầy kệ, bất kỳ hành động Gom Mã/Kiểm Đếm/Kiểm Soát) tại ĐÚNG
+// siêu thị này không — dùng cho các route ĐỌC theo sessionId (GET /counts, GET /shelf-confirmations) để
+// xác nhận session đó THUỘC phạm vi người gọi được xem, mà KHÔNG chặn nhầm "Giám Sát Vùng" (user được gán
+// allowlist ở siêu thị KHÁC dept hồ sơ của chính họ, xem tài liệu đề xuất mục B1) như so sánh thẳng
+// session.dept === user.dept sẽ làm.
+function userHasAnyStocktakeAccessToDept(access, username, dept) {
+  return (Array.isArray(access) ? access : []).some(
+    a => a.username === username && a.dept === dept && (a.canGomMa === true || a.canKiemDem === true || a.canKiemSoat === true)
+  );
 }
 
 // Gán quyền HÀNG LOẠT cho 1 user × nhiều quầy kệ cùng lúc (tiện nhập liệu, xem tài liệu đề xuất mục B1 —
@@ -344,7 +358,7 @@ module.exports = {
   canReopenStocktakeSession,
   isValidLoaiKy, findActiveSession, validateCreateSessionInput, buildNewSession,
   activateSession, closeSession, reopenSession,
-  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds,
+  MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds
