@@ -3485,6 +3485,21 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     cho 2 trường hợp này. Khoá tài khoản (không xoá) và chuyển siêu thị
     KHÔNG tự động gỡ (2 việc này không chắc là vĩnh viễn/có thể là nghiệp
     vụ bình thường) — admin chủ động xem + gỡ ở màn trên nếu cần.
+  - **Ô lọc "tìm-kiếm-gõ-chọn", gợi ý THẬT từ dữ liệu (MỚI, 11/2026, theo
+    yêu cầu người dùng kèm ảnh chụp "⏰ Hạn Sử Dụng": "nếu mà nó có thông
+    tin trường bên dưới thì nó như là kiểu lọc có thông tin ấy... Tìm kiếm
+    là gợi ý")**: các ô lọc trước đây gõ-chữ-tự-do (không biết nên gõ gì)
+    nay gõ vài ký tự (có/không dấu đều được) sẽ hiện gợi ý ĐÚNG các giá trị
+    THẬT đang có trong dữ liệu, bấm chọn 1 gợi ý là lọc ngay — cùng cơ chế
+    đã dùng cho ô "Ngành Hàng" ở "🗄️ Quầy Kệ" từ trước.
+    - "📷 Ghi Nhận" + "⏰ Hạn Sử Dụng": 5 ô lọc sẵn có (Quầy Kệ/Mã Hàng/Mã
+      Vạch/Tên Sản Phẩm/Người Cập Nhật Gần Nhất) chuyển sang gợi ý thật.
+    - "🔔 Ngưỡng Tồn", "📊 Đối Chiếu", "📑 Báo Cáo": 3 màn này TRƯỚC ĐÂY
+      CHƯA CÓ panel lọc nào — xây MỚI hoàn toàn (Ngưỡng Tồn: Mã Hàng/Mã
+      Vạch/Ngành Hàng/Trạng Thái; Đối Chiếu: Mã Hàng/Tên Hàng/Kết Quả; Báo
+      Cáo: Mã Hàng/Tên Hàng/Quầy Kệ/Người Ghi Nhận/Trạng Thái — panel lọc
+      theo-từng-trường này ĐỘC LẬP với bộ lọc "Siêu Thị" đã có sẵn ở Báo
+      Cáo, dùng được song song).
 - **Cấu hình "Mã Điểm" (bắt buộc để dùng Đối Chiếu, MỚI 11/2026)**: Hệ
   Thống → Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị —
   admin tự nhập tay ô "Mã Điểm API Tồn Kho" cho từng siêu thị (mã do bên

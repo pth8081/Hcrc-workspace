@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**30.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.44 (2026-11): "📋 Kiểm Soát Hàng Hóa" — ô lọc tìm-kiếm-gõ-chọn, gợi ý THẬT từ dữ liệu
+
+Theo yêu cầu người dùng (kèm ảnh chụp màn "⏰ Hạn Sử Dụng"): "nếu mà nó có thông tin trường bên dưới thì
+nó như là kiểu lọc có thông tin ấy, và đều drop list và có thể filter được... Tìm kiếm là gợi ý" — các ô
+lọc dạng gõ-chữ-tự-do trước đây (người dùng không biết nên gõ gì) được chuyển sang widget "tìm-kiếm-gõ-
+chọn" (`sdd*`, cùng cơ chế đã dùng cho ô "Ngành Hàng" ở Quầy Kệ) — gõ vài ký tự (có/không dấu đều được)
+sẽ gợi ý ĐÚNG các giá trị THẬT đang tồn tại trong dữ liệu, bấm chọn 1 gợi ý là lọc ngay.
+
+- **"📷 Ghi Nhận"** + **"⏰ Hạn Sử Dụng"**: 5 ô lọc sẵn có (Quầy Kệ/Mã Hàng/Mã Vạch/Tên Sản Phẩm/Người Cập
+  Nhật Gần Nhất) chuyển từ gõ-tự-do sang gợi ý thật.
+- **"🔔 Ngưỡng Tồn"**, **"📊 Đối Chiếu"**, **"📑 Báo Cáo"**: 3 màn này TRƯỚC ĐÂY CHƯA CÓ panel lọc nào —
+  xây MỚI hoàn toàn (Ngưỡng Tồn: Mã Hàng/Mã Vạch/Ngành Hàng/Trạng Thái; Đối Chiếu: Mã Hàng/Tên Hàng/Kết
+  Quả; Báo Cáo: Mã Hàng/Tên Hàng/Quầy Kệ/Người Ghi Nhận/Trạng Thái — ĐỘC LẬP với bộ lọc Siêu Thị đã có).
 
 ## v30.43 (2026-12): "📋 Kiểm Kê" Tab 7 Báo Cáo — thêm "💰 Giá Trị Thừa/Thiếu" (tồn kho × giá)
 
