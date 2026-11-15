@@ -164,9 +164,12 @@
         <div id="kkShelfConfigListBody"></div>
       </div>
     </div>
-    <!-- Tab 6 "Xác Nhận" (12/2026) — 2 khu vực: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy
-         kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Toàn Bộ Đợt (CHỈ người có quyền
-         Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận). -->
+    <!-- Tab 6 "Xác Nhận" (12/2026) — 3 khu vực: (a) Xác Nhận Kiểm Đếm từng quầy kệ (ai có quyền Kiểm
+         Đếm quầy kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Kiểm Soát từng quầy kệ
+         (CÙNG khuôn (a), ai có quyền Kiểm Soát quầy kệ đó đều bấm được — thêm 12/2026 theo phản hồi
+         người dùng: Kiểm Soát trước đây không khoá được riêng theo từng quầy kệ) + (c) Xác Nhận Toàn Bộ
+         Đợt (CHỈ người có quyền Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm VÀ mọi
+         quầy kệ đã Kiểm Soát đều đã Xác Nhận đúng phần của nó). -->
     <div id="kkConfirmWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Kiểm Kê</label>
@@ -176,9 +179,14 @@
       </div>
       <div id="kkConfirmBody" class="hidden space-y-3">
         <div class="bg-white border rounded p-3">
-          <div class="font-bold text-sm text-gray-800 mb-2">✅ Xác Nhận Từng Quầy Kệ</div>
-          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát vẫn thao tác được bình thường).</p>
+          <div class="font-bold text-sm text-gray-800 mb-2">✅ Xác Nhận Kiểm Đếm Từng Quầy Kệ</div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát có Xác Nhận riêng ở khung dưới, không bị ảnh hưởng).</p>
           <div id="kkConfirmShelfListBody"></div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <div class="font-bold text-sm text-gray-800 mb-2">🛡️ Xác Nhận Kiểm Soát Từng Quầy Kệ</div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Soát trong kỳ này. Xác Nhận xong thì khoá Kiểm Soát tiếp trên quầy kệ đó NGAY (không cần đợi đóng cả Kỳ) — tránh số liệu bị sửa thêm sau khi đã soát xong.</p>
+          <div id="kkConfirmSoatShelfListBody"></div>
         </div>
         <div id="kkConfirmAllWrap" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
           <button type="button" data-op="submitKkConfirmAll" class="w-full px-3 py-2 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">🔒 Xác Nhận Toàn Bộ Đợt Kiểm Kê (Đóng Kỳ)</button>

@@ -659,11 +659,18 @@ async function onKkScanShelfChanged(tabKey) {
     // LỖI UX THẬT phát hiện qua audit chéo (11/2026): trước đây chỉ biết quầy kệ ĐÃ Xác Nhận (Lớp 4,
     // Tab 6) khi bấm "Thêm" thật và nhận lỗi 409 — nay server trả kèm `shelfConfirmed` ngay lúc chọn quầy
     // kệ, khoá/báo rõ NGAY thay vì mở ô quét cho người dùng quét xong mới biết không được việc.
+    // shelfKiemSoatConfirmed (12/2026) — CÙNG cơ chế, riêng cho tab Kiểm Soát (trước đây Kiểm Soát không
+    // có cờ khoá riêng theo từng quầy kệ, xem chú thích đầy đủ ở assertStocktakeScanAllowed()).
     if (body.shelfConfirmed) {
       // Vẫn tải lại danh sách đã quét trước đó để quản lý XEM được (tham khảo), chỉ khoá Ô QUÉT (không quét
       // thêm được) — không phải ẩn trắng toàn bộ nội dung đã có.
       await loadKkScanCounts(tabKey);
       renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận ở tab "✅ Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa).`);
+      return;
+    }
+    if (body.shelfKiemSoatConfirmed) {
+      await loadKkScanCounts(tabKey);
+      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Kiểm Soát ở tab "✅ Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa).`);
       return;
     }
     if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
@@ -835,13 +842,19 @@ function goToShelfLocationsManagement() {
   setVanHanhShelfSubTab('LOCATIONS');
 }
 
-// ===== Tab 6 "Xác Nhận" (12/2026) — 2 khu vực độc lập, xem chú thích đầy đủ tại #kkConfirmWrap/
-// vanHanhSection.html: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy kệ đó đều bấm được) khoá
-// Kiểm Đếm tiếp trên quầy kệ đó (KHÔNG khoá Kiểm Soát) — (b) Xác Nhận Toàn Bộ Đợt (CHỈ kiemKeConfirmDo)
-// đóng hẳn Kỳ Thống Kê, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận. =====
+// ===== Tab 6 "Xác Nhận" (12/2026) — 3 khu vực độc lập, xem chú thích đầy đủ tại #kkConfirmWrap/
+// kiemKeSection.html: (a) Xác Nhận Kiểm Đếm từng quầy kệ (ai có quyền Kiểm Đếm quầy kệ đó đều bấm được)
+// khoá Kiểm Đếm tiếp trên quầy kệ đó — (b) Xác Nhận Kiểm Soát từng quầy kệ (ai có quyền Kiểm Soát quầy
+// kệ đó đều bấm được, CHỈ hiện quầy đã có hoạt động Kiểm Soát thật) khoá Kiểm Soát tiếp trên quầy kệ đó,
+// ĐỘC LẬP với (a) — thêm 12/2026 theo phản hồi người dùng: "không kiểm soát mà không xác nhận... có thể
+// làm sai lệch số liệu nếu người ta cứ kiểm soát suốt", trước đây Kiểm Soát không khoá được theo từng
+// quầy kệ, chỉ khoá chung khi cả Kỳ đã chốt — (c) Xác Nhận Toàn Bộ Đợt (CHỈ kiemKeConfirmDo) đóng hẳn Kỳ
+// Kiểm Kê, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm VÀ mọi quầy kệ đã Kiểm Soát đều đã Xác Nhận đúng
+// phần của nó (quầy chưa từng ai Kiểm Soát thì không bắt buộc Xác Nhận Kiểm Soát). =====
 let kkConfirmSessionId = null;
 let kkConfirmCounts = [];
 let kkConfirmConfirmations = [];
+let kkConfirmSoatConfirmations = [];
 
 async function enterKkConfirmTab() {
   kkConfirmSessionId = null;
@@ -875,19 +888,23 @@ async function loadKkConfirmTab() {
   if (!sessionId) { if (bodyWrap) bodyWrap.classList.add('hidden'); return; }
   if (bodyWrap) bodyWrap.classList.remove('hidden');
   try {
-    const [countsRes, confirmRes] = await Promise.all([
+    const [countsRes, confirmRes, soatConfirmRes] = await Promise.all([
       fetch(`/api/stocktake/counts?sessionId=${sessionId}`),
-      fetch(`/api/stocktake/shelf-confirmations?sessionId=${sessionId}`)
+      fetch(`/api/stocktake/shelf-confirmations?sessionId=${sessionId}`),
+      fetch(`/api/stocktake/shelf-kiem-soat-confirmations?sessionId=${sessionId}`)
     ]);
-    if (countsRes.status === 401 || confirmRes.status === 401) return handleSessionExpired();
+    if (countsRes.status === 401 || confirmRes.status === 401 || soatConfirmRes.status === 401) return handleSessionExpired();
     const countsBody = await countsRes.json().catch(() => ({}));
     const confirmBody = await confirmRes.json().catch(() => ({}));
+    const soatConfirmBody = await soatConfirmRes.json().catch(() => ({}));
     kkConfirmCounts = countsRes.ok ? (countsBody.items || []) : [];
     kkConfirmConfirmations = confirmRes.ok ? (confirmBody.items || []) : [];
+    kkConfirmSoatConfirmations = soatConfirmRes.ok ? (soatConfirmBody.items || []) : [];
   } catch (err) {
-    kkConfirmCounts = []; kkConfirmConfirmations = [];
+    kkConfirmCounts = []; kkConfirmConfirmations = []; kkConfirmSoatConfirmations = [];
   }
   renderKkConfirmShelfList();
+  renderKkConfirmSoatShelfList();
 }
 
 function renderKkConfirmShelfList() {
@@ -898,26 +915,25 @@ function renderKkConfirmShelfList() {
   const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
   if (!shelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Đếm trong kỳ này.</p>';
-    updateKkConfirmAllVisibility(false);
-    return;
-  }
-  const allLocations = DB.shelfLocations || [];
-  listBody.innerHTML = shelfIds.map(sid => {
-    const loc = allLocations.find(l => l.id === sid);
-    const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
-    const confirmedRow = kkConfirmConfirmations.find(c => c.shelfLocationId === sid);
-    if (confirmedRow) {
+  } else {
+    const allLocations = DB.shelfLocations || [];
+    listBody.innerHTML = shelfIds.map(sid => {
+      const loc = allLocations.find(l => l.id === sid);
+      const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      const confirmedRow = kkConfirmConfirmations.find(c => c.shelfLocationId === sid);
+      if (confirmedRow) {
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
+          <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
+          <button type="button" data-op="unconfirmKkShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
+        </div>`;
+      }
       return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-        <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
-        <button type="button" data-op="unconfirmKkShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
+        <span>${escapeHtml(label)}</span>
+        <button type="button" data-op="confirmKkShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
       </div>`;
-    }
-    return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-      <span>${escapeHtml(label)}</span>
-      <button type="button" data-op="confirmKkShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
-    </div>`;
-  }).join('');
-  updateKkConfirmAllVisibility(shelfIds.every(sid => kkConfirmConfirmations.some(c => c.shelfLocationId === sid)));
+    }).join('');
+  }
+  updateKkConfirmAllVisibility();
 }
 
 async function confirmKkShelf(shelfLocationId) {
@@ -949,14 +965,88 @@ async function unconfirmKkShelf(id) {
   await loadKkConfirmTab();
 }
 
-function updateKkConfirmAllVisibility(allConfirmed) {
+// renderKkConfirmSoatShelfList()/confirmKkSoatShelf()/unconfirmKkSoatShelf() (12/2026) — mirror NGUYÊN 3
+// hàm Kiểm Đếm ngay trên, chỉ khác: CHỈ hiện quầy kệ CÓ hoạt động Kiểm Soát thật (slKiemSoat > 0, không
+// phải slKiemDem), gọi route riêng "shelf-kiem-soat-confirmations". Quầy kệ chưa từng ai Kiểm Soát thì
+// KHÔNG hiện ở danh sách này (không bắt buộc xác nhận) — xem listUnconfirmedSoatedShelfIds().
+function renderKkConfirmSoatShelfList() {
+  const listBody = document.getElementById('kkConfirmSoatShelfListBody');
+  if (!listBody) return;
+  const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemSoat) > 0).map(c => c.shelfLocationId))];
+  if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Soát trong kỳ này.</p>';
+  } else {
+    const allLocations = DB.shelfLocations || [];
+    listBody.innerHTML = shelfIds.map(sid => {
+      const loc = allLocations.find(l => l.id === sid);
+      const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      const confirmedRow = kkConfirmSoatConfirmations.find(c => c.shelfLocationId === sid);
+      if (confirmedRow) {
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
+          <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
+          <button type="button" data-op="unconfirmKkSoatShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
+        </div>`;
+      }
+      return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
+        <span>${escapeHtml(label)}</span>
+        <button type="button" data-op="confirmKkSoatShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
+      </div>`;
+    }).join('');
+  }
+  updateKkConfirmAllVisibility();
+}
+
+async function confirmKkSoatShelf(shelfLocationId) {
+  if (!kkConfirmSessionId) return;
+  try {
+    const res = await fetch('/api/stocktake/shelf-kiem-soat-confirmations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: kkConfirmSessionId, shelfLocationId })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmTab();
+}
+
+async function unconfirmKkSoatShelf(id) {
+  if (!confirm('Gỡ Xác Nhận Kiểm Soát quầy kệ này? Quầy kệ sẽ mở lại cho Kiểm Soát.')) return;
+  try {
+    const res = await fetch(`/api/stocktake/shelf-kiem-soat-confirmations/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmTab();
+}
+
+// updateKkConfirmAllVisibility() (12/2026, đổi tham số) — tự tính CẢ 2 điều kiện Kiểm Đếm/Kiểm Soát từ
+// state hiện có thay vì nhận tham số đơn `allConfirmed` như trước, vì giờ nút "Xác Nhận Toàn Bộ Đợt" cần
+// ĐỦ CẢ 2 mới bật (đúng route confirm-all phía server) — gọi được từ cả renderKkConfirmShelfList() lẫn
+// renderKkConfirmSoatShelfList() mà không cần biết thứ tự gọi trước/sau.
+function updateKkConfirmAllVisibility() {
   const wrap = document.getElementById('kkConfirmAllWrap');
   if (!wrap) return;
   const canSeeButton = canConfirmStocktakeClient(currentUser);
   wrap.classList.toggle('hidden', !canSeeButton);
   if (!canSeeButton) return;
+  const kiemDemShelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
+  const kiemSoatShelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemSoat) > 0).map(c => c.shelfLocationId))];
+  const allKiemDemConfirmed = kiemDemShelfIds.every(sid => kkConfirmConfirmations.some(c => c.shelfLocationId === sid));
+  const allKiemSoatConfirmed = kiemSoatShelfIds.every(sid => kkConfirmSoatConfirmations.some(c => c.shelfLocationId === sid));
+  const allConfirmed = allKiemDemConfirmed && allKiemSoatConfirmed;
   const note = document.getElementById('kkConfirmAllNote');
-  if (note) note.textContent = allConfirmed ? '' : 'Còn quầy kệ đã Kiểm Đếm nhưng chưa Xác Nhận — chưa thể đóng kỳ.';
+  if (note) {
+    const notes = [];
+    if (!allKiemDemConfirmed) notes.push('còn quầy kệ đã Kiểm Đếm nhưng chưa Xác Nhận');
+    if (!allKiemSoatConfirmed) notes.push('còn quầy kệ đã Kiểm Soát nhưng chưa Xác Nhận Kiểm Soát');
+    note.textContent = notes.length ? `Chưa thể đóng kỳ — ${notes.join(', ')}.` : '';
+  }
   const btn = wrap.querySelector('button[data-op="submitKkConfirmAll"]');
   if (btn) {
     btn.disabled = !allConfirmed;

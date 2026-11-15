@@ -3751,16 +3751,25 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   (tái dùng ĐÚNG danh mục Quầy Kệ đã có, không tạo danh mục riêng cho Kiểm
   Kê) — nút này gác theo quyền `shelfLocationManage` RIÊNG của Kiểm Soát
   Hàng Hóa, báo lỗi rõ ràng (không âm thầm chuyển sang tab khác) nếu thiếu.
-  Tab 6 dùng để xác nhận số liệu Kiểm Đếm: hệ thống tự chọn kỳ "Kiểm Kê"
-  đang hoạt động, liệt kê các quầy kệ ĐÃ có số Kiểm Đếm (> 0) → bấm "Xác
-  Nhận" trên từng quầy khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
-  Xác Nhận TỪNG quầy chỉ cần quyền Kiểm Đếm đúng quầy đó (KHÔNG cần quyền
-  riêng — ai đếm quầy nào thì tự xác nhận quầy đó được); còn "Xác Nhận Toàn
-  Bộ Đợt" (đóng cả kỳ Kiểm Kê, chỉ mở khoá khi MỌI quầy đã Kiểm Đếm đều đã
-  Xác Nhận) bắt buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC
-  quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
-  đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
-  nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
+  Tab 6 dùng để xác nhận số liệu: hệ thống tự chọn kỳ "Kiểm Kê" đang hoạt
+  động, có 2 khung ĐỘC LẬP — **"✅ Xác Nhận Kiểm Đếm Từng Quầy Kệ"** (liệt
+  kê quầy kệ ĐÃ có số Kiểm Đếm > 0) và **"🛡️ Xác Nhận Kiểm Soát Từng Quầy
+  Kệ"** (liệt kê quầy kệ ĐÃ có số Kiểm Soát > 0, thêm 12/2026 theo phản hồi
+  người dùng: "không kiểm soát mà không xác nhận... có thể làm sai lệch số
+  liệu nếu người ta cứ kiểm soát suốt" — trước đây Kiểm Soát không khoá
+  được riêng theo từng quầy kệ, chỉ bị khoá chung khi cả Kỳ đã chốt). Bấm
+  "Xác Nhận" đúng khung khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
+  Xác Nhận TỪNG quầy (cả Kiểm Đếm lẫn Kiểm Soát) chỉ cần quyền tương ứng
+  đúng quầy đó (KHÔNG cần quyền riêng — ai đếm/soát quầy nào thì tự xác
+  nhận quầy đó được); còn "Xác Nhận Toàn Bộ Đợt" (đóng cả kỳ Kiểm Kê) bắt
+  buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC quyền "📅 Quản Lý
+  Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1 — và CHỈ mở khoá khi ĐỦ
+  CẢ 2 điều kiện: mọi quầy đã Kiểm Đếm đều đã Xác Nhận Kiểm Đếm, VÀ mọi
+  quầy đã Kiểm Soát đều đã Xác Nhận Kiểm Soát (quầy chưa từng ai Kiểm Soát
+  thì không bắt buộc Xác Nhận Kiểm Soát). Quầy kệ đã Xác Nhận Kiểm Đếm bị
+  chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa); quầy kệ đã Xác
+  Nhận Kiểm Soát bị chặn Kiểm Soát tiếp (phải "Gỡ Xác Nhận Kiểm Soát" trước
+  nếu cần sửa) — 2 cờ khoá này ĐỘC LẬP, không ảnh hưởng lẫn nhau.
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
   chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều

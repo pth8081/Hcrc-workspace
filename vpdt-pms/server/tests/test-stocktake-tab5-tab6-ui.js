@@ -168,13 +168,37 @@ async function main() {
       assert(text.includes('SP001'), `Kiểm Soát phải quét thành công, thực tế: ${text}`);
     });
 
-    await run.run('Tab 6: Xác Nhận nốt A2 -> đủ cả 2 quầy kệ, nút Xác Nhận Toàn Bộ Đợt MỞ KHOÁ', async () => {
+    await run.run('Tab 6: Xác Nhận nốt A2 (Kiểm Đếm) -> ĐỦ Kiểm Đếm nhưng A1 còn Kiểm Soát chưa Xác Nhận Kiểm Soát -> nút Xác Nhận Toàn Bộ Đợt VẪN khoá', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(200);
       await page.click('#kkConfirmShelfListBody button[data-op="confirmKkShelf"][data-arg0="11"]');
       await page.waitForTimeout(200);
       const btnDisabled = await page.evaluate(() => document.querySelector('[data-op="submitKkConfirmAll"]').disabled);
-      assert(!btnDisabled, 'Đủ cả 2 quầy kệ đã Xác Nhận -> nút Xác Nhận Toàn Bộ Đợt phải MỞ KHOÁ');
+      assert(btnDisabled, 'A1 đã có hoạt động Kiểm Soát (bước trước) nhưng CHƯA Xác Nhận Kiểm Soát -> nút Xác Nhận Toàn Bộ Đợt phải vẫn khoá (yêu cầu CẢ 2 điều kiện)');
+      const text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(text.includes('A1'), `Khung "Xác Nhận Kiểm Soát Từng Quầy Kệ" phải hiện A1 (đã có hoạt động Kiểm Soát), thực tế: ${text}`);
+    });
+
+    await run.run('Tab 6: Xác Nhận Kiểm Soát nốt A1 -> đủ CẢ 2 điều kiện, nút Xác Nhận Toàn Bộ Đợt MỞ KHOÁ', async () => {
+      await page.click('#kkConfirmSoatShelfListBody button[data-op="confirmKkSoatShelf"][data-arg0="10"]');
+      await page.waitForTimeout(200);
+      const btnDisabled = await page.evaluate(() => document.querySelector('[data-op="submitKkConfirmAll"]').disabled);
+      assert(!btnDisabled, 'Đủ cả Kiểm Đếm (A1+A2) lẫn Kiểm Soát (A1) đã Xác Nhận -> nút Xác Nhận Toàn Bộ Đợt phải MỞ KHOÁ');
+    });
+
+    await run.run('Tab 4 Kiểm Soát: quầy kệ A1 (đã Xác Nhận Kiểm Soát) -> Kiểm Soát TIẾP bị chặn rõ ràng NGAY lúc chọn', async () => {
+      await page.click('#btnKkSubKiemSoat');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemSoatShelfSelect', '11');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.waitForTimeout(200);
+      const info = await page.evaluate(() => document.getElementById('kkKiemSoatSessionInfo').textContent);
+      assert(/ĐÃ được Xác Nhận Kiểm Soát/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận Kiểm Soát" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
+      const scanBoxHidden = await page.evaluate(() => document.getElementById('kkKiemSoatScanBox').classList.contains('hidden'));
+      assert(scanBoxHidden, 'Ô quét Kiểm Soát phải KHOÁ (ẩn) ngay khi chọn quầy kệ đã Xác Nhận Kiểm Soát');
+      await page.click('#btnKkSubConfirm');
+      await page.waitForTimeout(200);
     });
 
     await run.run('Tab 6: bấm Xác Nhận Toàn Bộ Đợt -> đóng kỳ thành công, không còn thao tác tiếp được', async () => {

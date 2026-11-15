@@ -117,7 +117,9 @@ function createMockState(seed) {
     stocktakeSessions: [],
     // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng) / stocktakeCounts (Tab 2/3/4) — CÙNG lý do
     // stocktakeSessions ngay trên.
-    stocktakeUserAccess: [], stocktakeCounts: [], stocktakeShelfConfirmations: []
+    stocktakeUserAccess: [], stocktakeCounts: [], stocktakeShelfConfirmations: [],
+    // stocktakeShelfKiemSoatConfirmations (Tab 6 Xác Nhận Kiểm Soát riêng, 12/2026) — CÙNG lý do.
+    stocktakeShelfKiemSoatConfirmations: []
   }, seed || {});
 }
 
@@ -1033,6 +1035,12 @@ function createDispatcher(state) {
             const e = new Error('Quầy kệ này đã được Xác Nhận ở Tab "Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa)'); e.status = 409; throw e;
           }
         }
+        if (mode === 'KIEM_SOAT' && !opts?.skipConfirmedCheck) {
+          const soatConfirmations = state.stocktakeShelfKiemSoatConfirmations || [];
+          if (isShelfConfirmed(soatConfirmations, sessionId, shelfLocationId)) {
+            const e = new Error('Quầy kệ này đã được Xác Nhận Kiểm Soát ở Tab "Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa)'); e.status = 409; throw e;
+          }
+        }
         return loc;
       }
 
@@ -1109,11 +1117,16 @@ function createDispatcher(state) {
         // stocktake.js: CHỈ mode KIEM_DEM mới kiểm tra Lớp 4, để client khoá/báo ngay lúc chọn quầy kệ
         // thay vì đợi tới lúc quét mới biết đã bị Xác Nhận).
         let shelfConfirmed = false;
+        let shelfKiemSoatConfirmed = false;
         if (mode === 'KIEM_DEM' && activeSession) {
           const { isShelfConfirmed } = stockEngine2();
           shelfConfirmed = isShelfConfirmed(state.stocktakeShelfConfirmations || [], activeSession.id, shelfLocationId);
         }
-        return { status: 200, body: { session: activeSession || null, shelfConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
+        if (mode === 'KIEM_SOAT' && activeSession) {
+          const { isShelfConfirmed } = stockEngine2();
+          shelfKiemSoatConfirmed = isShelfConfirmed(state.stocktakeShelfKiemSoatConfirmations || [], activeSession.id, shelfLocationId);
+        }
+        return { status: 200, body: { session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
       }
       if (pathName === '/api/stocktake/counts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
@@ -1195,11 +1208,47 @@ function createDispatcher(state) {
           return { status: 200, body: { ok: true } };
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
+      // Xác Nhận Kiểm Soát từng quầy kệ (12/2026) — mirror NGUYÊN 3 route Kiểm Đếm ngay trên, chỉ khác
+      // collection `stocktakeShelfKiemSoatConfirmations` + mode 'KIEM_SOAT'.
+      if (pathName === '/api/stocktake/shelf-kiem-soat-confirmations' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const sessionId = Number(new URL(url, 'http://x').searchParams.get('sessionId'));
+        const items = (state.stocktakeShelfKiemSoatConfirmations || []).filter(c => c.sessionId === sessionId);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/shelf-kiem-soat-confirmations' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        try {
+          const sessionId = Number(body?.sessionId);
+          const shelfLocationId = Number(body?.shelfLocationId);
+          const loc = kkAssertScanAllowedMock(freshUser, 'KIEM_SOAT', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+          const { confirmShelf } = stockEngine2();
+          const arr = state.stocktakeShelfKiemSoatConfirmations || (state.stocktakeShelfKiemSoatConfirmations = []);
+          const row = confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, freshUser);
+          return { status: 200, body: { item: row } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkSoatShelfConfirmDelMatch = pathName.match(/^\/api\/stocktake\/shelf-kiem-soat-confirmations\/(\d+)$/);
+      if (kkSoatShelfConfirmDelMatch && method === 'DELETE') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const id = Number(kkSoatShelfConfirmDelMatch[1]);
+        try {
+          const existingRow = (state.stocktakeShelfKiemSoatConfirmations || []).find(c => c.id === id);
+          if (!existingRow) return { status: 404, body: { error: 'Không tìm thấy xác nhận quầy kệ này' } };
+          kkAssertScanAllowedMock(freshUser, 'KIEM_SOAT', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+          const { unconfirmShelf } = stockEngine2();
+          state.stocktakeShelfKiemSoatConfirmations = unconfirmShelf(state.stocktakeShelfKiemSoatConfirmations, id);
+          return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
       const kkConfirmAllMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)\/confirm-all$/);
       if (kkConfirmAllMatch && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
-        const { canConfirmStocktake, closeSession, listUnconfirmedCountedShelfIds, LOAI_KY } = stockEngine2();
+        const { canConfirmStocktake, closeSession, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds, LOAI_KY } = stockEngine2();
         if (!canConfirmStocktake(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền Xác Nhận Toàn Bộ Đợt Kiểm Kê' } };
         const id = Number(kkConfirmAllMatch[1]);
         const session = (state.stocktakeSessions || []).find(s => s.id === id);
@@ -1207,12 +1256,13 @@ function createDispatcher(state) {
         if (!freshUser.perms?.admin && session.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
         if (session.loaiKy !== LOAI_KY.THONG_KE) return { status: 400, body: { error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Kiểm Kê' } };
         const unconfirmedIds = listUnconfirmedCountedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfConfirmations || [], id);
-        if (unconfirmedIds.length) {
-          const labels = unconfirmedIds.map(sid => {
-            const loc = (state.shelfLocations || []).find(l => l.id === sid);
-            return loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
-          });
-          return { status: 409, body: { error: `Còn ${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${labels.join(', ')}` } };
+        const unconfirmedSoatIds = listUnconfirmedSoatedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfKiemSoatConfirmations || [], id);
+        if (unconfirmedIds.length || unconfirmedSoatIds.length) {
+          const labelOf = (sid) => { const loc = (state.shelfLocations || []).find(l => l.id === sid); return loc ? `${loc.code} — ${loc.name}` : `#${sid}`; };
+          const parts = [];
+          if (unconfirmedIds.length) parts.push(`${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${unconfirmedIds.map(labelOf).join(', ')}`);
+          if (unconfirmedSoatIds.length) parts.push(`${unconfirmedSoatIds.length} quầy kệ đã Kiểm Soát nhưng CHƯA Xác Nhận Kiểm Soát: ${unconfirmedSoatIds.map(labelOf).join(', ')}`);
+          return { status: 409, body: { error: `Còn ${parts.join('; ')}` } };
         }
         try {
           const updated = closeSession(state.stocktakeSessions, id, freshUser);

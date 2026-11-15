@@ -34,6 +34,7 @@ let appDataStore = {
   stocktakeUserAccess: [],
   stocktakeCounts: [],
   stocktakeShelfConfirmations: [],
+  stocktakeShelfKiemSoatConfirmations: [],
   storeExternalCodes: {},
   stores: [DEPT1, DEPT2, DEPT3],
   users: [
