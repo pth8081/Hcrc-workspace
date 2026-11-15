@@ -1190,7 +1190,8 @@ function createDispatcher(state) {
           const loc = kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId);
           const { upsertScanCount } = stockEngine2();
           const arr = state.stocktakeCounts || (state.stocktakeCounts = []);
-          const row = upsertScanCount(arr, body, { dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`, maVach: body?.maVach, tenHang: body?.tenHang }, freshUser);
+          const clientScanId = body?.clientScanId ? String(body.clientScanId).trim().slice(0, 100) : '';
+          const row = upsertScanCount(arr, body, { dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`, maVach: body?.maVach, tenHang: body?.tenHang }, freshUser, clientScanId);
           return { status: 200, body: { item: row } };
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }
@@ -1794,7 +1795,12 @@ async function launchPage(port, state) {
     window.__promptAnswer = 'test-supplement';
 
     window.alert = (msg) => { window.__alerts.push(String(msg)); };
-    window.confirm = (msg) => { window.__confirms.push(String(msg)); return true; };
+    // __confirmAnswers (MỚI, 12/2026 — cần để test "nhắc nhở mềm" đổi quầy kệ Kiểm Kê, khi phải xác nhận
+    // ĐÚNG hành vi khi người dùng bấm "Huỷ") — hàng đợi CÁC CÂU TRẢ LỜI test tự set trước (push(false) để
+    // mô phỏng bấm Huỷ cho lần confirm() KẾ TIẾP) — RỖNG (mặc định, hành vi CŨ không đổi) thì vẫn luôn trả
+    // `true` như trước, không ảnh hưởng bất kỳ test nào đang có đang ngầm định confirm() luôn đồng ý.
+    window.__confirmAnswers = [];
+    window.confirm = (msg) => { window.__confirms.push(String(msg)); return window.__confirmAnswers.length ? window.__confirmAnswers.shift() : true; };
     window.prompt = (msg) => { window.__prompts.push(String(msg)); return window.__promptAnswer; };
     // showApprovalToast() (core.js, 11/2026) thay alert() chặn thao tác cho kết quả Duyệt/Từ chối... —
     // ghi vào CÙNG window.__alerts để test cũ (assertIncludes(result.alerts, ...)) không cần sửa gì, ĐỒNG
@@ -1856,6 +1862,7 @@ async function launchPage(port, state) {
       window.__alerts = [];
       window.__confirms = [];
       window.__prompts = [];
+      window.__confirmAnswers = [];
     };
   });
 

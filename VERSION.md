@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**30.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.49 (2026-12): "📋 Kiểm Kê" — Hoạt động Offline (Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận) + chống trùng khi đồng bộ + nhắc nhở mềm đổi quầy kệ
+
+Theo loạt yêu cầu người dùng (kho/quầy kệ hay mất sóng/wifi chập chờn): Tab
+2/3/4/6 của Kiểm Kê giờ hoạt động được khi MẤT MẠNG, với 3 lớp an toàn:
+
+- **Offline tự nhiên**: mất mạng → banner "📡 Ngoại tuyến", dùng cache quầy
+  kệ/khoá/dữ liệu đã quét gần nhất, mọi thao tác (quét/Xác Nhận/Gỡ Xác Nhận)
+  vào hàng đợi cục bộ (hiện ngay kèm badge ⏳) — khoá quầy kệ ĐÃ áp dụng từ
+  trước lúc mất mạng vẫn chặn đúng như online (không lách khoá được).
+- **Tự động đồng bộ 3 lớp dự phòng** (chịu được mạng chập chờn, không chỉ
+  mất-rồi-có 1 lần): sự kiện `online` của trình duyệt, ngay sau 1 lượt
+  online thành công, và nhịp nền 20 giây/lần.
+- **Chống trùng số liệu tuyệt đối**: mỗi lượt quét mang 1 mã định danh
+  (`clientScanId`) sinh từ lượt gửi đầu tiên, server (`stocktakeEngine.js`)
+  ghi nhớ các mã đã áp dụng và bỏ qua lượt gửi lại trùng mã (không cộng dồn
+  lần 2) — xử lý đúng race condition "gửi thành công nhưng phản hồi bị rớt
+  giữa đường rồi máy tự gửi lại". Gỡ Xác Nhận gửi lại gặp 404 (đã gỡ từ lần
+  trước) nay coi là THÀNH CÔNG thay vì báo lỗi.
+- **"✈️ Bật/Tắt Offline Thủ Công"**: nút riêng ở đầu Tab 2/3/4/6, cho chủ
+  động chuyển sang chế độ hàng đợi ngay cả khi mạng còn (vùng sóng yếu, để
+  khỏi chờ timeout từng lượt) — dùng lại đúng hàng đợi/cơ chế chống trùng ở
+  trên nên an toàn như offline tự nhiên. Không tự nhớ qua lần đăng nhập để
+  tránh quên đang bật.
+- **"Nhắc nhở mềm" đổi quầy kệ**: quầy kệ đang mở (không Khoá) có số liệu
+  quét chưa Xác Nhận mà đổi sang quầy kệ khác → hỏi lại 1 lần (không chặn
+  cứng, Huỷ thì giữ nguyên dữ liệu) — bổ sung cho IT muốn để mở hết quầy kệ
+  (không dùng 🔒 Khoá Quầy Kệ) mà vẫn hạn chế làm dở nhiều quầy kệ cùng lúc.
+
+Không đổi `schema.sql`/biến môi trường/`package.json` dependencies — chỉ
+thêm bảng mới trong IndexedDB phía trình duyệt (`hcrcShelfOfflineDb`) và 1
+tham số mới (`clientScanId`) trên route `/counts/scan` đã có.
 
 ## v30.48 (2026-12): "📋 Kiểm Kê" — Khoá/Mở Khoá Quầy Kệ (IT-only, tách biệt Xác Nhận)
 

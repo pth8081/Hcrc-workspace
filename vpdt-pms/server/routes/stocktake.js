@@ -497,13 +497,17 @@ router.post('/counts/scan', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
     }
     const { loc } = await assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId);
+    // clientScanId (MỚI, 12/2026 — chống trùng khi đồng bộ offline/mạng chập chờn, xem chú thích đầy đủ ở
+    // upsertScanCount()/lib/stocktakeEngine.js) — optional, client cũ/không gửi vẫn hoạt động như trước
+    // (không bắt buộc field mới, chỉ KHÔNG có bảo vệ chống trùng cho riêng lượt đó).
+    const clientScanId = req.body?.clientScanId ? String(req.body.clientScanId).trim().slice(0, 100) : '';
     await ensureStocktakeKey('stocktakeCounts');
     const saved = await withLockedAppDataValue('stocktakeCounts', (list) => {
       const arr = Array.isArray(list) ? list : [];
       const row = upsertScanCount(arr, req.body, {
         dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`,
         maVach: req.body?.maVach, tenHang: req.body?.tenHang
-      }, req.freshUser);
+      }, req.freshUser, clientScanId);
       return arr;
     }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId && c.maHang === String(req.body?.maHang || '').trim()));
     res.json({ item: saved });

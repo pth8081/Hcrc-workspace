@@ -56,6 +56,12 @@ async function main() {
     jsErrors.push('[console.error] ' + msg.text());
   });
   page.on('pageerror', (err) => jsErrors.push('[pageerror] ' + (err && err.stack || String(err))));
+  // "Nhắc nhở mềm" (MỚI, 12/2026) — đổi quầy kệ khác khi quầy kệ đang thao tác CÓ số liệu quét nhưng CHƯA
+  // Xác Nhận nay bật 1 hộp thoại confirm() hỏi lại — file test này CỐ Ý đổi qua lại nhiều quầy kệ CHƯA
+  // Xác Nhận (đúng kịch bản cần test Tab 6 xử lý nhiều quầy kệ cùng lúc), nên chấp nhận SẴN mọi hộp thoại
+  // dạng này ở mức toàn file (các listener cục bộ page.on/page.off ở từng bước bulk vẫn giữ nguyên, không
+  // xung đột — dialog luôn được xử lý bởi listener gắn trước).
+  page.on('dialog', (d) => d.accept().catch(() => {}));
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, MANAGER);

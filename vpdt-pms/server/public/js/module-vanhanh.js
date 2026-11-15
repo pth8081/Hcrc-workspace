@@ -357,7 +357,14 @@ function kkEffectiveDept() {
   return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
 }
 
+// Online/Offline Kiểm Kê (12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md): mở
+// BẤT KỲ sub-tab nào của Kiểm Kê đều tự nạp IndexedDB dùng chung với Kiểm Soát Hàng Hóa (hcrcShelfOfflineDb,
+// CÙNG DB — không tạo DB riêng) + thử đồng bộ ngược hàng đợi quét/xác nhận còn tồn (nếu có mạng), HOÀN
+// TOÀN ÂM THẦM (fire-and-forget), KHÔNG chặn vẽ giao diện ngay — mỗi hàm loadKkScanTab()/loadKkShelfConfigTab()/
+// enterKkConfirmTab() tự await ensureShelfOfflineReady() riêng khi thật sự cần đọc cache (y hệt khuôn
+// setVanHanhShelfSubTab() đã dùng cho Kiểm Soát Hàng Hóa).
 function setKiemKeSubTab(tab) {
+  (async () => { await ensureShelfOfflineReady(); renderKkOfflineModeBar(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
   const tabs = [
     ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
     ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
@@ -597,15 +604,33 @@ function resolveKkScanItemFromCode(code) {
 async function loadKkScanTab(tabKey) {
   const cfg = KK_SCAN_TAB_CONFIG[tabKey];
   const st = kkScanState[tabKey];
+  await ensureShelfOfflineReady();
   await ensureShelfSystemInventoryCacheLoaded();
   const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
   if (selectEl) selectEl.innerHTML = '<option value="">-- Đang tải quầy kệ... --</option>';
+  st.offlineShelves = false;
   try {
     const res = await fetch(`/api/stocktake/my-shelf-locations?mode=${cfg.apiMode}`);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     st.shelves = res.ok ? (body.items || []) : [];
-  } catch (err) { st.shelves = []; }
+    if (res.ok) {
+      await cacheKkShelvesOffline(cfg.apiMode, st.shelves);
+      // Chủ động tải trước trạng thái Kỳ/Khoá/Xác Nhận của TỪNG quầy kệ (ngầm, không await) — để đủ dữ
+      // liệu chọn quầy kệ offline ngay cả khi người dùng CHƯA TỪNG tự bấm chọn quầy kệ đó lúc còn mạng
+      // (xem docs/kiem-ke-kiem-soat-offline.md, Giai đoạn 1).
+      prefetchKkSessionInfoForShelves(cfg.apiMode, st.shelves);
+    }
+  } catch (err) {
+    if (err instanceof TypeError) {
+      const cached = getKkShelvesOffline(cfg.apiMode);
+      st.shelves = cached ? cached.items : [];
+      st.offlineShelves = true;
+      st.offlineShelvesCachedAt = cached ? cached.cachedAt : null;
+    } else {
+      st.shelves = [];
+    }
+  }
   renderKkScanShelfOptions(tabKey);
   // Giữ lựa chọn quầy kệ đang có (nếu còn hợp lệ) khi chuyển qua tab khác rồi quay lại — không bắt chọn
   // lại từ đầu vô lý.
@@ -625,11 +650,23 @@ function renderKkScanShelfOptions(tabKey) {
   if (!selectEl) return;
   if (!st.shelves.length) {
     selectEl.innerHTML = '<option value="">-- Bạn chưa được cấp quyền quầy kệ nào --</option>';
-    return;
+  } else {
+    const opts = st.shelves.slice().sort((a, b) => `${a.dept} ${a.code}`.localeCompare(`${b.dept} ${b.code}`, 'vi'));
+    // kiemKeLocked (MỚI, 12/2026): danh sách quầy kệ (kể cả đọc từ cache offline) LUÔN giữ field này từ
+    // shelfLocations gốc — đánh dấu 🔒 NGAY ở bước chọn (gợi ý sớm trước khi bấm), nhưng CỐ Ý KHÔNG
+    // `disabled` option (giữ nguyên hành vi/test cũ: chọn vẫn được, onKkScanShelfChanged() mới chặn thật +
+    // báo rõ lý do — chặn thật nằm ở đó + ở server, không phải ở việc ẩn lựa chọn này).
+    selectEl.innerHTML = '<option value="">-- Chọn quầy kệ --</option>' +
+      opts.map(l => `<option value="${l.id}">${l.kiemKeLocked ? '🔒 ' : ''}${escapeHtml(l.dept)} — ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('');
   }
-  const opts = st.shelves.slice().sort((a, b) => `${a.dept} ${a.code}`.localeCompare(`${b.dept} ${b.code}`, 'vi'));
-  selectEl.innerHTML = '<option value="">-- Chọn quầy kệ --</option>' +
-    opts.map(l => `<option value="${l.id}">${escapeHtml(l.dept)} — ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('');
+  const noteEl = document.getElementById(`${cfg.prefix}OfflineNote`);
+  if (noteEl) {
+    const show = !!st.offlineShelves;
+    noteEl.classList.toggle('hidden', !show);
+    noteEl.textContent = show
+      ? `🔌 Ngoại tuyến — danh sách quầy kệ lúc ${st.offlineShelvesCachedAt ? new Date(st.offlineShelvesCachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`
+      : '';
+  }
 }
 
 function renderKkScanBoxLocked(tabKey, infoText) {
@@ -651,60 +688,98 @@ async function onKkScanShelfChanged(tabKey) {
   const st = kkScanState[tabKey];
   const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
   const shelfId = Number(selectEl?.value || 0);
+  // Nhắc nhở mềm (MỚI, 12/2026, theo yêu cầu người dùng — cân nhắc giữa Khóa Quầy Kệ IT quản lý VS để mở
+  // hết: nếu KHÔNG dùng Khóa, vẫn muốn hạn chế làm dở nhiều quầy kệ cùng lúc) — quầy kệ ĐANG MỞ (chưa bị
+  // khóa/xác nhận, nếu không đã không mở được ô quét) mà ĐÃ có số liệu quét thật (qty>0, không phải quầy
+  // kệ trống chưa quét gì) nhưng CHƯA Xác Nhận, nay người dùng tự đổi sang quầy kệ KHÁC — hỏi lại 1 lần.
+  // KHÔNG chặn cứng (khác hẳn Khóa Quầy Kệ) — chỉ nhắc, huỷ thì giữ nguyên quầy kệ cũ, đồng ý thì cho đổi
+  // bình thường (người dùng vẫn toàn quyền quyết định, phù hợp khi IT chủ động chọn không dùng Khóa).
+  // CHỈ hỏi khi chuyển sang 1 quầy kệ KHÁC thật sự (shelfId mới khác rỗng) — bỏ trống lựa chọn (đóng màn
+  // quét lại, không chuyển sang làm quầy kệ nào khác) thì không cần nhắc, không phải tình huống "làm dở
+  // nhiều quầy kệ cùng lúc".
+  const previousShelfId = st.selectedShelfId;
+  const previousHadUnconfirmedWork = previousShelfId && shelfId && previousShelfId !== shelfId && (st.counts || []).some(c => Number(c[cfg.qtyField]) > 0);
+  if (previousHadUnconfirmedWork) {
+    const prevLoc = (st.shelves || []).find(l => l.id === previousShelfId);
+    const label = prevLoc ? `${prevLoc.code} — ${prevLoc.name}` : `#${previousShelfId}`;
+    const ok = confirm(`⚠️ Quầy kệ "${label}" vừa thao tác CHƯA được Xác Nhận. Bạn có chắc muốn chuyển sang quầy kệ khác không?\n\n(Nên vào tab "✅ Xác Nhận" xác nhận xong quầy kệ này trước, để tránh làm dở nhiều quầy kệ cùng lúc.)`);
+    if (!ok) { if (selectEl) selectEl.value = String(previousShelfId); return; }
+  }
   st.selectedShelfId = shelfId || null;
   st.session = null;
   st.counts = [];
   if (!shelfId) { renderKkScanBoxLocked(tabKey, '📍 Vui lòng chọn quầy kệ để bắt đầu quét.'); return; }
   const infoEl = document.getElementById(`${cfg.prefix}SessionInfo`);
+  const offlineNoteEl = document.getElementById(`${cfg.prefix}OfflineNote`);
   if (infoEl) infoEl.textContent = 'Đang kiểm tra kỳ đang hoạt động...';
+  let body, offline = false;
   try {
     const res = await fetch(`/api/stocktake/active-session-for-shelf?shelfLocationId=${shelfId}&mode=${cfg.apiMode}`);
     if (res.status === 401) return handleSessionExpired();
-    const body = await res.json().catch(() => ({}));
+    body = await res.json().catch(() => ({}));
     if (!res.ok) { renderKkScanBoxLocked(tabKey, `⛔ ${body.error || 'Không kiểm tra được quyền/kỳ.'}`); return; }
-    st.session = body.session || null;
-    // shelfLocked (MỚI, 12/2026 — theo yêu cầu người dùng "IT khoá lại kệ... chỉ kệ đang mở mới xử lý
-    // được") — kiểm tra NGAY, ƯU TIÊN HƠN cả thông báo "chưa có kỳ đang hoạt động" ngay dưới, vì khoá IT
-    // độc lập hoàn toàn với kỳ/Xác Nhận: quầy đang khoá thì không cần biết kỳ đang thế nào, cứ báo khoá
-    // trước tiên. CHẶN CẢ 3 tab Gom Mã/Kiểm Đếm/Kiểm Soát (không riêng theo tabKey).
-    if (body.shelfLocked) {
-      renderKkScanBoxLocked(tabKey, '🔒 Quầy kệ này ĐANG BỊ KHOÁ bởi IT/Quản lý (Tab "🗄️ Cấu Hình Quầy Kệ") — liên hệ để được Mở Khoá trước khi thao tác.');
-      return;
-    }
-    if (!st.session) {
-      renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
-      return;
-    }
-    // LỖI UX THẬT phát hiện qua audit chéo (11/2026): trước đây chỉ biết quầy kệ ĐÃ Xác Nhận (Lớp 4,
-    // Tab 6) khi bấm "Thêm" thật và nhận lỗi 409 — nay server trả kèm `shelfConfirmed` ngay lúc chọn quầy
-    // kệ, khoá/báo rõ NGAY thay vì mở ô quét cho người dùng quét xong mới biết không được việc.
-    // shelfKiemSoatConfirmed (12/2026) — CÙNG cơ chế, riêng cho tab Kiểm Soát (trước đây Kiểm Soát không
-    // có cờ khoá riêng theo từng quầy kệ, xem chú thích đầy đủ ở assertStocktakeScanAllowed()).
-    if (body.shelfConfirmed) {
-      // Vẫn tải lại danh sách đã quét trước đó để quản lý XEM được (tham khảo), chỉ khoá Ô QUÉT (không quét
-      // thêm được) — không phải ẩn trắng toàn bộ nội dung đã có.
-      await loadKkScanCounts(tabKey);
-      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận ở tab "✅ Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa).`);
-      return;
-    }
-    if (body.shelfKiemSoatConfirmed) {
-      await loadKkScanCounts(tabKey);
-      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Kiểm Soát ở tab "✅ Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa).`);
-      return;
-    }
-    // shelfGomMaConfirmed (MỚI, 12/2026) — CÙNG cơ chế, riêng cho tab Gom Mã (trước đây Gom Mã hoàn toàn
-    // không có cờ khoá nào, xem Lớp 4 nhánh GOM_MA ở assertStocktakeScanAllowed()).
-    if (body.shelfGomMaConfirmed) {
-      await loadKkScanCounts(tabKey);
-      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Gom Mã ở tab "✅ Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa).`);
-      return;
-    }
-    if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
-    renderKkScanBoxUnlocked(tabKey);
-    await loadKkScanCounts(tabKey);
+    await cacheKkSessionInfoOffline(cfg.apiMode, shelfId, body);
   } catch (err) {
-    renderKkScanBoxLocked(tabKey, '⛔ Lỗi tải thông tin kỳ — vui lòng thử lại.');
+    if (!(err instanceof TypeError)) { renderKkScanBoxLocked(tabKey, '⛔ Lỗi tải thông tin kỳ — vui lòng thử lại.'); return; }
+    // Mất mạng thật — dùng bản cache gần nhất của ĐÚNG quầy kệ này (tải sẵn lúc còn mạng, xem
+    // prefetchKkSessionInfoForShelves()/cacheKkSessionInfoOffline()) — KHÔNG có cache thì báo rõ thay vì
+    // coi như "chưa có kỳ" (dễ hiểu nhầm là lỗi nghiệp vụ).
+    const cached = getKkSessionInfoOffline(cfg.apiMode, shelfId);
+    if (!cached) {
+      renderKkScanBoxLocked(tabKey, '⛔ Mất mạng và CHƯA có dữ liệu ngoại tuyến cho quầy kệ này — cần vào quầy kệ này ít nhất 1 lần lúc còn mạng trước.');
+      return;
+    }
+    body = cached;
+    offline = true;
   }
+  st.session = body.session || null;
+  // Khoá Quầy Kệ khi offline (MỚI, 12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md
+  // "Khóa Quầy Kệ Khi Offline — Không Nên Vô Hiệu Hoàn Toàn"): LẤY GIAO (OR) khoá từ CẢ cache phiên quét
+  // (body.shelfLocked, có thể đã cũ vài giờ) LẪN field kiemKeLocked trên chính dòng quầy kệ đang cache ở
+  // st.shelves (có thể MỚI đồng bộ hơn, VD vừa tải lại Tab 2/3/4 sau khi IT khoá) — quầy kệ bị coi là khoá
+  // nếu BẤT KỲ nguồn cache nào báo khoá, không chờ cả 2 đồng thuận (an toàn hơn, tránh lách khoá bằng cách
+  // mất mạng đúng lúc 1 nguồn chưa kịp cập nhật).
+  const shelfFromCache = (st.shelves || []).find(l => l.id === shelfId);
+  const shelfLocked = !!(body.shelfLocked || shelfFromCache?.kiemKeLocked);
+  if (offlineNoteEl) {
+    offlineNoteEl.classList.toggle('hidden', !offline);
+    offlineNoteEl.textContent = offline ? `🔌 Ngoại tuyến — dữ liệu quầy kệ này lúc ${body.cachedAt ? new Date(body.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.` : '';
+  }
+  if (shelfLocked) {
+    renderKkScanBoxLocked(tabKey, '🔒 Quầy kệ này ĐANG BỊ KHOÁ bởi IT/Quản lý (Tab "🗄️ Cấu Hình Quầy Kệ") — liên hệ để được Mở Khoá trước khi thao tác.');
+    return;
+  }
+  if (!st.session) {
+    renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
+    return;
+  }
+  // LỖI UX THẬT phát hiện qua audit chéo (11/2026): trước đây chỉ biết quầy kệ ĐÃ Xác Nhận (Lớp 4,
+  // Tab 6) khi bấm "Thêm" thật và nhận lỗi 409 — nay server trả kèm `shelfConfirmed` ngay lúc chọn quầy
+  // kệ, khoá/báo rõ NGAY thay vì mở ô quét cho người dùng quét xong mới biết không được việc.
+  // shelfKiemSoatConfirmed (12/2026) — CÙNG cơ chế, riêng cho tab Kiểm Soát (trước đây Kiểm Soát không
+  // có cờ khoá riêng theo từng quầy kệ, xem chú thích đầy đủ ở assertStocktakeScanAllowed()).
+  if (body.shelfConfirmed) {
+    // Vẫn tải lại danh sách đã quét trước đó để quản lý XEM được (tham khảo), chỉ khoá Ô QUÉT (không quét
+    // thêm được) — không phải ẩn trắng toàn bộ nội dung đã có.
+    await loadKkScanCounts(tabKey);
+    renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận ở tab "✅ Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa).`);
+    return;
+  }
+  if (body.shelfKiemSoatConfirmed) {
+    await loadKkScanCounts(tabKey);
+    renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Kiểm Soát ở tab "✅ Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa).`);
+    return;
+  }
+  // shelfGomMaConfirmed (MỚI, 12/2026) — CÙNG cơ chế, riêng cho tab Gom Mã (trước đây Gom Mã hoàn toàn
+  // không có cờ khoá nào, xem Lớp 4 nhánh GOM_MA ở assertStocktakeScanAllowed()).
+  if (body.shelfGomMaConfirmed) {
+    await loadKkScanCounts(tabKey);
+    renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Gom Mã ở tab "✅ Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa).`);
+    return;
+  }
+  if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
+  renderKkScanBoxUnlocked(tabKey);
+  await loadKkScanCounts(tabKey);
 }
 
 async function loadKkScanCounts(tabKey) {
@@ -715,7 +790,13 @@ async function loadKkScanCounts(tabKey) {
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     st.counts = res.ok ? (body.items || []) : [];
-  } catch (err) { st.counts = []; }
+  } catch (err) {
+    // Mất mạng thật (MỚI, 12/2026): GIỮ NGUYÊN st.counts đang có (đã tải lúc còn mạng trước đó trong
+    // CÙNG phiên trình duyệt này) thay vì xoá trắng — người dùng vẫn cần xem lại các mã đã quét để tiếp
+    // tục quét thêm offline (xem submitKkScan()/applyOptimisticKkScan()). KHÔNG có gì để giữ (lần đầu vào
+    // quầy kệ này đã mất mạng sẵn) thì vẫn là mảng rỗng như trước.
+    if (!(err instanceof TypeError)) st.counts = [];
+  }
   renderKkScanList(tabKey);
 }
 
@@ -731,23 +812,73 @@ async function submitKkScan(tabKey) {
   if (!Number.isFinite(qty) || qty <= 0) return alert('Số lượng phải lớn hơn 0.');
   const resolved = resolveKkScanItemFromCode(raw);
   if (!resolved) return alert(`Không khớp tồn kho hệ thống với mã "${raw}" — vui lòng kiểm tra lại.`);
+  // clientScanId (MỚI, 12/2026, theo yêu cầu người dùng — chống trùng khi đồng bộ offline/mạng chập chờn)
+  // — sinh NGAY Ở ĐÂY (không phải chỉ lúc vào hàng đợi), dùng NGUYÊN VẸN cho MỌI lần gửi của đúng lượt
+  // quét này (kể cả lượt gửi trực tuyến đầu tiên ngay dưới) — vì mất phản hồi (server đã xử lý xong,
+  // client không biết) có thể xảy ra NGAY Ở LƯỢT ĐẦU, trước khi kịp biết là cần queue lại. Xem chú thích
+  // đầy đủ ở upsertScanCount()/lib/stocktakeEngine.js.
+  const clientScanId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const scanPayload = {
+    sessionId: st.session.id, shelfLocationId: st.selectedShelfId, mode: cfg.apiMode,
+    maHang: resolved.maHang, maVach: resolved.maVach || raw, tenHang: resolved.tenHang, qty, clientScanId
+  };
+  const finishInputReset = () => { if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); } if (qtyInput) qtyInput.value = '1'; };
+  // "✈️ Offline thủ công" (MỚI, 12/2026, theo yêu cầu người dùng — mạng chập chờn: không muốn đợi 1 lượt
+  // fetch() "treo" vài chục giây mới biết là lỗi, cũng không muốn tắt hẳn mạng điện thoại vì còn cần dùng
+  // app khác) — bật thì BỎ QUA hẳn bước thử gửi trực tuyến, vào thẳng hàng đợi — dùng CHUNG đường đi với
+  // nhánh mất mạng thật bên dưới (không viết logic mới), xem kkManualOfflineMode.
+  if (kkManualOfflineMode) {
+    const loc = (st.shelves || []).find(l => l.id === st.selectedShelfId);
+    await queueKkScanOffline(scanPayload, loc ? `${loc.code} — ${loc.name}` : '');
+    applyOptimisticKkScan(tabKey, resolved, qty);
+    finishInputReset();
+    return;
+  }
   try {
     const res = await fetch('/api/stocktake/counts/scan', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: st.session.id, shelfLocationId: st.selectedShelfId, mode: cfg.apiMode,
-        maHang: resolved.maHang, maVach: resolved.maVach || raw, tenHang: resolved.tenHang, qty
-      })
+      body: JSON.stringify(scanPayload)
     });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không ghi nhận được, vui lòng thử lại.'); return; }
-    if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); }
-    if (qtyInput) qtyInput.value = '1';
+    finishInputReset();
     await loadKkScanCounts(tabKey);
+    // Tranh thủ đẩy nốt hàng đợi CŨ ngay khi vừa biết chắc đang có mạng (MỚI, 12/2026 — mạng chập chờn,
+    // xem docs/kiem-ke-kiem-soat-offline.md) — không đợi tới nhịp heartbeat 20 giây tiếp theo mới đồng bộ.
+    trySyncPendingKkScans();
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.');
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    // Mất mạng thật (MỚI, 12/2026) — ghi vào hàng đợi kkPendingScans thay vì báo lỗi mất lượt (xem
+    // docs/kiem-ke-kiem-soat-offline.md) — cập nhật danh sách NGAY (optimistic, cộng dồn qty giống server
+    // sẽ làm khi đồng bộ — xem upsertScanCount()/lib/stocktakeEngine.js) để người quét thấy ngay kết quả,
+    // không phải đợi có mạng mới biết đã ghi hay chưa.
+    const loc = (st.shelves || []).find(l => l.id === st.selectedShelfId);
+    await queueKkScanOffline(scanPayload, loc ? `${loc.code} — ${loc.name}` : '');
+    applyOptimisticKkScan(tabKey, resolved, qty);
+    finishInputReset();
   }
+}
+
+// Cập nhật NGAY danh sách đang hiện (st.counts) sau khi ghi vào hàng đợi offline — CỘNG DỒN qty vào dòng
+// mã hàng đã có (đúng hành vi upsertScanCount() server sẽ làm khi đồng bộ), hoặc thêm dòng mới nếu mã này
+// chưa từng quét ở quầy kệ đang chọn. KHÔNG có `id` thật (server chưa cấp) — dùng id tạm bắt đầu bằng
+// "offline_" để renderKkScanList() nhận diện dòng CHƯA đồng bộ (xem badge "⏳").
+function applyOptimisticKkScan(tabKey, resolved, qty) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const existing = st.counts.find(c => c.maHang === resolved.maHang);
+  if (existing) {
+    existing[cfg.qtyField] = (Number(existing[cfg.qtyField]) || 0) + qty;
+    existing.lastScannedAt = new Date().toISOString();
+  } else {
+    st.counts.push({
+      id: `offline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      maHang: resolved.maHang, tenHang: resolved.tenHang, [cfg.qtyField]: qty,
+      lastScannedAt: new Date().toISOString(), createdAt: new Date().toISOString()
+    });
+  }
+  renderKkScanList(tabKey);
 }
 
 function renderKkScanList(tabKey) {
@@ -770,25 +901,52 @@ function renderKkScanList(tabKey) {
   // MRU: mã vừa QUÉT (lastScannedAt) nhảy lên đầu — sửa tay (lastEditedAt) KHÔNG đổi vị trí, đúng A5.
   const sorted = filtered.slice().sort((a, b) => new Date(b.lastScannedAt || b.createdAt) - new Date(a.lastScannedAt || a.createdAt));
   if (!st.selectedShelfId) { listBody.innerHTML = ''; return; }
+  // Hàng đợi quét offline CHƯA đồng bộ (MỚI, 12/2026) của ĐÚNG quầy kệ + hành động đang chọn — banner
+  // riêng cho dòng bị SERVER TỪ CHỐI (lastError, VD quầy kệ bị Khoá/Xác Nhận ngay trong lúc offline, xem
+  // trySyncPendingKkScans()) để người dùng biết rõ, không âm thầm mất.
+  const pendingForShelf = kkOfflinePendingScans.filter(p => p.mode === cfg.apiMode && p.shelfLocationId === st.selectedShelfId);
+  const rejectedForShelf = pendingForShelf.filter(p => p.lastError);
+  const waitingCount = pendingForShelf.length - rejectedForShelf.length;
+  const banners = (waitingCount > 0 ? `<p class="text-xs text-amber-600 font-semibold mb-1">⏳ ${waitingCount} lượt quét đang chờ đồng bộ (sẽ tự gửi khi có mạng lại).</p>` : '') +
+    rejectedForShelf.map(p => `<p class="text-xs text-red-600 font-semibold mb-1 flex items-center justify-between gap-2">
+      <span>⚠️ Mã "${escapeHtml(p.maHang)}" (SL ${p.qty}) bị từ chối khi đồng bộ: ${escapeHtml(p.lastError)}</span>
+      <button type="button" data-op="removeKkPendingScanFromUI" data-arg0="${p.clientScanId}" class="shrink-0 text-xs underline">Xoá khỏi hàng đợi</button>
+    </p>`).join('');
   if (!sorted.length) {
-    listBody.innerHTML = `<p class="text-gray-400 text-sm">${st.counts.length ? 'Không tìm thấy mã khớp tìm kiếm.' : 'Chưa quét mã nào ở quầy kệ này.'}</p>`;
+    listBody.innerHTML = banners + `<p class="text-gray-400 text-sm">${st.counts.length ? 'Không tìm thấy mã khớp tìm kiếm.' : 'Chưa quét mã nào ở quầy kệ này.'}</p>`;
     return;
   }
   // Tab 4 "Kiểm Soát" (A2: "chọn ra các mã cần kiểm tra kỹ") — hiện thêm cột SL Kiểm Đếm THAM KHẢO
   // (field slKiemDem, KHÔNG sửa được ở đây) để người soát so sánh ngay số đã đếm trước khi quyết định có
   // cần soát lại mã đó hay không — 2 tab Gom Mã/Kiểm Đếm không cần cột này.
   const showKiemDemRef = tabKey === 'KIEMSOAT';
-  listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
+  listBody.innerHTML = banners + `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
     <th class="py-1">Mã Hàng</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
-    sorted.map(c => `<tr class="border-b last:border-0">
+    sorted.map(c => {
+      // Dòng CHƯA đồng bộ (id tạm "offline_...", xem applyOptimisticKkScan()) — CHỈ XEM, không sửa/xoá
+      // trực tiếp được (chưa có id thật từ server) — chờ đồng bộ xong (trySyncPendingKkScans() sẽ tải lại
+      // đúng id thật) mới sửa/xoá như bình thường.
+      const pending = String(c.id).startsWith('offline_');
+      const qtyCell = pending
+        ? `<span class="text-amber-600 font-semibold" title="Chưa đồng bộ">⏳ ${Number(c[cfg.qtyField]) || 0}</span>`
+        : `<input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">`;
+      return `<tr class="border-b last:border-0${pending ? ' bg-amber-50' : ''}">
       <td class="py-1 font-mono">${escapeHtml(c.maHang)}</td>
       <td>${escapeHtml(c.tenHang || '')}</td>
       ${showKiemDemRef ? `<td class="text-right text-gray-500">${Number(c.slKiemDem) || 0}</td>` : ''}
-      <td class="text-right">
-        <input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">
-      </td>
-      <td class="text-right"><button type="button" data-op="deleteKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" class="text-red-600 hover:underline">🗑️</button></td>
-    </tr>`).join('') + '</tbody></table>';
+      <td class="text-right">${qtyCell}</td>
+      <td class="text-right">${pending ? '' : `<button type="button" data-op="deleteKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" class="text-red-600 hover:underline">🗑️</button>`}</td>
+    </tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+// Nút "Xoá khỏi hàng đợi" trên banner mã bị từ chối (xem renderKkScanList()) — xoá HẲN lượt quét đó khỏi
+// hàng đợi kkPendingScans (KHÔNG gửi lại lên server nữa) — dùng cho trường hợp lỗi không thể tự khắc phục
+// (VD kỳ đã đổi) mà người dùng xác nhận bỏ qua lượt quét này.
+async function removeKkPendingScanFromUI(clientScanId) {
+  if (!confirm('Xoá lượt quét này khỏi hàng đợi? (Sẽ KHÔNG gửi lên server nữa)')) return;
+  await removeKkPendingScan(clientScanId);
+  Object.keys(kkScanState).forEach(tabKey => { if (kkScanState[tabKey].selectedShelfId) renderKkScanList(tabKey); });
 }
 
 function onKkScanSearchInput(tabKey, text) {
@@ -1226,8 +1384,20 @@ async function loadKkConfirmTab() {
     kkConfirmCounts = countsRes.ok ? (countsBody.items || []) : [];
     kkConfirmConfirmations = confirmRes.ok ? (confirmBody.items || []) : [];
     kkConfirmSoatConfirmations = soatConfirmRes.ok ? (soatConfirmBody.items || []) : [];
+    if (confirmRes.ok) cacheKkConfirmListOffline('KIEMDEM', sessionId, kkConfirmConfirmations);
+    if (soatConfirmRes.ok) cacheKkConfirmListOffline('KIEMSOAT', sessionId, kkConfirmSoatConfirmations);
   } catch (err) {
-    kkConfirmCounts = []; kkConfirmConfirmations = []; kkConfirmSoatConfirmations = [];
+    // Mất mạng thật (MỚI, 12/2026) — dùng bản cache Xác Nhận gần nhất của ĐÚNG kỳ này (đã quét ở đâu vẫn
+    // hiện ĐÚNG số liệu đó, xem renderKkScanList()'s st.counts riêng — KHÔNG đụng tới ở đây) kèm danh sách
+    // Xác Nhận đã lưu, để vẫn thao tác Xác Nhận/Gỡ Xác Nhận offline được (xem queueKkConfirmOffline()).
+    if (!(err instanceof TypeError)) { kkConfirmCounts = []; kkConfirmConfirmations = []; kkConfirmSoatConfirmations = []; }
+    else {
+      kkConfirmConfirmations = getKkConfirmListOffline('KIEMDEM', sessionId)?.items || [];
+      kkConfirmSoatConfirmations = getKkConfirmListOffline('KIEMSOAT', sessionId)?.items || [];
+      // kkConfirmCounts (danh sách quầy kệ ĐÃ quét trong kỳ) không có cache riêng — GIỮ NGUYÊN giá trị cũ
+      // đang có trong phiên trình duyệt này (nếu đã tải lúc còn mạng) thay vì xoá trắng, để vẫn thấy được
+      // quầy kệ nào cần Xác Nhận.
+    }
   }
   renderKkConfirmShelfList();
   renderKkConfirmSoatShelfList();
@@ -1269,6 +1439,17 @@ function renderKkConfirmShelfList() {
       const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
       const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="KIEMDEM" data-arg1="${sid}" class="shrink-0">`;
       const confirmedRow = kkConfirmConfirmations.find(c => c.shelfLocationId === sid);
+      // Xác Nhận/Gỡ Xác Nhận offline (MỚI, 12/2026) — xem docs/kiem-ke-kiem-soat-offline.md + renderKkScanList()
+      // badge ⏳ tương tự: 1 hành động đang CHỜ đồng bộ (chưa chắc server đã áp dụng) hiện riêng, khác hẳn
+      // trạng thái ✅/thường — người dùng tự Huỷ nếu bấm nhầm, không cần chờ có mạng mới sửa được.
+      const pending = getKkPendingConfirm('KIEMDEM', sid);
+      if (pending) {
+        const msg = pending.action === 'confirm' ? 'đã xác nhận (CHƯA đồng bộ)' : 'đang chờ GỠ xác nhận (CHƯA đồng bộ)';
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2 bg-amber-50">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">⏳ ${escapeHtml(label)} <span class="text-amber-600 text-[11px]">— ${msg}</span></span></label>
+          <button type="button" data-op="cancelKkPendingConfirm" data-arg0="KIEMDEM" data-arg1="${sid}" class="text-gray-600 text-xs font-bold hover:underline shrink-0">Huỷ</button>
+        </div>`;
+      }
       if (confirmedRow) {
         return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
           <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
@@ -1285,6 +1466,16 @@ function renderKkConfirmShelfList() {
   updateKkConfirmAllVisibility();
 }
 
+// cancelKkPendingConfirm() — nút "Huỷ" trên dòng ⏳ đang chờ đồng bộ (3 danh sách Kiểm Đếm/Kiểm Soát/Gom
+// Mã dùng CHUNG hàm này, xem renderKkConfirm...ShelfList()) — chỉ xoá khỏi hàng đợi cục bộ, KHÔNG gọi
+// server (hành động đó chưa từng gửi lên nếu đang pending).
+async function cancelKkPendingConfirm(kind, shelfLocationIdStr) {
+  await removeKkPendingConfirm(kkPendingConfirmKey(kind, Number(shelfLocationIdStr)));
+  if (kind === 'KIEMDEM') renderKkConfirmShelfList();
+  else if (kind === 'KIEMSOAT') renderKkConfirmSoatShelfList();
+  else if (kind === 'GOMMA') renderKkConfirmGomMaShelfList();
+}
+
 async function confirmKkShelf(shelfLocationId) {
   if (!kkConfirmSessionId) return;
   try {
@@ -1296,20 +1487,32 @@ async function confirmKkShelf(shelfLocationId) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    // Mất mạng thật — queue vào kkPendingConfirms (xem docs/kiem-ke-kiem-soat-offline.md) thay vì báo lỗi.
+    const loc = (DB.shelfLocations || []).find(l => l.id === shelfLocationId);
+    await queueKkConfirmOffline('KIEMDEM', shelfLocationId, kkConfirmSessionId, 'confirm', null, loc ? `${loc.code} — ${loc.name}` : '', false);
+    renderKkConfirmShelfList();
+    return;
   }
   await loadKkConfirmTab();
 }
 
 async function unconfirmKkShelf(id) {
   if (!confirm('Gỡ Xác Nhận quầy kệ này? Quầy kệ sẽ mở lại cho Kiểm Đếm.')) return;
+  const row = kkConfirmConfirmations.find(c => c.id === id);
   try {
     const res = await fetch(`/api/stocktake/shelf-confirmations/${id}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    // Mất mạng thật — CẦN id thật đã có (xem queueKkConfirmOffline(), tham số confirmationId) vì Gỡ Xác
+    // Nhận offline chỉ áp dụng cho dòng ĐÃ đồng bộ (có id thật từ server) — dòng vừa Xác Nhận offline
+    // (chưa đồng bộ) dùng nút "Huỷ" (cancelKkPendingConfirm()) chứ không qua đây.
+    if (row) await queueKkConfirmOffline('KIEMDEM', row.shelfLocationId, kkConfirmSessionId, 'unconfirm', id, row.shelfLocationLabel || '', true);
+    renderKkConfirmShelfList();
+    return;
   }
   await loadKkConfirmTab();
 }
@@ -1336,6 +1539,14 @@ function renderKkConfirmSoatShelfList() {
       const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
       const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="KIEMSOAT" data-arg1="${sid}" class="shrink-0">`;
       const confirmedRow = kkConfirmSoatConfirmations.find(c => c.shelfLocationId === sid);
+      const pending = getKkPendingConfirm('KIEMSOAT', sid);
+      if (pending) {
+        const msg = pending.action === 'confirm' ? 'đã xác nhận (CHƯA đồng bộ)' : 'đang chờ GỠ xác nhận (CHƯA đồng bộ)';
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2 bg-amber-50">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">⏳ ${escapeHtml(label)} <span class="text-amber-600 text-[11px]">— ${msg}</span></span></label>
+          <button type="button" data-op="cancelKkPendingConfirm" data-arg0="KIEMSOAT" data-arg1="${sid}" class="text-gray-600 text-xs font-bold hover:underline shrink-0">Huỷ</button>
+        </div>`;
+      }
       if (confirmedRow) {
         return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
           <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
@@ -1363,20 +1574,28 @@ async function confirmKkSoatShelf(shelfLocationId) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    const loc = (DB.shelfLocations || []).find(l => l.id === shelfLocationId);
+    await queueKkConfirmOffline('KIEMSOAT', shelfLocationId, kkConfirmSessionId, 'confirm', null, loc ? `${loc.code} — ${loc.name}` : '', false);
+    renderKkConfirmSoatShelfList();
+    return;
   }
   await loadKkConfirmTab();
 }
 
 async function unconfirmKkSoatShelf(id) {
   if (!confirm('Gỡ Xác Nhận Kiểm Soát quầy kệ này? Quầy kệ sẽ mở lại cho Kiểm Soát.')) return;
+  const row = kkConfirmSoatConfirmations.find(c => c.id === id);
   try {
     const res = await fetch(`/api/stocktake/shelf-kiem-soat-confirmations/${id}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    if (row) await queueKkConfirmOffline('KIEMSOAT', row.shelfLocationId, kkConfirmSessionId, 'unconfirm', id, row.shelfLocationLabel || '', true);
+    renderKkConfirmSoatShelfList();
+    return;
   }
   await loadKkConfirmTab();
 }
@@ -1404,8 +1623,11 @@ async function loadKkConfirmGomMaTab() {
     const confirmBody = await confirmRes.json().catch(() => ({}));
     kkConfirmGomMaCounts = countsRes.ok ? (countsBody.items || []) : [];
     kkConfirmGomMaConfirmations = confirmRes.ok ? (confirmBody.items || []) : [];
+    if (confirmRes.ok) cacheKkConfirmListOffline('GOMMA', sessionId, kkConfirmGomMaConfirmations);
   } catch (err) {
-    kkConfirmGomMaCounts = []; kkConfirmGomMaConfirmations = [];
+    // Cùng xử lý mất mạng như loadKkConfirmTab() ở trên.
+    if (!(err instanceof TypeError)) { kkConfirmGomMaCounts = []; kkConfirmGomMaConfirmations = []; }
+    else kkConfirmGomMaConfirmations = getKkConfirmListOffline('GOMMA', sessionId)?.items || [];
   }
   renderKkConfirmGomMaShelfList();
 }
@@ -1428,6 +1650,14 @@ function renderKkConfirmGomMaShelfList() {
       const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
       const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="GOMMA" data-arg1="${sid}" class="shrink-0">`;
       const confirmedRow = kkConfirmGomMaConfirmations.find(c => c.shelfLocationId === sid);
+      const pending = getKkPendingConfirm('GOMMA', sid);
+      if (pending) {
+        const msg = pending.action === 'confirm' ? 'đã xác nhận (CHƯA đồng bộ)' : 'đang chờ GỠ xác nhận (CHƯA đồng bộ)';
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2 bg-amber-50">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">⏳ ${escapeHtml(label)} <span class="text-amber-600 text-[11px]">— ${msg}</span></span></label>
+          <button type="button" data-op="cancelKkPendingConfirm" data-arg0="GOMMA" data-arg1="${sid}" class="text-gray-600 text-xs font-bold hover:underline shrink-0">Huỷ</button>
+        </div>`;
+      }
       if (confirmedRow) {
         return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
           <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
@@ -1454,20 +1684,28 @@ async function confirmKkGomMaShelf(shelfLocationId) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    const loc = (DB.shelfLocations || []).find(l => l.id === shelfLocationId);
+    await queueKkConfirmOffline('GOMMA', shelfLocationId, kkConfirmGomMaSessionId, 'confirm', null, loc ? `${loc.code} — ${loc.name}` : '', false);
+    renderKkConfirmGomMaShelfList();
+    return;
   }
   await loadKkConfirmGomMaTab();
 }
 
 async function unconfirmKkGomMaShelf(id) {
   if (!confirm('Gỡ Xác Nhận Gom Mã quầy kệ này? Quầy kệ sẽ mở lại cho Gom Mã.')) return;
+  const row = kkConfirmGomMaConfirmations.find(c => c.id === id);
   try {
     const res = await fetch(`/api/stocktake/shelf-gom-ma-confirmations/${id}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
   } catch (err) {
-    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+    if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
+    if (row) await queueKkConfirmOffline('GOMMA', row.shelfLocationId, kkConfirmGomMaSessionId, 'unconfirm', id, row.shelfLocationLabel || '', true);
+    renderKkConfirmGomMaShelfList();
+    return;
   }
   await loadKkConfirmGomMaTab();
 }
@@ -2868,14 +3106,24 @@ async function loadShelfReconciliation() {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
-  if (noteEl) noteEl.textContent = '';
   // Xoá cache CŨ ngay khi bắt đầu tải lại (xem chú thích tại _shelfReconLastArgsDept) — nếu lần tải này
   // lỗi (chưa cấu hình Mã Điểm, mất mạng không có fallback offline...) hoặc người dùng bấm "📥 Xuất Excel"
   // đúng lúc đang tải dở, exportShelfReconciliationExcel() sẽ thấy cache rỗng và báo "chưa có dữ liệu"
   // thay vì âm thầm xuất nhầm dữ liệu CŨ của siêu thị trước đó.
   _shelfReconLastArgs = null;
   _shelfReconLastArgsDept = null;
+  // Cache-first (MỚI, 12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md "Đối Chiếu
+  // Offline"): tồn kho hệ thống vốn CHỈ được server đồng bộ ngầm ~20 phút/lần (jobs/inventorySync.js) —
+  // "gọi live" mỗi lần vào tab KHÔNG hề mới hơn bản cache đã có, nên hiện NGAY bản cache sẵn có (nếu có)
+  // rồi mới âm thầm làm mới ngầm phía sau (CÙNG khuôn syncShelfPriceCatalogSilently() của Kiểm Tra Giá),
+  // thay vì bắt người dùng chờ roundtrip mỗi lần vào tab — và vẫn xem được khi mất mạng hẳn.
+  const cachedFirst = getShelfSystemInventoryOfflineFallback('recon');
+  if (cachedFirst) {
+    renderShelfReconciliationTable(cachedFirst.rows, cachedFirst.capNhatLuc, true, cachedFirst.maDiem);
+  } else {
+    tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
+    if (noteEl) noteEl.textContent = '';
+  }
   try {
     // scope=recon (11/2026, theo yêu cầu người dùng: "chỉ đối chiếu cho những mã đã scan lên kệ... không
     // thì quá nhiều khi siêu thị ấn cùng một lúc có thể gây treo ứng dụng", MỞ RỘNG cùng tháng sang "đã
@@ -2886,11 +3134,16 @@ async function loadShelfReconciliation() {
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      // isError=true ở đây BAO GỒM cả lỗi 404 "chưa cấu hình Mã Điểm" — chính kịch bản người dùng nhắc
-      // ("đối chiếu sai tôi không biết được"): phải nói rõ NGAY ở header đang thiếu cấu hình cho ĐÚNG
-      // siêu thị nào, không chỉ im lặng hiện dòng lỗi nhỏ trong bảng.
-      setShelfReconHeader(null, true);
-      tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
+      // ĐÃ hiện bản cache ở trên (cachedFirst) thì GIỮ NGUYÊN, không ghi đè bằng lỗi nghiệp vụ của lần làm
+      // mới NGẦM này (người dùng vẫn đang xem đúng dữ liệu hợp lệ, chỉ là chưa mới nhất) — chỉ hiện lỗi to
+      // khi đây là lần tải ĐẦU (chưa có gì để xem).
+      if (!cachedFirst) {
+        // isError=true ở đây BAO GỒM cả lỗi 404 "chưa cấu hình Mã Điểm" — chính kịch bản người dùng nhắc
+        // ("đối chiếu sai tôi không biết được"): phải nói rõ NGAY ở header đang thiếu cấu hình cho ĐÚNG
+        // siêu thị nào, không chỉ im lặng hiện dòng lỗi nhỏ trong bảng.
+        setShelfReconHeader(null, true);
+        tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
+      }
       return;
     }
     const rows = Array.isArray(body.rows) ? body.rows : [];
@@ -2902,10 +3155,9 @@ async function loadShelfReconciliation() {
     // fetch() throw = LỖI MẠNG THẬT (không phải response lỗi 503/404 ở trên, đã xử lý riêng) — cùng cách
     // phân biệt err instanceof TypeError đã dùng ở trySyncPendingShelfRecords(). Lỗi nghiệp vụ (chưa cấu
     // hình Mã Điểm...) KHÔNG rơi vào đây, luôn hiện đúng thông báo server trả về ở nhánh !res.ok trên.
-    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback('recon') : null;
-    if (cached) {
-      renderShelfReconciliationTable(cached.rows, cached.capNhatLuc, true, cached.maDiem);
-    } else {
+    // cachedFirst ĐÃ hiện sẵn ở đầu hàm (nếu có) — mất mạng lúc làm mới ngầm không cần làm gì thêm, chỉ
+    // báo lỗi to khi ĐÂY LÀ LẦN ĐẦU chưa có gì để xem (chưa từng cache lần nào trên máy này).
+    if (!cachedFirst) {
       setShelfReconHeader(null, true, `⚠️ Siêu Thị: ${getEffectiveShelfDept()} — không thể kết nối tới máy chủ để đối chiếu.`);
       tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
     }
@@ -2980,6 +3232,20 @@ async function loadShelfReportTab() {
   populateShelfReportStoreFilter();
   renderShelfReportTable();
   const isMulti = shelfReportIsMultiStore();
+  // Cache-first (MỚI, 12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md "Báo Cáo —
+  // Thêm Cache Offline Mới"): CHỈ áp dụng nhánh 1 siêu thị (nhánh "Tất cả siêu thị" hiếm khi cần xem lúc
+  // đang đứng kho mất mạng — admin/quản lý xem tổng hợp thường ở văn phòng có mạng, giữ nguyên network-
+  // only, ưu tiên thấp nhất theo đúng tài liệu đề xuất) — cache riêng key 'report' trong CÙNG object store
+  // `systemInventory` (khác 'cache' của picker/Hạn Sử Dụng, 'recon' của Đối Chiếu — xem
+  // cacheShelfSystemInventoryOffline()). TRƯỚC ĐÂY hoàn toàn không có dự phòng offline (chỉ cache RAM mất
+  // khi tải lại trang) — mất mạng là cột "Tồn Kho Hệ Thống" trống trắng "—" toàn bộ.
+  const cachedReportFirst = !isMulti ? getShelfSystemInventoryOfflineFallback('report') : null;
+  if (cachedReportFirst) {
+    const rowsMap = new Map();
+    (cachedReportFirst.rows || []).forEach(r => { if (r.maHang) rowsMap.set(String(r.maHang), r.soLuongTon); });
+    shelfReportSystemInventoryCache = { multi: false, maDiem: cachedReportFirst.maDiem, dept: getEffectiveShelfDept(), rows: rowsMap };
+    renderShelfReportTable();
+  }
   try {
     if (isMulti) {
       const res = await fetch('/api/shelf-stock/system-inventory/report-all');
@@ -3006,12 +3272,15 @@ async function loadShelfReportTab() {
         const rows = new Map();
         (Array.isArray(body.rows) ? body.rows : []).forEach(r => { if (r.maHang) rows.set(String(r.maHang), r.soLuongTon); });
         shelfReportSystemInventoryCache = { multi: false, maDiem: body.maDiem, dept: getEffectiveShelfDept(), rows };
-      } else {
+        cacheShelfSystemInventoryOffline(Array.isArray(body.rows) ? body.rows : [], body.capNhatLuc, body.maDiem, 'report');
+      } else if (!cachedReportFirst) {
         shelfReportSystemInventoryCache = null;
       }
     }
   } catch (err) {
-    shelfReportSystemInventoryCache = null;
+    // cachedReportFirst (nếu có) đã hiện sẵn ở trên — mất mạng thật không xoá sạch nữa như trước (khác
+    // hẳn hành vi cũ luôn set null trong catch, kể cả khi đã có cache để dùng tạm).
+    if (!cachedReportFirst) shelfReportSystemInventoryCache = null;
   }
   renderShelfReportTable();
 }
@@ -3939,6 +4208,15 @@ function findSystemInventoryQtyForProduct(maHang, maVach) {
 // Chi phí thêm không đáng kể — route GET /system-inventory chỉ đọc lại snapshot đã đồng bộ sẵn, syncSystemInventory({force:false})
 // bên trong CHỈ thực sự gọi API đối tác khi đã tới chu kỳ cấu hình, không tăng thêm tải lên đối tác.
 async function ensureShelfSystemInventoryForExpiry() {
+  // Cache-first (MỚI, 12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md): hiện NGAY
+  // bản cache sẵn có (nếu có) rồi mới gọi mạng làm mới ngầm, CÙNG nguyên lý đã áp dụng cho Đối Chiếu/Kiểm
+  // Tra Giá — vào tab nhanh hơn (không phải chờ roundtrip), và dùng được NGAY cả khi mất mạng ngay từ đầu
+  // (trước đây phải đợi fetch() thật sự thất bại mới rơi về cache).
+  const cachedFirst = getShelfSystemInventoryOfflineFallback();
+  if (cachedFirst) {
+    shelfSystemInventoryCache = cachedFirst.rows || [];
+    if (typeof renderShelfExpiryGroups === 'function') renderShelfExpiryGroups();
+  }
   try {
     const res = await shelfFetch('/api/shelf-stock/system-inventory');
     if (res.status === 401) return handleSessionExpired();
@@ -3947,8 +4225,7 @@ async function ensureShelfSystemInventoryForExpiry() {
     shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
     cacheShelfSystemInventoryOffline(shelfSystemInventoryCache, data.capNhatLuc);
   } catch (err) {
-    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
-    if (cached) shelfSystemInventoryCache = cached.rows || [];
+    // cachedFirst (nếu có) đã hiện sẵn ở trên — mất mạng thật không cần làm gì thêm ở đây.
   }
 }
 // --- Bộ lọc "⏰ Hạn Sử Dụng": Quầy Kệ/Mã Vạch/Mã Hàng/Tên Sản Phẩm/Người Cập Nhật Gần Nhất (text) + Số
@@ -4160,22 +4437,47 @@ function exportShelfExpiryExcel() {
 // ghi IndexedDB) — populateShelfLocationPicker()/renderShelfRecordRecentList() đọc trực tiếp 2 biến này
 // (đồng bộ, không await) thay vì phải await IndexedDB mỗi lần vẽ lại danh sách.
 const SHELF_OFFLINE_DB_NAME = 'hcrcShelfOfflineDb';
+// Version 4 (12/2026) — thêm 5 store cho "Online/Offline Kiểm Kê" (xem đề xuất
+// docs/kiem-ke-kiem-soat-offline.md): 'kkShelves' (cache danh sách quầy kệ ĐƯỢC PHÉP theo từng mode quét,
+// đã CÓ SẴN field kiemKeLocked từ shelfLocations gốc nên dùng luôn làm cache trạng thái Khoá, không cần
+// store riêng), 'kkSessionInfo' (cache kỳ đang hoạt động + các cờ Khoá/Xác Nhận của TỪNG quầy kệ, key
+// `${mode}_${shelfLocationId}`), 'kkConfirmLists' (cache danh sách đã Xác Nhận của Tab 6, key
+// `${kind}_${sessionId}`), 'kkPendingScans' (hàng đợi lượt quét CHƯA gửi lên được, key tự sinh
+// clientScanId) và 'kkPendingConfirms' (hàng đợi Xác Nhận/Gỡ Xác Nhận CHƯA gửi lên được, key
+// `${kind}_${shelfLocationId}` — ghi đè khi queue lại CÙNG quầy kệ, xem queueKkConfirmOffline()).
 // Version 3 (12/2026) — thêm store 'priceCatalog' (cache "bảng giá" offline cho "💲 Kiểm Tra Giá", đồng
 // bộ ngầm qua GET /api/shelf-stock/price-catalog — xem syncShelfPriceCatalogSilently()) — nâng version
 // để onupgradeneeded chạy lại trên DB v1/v2 đã có từ trước, bổ sung thêm store mới mà KHÔNG mất dữ liệu
 // các store cũ (mỗi dòng tạo store đều tự guard bằng objectStoreNames.contains()). Version 2 (11/2026) —
 // thêm store 'systemInventory' (cache kết quả GET /system-inventory lúc còn online, dùng khi mất mạng
 // cho cả picker "🔎 Chọn Từ Tồn Kho Hệ Thống" và màn "📊 Đối Chiếu").
-const SHELF_OFFLINE_DB_VERSION = 3;
+const SHELF_OFFLINE_DB_VERSION = 4;
 let shelfOfflineDbPromise = null;
 let shelfOfflineLocationsCache = [];
 let shelfOfflinePendingCache = [];
+// ===== Cache JS (đồng bộ, không await) cho "Online/Offline Kiểm Kê" — nạp lại trong
+// ensureShelfOfflineReady(), ghi qua các hàm cacheKk.../queueKk... ngay dưới. =====
+let kkOfflineShelvesCache = {}; // { [mode]: { items, cachedAt } }
+let kkOfflineSessionInfoCache = {}; // { [`${mode}_${shelfLocationId}`]: { session, shelfLocked, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, loc, cachedAt } }
+let kkOfflineConfirmListsCache = {}; // { [`${kind}_${sessionId}`]: { items, cachedAt } }
+let kkOfflinePendingScans = []; // [{ clientScanId, mode, sessionId, shelfLocationId, maHang, maVach, tenHang, qty, shelfLocationLabel, queuedAt, lastError }]
+let kkOfflinePendingConfirms = []; // [{ key, kind, action, sessionId, shelfLocationId, confirmationId, shelfLocationLabel, queuedAt, lastError }]
+// kkManualOfflineMode (MỚI, 12/2026, theo yêu cầu người dùng — mạng chập chờn, xem renderKkOfflineModeBar()
+// ở dưới) — CỐ Ý KHÔNG lưu vào localStorage/IndexedDB (chỉ sống trong phiên trình duyệt hiện tại, mất khi
+// tải lại trang) — tránh quên tắt từ hôm trước rồi hôm sau vẫn âm thầm offline mà không biết.
+let kkManualOfflineMode = false;
 let shelfOfflineSystemInventoryCache = null; // {rows, capNhatLuc, cachedAt} hoặc null (chưa cache lần nào)
 // Cache offline RIÊNG cho màn Đối Chiếu (key 'recon', KHÔNG dùng chung key 'cache' với picker/Hạn Sử
 // Dụng) — từ 11/2026 Đối Chiếu chỉ nhận mảng ĐÃ LỌC (chỉ mã đã scan hôm nay, xem loadShelfReconciliation()),
 // nếu lẫn chung 1 slot cache với 2 nơi còn lại thì lúc mất mạng picker/Hạn Sử Dụng sẽ vô tình đọc nhầm
 // mảng đã bị lọc nhỏ của Đối Chiếu thay vì mảng đầy đủ mà chúng cần.
 let shelfOfflineReconCache = null;
+// Cache offline RIÊNG cho màn Báo Cáo (key 'report', MỚI 12/2026 — xem docs/kiem-ke-kiem-soat-offline.md
+// "Báo Cáo — Thêm Cache Offline Mới") — CÙNG lý do tách riêng key 'recon' ở trên: Báo Cáo (nhánh 1 siêu
+// thị) cũng chỉ nhận mảng ĐÃ LỌC theo scope=recon, lẫn chung slot với picker/Hạn Sử Dụng (shelfOfflineSystemInventoryCache,
+// vốn cần mảng ĐẦY ĐỦ để khớp mã quét) sẽ làm hỏng khả năng khớp mã của Ghi Nhận/Hạn Sử Dụng/Kiểm Kê sau
+// khi người dùng chỉ đơn giản xem qua tab Báo Cáo.
+let shelfOfflineReportCache = null;
 // Cache offline "bảng giá" (💲 Kiểm Tra Giá, 12/2026) — {rows, capNhatLuc, fetchedAt, maDiem, cachedAt}
 // hoặc null (chưa đồng bộ lần nào). rows là mảng kết quả giá TỪNG mã (đúng hình dạng checkPrice() trả về
 // — maHang/tenHang/maVach/giaThuong/giaKhuyenMai/coKhuyenMai/capNhatLuc), do server tự "dựng bulk giả"
@@ -4193,6 +4495,11 @@ function openShelfOfflineDb() {
       if (!db.objectStoreNames.contains('pendingRecords')) db.createObjectStore('pendingRecords', { keyPath: 'clientRecordId' });
       if (!db.objectStoreNames.contains('systemInventory')) db.createObjectStore('systemInventory', { keyPath: 'key' });
       if (!db.objectStoreNames.contains('priceCatalog')) db.createObjectStore('priceCatalog', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('kkShelves')) db.createObjectStore('kkShelves', { keyPath: 'mode' });
+      if (!db.objectStoreNames.contains('kkSessionInfo')) db.createObjectStore('kkSessionInfo', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('kkConfirmLists')) db.createObjectStore('kkConfirmLists', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('kkPendingScans')) db.createObjectStore('kkPendingScans', { keyPath: 'clientScanId' });
+      if (!db.objectStoreNames.contains('kkPendingConfirms')) db.createObjectStore('kkPendingConfirms', { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -4226,13 +4533,27 @@ async function ensureShelfOfflineReady() {
       await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.clear());
       await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.clear());
       await shelfOfflineTx(db, 'priceCatalog', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'kkShelves', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'kkSessionInfo', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'kkConfirmLists', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'kkPendingScans', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'kkPendingConfirms', 'readwrite', s => s.clear());
     }
     await shelfOfflineTx(db, 'meta', 'readwrite', s => s.put({ key: 'dept', value: currentUser.dept }));
     shelfOfflineLocationsCache = await shelfOfflineTx(db, 'cachedLocations', 'readonly', s => s.getAll()) || [];
     shelfOfflinePendingCache = await shelfOfflineTx(db, 'pendingRecords', 'readonly', s => s.getAll()) || [];
     shelfOfflineSystemInventoryCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('cache')) || null;
     shelfOfflineReconCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('recon')) || null;
+    shelfOfflineReportCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('report')) || null;
     shelfOfflinePriceCatalogCache = await shelfOfflineTx(db, 'priceCatalog', 'readonly', s => s.get('cache')) || null;
+    kkOfflineShelvesCache = {};
+    (await shelfOfflineTx(db, 'kkShelves', 'readonly', s => s.getAll()) || []).forEach(r => { kkOfflineShelvesCache[r.mode] = r; });
+    kkOfflineSessionInfoCache = {};
+    (await shelfOfflineTx(db, 'kkSessionInfo', 'readonly', s => s.getAll()) || []).forEach(r => { kkOfflineSessionInfoCache[r.key] = r; });
+    kkOfflineConfirmListsCache = {};
+    (await shelfOfflineTx(db, 'kkConfirmLists', 'readonly', s => s.getAll()) || []).forEach(r => { kkOfflineConfirmListsCache[r.key] = r; });
+    kkOfflinePendingScans = await shelfOfflineTx(db, 'kkPendingScans', 'readonly', s => s.getAll()) || [];
+    kkOfflinePendingConfirms = await shelfOfflineTx(db, 'kkPendingConfirms', 'readonly', s => s.getAll()) || [];
   } catch (err) {
     // IndexedDB không dùng được (trình duyệt cũ/chế độ ẩn danh chặn...) — bỏ qua, màn vẫn hoạt động
     // ONLINE bình thường, chỉ mất khả năng offline (không chặn luồng chính).
@@ -4255,23 +4576,42 @@ async function cacheShelfLocationsOffline() {
 // Cache lại kết quả GET /system-inventory MỖI LẦN gọi thành công lúc còn online (gọi từ cả
 // loadShelfSystemInventoryForRecordPicker()/loadShelfReconciliation()) — dùng khi mất mạng sau đó, xem
 // getShelfSystemInventoryOfflineFallback(). Chỉ lưu đúng dept hiện tại (ensureShelfOfflineReady() tự xoá
-// khi đổi dept), KHÔNG lẫn dữ liệu siêu thị khác.
+// khi đổi dept THẬT của tài khoản/thiết bị), KHÔNG lẫn dữ liệu siêu thị khác.
+//
+// LỖI ĐÃ VÁ (12/2026, phát hiện khi thêm cache-first cho Đối Chiếu/Báo Cáo/Hạn Sử Dụng — xem
+// test-shelf-recon-export-stale-dept-fix.js, CÙNG lớp lỗi đã vá cho _shelfReconLastArgsDept 11/2026):
+// quyền "🔑 Được Chọn Siêu Thị Bất Kỳ" (shelfAnyStoreAccess) đổi `getEffectiveShelfDept()` MÀ KHÔNG đổi
+// currentUser.dept thật — ensureShelfOfflineReady() chỉ xoá cache theo dept THẬT nên KHÔNG tự phát hiện
+// được. Giờ MỌI entry cache đều ghi kèm `dept` = getEffectiveShelfDept() lúc lưu, và
+// getShelfSystemInventoryOfflineFallback() TỪ CHỐI trả cache nếu dept đã lưu KHÁC dept đang xem hiện tại
+// — tránh hiện NHẦM dữ liệu siêu thị A dưới tên đang xem siêu thị B (cache-first sẽ coi như "chưa có cache"
+// và chờ load thật, đúng tinh thần vá gốc).
 async function cacheShelfSystemInventoryOffline(rows, capNhatLuc, maDiem, cacheKey) {
   const key = cacheKey || 'cache';
-  const entry = { key, rows, capNhatLuc, maDiem, cachedAt: new Date().toISOString() };
+  const entry = { key, rows, capNhatLuc, maDiem, dept: getEffectiveShelfDept(), cachedAt: new Date().toISOString() };
   try {
     const db = await openShelfOfflineDb();
     await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.put(entry));
   } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
-  if (key === 'recon') shelfOfflineReconCache = entry; else shelfOfflineSystemInventoryCache = entry;
+  if (key === 'recon') shelfOfflineReconCache = entry;
+  else if (key === 'report') shelfOfflineReportCache = entry;
+  else shelfOfflineSystemInventoryCache = entry;
 }
-// Trả về bản cache gần nhất (hoặc null nếu chưa cache lần nào) — CHỈ gọi khi fetch thật sự lỗi MẠNG
-// (navigator.onLine === false hoặc fetch() throw TypeError, cùng cách phân biệt đã dùng ở
-// trySyncPendingShelfRecords()), KHÔNG dùng để che lỗi nghiệp vụ thật (503 chưa cấu hình API/404 chưa có
-// Mã Điểm) — 2 lỗi đó phải hiện ĐÚNG thông báo server trả về, không phải dữ liệu cũ gây hiểu nhầm.
-// cacheKey='recon' lấy đúng cache riêng của Đối Chiếu (mảng đã lọc) — xem shelfOfflineReconCache.
+// Trả về bản cache gần nhất CHO ĐÚNG dept đang xem hiện tại (hoặc null nếu chưa cache lần nào/cache đang
+// có thuộc dept KHÁC — xem chú thích "LỖI ĐÃ VÁ" ở cacheShelfSystemInventoryOffline() ngay trên). Dùng cho
+// 2 trường hợp: (1) CHỈ gọi khi fetch thật sự lỗi MẠNG (navigator.onLine === false hoặc fetch() throw
+// TypeError, cùng cách phân biệt đã dùng ở trySyncPendingShelfRecords()) — KHÔNG dùng để che lỗi nghiệp vụ
+// thật (503 chưa cấu hình API/404 chưa có Mã Điểm); (2) cache-first — hiện NGAY trước khi gọi mạng (xem
+// loadShelfReconciliation()/ensureShelfSystemInventoryForExpiry()/loadShelfReportTab()).
+// cacheKey='recon'/'report' lấy đúng cache riêng của Đối Chiếu/Báo Cáo (mảng đã lọc, KHÁC mảng đầy đủ của
+// picker/Hạn Sử Dụng) — xem shelfOfflineReconCache/shelfOfflineReportCache.
 function getShelfSystemInventoryOfflineFallback(cacheKey) {
-  return cacheKey === 'recon' ? shelfOfflineReconCache : shelfOfflineSystemInventoryCache;
+  const entry = cacheKey === 'recon' ? shelfOfflineReconCache : (cacheKey === 'report' ? shelfOfflineReportCache : shelfOfflineSystemInventoryCache);
+  if (!entry) return null;
+  // Cache cũ chưa từng có field `dept` (ghi trước đợt vá 12/2026 này) — coi là HỢP LỆ (không chặn oan) vì
+  // tình huống rủi ro CHỈ phát sinh SAU khi field này tồn tại; entry nào có dept phải khớp đúng.
+  if (entry.dept != null && entry.dept !== getEffectiveShelfDept()) return null;
+  return entry;
 }
 // ===== "💲 Kiểm Tra Giá" — bảng giá offline (12/2026) =====
 // Lưu lại bản bảng giá MỚI NHẤT nhận được từ GET /api/shelf-stock/price-catalog (cả lúc server trả bản
@@ -4393,11 +4733,296 @@ async function trySyncPendingShelfRecords() {
     renderShelfRecordRecentList();
   }
 }
+// ===== Online/Offline Kiểm Kê (12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md)
+// — mở rộng ĐÚNG nguyên lý 3 giai đoạn đã dùng cho Ghi Nhận ở trên, áp dụng cho Gom Mã/Kiểm Đếm/Kiểm Soát
+// (hàng đợi kkPendingScans) và Xác Nhận/Gỡ Xác Nhận (hàng đợi kkPendingConfirms), dùng CHUNG 1 DB
+// hcrcShelfOfflineDb (không tạo DB riêng). =====
+
+// Cache danh sách quầy kệ ĐƯỢC PHÉP (đã lọc allowlist + active ở server) cho 1 mode quét — gọi SAU MỖI
+// LẦN GET /my-shelf-locations thành công lúc còn online (loadKkScanTab()). Mỗi item giữ NGUYÊN field
+// `kiemKeLocked` từ shelfLocations gốc — dùng LUÔN làm cache trạng thái Khoá offline, không cần store
+// riêng (xem effectiveKkShelves()/getKkShelfLockedOffline() ngay dưới).
+async function cacheKkShelvesOffline(mode, items) {
+  const entry = { mode, items: items || [], cachedAt: new Date().toISOString() };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkShelves', 'readwrite', s => s.put(entry));
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+  kkOfflineShelvesCache[mode] = entry;
+}
+// Trả về danh sách quầy kệ dùng để vẽ picker: CÒN MẠNG dùng thẳng st.shelves (luôn mới nhất, hành vi CŨ
+// không đổi) — chỉ fallback sang cache khi MẤT MẠNG THẬT (gọi /my-shelf-locations lỗi TypeError) hoặc khi
+// đang hiển thị để biết "dữ liệu lúc hh:mm" lúc offline.
+function getKkShelvesOffline(mode) { return kkOfflineShelvesCache[mode] || null; }
+
+// Cache "trạng thái Kỳ/Khoá/Xác Nhận" của 1 quầy kệ cụ thể — gọi SAU MỖI LẦN GET /active-session-for-shelf
+// thành công lúc còn online (onKkScanShelfChanged()) — key `${mode}_${shelfLocationId}` để tách riêng
+// theo từng hành động (1 quầy kệ có thể Khoá/Xác Nhận khác nhau cho Gom Mã/Kiểm Đếm/Kiểm Soát).
+function kkSessionInfoKey(mode, shelfLocationId) { return `${mode}_${shelfLocationId}`; }
+async function cacheKkSessionInfoOffline(mode, shelfLocationId, info) {
+  const key = kkSessionInfoKey(mode, shelfLocationId);
+  const entry = { key, ...info, cachedAt: new Date().toISOString() };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkSessionInfo', 'readwrite', s => s.put(entry));
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+  kkOfflineSessionInfoCache[key] = entry;
+}
+// CHỈ gọi khi fetch thật sự lỗi MẠNG (navigator.onLine === false hoặc fetch() throw TypeError) — cùng quy
+// tắc getShelfSystemInventoryOfflineFallback() ở trên, KHÔNG dùng để che lỗi nghiệp vụ thật.
+function getKkSessionInfoOffline(mode, shelfLocationId) { return kkOfflineSessionInfoCache[kkSessionInfoKey(mode, shelfLocationId)] || null; }
+
+// Ngay sau khi tải xong danh sách quầy kệ ĐƯỢC PHÉP của 1 mode (loadKkScanTab(), lúc còn mạng) — chủ động
+// tải TRƯỚC trạng thái Kỳ/Khoá/Xác Nhận của TỪNG quầy kệ trong danh sách đó (song song), để người dùng có
+// đủ dữ liệu chọn quầy kệ NGAY cả khi mất mạng ngay sau đó — KHÔNG đợi người dùng tự bấm chọn từng quầy kệ
+// 1 lần lúc còn mạng mới có cache. Âm thầm, không chặn vẽ giao diện ban đầu (fire-and-forget), không báo
+// lỗi gì nếu 1 vài quầy kệ tải lỗi (vẫn còn quầy khác tải được).
+async function prefetchKkSessionInfoForShelves(mode, shelves) {
+  if (!navigator.onLine || !shelves || !shelves.length) return;
+  await Promise.all(shelves.map(async (loc) => {
+    try {
+      const res = await fetch(`/api/stocktake/active-session-for-shelf?shelfLocationId=${loc.id}&mode=${mode}`);
+      if (!res.ok) return;
+      const body = await res.json().catch(() => null);
+      if (body) await cacheKkSessionInfoOffline(mode, loc.id, body);
+    } catch (err) { /* bỏ qua — còn cache cũ (nếu có) hoặc chưa cache được quầy này */ }
+  }));
+}
+
+// Cache danh sách Xác Nhận hiện có của Tab 6 (1 trong 3 loại KIEMDEM/KIEMSOAT/GOMMA) — gọi SAU MỖI LẦN
+// loadKkConfirmTab() thành công lúc còn online, dùng để vẽ lại đúng trạng thái ✅ lúc offline.
+function kkConfirmListKey(kind, sessionId) { return `${kind}_${sessionId}`; }
+async function cacheKkConfirmListOffline(kind, sessionId, items) {
+  const key = kkConfirmListKey(kind, sessionId);
+  const entry = { key, items: items || [], cachedAt: new Date().toISOString() };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkConfirmLists', 'readwrite', s => s.put(entry));
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi */ }
+  kkOfflineConfirmListsCache[key] = entry;
+}
+function getKkConfirmListOffline(kind, sessionId) { return kkOfflineConfirmListsCache[kkConfirmListKey(kind, sessionId)] || null; }
+
+// ===== Hàng đợi quét offline (Gom Mã/Kiểm Đếm/Kiểm Soát) — xem submitKkScan() =====
+// clientScanId LẤY NGUYÊN từ payload (sinh 1 LẦN DUY NHẤT ở submitKkScan(), KHÔNG tự sinh id mới ở đây) —
+// id này vừa là KHOÁ CỦA DÒNG trong IndexedDB (xoá đúng dòng khi đồng bộ xong) vừa là idempotency key gửi
+// lên server mỗi lần thử lại (xem trySyncPendingKkScans()/upsertScanCount()) — PHẢI là CÙNG MỘT giá trị
+// xuyên suốt mọi lần gửi của đúng lượt quét này, nếu không cơ chế chống trùng sẽ mất tác dụng.
+async function queueKkScanOffline(payload, shelfLocationLabel) {
+  const rec = {
+    clientScanId: payload.clientScanId,
+    mode: payload.mode, sessionId: payload.sessionId, shelfLocationId: payload.shelfLocationId,
+    maHang: payload.maHang, maVach: payload.maVach, tenHang: payload.tenHang, qty: payload.qty,
+    shelfLocationLabel: shelfLocationLabel || '', queuedAt: new Date().toISOString(), lastError: null
+  };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkPendingScans', 'readwrite', s => s.put(rec));
+  } catch (err) { console.warn('queueKkScanOffline: không lưu được vào IndexedDB —', err.message); }
+  kkOfflinePendingScans.push(rec);
+  renderKkOfflineModeBar();
+  return rec;
+}
+async function removeKkPendingScan(clientScanId) {
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkPendingScans', 'readwrite', s => s.delete(clientScanId));
+  } catch (err) { /* bỏ qua */ }
+  kkOfflinePendingScans = kkOfflinePendingScans.filter(p => p.clientScanId !== clientScanId);
+  renderKkOfflineModeBar();
+}
+// Đồng bộ ngược từng lượt quét trong hàng đợi — ĐÚNG khuôn trySyncPendingShelfRecords(): gặp lỗi MẠNG thì
+// dừng cả lượt ngay (thử lại lần sau); gặp lỗi SERVER thật (VD quầy kệ đã bị Khoá/Xác Nhận ngay trong lúc
+// offline, kỳ đã đổi...) thì GIỮ NGUYÊN dòng đó trong hàng đợi kèm `lastError` RÕ RÀNG để người dùng/IT tự
+// xem xét (xem renderKkScanList() hiện badge), KHÔNG âm thầm xoá hay âm thầm bỏ qua — rồi đi tiếp dòng
+// khác (khác hàng đợi Ghi Nhận: lỗi dòng A không chặn dòng B vì mỗi dòng độc lập theo quầy kệ/mã riêng).
+let kkScanSyncInFlight = false;
+async function trySyncPendingKkScans() {
+  if (kkScanSyncInFlight || !navigator.onLine || !kkOfflinePendingScans.length) return;
+  kkScanSyncInFlight = true;
+  let changed = false;
+  try {
+    const db = await openShelfOfflineDb();
+    const queue = kkOfflinePendingScans.slice();
+    for (const rec of queue) {
+      try {
+        const res = await fetch('/api/stocktake/counts/scan', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: rec.sessionId, shelfLocationId: rec.shelfLocationId, mode: rec.mode, maHang: rec.maHang, maVach: rec.maVach, tenHang: rec.tenHang, qty: rec.qty, clientScanId: rec.clientScanId })
+        });
+        if (res.status === 401) return handleSessionExpired();
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || 'Không thể đồng bộ lượt quét');
+        await removeKkPendingScan(rec.clientScanId);
+        changed = true;
+      } catch (err) {
+        if (err instanceof TypeError) break; // lỗi mạng thật — dừng cả lượt, thử lại lần sau.
+        // Lỗi server thật — giữ trong hàng đợi kèm lý do, đi tiếp dòng khác.
+        rec.lastError = err.message;
+        try {
+          const db2 = await openShelfOfflineDb();
+          await shelfOfflineTx(db2, 'kkPendingScans', 'readwrite', s => s.put(rec));
+        } catch (e2) { /* bỏ qua */ }
+        const idx = kkOfflinePendingScans.findIndex(p => p.clientScanId === rec.clientScanId);
+        if (idx !== -1) kkOfflinePendingScans[idx] = rec;
+        changed = true;
+      }
+    }
+  } finally {
+    kkScanSyncInFlight = false;
+    renderKkOfflineModeBar();
+    // Tải lại THẬT từ server (không chỉ vẽ lại cache cũ) cho tab đang mở đúng quầy kệ/kỳ — thay hẳn các
+    // dòng "offline_..." tạm (xem applyOptimisticKkScan()) bằng id thật + số lượng đã được server cộng
+    // dồn chính xác, tránh lệch nếu 2 thiết bị cùng offline-quét 1 quầy kệ rồi lần lượt đồng bộ.
+    if (changed) {
+      Object.keys(kkScanState).forEach(tabKey => {
+        const st = kkScanState[tabKey];
+        if (st.selectedShelfId && st.session) loadKkScanCounts(tabKey);
+      });
+    }
+  }
+}
+
+// ===== Hàng đợi Xác Nhận/Gỡ Xác Nhận offline (Tab 6) — khác hàng đợi quét ở chỗ queue theo KEY ghi đè
+// (1 hành động đang chờ MỚI NHẤT mỗi quầy kệ, không cộng dồn) vì Xác Nhận là trạng thái bật/tắt chứ không
+// phải chuỗi sự kiện cộng dồn như quét — xem queueKkConfirmOffline(). =====
+const KK_CONFIRM_ROUTE = Object.freeze({
+  KIEMDEM: 'shelf-confirmations', KIEMSOAT: 'shelf-kiem-soat-confirmations', GOMMA: 'shelf-gom-ma-confirmations'
+});
+function kkPendingConfirmKey(kind, shelfLocationId) { return `${kind}_${shelfLocationId}`; }
+// action: 'confirm' | 'unconfirm'. confirmationId CHỈ cần cho 'unconfirm' (id THẬT đã có từ lần đồng bộ
+// trước — KHÔNG thể Gỡ Xác Nhận offline 1 dòng CHƯA từng xác nhận thành công lúc còn mạng, xem
+// renderKkConfirm...ShelfList() chỉ hiện nút Gỡ cho dòng đã có id thật).
+// Nếu hành động MỚI đưa quầy kệ về ĐÚNG trạng thái đã đồng bộ gần nhất (VD offline bấm Xác Nhận rồi bấm
+// Gỡ lại trước khi có mạng) thì XOÁ hẳn khỏi hàng đợi thay vì giữ 1 hành động vô nghĩa — so với
+// `alreadyConfirmedOnServer` (true nếu dòng đang có id thật từ lần đồng bộ trước, tức ĐANG xác nhận trên
+// server) truyền vào từ nơi gọi.
+async function queueKkConfirmOffline(kind, shelfLocationId, sessionId, action, confirmationId, shelfLocationLabel, alreadyConfirmedOnServer) {
+  const key = kkPendingConfirmKey(kind, shelfLocationId);
+  if ((action === 'confirm' && alreadyConfirmedOnServer) || (action === 'unconfirm' && !alreadyConfirmedOnServer)) {
+    // Quay lại ĐÚNG trạng thái đã đồng bộ — không cần gửi gì cả, xoá pending cũ (nếu có) là đủ.
+    await removeKkPendingConfirm(key);
+    return null;
+  }
+  const rec = { key, kind, action, sessionId, shelfLocationId, confirmationId: confirmationId || null, shelfLocationLabel: shelfLocationLabel || '', queuedAt: new Date().toISOString(), lastError: null };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkPendingConfirms', 'readwrite', s => s.put(rec));
+  } catch (err) { console.warn('queueKkConfirmOffline: không lưu được vào IndexedDB —', err.message); }
+  kkOfflinePendingConfirms = kkOfflinePendingConfirms.filter(p => p.key !== key);
+  kkOfflinePendingConfirms.push(rec);
+  renderKkOfflineModeBar();
+  return rec;
+}
+async function removeKkPendingConfirm(key) {
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'kkPendingConfirms', 'readwrite', s => s.delete(key));
+  } catch (err) { /* bỏ qua */ }
+  kkOfflinePendingConfirms = kkOfflinePendingConfirms.filter(p => p.key !== key);
+  renderKkOfflineModeBar();
+}
+function getKkPendingConfirm(kind, shelfLocationId) { return kkOfflinePendingConfirms.find(p => p.key === kkPendingConfirmKey(kind, shelfLocationId)) || null; }
+let kkConfirmSyncInFlight = false;
+async function trySyncPendingKkConfirms() {
+  if (kkConfirmSyncInFlight || !navigator.onLine || !kkOfflinePendingConfirms.length) return;
+  kkConfirmSyncInFlight = true;
+  let changed = false;
+  try {
+    const queue = kkOfflinePendingConfirms.slice();
+    for (const rec of queue) {
+      const route = KK_CONFIRM_ROUTE[rec.kind];
+      try {
+        let res;
+        if (rec.action === 'confirm') {
+          res = await fetch(`/api/stocktake/${route}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: rec.sessionId, shelfLocationId: rec.shelfLocationId })
+          });
+        } else {
+          res = await fetch(`/api/stocktake/${route}/${rec.confirmationId}`, { method: 'DELETE' });
+        }
+        if (res.status === 401) return handleSessionExpired();
+        const body = await res.json().catch(() => ({}));
+        // 404 ở ĐÚNG lượt Gỡ Xác Nhận (MỚI, 12/2026 — chống báo sai "bị từ chối" khi mạng chập chờn): lần
+        // gửi TRƯỚC đã xoá thành công nhưng phản hồi bị rớt, client tưởng lỗi nên giữ lại thử tiếp — lần
+        // sau gọi lại DELETE cùng id sẽ nhận 404 "không tìm thấy", vì dòng đó ĐÃ bị xoá rồi — đây là THÀNH
+        // CÔNG (đạt đúng trạng thái mong muốn: không còn xác nhận), không phải lỗi, nên coi như xong, xoá
+        // khỏi hàng đợi, KHÔNG hiện cảnh báo "bị từ chối" (đúng tinh thần idempotent — khác Xác Nhận POST
+        // vốn đã tự idempotent sẵn phía server, không cần vá riêng).
+        if (!res.ok && !(rec.action === 'unconfirm' && res.status === 404)) {
+          throw new Error(body.error || 'Không thể đồng bộ Xác Nhận');
+        }
+        await removeKkPendingConfirm(rec.key);
+        changed = true;
+      } catch (err) {
+        if (err instanceof TypeError) break; // lỗi mạng thật — dừng cả lượt, thử lại lần sau.
+        rec.lastError = err.message;
+        try {
+          const db2 = await openShelfOfflineDb();
+          await shelfOfflineTx(db2, 'kkPendingConfirms', 'readwrite', s => s.put(rec));
+        } catch (e2) { /* bỏ qua */ }
+        const idx = kkOfflinePendingConfirms.findIndex(p => p.key === rec.key);
+        if (idx !== -1) kkOfflinePendingConfirms[idx] = rec;
+        changed = true;
+      }
+    }
+  } finally {
+    kkConfirmSyncInFlight = false;
+    if (changed && typeof loadKkConfirmTab === 'function' && kkConfirmSessionId) loadKkConfirmTab();
+  }
+}
+
 // Đăng ký 1 LẦN DUY NHẤT lúc module này được nạp lần đầu (lazy-load theo cụm Vận Hành) — tự gọi lại khi
 // trình duyệt báo "có mạng trở lại", không cần người dùng tự bấm nút nào để đồng bộ.
 if (!window.__shelfOfflineOnlineListenerAdded) {
   window.__shelfOfflineOnlineListenerAdded = true;
-  window.addEventListener('online', () => { trySyncPendingShelfRecords(); });
+  window.addEventListener('online', () => { trySyncPendingShelfRecords(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); });
+}
+// Nhịp tự thử đồng bộ ĐỊNH KỲ mỗi 20 giây (MỚI, 12/2026, theo yêu cầu người dùng — mạng CHẬP CHỜN: đứng ở
+// vị trí sóng yếu, quét xong, đi ra chỗ có sóng nhưng KHÔNG chuyển tab nào/không có gì để trình duyệt tự
+// bắn sự kiện "online" — trước đây hàng đợi có thể bị "treo" khá lâu vì không có gì chủ động thử lại).
+// Hoàn toàn rẻ khi KHÔNG có gì để đồng bộ (2 hàm tự return ngay dòng đầu nếu hàng đợi rỗng) và khi thật sự
+// mất mạng (navigator.onLine false -> return ngay, KHÔNG gọi fetch() nào cả) — chỉ thực sự tốn 1 lượt gọi
+// mạng khi vừa có pending VỪA có vẻ đang có sóng, đúng lúc cần thử.
+if (!window.__kkOfflineHeartbeatAdded) {
+  window.__kkOfflineHeartbeatAdded = true;
+  setInterval(() => { trySyncPendingKkScans(); trySyncPendingKkConfirms(); }, 20000);
+}
+
+// ===== "✈️ Offline Thủ Công" (MỚI, 12/2026) — xem chú thích đầy đủ tại #kkOfflineModeBar/kiemKeSection.html
+// + submitKkScan(). Bật/tắt dùng CHUNG cho mọi hành động (Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận) — không
+// tách riêng từng tab vì thực tế là "đang đứng ở vị trí sóng yếu", không phải riêng từng thao tác. =====
+function toggleKkManualOfflineMode() {
+  kkManualOfflineMode = !kkManualOfflineMode;
+  if (!kkManualOfflineMode) { trySyncPendingKkScans(); trySyncPendingKkConfirms(); }
+  renderKkOfflineModeBar();
+}
+// Gọi lại MỖI LẦN hàng đợi (kkOfflinePendingScans/kkOfflinePendingConfirms) có thể đã đổi — xem các điểm
+// gọi ở queueKkScanOffline()/trySyncPendingKkScans()/queueKkConfirmOffline()/trySyncPendingKkConfirms()/
+// cancelKkPendingConfirm() — để số lượt đang chờ LUÔN đúng, hiện NGAY CẢ KHI đang ở sub-tab khác (không
+// phải đúng tab/đúng quầy kệ mới thấy, khác hẳn banner ⏳ riêng từng quầy kệ ở renderKkScanList()).
+function renderKkOfflineModeBar() {
+  const btn = document.getElementById('btnKkManualOfflineToggle');
+  const note = document.getElementById('kkOfflineModeNote');
+  const countEl = document.getElementById('kkPendingSyncCount');
+  if (!btn) return;
+  if (kkManualOfflineMode) {
+    btn.textContent = '🌐 Tắt Offline Thủ Công (quay lại trực tuyến)';
+    btn.className = 'px-2 py-1 rounded font-bold bg-amber-500 text-white';
+  } else {
+    btn.textContent = '✈️ Bật Offline Thủ Công';
+    btn.className = 'px-2 py-1 rounded font-bold bg-gray-200 text-gray-700';
+  }
+  if (note) {
+    note.classList.toggle('hidden', !kkManualOfflineMode);
+    note.textContent = kkManualOfflineMode ? '✈️ ĐANG Ở CHẾ ĐỘ OFFLINE THỦ CÔNG — mọi lượt quét/xác nhận CHƯA gửi lên server, nhớ tắt khi có sóng tốt trở lại.' : '';
+  }
+  const pendingTotal = kkOfflinePendingScans.length + kkOfflinePendingConfirms.length;
+  if (countEl) {
+    countEl.classList.toggle('hidden', pendingTotal === 0);
+    countEl.textContent = pendingTotal ? `⏳ ${pendingTotal} lượt đang chờ đồng bộ` : '';
+  }
 }
 
 // ===== Phần D — Quét mã vạch bằng camera ở "📷 Ghi Nhận" (11/2026) =====
