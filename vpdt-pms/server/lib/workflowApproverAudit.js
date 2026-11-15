@@ -50,6 +50,39 @@ function pushFinding(out, moduleKey, moduleLabel, scopeLabel, stepOrder, stepNam
   out.push({ module: moduleKey, moduleLabel, scopeLabel, stepOrder, stepName, severity, reason });
 }
 
+// LỖI ĐÃ VÁ (12/2026, theo phản ánh người dùng kèm ảnh chụp: "tôi không có đưa Ban Tổng Giám đốc/Ban
+// Cung ứng/Quản trị vào quy trình Đăng Ký Xe, nhưng Audit vẫn báo NGHIÊM TRỌNG 'chưa gắn người duyệt'
+// — audit phải đúng với THỰC TẾ cấu hình"): trước đây auditDeptModules()/auditSubmissions()/
+// auditContracts()/auditItPrice() LUÔN quét TOÀN BỘ danh mục phòng ban công ty (appData.depts) cho MỌI
+// quy trình, kể cả khi admin đã dùng "🔑 Hệ Thống → Cấu Hình Nghiệp Vụ → Đơn Vị Tham Gia Quy Trình"
+// (appData.workflowParticipatingDeptGroups, xem getWorkflowParticipatingDepts() ở
+// module-admin-specialperm.js) để CHỦ ĐỘNG thu hẹp phòng ban nào thật sự dùng ĐÚNG quy trình đó — màn
+// cấu hình "🔄 Quy Trình & Phê Duyệt" VÀ "⚡ Áp Dụng Nhanh" đã tôn trọng đúng phạm vi thu hẹp này (chỉ
+// hiện/áp dụng cho phòng ban trong nhóm), nhưng Audit lại bỏ qua hoàn toàn, nên phòng ban đã bị admin
+// CHỦ Ý loại khỏi quy trình (không có trong nhóm) vẫn bị quét + báo lỗi y hệt phòng ban "bị quên cấu
+// hình" — 2 trạng thái khác hẳn nhau về ý nghĩa nhưng audit không phân biệt được.
+// AUDIT_KEY_TO_WF_MODULE_KEY: map từ moduleKey NỘI BỘ của audit (khớp key của MODULE_CONFIGS,
+// lib/workflowEngine.js) sang đúng key của WF_MODULE_CONFIG (module-workflow.js) mà
+// workflowParticipatingDeptGroups[].moduleKeys dùng — 2 bộ key đặt tên khác quy ước nhau (chữ thường
+// nhiều từ vs HOA_GẠCH_DƯỚI) nên cần bảng tra, không gộp được thành 1.
+const AUDIT_KEY_TO_WF_MODULE_KEY = {
+  docs: 'DOC', submissions: 'SUBMISSION', carRegs: 'CAR', vppRegistrations: 'VPP',
+  contracts: 'CONTRACT_APPROVAL', contractsSignedFile: 'CONTRACT_MANAGE',
+  budgetEntries: 'BUDGET', paymentRequests: 'PAYMENT', itPriceApprovals_RETAIL: 'ITPRICE_RETAIL',
+  officeReqs_MUA_BAN: 'OFFICE_BUY', officeReqs_SUA_CHUA: 'OFFICE_FIX'
+};
+// getAuditScopedDepts(auditKey, appData): mirror ĐÚNG getWorkflowParticipatingDepts() phía client
+// (module-admin-specialperm.js) — module NÀO đã được 1 nhóm "Đơn Vị Tham Gia Quy Trình" claim (nhóm có
+// moduleKeys chứa đúng key của module đó) thì CHỈ quét đúng depts của nhóm; module CHƯA từng được nhóm
+// nào claim thì vẫn quét TOÀN BỘ appData.depts như cũ (không đổi hành vi cho module chưa dùng tính năng
+// thu hẹp này — an toàn ngược, không tự "ẩn" lỗ hổng thật của module chưa cấu hình gì).
+function getAuditScopedDepts(auditKey, appData) {
+  const wfModuleKey = AUDIT_KEY_TO_WF_MODULE_KEY[auditKey];
+  const groups = appData.workflowParticipatingDeptGroups || [];
+  const group = wfModuleKey ? groups.find(g => (g.moduleKeys || []).includes(wfModuleKey)) : null;
+  return group ? (group.depts || []) : (appData.depts || []);
+}
+
 // Gọi findMissingApproverStep() cho 1 item giả lập — bọc try/catch vì 1 số nhánh resolveWfConfig() hiếm
 // khi có thể throw với dữ liệu danh mục bất thường (VD workflowId trỏ tới 1 workflow đã bị xoá) — audit
 // KHÔNG được phép crash giữa chừng vì 1 tổ hợp lỗi, chỉ bỏ qua tổ hợp đó (không coi là "không lỗ hổng",
@@ -66,9 +99,11 @@ function checkModuleItem(out, moduleKey, moduleLabel, scopeLabel, item, appData)
 }
 
 function auditDeptModules(out, appData) {
-  const depts = appData.depts || [];
   // docs/carRegs/vppRegistrations/budgetEntries/paymentRequests: CÙNG khuôn — chỉ khác dbKey appData đọc
-  // (đã nằm sẵn trong resolveWfConfig() của từng module, audit chỉ cần truyền item.dept).
+  // (đã nằm sẵn trong resolveWfConfig() của từng module, audit chỉ cần truyền item.dept). MỖI module tự
+  // lấy ĐÚNG danh sách phòng ban đã thu hẹp của riêng nó qua getAuditScopedDepts() (xem chú thích tại
+  // đó) — KHÔNG dùng chung 1 biến `depts` phẳng nữa, vì mỗi module có thể thuộc 1 nhóm "Đơn Vị Tham Gia
+  // Quy Trình" khác nhau (hoặc không thuộc nhóm nào).
   const SIMPLE_DEPT_MODULES = [
     { key: 'docs', label: MODULE_LABELS.docs },
     { key: 'carRegs', label: MODULE_LABELS.carRegs },
@@ -78,7 +113,7 @@ function auditDeptModules(out, appData) {
     { key: 'contractsSignedFile', label: MODULE_LABELS.contractsSignedFile }
   ];
   SIMPLE_DEPT_MODULES.forEach(({ key, label }) => {
-    depts.forEach(dept => {
+    getAuditScopedDepts(key, appData).forEach(dept => {
       checkModuleItem(out, key, label, `${label} — ${dept}`, { dept }, appData);
     });
   });
@@ -88,8 +123,9 @@ function auditDeptModules(out, appData) {
   // gốc theo phòng ban (bước Kỹ Thuật Xác Nhận luôn có đúng 1 người do CHÍNH người đề xuất chọn lúc tạo
   // hồ sơ — không phải cấu hình admin, không có gì để audit trước).
   ['MUA_BAN', 'SUA_CHUA'].forEach(subType => {
-    const label = MODULE_LABELS[`officeReqs_${subType}`];
-    depts.forEach(dept => {
+    const auditKey = `officeReqs_${subType}`;
+    const label = MODULE_LABELS[auditKey];
+    getAuditScopedDepts(auditKey, appData).forEach(dept => {
       checkModuleItem(out, 'officeReqs', label, `${label} — ${dept}`, { dept, subType }, appData);
     });
   });
@@ -102,7 +138,9 @@ function auditDeptModules(out, appData) {
 // riêng trong submissionTypeDeptWorkflows (admin đã chủ động tách quy trình riêng cho loại đó) — đúng
 // đủ để bắt lỗi mà không báo trùng hàng loạt.
 function auditSubmissions(out, appData) {
-  const depts = appData.depts || [];
+  // Chỉ thu hẹp nhánh chung (catalog toàn bộ phòng ban) theo "Đơn Vị Tham Gia Quy Trình" — nhánh dưới
+  // (typeMaps) đã là phòng ban admin THẬT SỰ cấu hình riêng, không cần thu hẹp thêm.
+  const depts = getAuditScopedDepts('submissions', appData);
   const label = MODULE_LABELS.submissions;
   const typeMaps = appData.submissionTypeDeptWorkflows || {};
   depts.forEach(dept => {
@@ -125,7 +163,8 @@ function auditSubmissions(out, appData) {
 // bỏ trống -> fallback contractApprovalDeptWorkflows[dept]) + từng (loại, dept) ĐÃ cấu hình riêng trong
 // contractTypeApprovalDeptWorkflows.
 function auditContracts(out, appData) {
-  const depts = appData.depts || [];
+  // Cùng lý do chỉ thu hẹp nhánh chung như auditSubmissions() ở trên.
+  const depts = getAuditScopedDepts('contracts', appData);
   const label = MODULE_LABELS.contracts;
   const typeMaps = appData.contractTypeApprovalDeptWorkflows || {};
   depts.forEach(dept => {
@@ -152,7 +191,7 @@ function auditContracts(out, appData) {
 // rất nhiều mã, làm phình to kết quả quét không cần thiết.
 function auditItPrice(out, appData) {
   const retailLabel = MODULE_LABELS.itPriceApprovals_RETAIL;
-  (appData.depts || []).forEach(dept => {
+  getAuditScopedDepts('itPriceApprovals_RETAIL', appData).forEach(dept => {
     checkModuleItem(out, 'itPriceApprovals', retailLabel, `${retailLabel} — ${dept}`, { dept, priceType: 'RETAIL' }, appData);
   });
 

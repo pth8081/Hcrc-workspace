@@ -7265,6 +7265,16 @@ Hệ Thống" ở mục 7.1c ngay dưới, cả 3 audit gom về 1 chỗ cho đ�
   phải lỗ hổng). Quy Trình Hỗn Hợp Bán Buôn còn có chiều lọc "Ngành Hàng" —
   audit chỉ quét quy tắc KHÔNG giới hạn Ngành Hàng để tránh nổ tổ hợp, nên có
   thể bỏ sót lỗ hổng ở 1 quy tắc giới hạn riêng 1 Ngành Hàng cụ thể.
+- **LỖI ĐÃ VÁ (12/2026, theo phản ánh người dùng "không có đưa phòng X vào
+  quy trình Đăng Ký Xe nhưng Audit vẫn báo thiếu người duyệt")**: trước đây
+  audit quét TOÀN BỘ danh mục phòng ban công ty cho mọi quy trình trong
+  phạm vi trên, kể cả khi admin đã dùng **"Đơn Vị Tham Gia Quy Trình"**
+  (Hệ Thống → Cấu Hình Nghiệp Vụ) để chủ động thu hẹp phòng ban nào thật sự
+  dùng đúng quy trình đó — phòng ban bị loại khỏi quy trình CÓ CHỦ Ý vẫn bị
+  báo NGHIÊM TRỌNG y như phòng ban bị quên cấu hình. Nay audit đọc đúng
+  phạm vi "Đơn Vị Tham Gia Quy Trình" (module nào đã được 1 nhóm claim thì
+  chỉ quét đúng phòng ban của nhóm đó) — module nào CHƯA dùng tính năng thu
+  hẹp này vẫn quét toàn bộ phòng ban như trước (không đổi hành vi).
 - **3 kênh cảnh báo** (đúng yêu cầu "tự scan hoặc đặt lịch scan + email hoặc
   cảnh báo màn hình"):
   1. Quét tay ngay trên màn này (trên).
