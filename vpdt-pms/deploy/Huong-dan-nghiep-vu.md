@@ -3797,6 +3797,27 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   gọn) để lọc theo Quầy Kệ và/hoặc Xác Nhận (Đã xác nhận/Chưa xác nhận) —
   hữu ích khi siêu thị có nhiều quầy kệ, giúp nhanh tìm đúng quầy cần xử lý
   tiếp hoặc rà soát quầy nào còn thiếu Xác Nhận.
+- **🔒 Khoá/Mở Khoá Quầy Kệ (MỚI, 12/2026, theo yêu cầu người dùng — HOÀN
+  TOÀN TÁCH BIỆT khỏi Xác Nhận)**: quyền RIÊNG (khác mọi quyền khác của
+  module, kể cả Xác Nhận) — ở Tab 5 "🗄️ Cấu Hình Quầy Kệ", người có quyền
+  này (hoặc Admin) thấy thêm checkbox đầu mỗi dòng quầy kệ + cột "Khoá Kiểm
+  Kê" (🔓 Đang mở / 🔒 Đã khoá kèm tên người khoá) + khung "Chọn tất cả" +
+  2 nút **"🔒 Khoá Đã Chọn"**/**"🔓 Mở Khoá Đã Chọn"** để khoá/mở khoá
+  NHIỀU quầy kệ cùng lúc. Quầy kệ ĐANG KHOÁ bị chặn CẢ 3 hành động Gom Mã/
+  Kiểm Đếm/Kiểm Soát ngay lập tức (báo rõ "ĐANG BỊ KHOÁ" lúc vừa chọn quầy
+  kệ ở Tab 2/3/4, không đợi quét thử mới biết), **bất kể người đó đã có
+  allowlist Tab 8 đầy đủ hay chưa** — khoá IT luôn ưu tiên cao hơn allowlist.
+  Khoá này **cũng chặn luôn Xác Nhận/Gỡ Xác Nhận** ở Tab 6 trên quầy kệ đó
+  (không riêng gì quét). **Khác Xác Nhận ở chỗ nào**: Xác Nhận (Tab 6) thì
+  BẤT KỲ ai có quyền + allowlist quầy kệ đó đều TỰ xác nhận/gỡ được, không
+  cần quyền riêng; Khoá/Mở Khoá thì CHỈ người có đúng quyền RIÊNG này (hoặc
+  Admin) mới bấm được — đúng vai "IT/quản lý kiểm soát quầy kệ nào đang
+  được phép làm việc tại 1 thời điểm", phục vụ quy trình: nhân viên báo
+  xong 1 quầy kệ → IT khoá lại (không ai sửa thêm được) → nhân viên muốn
+  chuyển sang quầy kệ mới → IT mở khoá đúng quầy đó, đảm bảo nhân viên luôn
+  làm đúng quầy kệ đang được chỉ định, tránh làm nhầm/làm trước thứ tự.
+  Admin luôn bypass khoá này (đúng triết lý chung của hệ thống), nhưng vẫn
+  cần có allowlist Tab 8 riêng mới thao tác được (2 lớp độc lập).
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
   chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều

@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**30.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.48 (2026-12): "📋 Kiểm Kê" — Khoá/Mở Khoá Quầy Kệ (IT-only, tách biệt Xác Nhận)
+
+Theo yêu cầu người dùng: thêm tính năng MỚI "🔒 Khoá/Mở Khoá Quầy Kệ" ở Tab 5
+"Cấu Hình Quầy Kệ" — khác HẲN Xác Nhận (Tab 6, vốn ai quét được quầy nào thì
+tự xác nhận/gỡ được quầy đó). Khoá/Mở Khoá chỉ người có quyền RIÊNG MỚI
+`kiemKeShelfLockManage` (hoặc Admin) mới bấm được:
+
+- Chọn nhiều quầy kệ (checkbox + "Chọn tất cả") → "🔒 Khoá Đã Chọn"/"🔓 Mở
+  Khoá Đã Chọn" hàng loạt.
+- Quầy kệ đang khoá bị chặn CẢ 3 hành động Gom Mã/Kiểm Đếm/Kiểm Soát NGAY
+  lúc chọn quầy kệ (không đợi quét thử mới biết), kể cả khi đã có allowlist
+  Tab 8 đầy đủ — khoá cũng chặn luôn Xác Nhận/Gỡ Xác Nhận trên quầy đó.
+- Admin luôn bypass khoá (đúng triết lý chung hệ thống), nhưng vẫn cần
+  allowlist Tab 8 riêng mới thao tác được (2 lớp độc lập).
+- Thêm sẵn ô chọn Siêu Thị dạng tìm-kiếm-gõ-chọn (sdd, không phải `<select>`)
+  ngay tại Tab 5 cho Admin — đổi siêu thị thì danh sách quầy kệ tự cập nhật
+  đúng siêu thị đó, không cần nhảy sang Tab 1 "Kỳ Kiểm Kê" nữa.
+- Đã thêm quyền mới vào Cây Phân Quyền + Ma Trận Phân Quyền + tài liệu
+  "📘 Hướng Dẫn Nghiệp Vụ" theo đúng quy tắc.
 
 ## v30.47 (2026-12): "📋 Kiểm Kê" — Xác Nhận Kiểm Soát/Gom Mã riêng từng quầy kệ, chọn nhiều quầy kệ xác
 nhận hàng loạt, bộ lọc tìm kiếm mới, nhập Excel Quầy Kệ nhiều siêu thị

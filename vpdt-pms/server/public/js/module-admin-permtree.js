@@ -352,6 +352,7 @@ function collectPermsFromForm() {
     kiemKeKiemDemDo: document.getElementById('pKiemKeKiemDemDo').checked,
     kiemKeKiemSoatDo: document.getElementById('pKiemKeKiemSoatDo').checked,
     kiemKeShelfConfigManage: document.getElementById('pKiemKeShelfConfigManage').checked,
+    kiemKeShelfLockManage: document.getElementById('pKiemKeShelfLockManage').checked,
     kiemKeConfirmDo: document.getElementById('pKiemKeConfirmDo').checked,
     kiemKeReportView: document.getElementById('pKiemKeReportView').checked,
     kiemKeUserAccessManage: document.getElementById('pKiemKeUserAccessManage').checked,
@@ -487,6 +488,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pKiemKeKiemDemDo').checked = !!perms.kiemKeKiemDemDo;
   document.getElementById('pKiemKeKiemSoatDo').checked = !!perms.kiemKeKiemSoatDo;
   document.getElementById('pKiemKeShelfConfigManage').checked = !!perms.kiemKeShelfConfigManage;
+  document.getElementById('pKiemKeShelfLockManage').checked = !!perms.kiemKeShelfLockManage;
   document.getElementById('pKiemKeConfirmDo').checked = !!perms.kiemKeConfirmDo;
   document.getElementById('pKiemKeReportView').checked = !!perms.kiemKeReportView;
   document.getElementById('pKiemKeUserAccessManage').checked = !!perms.kiemKeUserAccessManage;

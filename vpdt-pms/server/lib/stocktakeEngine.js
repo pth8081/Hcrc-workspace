@@ -22,6 +22,14 @@ function canManageStocktakeShelfConfig(user) { return !!(user?.perms?.admin || u
 function canConfirmStocktake(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
 function canViewStocktakeReport(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeReportView); }
 function canManageStocktakeUserAccess(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
+// canManageStocktakeShelfLock (MỚI, 12/2026 — quyền thứ 9, KHÔNG gắn 1 tab mới mà sống trong Tab 5 "🗄️
+// Cấu Hình Quầy Kệ") — theo yêu cầu người dùng: "IT có thể chọn nhiều, select nhiều và khóa lại kệ đấy,
+// khóa chứ không phải xác nhận... đảm bảo người dùng chỉ có cái kệ đang mở mới được xử lý". Khác HẲN
+// quyền Xác Nhận (kiemKeConfirmDo chỉ gác "Xác Nhận Toàn Bộ Đợt", còn Xác Nhận TỪNG quầy kệ ở Tab 6 thì
+// BẤT KỲ ai có quyền quét đúng quầy đó đều tự làm được, không cần quyền riêng) — Khoá/Mở Khoá Quầy Kệ
+// CHỈ người có quyền RIÊNG này (hoặc admin) mới bấm được, chặn CẢ 3 hành động Gom Mã/Kiểm Đếm/Kiểm Soát
+// trên quầy kệ đó bất kể ai đang có allowlist gì (xem assertStocktakeScanAllowed(), routes/stocktake.js).
+function canManageStocktakeShelfLock(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
 
 // Mở lại Kỳ Đã Chốt — CHỈ Admin (cố ý KHÔNG nhận kiemKePeriodManage, xem tài liệu đề xuất mục B1 "chỉ
 // Admin có nút Mở Lại Kỳ" — người quản lý kỳ thường không đủ để tự ý mở khoá dữ liệu đã chốt).
@@ -456,6 +464,7 @@ module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
   canManageStocktakeShelfConfig, canConfirmStocktake, canViewStocktakeReport, canManageStocktakeUserAccess,
+  canManageStocktakeShelfLock,
   canReopenStocktakeSession,
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
   activateSession, closeSession, reopenSession,
