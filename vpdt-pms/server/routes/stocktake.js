@@ -16,14 +16,16 @@ const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const {
   LOAI_KY, TRANG_THAI,
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake, canConfirmStocktakeForDept,
-  buildNewSession, activateSession, closeSession, reopenSession, findActiveSession, listOpenSessionsByLoaiKy,
+  canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
+  buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
+  findActiveSession, listOpenSessionsByLoaiKy,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds,
-  buildPriceMapFromRows, computeValueBreakdown, canManageStocktakeShelfLock
+  buildPriceMapFromRows, computeValueBreakdown, canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept
 } = require('../lib/stocktakeEngine');
 // Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
 // Soát Hàng Hóa" (routes/shelfStock.js) thay vì tự viết lại: cùng hàm đồng bộ/snapshot/gộp theo mã hàng,
@@ -74,11 +76,21 @@ function requireKiemKeModuleAccess(req, res) {
 
 // Xem danh sách kỳ — mở cho MỌI user có quyền module Kiểm Kê (không riêng kiemKePeriodManage): các tab
 // Gom Mã/Kiểm Đếm/Kiểm Soát khác (sẽ bổ sung sau) cần đọc danh sách này để biết kỳ nào đang hoạt động.
-// Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=.
+// Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=. 12/2026, MỞ
+// RỘNG: người được gán kiemKePeriodCloseReopenManage (Đóng Kỳ/Mở Lại theo siêu thị) cũng xem được đúng
+// các siêu thị nằm trong phạm vi đó qua ?dept= (không phải admin vẫn cần XEM được thì mới Đóng/Mở Lại
+// được — quyền có mà không xem được danh sách thì vô dụng trên giao diện).
 router.get('/sessions', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {
-    const dept = req.freshUser.perms?.admin && req.query.dept ? String(req.query.dept) : req.freshUser.dept;
+    const requestedDept = req.query.dept ? String(req.query.dept) : null;
+    let dept = req.freshUser.dept;
+    if (requestedDept && requestedDept !== req.freshUser.dept) {
+      const allowed = req.freshUser.perms?.admin
+        || canCloseStocktakePeriodForDept(req.freshUser, requestedDept)
+        || canReopenStocktakePeriodForDept(req.freshUser, requestedDept);
+      if (allowed) dept = requestedDept;
+    }
     const all = (await getAppDataValue('stocktakeSessions')) || [];
     const items = all.filter(s => s.dept === dept);
     res.json({ items });
@@ -119,10 +131,13 @@ router.post('/sessions', async (req, res) => {
   }
   try {
     const dept = req.freshUser.perms?.admin && req.body?.dept ? String(req.body.dept).trim() : req.freshUser.dept;
+    // batchId (MỚI, 12/2026) chỉ admin mới gửi được (đúng luồng tạo nhiều siêu thị cùng lúc, UI non-admin
+    // không có ô này) — không bắt buộc, bỏ qua thì tạo kỳ đơn lẻ như trước.
+    const batchId = req.freshUser.perms?.admin && req.body?.batchId ? String(req.body.batchId).trim() : null;
     await ensureStocktakeSessionsKey();
     const newItem = await withLockedAppDataValue('stocktakeSessions', (list) => {
       const arr = Array.isArray(list) ? list : [];
-      const item = buildNewSession({ ...req.body, dept }, req.freshUser, arr);
+      const item = buildNewSession({ ...req.body, dept, batchId }, req.freshUser, arr);
       arr.unshift(item);
       return arr;
     }).then(arr => arr[0]);
@@ -132,7 +147,14 @@ router.post('/sessions', async (req, res) => {
   }
 });
 
-async function handleSessionTransition(req, res, routeLabel, checkPerm, transitionFn) {
+// handleSessionTransition(..., itemAccessCheck) — itemAccessCheck(user, item) MỚI (12/2026, tuỳ chọn):
+// khi truyền vào, THAY cho check cứng "admin hoặc đúng dept của chính mình" mặc định — dùng cho Đóng
+// Kỳ/Mở Lại (canCloseStocktakePeriodForDept/canReopenStocktakePeriodForDept, theo yêu cầu người dùng
+// "cho thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị"). Bỏ qua tham
+// số này (Kích Hoạt/Sửa/Xoá) thì hành vi y hệt trước đây — không đổi gì.
+// transitionFn có thể trả về chính item (Đóng/Mở Lại/Sửa) HOẶC {item, ...extra} (Kích Hoạt — kèm
+// `siblings` của activateSessionBatch()) — tự nhận diện qua `result && result.item !== undefined`.
+async function handleSessionTransition(req, res, routeLabel, checkPerm, transitionFn, itemAccessCheck) {
   if (!requireKiemKeModuleAccess(req, res)) return;
   if (!checkPerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' });
@@ -142,30 +164,55 @@ async function handleSessionTransition(req, res, routeLabel, checkPerm, transiti
   try {
     await ensureStocktakeSessionsKey();
     let updated = null;
-    const newArr = await withLockedAppDataValue('stocktakeSessions', (list) => {
+    let extra = null;
+    await withLockedAppDataValue('stocktakeSessions', (list) => {
       const arr = Array.isArray(list) ? list : [];
       const item = arr.find(s => s.id === id);
       if (!item) throw new HttpError(404, 'Không tìm thấy kỳ kiểm kê');
-      if (!req.freshUser.perms?.admin && item.dept !== req.freshUser.dept) {
-        throw new HttpError(403, 'Kỳ kiểm kê không thuộc siêu thị của bạn');
+      const accessOk = itemAccessCheck
+        ? itemAccessCheck(req.freshUser, item)
+        : !!(req.freshUser.perms?.admin || item.dept === req.freshUser.dept);
+      if (!accessOk) {
+        throw new HttpError(403, 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác');
       }
-      updated = transitionFn(arr, id, req.freshUser);
+      const result = transitionFn(arr, id, req.freshUser, req.body);
+      if (result && typeof result === 'object' && result.item !== undefined) {
+        updated = result.item;
+        extra = result;
+      } else {
+        updated = result;
+      }
       return arr;
     });
-    res.json({ item: updated });
+    res.json(extra ? { item: updated, siblings: extra.siblings } : { item: updated });
   } catch (err) {
     sendCatchError(res, err, routeLabel);
   }
 }
 
 router.post('/sessions/:id/activate', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/activate', canManageStocktakePeriod, activateSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/activate', canManageStocktakePeriod, activateSessionBatch));
 
 router.post('/sessions/:id/close', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canManageStocktakePeriod, closeSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canCloseStocktakePeriodAtAll, closeSession,
+    (user, item) => canCloseStocktakePeriodForDept(user, item.dept)));
 
 router.post('/sessions/:id/reopen', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakeSession, reopenSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakePeriodAtAll, reopenSession,
+    (user, item) => canReopenStocktakePeriodForDept(user, item.dept)));
+
+// PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — chỉ đổi
+// Tên Kỳ/Thời Gian, giữ NGUYÊN gate/phạm vi y hệt Kích Hoạt (canManageStocktakePeriod + đúng dept của
+// mình, admin bypass) — không mở rộng phạm vi theo kiemKePeriodCloseReopenManage (quyền đó CHỈ áp dụng
+// cho Đóng Kỳ/Mở Lại như người dùng nêu rõ, không phải Sửa).
+router.patch('/sessions/:id', (req, res) =>
+  handleSessionTransition(req, res, 'PATCH /api/stocktake/sessions/:id', canManageStocktakePeriod,
+    (arr, id) => editSessionMeta(arr, id, req.body)));
+
+// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê") — CHỈ xoá
+// được kỳ còn Nháp (deleteDraftSession() tự chặn trạng thái khác), cùng gate/phạm vi như Sửa/Kích Hoạt.
+router.delete('/sessions/:id', (req, res) =>
+  handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod, deleteDraftSession));
 
 // ===================== TAB 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
 // Theo tài liệu đề xuất mục B1: allowlist TUYỆT ĐỐI, không có cờ "tất cả"/"bất kỳ" nào — kể cả Admin khi
@@ -413,8 +460,8 @@ async function setStocktakeShelfLocked(req, res, locked) {
       const arr = Array.isArray(list) ? list : [];
       arr.forEach((loc) => {
         if (!idSet.has(loc.id)) return;
-        if (!req.freshUser.perms?.admin && loc.dept !== req.freshUser.dept) {
-          throw new HttpError(403, `Quầy kệ "${loc.code}" không thuộc siêu thị của bạn`);
+        if (!canManageStocktakeShelfLockForDept(req.freshUser, loc.dept)) {
+          throw new HttpError(403, `Quầy kệ "${loc.code}" không thuộc phạm vi siêu thị bạn được phép Khoá/Mở Khoá`);
         }
         loc.kiemKeLocked = locked;
         if (locked) { loc.kiemKeLockedBy = req.freshUser.username; loc.kiemKeLockedByName = req.freshUser.name || req.freshUser.username; loc.kiemKeLockedAt = new Date().toISOString(); }

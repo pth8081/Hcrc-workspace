@@ -1879,6 +1879,10 @@ function renderDeptCheckboxes() {
   renderShelfReportViewScopeCheckboxes();
   // kiemKeConfirmDo (📋 Kiểm Kê > Tab 6 Xác Nhận Toàn Bộ Đợt, 12/2026) — cùng lý do gọi kèm tại đây.
   renderKiemKeConfirmDoScopeCheckboxes();
+  // kiemKeShelfLockManage (📋 Kiểm Kê > Tab 5 riêng Khoá/Mở Khoá Quầy Kệ, 12/2026) + kiemKePeriodCloseReopenManage
+  // (📋 Kiểm Kê > Tab 1 Đóng Kỳ/Mở Lại Kỳ, MỚI 12/2026) — cùng lý do gọi kèm tại đây.
+  renderKiemKeShelfLockScopeCheckboxes();
+  renderKiemKePeriodCloseReopenScopeCheckboxes();
   // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
@@ -2057,6 +2061,50 @@ function setKiemKeConfirmDoScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pKiemKeConfirmDoDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Xác Nhận Toàn Bộ Đợt...',
     emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xác nhận được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKeShelfLockManage {all, depts[]} (📋 Kiểm Kê > Tab 5 riêng — Khoá/Mở Khoá Quầy Kệ, 12/2026, theo
+// yêu cầu người dùng "cho IT chỉ khóa mở ở một siêu thị của họ thôi") — CÙNG khuôn kiemKeConfirmDo ở trên.
+function renderKiemKeShelfLockScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKeShelfLockManageDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Khoá/Mở Khoá Quầy Kệ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu khoá/mở khoá được mọi siêu thị).'
+  });
+}
+function toggleKiemKeShelfLockScopeGroup() {
+  const isAll = document.getElementById('pKiemKeShelfLockManageAll')?.checked;
+  document.getElementById('pKiemKeShelfLockManageDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKeShelfLockManageDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKeShelfLockScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKeShelfLockManageDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Khoá/Mở Khoá Quầy Kệ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu khoá/mở khoá được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKePeriodCloseReopenManage {all, depts[]} (📋 Kiểm Kê > Tab 1 — Đóng Kỳ/Mở Lại Kỳ Đã Chốt theo siêu
+// thị, MỚI 12/2026, theo yêu cầu người dùng "cho thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều
+// siêu thị hoặc all siêu thị") — CÙNG khuôn kiemKeConfirmDo ở trên. Quyền HOÀN TOÀN MỚI (không có dữ liệu
+// cũ cần tương thích ngược).
+function renderKiemKePeriodCloseReopenScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKePeriodCloseReopenDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ/Mở Lại Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng/mở lại được mọi siêu thị).'
+  });
+}
+function toggleKiemKePeriodCloseReopenScopeGroup() {
+  const isAll = document.getElementById('pKiemKePeriodCloseReopenAll')?.checked;
+  document.getElementById('pKiemKePeriodCloseReopenDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKePeriodCloseReopenDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKePeriodCloseReopenScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKePeriodCloseReopenDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ/Mở Lại Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng/mở lại được mọi siêu thị).',
     resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }

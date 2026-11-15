@@ -44,12 +44,17 @@
       </div>
 
       <div id="kkPeriodCreateBox" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
-        <div class="font-bold text-sm text-cyan-800">+ Tạo Kỳ Mới</div>
+        <div id="kkPeriodCreateBoxTitle" class="font-bold text-sm text-cyan-800">+ Tạo Kỳ Mới</div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-          <select id="kkNewLoaiKy" data-op-change="onKkNewLoaiKyChanged" class="border rounded px-2 py-1.5">
-            <option value="GOM_MA">Loại: Gom Mã</option>
-            <option value="THONG_KE">Loại: Kiểm Kê</option>
-          </select>
+          <!-- kkNewLoaiKyWrap (MỚI, 12/2026) — ẩn ở chế độ Sửa (setKkPeriodFormEditMode(), module-
+               vanhanh.js): đổi loại kỳ sau khi tạo dễ gây lẫn dữ liệu đã gắn vào kỳ, Sửa chỉ đổi Tên
+               Kỳ/Thời Gian (editSessionMeta(), lib/stocktakeEngine.js). -->
+          <div id="kkNewLoaiKyWrap">
+            <select id="kkNewLoaiKy" data-op-change="onKkNewLoaiKyChanged" class="w-full border rounded px-2 py-1.5">
+              <option value="GOM_MA">Loại: Gom Mã</option>
+              <option value="THONG_KE">Loại: Kiểm Kê</option>
+            </select>
+          </div>
           <input type="text" id="kkNewTenKy" placeholder="Tên kỳ (VD: Kiểm Kê Q4/2026)" class="border rounded px-2 py-1.5">
           <input type="date" id="kkNewBatDau" class="border rounded px-2 py-1.5">
           <input type="date" id="kkNewKetThuc" class="border rounded px-2 py-1.5">
@@ -74,7 +79,7 @@
           <p id="kkNewStoresBlockedNote" class="text-[11px] text-amber-700"></p>
         </div>
         <div class="flex gap-2">
-          <button type="button" data-op="submitCreateKkPeriod" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Tạo (Nháp)</button>
+          <button type="button" id="btnSubmitKkPeriod" data-op="submitCreateKkPeriod" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">Tạo</button>
           <button type="button" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded border text-xs">Hủy</button>
         </div>
       </div>

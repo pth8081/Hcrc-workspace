@@ -429,11 +429,18 @@ const PERM_KEY_VN_LABELS = {
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",
   "checklistAtvstpReportView": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Báo Cáo ATVSTP (Dashboard VSATTP, mọi siêu thị)",
   "kiemKePeriodManage": "Kiểm Kê — 📅 Tab 1: Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã & Thống Kê)",
+  // kiemKePeriodCloseReopenManage.all (MỚI, 12/2026) — quyền CỘNG THÊM cho Đóng Kỳ/Mở Lại Kỳ Đã Chốt theo
+  // phạm vi siêu thị, hoàn toàn MỚI (chỉ tồn tại dạng object {all,depts[]}, không có dạng boolean cũ).
+  "kiemKePeriodCloseReopenManage.all": "Kiểm Kê — 🔐 Tab 1: Đóng Kỳ/Mở Lại Kỳ Đã Chốt Theo Siêu Thị (Tất Cả Siêu Thị)",
   "kiemKeGomMaDo": "Kiểm Kê — 📷 Tab 2: Gom Mã",
   "kiemKeKiemDemDo": "Kiểm Kê — 🔢 Tab 3: Kiểm Đếm",
   "kiemKeKiemSoatDo": "Kiểm Kê — 🛡️ Tab 4: Kiểm Soát",
   "kiemKeShelfConfigManage": "Kiểm Kê — 🗄️ Tab 5: Cấu Hình Quầy Kệ",
   "kiemKeShelfLockManage": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ (IT)",
+  // kiemKeShelfLockManage.all (12/2026, nâng cấp từ boolean đơn giản sang {all,depts[]}) — nhãn RIÊNG cho
+  // dạng object mới; nhãn "kiemKeShelfLockManage" ngay trên vẫn giữ nguyên cho user CHƯA được admin
+  // re-save qua UI mới (dữ liệu cũ dạng boolean đơn giản).
+  "kiemKeShelfLockManage.all": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ — Tất Cả Siêu Thị (IT)",
   "kiemKeConfirmDo": "Kiểm Kê — ✅ Tab 6: Xác Nhận",
   // kiemKeConfirmDo.all (12/2026, nâng cấp từ boolean đơn giản sang {all,depts[]}) — nhãn RIÊNG cho
   // dạng object mới (xem flattenPermsForMatrixInto()); nhãn "kiemKeConfirmDo" ngay trên vẫn giữ nguyên

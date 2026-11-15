@@ -12688,14 +12688,26 @@ function canAccessOperationModule(user) {
 // vì Kiểm Kê từng "sống" về điều hướng bên trong tab Vận Hành) — cùng khuôn canAccessPurchasingModule()
 // ở trên: admin luôn qua, còn lại cần hasModuleAccess(user,'kiemKe') (mặc định TRUE, xem BUSINESS_MODULES)
 // VÀ có ít nhất 1 trong 8 quyền thao tác/xem của module (không hiện module rỗng cho người không có quyền
-// nào bên trong, dù hasModuleAccess() mặc định cho qua).
+// nào bên trong, dù hasModuleAccess() mặc định cho qua). kiemKeShelfLockManage CỐ Ý KHÔNG liệt kê (thiết
+// kế gốc: quyền "sống trong Tab 5", luôn đi kèm kiemKeShelfConfigManage trên thực tế).
+// kiemKePeriodCloseReopenManage (MỚI, 12/2026, theo yêu cầu người dùng "cho thêm mục quyền đóng mở kỳ
+// kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — LỖI THẬT phát hiện khi test: người CHỈ có
+// đúng quyền MỚI này (không có kiemKePeriodManage/8 quyền khác, VD IT ở HQ chỉ phụ trách đóng/mở kỳ cho
+// vài siêu thị) bị canAccessStocktakeModule() chặn hẳn KHÔNG vào được module (switchTab('kiemKe') alert
+// "không có quyền" và return sớm) — quyền có mà không dùng được trên giao diện. Phải tính là phạm vi
+// THẬT SỰ không rỗng (all=true HOẶC depts có ít nhất 1 phần tử) — object rỗng {all:false,depts:[]} không
+// cấp được gì (canCloseStocktakePeriodForDept/canReopenStocktakePeriodForDept không có fallback own-dept
+// cho quyền MỚI này, khác hẳn kiemKeShelfLockManage/kiemKeConfirmDo) nên không tính là "có quyền".
 function canAccessStocktakeModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'kiemKe')) return false;
+  const closeReopenScope = user.perms?.kiemKePeriodCloseReopenManage;
+  const hasCloseReopenScope = !!(closeReopenScope && typeof closeReopenScope === 'object'
+    && (closeReopenScope.all || (Array.isArray(closeReopenScope.depts) && closeReopenScope.depts.length > 0)));
   return !!(user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
     || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
-    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage);
+    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage || hasCloseReopenScope);
 }
 // canViewShelfReportClient() (12/2026) — gác mục "📋 Kiểm Soát Hàng Hóa" trong REPORT_NAV_TREE
 // (module-baocaoquantri.js, REPORT_KEY_ACCESS_FN), cùng khuôn canViewChecklistReportsClient(): quyền

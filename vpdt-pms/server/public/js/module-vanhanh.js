@@ -331,6 +331,27 @@ let kkPeriodDeptSelected = '';
 
 function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
 function canReopenKiemKePeriodClient(user) { return !!user?.perms?.admin; }
+// hasKiemKePeriodCloseReopenScopeForDeptClient/canCloseKiemKePeriodForDeptClient/
+// canReopenKiemKePeriodForDeptClient (MỚI, 12/2026, theo yêu cầu người dùng "cho thêm mục quyền đóng mở
+// kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — mirror ĐÚNG canCloseStocktakePeriodForDept/
+// canReopenStocktakePeriodForDept (lib/stocktakeEngine.js). Quyền CỘNG THÊM — admin/kiemKePeriodManage
+// (đúng dept mình) vẫn Đóng Kỳ được như cũ; Mở Lại trước đây CHỈ admin, nay thêm scope mới
+// kiemKePeriodCloseReopenManage={all/depts}.
+function hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept) {
+  const v = user?.perms?.kiemKePeriodCloseReopenManage;
+  if (!v || typeof v !== 'object') return false;
+  if (v.all) return true;
+  return Array.isArray(v.depts) && v.depts.includes(dept);
+}
+function canCloseKiemKePeriodForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
+  return hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept);
+}
+function canReopenKiemKePeriodForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  return hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept);
+}
 // Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
 // (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
 // CLAUDE.md nhắc tránh — áp dụng NGAY từ đầu cho 7 tab còn lại khi build thật, không để dành sửa sau).
@@ -343,7 +364,37 @@ function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admi
 // canManageStocktakeShelfConfigClient() (quyền XEM Tab 5) và canConfirmStocktakeClient() (quyền Xác Nhận
 // Toàn Bộ Đợt) — 3 quyền độc lập, không thay thế nhau.
 function canManageStocktakeShelfLockClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
+// canManageStocktakeShelfLockForDeptClient (MỚI, 12/2026, theo yêu cầu người dùng "cho IT chỉ khoá mở ở
+// một siêu thị của họ thôi") — mirror ĐÚNG canManageStocktakeShelfLockForDept() server
+// (lib/stocktakeEngine.js). kiemKeShelfLockManage nâng cấp boolean -> {all, depts[]}, tương thích ngược
+// (`true` cũ = đúng dept của mình).
+function canManageStocktakeShelfLockForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeShelfLockManage;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
 function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canConfirmStocktakeForDeptClient (LỖI THẬT đã vá, 12/2026 — phát hiện lại khi mirror cho
+// kiemKeShelfLockManage ở trên) — canConfirmStocktakeClient() ở trên KHÔNG xét dept, nên 1 người được gán
+// phạm vi HẸP (VD {all:false, depts:['Siêu thị A']}) vẫn THẤY nút "Xác Nhận Toàn Bộ Đợt" dù đang xem 1
+// siêu thị KHÁC ngoài phạm vi — bấm vào mới bị 403 (đúng lớp lỗi "nút hiện nhưng bấm không được" CLAUDE.md
+// nhắc tránh). Mirror ĐÚNG canConfirmStocktakeForDept() server, dùng thay canConfirmStocktakeClient() ở
+// MỌI nơi cần biết phạm vi theo 1 siêu thị cụ thể (xem updateKkConfirmAllVisibility()).
+function canConfirmStocktakeForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeConfirmDo;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
 // canSeeStocktakeConfirmTabClient (12/2026) — Tab 6 có 2 vai ĐỘC LẬP (xem chú thích #kkConfirmWrap/
 // vanHanhSection.html): Xác Nhận TỪNG quầy kệ chỉ cần quyền Kiểm Đếm (KHÔNG cần kiemKeConfirmDo), Xác
 // Nhận TOÀN BỘ ĐỢT mới cần kiemKeConfirmDo riêng. Nếu CHỈ gác tab theo canConfirmStocktakeClient (như 7
@@ -1167,7 +1218,11 @@ function renderKkShelfConfigList() {
     return true;
   });
   const canManage = canManageStocktakeShelfConfigClient(currentUser);
-  const canLock = canManageStocktakeShelfLockClient(currentUser);
+  // canManageStocktakeShelfLockForDeptClient() CHỈ quyết định phạm vi SIÊU THỊ (fallback "đúng dept của
+  // mình" khi KHÔNG có scope nào) — phải kết hợp canManageStocktakeShelfLockClient() trước để chặn đúng
+  // người HOÀN TOÀN không có kiemKeShelfLockManage khỏi bị lọt qua nhánh fallback đó khi đang xem ĐÚNG
+  // siêu thị của chính họ (CÙNG LỖI vừa vá ở updateKkConfirmAllVisibility() — xem chú thích ở đó).
+  const canLock = canManageStocktakeShelfLockClient(currentUser) && canManageStocktakeShelfLockForDeptClient(currentUser, dept);
   const lockBulkBar = canLock ? `<div id="kkShelfLockBulkBar" class="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
     <label class="flex items-center gap-1.5 shrink-0">
       <input type="checkbox" data-op-change="toggleKkShelfLockSelectAll" data-arg-el="0">
@@ -2064,7 +2119,11 @@ async function bulkUnconfirmKkShelves(kind) {
 function updateKkConfirmAllVisibility() {
   const wrap = document.getElementById('kkConfirmAllWrap');
   if (!wrap) return;
-  const canSeeButton = canConfirmStocktakeClient(currentUser);
+  // canConfirmStocktakeForDeptClient() CHỈ quyết định phạm vi SIÊU THỊ (fallback "đúng dept của mình" khi
+  // KHÔNG có scope nào) — phải kết hợp canConfirmStocktakeClient() trước để chặn đúng người HOÀN TOÀN
+  // không có kiemKeConfirmDo (nv1 kiểu "chỉ kiemKeKiemDemDo") khỏi bị lọt qua nhánh fallback đó (LỖI THẬT
+  // suýt lọt khi mirror cho dept — xem test-stocktake-tab5-tab6-ui.js).
+  const canSeeButton = canConfirmStocktakeClient(currentUser) && canConfirmStocktakeForDeptClient(currentUser, kkEffectiveDept());
   wrap.classList.toggle('hidden', !canSeeButton);
   if (!canSeeButton) return;
   const kiemDemShelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
@@ -2561,18 +2620,37 @@ function exportKkReportExcel() {
   }
 }
 
+// kkPeriodSelectableDepts() (MỚI, 12/2026, theo phát hiện khi thêm kiemKePeriodCloseReopenManage: quyền
+// mới cho phép Đóng Kỳ/Mở Lại ở siêu thị KHÁC siêu thị của mình, nhưng ô "📍 Siêu thị:" ở Tab 1 trước đây
+// CHỈ admin mới có dropdown chọn — người thường dù được gán quyền mới vẫn bị kẹt cứng đúng 1 siêu thị của
+// mình, KHÔNG có cách nào chuyển sang xem/thao tác siêu thị khác được gán — quyền có nhưng không dùng
+// được trên giao diện, đúng lớp lỗi CLAUDE.md nhắc tránh). Trả về danh sách siêu thị người này được PHÉP
+// chọn ở Tab 1: admin -> mọi siêu thị; người thường -> đúng siêu thị của mình HỢP với phạm vi
+// kiemKePeriodCloseReopenManage (nếu có) — CHỈ ảnh hưởng ô chọn RIÊNG của Tab 1, không đụng
+// kkEffectiveDept()/DB.stores dùng chung cho các tab khác (Cấu Hình Quầy Kệ, Xác Nhận...).
+function kkPeriodSelectableDepts(user) {
+  const allStores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+  if (user?.perms?.admin) return allStores;
+  const scope = user?.perms?.kiemKePeriodCloseReopenManage;
+  if (scope && typeof scope === 'object' && scope.all) return allStores;
+  const extra = new Set();
+  if (user?.dept) extra.add(user.dept);
+  if (scope && typeof scope === 'object' && Array.isArray(scope.depts)) scope.depts.forEach(d => extra.add(d));
+  return allStores.filter(s => extra.has(s));
+}
 function renderKkPeriodDeptRow() {
   const row = document.getElementById('kkPeriodDeptRow');
   if (!row) return;
-  if (currentUser.perms?.admin) {
-    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-    if (!kkPeriodDeptSelected) kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+  const stores = kkPeriodSelectableDepts(currentUser);
+  if (stores.length > 1) {
+    if (!kkPeriodDeptSelected || !stores.includes(kkPeriodDeptSelected)) kkPeriodDeptSelected = stores.includes(currentUser.dept) ? currentUser.dept : stores[0];
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
       <select id="kkPeriodDeptSelect" data-op-change="onKkPeriodDeptChanged" class="border rounded px-2 py-1">
         ${stores.map(s => `<option value="${escapeHtml(s)}" ${s === kkPeriodDeptSelected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
       </select>`;
   } else {
-    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(currentUser.dept || '')}</span>`;
+    kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(kkPeriodDeptSelected)}</span>`;
   }
 }
 function onKkPeriodDeptChanged() {
@@ -2597,8 +2675,11 @@ async function loadKkPeriodSessions() {
   const body = document.getElementById('kkPeriodListBody');
   if (body) body.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
   try {
-    const dept = kkEffectiveDept();
-    const qs = currentUser.perms?.admin ? `?dept=${encodeURIComponent(dept)}` : '';
+    // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán
+    // kiemKePeriodCloseReopenManage phạm vi khác siêu thị của mình, xem kkPeriodSelectableDepts()) — KHÔNG
+    // chỉ riêng admin như trước (server GET /sessions đã mở rộng tương ứng, xem routes/stocktake.js).
+    const canPickDept = kkPeriodSelectableDepts(currentUser).length > 1;
+    const qs = canPickDept ? `?dept=${encodeURIComponent(kkPeriodDeptSelected)}` : '';
     const res = await fetch(`/api/stocktake/sessions${qs}`);
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) { if (body) body.innerHTML = '<p class="text-red-500 text-sm">Không tải được danh sách kỳ kiểm kê.</p>'; return; }
@@ -2634,11 +2715,23 @@ function renderKkPeriodList() {
     if (canManage && s.trangThai === 'NHAP') {
       actions.push(`<button type="button" data-op="activateKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold">▶ Kích Hoạt</button>`);
     }
-    if (canManage && s.trangThai === 'DANG_HOAT_DONG') {
+    // Đóng Kỳ/Mở Lại (12/2026, ĐỔI sang check theo ĐÚNG siêu thị của dòng này — canCloseKiemKePeriodForDeptClient/
+    // canReopenKiemKePeriodForDeptClient — thay vì canManage/canReopenKk phẳng cũ, theo yêu cầu người dùng "cho
+    // thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị"). Vẫn giữ y hệt
+    // hành vi cũ cho người có kiemKePeriodManage/admin (xem canCloseKiemKePeriodForDeptClient()).
+    if (canCloseKiemKePeriodForDeptClient(currentUser, s.dept) && s.trangThai === 'DANG_HOAT_DONG') {
       actions.push(`<button type="button" data-op="closeKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded border border-red-300 text-red-700 text-xs font-bold">🔒 Đóng Kỳ</button>`);
     }
-    if (canReopenKk && s.trangThai === 'DA_CHOT') {
+    if (canReopenKiemKePeriodForDeptClient(currentUser, s.dept) && s.trangThai === 'DA_CHOT') {
       actions.push(`<button type="button" data-op="reopenKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded border border-cyan-400 text-cyan-700 text-xs font-bold">↩️ Mở Lại</button>`);
+    }
+    // Sửa (MỌI trạng thái) / Xoá (CHỈ Nháp) — MỚI 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa,
+    // có nút xóa kỳ kiểm kê".
+    if (canManage) {
+      actions.push(`<button type="button" data-op="editKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-gray-300 text-gray-700 text-xs font-bold">✏️ Sửa</button>`);
+      if (s.trangThai === 'NHAP') {
+        actions.push(`<button type="button" data-op="deleteKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-red-300 text-red-600 text-xs font-bold">🗑️ Xoá</button>`);
+      }
     }
     const thoiGian = [s.thoiGianBatDau, s.thoiGianKetThuc].filter(Boolean).join(' – ');
     return `<div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
@@ -2664,6 +2757,10 @@ function setKkPeriodLoaiFilter(loai) {
   renderKkPeriodList();
 }
 
+// editingKkPeriodId (MỚI, 12/2026) — null = form đang ở chế độ "+ Tạo Kỳ Mới" bình thường; set id = form
+// TÁI DÙNG y hệt khung "+ Tạo Kỳ Mới" nhưng chuyển sang chế độ Sửa (ẩn ô chọn siêu thị/loại kỳ — KHÔNG
+// đổi dept/loaiKy sau khi tạo, xem editSessionMeta() lib/stocktakeEngine.js — chỉ còn Tên Kỳ/Thời Gian).
+let editingKkPeriodId = null;
 function toggleKkPeriodCreateBox() {
   const box = document.getElementById('kkPeriodCreateBox');
   const openBtn = document.getElementById('btnKkPeriodOpenCreate');
@@ -2672,6 +2769,8 @@ function toggleKkPeriodCreateBox() {
   box.classList.toggle('hidden', !show);
   if (openBtn) openBtn.classList.toggle('hidden', show);
   if (show) {
+    editingKkPeriodId = null;
+    setKkPeriodFormEditMode(false);
     const tenKy = document.getElementById('kkNewTenKy');
     const batDau = document.getElementById('kkNewBatDau');
     const ketThuc = document.getElementById('kkNewKetThuc');
@@ -2679,6 +2778,51 @@ function toggleKkPeriodCreateBox() {
     if (batDau) batDau.value = '';
     if (ketThuc) ketThuc.value = '';
     renderKkNewStoresPicker();
+  }
+}
+// setKkPeriodFormEditMode(isEdit) — ẩn/hiện đúng phần "chọn loại kỳ + chọn siêu thị" (CHỈ có ý nghĩa lúc
+// TẠO MỚI) và đổi nhãn tiêu đề/nút Lưu cho khớp 2 chế độ, dùng CHUNG 1 khung HTML thay vì tạo khung riêng.
+function setKkPeriodFormEditMode(isEdit) {
+  const loaiWrap = document.getElementById('kkNewLoaiKyWrap');
+  const storesWrap = document.getElementById('kkNewStoresWrap');
+  if (loaiWrap) loaiWrap.classList.toggle('hidden', isEdit);
+  if (storesWrap) storesWrap.classList.toggle('hidden', isEdit);
+  const title = document.getElementById('kkPeriodCreateBoxTitle');
+  if (title) title.textContent = isEdit ? '✏️ Sửa Kỳ Kiểm Kê' : '+ Tạo Kỳ Mới';
+  const submitBtn = document.getElementById('btnSubmitKkPeriod');
+  if (submitBtn) submitBtn.textContent = isEdit ? 'Lưu' : 'Tạo (Nháp)';
+}
+function editKkPeriodClick(idStr) {
+  const id = Number(idStr);
+  const item = kkPeriodSessionsCache.find(s => s.id === id);
+  if (!item) return;
+  editingKkPeriodId = id;
+  const box = document.getElementById('kkPeriodCreateBox');
+  const openBtn = document.getElementById('btnKkPeriodOpenCreate');
+  if (box) box.classList.remove('hidden');
+  if (openBtn) openBtn.classList.add('hidden');
+  setKkPeriodFormEditMode(true);
+  const tenKy = document.getElementById('kkNewTenKy');
+  const batDau = document.getElementById('kkNewBatDau');
+  const ketThuc = document.getElementById('kkNewKetThuc');
+  if (tenKy) tenKy.value = item.tenKy || '';
+  if (batDau) batDau.value = item.thoiGianBatDau || '';
+  if (ketThuc) ketThuc.value = item.thoiGianKetThuc || '';
+  tenKy?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+async function deleteKkPeriodClick(idStr) {
+  const id = Number(idStr);
+  const item = kkPeriodSessionsCache.find(s => s.id === id);
+  if (!item) return;
+  if (!confirm(`Xoá hẳn kỳ "${item.tenKy}"? Chỉ xoá được kỳ còn Nháp (chưa kích hoạt) — không thể hoàn tác.`)) return;
+  try {
+    const res = await fetch(`/api/stocktake/sessions/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Không xoá được kỳ kiểm kê'); return; }
+    await loadKkPeriodSessions();
+  } catch (err) {
+    alert('Lỗi kết nối — thử lại.');
   }
 }
 
@@ -2728,24 +2872,48 @@ function selectAllKkNewStores() {
 function clearAllKkNewStores() { gmsClear('kkNewStoresMultiSelect'); }
 
 async function submitCreateKkPeriod() {
-  const loaiKy = document.getElementById('kkNewLoaiKy')?.value;
   const tenKy = (document.getElementById('kkNewTenKy')?.value || '').trim();
   const thoiGianBatDau = document.getElementById('kkNewBatDau')?.value || '';
   const thoiGianKetThuc = document.getElementById('kkNewKetThuc')?.value || '';
   if (!tenKy) { alert('Vui lòng nhập tên kỳ'); return; }
+  // Chế độ Sửa (editingKkPeriodId != null, MỚI 12/2026) — CHỈ gọi PATCH đổi Tên Kỳ/Thời Gian, không đụng
+  // tới dept/loaiKy/ô chọn siêu thị (đã ẩn ở setKkPeriodFormEditMode(true)).
+  if (editingKkPeriodId != null) {
+    try {
+      const res = await fetch(`/api/stocktake/sessions/${editingKkPeriodId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenKy, thoiGianBatDau, thoiGianKetThuc })
+      });
+      if (res.status === 401) return handleSessionExpired();
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Không sửa được kỳ kiểm kê'); return; }
+      editingKkPeriodId = null;
+      toggleKkPeriodCreateBox();
+      await loadKkPeriodSessions();
+    } catch (err) {
+      alert('Lỗi kết nối — thử lại.');
+    }
+    return;
+  }
+  const loaiKy = document.getElementById('kkNewLoaiKy')?.value;
   // admin: tạo cho NHIỀU/TẤT CẢ siêu thị đã chọn ở ô multi-select (12/2026, MỚI) — lần lượt gọi đúng
   // route POST /sessions hiện có cho TỪNG siêu thị (không đổi API, chỉ gọi nhiều lần phía client), để
   // không phải thêm route bulk riêng + giữ nguyên validate/log mỗi lần tạo như khi tạo tay từng cái.
+  // batchId (MỚI, 12/2026, theo yêu cầu người dùng "tôi đã tạo kỳ kiểm kê cho tất cả siêu thị, tôi chỉ
+  // cần ấn kích hoạt là nó kích hoạt vào tất cả siêu thị luôn") — 1 mã dùng CHUNG cho cả đợt tạo này, để
+  // sau này bấm "▶ Kích Hoạt" ở BẤT KỲ siêu thị nào trong nhóm sẽ kích hoạt LUÔN cả nhóm (xem
+  // activateSessionBatch(), lib/stocktakeEngine.js). Chỉ sinh khi thật sự tạo nhiều siêu thị cùng lúc.
   if (currentUser.perms?.admin) {
     const depts = getMultiSelectValues('kkNewStoresMultiSelect');
     if (!depts.length) { alert('Vui lòng chọn ít nhất 1 siêu thị'); return; }
+    const batchId = depts.length > 1 ? `kk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : null;
     let okCount = 0;
     const failures = [];
     for (const dept of depts) {
       try {
         const res = await fetch('/api/stocktake/sessions', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc })
+          body: JSON.stringify({ dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc, batchId })
         });
         if (res.status === 401) return handleSessionExpired();
         const data = await res.json();
@@ -2756,6 +2924,8 @@ async function submitCreateKkPeriod() {
     await loadKkPeriodSessions();
     if (failures.length) {
       alert(`Đã tạo ${okCount}/${depts.length} kỳ thành công.\n\nKhông tạo được cho:\n${failures.join('\n')}`);
+    } else if (okCount > 1) {
+      alert(`Đã tạo ${okCount} kỳ cho ${okCount} siêu thị — bấm "▶ Kích Hoạt" ở BẤT KỲ siêu thị nào trong nhóm này sẽ tự kích hoạt luôn cả ${okCount} siêu thị.`);
     }
     return;
   }
@@ -2781,11 +2951,24 @@ async function postKkPeriodAction(id, action) {
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Thao tác không thành công'); return; }
     await loadKkPeriodSessions();
+    return data;
   } catch (err) {
     alert('Lỗi kết nối — thử lại.');
   }
 }
-function activateKkPeriod(id) { return postKkPeriodAction(id, 'activate'); }
+// activateKkPeriod() — server tự kích hoạt LUÔN mọi kỳ "anh em" cùng batchId (tạo cùng đợt nhiều siêu
+// thị, xem activateSessionBatch()); `data.siblings` (MỚI, 12/2026) liệt kê kết quả từng siêu thị anh em
+// để báo cho người dùng biết ĐÃ kích hoạt luôn cả nhóm, không chỉ đúng 1 dòng vừa bấm.
+async function activateKkPeriod(id) {
+  const data = await postKkPeriodAction(id, 'activate');
+  if (data && Array.isArray(data.siblings) && data.siblings.length) {
+    const ok = data.siblings.filter(s => s.ok);
+    const failed = data.siblings.filter(s => !s.ok);
+    let msg = `Đã kích hoạt thêm ${ok.length} siêu thị cùng nhóm: ${ok.map(s => s.dept).join(', ') || '(không có)'}.`;
+    if (failed.length) msg += `\n\nKhông kích hoạt được:\n${failed.map(s => `${s.dept}: ${s.error}`).join('\n')}`;
+    alert(msg);
+  }
+}
 function closeKkPeriod(id) {
   if (!confirm('Đóng kỳ này? Sau khi đóng, mọi thao tác trên kỳ đều dừng — chỉ Admin mới mở lại được.')) return;
   return postKkPeriodAction(id, 'close');

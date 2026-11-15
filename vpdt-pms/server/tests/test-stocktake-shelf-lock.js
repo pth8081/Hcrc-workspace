@@ -150,7 +150,7 @@ function request(port, method, urlPath, username, body) {
 
     // 9) Khoá/mở khoá quầy kệ KHÔNG thuộc siêu thị mình (không-Admin) -> bị chặn rõ ràng.
     res = await request(port, 'POST', '/api/stocktake/shelf-locations/lock', 'itA', { shelfLocationIds: [20] });
-    check('IT siêu thị A không khoá được quầy kệ của siêu thị khác (B1)', res.status === 403 && /không thuộc siêu thị/.test(res.body.error || ''), res);
+    check('IT siêu thị A không khoá được quầy kệ của siêu thị khác (B1)', res.status === 403 && /không thuộc phạm vi siêu thị/.test(res.body.error || ''), res);
 
     // 10) Thiếu danh sách quầy kệ -> 400 rõ ràng, không âm thầm khoá rỗng.
     res = await request(port, 'POST', '/api/stocktake/shelf-locations/lock', 'itA', { shelfLocationIds: [] });

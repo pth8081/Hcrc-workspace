@@ -956,9 +956,14 @@ function createDispatcher(state) {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         const qsDept = new URL(url, 'http://x').searchParams.get('dept');
-        const dept = (freshUser.perms?.admin && qsDept) ? qsDept : freshUser.dept;
+        let dept = freshUser.dept;
+        if (qsDept && qsDept !== freshUser.dept) {
+          const allowed = freshUser.perms?.admin || canCloseStocktakePeriodForDept(freshUser, qsDept) || canReopenStocktakePeriodForDept(freshUser, qsDept);
+          if (allowed) dept = qsDept;
+        }
         const items = (state.stocktakeSessions || []).filter(s => s.dept === dept);
         return { status: 200, body: { items } };
       }
@@ -983,33 +988,77 @@ function createDispatcher(state) {
         if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền quản lý Kỳ Kiểm Kê' } };
         try {
           const dept = (freshUser.perms?.admin && body?.dept) ? String(body.dept).trim() : freshUser.dept;
+          const batchId = (freshUser.perms?.admin && body?.batchId) ? String(body.batchId).trim() : null;
           if (!state.stocktakeSessions) state.stocktakeSessions = [];
-          const item = buildNewSession({ ...body, dept }, freshUser, state.stocktakeSessions);
+          const item = buildNewSession({ ...body, dept, batchId }, freshUser, state.stocktakeSessions);
           state.stocktakeSessions.unshift(item);
           return { status: 200, body: { item } };
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
         }
       }
+      // kkTransitionMatch (12/2026, mirror ĐÚNG routes/stocktake.js handleSessionTransition() sau khi
+      // thêm batch-activate + Đóng Kỳ/Mở Lại theo phạm vi siêu thị kiemKePeriodCloseReopenManage) — Kích
+      // Hoạt dùng activateSessionBatch() (kích hoạt luôn các kỳ cùng batchId), Đóng/Mở Lại dùng đúng
+      // canCloseStocktakePeriodForDept()/canReopenStocktakePeriodForDept() thay vì check cứng own-dept.
       const kkTransitionMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)\/(activate|close|reopen)$/);
       if (kkTransitionMatch && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
-        const { canManageStocktakePeriod, canReopenStocktakeSession, activateSession, closeSession, reopenSession } = require('../lib/stocktakeEngine');
+        const {
+          canManageStocktakePeriod, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
+          canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept,
+          activateSessionBatch, closeSession, reopenSession
+        } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         const id = Number(kkTransitionMatch[1]);
         const action = kkTransitionMatch[2];
-        const fnMap = { activate: activateSession, close: closeSession, reopen: reopenSession };
-        const permOk = action === 'reopen' ? canReopenStocktakeSession(freshUser) : canManageStocktakePeriod(freshUser);
-        if (!permOk) return { status: 403, body: { error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' } };
+        const checkPermMap = { activate: canManageStocktakePeriod, close: canCloseStocktakePeriodAtAll, reopen: canReopenStocktakePeriodAtAll };
+        if (!checkPermMap[action](freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' } };
         try {
           const arr = state.stocktakeSessions || [];
           const item = arr.find(s => s.id === id);
           if (!item) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
-          if (!freshUser.perms?.admin && item.dept !== freshUser.dept) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' } };
+          const itemAccessFnMap = {
+            activate: () => !!(freshUser.perms?.admin || item.dept === freshUser.dept),
+            close: () => canCloseStocktakePeriodForDept(freshUser, item.dept),
+            reopen: () => canReopenStocktakePeriodForDept(freshUser, item.dept)
+          };
+          if (!itemAccessFnMap[action]()) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác' } };
+          if (action === 'activate') {
+            const result = activateSessionBatch(arr, id, freshUser);
+            return { status: 200, body: { item: result.item, siblings: result.siblings } };
+          }
+          const fnMap = { close: closeSession, reopen: reopenSession };
           const updated = fnMap[action](arr, id, freshUser);
           return { status: 200, body: { item: updated } };
+        } catch (err) {
+          return { status: err.status || 500, body: { error: err.message } };
+        }
+      }
+      // PATCH/DELETE /sessions/:id (MỚI, 12/2026 — Sửa/Xoá kỳ) — cùng gate canManageStocktakePeriod +
+      // own-dept như Kích Hoạt (xem routes/stocktake.js).
+      const kkSessionIdMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)$/);
+      if (kkSessionIdMatch && (method === 'PATCH' || method === 'DELETE')) {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { hasModuleAccessServer } = require('../lib/recordViewScope');
+        const { canManageStocktakePeriod, editSessionMeta, deleteDraftSession } = require('../lib/stocktakeEngine');
+        if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
+        if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' } };
+        const id = Number(kkSessionIdMatch[1]);
+        try {
+          const arr = state.stocktakeSessions || [];
+          const item = arr.find(s => s.id === id);
+          if (!item) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
+          if (!(freshUser.perms?.admin || item.dept === freshUser.dept)) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác' } };
+          if (method === 'PATCH') {
+            const updated = editSessionMeta(arr, id, body);
+            return { status: 200, body: { item: updated } };
+          }
+          const result = deleteDraftSession(arr, id);
+          return { status: 200, body: { item: result } };
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
         }
@@ -1159,7 +1208,7 @@ function createDispatcher(state) {
       if (kkShelfLockMatch && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
-        const { canManageStocktakeShelfLock } = stockEngine2();
+        const { canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept } = stockEngine2();
         if (!canManageStocktakeShelfLock(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền Khoá/Mở Khoá Quầy Kệ' } };
         const locked = kkShelfLockMatch[1] === 'lock';
         const ids = Array.isArray(body?.shelfLocationIds) ? body.shelfLocationIds.map(Number).filter(Number.isFinite) : [];
@@ -1167,7 +1216,7 @@ function createDispatcher(state) {
         const idSet = new Set(ids);
         for (const loc of (state.kiemKeShelfLocations || [])) {
           if (!idSet.has(loc.id)) continue;
-          if (!freshUser.perms?.admin && loc.dept !== freshUser.dept) return { status: 403, body: { error: `Quầy kệ "${loc.code}" không thuộc siêu thị của bạn` } };
+          if (!canManageStocktakeShelfLockForDept(freshUser, loc.dept)) return { status: 403, body: { error: `Quầy kệ "${loc.code}" không thuộc phạm vi siêu thị bạn được phép Khoá/Mở Khoá` } };
           loc.kiemKeLocked = locked;
           if (locked) { loc.kiemKeLockedBy = freshUser.username; loc.kiemKeLockedByName = freshUser.name || freshUser.username; loc.kiemKeLockedAt = new Date().toISOString(); }
           else { delete loc.kiemKeLockedBy; delete loc.kiemKeLockedByName; delete loc.kiemKeLockedAt; }
