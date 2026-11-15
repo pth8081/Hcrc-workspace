@@ -305,7 +305,13 @@ router.get('/active-session-for-shelf', async (req, res) => {
       const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
       shelfKiemSoatConfirmed = isShelfConfirmed(soatConfirmations, activeSession.id, shelfLocationId);
     }
-    res.json({ session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+    let shelfGomMaConfirmed = false;
+    if (mode === 'GOM_MA' && activeSession) {
+      await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+      const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+      shelfGomMaConfirmed = isShelfConfirmed(gomMaConfirmations, activeSession.id, shelfLocationId);
+    }
+    res.json({ session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
   }
@@ -366,6 +372,16 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
     const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
     if (isShelfConfirmed(soatConfirmations, sessionId, shelfLocationId)) {
       throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Kiểm Soát ở Tab "Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa)');
+    }
+  }
+  // Xác Nhận Gom Mã (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom Mã/Kiểm Soát để Xác
+  // Nhận/Gỡ Xác Nhận — Gom Mã TRƯỚC ĐÂY hoàn toàn không có khái niệm khoá/Xác Nhận nào, nay thêm Lớp 4
+  // riêng CÙNG khuôn Kiểm Đếm/Kiểm Soát để nhất quán cả 3 bước quét).
+  if (mode === 'GOM_MA' && !opts?.skipConfirmedCheck) {
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    if (isShelfConfirmed(gomMaConfirmations, sessionId, shelfLocationId)) {
+      throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Gom Mã ở Tab "Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa)');
     }
   }
   return { loc, activeSession };
@@ -622,6 +638,75 @@ router.delete('/shelf-kiem-soat-confirmations/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/shelf-kiem-soat-confirmations/:id');
+  }
+});
+
+// ===== Xác Nhận Gom Mã từng quầy kệ (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom
+// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror NGUYÊN 3 route Kiểm Soát ngay trên, chỉ khác collection
+// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê). =====
+router.get('/shelf-gom-ma-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.query.sessionId);
+    if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const all = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/shelf-gom-ma-confirmations');
+  }
+});
+
+// Xác Nhận Gom Mã 1 quầy kệ — ĐÚNG người có quyền Gom Mã quầy kệ đó (3 lớp y hệt route quét Gom Mã,
+// KHÔNG cần quyền Tab 6 riêng — khác hẳn route confirm-all, vốn CHỈ áp dụng Kỳ Kiểm Kê, không liên quan
+// Gom Mã).
+router.post('/shelf-gom-ma-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.body?.sessionId);
+    const shelfLocationId = Number(req.body?.shelfLocationId);
+    if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) {
+      return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
+    }
+    const { loc } = await assertStocktakeScanAllowed(req, 'GOM_MA', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const saved = await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
+      return arr;
+    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    res.json({ item: saved });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/shelf-gom-ma-confirmations');
+  }
+});
+
+// Gỡ Xác Nhận Gom Mã 1 quầy kệ (cần gom mã lại) — CÙNG quyền với xác nhận (Gom Mã quầy kệ đó), tự tra
+// lại ĐÚNG shelfLocationId/sessionId thật của dòng đang gỡ (không tin id suông).
+router.delete('/shelf-gom-ma-confirmations/:id', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const existingAll = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    const existingRow = existingAll.find(c => c.id === id);
+    if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
+    await assertStocktakeScanAllowed(req, 'GOM_MA', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+    await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/stocktake/shelf-gom-ma-confirmations/:id');
   }
 });
 

@@ -673,6 +673,13 @@ async function onKkScanShelfChanged(tabKey) {
       renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Kiểm Soát ở tab "✅ Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa).`);
       return;
     }
+    // shelfGomMaConfirmed (MỚI, 12/2026) — CÙNG cơ chế, riêng cho tab Gom Mã (trước đây Gom Mã hoàn toàn
+    // không có cờ khoá nào, xem Lớp 4 nhánh GOM_MA ở assertStocktakeScanAllowed()).
+    if (body.shelfGomMaConfirmed) {
+      await loadKkScanCounts(tabKey);
+      renderKkScanBoxLocked(tabKey, `🔒 Quầy kệ này ĐÃ được Xác Nhận Gom Mã ở tab "✅ Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa).`);
+      return;
+    }
     if (infoEl) infoEl.textContent = `✅ Kỳ đang hoạt động: ${st.session.tenKy}`;
     renderKkScanBoxUnlocked(tabKey);
     await loadKkScanCounts(tabKey);
@@ -842,23 +849,65 @@ function goToShelfLocationsManagement() {
   setVanHanhShelfSubTab('LOCATIONS');
 }
 
-// ===== Tab 6 "Xác Nhận" (12/2026) — 3 khu vực độc lập, xem chú thích đầy đủ tại #kkConfirmWrap/
+// ===== Tab 6 "Xác Nhận" (12/2026) — 4 khu vực độc lập, xem chú thích đầy đủ tại #kkConfirmWrap/
 // kiemKeSection.html: (a) Xác Nhận Kiểm Đếm từng quầy kệ (ai có quyền Kiểm Đếm quầy kệ đó đều bấm được)
 // khoá Kiểm Đếm tiếp trên quầy kệ đó — (b) Xác Nhận Kiểm Soát từng quầy kệ (ai có quyền Kiểm Soát quầy
 // kệ đó đều bấm được, CHỈ hiện quầy đã có hoạt động Kiểm Soát thật) khoá Kiểm Soát tiếp trên quầy kệ đó,
 // ĐỘC LẬP với (a) — thêm 12/2026 theo phản hồi người dùng: "không kiểm soát mà không xác nhận... có thể
 // làm sai lệch số liệu nếu người ta cứ kiểm soát suốt", trước đây Kiểm Soát không khoá được theo từng
-// quầy kệ, chỉ khoá chung khi cả Kỳ đã chốt — (c) Xác Nhận Toàn Bộ Đợt (CHỈ kiemKeConfirmDo) đóng hẳn Kỳ
+// quầy kệ, chỉ khoá chung khi cả Kỳ đã chốt — (c) Xác Nhận Gom Mã từng quầy kệ (MỚI, 12/2026, cùng lúc
+// với Gỡ Xác Nhận hàng loạt — trước đây Gom Mã KHÔNG có khái niệm khoá/Xác Nhận nào), dùng ĐÚNG Kỳ Gom Mã
+// riêng (selector riêng #kkConfirmGomMaSessionSelect, khác hẳn Kỳ Kiểm Kê của (a)/(b)), KHÔNG tham gia
+// điều kiện đóng Kỳ ở (d) vì thuộc kỳ khác — (d) Xác Nhận Toàn Bộ Đợt (CHỈ kiemKeConfirmDo) đóng hẳn Kỳ
 // Kiểm Kê, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm VÀ mọi quầy kệ đã Kiểm Soát đều đã Xác Nhận đúng
-// phần của nó (quầy chưa từng ai Kiểm Soát thì không bắt buộc Xác Nhận Kiểm Soát). =====
+// phần của nó (quầy chưa từng ai Kiểm Soát thì không bắt buộc Xác Nhận Kiểm Soát). Cả 3 danh sách (a)/(b)/
+// (c) đều có thêm checkbox chọn nhiều + nút "Xác Nhận Đã Chọn"/"Gỡ Xác Nhận Đã Chọn" (MỚI, 12/2026, theo
+// yêu cầu người dùng "chọn nhiều quầy kệ... để xác nhận cũng như gỡ xác nhận") — dùng chung 1 cơ chế
+// KK_CONFIRM_KIND/kkConfirmSelected bên dưới, KHÔNG đụng tới 4 hàm xác nhận/gỡ xác nhận ĐƠN LẺ đã có (vẫn
+// giữ nguyên để giảm rủi ro hồi quy trên code đã test kỹ). =====
 let kkConfirmSessionId = null;
+let kkConfirmGomMaSessionId = null;
 let kkConfirmCounts = [];
 let kkConfirmConfirmations = [];
 let kkConfirmSoatConfirmations = [];
+let kkConfirmGomMaCounts = [];
+let kkConfirmGomMaConfirmations = [];
+// kkConfirmSelected — 1 Set riêng/loại, giữ danh sách shelfLocationId đang được tick chọn ở khung "Xác
+// Nhận Đã Chọn"/"Gỡ Xác Nhận Đã Chọn" (MỚI, 12/2026). Reset mỗi lần vào lại Tab 6 (enterKkConfirmTab()).
+let kkConfirmSelected = { KIEMDEM: new Set(), KIEMSOAT: new Set(), GOMMA: new Set() };
+const KK_CONFIRM_KIND = {
+  KIEMDEM: {
+    url: '/api/stocktake/shelf-confirmations',
+    listBodyId: 'kkConfirmShelfListBody',
+    bulkBarId: 'kkConfirmBulkBarKiemDem',
+    getSessionId: () => kkConfirmSessionId,
+    getConfirmations: () => kkConfirmConfirmations,
+    reload: () => loadKkConfirmTab(),
+  },
+  KIEMSOAT: {
+    url: '/api/stocktake/shelf-kiem-soat-confirmations',
+    listBodyId: 'kkConfirmSoatShelfListBody',
+    bulkBarId: 'kkConfirmBulkBarKiemSoat',
+    getSessionId: () => kkConfirmSessionId,
+    getConfirmations: () => kkConfirmSoatConfirmations,
+    reload: () => loadKkConfirmTab(),
+  },
+  GOMMA: {
+    url: '/api/stocktake/shelf-gom-ma-confirmations',
+    listBodyId: 'kkConfirmGomMaShelfListBody',
+    bulkBarId: 'kkConfirmBulkBarGomMa',
+    getSessionId: () => kkConfirmGomMaSessionId,
+    getConfirmations: () => kkConfirmGomMaConfirmations,
+    reload: () => loadKkConfirmGomMaTab(),
+  },
+};
 
 async function enterKkConfirmTab() {
   kkConfirmSessionId = null;
+  kkConfirmGomMaSessionId = null;
+  kkConfirmSelected = { KIEMDEM: new Set(), KIEMSOAT: new Set(), GOMMA: new Set() };
   const sel = document.getElementById('kkConfirmSessionSelect');
+  const gomMaSel = document.getElementById('kkConfirmGomMaSessionSelect');
   const dept = kkEffectiveDept();
   try {
     const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
@@ -867,6 +916,7 @@ async function enterKkConfirmTab() {
     const body = await res.json().catch(() => ({}));
     const sessions = res.ok ? (body.items || []) : [];
     const activeThongKe = sessions.filter(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
+    const activeGomMa = sessions.filter(s => s.loaiKy === 'GOM_MA' && s.trangThai === 'DANG_HOAT_DONG');
     if (sel) {
       sel.innerHTML = '<option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>' +
         activeThongKe.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
@@ -874,10 +924,16 @@ async function enterKkConfirmTab() {
       // luôn cho đỡ phải bấm thêm 1 bước, vẫn để trống nếu chưa có kỳ nào.
       if (activeThongKe.length === 1) sel.value = String(activeThongKe[0].id);
     }
+    if (gomMaSel) {
+      gomMaSel.innerHTML = '<option value="">-- Chọn kỳ Gom Mã đang hoạt động --</option>' +
+        activeGomMa.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
+      if (activeGomMa.length === 1) gomMaSel.value = String(activeGomMa[0].id);
+    }
   } catch (err) {
     if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
+    if (gomMaSel) gomMaSel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
   }
-  await loadKkConfirmTab();
+  await Promise.all([loadKkConfirmTab(), loadKkConfirmGomMaTab()]);
 }
 
 async function loadKkConfirmTab() {
@@ -907,32 +963,51 @@ async function loadKkConfirmTab() {
   renderKkConfirmSoatShelfList();
 }
 
+// kkConfirmBulkBarHtml() — khung "Chọn tất cả" + 2 nút "Xác Nhận Đã Chọn"/"Gỡ Xác Nhận Đã Chọn" (MỚI,
+// 12/2026) — render GIỐNG NHAU cho cả 3 danh sách Kiểm Đếm/Kiểm Soát/Gom Mã, chỉ khác `kind`/id khung.
+function kkConfirmBulkBarHtml(kind, barId) {
+  return `<div id="${barId}" class="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs bg-gray-50 border rounded px-2 py-1.5">
+    <label class="flex items-center gap-1.5 shrink-0">
+      <input type="checkbox" data-op-change="toggleKkConfirmSelectAll" data-arg0="${kind}" data-arg-el="1">
+      <span>Chọn tất cả</span>
+    </label>
+    <span data-role="count" class="text-gray-500 truncate flex-1 min-w-0"></span>
+    <div class="flex gap-1.5 shrink-0">
+      <button type="button" data-bulk-btn disabled data-op="bulkConfirmKkShelves" data-arg0="${kind}" class="opacity-40 cursor-not-allowed px-2 py-1 rounded bg-cyan-700 text-white font-bold">✅ Xác Nhận Đã Chọn</button>
+      <button type="button" data-bulk-btn disabled data-op="bulkUnconfirmKkShelves" data-arg0="${kind}" class="opacity-40 cursor-not-allowed px-2 py-1 rounded bg-red-600 text-white font-bold">↩️ Gỡ Xác Nhận Đã Chọn</button>
+    </div>
+  </div>`;
+}
+
 function renderKkConfirmShelfList() {
   const listBody = document.getElementById('kkConfirmShelfListBody');
   if (!listBody) return;
   // CHỈ hiện quầy kệ CÓ hoạt động Kiểm Đếm thật (slKiemDem > 0) trong đúng kỳ này — đúng khuôn
   // listUnconfirmedCountedShelfIds() phía server (lib/stocktakeEngine.js).
   const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
+  const bulkBar = kkConfirmBulkBarHtml('KIEMDEM', 'kkConfirmBulkBarKiemDem');
   if (!shelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Đếm trong kỳ này.</p>';
   } else {
     const allLocations = DB.shelfLocations || [];
-    listBody.innerHTML = shelfIds.map(sid => {
+    listBody.innerHTML = bulkBar + shelfIds.map(sid => {
       const loc = allLocations.find(l => l.id === sid);
       const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="KIEMDEM" data-arg1="${sid}" class="shrink-0">`;
       const confirmedRow = kkConfirmConfirmations.find(c => c.shelfLocationId === sid);
       if (confirmedRow) {
-        return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-          <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
           <button type="button" data-op="unconfirmKkShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
         </div>`;
       }
-      return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-        <span>${escapeHtml(label)}</span>
+      return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+        <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">${escapeHtml(label)}</span></label>
         <button type="button" data-op="confirmKkShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
       </div>`;
     }).join('');
   }
+  updateKkConfirmBulkBarState('KIEMDEM');
   updateKkConfirmAllVisibility();
 }
 
@@ -973,26 +1048,29 @@ function renderKkConfirmSoatShelfList() {
   const listBody = document.getElementById('kkConfirmSoatShelfListBody');
   if (!listBody) return;
   const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemSoat) > 0).map(c => c.shelfLocationId))];
+  const bulkBar = kkConfirmBulkBarHtml('KIEMSOAT', 'kkConfirmBulkBarKiemSoat');
   if (!shelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Soát trong kỳ này.</p>';
   } else {
     const allLocations = DB.shelfLocations || [];
-    listBody.innerHTML = shelfIds.map(sid => {
+    listBody.innerHTML = bulkBar + shelfIds.map(sid => {
       const loc = allLocations.find(l => l.id === sid);
       const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="KIEMSOAT" data-arg1="${sid}" class="shrink-0">`;
       const confirmedRow = kkConfirmSoatConfirmations.find(c => c.shelfLocationId === sid);
       if (confirmedRow) {
-        return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-          <span>✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span>
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
           <button type="button" data-op="unconfirmKkSoatShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
         </div>`;
       }
-      return `<div class="flex items-center justify-between border-b py-1.5 text-sm">
-        <span>${escapeHtml(label)}</span>
+      return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+        <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">${escapeHtml(label)}</span></label>
         <button type="button" data-op="confirmKkSoatShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
       </div>`;
     }).join('');
   }
+  updateKkConfirmBulkBarState('KIEMSOAT');
   updateKkConfirmAllVisibility();
 }
 
@@ -1023,6 +1101,195 @@ async function unconfirmKkSoatShelf(id) {
     alert('⛔ Không thể kết nối tới máy chủ.'); return;
   }
   await loadKkConfirmTab();
+}
+
+// loadKkConfirmGomMaTab()/renderKkConfirmGomMaShelfList()/confirmKkGomMaShelf()/unconfirmKkGomMaShelf()
+// (MỚI, 12/2026) — mirror NGUYÊN khuôn Kiểm Soát ngay trên, chỉ khác: dùng Kỳ Gom Mã riêng
+// (kkConfirmGomMaSessionId, selector #kkConfirmGomMaSessionSelect — Gom Mã thuộc loaiKy='GOM_MA', KHÁC
+// Kỳ Kiểm Kê loaiKy='THONG_KE' của Kiểm Đếm/Kiểm Soát), lọc theo slGomMa > 0, gọi route riêng
+// "shelf-gom-ma-confirmations". KHÔNG tham gia updateKkConfirmAllVisibility() — Gom Mã đóng Kỳ riêng ở
+// Tab 1 (nút "Đóng Kỳ" thủ công), không liên quan điều kiện đóng Kỳ Kiểm Kê.
+async function loadKkConfirmGomMaTab() {
+  const sel = document.getElementById('kkConfirmGomMaSessionSelect');
+  const sessionId = Number(sel?.value || 0);
+  const bodyWrap = document.getElementById('kkConfirmGomMaBody');
+  kkConfirmGomMaSessionId = sessionId || null;
+  if (!sessionId) { if (bodyWrap) bodyWrap.classList.add('hidden'); return; }
+  if (bodyWrap) bodyWrap.classList.remove('hidden');
+  try {
+    const [countsRes, confirmRes] = await Promise.all([
+      fetch(`/api/stocktake/counts?sessionId=${sessionId}`),
+      fetch(`/api/stocktake/shelf-gom-ma-confirmations?sessionId=${sessionId}`)
+    ]);
+    if (countsRes.status === 401 || confirmRes.status === 401) return handleSessionExpired();
+    const countsBody = await countsRes.json().catch(() => ({}));
+    const confirmBody = await confirmRes.json().catch(() => ({}));
+    kkConfirmGomMaCounts = countsRes.ok ? (countsBody.items || []) : [];
+    kkConfirmGomMaConfirmations = confirmRes.ok ? (confirmBody.items || []) : [];
+  } catch (err) {
+    kkConfirmGomMaCounts = []; kkConfirmGomMaConfirmations = [];
+  }
+  renderKkConfirmGomMaShelfList();
+}
+
+function renderKkConfirmGomMaShelfList() {
+  const listBody = document.getElementById('kkConfirmGomMaShelfListBody');
+  if (!listBody) return;
+  const shelfIds = [...new Set(kkConfirmGomMaCounts.filter(c => Number(c.slGomMa) > 0).map(c => c.shelfLocationId))];
+  const bulkBar = kkConfirmBulkBarHtml('GOMMA', 'kkConfirmBulkBarGomMa');
+  if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Gom Mã trong kỳ này.</p>';
+  } else {
+    const allLocations = DB.shelfLocations || [];
+    listBody.innerHTML = bulkBar + shelfIds.map(sid => {
+      const loc = allLocations.find(l => l.id === sid);
+      const label = loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
+      const cb = `<input type="checkbox" data-shelf-id="${sid}" data-op-change="toggleKkConfirmSelect" data-arg0="GOMMA" data-arg1="${sid}" class="shrink-0">`;
+      const confirmedRow = kkConfirmGomMaConfirmations.find(c => c.shelfLocationId === sid);
+      if (confirmedRow) {
+        return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+          <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">✅ ${escapeHtml(label)} <span class="text-gray-400 text-[11px]">— đã xác nhận bởi ${escapeHtml(confirmedRow.confirmedByName || '')}</span></span></label>
+          <button type="button" data-op="unconfirmKkGomMaShelf" data-arg0="${confirmedRow.id}" class="text-red-600 text-xs font-bold hover:underline shrink-0">Gỡ Xác Nhận</button>
+        </div>`;
+      }
+      return `<div class="flex items-center justify-between border-b py-1.5 text-sm gap-2">
+        <label class="flex items-center gap-2 min-w-0">${cb}<span class="truncate">${escapeHtml(label)}</span></label>
+        <button type="button" data-op="confirmKkGomMaShelf" data-arg0="${sid}" class="shrink-0 px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">Xác Nhận</button>
+      </div>`;
+    }).join('');
+  }
+  updateKkConfirmBulkBarState('GOMMA');
+}
+
+async function confirmKkGomMaShelf(shelfLocationId) {
+  if (!kkConfirmGomMaSessionId) return;
+  try {
+    const res = await fetch('/api/stocktake/shelf-gom-ma-confirmations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: kkConfirmGomMaSessionId, shelfLocationId })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không xác nhận được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmGomMaTab();
+}
+
+async function unconfirmKkGomMaShelf(id) {
+  if (!confirm('Gỡ Xác Nhận Gom Mã quầy kệ này? Quầy kệ sẽ mở lại cho Gom Mã.')) return;
+  try {
+    const res = await fetch(`/api/stocktake/shelf-gom-ma-confirmations/${id}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || 'Không gỡ được, vui lòng thử lại.'); return; }
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  await loadKkConfirmGomMaTab();
+}
+
+// toggleKkConfirmSelect()/toggleKkConfirmSelectAll()/updateKkConfirmBulkBarState()/bulkConfirmKkShelves()/
+// bulkUnconfirmKkShelves() (MỚI, 12/2026) — cơ chế chọn nhiều DÙNG CHUNG cho cả 3 danh sách (kind =
+// 'KIEMDEM'|'KIEMSOAT'|'GOMMA', xem KK_CONFIRM_KIND ở trên). Theo đúng khuôn
+// toggleOperationEstimateImportRow() đã có (module-vanhanh... các module khác) — toggle thẳng vào Set,
+// không cần đọc lại `.checked` của checkbox (trình duyệt đã tự phản ánh trên DOM).
+function toggleKkConfirmSelect(kind, shelfLocationIdStr) {
+  const set = kkConfirmSelected[kind];
+  if (!set) return;
+  const sid = Number(shelfLocationIdStr);
+  if (set.has(sid)) set.delete(sid); else set.add(sid);
+  updateKkConfirmBulkBarState(kind);
+}
+
+// toggleKkConfirmSelectAll(kind, el) — el = chính checkbox "Chọn tất cả" (truyền qua data-arg-el, CẦN
+// đọc .checked thật vì phải đồng bộ lại checkbox từng dòng đang hiện, không chỉ Set nội bộ).
+function toggleKkConfirmSelectAll(kind, el) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  const set = kkConfirmSelected[kind];
+  if (!cfg || !set) return;
+  const listBody = document.getElementById(cfg.listBodyId);
+  const checked = !!(el && el.checked);
+  if (listBody) {
+    listBody.querySelectorAll('input[type="checkbox"][data-shelf-id]').forEach((cbEl) => {
+      cbEl.checked = checked;
+      const sid = Number(cbEl.dataset.shelfId);
+      if (checked) set.add(sid); else set.delete(sid);
+    });
+  }
+  updateKkConfirmBulkBarState(kind);
+}
+
+function updateKkConfirmBulkBarState(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  const set = kkConfirmSelected[kind];
+  if (!cfg || !set) return;
+  const bar = document.getElementById(cfg.bulkBarId);
+  if (!bar) return;
+  const n = set.size;
+  const countEl = bar.querySelector('[data-role="count"]');
+  if (countEl) countEl.textContent = n > 0 ? `Đã chọn ${n} quầy kệ` : '';
+  bar.querySelectorAll('button[data-bulk-btn]').forEach((btn) => {
+    btn.disabled = n === 0;
+    btn.classList.toggle('opacity-40', n === 0);
+    btn.classList.toggle('cursor-not-allowed', n === 0);
+  });
+}
+
+async function bulkConfirmKkShelves(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  const sessionId = cfg.getSessionId();
+  if (!sessionId) return;
+  const ids = Array.from(kkConfirmSelected[kind]);
+  if (!ids.length) return;
+  const already = new Set(cfg.getConfirmations().map(c => c.shelfLocationId));
+  const todo = ids.filter(id => !already.has(id));
+  if (!todo.length) { alert('Các quầy kệ đã chọn đều đã được Xác Nhận rồi.'); return; }
+  if (!confirm(`Xác Nhận ${todo.length} quầy kệ đã chọn?`)) return;
+  const errors = [];
+  for (const shelfLocationId of todo) {
+    try {
+      const res = await fetch(cfg.url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, shelfLocationId })
+      });
+      if (res.status === 401) return handleSessionExpired();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) errors.push(`#${shelfLocationId}: ${body.error || 'lỗi không rõ'}`);
+    } catch (err) {
+      errors.push(`#${shelfLocationId}: không kết nối được máy chủ`);
+    }
+  }
+  kkConfirmSelected[kind] = new Set();
+  await cfg.reload();
+  if (errors.length) alert(`⚠️ Một số quầy kệ không Xác Nhận được:\n${errors.join('\n')}`);
+}
+
+async function bulkUnconfirmKkShelves(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  const ids = Array.from(kkConfirmSelected[kind]);
+  if (!ids.length) return;
+  const confirmations = cfg.getConfirmations();
+  const rows = ids.map(sid => confirmations.find(c => c.shelfLocationId === sid)).filter(Boolean);
+  if (!rows.length) { alert('Các quầy kệ đã chọn đều chưa được Xác Nhận.'); return; }
+  if (!confirm(`Gỡ Xác Nhận ${rows.length} quầy kệ đã chọn?`)) return;
+  const errors = [];
+  for (const row of rows) {
+    try {
+      const res = await fetch(`${cfg.url}/${row.id}`, { method: 'DELETE' });
+      if (res.status === 401) return handleSessionExpired();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) errors.push(`#${row.shelfLocationId}: ${body.error || 'lỗi không rõ'}`);
+    } catch (err) {
+      errors.push(`#${row.shelfLocationId}: không kết nối được máy chủ`);
+    }
+  }
+  kkConfirmSelected[kind] = new Set();
+  await cfg.reload();
+  if (errors.length) alert(`⚠️ Một số quầy kệ không Gỡ Xác Nhận được:\n${errors.join('\n')}`);
 }
 
 // updateKkConfirmAllVisibility() (12/2026, đổi tham số) — tự tính CẢ 2 điều kiện Kiểm Đếm/Kiểm Soát từ

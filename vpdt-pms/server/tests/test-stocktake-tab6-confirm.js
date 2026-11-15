@@ -28,9 +28,10 @@ let appDataStore = {
   stocktakeCounts: [],
   stocktakeShelfConfirmations: [],
   stocktakeShelfKiemSoatConfirmations: [],
+  stocktakeShelfGomMaConfirmations: [],
   users: [
-    // nv1: Kiểm Đếm + Kiểm Soát trên A1/A2 (nhân viên thao tác thường).
-    { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true }, active: true },
+    // nv1: Kiểm Đếm + Kiểm Soát + Gom Mã trên A1/A2 (nhân viên thao tác thường, Gom Mã MỚI 12/2026).
+    { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeGomMaDo: true }, active: true },
     // nv2: CHỈ có quyền tab Kiểm Đếm nhưng KHÔNG có allowlist gì — dùng để test Lớp 1/2 vẫn chặn Xác Nhận.
     { username: 'nv2', name: 'Nhân Viên 2', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true },
     // qlA: Quản Lý Siêu Thị — có quyền Tab 6 (kiemKeConfirmDo) nhưng KHÔNG có kiemKeKiemDemDo (đúng vai
@@ -98,8 +99,8 @@ function request(port, method, urlPath, username, body) {
     const SESSION_ID = 2001;
     appDataStore.stocktakeSessions.push({ id: SESSION_ID, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Thống Kê test', trangThai: 'DANG_HOAT_DONG' });
     appDataStore.stocktakeUserAccess.push(
-      { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true },
-      { id: 2, username: 'nv1', dept: DEPT1, shelfLocationId: 11, canKiemDem: true, canKiemSoat: true }
+      { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
+      { id: 2, username: 'nv1', dept: DEPT1, shelfLocationId: 11, canKiemDem: true, canKiemSoat: true, canGomMa: true }
     );
 
     // 0) Kiểm Đếm thật 2 quầy kệ A1/A2 trước (để có dữ liệu "đã đếm" cho confirm-all kiểm tra).
@@ -198,8 +199,38 @@ function request(port, method, urlPath, username, body) {
     res = await request(port, 'POST', '/api/stocktake/sessions/2002/confirm-all', 'qlA');
     check('Xác Nhận Toàn Bộ Đợt: từ chối với Kỳ Gom Mã (chỉ áp dụng Kỳ Thống Kê)', res.status === 400, res);
 
-    // 13) Chưa đăng nhập -> 401 cho cả 7 route liên quan (4 route Kiểm Đếm/confirm-all cũ + 3 route Kiểm
-    //     Soát mới).
+    // 12b) === Xác Nhận Gom Mã từng quầy kệ (MỚI, 12/2026) — dùng ĐÚNG Kỳ Gom Mã 2002 (loaiKy='GOM_MA'),
+    //      HOÀN TOÀN ĐỘC LẬP với Kỳ Thống Kê 2001 (đã Đã chốt ở bước 10b) — chứng minh Gom Mã không bị
+    //      ảnh hưởng bởi việc Kỳ Thống Kê đã chốt hay bất kỳ cờ Xác Nhận Kiểm Đếm/Kiểm Soát nào. ===
+    res = await request(port, 'POST', '/api/stocktake/counts/scan', 'nv1', { sessionId: 2002, shelfLocationId: 10, maHang: 'SP001', mode: 'GOM_MA', qty: 3 });
+    check('Chuẩn bị: Gom Mã quầy kệ A1 (Kỳ Gom Mã riêng) thành công dù Kỳ Thống Kê đã Đã chốt', res.status === 200 && res.body.item?.slGomMa === 3, res);
+
+    // nv2 (KHÔNG có kiemKeGomMaDo) không Xác Nhận Gom Mã được — Lớp 1.
+    res = await request(port, 'POST', '/api/stocktake/shelf-gom-ma-confirmations', 'nv2', { sessionId: 2002, shelfLocationId: 10 });
+    check('Xác Nhận Gom Mã: chặn đúng Lớp 1 khi không có quyền tab Gom Mã', res.status === 403, res);
+
+    // nv1 (có allowlist Gom Mã A1) xác nhận Gom Mã được.
+    res = await request(port, 'POST', '/api/stocktake/shelf-gom-ma-confirmations', 'nv1', { sessionId: 2002, shelfLocationId: 10 });
+    check('Người có quyền Gom Mã quầy kệ đó xác nhận Gom Mã được', res.status === 200 && res.body.item?.shelfLocationId === 10, res);
+
+    // Xác nhận Gom Mã lại (idempotent).
+    const gomMaListBefore = await request(port, 'GET', `/api/stocktake/shelf-gom-ma-confirmations?sessionId=2002`, 'nv1');
+    res = await request(port, 'POST', '/api/stocktake/shelf-gom-ma-confirmations', 'nv1', { sessionId: 2002, shelfLocationId: 10 });
+    check('Xác nhận Gom Mã lại 1 quầy kệ đã xác nhận: idempotent, không tạo trùng dòng', res.status === 200 && gomMaListBefore.body.items.filter(c => c.shelfLocationId === 10).length === 1, { res, gomMaListBefore });
+
+    // Sau khi Xác Nhận Gom Mã A1: Gom Mã TIẾP trên A1 bị chặn.
+    res = await request(port, 'POST', '/api/stocktake/counts/scan', 'nv1', { sessionId: 2002, shelfLocationId: 10, maHang: 'SP001', mode: 'GOM_MA', qty: 9 });
+    check('Quầy kệ ĐÃ Xác Nhận Gom Mã: quét Gom Mã TIẾP bị chặn (khoá riêng Gom Mã)', res.status === 409 && /đã được Xác Nhận Gom Mã/.test(res.body.error || ''), res);
+
+    // Gỡ Xác Nhận Gom Mã A1 -> Gom Mã lại được bình thường.
+    const gomMaConfirmedRow = gomMaListBefore.body.items.find(c => c.shelfLocationId === 10);
+    res = await request(port, 'DELETE', `/api/stocktake/shelf-gom-ma-confirmations/${gomMaConfirmedRow.id}`, 'nv1');
+    check('Gỡ Xác Nhận Gom Mã quầy kệ thành công', res.status === 200, res);
+    res = await request(port, 'POST', '/api/stocktake/counts/scan', 'nv1', { sessionId: 2002, shelfLocationId: 10, maHang: 'SP001', mode: 'GOM_MA', qty: 5 });
+    check('Sau khi gỡ Xác Nhận Gom Mã: Gom Mã lại được bình thường', res.status === 200, res);
+
+    // 13) Chưa đăng nhập -> 401 cho cả 10 route liên quan (4 route Kiểm Đếm/confirm-all cũ + 3 route Kiểm
+    //     Soát + 3 route Gom Mã mới).
     res = await request(port, 'GET', `/api/stocktake/shelf-confirmations?sessionId=${SESSION_ID}`, null);
     check('Chưa đăng nhập -> 401 (GET shelf-confirmations)', res.status === 401, res);
     res = await request(port, 'POST', '/api/stocktake/shelf-confirmations', null, { sessionId: SESSION_ID, shelfLocationId: 10 });
@@ -212,6 +243,12 @@ function request(port, method, urlPath, username, body) {
     check('Chưa đăng nhập -> 401 (POST shelf-kiem-soat-confirmations)', res.status === 401, res);
     res = await request(port, 'DELETE', '/api/stocktake/shelf-kiem-soat-confirmations/1', null);
     check('Chưa đăng nhập -> 401 (DELETE shelf-kiem-soat-confirmations)', res.status === 401, res);
+    res = await request(port, 'GET', `/api/stocktake/shelf-gom-ma-confirmations?sessionId=2002`, null);
+    check('Chưa đăng nhập -> 401 (GET shelf-gom-ma-confirmations)', res.status === 401, res);
+    res = await request(port, 'POST', '/api/stocktake/shelf-gom-ma-confirmations', null, { sessionId: 2002, shelfLocationId: 10 });
+    check('Chưa đăng nhập -> 401 (POST shelf-gom-ma-confirmations)', res.status === 401, res);
+    res = await request(port, 'DELETE', '/api/stocktake/shelf-gom-ma-confirmations/1', null);
+    check('Chưa đăng nhập -> 401 (DELETE shelf-gom-ma-confirmations)', res.status === 401, res);
 
     console.log(`\n==== ${pass} passed, ${fail} failed ====`);
     process.exitCode = fail ? 1 : 0;

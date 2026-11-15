@@ -119,7 +119,9 @@ function createMockState(seed) {
     // stocktakeSessions ngay trên.
     stocktakeUserAccess: [], stocktakeCounts: [], stocktakeShelfConfirmations: [],
     // stocktakeShelfKiemSoatConfirmations (Tab 6 Xác Nhận Kiểm Soát riêng, 12/2026) — CÙNG lý do.
-    stocktakeShelfKiemSoatConfirmations: []
+    stocktakeShelfKiemSoatConfirmations: [],
+    // stocktakeShelfGomMaConfirmations (Tab 6 Xác Nhận Gom Mã riêng, MỚI 12/2026) — CÙNG lý do.
+    stocktakeShelfGomMaConfirmations: []
   }, seed || {});
 }
 
@@ -1041,6 +1043,13 @@ function createDispatcher(state) {
             const e = new Error('Quầy kệ này đã được Xác Nhận Kiểm Soát ở Tab "Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa)'); e.status = 409; throw e;
           }
         }
+        // mode === 'GOM_MA' (MỚI, 12/2026) — CÙNG khuôn KIEM_SOAT ngay trên, collection riêng.
+        if (mode === 'GOM_MA' && !opts?.skipConfirmedCheck) {
+          const gomMaConfirmations = state.stocktakeShelfGomMaConfirmations || [];
+          if (isShelfConfirmed(gomMaConfirmations, sessionId, shelfLocationId)) {
+            const e = new Error('Quầy kệ này đã được Xác Nhận Gom Mã ở Tab "Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa)'); e.status = 409; throw e;
+          }
+        }
         return loc;
       }
 
@@ -1118,6 +1127,7 @@ function createDispatcher(state) {
         // thay vì đợi tới lúc quét mới biết đã bị Xác Nhận).
         let shelfConfirmed = false;
         let shelfKiemSoatConfirmed = false;
+        let shelfGomMaConfirmed = false;
         if (mode === 'KIEM_DEM' && activeSession) {
           const { isShelfConfirmed } = stockEngine2();
           shelfConfirmed = isShelfConfirmed(state.stocktakeShelfConfirmations || [], activeSession.id, shelfLocationId);
@@ -1126,7 +1136,11 @@ function createDispatcher(state) {
           const { isShelfConfirmed } = stockEngine2();
           shelfKiemSoatConfirmed = isShelfConfirmed(state.stocktakeShelfKiemSoatConfirmations || [], activeSession.id, shelfLocationId);
         }
-        return { status: 200, body: { session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
+        if (mode === 'GOM_MA' && activeSession) {
+          const { isShelfConfirmed } = stockEngine2();
+          shelfGomMaConfirmed = isShelfConfirmed(state.stocktakeShelfGomMaConfirmations || [], activeSession.id, shelfLocationId);
+        }
+        return { status: 200, body: { session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } } };
       }
       if (pathName === '/api/stocktake/counts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
@@ -1241,6 +1255,42 @@ function createDispatcher(state) {
           kkAssertScanAllowedMock(freshUser, 'KIEM_SOAT', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
           const { unconfirmShelf } = stockEngine2();
           state.stocktakeShelfKiemSoatConfirmations = unconfirmShelf(state.stocktakeShelfKiemSoatConfirmations, id);
+          return { status: 200, body: { ok: true } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      // Xác Nhận Gom Mã từng quầy kệ (MỚI, 12/2026) — mirror NGUYÊN 3 route Kiểm Soát ngay trên, chỉ
+      // khác collection `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA'.
+      if (pathName === '/api/stocktake/shelf-gom-ma-confirmations' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const sessionId = Number(new URL(url, 'http://x').searchParams.get('sessionId'));
+        const items = (state.stocktakeShelfGomMaConfirmations || []).filter(c => c.sessionId === sessionId);
+        return { status: 200, body: { items } };
+      }
+      if (pathName === '/api/stocktake/shelf-gom-ma-confirmations' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        try {
+          const sessionId = Number(body?.sessionId);
+          const shelfLocationId = Number(body?.shelfLocationId);
+          const loc = kkAssertScanAllowedMock(freshUser, 'GOM_MA', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+          const { confirmShelf } = stockEngine2();
+          const arr = state.stocktakeShelfGomMaConfirmations || (state.stocktakeShelfGomMaConfirmations = []);
+          const row = confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, freshUser);
+          return { status: 200, body: { item: row } };
+        } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
+      }
+      const kkGomMaShelfConfirmDelMatch = pathName.match(/^\/api\/stocktake\/shelf-gom-ma-confirmations\/(\d+)$/);
+      if (kkGomMaShelfConfirmDelMatch && method === 'DELETE') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const id = Number(kkGomMaShelfConfirmDelMatch[1]);
+        try {
+          const existingRow = (state.stocktakeShelfGomMaConfirmations || []).find(c => c.id === id);
+          if (!existingRow) return { status: 404, body: { error: 'Không tìm thấy xác nhận quầy kệ này' } };
+          kkAssertScanAllowedMock(freshUser, 'GOM_MA', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+          const { unconfirmShelf } = stockEngine2();
+          state.stocktakeShelfGomMaConfirmations = unconfirmShelf(state.stocktakeShelfGomMaConfirmations, id);
           return { status: 200, body: { ok: true } };
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }

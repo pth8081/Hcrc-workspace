@@ -17,7 +17,8 @@ async function main() {
     username: 'qlA', name: 'Quản Lý A', dept: DEPT1,
     // shelfLocationManage (10/2026, Kiểm Soát Hàng Hóa) thêm kèm ở đây để test được NHÁNH THÀNH CÔNG của
     // "Mở Quản Lý Quầy Kệ" — nhánh THIẾU quyền (báo lỗi rõ thay vì âm thầm rơi tab) test riêng bên dưới.
-    perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeConfirmDo: true, kiemKeShelfConfigManage: true, shelfLocationManage: true }, active: true, totpEnabled: true
+    // kiemKeGomMaDo (MỚI, 12/2026) thêm để test được bulk-select + Xác Nhận Gom Mã ở cuối file.
+    perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeConfirmDo: true, kiemKeShelfConfigManage: true, shelfLocationManage: true, kiemKeGomMaDo: true }, active: true, totpEnabled: true
   };
   // nv1: CHỈ có kiemKeKiemDemDo (KHÔNG kiemKeConfirmDo) — đúng vai nhân viên Kiểm Đếm thường, dùng để
   // xác nhận Tab 6 VẪN hiện cho vai này (tự Xác Nhận quầy kệ mình vừa đếm xong), chỉ ẩn nút Toàn Bộ Đợt.
@@ -29,8 +30,8 @@ async function main() {
     shelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
-      { id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true },
-      { id: 2, username: 'qlA', dept: DEPT1, shelfLocationId: 11, canKiemDem: true, canKiemSoat: true }
+      { id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
+      { id: 2, username: 'qlA', dept: DEPT1, shelfLocationId: 11, canKiemDem: true, canKiemSoat: true, canGomMa: true }
     ],
     stocktakeCounts: []
   });
@@ -238,6 +239,132 @@ async function main() {
       assert(confirmAllWrapHidden, 'Nhân viên KHÔNG có kiemKeConfirmDo KHÔNG được thấy khối "Xác Nhận Toàn Bộ Đợt"');
       const btnShelfConfigHidden = await page.evaluate(() => document.getElementById('btnKkSubShelfConfig').classList.contains('hidden'));
       assert(btnShelfConfigHidden, 'Nhân viên không có kiemKeShelfConfigManage thì KHÔNG thấy nút Tab 5 (gating độc lập, không bị ảnh hưởng bởi thay đổi Tab 6)');
+    });
+
+    // ===== Bulk multi-select Xác Nhận/Gỡ Xác Nhận (MỚI, 12/2026, theo yêu cầu người dùng "chọn nhiều
+    // quầy kệ kiểm đếm, gom mã và kiểm soát để xác nhận cũng như gỡ xác nhận") + Xác Nhận Gom Mã (MỚI,
+    // 12/2026 — trước đây Gom Mã không có khoá/Xác Nhận nào) — dùng ĐÚNG session "Thống Kê đợt 2" (đã
+    // tạo+kích hoạt ở test ngay trên, còn "Đang hoạt động", qlA có allowlist Kiểm Đếm/Kiểm Soát/Gom Mã
+    // trên A1/A2) + 1 session Gom Mã MỚI tạo riêng. Đăng nhập lại bằng qlA (đủ cả 3 quyền). =====
+    // qlA không có kiemKePeriodManage (vai "thao tác", không "quản lý Kỳ") -> tạo+kích hoạt Kỳ Gom Mã
+    // bằng ADMIN trước (CÙNG cách session "Thống Kê đợt 2" đã tạo ở test ngay trên), rồi mới đăng nhập
+    // lại qlA để thao tác Tab 6.
+    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
+    const gomMaSessionId = await page.evaluate(async (dept) => {
+      const r = await fetch('/api/stocktake/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dept, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q4/2026' }) });
+      const body = await r.json();
+      await fetch(`/api/stocktake/sessions/${body.item.id}/activate`, { method: 'POST' });
+      return body.item.id;
+    }, DEPT1);
+    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, MANAGER);
+    await page.evaluate(() => switchTab('kiemKe'));
+    await page.waitForTimeout(100);
+
+    await run.run('Chuẩn bị: Kiểm Đếm + Kiểm Soát A1/A2 (session "Thống Kê đợt 2") + Gom Mã A1 (session Gom Mã mới) qua UI thật', async () => {
+      await page.click('#btnKkSubKiemDem');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.waitForTimeout(150);
+      await page.fill('#kkKiemDemBarcodeInput', 'SP001');
+      await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemDemShelfSelect', '11');
+      await page.waitForTimeout(150);
+      await page.fill('#kkKiemDemBarcodeInput', 'SP002');
+      await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
+      await page.waitForTimeout(150);
+
+      await page.click('#btnKkSubKiemSoat');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.waitForTimeout(150);
+      await page.fill('#kkKiemSoatBarcodeInput', 'SP001');
+      await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
+      await page.waitForTimeout(150);
+
+      await page.click('#btnKkSubGomMa');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkGomMaShelfSelect', '10');
+      await page.waitForTimeout(150);
+      await page.fill('#kkGomMaBarcodeInput', 'SP001');
+      await page.click('[data-op="submitKkScan"][data-arg0="GOMMA"]');
+      await page.waitForTimeout(150);
+      const text = await page.evaluate(() => document.getElementById('kkGomMaListBody').textContent);
+      assert(text.includes('SP001'), `Gom Mã phải quét thành công, thực tế: ${text}`);
+    });
+
+    await run.run('Tab 6 bulk Kiểm Đếm: "Chọn tất cả" + "Xác Nhận Đã Chọn" -> cả A1+A2 Xác Nhận cùng lúc', async () => {
+      await page.click('#btnKkSubConfirm');
+      await page.waitForTimeout(250);
+      const text0 = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
+      assert(text0.includes('A1') && text0.includes('A2'), `Phải hiện đủ A1/A2 chưa xác nhận ở session mới, thực tế: ${text0}`);
+      const onDialog = (d) => d.accept().catch(() => {});
+      page.on('dialog', onDialog);
+      await page.check('#kkConfirmBulkBarKiemDem input[type="checkbox"]');
+      await page.waitForTimeout(100);
+      const countLabel = await page.evaluate(() => document.querySelector('#kkConfirmBulkBarKiemDem [data-role="count"]').textContent);
+      assert(countLabel.includes('2'), `Phải báo đã chọn 2 quầy kệ, thực tế: "${countLabel}"`);
+      await page.click('[data-op="bulkConfirmKkShelves"][data-arg0="KIEMDEM"]');
+      await page.waitForTimeout(250);
+      page.off('dialog', onDialog);
+      const text = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
+      const checkCount = (text.match(/đã xác nhận bởi/g) || []).length;
+      assertEqual(checkCount, 2, `Cả A1+A2 phải cùng chuyển sang đã xác nhận sau 1 lần bấm bulk, thực tế: ${text}`);
+    });
+
+    await run.run('Tab 6 bulk Kiểm Đếm: "Chọn tất cả" + "Gỡ Xác Nhận Đã Chọn" -> cả A1+A2 gỡ xác nhận cùng lúc', async () => {
+      const onDialog = (d) => d.accept().catch(() => {});
+      page.on('dialog', onDialog);
+      await page.check('#kkConfirmBulkBarKiemDem input[type="checkbox"]');
+      await page.waitForTimeout(100);
+      await page.click('[data-op="bulkUnconfirmKkShelves"][data-arg0="KIEMDEM"]');
+      await page.waitForTimeout(250);
+      page.off('dialog', onDialog);
+      const text = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
+      const checkCount = (text.match(/đã xác nhận bởi/g) || []).length;
+      assertEqual(checkCount, 0, `Cả A1+A2 phải cùng gỡ xác nhận sau 1 lần bấm bulk gỡ, thực tế: ${text}`);
+      const btnDisabled = await page.evaluate(() => document.querySelector('[data-bulk-btn][data-op="bulkConfirmKkShelves"][data-arg0="KIEMDEM"]').disabled);
+      assert(btnDisabled, 'Sau khi bulk xong, selection phải tự reset -> nút bulk quay lại trạng thái khoá (chưa chọn gì)');
+    });
+
+    await run.run('Tab 6 bulk Kiểm Soát: tick riêng 1 dòng (không dùng "Chọn tất cả") + "Xác Nhận Đã Chọn" -> đúng 1 quầy kệ được xác nhận', async () => {
+      const text0 = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(text0.includes('A1'), `Phải hiện A1 đã có hoạt động Kiểm Soát, thực tế: ${text0}`);
+      const onDialog = (d) => d.accept().catch(() => {});
+      page.on('dialog', onDialog);
+      await page.check('#kkConfirmSoatShelfListBody input[type="checkbox"][data-shelf-id="10"]');
+      await page.waitForTimeout(100);
+      await page.click('[data-op="bulkConfirmKkShelves"][data-arg0="KIEMSOAT"]');
+      await page.waitForTimeout(250);
+      page.off('dialog', onDialog);
+      const text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(text.includes('đã xác nhận bởi'), `A1 phải chuyển sang đã Xác Nhận Kiểm Soát qua bulk (1 dòng), thực tế: ${text}`);
+    });
+
+    await run.run('Tab 6 Gom Mã (kỳ riêng): chọn đúng kỳ Gom Mã mới, hiện A1, bulk Xác Nhận hoạt động đúng', async () => {
+      await page.selectOption('#kkConfirmGomMaSessionSelect', String(gomMaSessionId));
+      await page.waitForTimeout(250);
+      const text0 = await page.evaluate(() => document.getElementById('kkConfirmGomMaShelfListBody').textContent);
+      assert(text0.includes('A1'), `Phải hiện A1 đã có hoạt động Gom Mã ở ĐÚNG kỳ Gom Mã riêng, thực tế: ${text0}`);
+      const onDialog = (d) => d.accept().catch(() => {});
+      page.on('dialog', onDialog);
+      await page.check('#kkConfirmBulkBarGomMa input[type="checkbox"]');
+      await page.waitForTimeout(100);
+      await page.click('[data-op="bulkConfirmKkShelves"][data-arg0="GOMMA"]');
+      await page.waitForTimeout(250);
+      page.off('dialog', onDialog);
+      const text = await page.evaluate(() => document.getElementById('kkConfirmGomMaShelfListBody').textContent);
+      assert(text.includes('đã xác nhận bởi'), `A1 phải chuyển sang đã Xác Nhận Gom Mã qua bulk, thực tế: ${text}`);
+      // Gom Mã đã khoá -> sang Tab 2 Gom Mã TIẾP trên A1 bị chặn rõ ràng NGAY lúc chọn (cùng khuôn Kiểm
+      // Đếm/Kiểm Soát).
+      await page.click('#btnKkSubGomMa');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkGomMaShelfSelect', '11');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkGomMaShelfSelect', '10');
+      await page.waitForTimeout(200);
+      const info = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);
+      assert(/ĐÃ được Xác Nhận Gom Mã/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận Gom Mã" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
     });
 
     assertEqual(jsErrors.length, 0, 'Không có lỗi JS/console nào phát sinh: ' + jsErrors.join('\n'));
