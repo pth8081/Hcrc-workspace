@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**30.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.50 (2026-12): Vá 2 lỗ hổng bảo mật NGHIÊM TRỌNG + 2 lỗi thật ở "📋 Kiểm Kê"/"📋 Kiểm Soát Hàng Hóa" (đợt audit chuyên sâu nhiều agent độc lập, theo yêu cầu người dùng "rà soát sâu xem có lỗi tiềm ẩn gì không")
+
+Cho 3 agent độc lập audit song song (1 rà logic server/race condition, 1 lái Playwright thao tác thực tế,
+1 rà bảo mật/thử phá quyền) toàn bộ mảng offline vừa xây cho 2 module trên. Phát hiện và vá:
+
+- **[NGHIÊM TRỌNG]** `POST/GET /api/data/:key` (route generic) hoàn toàn KHÔNG gác quyền cho 9 collection
+  của Kiểm Kê/Kiểm Soát Hàng Hóa (`shelfLocations`, `shelfRecords`, `shelfStockThresholds`,
+  `stocktakeSessions`, `stocktakeCounts`, `stocktakeUserAccess`, `stocktakeShelfConfirmations`,
+  `stocktakeShelfKiemSoatConfirmations`, `stocktakeShelfGomMaConfirmations`) — BẤT KỲ tài khoản đã đăng
+  nhập nào (không cần quyền gì) có thể ghi đè/xoá trắng TOÀN BỘ dữ liệu 2 module này của MỌI siêu thị,
+  kể cả tự ghi thẳng vào `stocktakeUserAccess` để leo thang quyền (tự gán mình quyền quét quầy kệ bất
+  kỳ). Đã tái hiện bằng HTTP PoC thật. Vá: thêm 9 key vào `SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE`
+  (`routes/data.js`) — bắt buộc đi qua các route riêng đã có đủ (đã có validate + gác quyền đúng vai trò).
+- **[TRUNG BÌNH]** `GET /api/data` (route tổng hợp dùng lúc đăng nhập) lộ chéo siêu thị 2 collection Xác
+  Nhận Kiểm Soát/Gom Mã (`stocktakeShelfKiemSoatConfirmations`/`stocktakeShelfGomMaConfirmations`, thêm
+  sau collection Kiểm Đếm) cho MỌI tài khoản đã đăng nhập. Vá: thêm 2 hàm filter theo dept (tái dùng đúng
+  khuôn `stocktakeShelfConfirmations`) + thêm 2 key vào `MODULE_ACCESS_GATED_COLLECTIONS.kiemKe`.
+- **[NGHIÊM TRỌNG, kiểm soát truy cập]** Gán quyền Tab 8 hàng loạt (chọn nhiều quầy kệ 1 lúc) sinh `id`
+  có thể TRÙNG NHAU (`Date.now()+random` không đủ phân biệt khi tạo nhiều dòng trong 1 vòng lặp đồng bộ,
+  xác nhận ~90% tỉ lệ trùng với 60 quầy kệ) — khiến bấm "Xoá" 1 dòng allowlist có thể xoá nhầm dòng khác,
+  dòng còn lại "biến mất" khỏi màn hình nhưng VẪN CÒN HIỆU LỰC ngầm trong DB. Vá: đổi sang bộ đếm tăng dần
+  thật trong đúng 1 lần gọi (`lib/stocktakeEngine.js`, `upsertUserAccessRows()`).
+- **[NHẸ, hiển thị]** Bật "✈️ Offline Thủ Công" đúng lúc 1 lượt đồng bộ nền (heartbeat) của mã khác đang
+  bay — mã vừa quét thêm "biến mất" tạm khỏi danh sách (không mất dữ liệu thật, vẫn trong hàng đợi, tự
+  đồng bộ đúng sau) do `loadKkScanCounts()` ghi đè mất dòng optimistic chưa đồng bộ. Vá: merge lại đúng
+  các lượt còn chờ sau khi tải mới từ server (`applyOptimisticKkScanRow()`, `module-vanhanh.js`).
+
+Đã chạy lại toàn bộ `test-stocktake-*`/`test-shelf-*` (không regression) + mẫu ngẫu nhiên ~20 file test
+module khác (không liên quan). Không đổi `schema.sql`/biến môi trường/`package.json` dependencies — chỉ
+sửa code JS/logic, copy code + `pm2 restart` là đủ. **Khuyến nghị deploy sớm** do mức độ nghiêm trọng của
+2 lỗ hổng đầu (ảnh hưởng toàn bộ dữ liệu Kiểm Kê/Kiểm Soát Hàng Hóa của công ty).
+
+Phát hiện khác ĐÃ GHI NHẬN nhưng CHƯA vá (cần thêm quyết định thiết kế, không phải lỗi cấp bách):
+mảng `appliedScanIds` (chống trùng quét) tăng không giới hạn về lâu dài (rủi ro hiệu năng tương lai, cùng
+dạng `systemInventorySnapshot` từng gặp); F5/kill app lúc đang offline yêu cầu có mạng lại mới đăng nhập
+lại được (hành vi chung toàn hệ thống, không riêng Kiểm Kê, dữ liệu offline không mất nhưng không xem/tiếp
+tục được cho tới khi có mạng).
 
 ## v30.49 (2026-12): "📋 Kiểm Kê" — Hoạt động Offline (Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận) + chống trùng khi đồng bộ + nhắc nhở mềm đổi quầy kệ
 

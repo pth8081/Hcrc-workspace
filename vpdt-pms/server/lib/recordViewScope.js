@@ -1056,6 +1056,19 @@ function canViewStocktakeShelfConfirmation(user, item) {
 function filterStocktakeShelfConfirmationsForUser(items, user) {
   return (items || []).filter(o => canViewStocktakeShelfConfirmation(user, o));
 }
+// stocktakeShelfKiemSoatConfirmations/stocktakeShelfGomMaConfirmations (Tab 6 Xác Nhận Kiểm Soát/Gom
+// Mã, 12/2026) — LỖI ĐÃ VÁ (phát hiện ở đợt audit chuyên sâu 12/2026): 2 collection "song sinh" thêm
+// SAU stocktakeShelfConfirmations (Kiểm Đếm) bị BỎ SÓT khỏi cả nơi lọc này lẫn
+// MODULE_ACCESS_GATED_COLLECTIONS.kiemKe — để lộ chéo siêu thị (dept/shelfLocationId/
+// confirmedBy/confirmedByName) cho MỌI tài khoản đã đăng nhập qua GET /api/data chung, kể cả không có
+// quyền/bị tắt hẳn moduleAccess.kiemKe. Dùng lại ĐÚNG khuôn canViewStocktakeShelfConfirmation() ngay
+// trên (cùng bản chất dữ liệu, chỉ khác tên collection).
+function filterStocktakeShelfKiemSoatConfirmationsForUser(items, user) {
+  return (items || []).filter(o => canViewStocktakeShelfConfirmation(user, o));
+}
+function filterStocktakeShelfGomMaConfirmationsForUser(items, user) {
+  return (items || []).filter(o => canViewStocktakeShelfConfirmation(user, o));
+}
 // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng, 12/2026) — đây là DỮ LIỆU CẤU HÌNH QUYỀN (ai được quét
 // quầy kệ nào), không phải hồ sơ nghiệp vụ theo dept — lộ ra cho nhân viên quét hàng thường sẽ cho họ
 // biết đồng nghiệp khác được cấp quyền gì (không nguy hiểm bằng dữ liệu cá nhân nhưng vẫn không nên lộ
@@ -1784,7 +1797,8 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // lặp lại nhiều lần trong file này (budget/car/meeting/vpp/payment/checklist...). Key RIÊNG 'kiemKe'
   // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
   // hoàn toàn khỏi Vận Hành (xem core.js).
-  kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess', 'stocktakeShelfConfirmations'],
+  kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess', 'stocktakeShelfConfirmations',
+    'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -2029,6 +2043,7 @@ module.exports = {
   canViewStocktakeSession, filterStocktakeSessionsForUser,
   canViewStocktakeCount, filterStocktakeCountsForUser,
   canViewStocktakeShelfConfirmation, filterStocktakeShelfConfirmationsForUser,
+  filterStocktakeShelfKiemSoatConfirmationsForUser, filterStocktakeShelfGomMaConfirmationsForUser,
   canViewStocktakeUserAccess, filterStocktakeUserAccessForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,

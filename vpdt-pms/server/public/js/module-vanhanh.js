@@ -783,19 +783,40 @@ async function onKkScanShelfChanged(tabKey) {
 }
 
 async function loadKkScanCounts(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
   const st = kkScanState[tabKey];
   if (!st.selectedShelfId || !st.session) { st.counts = []; renderKkScanList(tabKey); return; }
+  // replacedFromServer: TRUE nếu st.counts vừa bị GHI ĐÈ bằng dữ liệu mới (thành công hoặc lỗi server
+  // thật) — khi đó cần merge lại các lượt offline CÒN ĐANG CHỜ (xem chú thích LỖI ĐÃ VÁ bên dưới). FALSE
+  // khi mất mạng thật (giữ NGUYÊN st.counts cũ, đã có sẵn các dòng pending từ trước) — merge lại trong
+  // trường hợp này sẽ CỘNG DỒN NHẦM LẦN 2 vào đúng dòng đã có.
+  let replacedFromServer = false;
   try {
     const res = await fetch(`/api/stocktake/counts?sessionId=${st.session.id}&shelfLocationId=${st.selectedShelfId}`);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     st.counts = res.ok ? (body.items || []) : [];
+    replacedFromServer = true;
   } catch (err) {
     // Mất mạng thật (MỚI, 12/2026): GIỮ NGUYÊN st.counts đang có (đã tải lúc còn mạng trước đó trong
     // CÙNG phiên trình duyệt này) thay vì xoá trắng — người dùng vẫn cần xem lại các mã đã quét để tiếp
     // tục quét thêm offline (xem submitKkScan()/applyOptimisticKkScan()). KHÔNG có gì để giữ (lần đầu vào
     // quầy kệ này đã mất mạng sẵn) thì vẫn là mảng rỗng như trước.
-    if (!(err instanceof TypeError)) st.counts = [];
+    if (!(err instanceof TypeError)) { st.counts = []; replacedFromServer = true; }
+  }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12/2026, phát hiện qua Playwright thao tác thực tế): nhánh tải mới ở
+  // trên GHI ĐÈ NGUYÊN st.counts bằng dữ liệu server, xoá mất các dòng "optimistic" (id "offline_...",
+  // xem applyOptimisticKkScanRow()) của những lượt quét KHÁC vẫn còn đang chờ đồng bộ — kịch bản thật:
+  // 1 lượt đồng bộ NỀN (heartbeat 20s/sự kiện 'online', KHÔNG qua nút nên không bị khoá double-submit)
+  // cho mã A đang chạy xong tự gọi lại hàm này, ngay lúc mã B vừa quét thêm (lúc bật Offline Thủ Công
+  // hoặc mất mạng) chưa kịp đồng bộ — mã B "biến mất" khỏi danh sách hiển thị dù vẫn còn nguyên trong
+  // hàng đợi/IndexedDB (không mất dữ liệu thật, chỉ sai hiển thị tạm thời, dễ khiến người dùng tưởng mất
+  // mà quét lại thừa). Merge lại đúng các lượt CÒN ĐANG CHỜ của ĐÚNG quầy kệ/hành động đang xem — CHỈ khi
+  // st.counts vừa được thay MỚI (replacedFromServer), tránh cộng dồn nhầm lần 2 ở nhánh mất mạng.
+  if (replacedFromServer) {
+    kkOfflinePendingScans
+      .filter(p => p.mode === cfg.apiMode && p.shelfLocationId === st.selectedShelfId)
+      .forEach(p => applyOptimisticKkScanRow(st, cfg, { maHang: p.maHang, tenHang: p.tenHang }, p.qty));
   }
   renderKkScanList(tabKey);
 }
@@ -860,13 +881,11 @@ async function submitKkScan(tabKey) {
   }
 }
 
-// Cập nhật NGAY danh sách đang hiện (st.counts) sau khi ghi vào hàng đợi offline — CỘNG DỒN qty vào dòng
-// mã hàng đã có (đúng hành vi upsertScanCount() server sẽ làm khi đồng bộ), hoặc thêm dòng mới nếu mã này
-// chưa từng quét ở quầy kệ đang chọn. KHÔNG có `id` thật (server chưa cấp) — dùng id tạm bắt đầu bằng
-// "offline_" để renderKkScanList() nhận diện dòng CHƯA đồng bộ (xem badge "⏳").
-function applyOptimisticKkScan(tabKey, resolved, qty) {
-  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
-  const st = kkScanState[tabKey];
+// Cộng 1 lượt quét (CHƯA đồng bộ) vào ĐÚNG mảng st.counts đang có — tách riêng khỏi applyOptimisticKkScan()
+// (LỖI ĐÃ VÁ, đợt audit chuyên sâu 12/2026) để loadKkScanCounts() cũng dùng lại được NGUYÊN logic này
+// khi cần merge lại các lượt còn đang chờ đồng bộ sau khi tải mới `st.counts` từ server (xem chú thích ở
+// loadKkScanCounts()) — tránh viết lặp lại đúng 2 nhánh "cộng dồn nếu đã có mã / thêm dòng mới" ở 2 nơi.
+function applyOptimisticKkScanRow(st, cfg, resolved, qty) {
   const existing = st.counts.find(c => c.maHang === resolved.maHang);
   if (existing) {
     existing[cfg.qtyField] = (Number(existing[cfg.qtyField]) || 0) + qty;
@@ -878,6 +897,15 @@ function applyOptimisticKkScan(tabKey, resolved, qty) {
       lastScannedAt: new Date().toISOString(), createdAt: new Date().toISOString()
     });
   }
+}
+// Cập nhật NGAY danh sách đang hiện (st.counts) sau khi ghi vào hàng đợi offline — CỘNG DỒN qty vào dòng
+// mã hàng đã có (đúng hành vi upsertScanCount() server sẽ làm khi đồng bộ), hoặc thêm dòng mới nếu mã này
+// chưa từng quét ở quầy kệ đang chọn. KHÔNG có `id` thật (server chưa cấp) — dùng id tạm bắt đầu bằng
+// "offline_" để renderKkScanList() nhận diện dòng CHƯA đồng bộ (xem badge "⏳").
+function applyOptimisticKkScan(tabKey, resolved, qty) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  applyOptimisticKkScanRow(st, cfg, resolved, qty);
   renderKkScanList(tabKey);
 }
 
