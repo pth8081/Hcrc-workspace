@@ -156,11 +156,20 @@ async function main() {
       await page.waitForTimeout(100);
       await page.click('#btnKkSubShelfConfig');
       await page.waitForTimeout(200);
-      const selectExists = await page.evaluate(() => !!document.getElementById('kkShelfConfigDeptSelect'));
-      assert(selectExists, 'Admin phải thấy ô <select> chọn Siêu Thị NGAY tại Tab 5, không cần sang Tab 1');
+      // Ô chọn Siêu Thị PHẢI là ô tìm-kiếm-gõ-chọn (sdd) — KHÔNG phải <select> thường (12/2026, theo yêu
+      // cầu người dùng: "siêu thị dài mà select, mình lựa chọn theo kiểu tìm kiếm gợi ý").
+      const inputExists = await page.evaluate(() => !!document.getElementById('kkShelfConfigDeptInput') && document.getElementById('kkShelfConfigDeptInput').tagName === 'INPUT');
+      assert(inputExists, 'Admin phải thấy Ô TÌM-KIẾM-GÕ-CHỌN (input, không phải <select>) chọn Siêu Thị NGAY tại Tab 5');
+      const noNativeSelect = await page.evaluate(() => !document.getElementById('kkShelfConfigDeptSelect'));
+      assert(noNativeSelect, 'KHÔNG được còn <select id="kkShelfConfigDeptSelect"> native — phải đổi hẳn sang sdd');
       let text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
       assert(text.includes('A1') && text.includes('A2') && !text.includes('B1'), `Siêu thị mặc định (DEPT1) phải hiện A1/A2, KHÔNG hiện B1 của siêu thị khác, thực tế: ${text}`);
-      await page.selectOption('#kkShelfConfigDeptSelect', DEPT2);
+      // Gõ tìm "Quận 2" -> hiện gợi ý -> bấm chọn (CÙNG khuôn mọi ô sdd khác trong hệ thống).
+      await page.fill('#kkShelfConfigDeptInput', 'Quận 2');
+      await page.waitForTimeout(150);
+      const suggestionVisible = await page.evaluate(() => !document.getElementById('kkShelfConfigDeptDropdown').classList.contains('hidden'));
+      assert(suggestionVisible, 'Gõ tìm phải hiện dropdown gợi ý (sdd), không phải danh sách <option> tĩnh');
+      await page.click('#kkShelfConfigDeptDropdown [data-sdd-idx="0"]');
       await page.waitForTimeout(200);
       text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
       assert(!text.includes('A1') && !text.includes('A2') && text.includes('B1'), `Đổi sang Siêu Thị Quận 2 phải hiện ĐÚNG B1, KHÔNG còn A1/A2, thực tế: ${text}`);

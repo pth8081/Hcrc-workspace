@@ -872,9 +872,11 @@ let kkShelfLockSelected = new Set();
 // siêu thị phải rời sang Tab 1 rồi quay lại — nay thêm thẳng 1 ô chọn NGAY tại Tab 5 (CÙNG biến
 // kkPeriodDeptSelected dùng chung với Tab 1 qua kkEffectiveDept(), đổi ở tab nào cũng đồng bộ 2 chiều),
 // để trọn quy trình "chọn siêu thị -> hiện quầy kệ đúng siêu thị đó -> tìm kiếm -> Khoá/Mở Khoá" nằm gọn
-// trong 1 màn, không phải nhảy tab. Dạng <select> thường (KHÔNG sdd) — ĐÚNG khuôn renderKkPeriodDeptRow()
-// (Tab 1) đã có sẵn cho CHÍNH xác mục đích chọn siêu thị này, số lượng siêu thị không nhiều nên không cần
-// ô tìm-kiếm-gõ-chọn như Quầy Kệ/Trạng Thái/Xác Nhận (vốn có thể có HÀNG CHỤC/TRĂM giá trị).
+// trong 1 màn, không phải nhảy tab. Dùng ô tìm-kiếm-gõ-chọn sdd (KHÔNG phải <select> thường — người dùng
+// xác nhận rõ 12/2026: "siêu thị dài mà select, mình lựa chọn theo kiểu tìm kiếm gợi ý") — KHÁC Tab 1
+// "Kỳ Kiểm Kê" (renderKkPeriodDeptRow() vẫn giữ nguyên <select> cũ, ĐÃ có 2 bộ test Playwright dùng
+// page.selectOption() trên đó — cố ý KHÔNG đổi để tránh phá test đang pass, đúng phạm vi người dùng yêu
+// cầu CHỈ riêng màn Khoá/Mở Khoá này).
 function renderKkShelfConfigDeptRow() {
   const row = document.getElementById('kkShelfConfigDeptRow');
   if (!row) return;
@@ -882,16 +884,22 @@ function renderKkShelfConfigDeptRow() {
     const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
     if (!kkPeriodDeptSelected) kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
-      <select id="kkShelfConfigDeptSelect" data-op-change="onKkShelfConfigDeptChanged" class="border rounded px-2 py-1">
-        ${stores.map(s => `<option value="${escapeHtml(s)}" ${s === kkPeriodDeptSelected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
-      </select>`;
+      <input id="kkShelfConfigDeptInput" value="${escapeHtml(kkPeriodDeptSelected)}" data-sdd-list="kkShelfConfigDeptDropdown" data-op-input="onKkShelfConfigDeptInputChanged" placeholder="Gõ tên siêu thị..." autocomplete="off" class="border rounded px-2 py-1 w-64">
+      <div id="kkShelfConfigDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>`;
+    sddSetOptions('kkShelfConfigDeptDropdown', stores);
   } else {
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(currentUser.dept || '')}</span>`;
   }
 }
-function onKkShelfConfigDeptChanged() {
-  const sel = document.getElementById('kkShelfConfigDeptSelect');
-  kkPeriodDeptSelected = sel ? sel.value : '';
+// onKkShelfConfigDeptInputChanged() — CHỈ đổi siêu thị khi giá trị gõ KHỚP CHÍNH XÁC 1 siêu thị có thật
+// (tức là đã bấm chọn từ gợi ý, hoặc gõ đúng tuyệt đối tên) — gõ dở dang/sai chính tả thì GIỮ NGUYÊN siêu
+// thị đang chọn (không tự đổi sang rỗng/sai), tránh mất trạng thái khi admin đang gõ tìm.
+function onKkShelfConfigDeptInputChanged() {
+  const input = document.getElementById('kkShelfConfigDeptInput');
+  const raw = (input?.value || '').trim();
+  const stores = DB.stores || [];
+  if (!stores.includes(raw) || raw === kkPeriodDeptSelected) return;
+  kkPeriodDeptSelected = raw;
   kkShelfLockSelected = new Set();
   clearKkShelfConfigFilters();
 }
