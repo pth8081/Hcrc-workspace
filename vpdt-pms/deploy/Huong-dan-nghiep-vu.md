@@ -3770,6 +3770,33 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa); quầy kệ đã Xác
   Nhận Kiểm Soát bị chặn Kiểm Soát tiếp (phải "Gỡ Xác Nhận Kiểm Soát" trước
   nếu cần sửa) — 2 cờ khoá này ĐỘC LẬP, không ảnh hưởng lẫn nhau.
+- **Xác Nhận Gom Mã riêng (MỚI, 12/2026)**: Tab 6 có thêm khung thứ 3 —
+  **"🔖 Xác Nhận Gom Mã Từng Quầy Kệ"** — dùng 1 bộ chọn "📅 Kỳ Gom Mã"
+  RIÊNG (khác hẳn bộ chọn "📅 Kỳ Kiểm Kê" dùng cho Kiểm Đếm/Kiểm Soát ở
+  trên, vì Gom Mã thuộc loại kỳ khác), liệt kê quầy kệ ĐÃ có hoạt động Gom
+  Mã trong đúng Kỳ Gom Mã đang chọn. Xác Nhận xong khoá Gom Mã tiếp trên
+  quầy kệ đó NGAY (cùng cơ chế Kiểm Đếm/Kiểm Soát) — **không** tham gia
+  điều kiện mở khoá "Xác Nhận Toàn Bộ Đợt" ở trên (Gom Mã đóng Kỳ riêng,
+  thủ công, ở Tab 1 "📅 Kỳ Kiểm Kê").
+- **Chọn nhiều quầy kệ để Xác Nhận/Gỡ Xác Nhận hàng loạt (MỚI, 12/2026)**:
+  cả 3 khung ở Tab 6 (Kiểm Đếm/Kiểm Soát/Gom Mã) đều có thêm checkbox đầu
+  dòng + "☑ Chọn tất cả" + 2 nút "✅ Xác Nhận Đã Chọn"/"↩️ Gỡ Xác Nhận Đã
+  Chọn" — tick nhiều quầy kệ rồi bấm 1 lần thay vì phải bấm "Xác Nhận"
+  từng dòng một. "Chọn tất cả" chỉ chọn đúng các dòng ĐANG HIỂN THỊ (tôn
+  trọng bộ lọc Quầy Kệ/Xác Nhận nếu đang lọc, xem mục ngay dưới) — không
+  âm thầm chọn luôn các dòng đang bị ẩn bởi bộ lọc. Các nút Xác Nhận/Gỡ
+  Xác Nhận từng dòng riêng lẻ vẫn giữ nguyên, dùng song song được.
+- **Bộ lọc tìm kiếm (MỚI, 12/2026)**: Tab 2/3/4 — ô "🔎 Tìm theo mã/tên để
+  sửa/xoá..." tự nạp gợi ý (gõ vài ký tự là hiện danh sách mã đã quét ở
+  quầy kệ đang chọn để bấm chọn nhanh, không cần gõ chính xác). Tab 5 "🗄️
+  Cấu Hình Quầy Kệ" — bấm "🔍 Hiện Bộ Lọc" (mặc định thu gọn) để lọc theo
+  Quầy Kệ và/hoặc Trạng Thái (Đang hoạt động/Ngừng hoạt động — danh sách
+  giờ hiện CẢ quầy đã ngừng hoạt động để lọc này có ý nghĩa, trước đây ẩn
+  hẳn không xem lại được). Tab 6 "✅ Xác Nhận" — mỗi khung trong 3 khung
+  Kiểm Đếm/Kiểm Soát/Gom Mã đều có "🔍 Hiện Bộ Lọc" riêng (mặc định thu
+  gọn) để lọc theo Quầy Kệ và/hoặc Xác Nhận (Đã xác nhận/Chưa xác nhận) —
+  hữu ích khi siêu thị có nhiều quầy kệ, giúp nhanh tìm đúng quầy cần xử lý
+  tiếp hoặc rà soát quầy nào còn thiếu Xác Nhận.
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
   chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều

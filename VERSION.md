@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**30.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.47 (2026-12): "📋 Kiểm Kê" — Xác Nhận Kiểm Soát/Gom Mã riêng từng quầy kệ, chọn nhiều quầy kệ xác
+nhận hàng loạt, bộ lọc tìm kiếm mới, nhập Excel Quầy Kệ nhiều siêu thị
+
+Gộp 4 việc theo yêu cầu người dùng trong cùng đợt:
+
+- **Xác Nhận Kiểm Soát riêng theo từng quầy kệ (Tab 6)**: trước đây Kiểm Soát không khoá được theo
+  từng quầy kệ, chỉ khoá chung khi cả Kỳ đã chốt — theo phản hồi "không kiểm soát mà không xác nhận...
+  có thể làm sai lệch số liệu nếu người ta cứ kiểm soát suốt", nay có khung "🛡️ Xác Nhận Kiểm Soát Từng
+  Quầy Kệ" riêng, độc lập với Xác Nhận Kiểm Đếm. Nút "Xác Nhận Toàn Bộ Đợt" giờ yêu cầu ĐỦ CẢ 2 điều
+  kiện (Kiểm Đếm + Kiểm Soát) mới mở khoá đóng Kỳ.
+- **Xác Nhận Gom Mã riêng theo từng quầy kệ (MỚI)**: Gom Mã trước đây hoàn toàn không có khái niệm
+  khoá/Xác Nhận — nay có khung riêng, dùng đúng Kỳ Gom Mã (khác Kỳ Kiểm Kê), không ảnh hưởng điều kiện
+  đóng Kỳ Kiểm Kê ở trên.
+- **Chọn nhiều quầy kệ Xác Nhận/Gỡ Xác Nhận hàng loạt (MỚI)**: cả 3 khung Kiểm Đếm/Kiểm Soát/Gom Mã ở
+  Tab 6 đều có checkbox + "Chọn tất cả" + 2 nút Xác Nhận/Gỡ Xác Nhận hàng loạt, không cần bấm từng dòng.
+- **Bộ lọc tìm kiếm mới**: ô "Tìm theo mã/tên" ở Tab 2/3/4 (Gom Mã/Kiểm Đếm/Kiểm Soát) tự nạp gợi ý
+  (sdd); Tab 5 "Cấu Hình Quầy Kệ" có panel lọc Quầy Kệ + Trạng Thái (nay hiện cả quầy ngừng hoạt động để
+  lọc có ý nghĩa); Tab 6 có panel lọc Quầy Kệ + Xác Nhận cho cả 3 khung — "Chọn tất cả" chỉ chọn đúng
+  dòng đang hiển thị sau khi lọc. Tất cả panel lọc đều mặc định thu gọn, có nút bấm mở/ẩn (quy tắc MỚI
+  từ nay cho mọi bộ lọc, đã ghi vào `CLAUDE.md`).
+- **Nhập Excel Quầy Kệ nhiều siêu thị 1 lần (Tab 5/Kiểm Soát Hàng Hóa)**: admin quản lý nhiều siêu thị
+  giờ tải lên 1 file Excel chứa quầy kệ của nhiều siêu thị khác nhau cùng lúc (thêm cột Siêu Thị), hệ
+  thống tự tách theo đúng siêu thị khi tạo — kèm tài liệu quy trình Kiểm Kê as-built (`docs/kiem-ke-
+  quy-trinh-van-hanh.md` + `.docx`) và đổi nhãn "Thống Kê"→"Kiểm Kê" trên tài liệu GitHub.
 
 ## v30.46 (2026-11): "🔍 Audit Quy Trình" — sửa báo nhầm phòng ban KHÔNG thuộc phạm vi quy trình
 
