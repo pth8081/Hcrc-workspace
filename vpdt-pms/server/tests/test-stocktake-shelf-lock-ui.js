@@ -10,8 +10,10 @@ async function main() {
   const { startStaticServer, createMockState, launchPage } = require('./testHarness');
   const PORT = 8993;
   const DEPT1 = 'Siêu thị Quận 1';
+  const DEPT2 = 'Siêu thị Quận 2';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', category: 'Gia vị', active: true };
   const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', category: 'Mì', active: true };
+  const SHELF_B1 = { id: 20, dept: DEPT2, code: 'B1', name: 'Kệ B1 — Quận 2', category: 'Khác', active: true };
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   // itA: CHỈ có quyền Khoá/Mở Khoá (kiemKeShelfLockManage) + xem Tab 5 (kiemKeShelfConfigManage) — KHÔNG
   // có quyền Kiểm Đếm/Kiểm Soát/Gom Mã, đúng vai "IT thuần", không tự thao tác nghiệp vụ.
@@ -21,9 +23,13 @@ async function main() {
     username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1,
     perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeGomMaDo: true }, active: true, totpEnabled: true
   };
+  // admin1: không cố định 1 siêu thị — dùng để test ô chọn siêu thị MỚI ngay tại Tab 5 (MỚI, 12/2026,
+  // theo yêu cầu người dùng "Admin phải chọn siêu thị... lúc ấy siêu thị nào thì hiện quầy kệ của siêu
+  // thị đấy").
+  const ADMIN = { username: 'admin1', name: 'Quản Trị Viên', dept: DEPT1, perms: { admin: true }, active: true, totpEnabled: true };
   const state = createMockState({
-    depts: [DEPT1], stores: [DEPT1], users: [IT_ROLE, STAFF],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [IT_ROLE, STAFF, ADMIN],
+    shelfLocations: [SHELF_A1, SHELF_A2, SHELF_B1],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
@@ -31,7 +37,7 @@ async function main() {
     ],
     stocktakeCounts: []
   });
-  state.storeExternalCodes = { [DEPT1]: '001' };
+  state.storeExternalCodes = { [DEPT1]: '001', [DEPT2]: '002' };
   state.__mockSystemInventoryRows = [{ maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 50 }];
 
   const server = await startStaticServer(PORT);
@@ -138,6 +144,33 @@ async function main() {
       await page.waitForTimeout(200);
       const listText = await page.evaluate(() => document.getElementById('kkKiemDemListBody').textContent);
       assert(listText.includes('SP001'), `Quét A2 (đã mở khoá) phải thành công, thực tế: ${listText}`);
+    });
+
+    // ===== Ô chọn Siêu Thị NGAY TẠI Tab 5 (MỚI, 12/2026, theo yêu cầu người dùng: "Admin phải chọn siêu
+    // thị... lúc ấy siêu thị nào thì hiện quầy kệ của siêu thị đấy, sau đó mới tìm kiếm quầy kệ và khoá/
+    // mở khoá") — trước đây Tab 5 CHỈ hiện tên siêu thị dạng chữ, admin phải nhảy sang Tab 1 mới đổi
+    // được. Dùng admin1 (không cố định 1 siêu thị) + DEPT2/B1 mới thêm ở state. =====
+    await run.run('Admin: Tab 5 có SẴN ô chọn Siêu Thị (không cần nhảy sang Tab 1) — đổi siêu thị hiện đúng quầy kệ siêu thị đó', async () => {
+      await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
+      await page.evaluate(() => switchTab('kiemKe'));
+      await page.waitForTimeout(100);
+      await page.click('#btnKkSubShelfConfig');
+      await page.waitForTimeout(200);
+      const selectExists = await page.evaluate(() => !!document.getElementById('kkShelfConfigDeptSelect'));
+      assert(selectExists, 'Admin phải thấy ô <select> chọn Siêu Thị NGAY tại Tab 5, không cần sang Tab 1');
+      let text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
+      assert(text.includes('A1') && text.includes('A2') && !text.includes('B1'), `Siêu thị mặc định (DEPT1) phải hiện A1/A2, KHÔNG hiện B1 của siêu thị khác, thực tế: ${text}`);
+      await page.selectOption('#kkShelfConfigDeptSelect', DEPT2);
+      await page.waitForTimeout(200);
+      text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
+      assert(!text.includes('A1') && !text.includes('A2') && text.includes('B1'), `Đổi sang Siêu Thị Quận 2 phải hiện ĐÚNG B1, KHÔNG còn A1/A2, thực tế: ${text}`);
+    });
+
+    await run.run('Admin: đổi siêu thị ở Tab 5 cũng đồng bộ sang Tab 1 "Kỳ Kiểm Kê" (dùng CHUNG 1 biến, không lệch nhau)', async () => {
+      await page.click('#btnKkSubPeriod');
+      await page.waitForTimeout(200);
+      const periodDeptValue = await page.evaluate(() => document.getElementById('kkPeriodDeptSelect')?.value);
+      assertEqual(periodDeptValue, DEPT2, `Tab 1 phải hiện ĐÚNG siêu thị vừa chọn ở Tab 5 (Siêu thị Quận 2), thực tế: "${periodDeptValue}"`);
     });
 
     assertEqual(jsErrors.length, 0, 'Không có lỗi JS/console nào phát sinh: ' + jsErrors.join('\n'));

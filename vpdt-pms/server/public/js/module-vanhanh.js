@@ -866,13 +866,37 @@ function clearKkShelfConfigFilters() {
 // kkShelfLockSelected (MỚI, 12/2026) — chọn nhiều quầy kệ để Khoá/Mở Khoá hàng loạt (khung CHỈ hiện cho
 // canManageStocktakeShelfLockClient()), reset mỗi lần vào lại Tab 5.
 let kkShelfLockSelected = new Set();
-function loadKkShelfConfigTab() {
+// renderKkShelfConfigDeptRow() (MỚI, 12/2026, theo yêu cầu người dùng — "Admin phải chọn siêu thị... lúc
+// ấy siêu thị nào thì hiện quầy kệ của siêu thị đấy, sau đó mới tìm kiếm quầy kệ và khoá/mở khoá"): TRƯỚC
+// ĐÂY Tab 5 CHỈ hiện tên siêu thị dạng chữ (đọc từ kkPeriodDeptSelected đã chọn Ở TAB 1), admin muốn đổi
+// siêu thị phải rời sang Tab 1 rồi quay lại — nay thêm thẳng 1 ô chọn NGAY tại Tab 5 (CÙNG biến
+// kkPeriodDeptSelected dùng chung với Tab 1 qua kkEffectiveDept(), đổi ở tab nào cũng đồng bộ 2 chiều),
+// để trọn quy trình "chọn siêu thị -> hiện quầy kệ đúng siêu thị đó -> tìm kiếm -> Khoá/Mở Khoá" nằm gọn
+// trong 1 màn, không phải nhảy tab. Dạng <select> thường (KHÔNG sdd) — ĐÚNG khuôn renderKkPeriodDeptRow()
+// (Tab 1) đã có sẵn cho CHÍNH xác mục đích chọn siêu thị này, số lượng siêu thị không nhiều nên không cần
+// ô tìm-kiếm-gõ-chọn như Quầy Kệ/Trạng Thái/Xác Nhận (vốn có thể có HÀNG CHỤC/TRĂM giá trị).
+function renderKkShelfConfigDeptRow() {
   const row = document.getElementById('kkShelfConfigDeptRow');
-  const dept = kkEffectiveDept();
-  if (row) {
-    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
-      (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
+  if (!row) return;
+  if (currentUser.perms?.admin) {
+    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+    if (!kkPeriodDeptSelected) kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
+      <select id="kkShelfConfigDeptSelect" data-op-change="onKkShelfConfigDeptChanged" class="border rounded px-2 py-1">
+        ${stores.map(s => `<option value="${escapeHtml(s)}" ${s === kkPeriodDeptSelected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
+      </select>`;
+  } else {
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(currentUser.dept || '')}</span>`;
   }
+}
+function onKkShelfConfigDeptChanged() {
+  const sel = document.getElementById('kkShelfConfigDeptSelect');
+  kkPeriodDeptSelected = sel ? sel.value : '';
+  kkShelfLockSelected = new Set();
+  clearKkShelfConfigFilters();
+}
+function loadKkShelfConfigTab() {
+  renderKkShelfConfigDeptRow();
   kkShelfLockSelected = new Set();
   clearKkShelfConfigFilters();
   sddSetOptions('kkscfStatusDropdown', Object.values(KK_SHELF_CONFIG_STATUS_LABELS));
