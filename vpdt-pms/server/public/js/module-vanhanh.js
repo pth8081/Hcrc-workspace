@@ -688,6 +688,23 @@ async function onKkScanShelfChanged(tabKey) {
   const st = kkScanState[tabKey];
   const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
   const shelfId = Number(selectEl?.value || 0);
+  // Nhắc nhở mềm (MỚI, 12/2026, theo yêu cầu người dùng — cân nhắc giữa Khóa Quầy Kệ IT quản lý VS để mở
+  // hết: nếu KHÔNG dùng Khóa, vẫn muốn hạn chế làm dở nhiều quầy kệ cùng lúc) — quầy kệ ĐANG MỞ (chưa bị
+  // khóa/xác nhận, nếu không đã không mở được ô quét) mà ĐÃ có số liệu quét thật (qty>0, không phải quầy
+  // kệ trống chưa quét gì) nhưng CHƯA Xác Nhận, nay người dùng tự đổi sang quầy kệ KHÁC — hỏi lại 1 lần.
+  // KHÔNG chặn cứng (khác hẳn Khóa Quầy Kệ) — chỉ nhắc, huỷ thì giữ nguyên quầy kệ cũ, đồng ý thì cho đổi
+  // bình thường (người dùng vẫn toàn quyền quyết định, phù hợp khi IT chủ động chọn không dùng Khóa).
+  // CHỈ hỏi khi chuyển sang 1 quầy kệ KHÁC thật sự (shelfId mới khác rỗng) — bỏ trống lựa chọn (đóng màn
+  // quét lại, không chuyển sang làm quầy kệ nào khác) thì không cần nhắc, không phải tình huống "làm dở
+  // nhiều quầy kệ cùng lúc".
+  const previousShelfId = st.selectedShelfId;
+  const previousHadUnconfirmedWork = previousShelfId && shelfId && previousShelfId !== shelfId && (st.counts || []).some(c => Number(c[cfg.qtyField]) > 0);
+  if (previousHadUnconfirmedWork) {
+    const prevLoc = (st.shelves || []).find(l => l.id === previousShelfId);
+    const label = prevLoc ? `${prevLoc.code} — ${prevLoc.name}` : `#${previousShelfId}`;
+    const ok = confirm(`⚠️ Quầy kệ "${label}" vừa thao tác CHƯA được Xác Nhận. Bạn có chắc muốn chuyển sang quầy kệ khác không?\n\n(Nên vào tab "✅ Xác Nhận" xác nhận xong quầy kệ này trước, để tránh làm dở nhiều quầy kệ cùng lúc.)`);
+    if (!ok) { if (selectEl) selectEl.value = String(previousShelfId); return; }
+  }
   st.selectedShelfId = shelfId || null;
   st.session = null;
   st.counts = [];

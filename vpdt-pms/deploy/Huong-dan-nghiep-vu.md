@@ -3818,6 +3818,53 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   làm đúng quầy kệ đang được chỉ định, tránh làm nhầm/làm trước thứ tự.
   Admin luôn bypass khoá này (đúng triết lý chung của hệ thống), nhưng vẫn
   cần có allowlist Tab 8 riêng mới thao tác được (2 lớp độc lập).
+- **📡 Hoạt động Offline (MỚI, 12/2026, theo yêu cầu người dùng — kho/quầy
+  kệ hay mất sóng/wifi chập chờn)**: Tab 2 "Gom Mã"/Tab 3 "Kiểm Đếm"/Tab 4
+  "Kiểm Soát"/Tab 6 "Xác Nhận" đều hoạt động được KHI MẤT MẠNG. Mất mạng
+  giữa chừng → hệ thống tự chuyển banner "📡 Ngoại tuyến" (đỏ), dùng danh
+  sách quầy kệ + trạng thái khoá + dữ liệu đã quét gần nhất đã lưu sẵn
+  trong máy (từ lần online gần nhất) — vẫn chọn quầy kệ, quét mã, Xác
+  Nhận/Gỡ Xác Nhận bình thường, mọi thao tác xếp vào hàng đợi (hiện ngay
+  tại chỗ kèm badge "⏳ Đang chờ đồng bộ") thay vì mất. Quầy kệ ĐÃ bị Khoá
+  TỪ TRƯỚC lúc còn mạng vẫn bị chặn đúng y hệt lúc online (không lách khoá
+  được bằng cách tắt mạng) — chỉ quầy kệ bị khoá SAU khi đã mất mạng mới
+  không chặn kịp (sẽ bị server từ chối rõ ràng lúc đồng bộ lại, không bị
+  âm thầm chấp nhận).
+  - **Tự động đồng bộ lại, 3 lớp dự phòng** (để chịu được mạng CHẬP CHỜN —
+    lúc có lúc không — không chỉ mất hẳn rồi có lại 1 lần): (1) trình
+    duyệt tự báo "có mạng trở lại", (2) ngay sau 1 lượt thao tác online
+    thành công bất kỳ, (3) cứ 20 giây tự thử lại 1 lần nền (không cần
+    chuyển tab/mở lại màn). Không cần bấm nút gì để đồng bộ — chỉ cần có
+    sóng trở lại dù chỉ một lúc ngắn.
+  - **Chống trùng số liệu tuyệt đối khi đồng bộ lại**: tình huống lượt quét
+    gửi lên server THÀNH CÔNG nhưng phản hồi bị rớt giữa đường (do mất
+    mạng đúng lúc đó) — máy vẫn tưởng thất bại nên tự thử gửi lại — mỗi
+    lượt quét mang theo 1 mã định danh riêng (sinh ra ngay từ lượt gửi
+    ĐẦU TIÊN, giữ nguyên qua mọi lần thử lại), server ghi nhớ các mã đã áp
+    dụng và tự bỏ qua lượt gửi lại trùng mã thay vì cộng dồn số lượng lần
+    2 — áp dụng cho cả quét số lượng (Gom Mã/Kiểm Đếm/Kiểm Soát) lẫn
+    Gỡ Xác Nhận (gỡ xong gửi lại gặp "không tìm thấy" thì coi là THÀNH
+    CÔNG, không báo lỗi — vì mục tiêu đã đạt được từ lần gửi đầu).
+  - **"✈️ Bật/Tắt Offline Thủ Công" (nút riêng đầu mỗi tab Gom Mã/Kiểm
+    Đếm/Kiểm Soát/Xác Nhận)**: dùng khi mạng VẪN CÒN nhưng yếu/hay rớt,
+    muốn chủ động quét offline ngay để khỏi chờ timeout từng lượt. Bật →
+    banner cảnh báo rõ + số lượt đang chờ đồng bộ luôn hiển thị, mọi thao
+    tác vào thẳng hàng đợi (không gọi mạng) dùng ĐÚNG cơ chế chống trùng ở
+    trên nên an toàn như offline tự nhiên (không có rủi ro trùng dữ liệu,
+    chỉ có rủi ro thao tác — người khác xem tạm thời chưa thấy số liệu
+    mới tới khi đồng bộ). Tắt → đồng bộ hết ngay lập tức. Công tắc KHÔNG
+    tự nhớ qua lần đăng nhập/tải lại trang (cố ý, tránh quên đang bật rồi
+    tưởng là lỗi hệ thống không đồng bộ).
+  - **"Nhắc nhở mềm" khi đổi quầy kệ (MỚI, 12/2026)**: quầy kệ ĐANG MỞ
+    (chưa bị Khoá) mà vừa quét có số liệu thật (chưa Xác Nhận) nay đổi
+    sang quầy kệ KHÁC → hệ thống hỏi lại 1 lần trước khi đổi ("Quầy kệ
+    ... vừa thao tác CHƯA được Xác Nhận. Bạn có chắc muốn chuyển sang quầy
+    kệ khác không?") — bấm Huỷ thì giữ nguyên quầy kệ đang làm (không mất
+    dữ liệu), bấm Đồng Ý thì đổi bình thường. KHÔNG chặn cứng như 🔒 Khoá
+    Quầy Kệ — chỉ là lời nhắc, dành cho IT muốn ĐỂ MỞ hết quầy kệ (không
+    dùng Khoá) nhưng vẫn muốn hạn chế nhân viên làm dở nhiều quầy kệ cùng
+    lúc; dùng song song được với Khoá Quầy Kệ nếu IT vẫn muốn khoá riêng
+    một số quầy.
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
   chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều
