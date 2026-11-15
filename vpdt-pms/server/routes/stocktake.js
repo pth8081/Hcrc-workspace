@@ -23,7 +23,7 @@ const {
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds,
-  buildPriceMapFromRows, computeValueBreakdown
+  buildPriceMapFromRows, computeValueBreakdown, canManageStocktakeShelfLock
 } = require('../lib/stocktakeEngine');
 // Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
 // Soát Hàng Hóa" (routes/shelfStock.js) thay vì tự viết lại: cùng hàm đồng bộ/snapshot/gộp theo mã hàng,
@@ -311,11 +311,59 @@ router.get('/active-session-for-shelf', async (req, res) => {
       const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
       shelfGomMaConfirmed = isShelfConfirmed(gomMaConfirmations, activeSession.id, shelfLocationId);
     }
-    res.json({ session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+    // shelfLocked (MỚI, 12/2026) — CÙNG lý do shelfConfirmed/shelfKiemSoatConfirmed/shelfGomMaConfirmed ở
+    // trên: báo ngay lúc chọn quầy kệ (không đợi quét xong mới biết 409) — ĐỘC LẬP với mode (khoá IT chặn
+    // CẢ 3 hành động), admin bypass (xem assertStocktakeScanAllowed()).
+    const shelfLocked = !!(loc.kiemKeLocked && !req.freshUser?.perms?.admin);
+    res.json({ session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, shelfLocked, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
   }
 });
+
+// ===== Khoá/Mở Khoá Quầy Kệ (MỚI, 12/2026, theo yêu cầu người dùng: "IT có thể chọn nhiều, select
+// nhiều và khóa lại kệ đấy, khóa chứ không phải xác nhận... đảm bảo người dùng chỉ có cái kệ đang mở mới
+// được xử lý kiểm kê gom mã và kiểm soát, để sau này nghiệp vụ là xong một kệ hỏi báo IT và IT sẽ xác
+// nhận [khoá]. Và người ta muốn kiểm soát, kiểm đếm và gom mã kệ mới thì IT có thể mở khóa") — CHỈ người
+// có quyền RIÊNG canManageStocktakeShelfLock() (hoặc admin) mới khoá/mở khoá được, ghi field
+// `kiemKeLocked` thẳng lên BẢN GHI shelfLocations (collection DÙNG CHUNG với Kiểm Soát Hàng Hóa — field
+// mới này KHÔNG đụng gì tới `active`/các field khác, và route PATCH /api/shelf-stock/locations/:id của
+// Kiểm Soát Hàng Hóa KHÔNG đọc/ghi field này nên 2 bên không giẫm chân nhau). Chặn thực sự nằm ở
+// assertStocktakeScanAllowed() (Lớp mới, trước Lớp 2) — xem chú thích đầy đủ tại đó. =====
+function requireStocktakeShelfLockManage(req, res) {
+  if (!requireKiemKeModuleAccess(req, res)) return false;
+  if (!canManageStocktakeShelfLock(req.freshUser)) {
+    res.status(403).json({ error: 'Bạn không có quyền Khoá/Mở Khoá Quầy Kệ' });
+    return false;
+  }
+  return true;
+}
+async function setStocktakeShelfLocked(req, res, locked) {
+  if (!requireStocktakeShelfLockManage(req, res)) return;
+  try {
+    const ids = Array.isArray(req.body?.shelfLocationIds) ? req.body.shelfLocationIds.map(Number).filter(Number.isFinite) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Thiếu danh sách quầy kệ' });
+    const idSet = new Set(ids);
+    const updatedItems = await withLockedAppDataValue('shelfLocations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      arr.forEach((loc) => {
+        if (!idSet.has(loc.id)) return;
+        if (!req.freshUser.perms?.admin && loc.dept !== req.freshUser.dept) {
+          throw new HttpError(403, `Quầy kệ "${loc.code}" không thuộc siêu thị của bạn`);
+        }
+        loc.kiemKeLocked = locked;
+        if (locked) { loc.kiemKeLockedBy = req.freshUser.username; loc.kiemKeLockedByName = req.freshUser.name || req.freshUser.username; loc.kiemKeLockedAt = new Date().toISOString(); }
+        else { delete loc.kiemKeLockedBy; delete loc.kiemKeLockedByName; delete loc.kiemKeLockedAt; }
+      });
+      return arr;
+    }).then(arr => arr.filter(l => idSet.has(l.id)));
+    res.json({ items: updatedItems });
+  } catch (err) {
+    sendCatchError(res, err, `POST /api/stocktake/shelf-locations/${locked ? 'lock' : 'unlock'}`);
+  }
+}
+router.post('/shelf-locations/lock', async (req, res) => { await setStocktakeShelfLocked(req, res, true); });
+router.post('/shelf-locations/unlock', async (req, res) => { await setStocktakeShelfLocked(req, res, false); });
 
 async function findShelfLocationOrThrow(shelfLocationId) {
   const allLocations = await getAllForCollection('shelfLocations');
@@ -334,6 +382,17 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
   if (!checkFn(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền thực hiện hành động này (Lớp 1 — quyền tab)');
 
   const loc = await findShelfLocationOrThrow(shelfLocationId);
+
+  // Khoá Quầy Kệ (MỚI, 12/2026, theo yêu cầu người dùng: "IT có thể chọn nhiều, select nhiều và khóa lại
+  // kệ đấy, khóa chứ không phải xác nhận... đảm bảo người dùng chỉ có cái kệ đang mở mới được xử lý").
+  // KHÁC HẲN Lớp 4 Xác Nhận bên dưới: (1) IT-ONLY — đặt/gỡ qua canManageStocktakeShelfLock() riêng, không
+  // phải "ai quét được quầy đó thì tự khoá được" như Xác Nhận; (2) chặn CẢ 3 hành động Gom Mã/Kiểm Đếm/
+  // Kiểm Soát cùng lúc (không tách theo mode như 3 cờ Xác Nhận); (3) KHÔNG bị bỏ qua bởi
+  // opts.skipConfirmedCheck — khoá rồi thì Xác Nhận/Gỡ Xác Nhận cũng bị chặn luôn, không riêng gì quét
+  // (route Xác Nhận/Gỡ Xác Nhận cũng gọi hàm này). Admin luôn bypass (đúng triết lý toàn hệ thống).
+  if (loc.kiemKeLocked && !req.freshUser?.perms?.admin) {
+    throw new HttpError(409, 'Quầy kệ này đang bị KHOÁ bởi IT/Quản lý — liên hệ để được Mở Khoá trước khi thao tác Gom Mã/Kiểm Đếm/Kiểm Soát.');
+  }
 
   await ensureStocktakeKey('stocktakeUserAccess');
   const access = (await getAppDataValue('stocktakeUserAccess')) || [];

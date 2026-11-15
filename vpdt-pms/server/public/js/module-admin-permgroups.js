@@ -433,6 +433,7 @@ const PERM_KEY_VN_LABELS = {
   "kiemKeKiemDemDo": "Kiểm Kê — 🔢 Tab 3: Kiểm Đếm",
   "kiemKeKiemSoatDo": "Kiểm Kê — 🛡️ Tab 4: Kiểm Soát",
   "kiemKeShelfConfigManage": "Kiểm Kê — 🗄️ Tab 5: Cấu Hình Quầy Kệ",
+  "kiemKeShelfLockManage": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ (IT)",
   "kiemKeConfirmDo": "Kiểm Kê — ✅ Tab 6: Xác Nhận",
   "kiemKeReportView": "Kiểm Kê — 📊 Tab 7: Báo Cáo",
   "kiemKeUserAccessManage": "Kiểm Kê — 🔑 Tab 8: Cấu Hình Người Dùng",

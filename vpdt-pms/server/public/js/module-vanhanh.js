@@ -338,6 +338,11 @@ function canDoStocktakeGomMaClient(user) { return !!(user?.perms?.admin || user?
 function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemDemDo); }
 function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
 function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
+// canManageStocktakeShelfLockClient (MỚI, 12/2026) — mirror canManageStocktakeShelfLock() server
+// (lib/stocktakeEngine.js) — gác khung "🔒 Khoá/Mở Khoá Quầy Kệ" MỚI ở Tab 5, KHÁC HẲN
+// canManageStocktakeShelfConfigClient() (quyền XEM Tab 5) và canConfirmStocktakeClient() (quyền Xác Nhận
+// Toàn Bộ Đợt) — 3 quyền độc lập, không thay thế nhau.
+function canManageStocktakeShelfLockClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
 function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
 // canSeeStocktakeConfirmTabClient (12/2026) — Tab 6 có 2 vai ĐỘC LẬP (xem chú thích #kkConfirmWrap/
 // vanHanhSection.html): Xác Nhận TỪNG quầy kệ chỉ cần quyền Kiểm Đếm (KHÔNG cần kiemKeConfirmDo), Xác
@@ -658,6 +663,14 @@ async function onKkScanShelfChanged(tabKey) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { renderKkScanBoxLocked(tabKey, `⛔ ${body.error || 'Không kiểm tra được quyền/kỳ.'}`); return; }
     st.session = body.session || null;
+    // shelfLocked (MỚI, 12/2026 — theo yêu cầu người dùng "IT khoá lại kệ... chỉ kệ đang mở mới xử lý
+    // được") — kiểm tra NGAY, ƯU TIÊN HƠN cả thông báo "chưa có kỳ đang hoạt động" ngay dưới, vì khoá IT
+    // độc lập hoàn toàn với kỳ/Xác Nhận: quầy đang khoá thì không cần biết kỳ đang thế nào, cứ báo khoá
+    // trước tiên. CHẶN CẢ 3 tab Gom Mã/Kiểm Đếm/Kiểm Soát (không riêng theo tabKey).
+    if (body.shelfLocked) {
+      renderKkScanBoxLocked(tabKey, '🔒 Quầy kệ này ĐANG BỊ KHOÁ bởi IT/Quản lý (Tab "🗄️ Cấu Hình Quầy Kệ") — liên hệ để được Mở Khoá trước khi thao tác.');
+      return;
+    }
     if (!st.session) {
       renderKkScanBoxLocked(tabKey, `⚠️ Siêu thị "${body.loc?.dept || ''}" chưa có kỳ ${cfg.loaiKyLabel} đang hoạt động — báo quản lý mở kỳ ở tab "📅 Kỳ Kiểm Kê".`);
       return;
@@ -850,6 +863,9 @@ function clearKkShelfConfigFilters() {
   kkShelfConfigFilters = { shelf: '', status: '' };
   renderKkShelfConfigList();
 }
+// kkShelfLockSelected (MỚI, 12/2026) — chọn nhiều quầy kệ để Khoá/Mở Khoá hàng loạt (khung CHỈ hiện cho
+// canManageStocktakeShelfLockClient()), reset mỗi lần vào lại Tab 5.
+let kkShelfLockSelected = new Set();
 function loadKkShelfConfigTab() {
   const row = document.getElementById('kkShelfConfigDeptRow');
   const dept = kkEffectiveDept();
@@ -857,6 +873,7 @@ function loadKkShelfConfigTab() {
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
       (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
   }
+  kkShelfLockSelected = new Set();
   clearKkShelfConfigFilters();
   sddSetOptions('kkscfStatusDropdown', Object.values(KK_SHELF_CONFIG_STATUS_LABELS));
 }
@@ -872,22 +889,102 @@ function renderKkShelfConfigList() {
     if (f.status && shelfFilterTextMatch(KK_SHELF_CONFIG_STATUS_LABELS[l.active !== false ? 'active' : 'inactive'], f.status) === false) return false;
     return true;
   });
+  const canLock = canManageStocktakeShelfLockClient(currentUser);
+  const lockBulkBar = canLock ? `<div id="kkShelfLockBulkBar" class="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+    <label class="flex items-center gap-1.5 shrink-0">
+      <input type="checkbox" data-op-change="toggleKkShelfLockSelectAll" data-arg-el="0">
+      <span>Chọn tất cả</span>
+    </label>
+    <span data-role="count" class="text-gray-500 truncate flex-1 min-w-0"></span>
+    <div class="flex gap-1.5 shrink-0">
+      <button type="button" data-bulk-btn disabled data-op="bulkLockKkShelves" class="opacity-40 cursor-not-allowed px-2 py-1 rounded bg-red-600 text-white font-bold">🔒 Khoá Đã Chọn</button>
+      <button type="button" data-bulk-btn disabled data-op="bulkUnlockKkShelves" class="opacity-40 cursor-not-allowed px-2 py-1 rounded bg-cyan-700 text-white font-bold">🔓 Mở Khoá Đã Chọn</button>
+    </div>
+  </div>` : '';
   if (!items.length) {
-    listBody.innerHTML = `<p class="text-gray-400 text-sm">${(f.shelf || f.status) ? 'Không tìm thấy quầy kệ khớp bộ lọc.' : 'Siêu thị này chưa khai báo quầy kệ nào — vào "Mở Quản Lý Quầy Kệ" phía trên để thêm.'}</p>`;
+    listBody.innerHTML = lockBulkBar + `<p class="text-gray-400 text-sm">${(f.shelf || f.status) ? 'Không tìm thấy quầy kệ khớp bộ lọc.' : 'Siêu thị này chưa khai báo quầy kệ nào — vào "Mở Quản Lý Quầy Kệ" phía trên để thêm.'}</p>`;
     return;
   }
-  listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1">Mã</th><th>Tên</th><th>Ngành Hàng</th><th>Trạng Thái</th></tr></thead><tbody>` +
+  listBody.innerHTML = lockBulkBar + `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
+    ${canLock ? '<th class="py-1"></th>' : ''}<th class="py-1">Mã</th><th>Tên</th><th>Ngành Hàng</th><th>Trạng Thái</th><th>Khoá Kiểm Kê</th></tr></thead><tbody>` +
     items.map(l => {
       const active = l.active !== false;
+      const locked = !!l.kiemKeLocked;
+      const cb = canLock ? `<td class="py-1"><input type="checkbox" data-shelf-id="${l.id}" data-op-change="toggleKkShelfLockSelect" data-arg0="${l.id}" class="shrink-0"></td>` : '';
+      const lockLabel = locked
+        ? `<span class="text-red-700">🔒 Đã khoá${l.kiemKeLockedByName ? ` — ${escapeHtml(l.kiemKeLockedByName)}` : ''}</span>`
+        : '<span class="text-gray-400">🔓 Đang mở</span>';
       return `<tr class="border-b last:border-0">
+      ${cb}
       <td class="py-1 font-mono">${escapeHtml(l.code)}</td>
       <td>${escapeHtml(l.name)}</td>
       <td>${escapeHtml(l.category || '')}</td>
       <td>${active ? '<span class="text-green-700">● Đang hoạt động</span>' : '<span class="text-gray-400">● Ngừng hoạt động</span>'}</td>
+      <td>${lockLabel}</td>
     </tr>`;
     }).join('') + '</tbody></table>';
+  if (canLock) updateKkShelfLockBulkBarState();
 }
+// toggleKkShelfLockSelect()/toggleKkShelfLockSelectAll()/updateKkShelfLockBulkBarState()/
+// bulkLockKkShelves()/bulkUnlockKkShelves() (MỚI, 12/2026) — CÙNG khuôn bulk-select đã dùng ở Tab 6
+// (kkConfirmSelected/toggleKkConfirmSelect...), áp dụng cho field MỚI `kiemKeLocked` qua 2 route riêng
+// POST /api/stocktake/shelf-locations/lock|unlock (routes/stocktake.js).
+function toggleKkShelfLockSelect(shelfLocationIdStr) {
+  const sid = Number(shelfLocationIdStr);
+  if (kkShelfLockSelected.has(sid)) kkShelfLockSelected.delete(sid); else kkShelfLockSelected.add(sid);
+  updateKkShelfLockBulkBarState();
+}
+function toggleKkShelfLockSelectAll(el) {
+  const listBody = document.getElementById('kkShelfConfigListBody');
+  const checked = !!(el && el.checked);
+  if (listBody) {
+    listBody.querySelectorAll('input[type="checkbox"][data-shelf-id]').forEach((cbEl) => {
+      cbEl.checked = checked;
+      const sid = Number(cbEl.dataset.shelfId);
+      if (checked) kkShelfLockSelected.add(sid); else kkShelfLockSelected.delete(sid);
+    });
+  }
+  updateKkShelfLockBulkBarState();
+}
+function updateKkShelfLockBulkBarState() {
+  const bar = document.getElementById('kkShelfLockBulkBar');
+  if (!bar) return;
+  const n = kkShelfLockSelected.size;
+  const countEl = bar.querySelector('[data-role="count"]');
+  if (countEl) countEl.textContent = n > 0 ? `Đã chọn ${n} quầy kệ` : '';
+  bar.querySelectorAll('button[data-bulk-btn]').forEach((btn) => {
+    btn.disabled = n === 0;
+    btn.classList.toggle('opacity-40', n === 0);
+    btn.classList.toggle('cursor-not-allowed', n === 0);
+  });
+}
+async function bulkSetKkShelfLocked(locked) {
+  const ids = Array.from(kkShelfLockSelected);
+  if (!ids.length) return;
+  const verb = locked ? 'Khoá' : 'Mở Khoá';
+  if (!confirm(`${verb} ${ids.length} quầy kệ đã chọn? Khi khoá, không ai Gom Mã/Kiểm Đếm/Kiểm Soát được trên các quầy kệ này cho tới khi được Mở Khoá lại.`)) return;
+  try {
+    const res = await fetch(`/api/stocktake/shelf-locations/${locked ? 'lock' : 'unlock'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shelfLocationIds: ids })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(body.error || `Không ${verb.toLowerCase()} được, vui lòng thử lại.`); return; }
+    // Cập nhật thẳng DB.shelfLocations tại chỗ (không cần tải lại cả trang) — items trả về từ server đã
+    // là bản ghi MỚI NHẤT (kèm kiemKeLockedBy/Name/At nếu khoá).
+    (body.items || []).forEach(updated => {
+      const idx = (DB.shelfLocations || []).findIndex(l => l.id === updated.id);
+      if (idx !== -1) DB.shelfLocations[idx] = updated;
+    });
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ.'); return;
+  }
+  kkShelfLockSelected = new Set();
+  renderKkShelfConfigList();
+}
+function bulkLockKkShelves() { return bulkSetKkShelfLocked(true); }
+function bulkUnlockKkShelves() { return bulkSetKkShelfLocked(false); }
 function goToShelfLocationsManagement() {
   // LỖI THẬT tự phát hiện lúc build demo: quyền Tab 5 Kiểm Kê (kiemKeShelfConfigManage) KHÔNG đảm bảo
   // user cũng có quyền quản lý Quầy Kệ thật ở Kiểm Soát Hàng Hóa (shelfLocationManage) — 2 quyền hoàn
