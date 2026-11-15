@@ -34,3 +34,8 @@ sử quyết định (vì sao thiết kế như vậy), không xoá.
   (6 bước: Chuẩn Bị → Gom Mã → Kiểm Đếm → Kiểm Soát → Xác Nhận & Đóng Kỳ →
   Báo Cáo), kèm ảnh chụp màn hình thật từng bước + bảng phân quyền theo
   vai trò. **Trạng thái: Tài liệu tham khảo (as-built).**
+- [kiem-ke-kiem-soat-offline.md](./kiem-ke-kiem-soat-offline.md) — Online/
+  Offline cho Kiểm Kê (Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận offline, cache
+  quầy kệ + tồn kho + trạng thái Khóa Quầy Kệ) và mở rộng offline cho Kiểm
+  Soát Hàng Hóa (Đối Chiếu/Hạn Sử Dụng cache-first, Báo Cáo thêm cache).
+  **Trạng thái: Đã xác nhận hướng, đang triển khai.**
