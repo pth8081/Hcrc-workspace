@@ -3193,29 +3193,57 @@ async function parseShelfLocationImportFile() {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return alert(`⛔ ${body.error || 'Không đọc được file'}`);
     shelfLocationImportPreviewItems = body.items || [];
+    // canPickAnyStore (12/2026) — chỉ server/route mới biết CHẮC quyền này (canPickAnyStoreUser() ở
+    // routes/shelfStock.js), client dùng lại ĐÚNG giá trị server trả về thay vì tự suy đoán lại từ
+    // currentUser.perms, để cột "Siêu Thị" ở bảng xem trước chỉ hiện khi file THỰC SỰ có đọc cột đó.
+    const showDeptCol = !!body.canPickAnyStore;
+    document.getElementById('slImportDeptHeaderCell')?.classList.toggle('hidden', !showDeptCol);
     const tbody = document.getElementById('slImportPreviewBody');
-    tbody.innerHTML = shelfLocationImportPreviewItems.map((it, idx) => `
+    tbody.innerHTML = shelfLocationImportPreviewItems.map((it) => {
+      let statusCell;
+      if (it.deptInvalid) {
+        statusCell = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">⛔ Siêu thị không hợp lệ</span>`;
+      } else if (it.isNew) {
+        statusCell = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Mới</span>`;
+      } else {
+        statusCell = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Đã có — bỏ qua</span>`;
+      }
+      const deptCell = showDeptCol ? `<td class="p-1.5 text-gray-500${it.deptInvalid ? ' text-red-600 font-semibold' : ''}">${escapeHtml(it.dept || '')}</td>` : '';
+      return `
       <tr class="border-b">
         <td class="p-1.5">${escapeHtml(it.code)}</td>
         <td class="p-1.5">${escapeHtml(it.name)}</td>
         <td class="p-1.5 text-gray-500">${escapeHtml(it.category || '')}</td>
-        <td class="p-1.5">${it.isNew
-          ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Mới</span>`
-          : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Đã có — bỏ qua</span>`}</td>
-      </tr>`).join('') || `<tr><td colspan="4" class="p-3 text-center text-gray-400">Không có dòng nào</td></tr>`;
+        ${deptCell}
+        <td class="p-1.5">${statusCell}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="${showDeptCol ? 5 : 4}" class="p-3 text-center text-gray-400">Không có dòng nào</td></tr>`;
     document.getElementById('slImportPreviewWrap').classList.remove('hidden');
   } catch (err) { alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
 }
 async function confirmShelfLocationImport() {
-  const newItems = shelfLocationImportPreviewItems.filter(it => it.isNew);
+  const newItems = shelfLocationImportPreviewItems.filter(it => it.isNew && !it.deptInvalid);
   if (!newItems.length) return alert('Không có dòng mới nào để thêm.');
+  // Nhập nhiều siêu thị 1 lần (12/2026) — mỗi dòng "mới" tạm đổi shelfStoreOverrideDept đúng bằng siêu
+  // thị CỦA DÒNG ĐÓ (it.dept, chỉ có khi server đã xác nhận canPickAnyStoreUser() và khớp danh mục) ngay
+  // trước khi gọi callCreateAction(), rồi LUÔN trả lại giá trị gốc ở finally — callCreateAction() tự đọc
+  // lại header X-Shelf-Store-Override qua getShelfStoreOverrideHeaderValue() (xem core.js), tái dùng
+  // NGUYÊN cơ chế "Được Chọn Siêu Thị Bất Kỳ" đã có, không mở đường bypass mới nào ở phía server. Dòng
+  // không có it.dept (người không có quyền này) giữ nguyên hành vi cũ — không đổi override, tạo đúng
+  // siêu thị đang chọn như trước giờ.
+  const originalOverrideDept = shelfStoreOverrideDept;
   let added = 0, failed = 0;
-  for (const it of newItems) {
-    try {
-      const result = await callCreateAction('shelfLocations', { shelfCode: it.code, name: it.name, category: it.category });
-      DB.shelfLocations.unshift(result.item);
-      added++;
-    } catch (err) { failed++; }
+  try {
+    for (const it of newItems) {
+      try {
+        if (it.dept) shelfStoreOverrideDept = it.dept;
+        const result = await callCreateAction('shelfLocations', { shelfCode: it.code, name: it.name, category: it.category });
+        DB.shelfLocations.unshift(result.item); // shelfItemsForOwnStore() tự lọc lại theo dept lúc hiển thị
+        added++;
+      } catch (err) { failed++; }
+    }
+  } finally {
+    shelfStoreOverrideDept = originalOverrideDept;
   }
   logSystemAction('SHELF_LOCATION', 'IMPORT', `Nhập Excel quầy kệ — thêm ${added}/${newItems.length} dòng`, failed ? 'WARNING' : 'SUCCESS', '');
   alert(failed ? `✅ Đã thêm ${added} quầy kệ, ${failed} dòng lỗi (có thể do trùng mã).` : `✅ Đã thêm ${added} quầy kệ!`);

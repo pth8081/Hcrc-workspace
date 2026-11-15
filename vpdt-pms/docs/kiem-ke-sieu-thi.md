@@ -1,7 +1,15 @@
 # Đề xuất: Module "Kiểm Kê" cho Vận Hành
 
-**Trạng thái: Chờ xác nhận phương án — tài liệu phân tích/đề xuất, CHƯA
-triển khai code.**
+**Trạng thái: Đã triển khai (11-12/2026)** — tài liệu này là bản **phân
+tích/đề xuất GỐC**, giữ lại làm lịch sử quyết định (vì sao thiết kế như
+vậy), theo đúng quy ước ở [README.md](./README.md). Hướng dẫn sử dụng/cấu
+hình THẬT của module đã triển khai nằm ở
+`../deploy/Huong-dan-nghiep-vu.md` (mục "📋 Kiểm Kê"); quy trình vận hành
+đầy đủ kèm ảnh chụp màn hình thật xem thêm ở
+[kiem-ke-quy-trinh-van-hanh.md](./kiem-ke-quy-trinh-van-hanh.md). Tên
+loại kỳ "Thống Kê" trong bản đề xuất gốc đã đổi nhãn hiển thị thành
+"Kiểm Kê" khi triển khai thật (12/2026) — tài liệu này đã cập nhật lại
+theo tên mới cho nhất quán.
 
 Phạm vi: `Vận Hành → Kiểm Kê` (module mới, tách khỏi "Kiểm Soát Hàng Hóa"
 đang có). Tài liệu chia 2 phần: **Phần A — Hướng Dẫn Sử Dụng** (cho nhân
@@ -9,7 +17,8 @@ viên/giám sát thao tác Gom Mã → Kiểm Đếm → Kiểm Soát → Báo C
 B — Hướng Dẫn Hệ Thống** (cho quản trị cấu hình phân quyền + kiến trúc lưu
 trữ/online-offline).
 
-Bản xem có hình minh hoạ (wireframe giao diện, biểu đồ màu):
+Bản xem có hình minh hoạ (wireframe giao diện, biểu đồ màu) — bản ĐỀ XUẤT
+ban đầu, trước khi code:
 https://claude.ai/artifact/7bwcVNmkG3MRBS73D1UnT2 — nội dung dưới đây là
 bản văn bản đầy đủ, tự chứa (không cần mở link mới hiểu được).
 
@@ -59,7 +68,7 @@ cùng — gộp cả 8 tab theo đúng trình tự thời gian thực tế sẽ 
 > - **Kỳ Gom Mã** — kích hoạt thì CHỈ cho phép thao tác Gom Mã. Thường mở
 >   thường xuyên hơn (VD hàng tuần), phục vụ đối chiếu nhanh, không liên
 >   quan đợt kiểm kê chính thức.
-> - **Kỳ Thống Kê** — kích hoạt thì cho phép Kiểm Đếm + Kiểm Soát (+ Xác
+> - **Kỳ Kiểm Kê** — kích hoạt thì cho phép Kiểm Đếm + Kiểm Soát (+ Xác
 >   Nhận đi kèm). Đây là đợt kiểm kê chính thức, ra số liệu lên Báo Cáo.
 >
 > Mỗi kỳ (dù loại nào) có **Báo Cáo riêng, độc lập** — không cộng gộp số
@@ -67,13 +76,13 @@ cùng — gộp cả 8 tab theo đúng trình tự thời gian thực tế sẽ 
 
 | # | Bước | Chi tiết | Ai làm | Ở đâu | Trạng thái |
 |---|---|---|---|---|---|
-| 0 | **Tạo & Kích Hoạt Kỳ** (chọn đúng loại) | Quản lý siêu thị/Admin tạo 1 kỳ mới cho 1 siêu thị — chọn loại (Gom Mã hoặc Thống Kê), đặt tên + khoảng thời gian dự kiến (ban đầu: Nháp), rồi bấm "Kích Hoạt". Dù user đã có quyền ở Tab Cấu Hình Người Dùng, nếu siêu thị CHƯA có kỳ đúng loại đang hoạt động, tab tương ứng không cho chọn siêu thị đó. | Quản lý siêu thị/Admin | Tab Kỳ Kiểm Kê | Nháp → Đang hoạt động |
+| 0 | **Tạo & Kích Hoạt Kỳ** (chọn đúng loại) | Quản lý siêu thị/Admin tạo 1 kỳ mới cho 1 siêu thị — chọn loại (Gom Mã hoặc Kiểm Kê), đặt tên + khoảng thời gian dự kiến (ban đầu: Nháp), rồi bấm "Kích Hoạt". Dù user đã có quyền ở Tab Cấu Hình Người Dùng, nếu siêu thị CHƯA có kỳ đúng loại đang hoạt động, tab tương ứng không cho chọn siêu thị đó. | Quản lý siêu thị/Admin | Tab Kỳ Kiểm Kê | Nháp → Đang hoạt động |
 | 1 | **Gom Mã** (nhiều người song song) | Từng nhân viên được phân quyền Gom Mã chọn 1 quầy kệ, quét liên tục — số lượng tự gộp theo mã, mã vừa quét nhảy lên đầu danh sách. Có thể làm offline. Số liệu chỉ tham khảo, thuộc đúng Kỳ Gom Mã đang hoạt động. | Nhân viên được phân quyền Gom Mã | Tab Gom Mã | Cần Kỳ Gom Mã đang hoạt động |
-| 2 | **Kiểm Đếm** (theo từng quầy kệ, song song) | Nhân viên được phân quyền Kiểm Đếm chọn quầy kệ, quét chính thức — cùng cơ chế gộp số lượng + mã mới lên đầu + ô tìm kiếm sửa tay. Có thể đối chiếu nhanh với số Gom Mã. | Nhân viên được phân quyền Kiểm Đếm | Tab Kiểm Đếm | Cần Kỳ Thống Kê đang hoạt động |
+| 2 | **Kiểm Đếm** (theo từng quầy kệ, song song) | Nhân viên được phân quyền Kiểm Đếm chọn quầy kệ, quét chính thức — cùng cơ chế gộp số lượng + mã mới lên đầu + ô tìm kiếm sửa tay. Có thể đối chiếu nhanh với số Gom Mã. | Nhân viên được phân quyền Kiểm Đếm | Tab Kiểm Đếm | Cần Kỳ Kiểm Kê đang hoạt động |
 | 3 | **Xác Nhận Quầy Kệ** (khoá khi đếm xong) | Khi 1 quầy kệ đã đếm xong, người có quyền Kiểm Đếm quầy kệ đó bấm "Xác Nhận" → quầy kệ bị khoá ở Kiểm Đếm. Lặp Bước 2+3 cho từng quầy kệ còn lại. | Người có quyền Kiểm Đếm quầy kệ đó | Tab Xác Nhận | Khoá quầy kệ — ngừng quét Kiểm Đếm |
-| 4 | **Kiểm Soát** (song song hoặc sau khi khoá) | Người có quyền Kiểm Soát quầy kệ đó xem lại danh sách mã đã Kiểm Đếm, chọn mã nghi vấn → quét/nhập lại số. Khoá ở Bước 3 KHÔNG chặn Kiểm Soát — vẫn soát lại được, miễn Kỳ Thống Kê còn Đang hoạt động. | Người có quyền Kiểm Soát quầy kệ đó | Tab Kiểm Soát | Ghi đè — chỉ đúng mã đã soát |
-| 5 | **Xác Nhận Toàn Bộ Đợt → Đóng Kỳ Thống Kê** | Khi TẤT CẢ quầy kệ đã Xác Nhận, Quản lý siêu thị bấm "Xác Nhận Toàn Bộ Đợt Kiểm Kê" → Kỳ Thống Kê chuyển Đang hoạt động → **Đã chốt**. Kỳ đã chốt là **khoá tuyệt đối** — không ai thực hiện được bất kỳ thao tác nào nữa. Chỉ Admin có nút "↩️ Mở Lại Kỳ" để đưa kỳ về Đang hoạt động khi cần sửa. | Quản lý siêu thị (chốt) / Admin (mở lại) | Tab Xác Nhận · Tab Kỳ Kiểm Kê | Đã chốt = khoá tuyệt đối, Admin mở lại được |
-| 6 | **Báo Cáo** — ra dữ liệu cuối cùng, theo đúng 1 kỳ | Vào Tab Báo Cáo, việc đầu tiên là chọn Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi kỳ Gom Mã/Thống Kê của siêu thị, kể cả đã chốt). Hệ thống tổng hợp theo mã hàng CHO ĐÚNG KỲ ĐÃ CHỌN: SL cuối cùng = SL Kiểm Soát (nếu có), ngược lại = SL Kiểm Đếm; so Tồn Kho Hệ Thống để tính chênh lệch. Đổi kỳ thì cả bảng và biểu đồ load lại theo kỳ đó. | Quản lý/người có quyền xem báo cáo | Tab Báo Cáo | Mỗi kỳ 1 báo cáo độc lập |
+| 4 | **Kiểm Soát** (song song hoặc sau khi khoá) | Người có quyền Kiểm Soát quầy kệ đó xem lại danh sách mã đã Kiểm Đếm, chọn mã nghi vấn → quét/nhập lại số. Khoá ở Bước 3 KHÔNG chặn Kiểm Soát — vẫn soát lại được, miễn Kỳ Kiểm Kê còn Đang hoạt động. | Người có quyền Kiểm Soát quầy kệ đó | Tab Kiểm Soát | Ghi đè — chỉ đúng mã đã soát |
+| 5 | **Xác Nhận Toàn Bộ Đợt → Đóng Kỳ Kiểm Kê** | Khi TẤT CẢ quầy kệ đã Xác Nhận, Quản lý siêu thị bấm "Xác Nhận Toàn Bộ Đợt Kiểm Kê" → Kỳ Kiểm Kê chuyển Đang hoạt động → **Đã chốt**. Kỳ đã chốt là **khoá tuyệt đối** — không ai thực hiện được bất kỳ thao tác nào nữa. Chỉ Admin có nút "↩️ Mở Lại Kỳ" để đưa kỳ về Đang hoạt động khi cần sửa. | Quản lý siêu thị (chốt) / Admin (mở lại) | Tab Xác Nhận · Tab Kỳ Kiểm Kê | Đã chốt = khoá tuyệt đối, Admin mở lại được |
+| 6 | **Báo Cáo** — ra dữ liệu cuối cùng, theo đúng 1 kỳ | Vào Tab Báo Cáo, việc đầu tiên là chọn Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi kỳ Gom Mã/Kiểm Kê của siêu thị, kể cả đã chốt). Hệ thống tổng hợp theo mã hàng CHO ĐÚNG KỲ ĐÃ CHỌN: SL cuối cùng = SL Kiểm Soát (nếu có), ngược lại = SL Kiểm Đếm; so Tồn Kho Hệ Thống để tính chênh lệch. Đổi kỳ thì cả bảng và biểu đồ load lại theo kỳ đó. | Quản lý/người có quyền xem báo cáo | Tab Báo Cáo | Mỗi kỳ 1 báo cáo độc lập |
 
 > ✅ **Xác nhận: xuất Excel — mỗi siêu thị 1 sheet riêng.** Khi người xuất
 > chỉ có quyền đúng 1 siêu thị, file ra 1 sheet như bình thường. Khi người
@@ -103,13 +112,13 @@ cùng — gộp cả 8 tab theo đúng trình tự thời gian thực tế sẽ 
 
 | Tab | Tên | Mô tả | Ai dùng |
 |---|---|---|---|
-| 1 · MỚI | 📅 **Kỳ Kiểm Kê** | Tạo kỳ mới cho 1 siêu thị theo 2 loại — Kỳ Gom Mã (chỉ cho Gom Mã) hoặc Kỳ Thống Kê (cho Kiểm Đếm + Kiểm Soát) — rồi Kích Hoạt. Đóng kỳ = khoá tuyệt đối; Admin có thể Mở Lại. | Quản trị / Quản lý siêu thị |
+| 1 · MỚI | 📅 **Kỳ Kiểm Kê** | Tạo kỳ mới cho 1 siêu thị theo 2 loại — Kỳ Gom Mã (chỉ cho Gom Mã) hoặc Kỳ Kiểm Kê (cho Kiểm Đếm + Kiểm Soát) — rồi Kích Hoạt. Đóng kỳ = khoá tuyệt đối; Admin có thể Mở Lại. | Quản trị / Quản lý siêu thị |
 | 2 | 📷 **Gom Mã** | Chọn quầy kệ (theo phân quyền) → quét, gộp số lượng theo mã, tham khảo. | Theo quyền từng quầy kệ/user |
 | 3 | 🔢 **Kiểm Đếm** | Chọn quầy kệ (theo phân quyền) → quét → số liệu chính thức của đợt kiểm kê. | Theo quyền từng quầy kệ/user |
 | 4 | 🛡️ **Kiểm Soát** | Chọn quầy kệ (theo phân quyền) → soát lại các mã nghi vấn, kết quả ghi đè Kiểm Đếm cho đúng mã đó. | Theo quyền từng quầy kệ/user |
 | 5 | 🗄️ **Cấu Hình Quầy Kệ** | Khai báo/nhập Excel danh sách quầy kệ cho từng siêu thị (phục vụ Kiểm Đếm chọn quầy kệ). | Quản trị / Quản lý siêu thị |
 | 6 | ✅ **Xác Nhận** | Xác nhận từng quầy kệ đã đếm xong (khoá quầy kệ) + xác nhận toàn đợt kiểm kê (tự chốt Kỳ Kiểm Kê). | Quản lý siêu thị |
-| 7 | 📊 **Báo Cáo** | Đầu màn có bộ chọn "📅 Kỳ" (liệt kê mọi kỳ Gom Mã/Thống Kê, kể cả đã chốt) — chọn đúng 1 kỳ để xem, mỗi kỳ ra báo cáo + biểu đồ độc lập. Tổng hợp theo mã hàng + 3 biểu đồ (xem A7). Xuất Excel — nhiều siêu thị thì mỗi siêu thị 1 sheet. | Theo quyền xem báo cáo |
+| 7 | 📊 **Báo Cáo** | Đầu màn có bộ chọn "📅 Kỳ" (liệt kê mọi kỳ Gom Mã/Kiểm Kê, kể cả đã chốt) — chọn đúng 1 kỳ để xem, mỗi kỳ ra báo cáo + biểu đồ độc lập. Tổng hợp theo mã hàng + 3 biểu đồ (xem A7). Xuất Excel — nhiều siêu thị thì mỗi siêu thị 1 sheet. | Theo quyền xem báo cáo |
 | 8 | 🔑 **Cấu Hình Người Dùng** | Gán cho từng user: được vào siêu thị/quầy kệ nào, được làm Gom Mã / Kiểm Đếm / Kiểm Soát. Không có dòng cấu hình = không vào được. | Quản trị hệ thống |
 
 ### A5. Luồng quét & gộp số lượng (Gom Mã / Kiểm Đếm / Kiểm Soát)
@@ -237,7 +246,7 @@ chuột/chạm vào từng cột, bộ lọc theo Kỳ/siêu thị ở trên bi�
 > 2. **Tab 8 Cấu Hình Người Dùng** — user đó có được cấp quyền Gom
 >    Mã/Kiểm Đếm/Kiểm Soát ở đúng siêu thị + quầy kệ này không.
 > 3. **Tab 1 Kỳ Kiểm Kê** — siêu thị đó có đang trong 1 kỳ **đúng loại**
->    (Gom Mã cần Kỳ Gom Mã; Kiểm Đếm/Kiểm Soát cần Kỳ Thống Kê) ở trạng
+>    (Gom Mã cần Kỳ Gom Mã; Kiểm Đếm/Kiểm Soát cần Kỳ Kiểm Kê) ở trạng
 >    thái **Đang hoạt động** không.
 >
 > Thiếu 1 trong 3 là không thao tác được. 5 tab còn lại (Kỳ Kiểm Kê, Cấu
@@ -365,7 +374,7 @@ tên/tồn kho hệ thống lấy từ cache đồng bộ đối tác đã có s
 3. KHÔNG có cờ "siêu thị bất kỳ"/"tất cả" nào ở Tab 8 — Kiểm Kê là
    allowlist tuyệt đối, mọi siêu thị/quầy kệ muốn vào đều phải có dòng
    cấu hình rõ ràng, kể cả Admin/Giám Sát Vùng.
-4. 1 siêu thị có thể chạy tối đa **1 Kỳ Gom Mã + 1 Kỳ Thống Kê** đang
+4. 1 siêu thị có thể chạy tối đa **1 Kỳ Gom Mã + 1 Kỳ Kiểm Kê** đang
    hoạt động cùng lúc (2 loại độc lập) — không trộn vào 1 kỳ chung. Mỗi
    kỳ có Báo Cáo riêng.
 5. Tab 7 Báo Cáo bắt buộc có bộ chọn "📅 Kỳ" ở đầu màn — xem báo cáo/biểu

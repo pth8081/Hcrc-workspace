@@ -1099,17 +1099,17 @@
       <div id="slImportModal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg max-w-2xl w-full p-4 text-xs space-y-3 max-h-[85vh] overflow-y-auto">
           <div class="font-bold text-sm">⬆️ Nhập Excel Danh Sách Quầy Kệ</div>
-          <p class="text-gray-500">Tải mẫu Excel (nút "⬇️ Tải Mẫu Excel" ở trên), điền Mã + Tên Quầy Kệ (+ Ngành Hàng tuỳ chọn), rồi chọn file đã điền ở đây để xem trước.</p>
+          <p class="text-gray-500">Tải mẫu Excel (nút "⬇️ Tải Mẫu Excel" ở trên), điền Mã + Tên Quầy Kệ (+ Ngành Hàng tuỳ chọn), rồi chọn file đã điền ở đây để xem trước. Có quyền "🔑 Được Chọn Siêu Thị Bất Kỳ" thì mẫu có thêm cột "Siêu Thị" — điền đúng tên để nhập quầy kệ cho NHIỀU siêu thị trong 1 lần, để trống thì dùng đúng siêu thị đang chọn ở trên.</p>
           <input type="file" id="slImportFile" accept=".xlsx,.xls,.csv" class="w-full border p-1.5 rounded">
           <button type="button" data-op="parseShelfLocationImportFile" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Xem Trước</button>
           <div id="slImportPreviewWrap" class="hidden space-y-2">
             <div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
               <table class="w-full text-xs">
-                <thead class="bg-gray-100"><tr><th class="p-1.5 text-left">Mã</th><th class="p-1.5 text-left">Tên</th><th class="p-1.5 text-left">Ngành Hàng</th><th class="p-1.5 text-left">Trạng Thái</th></tr></thead>
+                <thead class="bg-gray-100"><tr><th class="p-1.5 text-left">Mã</th><th class="p-1.5 text-left">Tên</th><th class="p-1.5 text-left">Ngành Hàng</th><th id="slImportDeptHeaderCell" class="hidden p-1.5 text-left">Siêu Thị</th><th class="p-1.5 text-left">Trạng Thái</th></tr></thead>
                 <tbody id="slImportPreviewBody"></tbody>
               </table>
             </div>
-            <p class="text-gray-400">Chỉ các dòng "Mới" sẽ được thêm — dòng "Đã có" (trùng mã trong siêu thị bạn) sẽ bị bỏ qua.</p>
+            <p class="text-gray-400">Chỉ các dòng "Mới" sẽ được thêm — dòng "Đã có" (trùng mã trong siêu thị tương ứng) sẽ bị bỏ qua, dòng "Siêu thị không hợp lệ" (tên không khớp danh mục) cũng không được thêm.</p>
             <button type="button" data-op="confirmShelfLocationImport" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">✅ Xác Nhận Thêm</button>
           </div>
           <button type="button" data-op="closeShelfLocationImportModal" class="text-gray-500 hover:underline">Đóng</button>

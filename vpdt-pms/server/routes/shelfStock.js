@@ -18,7 +18,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { withLockedRecordForCollection, getAllForCollection, deleteRecordForCollection } = require('../lib/recordStore');
-const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile } = require('../lib/shelfLocationImport');
+const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile, resolveShelfLocationImportPreview } = require('../lib/shelfLocationImport');
 const { buildShelfThresholdTemplateWorkbook, parseShelfThresholdFile } = require('../lib/shelfThresholdImport');
 const {
   canManageShelfStock, canManageShelfRecords, canManageShelfRecordEdits,
@@ -600,13 +600,26 @@ router.delete('/recon-recipients-overview', async (req, res) => {
   }
 });
 
+// canPickAnyStoreUser() — ĐÚNG khuôn điều kiện client renderVanHanhShelfStoreHeader() dùng để hiện
+// picker "🔑 Được Chọn Siêu Thị Bất Kỳ" (module-vanhanh.js) — người có quyền này mới được thấy/dùng cột
+// "Siêu Thị" ở mẫu Nhập Excel Quầy Kệ (nhập nhiều siêu thị 1 lần, 12/2026).
+function canPickAnyStoreUser(user) {
+  return !!(user?.perms?.admin || user?.perms?.shelfAnyStoreAccess);
+}
+
 // ===================== QUẦY KỆ: tải mẫu Excel + đọc file đã điền để XEM TRƯỚC =====================
 router.get('/locations/import-template', async (req, res) => {
   if (!canManageShelfLocations(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền quản lý Danh Mục Quầy Kệ' });
   }
   try {
-    const wb = await buildShelfLocationTemplateWorkbook();
+    const includeStoreColumn = canPickAnyStoreUser(req.freshUser);
+    let storeNames = [];
+    if (includeStoreColumn) {
+      const { getAppDataValueCached } = require('../lib/appData');
+      storeNames = ((await getAppDataValueCached('stores')) || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'vi'));
+    }
+    const wb = await buildShelfLocationTemplateWorkbook({ includeStoreColumn, storeNames });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Mau_Danh_Sach_Quay_Ke.xlsx"');
     await wb.xlsx.write(res);
@@ -667,19 +680,21 @@ router.post('/locations/parse-import', uploadRateLimiter, (req, res) => {
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       const effectiveUser = await getShelfEffectiveUserFromReq(req);
-      const parsedItems = await parseShelfLocationFile(buffer, ext);
-      const allLocations = await getAllForCollection('shelfLocations');
-      const existingCodesOwnDept = new Set(
-        (allLocations || []).filter(s => s.dept === effectiveUser.dept).map(s => s.code)
-      );
-      const seenInFile = new Set();
-      const items = [];
-      for (const it of parsedItems) {
-        if (seenInFile.has(it.code)) continue; // trùng mã NGAY TRONG file — chỉ giữ dòng đầu
-        seenInFile.add(it.code);
-        items.push({ code: it.code, name: it.name, category: it.category, isNew: !existingCodesOwnDept.has(it.code) });
+      // includeStoreColumn — CHỈ đọc cột "Siêu Thị" khi người gọi có quyền chọn siêu thị bất kỳ (xem
+      // canPickAnyStoreUser() ở trên); người khác thì dù file có cột này cũng bỏ qua hẳn, mỗi dòng luôn
+      // thuộc ĐÚNG effectiveUser.dept như hành vi cũ (KHÔNG đổi gì cho đa số người dùng).
+      const includeStoreColumn = canPickAnyStoreUser(req.freshUser);
+      const parsedItems = await parseShelfLocationFile(buffer, ext, includeStoreColumn);
+      const existingLocations = await getAllForCollection('shelfLocations');
+      let allStores = [];
+      if (includeStoreColumn) {
+        const { getAppDataValueCached } = require('../lib/appData');
+        allStores = (await getAppDataValueCached('stores')) || [];
       }
-      res.json({ items, fileName: req.file.originalname });
+      const items = resolveShelfLocationImportPreview(parsedItems, {
+        includeStoreColumn, effectiveDept: effectiveUser.dept, allStores, existingLocations
+      });
+      res.json({ items, fileName: req.file.originalname, canPickAnyStore: includeStoreColumn });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/shelf-stock/locations/parse-import');
     } finally {

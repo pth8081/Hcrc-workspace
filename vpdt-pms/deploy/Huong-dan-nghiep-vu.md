@@ -3274,6 +3274,17 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     khỏi danh sách chọn ở "Ghi Nhận", KHÔNG xoá lịch sử đã ghi nhận), và
     **Nhập/Xuất Excel** (tải mẫu → điền → xem trước → chỉ dòng "Mới" được
     thêm, dòng trùng mã trong siêu thị bị bỏ qua).
+    **Nhập NHIỀU siêu thị trong 1 lần (12/2026)** — dành cho người có quyền
+    **"🔑 Được Chọn Siêu Thị Bất Kỳ"** (`shelfAnyStoreAccess`, admin luôn
+    có): mẫu Excel có thêm cột **"Siêu Thị"** — điền đúng tên siêu thị cho
+    từng dòng để 1 file gồm quầy kệ của NHIỀU siêu thị khác nhau, không
+    cần đổi picker "📍 Chọn Siêu Thị Để Thao Tác" rồi nhập lại từng siêu
+    thị một; để trống ô này ở 1 dòng thì dòng đó vẫn dùng đúng siêu thị
+    đang chọn ở picker như trước. Bảng xem trước thêm cột "Siêu Thị" tương
+    ứng, dòng tên siêu thị gõ sai/không khớp danh mục bị đánh dấu "⛔ Siêu
+    thị không hợp lệ" và KHÔNG được thêm (không tự đoán/tự sửa tên). Người
+    KHÔNG có quyền `shelfAnyStoreAccess`/admin thì mẫu Excel KHÔNG có cột
+    này, hành vi 1-siêu-thị giữ nguyên như trước.
   - "⏰ Hạn Sử Dụng" — mặc định CHỈ hiện các lô ĐANG theo dõi (Số Lượng > 0,
     có khai Hạn Sử Dụng), tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn
     hạn — tick checkbox **"Hiện cả dòng đã bán hết (ngừng theo dõi)"** để
