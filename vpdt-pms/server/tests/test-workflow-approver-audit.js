@@ -229,6 +229,74 @@ function main() {
       try { auditWorkflowApproverGaps({}); return true; } catch (e) { return false; }
     })());
 
+  // 21-24) LỖI ĐÃ VÁ (12/2026, theo phản ánh người dùng kèm ảnh chụp: "tôi không có đưa Ban Tổng Giám
+  // đốc/Ban Cung ứng/Quản trị vào quy trình Đăng Ký Xe, nhưng Audit vẫn báo NGHIÊM TRỌNG" — audit lúc đó
+  // quét TOÀN BỘ appData.depts cho MỌI quy trình, bỏ qua hẳn "Đơn Vị Tham Gia Quy Trình"
+  // (workflowParticipatingDeptGroups) admin đã dùng để chủ động thu hẹp phạm vi). 21-24 xác nhận
+  // getAuditScopedDepts() (lib/workflowApproverAudit.js) đã tôn trọng đúng phạm vi đó cho carRegs (CAR).
+
+  // 21) Phòng ban KHÔNG nằm trong nhóm "Đơn Vị Tham Gia Quy Trình" đã claim carRegs (moduleKeys chứa
+  //     'CAR') -> KHÔNG báo lỗ hổng carRegs cho phòng đó, dù carDeptWorkflows chưa cấu hình gì (đúng ý
+  //     người dùng: phòng CHỦ Ý không đưa vào quy trình thì không phải lỗ hổng).
+  check('Phòng ban KHÔNG thuộc nhóm "Đơn Vị Tham Gia Quy Trình" của Đăng Ký Xe -> KHÔNG báo lỗ hổng carRegs',
+    (() => {
+      const appData = baseAppData({
+        depts: ['Phòng Cung ứng nội bộ', 'Ban Tổng Giám đốc'],
+        carDeptWorkflows: { 'Phòng Cung ứng nội bộ': { workflowId: 'WF_1STEP', approvers: { 1: ['active1'] } } },
+        workflowParticipatingDeptGroups: [{ id: 'g1', name: 'Cung ứng nội bộ', depts: ['Phòng Cung ứng nội bộ'], moduleKeys: ['CAR'] }]
+      });
+      const findings = auditWorkflowApproverGaps(appData);
+      return !findings.some(f => f.module === 'carRegs' && f.scopeLabel.includes('Ban Tổng Giám đốc'));
+    })());
+
+  // 22) Phòng ban CÓ trong nhóm nhưng THẬT SỰ chưa cấu hình gì -> VẪN phải CRITICAL như cũ (thu hẹp
+  //     phạm vi KHÔNG được làm audit "nương tay" cho phòng thật sự nằm trong quy trình).
+  check('Phòng ban CÓ trong nhóm "Đơn Vị Tham Gia Quy Trình" nhưng chưa cấu hình gì -> VẪN CRITICAL (carRegs)',
+    (() => {
+      const appData = baseAppData({
+        depts: ['Phòng Cung ứng nội bộ', 'Ban Tổng Giám đốc'],
+        carDeptWorkflows: {},
+        workflowParticipatingDeptGroups: [{ id: 'g1', name: 'Cung ứng nội bộ', depts: ['Phòng Cung ứng nội bộ'], moduleKeys: ['CAR'] }]
+      });
+      const findings = auditWorkflowApproverGaps(appData);
+      const f = findings.find(f => f.module === 'carRegs' && f.scopeLabel.includes('Phòng Cung ứng nội bộ'));
+      return f && f.severity === 'CRITICAL';
+    })());
+
+  // 23) Có nhóm tồn tại nhưng KHÔNG claim carRegs (moduleKeys chỉ có module khác) -> carRegs vẫn quét
+  //     TOÀN BỘ appData.depts như hành vi CŨ (an toàn ngược — module chưa dùng tính năng thu hẹp này
+  //     không bị ảnh hưởng chỉ vì admin có tạo 1 nhóm cho module khác).
+  check('Nhóm tồn tại nhưng KHÔNG claim carRegs -> carRegs vẫn quét toàn bộ depts như cũ',
+    (() => {
+      const appData = baseAppData({
+        depts: ['Phòng Cung ứng nội bộ', 'Ban Tổng Giám đốc'],
+        carDeptWorkflows: {},
+        workflowParticipatingDeptGroups: [{ id: 'g1', name: 'Khác', depts: ['Phòng Cung ứng nội bộ'], moduleKeys: ['DOC'] }]
+      });
+      const findings = auditWorkflowApproverGaps(appData);
+      return findings.some(f => f.module === 'carRegs' && f.scopeLabel.includes('Ban Tổng Giám đốc'));
+    })());
+
+  // 24) 2 module khác nhau (carRegs/CAR và docs/DOC) có 2 nhóm thu hẹp RIÊNG -> mỗi module chỉ áp dụng
+  //     đúng phạm vi của chính nó, không lẫn sang module kia.
+  check('2 module có 2 nhóm thu hẹp riêng -> không lẫn phạm vi giữa carRegs và docs',
+    (() => {
+      const appData = baseAppData({
+        depts: ['Phòng Cung ứng nội bộ', 'Ban Tổng Giám đốc'],
+        carDeptWorkflows: {}, deptWorkflows: {},
+        workflowParticipatingDeptGroups: [
+          { id: 'g1', name: 'Cung ứng nội bộ', depts: ['Phòng Cung ứng nội bộ'], moduleKeys: ['CAR'] },
+          { id: 'g2', name: 'Ban TGĐ', depts: ['Ban Tổng Giám đốc'], moduleKeys: ['DOC'] }
+        ]
+      });
+      const findings = auditWorkflowApproverGaps(appData);
+      const carOk = findings.some(f => f.module === 'carRegs' && f.scopeLabel.includes('Phòng Cung ứng nội bộ'))
+        && !findings.some(f => f.module === 'carRegs' && f.scopeLabel.includes('Ban Tổng Giám đốc'));
+      const docOk = findings.some(f => f.module === 'docs' && f.scopeLabel.includes('Ban Tổng Giám đốc'))
+        && !findings.some(f => f.module === 'docs' && f.scopeLabel.includes('Phòng Cung ứng nội bộ'));
+      return carOk && docOk;
+    })());
+
   const failed = results.filter(r => !r.pass);
   results.forEach(r => console.log(`${r.pass ? 'PASS' : 'FAIL'}: ${r.name}${r.pass ? '' : ' -- ' + r.detail}`));
   console.log(`\n==== ${results.length - failed.length}/${results.length} scenario(s) passed ====`);
