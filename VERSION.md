@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**30.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.46 (2026-11): "🔍 Audit Quy Trình" — sửa báo nhầm phòng ban KHÔNG thuộc phạm vi quy trình
+
+Theo phản ánh người dùng kèm ảnh chụp: "tôi không có đưa Ban Tổng Giám đốc/Ban Cung ứng/Quản trị vào quy
+trình Đăng Ký Xe, nhưng Audit vẫn báo NGHIÊM TRỌNG 'chưa gắn người duyệt' — audit phải đúng với THỰC TẾ
+cấu hình". Nguyên nhân: Audit Quy Trình trước đây luôn quét TOÀN BỘ danh mục phòng ban công ty cho mọi
+quy trình, bỏ qua hoàn toàn "Đơn Vị Tham Gia Quy Trình" (Hệ Thống → Cấu Hình Nghiệp Vụ) — nơi admin đã
+chủ động thu hẹp phòng ban nào thật sự dùng đúng quy trình đó (màn cấu hình "🔄 Quy Trình & Phê Duyệt" và
+"⚡ Áp Dụng Nhanh" đều tôn trọng đúng phạm vi này, chỉ riêng Audit thì không).
+
+Đã sửa: Audit giờ đọc đúng "Đơn Vị Tham Gia Quy Trình" — phòng ban bị admin chủ ý loại khỏi 1 quy trình
+sẽ được bỏ qua, không còn báo lỗi giả. Phòng ban NẰM TRONG phạm vi nhưng thật sự thiếu người duyệt vẫn
+báo lỗi bình thường như cũ (không "nương tay" sai chỗ). Module nào CHƯA từng dùng "Đơn Vị Tham Gia Quy
+Trình" thì hành vi giữ nguyên 100% như trước (vẫn quét toàn bộ phòng ban, an toàn ngược). Áp dụng cho tất
+cả quy trình bị cùng lỗi: Tài Liệu, Đăng Ký Xe, VPP, Ngân Sách, Thanh Toán, Hợp Đồng (Phê Duyệt + Quản Lý
+HĐ), Văn Bản Trình, VP Mua Bán/Sửa Chữa, Phê Duyệt Giá Bán Lẻ.
+
+Đã rà soát thêm "🔍 Audit Người Dùng" và "🔍 Audit Hệ Thống" — xác nhận KHÔNG dính lỗi tương tự (không có
+khái niệm "danh mục phòng ban" nào trong 6 mục kiểm tra của 2 audit này để mà bỏ sót phạm vi).
 
 ## v30.45 (2026-11): "📋 Kiểm Kê" — promote thành module chính riêng ở sidebar
 
