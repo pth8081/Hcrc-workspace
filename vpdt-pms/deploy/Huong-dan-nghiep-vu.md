@@ -3274,6 +3274,17 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     khỏi danh sách chọn ở "Ghi Nhận", KHÔNG xoá lịch sử đã ghi nhận), và
     **Nhập/Xuất Excel** (tải mẫu → điền → xem trước → chỉ dòng "Mới" được
     thêm, dòng trùng mã trong siêu thị bị bỏ qua).
+    **Nhập NHIỀU siêu thị trong 1 lần (12/2026)** — dành cho người có quyền
+    **"🔑 Được Chọn Siêu Thị Bất Kỳ"** (`shelfAnyStoreAccess`, admin luôn
+    có): mẫu Excel có thêm cột **"Siêu Thị"** — điền đúng tên siêu thị cho
+    từng dòng để 1 file gồm quầy kệ của NHIỀU siêu thị khác nhau, không
+    cần đổi picker "📍 Chọn Siêu Thị Để Thao Tác" rồi nhập lại từng siêu
+    thị một; để trống ô này ở 1 dòng thì dòng đó vẫn dùng đúng siêu thị
+    đang chọn ở picker như trước. Bảng xem trước thêm cột "Siêu Thị" tương
+    ứng, dòng tên siêu thị gõ sai/không khớp danh mục bị đánh dấu "⛔ Siêu
+    thị không hợp lệ" và KHÔNG được thêm (không tự đoán/tự sửa tên). Người
+    KHÔNG có quyền `shelfAnyStoreAccess`/admin thì mẫu Excel KHÔNG có cột
+    này, hành vi 1-siêu-thị giữ nguyên như trước.
   - "⏰ Hạn Sử Dụng" — mặc định CHỈ hiện các lô ĐANG theo dõi (Số Lượng > 0,
     có khai Hạn Sử Dụng), tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn
     hạn — tick checkbox **"Hiện cả dòng đã bán hết (ngừng theo dõi)"** để
@@ -3740,16 +3751,52 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   (tái dùng ĐÚNG danh mục Quầy Kệ đã có, không tạo danh mục riêng cho Kiểm
   Kê) — nút này gác theo quyền `shelfLocationManage` RIÊNG của Kiểm Soát
   Hàng Hóa, báo lỗi rõ ràng (không âm thầm chuyển sang tab khác) nếu thiếu.
-  Tab 6 dùng để xác nhận số liệu Kiểm Đếm: hệ thống tự chọn kỳ "Kiểm Kê"
-  đang hoạt động, liệt kê các quầy kệ ĐÃ có số Kiểm Đếm (> 0) → bấm "Xác
-  Nhận" trên từng quầy khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
-  Xác Nhận TỪNG quầy chỉ cần quyền Kiểm Đếm đúng quầy đó (KHÔNG cần quyền
-  riêng — ai đếm quầy nào thì tự xác nhận quầy đó được); còn "Xác Nhận Toàn
-  Bộ Đợt" (đóng cả kỳ Kiểm Kê, chỉ mở khoá khi MỌI quầy đã Kiểm Đếm đều đã
-  Xác Nhận) bắt buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC
-  quyền "📅 Quản Lý Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1. Quầy kệ
-  đã Xác Nhận bị chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa)
-  nhưng KHÔNG chặn Kiểm Soát (Tab 4) trên cùng quầy đó.
+  Tab 6 dùng để xác nhận số liệu: hệ thống tự chọn kỳ "Kiểm Kê" đang hoạt
+  động, có 2 khung ĐỘC LẬP — **"✅ Xác Nhận Kiểm Đếm Từng Quầy Kệ"** (liệt
+  kê quầy kệ ĐÃ có số Kiểm Đếm > 0) và **"🛡️ Xác Nhận Kiểm Soát Từng Quầy
+  Kệ"** (liệt kê quầy kệ ĐÃ có số Kiểm Soát > 0, thêm 12/2026 theo phản hồi
+  người dùng: "không kiểm soát mà không xác nhận... có thể làm sai lệch số
+  liệu nếu người ta cứ kiểm soát suốt" — trước đây Kiểm Soát không khoá
+  được riêng theo từng quầy kệ, chỉ bị khoá chung khi cả Kỳ đã chốt). Bấm
+  "Xác Nhận" đúng khung khi chắc số liệu đúng. **2 tầng quyền tách biệt**:
+  Xác Nhận TỪNG quầy (cả Kiểm Đếm lẫn Kiểm Soát) chỉ cần quyền tương ứng
+  đúng quầy đó (KHÔNG cần quyền riêng — ai đếm/soát quầy nào thì tự xác
+  nhận quầy đó được); còn "Xác Nhận Toàn Bộ Đợt" (đóng cả kỳ Kiểm Kê) bắt
+  buộc quyền riêng "✅ Tab 6: Xác Nhận Toàn Bộ Đợt" — KHÁC quyền "📅 Quản Lý
+  Kỳ Kiểm Kê" dùng cho "Đóng Kỳ" thủ công ở Tab 1 — và CHỈ mở khoá khi ĐỦ
+  CẢ 2 điều kiện: mọi quầy đã Kiểm Đếm đều đã Xác Nhận Kiểm Đếm, VÀ mọi
+  quầy đã Kiểm Soát đều đã Xác Nhận Kiểm Soát (quầy chưa từng ai Kiểm Soát
+  thì không bắt buộc Xác Nhận Kiểm Soát). Quầy kệ đã Xác Nhận Kiểm Đếm bị
+  chặn Kiểm Đếm tiếp (phải "Gỡ Xác Nhận" trước nếu cần sửa); quầy kệ đã Xác
+  Nhận Kiểm Soát bị chặn Kiểm Soát tiếp (phải "Gỡ Xác Nhận Kiểm Soát" trước
+  nếu cần sửa) — 2 cờ khoá này ĐỘC LẬP, không ảnh hưởng lẫn nhau.
+- **Xác Nhận Gom Mã riêng (MỚI, 12/2026)**: Tab 6 có thêm khung thứ 3 —
+  **"🔖 Xác Nhận Gom Mã Từng Quầy Kệ"** — dùng 1 bộ chọn "📅 Kỳ Gom Mã"
+  RIÊNG (khác hẳn bộ chọn "📅 Kỳ Kiểm Kê" dùng cho Kiểm Đếm/Kiểm Soát ở
+  trên, vì Gom Mã thuộc loại kỳ khác), liệt kê quầy kệ ĐÃ có hoạt động Gom
+  Mã trong đúng Kỳ Gom Mã đang chọn. Xác Nhận xong khoá Gom Mã tiếp trên
+  quầy kệ đó NGAY (cùng cơ chế Kiểm Đếm/Kiểm Soát) — **không** tham gia
+  điều kiện mở khoá "Xác Nhận Toàn Bộ Đợt" ở trên (Gom Mã đóng Kỳ riêng,
+  thủ công, ở Tab 1 "📅 Kỳ Kiểm Kê").
+- **Chọn nhiều quầy kệ để Xác Nhận/Gỡ Xác Nhận hàng loạt (MỚI, 12/2026)**:
+  cả 3 khung ở Tab 6 (Kiểm Đếm/Kiểm Soát/Gom Mã) đều có thêm checkbox đầu
+  dòng + "☑ Chọn tất cả" + 2 nút "✅ Xác Nhận Đã Chọn"/"↩️ Gỡ Xác Nhận Đã
+  Chọn" — tick nhiều quầy kệ rồi bấm 1 lần thay vì phải bấm "Xác Nhận"
+  từng dòng một. "Chọn tất cả" chỉ chọn đúng các dòng ĐANG HIỂN THỊ (tôn
+  trọng bộ lọc Quầy Kệ/Xác Nhận nếu đang lọc, xem mục ngay dưới) — không
+  âm thầm chọn luôn các dòng đang bị ẩn bởi bộ lọc. Các nút Xác Nhận/Gỡ
+  Xác Nhận từng dòng riêng lẻ vẫn giữ nguyên, dùng song song được.
+- **Bộ lọc tìm kiếm (MỚI, 12/2026)**: Tab 2/3/4 — ô "🔎 Tìm theo mã/tên để
+  sửa/xoá..." tự nạp gợi ý (gõ vài ký tự là hiện danh sách mã đã quét ở
+  quầy kệ đang chọn để bấm chọn nhanh, không cần gõ chính xác). Tab 5 "🗄️
+  Cấu Hình Quầy Kệ" — bấm "🔍 Hiện Bộ Lọc" (mặc định thu gọn) để lọc theo
+  Quầy Kệ và/hoặc Trạng Thái (Đang hoạt động/Ngừng hoạt động — danh sách
+  giờ hiện CẢ quầy đã ngừng hoạt động để lọc này có ý nghĩa, trước đây ẩn
+  hẳn không xem lại được). Tab 6 "✅ Xác Nhận" — mỗi khung trong 3 khung
+  Kiểm Đếm/Kiểm Soát/Gom Mã đều có "🔍 Hiện Bộ Lọc" riêng (mặc định thu
+  gọn) để lọc theo Quầy Kệ và/hoặc Xác Nhận (Đã xác nhận/Chưa xác nhận) —
+  hữu ích khi siêu thị có nhiều quầy kệ, giúp nhanh tìm đúng quầy cần xử lý
+  tiếp hoặc rà soát quầy nào còn thiếu Xác Nhận.
 - **Tab 7 "📊 Báo Cáo" (11/2026, SỬA LẠI theo đúng phản hồi người dùng)**:
   chọn 1 Kỳ ở bộ chọn "📅 Kỳ" đầu màn (liệt kê mọi Kỳ Gom Mã/Kiểm Kê, kể cả
   đã chốt) → 4 thẻ tổng hợp + biểu đồ cột theo mã hàng (Top 12 lệch nhiều

@@ -387,6 +387,23 @@ function listUnconfirmedCountedShelfIds(counts, confirmations, sessionId) {
   );
   return [...countedShelfIds].filter(id => !confirmedIds.has(id));
 }
+// listUnconfirmedSoatedShelfIds() (12/2026, theo phản hồi người dùng: "không kiểm soát mà không xác nhận
+// mà không đóng cái kỳ kiểm soát lại thì có thể làm sai lệch số liệu nếu người ta cứ kiểm soát suốt" —
+// trước đây Xác Nhận Toàn Bộ Đợt CHỈ đòi hỏi Kiểm Đếm xong, Kiểm Soát từng quầy kệ không có cách nào khoá
+// SỚM, chỉ bị khoá chung 1 lần khi cả Kỳ đã chốt) — mirror ĐÚNG listUnconfirmedCountedShelfIds() ở trên,
+// chỉ khác đếm theo slKiemSoat thay vì slKiemDem. Quầy kệ KHÔNG có ai Kiểm Soát (chưa từng soát) thì
+// KHÔNG bắt buộc Xác Nhận Kiểm Soát — người dùng xác nhận rõ chỉ quầy ĐÃ có hoạt động Kiểm Soát thật mới
+// cần xác nhận trước khi đóng Kỳ, giống đúng cách Kiểm Đếm đang làm.
+function listUnconfirmedSoatedShelfIds(counts, confirmations, sessionId) {
+  const soatedShelfIds = new Set();
+  (Array.isArray(counts) ? counts : []).forEach(c => {
+    if (c.sessionId === sessionId && Number(c.slKiemSoat) > 0) soatedShelfIds.add(c.shelfLocationId);
+  });
+  const confirmedIds = new Set(
+    (Array.isArray(confirmations) ? confirmations : []).filter(c => c.sessionId === sessionId).map(c => c.shelfLocationId)
+  );
+  return [...soatedShelfIds].filter(id => !confirmedIds.has(id));
+}
 
 // ===== Báo Cáo "Giá Trị Thừa/Thiếu" (12/2026, theo yêu cầu người dùng: "lấy phần tồn kho với cả phần
 // giá sang để làm báo cáo xuất ra giá trị siêu thị thừa thiếu bao nhiêu") — CHỈ áp dụng Kỳ Kiểm Kê
@@ -446,5 +463,6 @@ module.exports = {
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,
+  listUnconfirmedSoatedShelfIds,
   buildPriceMapFromRows, computeValueBreakdown
 };

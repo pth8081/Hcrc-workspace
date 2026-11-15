@@ -97,7 +97,8 @@
         </div>
       </div>
       <div class="bg-white border rounded p-3">
-        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="GOMMA" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-sdd-list="kkGomMaSearchDropdown" data-op-input="onKkScanSearchInput" data-arg0="GOMMA" data-arg-value="1" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkGomMaSearchDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <div id="kkGomMaListBody"></div>
       </div>
     </div>
@@ -118,7 +119,8 @@
         </div>
       </div>
       <div class="bg-white border rounded p-3">
-        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMDEM" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-sdd-list="kkKiemDemSearchDropdown" data-op-input="onKkScanSearchInput" data-arg0="KIEMDEM" data-arg-value="1" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkKiemDemSearchDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <div id="kkKiemDemListBody"></div>
       </div>
     </div>
@@ -143,7 +145,8 @@
         </div>
       </div>
       <div class="bg-white border rounded p-3">
-        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-op-input="onKkScanSearchInput" data-arg0="KIEMSOAT" data-arg-value="1" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <input type="text" placeholder="🔎 Tìm theo mã/tên để sửa/xoá..." data-sdd-list="kkKiemSoatSearchDropdown" data-op-input="onKkScanSearchInput" data-arg0="KIEMSOAT" data-arg-value="1" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <div id="kkKiemSoatSearchDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <div id="kkKiemSoatListBody"></div>
       </div>
     </div>
@@ -160,29 +163,132 @@
       </div>
       <div id="kkShelfConfigDeptRow" class="flex items-center gap-2 text-sm"></div>
       <div class="bg-white border rounded p-3">
-        <input type="text" id="kkShelfConfigFilter" placeholder="🔎 Tìm theo mã/tên quầy kệ..." data-op-input="renderKkShelfConfigList" data-arg-value="0" class="w-full border rounded px-2 py-1.5 text-sm mb-2">
+        <!-- Bộ lọc (12/2026, theo yêu cầu người dùng "lọc tìm kiếm theo quầy kệ, theo trạng thái... dạng
+             drop list, searchable, gợi ý nhắc") — CÙNG khuôn collapsible filter panel đã dùng ở "📷 Ghi
+             Nhận"/"⏰ Hạn Sử Dụng" (xem CLAUDE.md, mục "Bộ lọc tìm kiếm MỚI từ nay"), mặc định THU GỌN.
+             Trước đây danh sách CHỈ hiện quầy kệ active!==false — nay hiện CẢ quầy ngừng hoạt động để lọc
+             Trạng Thái mới có ý nghĩa (xem renderKkShelfConfigList()). -->
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-bold text-gray-600">Danh sách quầy kệ</span>
+          <button type="button" data-op="toggleKkShelfConfigFilterPanel" id="btnToggleKkShelfConfigFilter" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+        </div>
+        <div id="kkShelfConfigFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+            <input id="kkscfShelf" data-sdd-list="kkscfShelfDropdown" data-op-input="onKkShelfConfigFilterChanged" placeholder="Tìm theo mã/tên quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="kkscfShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Trạng Thái</label>
+            <input id="kkscfStatus" data-sdd-list="kkscfStatusDropdown" data-op-input="onKkShelfConfigFilterChanged" placeholder="Tất cả" class="w-full border p-1 rounded" autocomplete="off">
+            <div id="kkscfStatusDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+          <div class="col-span-1 md:col-span-2 text-right">
+            <button type="button" data-op="clearKkShelfConfigFilters" class="text-gray-500 hover:underline">Xoá Bộ Lọc</button>
+          </div>
+        </div>
         <div id="kkShelfConfigListBody"></div>
       </div>
     </div>
-    <!-- Tab 6 "Xác Nhận" (12/2026) — 2 khu vực: (a) Xác Nhận từng quầy kệ (ai có quyền Kiểm Đếm quầy
-         kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Toàn Bộ Đợt (CHỈ người có quyền
-         Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm đều đã Xác Nhận). -->
+    <!-- Tab 6 "Xác Nhận" (12/2026) — 3 khu vực: (a) Xác Nhận Kiểm Đếm từng quầy kệ (ai có quyền Kiểm
+         Đếm quầy kệ đó đều bấm được, không cần quyền Tab 6 riêng) + (b) Xác Nhận Kiểm Soát từng quầy kệ
+         (CÙNG khuôn (a), ai có quyền Kiểm Soát quầy kệ đó đều bấm được — thêm 12/2026 theo phản hồi
+         người dùng: Kiểm Soát trước đây không khoá được riêng theo từng quầy kệ) + (c) Xác Nhận Gom Mã
+         từng quầy kệ (MỚI, 12/2026 — CÙNG khuôn (a)/(b) nhưng dùng RIÊNG Kỳ Gom Mã, khác hẳn Kỳ Kiểm Kê
+         của (a)/(b)/(d), trước đây Gom Mã không có khái niệm khoá/Xác Nhận nào) + (d) Xác Nhận Toàn Bộ
+         Đợt (CHỈ người có quyền Tab 6 kiemKeConfirmDo, chỉ bấm được khi mọi quầy kệ đã Kiểm Đếm VÀ mọi
+         quầy kệ đã Kiểm Soát đều đã Xác Nhận đúng phần của nó). Cả 3 danh sách (a)/(b)/(c) đều có thêm
+         khung "Chọn tất cả" + 2 nút "Xác Nhận Đã Chọn"/"Gỡ Xác Nhận Đã Chọn" (MỚI, 12/2026, theo yêu cầu
+         người dùng chọn nhiều quầy kệ để xác nhận/gỡ xác nhận hàng loạt). -->
     <div id="kkConfirmWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
-        <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Kiểm Kê</label>
+        <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Kiểm Kê (dùng cho Kiểm Đếm + Kiểm Soát)</label>
         <select id="kkConfirmSessionSelect" data-op-change="loadKkConfirmTab" class="w-full border rounded px-2 py-1.5 text-sm">
           <option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>
         </select>
       </div>
       <div id="kkConfirmBody" class="hidden space-y-3">
         <div class="bg-white border rounded p-3">
-          <div class="font-bold text-sm text-gray-800 mb-2">✅ Xác Nhận Từng Quầy Kệ</div>
-          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát vẫn thao tác được bình thường).</p>
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-bold text-sm text-gray-800">✅ Xác Nhận Kiểm Đếm Từng Quầy Kệ</div>
+            <button type="button" data-op="toggleKkConfirmFilterPanel" data-arg0="KIEMDEM" id="btnToggleKkcfKiemDem" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Đếm trong kỳ này. Quầy kệ đã Xác Nhận bị khoá Kiểm Đếm tiếp (Kiểm Soát có Xác Nhận riêng ở khung dưới, không bị ảnh hưởng).</p>
+          <!-- Bộ lọc (MỚI, 12/2026 — xem CLAUDE.md "Bộ lọc tìm kiếm MỚI từ nay"), mặc định THU GỌN. -->
+          <div id="kkcfKiemDemPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+            <div>
+              <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+              <input id="kkcfKiemDemShelf" data-sdd-list="kkcfKiemDemShelfDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="KIEMDEM" placeholder="Tìm theo mã/tên quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfKiemDemShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block text-gray-500 mb-0.5">Xác Nhận</label>
+              <input id="kkcfKiemDemXacNhan" data-sdd-list="kkcfKiemDemXacNhanDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="KIEMDEM" placeholder="Tất cả" class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfKiemDemXacNhanDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div class="col-span-1 md:col-span-2 text-right">
+              <button type="button" data-op="clearKkConfirmFilters" data-arg0="KIEMDEM" class="text-gray-500 hover:underline">Xoá Bộ Lọc</button>
+            </div>
+          </div>
           <div id="kkConfirmShelfListBody"></div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-bold text-sm text-gray-800">🛡️ Xác Nhận Kiểm Soát Từng Quầy Kệ</div>
+            <button type="button" data-op="toggleKkConfirmFilterPanel" data-arg0="KIEMSOAT" id="btnToggleKkcfKiemSoat" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Kiểm Soát trong kỳ này. Xác Nhận xong thì khoá Kiểm Soát tiếp trên quầy kệ đó NGAY (không cần đợi đóng cả Kỳ) — tránh số liệu bị sửa thêm sau khi đã soát xong.</p>
+          <div id="kkcfKiemSoatPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+            <div>
+              <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+              <input id="kkcfKiemSoatShelf" data-sdd-list="kkcfKiemSoatShelfDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="KIEMSOAT" placeholder="Tìm theo mã/tên quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfKiemSoatShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block text-gray-500 mb-0.5">Xác Nhận</label>
+              <input id="kkcfKiemSoatXacNhan" data-sdd-list="kkcfKiemSoatXacNhanDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="KIEMSOAT" placeholder="Tất cả" class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfKiemSoatXacNhanDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div class="col-span-1 md:col-span-2 text-right">
+              <button type="button" data-op="clearKkConfirmFilters" data-arg0="KIEMSOAT" class="text-gray-500 hover:underline">Xoá Bộ Lọc</button>
+            </div>
+          </div>
+          <div id="kkConfirmSoatShelfListBody"></div>
         </div>
         <div id="kkConfirmAllWrap" class="hidden bg-cyan-50 border border-cyan-200 rounded p-3">
           <button type="button" data-op="submitKkConfirmAll" class="w-full px-3 py-2 rounded bg-cyan-700 text-white text-xs font-bold hover:bg-cyan-800">🔒 Xác Nhận Toàn Bộ Đợt Kiểm Kê (Đóng Kỳ)</button>
           <p id="kkConfirmAllNote" class="text-[11px] text-gray-500 mt-1"></p>
+        </div>
+      </div>
+      <div class="bg-white border rounded p-3 space-y-2">
+        <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Gom Mã (riêng, khác Kỳ Kiểm Kê ở trên)</label>
+        <select id="kkConfirmGomMaSessionSelect" data-op-change="loadKkConfirmGomMaTab" class="w-full border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Chọn kỳ Gom Mã đang hoạt động --</option>
+        </select>
+      </div>
+      <div id="kkConfirmGomMaBody" class="hidden space-y-3">
+        <div class="bg-white border rounded p-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-bold text-sm text-gray-800">🔖 Xác Nhận Gom Mã Từng Quầy Kệ</div>
+            <button type="button" data-op="toggleKkConfirmFilterPanel" data-arg0="GOMMA" id="btnToggleKkcfGomMa" class="text-xs font-bold text-cyan-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">Chỉ hiện quầy kệ ĐÃ có hoạt động Gom Mã trong kỳ Gom Mã này. Xác Nhận xong thì khoá Gom Mã tiếp trên quầy kệ đó NGAY. Không liên quan điều kiện đóng Kỳ Kiểm Kê ở trên (Gom Mã đóng Kỳ riêng ở Tab "Kỳ Kiểm Kê").</p>
+          <div id="kkcfGomMaPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 mb-2 text-xs">
+            <div>
+              <label class="block text-gray-500 mb-0.5">Quầy Kệ</label>
+              <input id="kkcfGomMaShelf" data-sdd-list="kkcfGomMaShelfDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="GOMMA" placeholder="Tìm theo mã/tên quầy kệ..." class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfGomMaShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block text-gray-500 mb-0.5">Xác Nhận</label>
+              <input id="kkcfGomMaXacNhan" data-sdd-list="kkcfGomMaXacNhanDropdown" data-op-input="onKkConfirmFilterChanged" data-arg0="GOMMA" placeholder="Tất cả" class="w-full border p-1 rounded" autocomplete="off">
+              <div id="kkcfGomMaXacNhanDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div class="col-span-1 md:col-span-2 text-right">
+              <button type="button" data-op="clearKkConfirmFilters" data-arg0="GOMMA" class="text-gray-500 hover:underline">Xoá Bộ Lọc</button>
+            </div>
+          </div>
+          <div id="kkConfirmGomMaShelfListBody"></div>
         </div>
       </div>
     </div>

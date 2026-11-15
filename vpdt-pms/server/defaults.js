@@ -985,6 +985,15 @@ const DEFAULTS = {
   stocktakeCounts: [],
   // stocktakeShelfConfirmations (Tab 6 Xác Nhận, 12/2026) — CÙNG lý do/khuôn 2 key ngay trên.
   stocktakeShelfConfirmations: [],
+  // stocktakeShelfKiemSoatConfirmations (Tab 6 Xác Nhận — Xác Nhận Kiểm Soát riêng theo từng quầy kệ,
+  // 12/2026, theo phản hồi người dùng "không kiểm soát mà không xác nhận... có thể làm sai lệch số liệu
+  // nếu người ta cứ kiểm soát suốt") — CÙNG khuôn stocktakeShelfConfirmations ngay trên nhưng TÁCH RIÊNG
+  // collection (không dùng chung) để không lẫn trạng thái Xác Nhận Kiểm Đếm/Kiểm Soát của cùng 1 quầy kệ.
+  stocktakeShelfKiemSoatConfirmations: [],
+  // stocktakeShelfGomMaConfirmations (Tab 6 Xác Nhận — Xác Nhận Gom Mã riêng theo từng quầy kệ, 12/2026,
+  // theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — CÙNG
+  // khuôn stocktakeShelfKiemSoatConfirmations, dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê).
+  stocktakeShelfGomMaConfirmations: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

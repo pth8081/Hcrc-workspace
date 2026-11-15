@@ -22,7 +22,7 @@ const {
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
-  isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,
+  isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds,
   buildPriceMapFromRows, computeValueBreakdown
 } = require('../lib/stocktakeEngine');
 // Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
@@ -288,15 +288,30 @@ router.get('/active-session-for-shelf', async (req, res) => {
     // Đếm vẫn hiện "Kỳ đang hoạt động" + MỞ ô quét bình thường — người dùng chỉ biết bị chặn SAU KHI gõ/
     // quét mã và bấm "Thêm" (lỗi 409 ở POST /counts/scan). Không mất dữ liệu (server vẫn chặn đúng ở bước
     // ghi), nhưng đúng kiểu "giao diện cho phép thao tác nhưng bấm xong mới biết không được việc" — trả
-    // thêm `shelfConfirmed` để client khoá/báo ngay lúc chọn quầy kệ, không đợi tới lúc quét. CHỈ áp dụng
-    // mode KIEM_DEM (đúng Lớp 4 gốc — Xác Nhận không khoá Gom Mã/Kiểm Soát).
+    // thêm `shelfConfirmed` để client khoá/báo ngay lúc chọn quầy kệ, không đợi tới lúc quét. Áp dụng mode
+    // KIEM_DEM (Lớp 4 gốc — Xác Nhận Kiểm Đếm không khoá Gom Mã/Kiểm Soát) VÀ KIEM_SOAT (Lớp 4 riêng cho
+    // Kiểm Soát, 12/2026 — theo phản hồi người dùng: Kiểm Soát trước đây KHÔNG BAO GIỜ khoá được theo
+    // từng quầy kệ, chỉ khoá chung khi cả Kỳ đã chốt, nên ai cũng sửa được số Kiểm Soát của 1 quầy kệ đã
+    // "xong" bất kỳ lúc nào trước khi đóng Kỳ — xem thêm shelfKiemSoatConfirmed ở assertStocktakeScanAllowed()).
     let shelfConfirmed = false;
+    let shelfKiemSoatConfirmed = false;
     if (mode === 'KIEM_DEM' && activeSession) {
       await ensureStocktakeKey('stocktakeShelfConfirmations');
       const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
       shelfConfirmed = isShelfConfirmed(confirmations, activeSession.id, shelfLocationId);
     }
-    res.json({ session: activeSession || null, shelfConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
+    if (mode === 'KIEM_SOAT' && activeSession) {
+      await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
+      const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+      shelfKiemSoatConfirmed = isShelfConfirmed(soatConfirmations, activeSession.id, shelfLocationId);
+    }
+    let shelfGomMaConfirmed = false;
+    if (mode === 'GOM_MA' && activeSession) {
+      await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+      const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+      shelfGomMaConfirmed = isShelfConfirmed(gomMaConfirmations, activeSession.id, shelfLocationId);
+    }
+    res.json({ session: activeSession || null, shelfConfirmed, shelfKiemSoatConfirmed, shelfGomMaConfirmed, loc: { id: loc.id, code: loc.code, name: loc.name, dept: loc.dept } });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/active-session-for-shelf');
   }
@@ -335,16 +350,38 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
   if (activeSession.id !== sessionId) {
     throw new HttpError(409, 'Kỳ kiểm kê đã đổi (không còn đúng kỳ đang hoạt động) — vui lòng tải lại trang');
   }
-  // Lớp 4 (CHỈ áp dụng cho Kiểm Đếm, tài liệu đề xuất A3 bước 3): quầy kệ ĐÃ được Xác Nhận ở Tab 6 thì
-  // khoá hẳn thao tác Kiểm Đếm (quét mới/sửa tay/xoá) trên quầy kệ đó — "Khoá ở Bước 3 KHÔNG chặn Kiểm
-  // Soát" (bước 4 cùng tài liệu), nên CHỈ chặn mode === 'KIEM_DEM', Gom Mã/Kiểm Soát không bị ảnh hưởng.
-  // skipConfirmedCheck: dùng bởi chính route Xác Nhận/Gỡ Xác Nhận quầy kệ (Tab 6) — xác nhận LẠI 1 quầy
-  // kệ đã xác nhận là hành động idempotent vô hại, không phải "cố quét tiếp sau khi khoá".
+  // Lớp 4 (tài liệu đề xuất A3 bước 3): quầy kệ ĐÃ được Xác Nhận ở Tab 6 thì khoá hẳn thao tác tiếp trên
+  // quầy kệ đó — Kiểm Đếm và Kiểm Soát có 2 cờ Xác Nhận ĐỘC LẬP (stocktakeShelfConfirmations/
+  // stocktakeShelfKiemSoatConfirmations), khoá nhau RIÊNG, không liên quan. skipConfirmedCheck: dùng bởi
+  // chính route Xác Nhận/Gỡ Xác Nhận quầy kệ (Tab 6, cả 2 cờ) — xác nhận LẠI 1 quầy kệ đã xác nhận là
+  // hành động idempotent vô hại, không phải "cố quét tiếp sau khi khoá".
+  //
+  // Xác Nhận Kiểm Soát (12/2026, theo phản hồi người dùng: "không kiểm soát mà không xác nhận mà không
+  // đóng cái kỳ kiểm soát lại thì có thể làm sai lệch số liệu nếu người ta cứ kiểm soát suốt") — TRƯỚC
+  // ĐÂY Kiểm Soát không có Lớp 4 riêng (chỉ Kiểm Đếm có), nên 1 quầy kệ dù đã "xong" Kiểm Soát từ lâu vẫn
+  // bị sửa được tới tận lúc cả Kỳ chốt — nay có cờ riêng để khoá SỚM từng quầy kệ, không phải đợi đóng Kỳ.
   if (mode === 'KIEM_DEM' && !opts?.skipConfirmedCheck) {
     await ensureStocktakeKey('stocktakeShelfConfirmations');
     const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
     if (isShelfConfirmed(confirmations, sessionId, shelfLocationId)) {
       throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận ở Tab "Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa)');
+    }
+  }
+  if (mode === 'KIEM_SOAT' && !opts?.skipConfirmedCheck) {
+    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
+    const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+    if (isShelfConfirmed(soatConfirmations, sessionId, shelfLocationId)) {
+      throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Kiểm Soát ở Tab "Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa)');
+    }
+  }
+  // Xác Nhận Gom Mã (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom Mã/Kiểm Soát để Xác
+  // Nhận/Gỡ Xác Nhận — Gom Mã TRƯỚC ĐÂY hoàn toàn không có khái niệm khoá/Xác Nhận nào, nay thêm Lớp 4
+  // riêng CÙNG khuôn Kiểm Đếm/Kiểm Soát để nhất quán cả 3 bước quét).
+  if (mode === 'GOM_MA' && !opts?.skipConfirmedCheck) {
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    if (isShelfConfirmed(gomMaConfirmations, sessionId, shelfLocationId)) {
+      throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Gom Mã ở Tab "Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa)');
     }
   }
   return { loc, activeSession };
@@ -534,10 +571,152 @@ router.delete('/shelf-confirmations/:id', async (req, res) => {
   }
 });
 
+// ===== Xác Nhận Kiểm Soát từng quầy kệ (12/2026) — mirror NGUYÊN 3 route "shelf-confirmations" ở trên,
+// chỉ khác: đọc/ghi collection RIÊNG `stocktakeShelfKiemSoatConfirmations` (không lẫn với Kiểm Đếm) và
+// mode truyền vào assertStocktakeScanAllowed() là 'KIEM_SOAT'. Theo phản hồi người dùng: "khi kiểm soát
+// xong phải đóng lại quầy kệ... đảm bảo không ai phát sinh làm thêm cái gì" — trước đây Kiểm Soát không
+// có cách khoá riêng theo từng quầy kệ, chỉ bị khoá chung khi cả Kỳ đã chốt. =====
+router.get('/shelf-kiem-soat-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.query.sessionId);
+    if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
+    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
+    const all = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/shelf-kiem-soat-confirmations');
+  }
+});
+
+// Xác Nhận Kiểm Soát 1 quầy kệ — ĐÚNG người có quyền Kiểm Soát quầy kệ đó (3 lớp y hệt route quét Kiểm
+// Soát, KHÔNG cần quyền Tab 6 riêng — khác hẳn route confirm-all).
+router.post('/shelf-kiem-soat-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.body?.sessionId);
+    const shelfLocationId = Number(req.body?.shelfLocationId);
+    if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) {
+      return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
+    }
+    const { loc } = await assertStocktakeScanAllowed(req, 'KIEM_SOAT', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
+    const saved = await withLockedAppDataValue('stocktakeShelfKiemSoatConfirmations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
+      return arr;
+    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    res.json({ item: saved });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/shelf-kiem-soat-confirmations');
+  }
+});
+
+// Gỡ Xác Nhận Kiểm Soát 1 quầy kệ (cần soát lại) — CÙNG quyền với xác nhận (Kiểm Soát quầy kệ đó), tự
+// tra lại ĐÚNG shelfLocationId/sessionId thật của dòng đang gỡ (không tin id suông).
+router.delete('/shelf-kiem-soat-confirmations/:id', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
+    const existingAll = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+    const existingRow = existingAll.find(c => c.id === id);
+    if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
+    await assertStocktakeScanAllowed(req, 'KIEM_SOAT', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+    await withLockedAppDataValue('stocktakeShelfKiemSoatConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/stocktake/shelf-kiem-soat-confirmations/:id');
+  }
+});
+
+// ===== Xác Nhận Gom Mã từng quầy kệ (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom
+// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror NGUYÊN 3 route Kiểm Soát ngay trên, chỉ khác collection
+// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê). =====
+router.get('/shelf-gom-ma-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.query.sessionId);
+    if (!Number.isFinite(sessionId)) return res.status(400).json({ error: 'Thiếu sessionId' });
+    await ensureStocktakeSessionsKey();
+    const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
+    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
+        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+      }
+    }
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const all = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/shelf-gom-ma-confirmations');
+  }
+});
+
+// Xác Nhận Gom Mã 1 quầy kệ — ĐÚNG người có quyền Gom Mã quầy kệ đó (3 lớp y hệt route quét Gom Mã,
+// KHÔNG cần quyền Tab 6 riêng — khác hẳn route confirm-all, vốn CHỈ áp dụng Kỳ Kiểm Kê, không liên quan
+// Gom Mã).
+router.post('/shelf-gom-ma-confirmations', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  try {
+    const sessionId = Number(req.body?.sessionId);
+    const shelfLocationId = Number(req.body?.shelfLocationId);
+    if (!Number.isFinite(sessionId) || !Number.isFinite(shelfLocationId)) {
+      return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
+    }
+    const { loc } = await assertStocktakeScanAllowed(req, 'GOM_MA', shelfLocationId, sessionId, { skipConfirmedCheck: true });
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const saved = await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
+      return arr;
+    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    res.json({ item: saved });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/shelf-gom-ma-confirmations');
+  }
+});
+
+// Gỡ Xác Nhận Gom Mã 1 quầy kệ (cần gom mã lại) — CÙNG quyền với xác nhận (Gom Mã quầy kệ đó), tự tra
+// lại ĐÚNG shelfLocationId/sessionId thật của dòng đang gỡ (không tin id suông).
+router.delete('/shelf-gom-ma-confirmations/:id', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
+    const existingAll = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    const existingRow = existingAll.find(c => c.id === id);
+    if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
+    await assertStocktakeScanAllowed(req, 'GOM_MA', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
+    await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/stocktake/shelf-gom-ma-confirmations/:id');
+  }
+});
+
 // Xác Nhận TOÀN BỘ ĐỢT — "Quản lý siêu thị" (quyền RIÊNG Tab 6 kiemKeConfirmDo, KHÁC quyền Tab 1
 // kiemKePeriodManage dùng cho nút "Đóng Kỳ" thủ công ở Tab Kỳ Kiểm Kê) — CHỈ cho phép khi mọi quầy kệ đã
-// THỰC SỰ Kiểm Đếm (slKiemDem > 0) trong đúng kỳ này đều đã Xác Nhận. Hiệu ứng cuối: CHUYỂN TRẠNG THÁI
-// kỳ giống hệt closeSession() (dùng lại ĐÚNG hàm đó, không viết lại logic chuyển trạng thái).
+// THỰC SỰ Kiểm Đếm (slKiemDem > 0) VÀ mọi quầy kệ đã THỰC SỰ Kiểm Soát (slKiemSoat > 0) trong đúng kỳ
+// này đều đã Xác Nhận (12/2026, theo phản hồi người dùng — trước đây CHỈ đòi Kiểm Đếm, Kiểm Soát có thể
+// còn dang dở mà vẫn đóng Kỳ được). Quầy kệ chưa từng ai Kiểm Soát thì KHÔNG bắt buộc Xác Nhận Kiểm Soát
+// (người dùng xác nhận rõ — giống đúng cách Kiểm Đếm đang làm). Hiệu ứng cuối: CHUYỂN TRẠNG THÁI kỳ giống
+// hệt closeSession() (dùng lại ĐÚNG hàm đó, không viết lại logic chuyển trạng thái).
 router.post('/sessions/:id/confirm-all', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   if (!canConfirmStocktake(req.freshUser)) {
@@ -558,16 +737,19 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
     }
     await ensureStocktakeKey('stocktakeCounts');
     await ensureStocktakeKey('stocktakeShelfConfirmations');
+    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
     const counts = (await getAppDataValue('stocktakeCounts')) || [];
     const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
     const unconfirmedIds = listUnconfirmedCountedShelfIds(counts, confirmations, id);
-    if (unconfirmedIds.length) {
+    const unconfirmedSoatIds = listUnconfirmedSoatedShelfIds(counts, soatConfirmations, id);
+    if (unconfirmedIds.length || unconfirmedSoatIds.length) {
       const allLocations = await getAllForCollection('shelfLocations');
-      const labels = unconfirmedIds.map(sid => {
-        const loc = allLocations.find(l => l.id === sid);
-        return loc ? `${loc.code} — ${loc.name}` : `#${sid}`;
-      });
-      return res.status(409).json({ error: `Còn ${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${labels.join(', ')}` });
+      const labelOf = (sid) => { const loc = allLocations.find(l => l.id === sid); return loc ? `${loc.code} — ${loc.name}` : `#${sid}`; };
+      const parts = [];
+      if (unconfirmedIds.length) parts.push(`${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${unconfirmedIds.map(labelOf).join(', ')}`);
+      if (unconfirmedSoatIds.length) parts.push(`${unconfirmedSoatIds.length} quầy kệ đã Kiểm Soát nhưng CHƯA Xác Nhận Kiểm Soát: ${unconfirmedSoatIds.map(labelOf).join(', ')}`);
+      return res.status(409).json({ error: `Còn ${parts.join('; ')}` });
     }
     let updated = null;
     await withLockedAppDataValue('stocktakeSessions', (list) => {
