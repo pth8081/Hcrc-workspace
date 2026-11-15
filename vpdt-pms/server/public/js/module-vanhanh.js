@@ -545,6 +545,12 @@ const KK_SCAN_TAB_CONFIG = Object.freeze({
   KIEMDEM: { apiMode: 'KIEM_DEM', prefix: 'kkKiemDem', qtyField: 'slKiemDem', loaiKyLabel: 'Kiểm Kê' },
   KIEMSOAT: { apiMode: 'KIEM_SOAT', prefix: 'kkKiemSoat', qtyField: 'slKiemSoat', loaiKyLabel: 'Kiểm Kê' }
 });
+// searchDropdownId (MỚI, 12/2026 — theo yêu cầu người dùng "lọc tìm kiếm theo mã sản phẩm... dạng drop
+// list, searchable, gợi ý nhắc") — ô "🔎 Tìm theo mã/tên để sửa/xoá..." vốn đã là ô lọc văn bản tự do, nay
+// thêm gợi ý tự nạp (sddSetOptions(), xem renderKkScanList() ngay dưới) từ ĐÚNG các mã đã quét ở quầy kệ
+// đang chọn — KHÔNG đổi hành vi/giao diện ô Quầy Kệ (vẫn <select> thường, cố ý giữ nguyên để không phá
+// hàng chục bài test Playwright đang dùng page.selectOption() trên ô này).
+const KK_SCAN_SEARCH_DROPDOWN_ID = Object.freeze({ GOMMA: 'kkGomMaSearchDropdown', KIEMDEM: 'kkKiemDemSearchDropdown', KIEMSOAT: 'kkKiemSoatSearchDropdown' });
 const kkScanState = {
   GOMMA: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
   KIEMDEM: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
@@ -736,6 +742,16 @@ function renderKkScanList(tabKey) {
   const st = kkScanState[tabKey];
   const listBody = document.getElementById(`${cfg.prefix}ListBody`);
   if (!listBody) return;
+  // Gợi ý ô tìm theo mã/tên (MỚI, 12/2026) — nạp từ ĐÚNG các mã đã quét ở quầy kệ đang chọn, mỗi lần
+  // danh sách đổi (quét thêm/sửa/xoá/đổi quầy kệ) — KHÔNG lọc theo searchText hiện tại (giữ nguyên toàn
+  // bộ gợi ý để còn đổi sang mã khác, cùng lý do đã ghi ở populateShelfFilterSuggestions()).
+  // LƯU Ý: nhãn gợi ý PHẢI khớp CHÍNH XÁC định dạng nối khoảng trắng dùng ở bộ lọc ngay dưới
+  // (`${maHang} ${tenHang}`, KHÔNG gạch ngang "—") — cùng lỗi đã ghi chú ở populateShelfFilterSuggestions(),
+  // dùng sai định dạng sẽ khiến bấm chọn 1 gợi ý lọc ra danh sách RỖNG ngay sau khi chọn.
+  const dropdownId = KK_SCAN_SEARCH_DROPDOWN_ID[tabKey];
+  if (dropdownId) {
+    sddSetOptions(dropdownId, [...new Set(st.counts.map(c => `${c.maHang} ${c.tenHang || ''}`.trim()))].sort((a, b) => a.localeCompare(b, 'vi')));
+  }
   const q = stripVnDiacritics(String(st.searchText || '').trim().toLowerCase());
   const filtered = st.counts.filter(c => !q || stripVnDiacritics(`${c.maHang} ${c.tenHang}`.toLowerCase()).includes(q));
   // MRU: mã vừa QUÉT (lastScannedAt) nhảy lên đầu — sửa tay (lastEditedAt) KHÔNG đổi vị trí, đúng A5.
@@ -803,7 +819,37 @@ async function deleteKkScanCount(tabKey, id) {
 // ===== Tab 5 "Cấu Hình Quầy Kệ" (12/2026) — CHỈ XEM, dùng chung danh mục shelfLocations đã đồng bộ sẵn
 // (DB.shelfLocations, KHÔNG gọi route riêng) — xem chú thích đầy đủ tại #kkShelfConfigWrap/
 // vanHanhSection.html lý do không xây form Thêm/Sửa/Xoá riêng ở đây. =====
-let kkShelfConfigFilterText = '';
+// Bộ lọc (MỚI, 12/2026, theo yêu cầu người dùng — xem CLAUDE.md "Bộ lọc tìm kiếm MỚI từ nay") — 2 trường
+// Quầy Kệ (sdd, lọc mã/tên) + Trạng Thái (sdd, giá trị cố định "Đang hoạt động"/"Ngừng hoạt động"). TRƯỚC
+// ĐÂY danh sách CHỈ hiện quầy active!==false (ẩn hẳn quầy ngừng hoạt động, không cách nào xem lại) — nay
+// hiện CẢ 2 loại khi KHÔNG lọc Trạng Thái, để trường lọc này có ý nghĩa thật (chọn đúng 1 trạng thái mới
+// thu hẹp), đồng thời thêm cột "Trạng Thái" vào bảng cho rõ.
+let kkShelfConfigFilters = { shelf: '', status: '' };
+let _kkShelfConfigFilterCollapsed = true;
+const KK_SHELF_CONFIG_STATUS_LABELS = { active: 'Đang hoạt động', inactive: 'Ngừng hoạt động' };
+function applyKkShelfConfigFilterPanelState() {
+  const panel = document.getElementById('kkShelfConfigFilterPanel');
+  const btn = document.getElementById('btnToggleKkShelfConfigFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _kkShelfConfigFilterCollapsed);
+  if (btn) btn.textContent = _kkShelfConfigFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleKkShelfConfigFilterPanel() {
+  _kkShelfConfigFilterCollapsed = !_kkShelfConfigFilterCollapsed;
+  applyKkShelfConfigFilterPanelState();
+}
+function onKkShelfConfigFilterChanged() {
+  kkShelfConfigFilters = {
+    shelf: document.getElementById('kkscfShelf')?.value.trim() || '',
+    status: document.getElementById('kkscfStatus')?.value.trim() || ''
+  };
+  renderKkShelfConfigList();
+}
+function clearKkShelfConfigFilters() {
+  ['kkscfShelf', 'kkscfStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  kkShelfConfigFilters = { shelf: '', status: '' };
+  renderKkShelfConfigList();
+}
 function loadKkShelfConfigTab() {
   const row = document.getElementById('kkShelfConfigDeptRow');
   const dept = kkEffectiveDept();
@@ -811,29 +857,36 @@ function loadKkShelfConfigTab() {
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
       (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
   }
-  const filterInput = document.getElementById('kkShelfConfigFilter');
-  if (filterInput) filterInput.value = '';
-  renderKkShelfConfigList('');
+  clearKkShelfConfigFilters();
+  sddSetOptions('kkscfStatusDropdown', Object.values(KK_SHELF_CONFIG_STATUS_LABELS));
 }
-function renderKkShelfConfigList(filterText) {
-  kkShelfConfigFilterText = filterText || '';
+function renderKkShelfConfigList() {
   const listBody = document.getElementById('kkShelfConfigListBody');
   if (!listBody) return;
   const dept = kkEffectiveDept();
-  const q = stripVnDiacritics(kkShelfConfigFilterText.trim().toLowerCase());
-  const items = (DB.shelfLocations || []).filter(l => l.dept === dept && l.active !== false &&
-    (!q || stripVnDiacritics(`${l.code} ${l.name}`.toLowerCase()).includes(q)));
+  const allForDept = (DB.shelfLocations || []).filter(l => l.dept === dept);
+  sddSetOptions('kkscfShelfDropdown', [...new Set(allForDept.map(l => `${l.code} ${l.name}`))].sort((a, b) => a.localeCompare(b, 'vi')));
+  const f = kkShelfConfigFilters;
+  const items = allForDept.filter(l => {
+    if (!shelfFilterTextMatch(`${l.code} ${l.name}`, f.shelf)) return false;
+    if (f.status && shelfFilterTextMatch(KK_SHELF_CONFIG_STATUS_LABELS[l.active !== false ? 'active' : 'inactive'], f.status) === false) return false;
+    return true;
+  });
   if (!items.length) {
-    listBody.innerHTML = `<p class="text-gray-400 text-sm">${q ? 'Không tìm thấy quầy kệ khớp.' : 'Siêu thị này chưa khai báo quầy kệ nào — vào "Mở Quản Lý Quầy Kệ" phía trên để thêm.'}</p>`;
+    listBody.innerHTML = `<p class="text-gray-400 text-sm">${(f.shelf || f.status) ? 'Không tìm thấy quầy kệ khớp bộ lọc.' : 'Siêu thị này chưa khai báo quầy kệ nào — vào "Mở Quản Lý Quầy Kệ" phía trên để thêm.'}</p>`;
     return;
   }
   listBody.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1">Mã</th><th>Tên</th><th>Ngành Hàng</th></tr></thead><tbody>` +
-    items.map(l => `<tr class="border-b last:border-0">
+    <th class="py-1">Mã</th><th>Tên</th><th>Ngành Hàng</th><th>Trạng Thái</th></tr></thead><tbody>` +
+    items.map(l => {
+      const active = l.active !== false;
+      return `<tr class="border-b last:border-0">
       <td class="py-1 font-mono">${escapeHtml(l.code)}</td>
       <td>${escapeHtml(l.name)}</td>
       <td>${escapeHtml(l.category || '')}</td>
-    </tr>`).join('') + '</tbody></table>';
+      <td>${active ? '<span class="text-green-700">● Đang hoạt động</span>' : '<span class="text-gray-400">● Ngừng hoạt động</span>'}</td>
+    </tr>`;
+    }).join('') + '</tbody></table>';
 }
 function goToShelfLocationsManagement() {
   // LỖI THẬT tự phát hiện lúc build demo: quyền Tab 5 Kiểm Kê (kiemKeShelfConfigManage) KHÔNG đảm bảo
@@ -875,11 +928,21 @@ let kkConfirmGomMaConfirmations = [];
 // kkConfirmSelected — 1 Set riêng/loại, giữ danh sách shelfLocationId đang được tick chọn ở khung "Xác
 // Nhận Đã Chọn"/"Gỡ Xác Nhận Đã Chọn" (MỚI, 12/2026). Reset mỗi lần vào lại Tab 6 (enterKkConfirmTab()).
 let kkConfirmSelected = { KIEMDEM: new Set(), KIEMSOAT: new Set(), GOMMA: new Set() };
+// kkConfirmFilters — bộ lọc "Quầy Kệ" + "Xác Nhận" MỚI (12/2026, theo yêu cầu người dùng, xem CLAUDE.md
+// "Bộ lọc tìm kiếm MỚI từ nay") cho cả 3 danh sách — panel lọc là HTML TĨNH (kiemKeSection.html, KHÔNG
+// render qua innerHTML như kkConfirmBulkBarHtml()) để không mất focus/giá trị đang gõ mỗi lần list render
+// lại (đúng lý do panel "20 ghi nhận gần nhất" cũng đặt tĩnh trong fragment, xem CLAUDE.md).
+let kkConfirmFilters = { KIEMDEM: { shelf: '', xacNhan: '' }, KIEMSOAT: { shelf: '', xacNhan: '' }, GOMMA: { shelf: '', xacNhan: '' } };
+let kkConfirmFilterCollapsed = { KIEMDEM: true, KIEMSOAT: true, GOMMA: true };
+const KK_XAC_NHAN_STATUS_LABELS = ['Đã xác nhận', 'Chưa xác nhận'];
 const KK_CONFIRM_KIND = {
   KIEMDEM: {
     url: '/api/stocktake/shelf-confirmations',
     listBodyId: 'kkConfirmShelfListBody',
     bulkBarId: 'kkConfirmBulkBarKiemDem',
+    filterPanelId: 'kkcfKiemDemPanel', filterToggleBtnId: 'btnToggleKkcfKiemDem',
+    filterShelfInputId: 'kkcfKiemDemShelf', filterShelfDropdownId: 'kkcfKiemDemShelfDropdown',
+    filterXacNhanInputId: 'kkcfKiemDemXacNhan', filterXacNhanDropdownId: 'kkcfKiemDemXacNhanDropdown',
     getSessionId: () => kkConfirmSessionId,
     getConfirmations: () => kkConfirmConfirmations,
     reload: () => loadKkConfirmTab(),
@@ -888,6 +951,9 @@ const KK_CONFIRM_KIND = {
     url: '/api/stocktake/shelf-kiem-soat-confirmations',
     listBodyId: 'kkConfirmSoatShelfListBody',
     bulkBarId: 'kkConfirmBulkBarKiemSoat',
+    filterPanelId: 'kkcfKiemSoatPanel', filterToggleBtnId: 'btnToggleKkcfKiemSoat',
+    filterShelfInputId: 'kkcfKiemSoatShelf', filterShelfDropdownId: 'kkcfKiemSoatShelfDropdown',
+    filterXacNhanInputId: 'kkcfKiemSoatXacNhan', filterXacNhanDropdownId: 'kkcfKiemSoatXacNhanDropdown',
     getSessionId: () => kkConfirmSessionId,
     getConfirmations: () => kkConfirmSoatConfirmations,
     reload: () => loadKkConfirmTab(),
@@ -896,16 +962,91 @@ const KK_CONFIRM_KIND = {
     url: '/api/stocktake/shelf-gom-ma-confirmations',
     listBodyId: 'kkConfirmGomMaShelfListBody',
     bulkBarId: 'kkConfirmBulkBarGomMa',
+    filterPanelId: 'kkcfGomMaPanel', filterToggleBtnId: 'btnToggleKkcfGomMa',
+    filterShelfInputId: 'kkcfGomMaShelf', filterShelfDropdownId: 'kkcfGomMaShelfDropdown',
+    filterXacNhanInputId: 'kkcfGomMaXacNhan', filterXacNhanDropdownId: 'kkcfGomMaXacNhanDropdown',
     getSessionId: () => kkConfirmGomMaSessionId,
     getConfirmations: () => kkConfirmGomMaConfirmations,
     reload: () => loadKkConfirmGomMaTab(),
   },
 };
 
+function applyKkConfirmFilterPanelState(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  const panel = document.getElementById(cfg.filterPanelId);
+  const btn = document.getElementById(cfg.filterToggleBtnId);
+  if (!panel) return;
+  panel.classList.toggle('hidden', kkConfirmFilterCollapsed[kind]);
+  if (btn) btn.textContent = kkConfirmFilterCollapsed[kind] ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleKkConfirmFilterPanel(kind) {
+  kkConfirmFilterCollapsed[kind] = !kkConfirmFilterCollapsed[kind];
+  applyKkConfirmFilterPanelState(kind);
+}
+function onKkConfirmFilterChanged(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  kkConfirmFilters[kind] = {
+    shelf: document.getElementById(cfg.filterShelfInputId)?.value.trim() || '',
+    xacNhan: document.getElementById(cfg.filterXacNhanInputId)?.value.trim() || ''
+  };
+  renderKkConfirmFilteredList(kind);
+}
+function clearKkConfirmFilters(kind) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  [cfg.filterShelfInputId, cfg.filterXacNhanInputId].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  kkConfirmFilters[kind] = { shelf: '', xacNhan: '' };
+  renderKkConfirmFilteredList(kind);
+}
+function renderKkConfirmFilteredList(kind) {
+  if (kind === 'GOMMA') { renderKkConfirmGomMaShelfList(); return; }
+  if (kind === 'KIEMSOAT') { renderKkConfirmSoatShelfList(); return; }
+  renderKkConfirmShelfList();
+}
+// kkConfirmPopulateFilterSuggestions() — nạp gợi ý cho 2 ô lọc (Quầy Kệ: mã/tên các quầy kệ ĐANG hiện
+// trong danh sách gốc trước khi lọc; Xác Nhận: 2 giá trị cố định) — gọi mỗi lần render (idempotent).
+function kkConfirmPopulateFilterSuggestions(kind, rawShelfIds) {
+  const cfg = KK_CONFIRM_KIND[kind];
+  if (!cfg) return;
+  const allLocations = DB.shelfLocations || [];
+  const labels = rawShelfIds.map(sid => { const loc = allLocations.find(l => l.id === sid); return loc ? `${loc.code} ${loc.name}` : null; }).filter(Boolean);
+  sddSetOptions(cfg.filterShelfDropdownId, [...new Set(labels)].sort((a, b) => a.localeCompare(b, 'vi')));
+  sddSetOptions(cfg.filterXacNhanDropdownId, KK_XAC_NHAN_STATUS_LABELS);
+}
+// kkConfirmFilterShelfIds() — áp dụng bộ lọc "Quầy Kệ"/"Xác Nhận" lên 1 mảng shelfLocationId ĐÃ tính sẵn
+// (slKiemDem>0/slKiemSoat>0/slGomMa>0 ở từng renderKkConfirmXxxShelfList()) — dùng CHUNG cho cả 3 danh
+// sách, KHÔNG đổi logic tính shelfIds gốc (CHỈ lọc bớt trên kết quả đó).
+function kkConfirmFilterShelfIds(kind, shelfIds, confirmations) {
+  const f = kkConfirmFilters[kind];
+  if (!f || (!f.shelf && !f.xacNhan)) return shelfIds;
+  const allLocations = DB.shelfLocations || [];
+  return shelfIds.filter(sid => {
+    const loc = allLocations.find(l => l.id === sid);
+    const label = loc ? `${loc.code} ${loc.name}` : `#${sid}`;
+    if (f.shelf && !shelfFilterTextMatch(label, f.shelf)) return false;
+    if (f.xacNhan) {
+      const statusLabel = confirmations.some(c => c.shelfLocationId === sid) ? 'Đã xác nhận' : 'Chưa xác nhận';
+      if (!shelfFilterTextMatch(statusLabel, f.xacNhan)) return false;
+    }
+    return true;
+  });
+}
+
 async function enterKkConfirmTab() {
   kkConfirmSessionId = null;
   kkConfirmGomMaSessionId = null;
   kkConfirmSelected = { KIEMDEM: new Set(), KIEMSOAT: new Set(), GOMMA: new Set() };
+  // Reset bộ lọc + về trạng thái THU GỌN mỗi lần vào lại Tab 6 (MỚI, 12/2026) — tránh giữ lọc cũ của lượt
+  // xem trước gây hiểu nhầm "sao danh sách thiếu quầy kệ" khi quay lại tab.
+  kkConfirmFilters = { KIEMDEM: { shelf: '', xacNhan: '' }, KIEMSOAT: { shelf: '', xacNhan: '' }, GOMMA: { shelf: '', xacNhan: '' } };
+  kkConfirmFilterCollapsed = { KIEMDEM: true, KIEMSOAT: true, GOMMA: true };
+  ['KIEMDEM', 'KIEMSOAT', 'GOMMA'].forEach(kind => {
+    const cfg = KK_CONFIRM_KIND[kind];
+    [cfg.filterShelfInputId, cfg.filterXacNhanInputId].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    applyKkConfirmFilterPanelState(kind);
+  });
   const sel = document.getElementById('kkConfirmSessionSelect');
   const gomMaSel = document.getElementById('kkConfirmGomMaSessionSelect');
   const dept = kkEffectiveDept();
@@ -984,10 +1125,14 @@ function renderKkConfirmShelfList() {
   if (!listBody) return;
   // CHỈ hiện quầy kệ CÓ hoạt động Kiểm Đếm thật (slKiemDem > 0) trong đúng kỳ này — đúng khuôn
   // listUnconfirmedCountedShelfIds() phía server (lib/stocktakeEngine.js).
-  const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
+  const rawShelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemDem) > 0).map(c => c.shelfLocationId))];
+  kkConfirmPopulateFilterSuggestions('KIEMDEM', rawShelfIds);
+  const shelfIds = kkConfirmFilterShelfIds('KIEMDEM', rawShelfIds, kkConfirmConfirmations);
   const bulkBar = kkConfirmBulkBarHtml('KIEMDEM', 'kkConfirmBulkBarKiemDem');
-  if (!shelfIds.length) {
+  if (!rawShelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Đếm trong kỳ này.</p>';
+  } else if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Không tìm thấy quầy kệ khớp bộ lọc.</p>';
   } else {
     const allLocations = DB.shelfLocations || [];
     listBody.innerHTML = bulkBar + shelfIds.map(sid => {
@@ -1047,10 +1192,14 @@ async function unconfirmKkShelf(id) {
 function renderKkConfirmSoatShelfList() {
   const listBody = document.getElementById('kkConfirmSoatShelfListBody');
   if (!listBody) return;
-  const shelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemSoat) > 0).map(c => c.shelfLocationId))];
+  const rawShelfIds = [...new Set(kkConfirmCounts.filter(c => Number(c.slKiemSoat) > 0).map(c => c.shelfLocationId))];
+  kkConfirmPopulateFilterSuggestions('KIEMSOAT', rawShelfIds);
+  const shelfIds = kkConfirmFilterShelfIds('KIEMSOAT', rawShelfIds, kkConfirmSoatConfirmations);
   const bulkBar = kkConfirmBulkBarHtml('KIEMSOAT', 'kkConfirmBulkBarKiemSoat');
-  if (!shelfIds.length) {
+  if (!rawShelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Kiểm Soát trong kỳ này.</p>';
+  } else if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Không tìm thấy quầy kệ khớp bộ lọc.</p>';
   } else {
     const allLocations = DB.shelfLocations || [];
     listBody.innerHTML = bulkBar + shelfIds.map(sid => {
@@ -1135,10 +1284,14 @@ async function loadKkConfirmGomMaTab() {
 function renderKkConfirmGomMaShelfList() {
   const listBody = document.getElementById('kkConfirmGomMaShelfListBody');
   if (!listBody) return;
-  const shelfIds = [...new Set(kkConfirmGomMaCounts.filter(c => Number(c.slGomMa) > 0).map(c => c.shelfLocationId))];
+  const rawShelfIds = [...new Set(kkConfirmGomMaCounts.filter(c => Number(c.slGomMa) > 0).map(c => c.shelfLocationId))];
+  kkConfirmPopulateFilterSuggestions('GOMMA', rawShelfIds);
+  const shelfIds = kkConfirmFilterShelfIds('GOMMA', rawShelfIds, kkConfirmGomMaConfirmations);
   const bulkBar = kkConfirmBulkBarHtml('GOMMA', 'kkConfirmBulkBarGomMa');
-  if (!shelfIds.length) {
+  if (!rawShelfIds.length) {
     listBody.innerHTML = '<p class="text-gray-400 text-sm">Chưa có quầy kệ nào được Gom Mã trong kỳ này.</p>';
+  } else if (!shelfIds.length) {
+    listBody.innerHTML = '<p class="text-gray-400 text-sm">Không tìm thấy quầy kệ khớp bộ lọc.</p>';
   } else {
     const allLocations = DB.shelfLocations || [];
     listBody.innerHTML = bulkBar + shelfIds.map(sid => {

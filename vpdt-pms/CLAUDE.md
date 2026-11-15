@@ -384,3 +384,32 @@ ngoài: `sddSetOptions(dropdownId, items)` để nạp danh sách, input dùng
 `sdd*`. **Mọi ô tìm-kiếm-gõ-chọn mới từ giờ trở đi phải dùng cơ chế này**
 (hoặc `renderPeopleMultiSelect()`/dropdown tự dựng tương tự nếu cần
 multi-select thật sự) — không quay lại `<datalist>` native.
+
+## Bộ lọc tìm kiếm MỚI từ nay: LUÔN phải có nút thu gọn/mở lại
+
+Người dùng xác nhận rõ ràng (12/2026, lúc yêu cầu thêm bộ lọc cho các tab
+Gom Mã/Kiểm Soát/Kiểm Đếm/Cấu Hình Quầy Kệ ở module Kiểm Kê): **"Bộ lọc tìm
+kiếm mà tất cả từ bây giờ làm là bao giờ cũng có cái nút thu gọn lại nhé"**
+— đây là quy tắc áp dụng cho MỌI bộ lọc/panel tìm kiếm MỚI thêm vào hệ
+thống từ nay, không riêng module nào. Đúng khuôn đã có sẵn ở "📷 Ghi Nhận
+(20 gần nhất)"/"⏰ Hạn Sử Dụng"/"🗄️ Quầy Kệ" (Kiểm Soát Hàng Hóa, xem
+`shelfRecordRecentFilterPanel`/`toggleShelfRecordRecentFilterPanel()` ở
+`module-vanhanh.js` làm mẫu):
+
+- 1 nút bấm (`🔍 Hiện Bộ Lọc` / `➖ Ẩn Bộ Lọc`) đặt ngay cạnh tiêu đề danh
+  sách, gắn `data-op="toggleXxxFilterPanel"`.
+- Khung chứa các trường lọc có `id` riêng, mặc định `class="hidden ..."`
+  (THU GỌN sẵn khi vào tab lần đầu) — bấm nút mới hiện ra, bấm lại thì ẩn.
+- Hàm `applyXxxFilterPanelState()` toggle `.hidden` + đổi chữ nút theo đúng
+  2 trạng thái trên.
+- Mỗi trường lọc bên trong panel, nếu là lọc theo văn bản/tên/mã (không
+  phải số/khoảng ngày), PHẢI dùng ô tìm-kiếm-gõ-chọn `sdd*` (xem mục ngay
+  trên) kèm gợi ý tự nạp từ dữ liệu thật đang có — không dùng `<select>`
+  tĩnh cứng nhắc cho trường có nhiều giá trị, và không bắt gõ chính xác
+  100% một ô text thường.
+
+Ngoại lệ DUY NHẤT: 1 ô tìm kiếm ĐƠN LẺ (chỉ 1 trường, không phải cụm nhiều
+trường gộp thành 1 "bộ lọc/panel") thì KHÔNG bắt buộc phải có nút thu gọn
+riêng — quy tắc này áp dụng cho PANEL lọc (từ 2 trường trở lên, hoặc 1
+trường nhưng được trình bày như 1 khối panel riêng), không áp dụng máy móc
+cho từng ô tìm kiếm rời rạc có sẵn trong 1 bảng nhỏ.

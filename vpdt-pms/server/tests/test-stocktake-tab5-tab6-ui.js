@@ -70,12 +70,16 @@ async function main() {
       assert(text.includes('Gia vị') && text.includes('Mì'), `Phải hiện đúng Ngành Hàng, thực tế: ${text}`);
     });
 
-    await run.run('Tab 5: lọc theo mã/tên -> chỉ còn đúng 1 dòng khớp', async () => {
-      await page.fill('#kkShelfConfigFilter', 'A2');
+    await run.run('Tab 5: bộ lọc "Quầy Kệ" (mới, panel thu gọn mặc định) -> chỉ còn đúng 1 dòng khớp', async () => {
+      const collapsedInitially = await page.evaluate(() => document.getElementById('kkShelfConfigFilterPanel').classList.contains('hidden'));
+      assert(collapsedInitially, 'Panel bộ lọc Tab 5 phải THU GỌN mặc định (quy tắc mới, xem CLAUDE.md)');
+      await page.click('#btnToggleKkShelfConfigFilter');
+      await page.waitForTimeout(100);
+      await page.fill('#kkscfShelf', 'A2');
       await page.waitForTimeout(150);
       const text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
       assert(!text.includes('A1') && text.includes('A2'), `Phải lọc đúng chỉ còn A2, thực tế: ${text}`);
-      await page.fill('#kkShelfConfigFilter', '');
+      await page.fill('#kkscfShelf', '');
       await page.waitForTimeout(100);
     });
 
@@ -365,6 +369,82 @@ async function main() {
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);
       assert(/ĐÃ được Xác Nhận Gom Mã/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận Gom Mã" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
+    });
+
+    // ===== Bộ lọc tìm kiếm MỚI (12/2026, theo yêu cầu người dùng: "lọc tìm kiếm theo quầy kệ, theo
+    // trạng thái, xác nhận, mã sản phẩm... dạng drop list, searchable, gợi ý nhắc", xem CLAUDE.md "Bộ lọc
+    // tìm kiếm MỚI từ nay"). Dùng tiếp đúng session "Thống Kê đợt 2" (A1 đã Xác Nhận Kiểm Soát từ test
+    // trên, A2 chưa) + Gom Mã session mới (A1 đã Xác Nhận Gom Mã). =====
+    await run.run('Chuẩn bị bộ lọc: Kiểm Soát thêm A2 (để có 1 quầy ĐÃ xác nhận + 1 quầy CHƯA xác nhận)', async () => {
+      await page.click('#btnKkSubKiemSoat');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemSoatShelfSelect', '11');
+      await page.waitForTimeout(150);
+      await page.fill('#kkKiemSoatBarcodeInput', 'SP002');
+      await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
+      await page.waitForTimeout(150);
+    });
+
+    await run.run('Tab 6 bộ lọc Kiểm Soát: panel thu gọn mặc định, lọc "Xác Nhận" tách đúng 2 nhóm', async () => {
+      await page.click('#btnKkSubConfirm');
+      await page.waitForTimeout(250);
+      const collapsedInitially = await page.evaluate(() => document.getElementById('kkcfKiemSoatPanel').classList.contains('hidden'));
+      assert(collapsedInitially, 'Panel bộ lọc Kiểm Soát phải THU GỌN mặc định (quy tắc mới)');
+      await page.click('#btnToggleKkcfKiemSoat');
+      await page.waitForTimeout(100);
+      await page.fill('#kkcfKiemSoatXacNhan', 'Đã xác nhận');
+      await page.waitForTimeout(150);
+      let text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(text.includes('A1') && !text.includes('A2'), `Lọc "Đã xác nhận" phải chỉ còn A1, thực tế: ${text}`);
+      await page.fill('#kkcfKiemSoatXacNhan', 'Chưa xác nhận');
+      await page.waitForTimeout(150);
+      text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(!text.includes('A1') && text.includes('A2'), `Lọc "Chưa xác nhận" phải chỉ còn A2, thực tế: ${text}`);
+      await page.fill('#kkcfKiemSoatXacNhan', '');
+      await page.fill('#kkcfKiemSoatShelf', 'A2');
+      await page.waitForTimeout(150);
+      text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(!text.includes('A1') && text.includes('A2'), `Lọc Quầy Kệ "A2" phải chỉ còn A2, thực tế: ${text}`);
+      // "Chọn tất cả" lúc đang lọc chỉ còn A2 -> chỉ chọn đúng A2 (không âm thầm chọn luôn A1 đang bị ẩn).
+      await page.check('#kkConfirmBulkBarKiemSoat input[type="checkbox"]');
+      await page.waitForTimeout(100);
+      const countLabel = await page.evaluate(() => document.querySelector('#kkConfirmBulkBarKiemSoat [data-role="count"]').textContent);
+      assertEqual(countLabel, 'Đã chọn 1 quầy kệ', `"Chọn tất cả" lúc đang lọc chỉ được chọn đúng những dòng ĐANG HIỆN, thực tế: "${countLabel}"`);
+      await page.click('[data-op="clearKkConfirmFilters"][data-arg0="KIEMSOAT"]');
+      await page.waitForTimeout(150);
+      text = await page.evaluate(() => document.getElementById('kkConfirmSoatShelfListBody').textContent);
+      assert(text.includes('A1') && text.includes('A2'), `Xoá Bộ Lọc phải hiện lại đủ cả A1+A2, thực tế: ${text}`);
+    });
+
+    await run.run('Tab 5 bộ lọc "Trạng Thái": phân biệt đúng quầy kệ Đang hoạt động / Ngừng hoạt động', async () => {
+      await page.evaluate(() => { const l = DB.shelfLocations.find(x => x.code === 'A2'); if (l) l.active = false; });
+      await page.click('#btnKkSubShelfConfig');
+      await page.waitForTimeout(200);
+      let text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
+      assert(text.includes('A1') && text.includes('A2'), `Không lọc Trạng Thái -> phải hiện CẢ quầy đã ngừng hoạt động, thực tế: ${text}`);
+      // Panel có thể đang MỞ SẴN từ 1 test trước đó (đã bấm toggle, chưa đóng lại) -> chỉ bấm toggle nếu
+      // đang THỰC SỰ thu gọn, tránh bấm nhầm thành ĐÓNG panel đang mở.
+      const isCollapsed = await page.evaluate(() => document.getElementById('kkShelfConfigFilterPanel').classList.contains('hidden'));
+      if (isCollapsed) await page.click('#btnToggleKkShelfConfigFilter');
+      await page.waitForTimeout(100);
+      await page.fill('#kkscfStatus', 'Ngừng hoạt động');
+      await page.waitForTimeout(150);
+      text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
+      assert(!text.includes('A1') && text.includes('A2'), `Lọc "Ngừng hoạt động" phải chỉ còn A2, thực tế: ${text}`);
+      await page.fill('#kkscfStatus', 'Đang hoạt động');
+      await page.waitForTimeout(150);
+      text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
+      assert(text.includes('A1') && !text.includes('A2'), `Lọc "Đang hoạt động" phải chỉ còn A1, thực tế: ${text}`);
+      await page.evaluate(() => { const l = DB.shelfLocations.find(x => x.code === 'A2'); if (l) l.active = true; });
+    });
+
+    await run.run('Tab 2/3/4 ô "Tìm theo mã/tên": tự nạp gợi ý (sdd) từ đúng mã đã quét ở quầy kệ đang chọn', async () => {
+      await page.click('#btnKkSubKiemDem');
+      await page.waitForTimeout(150);
+      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.waitForTimeout(200);
+      const items = await page.evaluate(() => (document.getElementById('kkKiemDemSearchDropdown')._sddItems || []).map(i => i.label));
+      assert(items.some(l => l.includes('SP001')), `Gợi ý ô tìm Kiểm Đếm phải có SP001 đã quét ở quầy kệ A1, thực tế: ${JSON.stringify(items)}`);
     });
 
     assertEqual(jsErrors.length, 0, 'Không có lỗi JS/console nào phát sinh: ' + jsErrors.join('\n'));
