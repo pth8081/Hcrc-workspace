@@ -435,6 +435,10 @@ const PERM_KEY_VN_LABELS = {
   "kiemKeShelfConfigManage": "Kiểm Kê — 🗄️ Tab 5: Cấu Hình Quầy Kệ",
   "kiemKeShelfLockManage": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ (IT)",
   "kiemKeConfirmDo": "Kiểm Kê — ✅ Tab 6: Xác Nhận",
+  // kiemKeConfirmDo.all (12/2026, nâng cấp từ boolean đơn giản sang {all,depts[]}) — nhãn RIÊNG cho
+  // dạng object mới (xem flattenPermsForMatrixInto()); nhãn "kiemKeConfirmDo" ngay trên vẫn giữ nguyên
+  // cho user CHƯA được admin re-save qua UI mới (dữ liệu cũ dạng boolean đơn giản).
+  "kiemKeConfirmDo.all": "Kiểm Kê — ✅ Tab 6: Xác Nhận Toàn Bộ Đợt (Tất Cả Siêu Thị)",
   "kiemKeReportView": "Kiểm Kê — 📊 Tab 7: Báo Cáo",
   "kiemKeUserAccessManage": "Kiểm Kê — 🔑 Tab 8: Cấu Hình Người Dùng",
   "contractAllowSelfApprove": "Hợp Đồng & Giấy Phép — ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Hợp Đồng (kể cả Tài Liệu Ký) Do Chính Mình Tạo/Trình",

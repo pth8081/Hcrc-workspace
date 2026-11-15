@@ -29,7 +29,7 @@ async function main() {
   const ADMIN = { username: 'admin1', name: 'Quản Trị Viên', dept: DEPT1, perms: { admin: true }, active: true, totpEnabled: true };
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [IT_ROLE, STAFF, ADMIN],
-    shelfLocations: [SHELF_A1, SHELF_A2, SHELF_B1],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2, SHELF_B1],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },

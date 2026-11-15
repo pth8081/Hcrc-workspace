@@ -20,6 +20,25 @@ function canDoStocktakeKiemDem(user) { return !!(user?.perms?.admin || user?.per
 function canDoStocktakeKiemSoat(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
 function canManageStocktakeShelfConfig(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
 function canConfirmStocktake(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canConfirmStocktakeForDept (MỚI, 12/2026, theo yêu cầu người dùng: "cho phép bộ phận IT xác nhận trên
+// siêu thị nào thôi thì đỡ bị nhầm") — kiemKeConfirmDo nâng cấp từ boolean đơn giản sang {all, depts[]}
+// (CÙNG khuôn shelfReportView đã có), giữ TƯƠNG THÍCH NGƯỢC với dữ liệu cũ (`kiemKeConfirmDo: true`,
+// user CHƯA được admin re-save qua UI mới) — tất cả các trường hợp TRUE đơn giản (cũ) CHỈ xác nhận được
+// ĐÚNG siêu thị của chính mình (y hệt hành vi gốc trước đợt này: `session.dept !== req.freshUser.dept`
+// từng chặn cứng ở route confirm-all) — PHẢI qua đúng cấu hình {all:true} hoặc {depts:[...]} (admin tự
+// gán qua Cây Phân Quyền) mới xác nhận được siêu thị KHÁC siêu thị đăng ký của mình. Hàm này CHỈ quyết
+// định phạm vi SIÊU THỊ — gọi SAU KHI đã xác nhận canConfirmStocktake(user) === true (có quyền nói
+// chung), không tự thay thế cho kiểm tra đó.
+function canConfirmStocktakeForDept(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeConfirmDo;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
 function canViewStocktakeReport(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeReportView); }
 function canManageStocktakeUserAccess(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 // canManageStocktakeShelfLock (MỚI, 12/2026 — quyền thứ 9, KHÔNG gắn 1 tab mới mà sống trong Tab 5 "🗄️
@@ -491,7 +510,7 @@ function computeValueBreakdown(rows, priceMap) {
 module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
-  canManageStocktakeShelfConfig, canConfirmStocktake, canViewStocktakeReport, canManageStocktakeUserAccess,
+  canManageStocktakeShelfConfig, canConfirmStocktake, canConfirmStocktakeForDept, canViewStocktakeReport, canManageStocktakeUserAccess,
   canManageStocktakeShelfLock,
   canReopenStocktakeSession,
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,

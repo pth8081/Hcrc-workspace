@@ -22,7 +22,7 @@ const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị'
 const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', active: true };
 
 let appDataStore = {
-  shelfLocations: [SHELF_A1, SHELF_A2],
+  kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
   stocktakeSessions: [],
   stocktakeUserAccess: [],
   stocktakeCounts: [],

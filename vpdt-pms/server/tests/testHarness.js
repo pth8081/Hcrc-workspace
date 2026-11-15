@@ -121,7 +121,11 @@ function createMockState(seed) {
     // stocktakeShelfKiemSoatConfirmations (Tab 6 Xác Nhận Kiểm Soát riêng, 12/2026) — CÙNG lý do.
     stocktakeShelfKiemSoatConfirmations: [],
     // stocktakeShelfGomMaConfirmations (Tab 6 Xác Nhận Gom Mã riêng, MỚI 12/2026) — CÙNG lý do.
-    stocktakeShelfGomMaConfirmations: []
+    stocktakeShelfGomMaConfirmations: [],
+    // kiemKeShelfLocations (Tab 5, MỚI 12/2026 — danh mục quầy kệ RIÊNG của Kiểm Kê, tách khỏi
+    // shelfLocations dùng chung Kiểm Soát Hàng Hóa) — seed rỗng SẴN (khác shelfLocations ở trên vốn CỐ Ý
+    // không seed vì dùng chung 2 module) để test không liên quan không cần tự khai báo.
+    kiemKeShelfLocations: []
   }, seed || {});
 }
 
@@ -1021,7 +1025,7 @@ function createDispatcher(state) {
         const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
         if (!checkFn) { const e = new Error('Hành động không hợp lệ'); e.status = 400; throw e; }
         if (!checkFn(freshUser)) { const e = new Error('Bạn không có quyền thực hiện hành động này (Lớp 1 — quyền tab)'); e.status = 403; throw e; }
-        const loc = (state.shelfLocations || []).find(l => l.id === shelfLocationId);
+        const loc = (state.kiemKeShelfLocations || []).find(l => l.id === shelfLocationId);
         if (!loc) { const e = new Error('Không tìm thấy quầy kệ'); e.status = 404; throw e; }
         // Khoá Quầy Kệ (MỚI, 12/2026) — mirror ĐÚNG nhánh mới ở assertStocktakeScanAllowed() thật
         // (routes/stocktake.js): admin bypass, chặn TRƯỚC Lớp 2 allowlist.
@@ -1107,7 +1111,7 @@ function createDispatcher(state) {
         if (!checkFn) return { status: 400, body: { error: 'Hành động không hợp lệ' } };
         if (!checkFn(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện hành động này' } };
         const allowedIds = new Set((state.stocktakeUserAccess || []).filter(a => a.username === freshUser.username && a[MODE_ACCESS_FIELD[mode]] === true).map(a => a.shelfLocationId));
-        const items = (state.shelfLocations || []).filter(l => allowedIds.has(l.id) && l.active !== false);
+        const items = (state.kiemKeShelfLocations || []).filter(l => allowedIds.has(l.id) && l.active !== false);
         return { status: 200, body: { items } };
       }
       if (pathName === '/api/stocktake/active-session-for-shelf' && method === 'GET') {
@@ -1120,7 +1124,7 @@ function createDispatcher(state) {
         const checkFn = { GOM_MA: canDoStocktakeGomMa, KIEM_DEM: canDoStocktakeKiemDem, KIEM_SOAT: canDoStocktakeKiemSoat }[mode];
         if (!checkFn) return { status: 400, body: { error: 'Hành động không hợp lệ' } };
         if (!checkFn(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện hành động này' } };
-        const loc = (state.shelfLocations || []).find(l => l.id === shelfLocationId);
+        const loc = (state.kiemKeShelfLocations || []).find(l => l.id === shelfLocationId);
         if (!loc) return { status: 404, body: { error: 'Không tìm thấy quầy kệ' } };
         if (!canUserDoStocktakeOnShelf(state.stocktakeUserAccess || [], freshUser.username, loc.dept, shelfLocationId, mode)) {
           return { status: 403, body: { error: 'Bạn chưa được cấp quyền thao tác hành động này trên quầy kệ này' } };
@@ -1161,15 +1165,70 @@ function createDispatcher(state) {
         const ids = Array.isArray(body?.shelfLocationIds) ? body.shelfLocationIds.map(Number).filter(Number.isFinite) : [];
         if (!ids.length) return { status: 400, body: { error: 'Thiếu danh sách quầy kệ' } };
         const idSet = new Set(ids);
-        for (const loc of (state.shelfLocations || [])) {
+        for (const loc of (state.kiemKeShelfLocations || [])) {
           if (!idSet.has(loc.id)) continue;
           if (!freshUser.perms?.admin && loc.dept !== freshUser.dept) return { status: 403, body: { error: `Quầy kệ "${loc.code}" không thuộc siêu thị của bạn` } };
           loc.kiemKeLocked = locked;
           if (locked) { loc.kiemKeLockedBy = freshUser.username; loc.kiemKeLockedByName = freshUser.name || freshUser.username; loc.kiemKeLockedAt = new Date().toISOString(); }
           else { delete loc.kiemKeLockedBy; delete loc.kiemKeLockedByName; delete loc.kiemKeLockedAt; }
         }
-        const items = (state.shelfLocations || []).filter(l => idSet.has(l.id));
+        const items = (state.kiemKeShelfLocations || []).filter(l => idSet.has(l.id));
         return { status: 200, body: { items } };
+      }
+      // CRUD kiemKeShelfLocations (MỚI, 12/2026 — danh mục quầy kệ RIÊNG của Kiểm Kê, tách khỏi
+      // shelfLocations dùng chung Kiểm Soát Hàng Hóa) — mirror ĐÚNG routes/stocktake.js
+      // POST/PATCH/DELETE /api/stocktake/shelf-locations[/:id].
+      if (pathName === '/api/stocktake/shelf-locations' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canManageStocktakeShelfConfig } = stockEngine2();
+        if (!canManageStocktakeShelfConfig(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền Cấu Hình Quầy Kệ' } };
+        const dept = String(body?.dept || '').trim();
+        const code = String(body?.code || '').trim();
+        const name = String(body?.name || '').trim();
+        if (!dept) return { status: 400, body: { error: 'Vui lòng chọn siêu thị' } };
+        if (!code) return { status: 400, body: { error: 'Vui lòng nhập mã quầy kệ' } };
+        if (!name) return { status: 400, body: { error: 'Vui lòng nhập tên quầy kệ' } };
+        if (!freshUser.perms?.admin && dept !== freshUser.dept) return { status: 403, body: { error: 'Chỉ tạo được quầy kệ cho siêu thị của bạn' } };
+        state.kiemKeShelfLocations = state.kiemKeShelfLocations || [];
+        if (state.kiemKeShelfLocations.some(l => l.dept === dept && String(l.code).toLowerCase() === code.toLowerCase())) {
+          return { status: 409, body: { error: `Siêu thị "${dept}" đã có quầy kệ mã "${code}"` } };
+        }
+        const created = { id: Date.now() + Math.floor(Math.random() * 100000), dept, code, name, active: true };
+        state.kiemKeShelfLocations.push(created);
+        return { status: 200, body: { item: created } };
+      }
+      const kkShelfCrudMatch = pathName.match(/^\/api\/stocktake\/shelf-locations\/(\d+)$/);
+      if (kkShelfCrudMatch && (method === 'PATCH' || method === 'DELETE')) {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
+        const { canManageStocktakeShelfConfig } = stockEngine2();
+        if (!canManageStocktakeShelfConfig(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền Cấu Hình Quầy Kệ' } };
+        const id = Number(kkShelfCrudMatch[1]);
+        state.kiemKeShelfLocations = state.kiemKeShelfLocations || [];
+        const idx = state.kiemKeShelfLocations.findIndex(l => l.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy quầy kệ' } };
+        const loc = state.kiemKeShelfLocations[idx];
+        if (!freshUser.perms?.admin && loc.dept !== freshUser.dept) return { status: 403, body: { error: 'Quầy kệ không thuộc siêu thị của bạn' } };
+        if (method === 'DELETE') {
+          state.kiemKeShelfLocations.splice(idx, 1);
+          return { status: 200, body: { ok: true } };
+        }
+        if (body?.code !== undefined) {
+          const newCode = String(body.code).trim();
+          if (!newCode) return { status: 400, body: { error: 'Mã quầy kệ không được để trống' } };
+          if (state.kiemKeShelfLocations.some(l => l.id !== id && l.dept === loc.dept && String(l.code).toLowerCase() === newCode.toLowerCase())) {
+            return { status: 409, body: { error: `Siêu thị "${loc.dept}" đã có quầy kệ mã "${newCode}"` } };
+          }
+          loc.code = newCode;
+        }
+        if (body?.name !== undefined) {
+          const newName = String(body.name).trim();
+          if (!newName) return { status: 400, body: { error: 'Tên quầy kệ không được để trống' } };
+          loc.name = newName;
+        }
+        if (body?.active !== undefined) loc.active = !!body.active;
+        return { status: 200, body: { item: loc } };
       }
       if (pathName === '/api/stocktake/counts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
@@ -1338,7 +1397,7 @@ function createDispatcher(state) {
         const unconfirmedIds = listUnconfirmedCountedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfConfirmations || [], id);
         const unconfirmedSoatIds = listUnconfirmedSoatedShelfIds(state.stocktakeCounts || [], state.stocktakeShelfKiemSoatConfirmations || [], id);
         if (unconfirmedIds.length || unconfirmedSoatIds.length) {
-          const labelOf = (sid) => { const loc = (state.shelfLocations || []).find(l => l.id === sid); return loc ? `${loc.code} — ${loc.name}` : `#${sid}`; };
+          const labelOf = (sid) => { const loc = (state.kiemKeShelfLocations || []).find(l => l.id === sid); return loc ? `${loc.code} — ${loc.name}` : `#${sid}`; };
           const parts = [];
           if (unconfirmedIds.length) parts.push(`${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${unconfirmedIds.map(labelOf).join(', ')}`);
           if (unconfirmedSoatIds.length) parts.push(`${unconfirmedSoatIds.length} quầy kệ đã Kiểm Soát nhưng CHƯA Xác Nhận Kiểm Soát: ${unconfirmedSoatIds.map(labelOf).join(', ')}`);

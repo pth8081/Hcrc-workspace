@@ -5914,6 +5914,11 @@ async function initDatabase(loggingInUser, opts) {
     DB.shelfRecords = data.shelfRecords || [];
     // shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror 2 dòng trên.
     DB.shelfStockThresholds = data.shelfStockThresholds || [];
+    // kiemKeShelfLocations (📋 Kiểm Kê > Tab 5, 12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê (tách khỏi
+    // DB.shelfLocations dùng chung ở trên, theo yêu cầu người dùng), cùng khuôn đồng bộ 1 lần lúc đăng
+    // nhập + giữ mới qua mutate thẳng mảng này sau mỗi lần Thêm/Sửa/Xoá/Khoá-Mở Khoá (không gọi lại route
+    // riêng), xem module-vanhanh.js.
+    DB.kiemKeShelfLocations = data.kiemKeShelfLocations || [];
 
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];

@@ -21,7 +21,7 @@ async function main() {
 
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [STAFF, MANAGER, ADMIN],
-    shelfLocations: [{ id: 50, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true }],
+    kiemKeShelfLocations: [{ id: 50, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true }],
     stocktakeSessions: [GOMMA_SESSION, THONGKE_SESSION, THONGKE_DEPT2_SESSION],
     stocktakeCounts: [
       // Gom Mã Q1: SP001 tham khảo 46.

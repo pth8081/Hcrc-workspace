@@ -3458,9 +3458,19 @@
             <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pKiemKeShelfLockManage"> 🔒 Tab 5 (riêng) — Khoá/Mở Khoá Quầy Kệ (IT, MỚI 12/2026 — chặn CẢ 3 hành động Gom Mã/Kiểm Đếm/Kiểm Soát trên quầy kệ đang khoá, KHÁC quyền Xác Nhận thường)
             </label>
-            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pKiemKeConfirmDo"> ✅ Tab 6 — Xác Nhận
-            </label>
+            <!-- kiemKeConfirmDo {all, depts[]} (12/2026, nâng cấp từ boolean đơn giản cũ — theo yêu cầu
+                 người dùng: "cho phép bộ phận IT xác nhận trên siêu thị nào thôi thì đỡ bị nhầm") — CÙNG
+                 khuôn shelfReportView ở trên. Dữ liệu CŨ (`kiemKeConfirmDo: true`) vẫn hoạt động, CHỈ xác
+                 nhận được đúng siêu thị của chính mình (y hệt hành vi gốc) cho tới khi admin re-save qua
+                 UI này với phạm vi {all}/{depts} cụ thể — xem canConfirmStocktakeForDept(),
+                 lib/stocktakeEngine.js. -->
+            <div class="pt-1 border-t">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer mb-1">
+                <input type="checkbox" id="pKiemKeConfirmDoAll" data-op-change="toggleKiemKeConfirmDoScopeGroup"> ✅ Tab 6 — Xác Nhận Toàn Bộ Đợt — Tất Cả Siêu Thị
+              </label>
+              <div id="pKiemKeConfirmDoDeptContainer" class="pl-1"></div>
+              <p class="text-[11px] text-gray-500 italic">Tắt "Tất Cả Siêu Thị" rồi chọn đúng danh sách siêu thị người này được Xác Nhận Toàn Bộ Đợt (VD IT/QA phụ trách riêng từng siêu thị, tránh xác nhận nhầm) — để trống = chỉ xác nhận được đúng siêu thị của chính mình.</p>
+            </div>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pKiemKeReportView"> 📊 Tab 7 — Báo Cáo
             </label>

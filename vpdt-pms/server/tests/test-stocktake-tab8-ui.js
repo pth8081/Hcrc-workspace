@@ -27,7 +27,7 @@ function check(label, cond) {
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2],
     users: [ADMIN, GOMMA_ONLY],
-    shelfLocations: [SHELF_A1]
+    kiemKeShelfLocations: [SHELF_A1]
   });
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);

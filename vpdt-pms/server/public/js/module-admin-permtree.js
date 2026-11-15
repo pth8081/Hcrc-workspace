@@ -353,7 +353,9 @@ function collectPermsFromForm() {
     kiemKeKiemSoatDo: document.getElementById('pKiemKeKiemSoatDo').checked,
     kiemKeShelfConfigManage: document.getElementById('pKiemKeShelfConfigManage').checked,
     kiemKeShelfLockManage: document.getElementById('pKiemKeShelfLockManage').checked,
-    kiemKeConfirmDo: document.getElementById('pKiemKeConfirmDo').checked,
+    // kiemKeConfirmDo {all, depts[]} (12/2026) — xem chú thích đầy đủ ở renderKiemKeConfirmDoScopeCheckboxes()
+    // (module-admin.js)/systemSection.html.
+    kiemKeConfirmDo: scopeFromMultiSelectDropdown('pKiemKeConfirmDoAll', 'pKiemKeConfirmDoDeptContainer'),
     kiemKeReportView: document.getElementById('pKiemKeReportView').checked,
     kiemKeUserAccessManage: document.getElementById('pKiemKeUserAccessManage').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
@@ -489,7 +491,12 @@ function populatePermsForm(permsInput) {
   document.getElementById('pKiemKeKiemSoatDo').checked = !!perms.kiemKeKiemSoatDo;
   document.getElementById('pKiemKeShelfConfigManage').checked = !!perms.kiemKeShelfConfigManage;
   document.getElementById('pKiemKeShelfLockManage').checked = !!perms.kiemKeShelfLockManage;
-  document.getElementById('pKiemKeConfirmDo').checked = !!perms.kiemKeConfirmDo;
+  // kiemKeConfirmDo {all, depts[]} (12/2026) — tương thích ngược: dữ liệu CŨ là boolean đơn giản
+  // (`true`) thì coi như {all:true} khi NẠP LÊN FORM (hiển thị đúng ý "không giới hạn siêu thị" như
+  // hành vi gốc) — chỉ ghi lại đúng shape {all,depts} MỚI khi admin bấm Lưu qua UI này.
+  const kiemKeConfirmDoScope = perms.kiemKeConfirmDo === true ? { all: true, depts: [] } : (perms.kiemKeConfirmDo || {});
+  document.getElementById('pKiemKeConfirmDoAll').checked = !!kiemKeConfirmDoScope.all;
+  setKiemKeConfirmDoScopeCheckboxes(kiemKeConfirmDoScope.depts);
   document.getElementById('pKiemKeReportView').checked = !!perms.kiemKeReportView;
   document.getElementById('pKiemKeUserAccessManage').checked = !!perms.kiemKeUserAccessManage;
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
@@ -568,6 +575,7 @@ function populatePermsForm(permsInput) {
   });
   toggleOperationOrderReceiptScopeGroup();
   toggleChecklistExecuteScopeGroup();
+  toggleKiemKeConfirmDoScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

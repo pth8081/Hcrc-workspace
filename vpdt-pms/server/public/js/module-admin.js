@@ -1877,6 +1877,8 @@ function renderDeptCheckboxes() {
   // shelfReportView (Kiểm Soát Hàng Hóa > Xem Báo Cáo, 12/2026) — cùng lý do gọi kèm tại đây, nguồn là
   // DB.stores (siêu thị).
   renderShelfReportViewScopeCheckboxes();
+  // kiemKeConfirmDo (📋 Kiểm Kê > Tab 6 Xác Nhận Toàn Bộ Đợt, 12/2026) — cùng lý do gọi kèm tại đây.
+  renderKiemKeConfirmDoScopeCheckboxes();
   // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
@@ -2032,6 +2034,29 @@ function setShelfReportViewScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pShelfReportViewDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi xem báo cáo...',
     emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xem được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKeConfirmDo {all, depts[]} (📋 Kiểm Kê > Tab 6 — Xác Nhận Toàn Bộ Đợt, 12/2026, theo yêu cầu người
+// dùng "cho phép bộ phận IT xác nhận trên siêu thị nào thôi thì đỡ bị nhầm") — CÙNG khuôn
+// renderShelfReportViewScopeCheckboxes()/toggleShelfReportViewScopeGroup()/setShelfReportViewScopeCheckboxes()
+// ngay trên, nguồn DB.stores.
+function renderKiemKeConfirmDoScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKeConfirmDoDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Xác Nhận Toàn Bộ Đợt...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xác nhận được mọi siêu thị).'
+  });
+}
+function toggleKiemKeConfirmDoScopeGroup() {
+  const isAll = document.getElementById('pKiemKeConfirmDoAll')?.checked;
+  document.getElementById('pKiemKeConfirmDoDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKeConfirmDoDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKeConfirmDoScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKeConfirmDoDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Xác Nhận Toàn Bộ Đợt...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xác nhận được mọi siêu thị).',
     resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }

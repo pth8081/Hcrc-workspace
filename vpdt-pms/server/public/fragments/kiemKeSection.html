@@ -164,18 +164,32 @@
         <div id="kkKiemSoatListBody"></div>
       </div>
     </div>
-    <!-- Tab 5 "Cấu Hình Quầy Kệ" (12/2026) — CHỈ XEM, trỏ sang màn quản lý THẬT đã có sẵn ở "📦 Kiểm
-         Soát Hàng Hóa" (tái dùng NGUYÊN danh mục shelfLocations, đúng câu hỏi mở #1 của tài liệu đề
-         xuất — "dùng chung danh mục đã có"). CỐ Ý không xây form Thêm/Sửa/Xoá/Nhập Excel RIÊNG ở đây —
-         tránh mở rộng canManageShelfStock() (đang dùng CHUNG cho cả Ngưỡng Tồn) sang thêm 1 nơi gọi
-         nữa, đúng nguyên tắc "không ảnh hưởng module khác đang hoạt động ổn định" khi không thật sự cần
-         thiết cho Phase này. -->
+    <!-- Tab 5 "Cấu Hình Quầy Kệ" — danh mục quầy kệ RIÊNG của Kiểm Kê (ĐỔI, 12/2026, theo yêu cầu người
+         dùng: "Kiểm Kê không dùng chung quầy kệ với Kiểm Soát Hàng Hóa, phải định nghĩa quầy kệ riêng,
+         cho phép import file: mã quầy kệ, tên quầy kệ, siêu thị") — TRƯỚC ĐÂY tab này chỉ XEM, trỏ sang
+         màn quản lý Quầy Kệ của "📦 Kiểm Soát Hàng Hóa" (dùng chung shelfLocations) — nay có CRUD +
+         Tải Mẫu/Nhập/Xuất Excel riêng (kiemKeShelfLocations, xem module-vanhanh.js). -->
     <div id="kkShelfConfigWrap" class="hidden space-y-3">
-      <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 flex items-center justify-between flex-wrap gap-2">
-        <span>ℹ️ Danh mục Quầy Kệ dùng CHUNG với "📦 Kiểm Soát Hàng Hóa" — xem đúng/đủ ở đây, muốn thêm/sửa/xoá/nhập Excel thì sang màn quản lý đầy đủ.</span>
-        <button type="button" data-op="goToShelfLocationsManagement" class="shrink-0 px-3 py-1 rounded bg-amber-700 text-white text-xs font-bold hover:bg-amber-800">Mở Quản Lý Quầy Kệ →</button>
-      </div>
       <div id="kkShelfConfigDeptRow" class="flex items-center gap-2 text-sm"></div>
+      <form data-op-submit="submitKiemKeShelfLocation" class="bg-cyan-50 border border-cyan-200 rounded p-3 flex flex-wrap items-end gap-2 text-sm">
+        <div class="font-bold text-cyan-800 w-full">+ Thêm Quầy Kệ</div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-0.5">Mã Quầy Kệ</label>
+          <input id="kkScNewCode" required class="border p-1.5 rounded w-28 font-mono" placeholder="VD: A1">
+        </div>
+        <div class="flex-1 min-w-[160px]">
+          <label class="block text-xs text-gray-500 mb-0.5">Tên Quầy Kệ</label>
+          <input id="kkScNewName" required class="w-full border p-1.5 rounded" placeholder="VD: Kệ A1 — Gia vị">
+        </div>
+        <button type="submit" class="px-3 py-1.5 rounded bg-cyan-700 text-white font-bold hover:bg-cyan-800">+ Thêm</button>
+      </form>
+      <div class="bg-white border rounded p-3 flex flex-wrap items-center gap-2 text-xs">
+        <span class="font-bold text-gray-600 mr-auto">📥📤 Nhập/Xuất Excel</span>
+        <button type="button" data-op="downloadKiemKeShelfLocationsTemplate" class="px-2.5 py-1.5 rounded bg-gray-200 text-gray-800 font-bold hover:bg-gray-300">📥 Tải Mẫu Excel</button>
+        <button type="button" data-op="triggerKiemKeShelfLocationsImportPicker" class="px-2.5 py-1.5 rounded bg-indigo-600 text-white font-bold hover:bg-indigo-700">📤 Nhập Excel</button>
+        <input type="file" id="kkScImportFileInput" accept=".xlsx,.xls,.csv" class="hidden" data-op-change="onKiemKeShelfLocationsImportFileChosen" data-arg-el="0">
+        <button type="button" data-op="exportKiemKeShelfLocationsExcel" class="px-2.5 py-1.5 rounded bg-teal-700 text-white font-bold hover:bg-teal-800">📊 Xuất Excel</button>
+      </div>
       <div class="bg-white border rounded p-3">
         <!-- Bộ lọc (12/2026, theo yêu cầu người dùng "lọc tìm kiếm theo quầy kệ, theo trạng thái... dạng
              drop list, searchable, gợi ý nhắc") — CÙNG khuôn collapsible filter panel đã dùng ở "📷 Ghi
@@ -377,6 +391,15 @@
          setKiemKeSubTab(), module-vanhanh.js) — nút "+ Gán Quyền" không ẩn/hiện theo quyền phụ vì CẢ
          TAB đã gác theo đúng quyền duy nhất cần (không giống Tab 1 có 2 mức quyền view/manage khác nhau). -->
     <div id="kkUserAccessWrap" class="hidden space-y-3">
+      <!-- Tải Mẫu/Nhập Excel (MỚI, 12/2026, theo yêu cầu người dùng: "mã nhân viên này, siêu thị này,
+           quầy kệ này, mapping vào, cho phép tải file/nhập file") — gán quyền HÀNG LOẠT thay vì gõ tay
+           từng dòng, xem lib/kiemKeUserAccessExcel.js. -->
+      <div class="bg-white border rounded p-3 flex flex-wrap items-center gap-2 text-xs">
+        <span class="font-bold text-gray-600 mr-auto">📥📤 Gán Quyền Hàng Loạt Bằng Excel</span>
+        <button type="button" data-op="downloadKiemKeUserAccessTemplate" class="px-2.5 py-1.5 rounded bg-gray-200 text-gray-800 font-bold hover:bg-gray-300">📥 Tải Mẫu Excel</button>
+        <button type="button" data-op="triggerKiemKeUserAccessImportPicker" class="px-2.5 py-1.5 rounded bg-indigo-600 text-white font-bold hover:bg-indigo-700">📤 Nhập Excel</button>
+        <input type="file" id="kkUaImportFileInput" accept=".xlsx,.xls,.csv" class="hidden" data-op-change="onKiemKeUserAccessImportFileChosen" data-arg-el="0">
+      </div>
       <div class="bg-cyan-50 border border-cyan-200 rounded p-3 space-y-2">
         <div class="font-bold text-sm text-cyan-800">+ Gán Quyền Thao Tác Theo Quầy Kệ</div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
