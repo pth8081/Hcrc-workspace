@@ -364,7 +364,7 @@ function kkEffectiveDept() {
 // enterKkConfirmTab() tự await ensureShelfOfflineReady() riêng khi thật sự cần đọc cache (y hệt khuôn
 // setVanHanhShelfSubTab() đã dùng cho Kiểm Soát Hàng Hóa).
 function setKiemKeSubTab(tab) {
-  (async () => { await ensureShelfOfflineReady(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
+  (async () => { await ensureShelfOfflineReady(); renderKkOfflineModeBar(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
   const tabs = [
     ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
     ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
@@ -795,10 +795,28 @@ async function submitKkScan(tabKey) {
   if (!Number.isFinite(qty) || qty <= 0) return alert('Số lượng phải lớn hơn 0.');
   const resolved = resolveKkScanItemFromCode(raw);
   if (!resolved) return alert(`Không khớp tồn kho hệ thống với mã "${raw}" — vui lòng kiểm tra lại.`);
+  // clientScanId (MỚI, 12/2026, theo yêu cầu người dùng — chống trùng khi đồng bộ offline/mạng chập chờn)
+  // — sinh NGAY Ở ĐÂY (không phải chỉ lúc vào hàng đợi), dùng NGUYÊN VẸN cho MỌI lần gửi của đúng lượt
+  // quét này (kể cả lượt gửi trực tuyến đầu tiên ngay dưới) — vì mất phản hồi (server đã xử lý xong,
+  // client không biết) có thể xảy ra NGAY Ở LƯỢT ĐẦU, trước khi kịp biết là cần queue lại. Xem chú thích
+  // đầy đủ ở upsertScanCount()/lib/stocktakeEngine.js.
+  const clientScanId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const scanPayload = {
     sessionId: st.session.id, shelfLocationId: st.selectedShelfId, mode: cfg.apiMode,
-    maHang: resolved.maHang, maVach: resolved.maVach || raw, tenHang: resolved.tenHang, qty
+    maHang: resolved.maHang, maVach: resolved.maVach || raw, tenHang: resolved.tenHang, qty, clientScanId
   };
+  const finishInputReset = () => { if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); } if (qtyInput) qtyInput.value = '1'; };
+  // "✈️ Offline thủ công" (MỚI, 12/2026, theo yêu cầu người dùng — mạng chập chờn: không muốn đợi 1 lượt
+  // fetch() "treo" vài chục giây mới biết là lỗi, cũng không muốn tắt hẳn mạng điện thoại vì còn cần dùng
+  // app khác) — bật thì BỎ QUA hẳn bước thử gửi trực tuyến, vào thẳng hàng đợi — dùng CHUNG đường đi với
+  // nhánh mất mạng thật bên dưới (không viết logic mới), xem kkManualOfflineMode.
+  if (kkManualOfflineMode) {
+    const loc = (st.shelves || []).find(l => l.id === st.selectedShelfId);
+    await queueKkScanOffline(scanPayload, loc ? `${loc.code} — ${loc.name}` : '');
+    applyOptimisticKkScan(tabKey, resolved, qty);
+    finishInputReset();
+    return;
+  }
   try {
     const res = await fetch('/api/stocktake/counts/scan', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -807,9 +825,11 @@ async function submitKkScan(tabKey) {
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { alert(body.error || 'Không ghi nhận được, vui lòng thử lại.'); return; }
-    if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); }
-    if (qtyInput) qtyInput.value = '1';
+    finishInputReset();
     await loadKkScanCounts(tabKey);
+    // Tranh thủ đẩy nốt hàng đợi CŨ ngay khi vừa biết chắc đang có mạng (MỚI, 12/2026 — mạng chập chờn,
+    // xem docs/kiem-ke-kiem-soat-offline.md) — không đợi tới nhịp heartbeat 20 giây tiếp theo mới đồng bộ.
+    trySyncPendingKkScans();
   } catch (err) {
     if (!(err instanceof TypeError)) { alert('⛔ Không thể kết nối tới máy chủ.'); return; }
     // Mất mạng thật (MỚI, 12/2026) — ghi vào hàng đợi kkPendingScans thay vì báo lỗi mất lượt (xem
@@ -819,8 +839,7 @@ async function submitKkScan(tabKey) {
     const loc = (st.shelves || []).find(l => l.id === st.selectedShelfId);
     await queueKkScanOffline(scanPayload, loc ? `${loc.code} — ${loc.name}` : '');
     applyOptimisticKkScan(tabKey, resolved, qty);
-    if (barcodeInput) { barcodeInput.value = ''; barcodeInput.focus(); }
-    if (qtyInput) qtyInput.value = '1';
+    finishInputReset();
   }
 }
 
@@ -4426,6 +4445,10 @@ let kkOfflineSessionInfoCache = {}; // { [`${mode}_${shelfLocationId}`]: { sessi
 let kkOfflineConfirmListsCache = {}; // { [`${kind}_${sessionId}`]: { items, cachedAt } }
 let kkOfflinePendingScans = []; // [{ clientScanId, mode, sessionId, shelfLocationId, maHang, maVach, tenHang, qty, shelfLocationLabel, queuedAt, lastError }]
 let kkOfflinePendingConfirms = []; // [{ key, kind, action, sessionId, shelfLocationId, confirmationId, shelfLocationLabel, queuedAt, lastError }]
+// kkManualOfflineMode (MỚI, 12/2026, theo yêu cầu người dùng — mạng chập chờn, xem renderKkOfflineModeBar()
+// ở dưới) — CỐ Ý KHÔNG lưu vào localStorage/IndexedDB (chỉ sống trong phiên trình duyệt hiện tại, mất khi
+// tải lại trang) — tránh quên tắt từ hôm trước rồi hôm sau vẫn âm thầm offline mà không biết.
+let kkManualOfflineMode = false;
 let shelfOfflineSystemInventoryCache = null; // {rows, capNhatLuc, cachedAt} hoặc null (chưa cache lần nào)
 // Cache offline RIÊNG cho màn Đối Chiếu (key 'recon', KHÔNG dùng chung key 'cache' với picker/Hạn Sử
 // Dụng) — từ 11/2026 Đối Chiếu chỉ nhận mảng ĐÃ LỌC (chỉ mã đã scan hôm nay, xem loadShelfReconciliation()),
@@ -4764,9 +4787,13 @@ async function cacheKkConfirmListOffline(kind, sessionId, items) {
 function getKkConfirmListOffline(kind, sessionId) { return kkOfflineConfirmListsCache[kkConfirmListKey(kind, sessionId)] || null; }
 
 // ===== Hàng đợi quét offline (Gom Mã/Kiểm Đếm/Kiểm Soát) — xem submitKkScan() =====
+// clientScanId LẤY NGUYÊN từ payload (sinh 1 LẦN DUY NHẤT ở submitKkScan(), KHÔNG tự sinh id mới ở đây) —
+// id này vừa là KHOÁ CỦA DÒNG trong IndexedDB (xoá đúng dòng khi đồng bộ xong) vừa là idempotency key gửi
+// lên server mỗi lần thử lại (xem trySyncPendingKkScans()/upsertScanCount()) — PHẢI là CÙNG MỘT giá trị
+// xuyên suốt mọi lần gửi của đúng lượt quét này, nếu không cơ chế chống trùng sẽ mất tác dụng.
 async function queueKkScanOffline(payload, shelfLocationLabel) {
   const rec = {
-    clientScanId: `kk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    clientScanId: payload.clientScanId,
     mode: payload.mode, sessionId: payload.sessionId, shelfLocationId: payload.shelfLocationId,
     maHang: payload.maHang, maVach: payload.maVach, tenHang: payload.tenHang, qty: payload.qty,
     shelfLocationLabel: shelfLocationLabel || '', queuedAt: new Date().toISOString(), lastError: null
@@ -4776,6 +4803,7 @@ async function queueKkScanOffline(payload, shelfLocationLabel) {
     await shelfOfflineTx(db, 'kkPendingScans', 'readwrite', s => s.put(rec));
   } catch (err) { console.warn('queueKkScanOffline: không lưu được vào IndexedDB —', err.message); }
   kkOfflinePendingScans.push(rec);
+  renderKkOfflineModeBar();
   return rec;
 }
 async function removeKkPendingScan(clientScanId) {
@@ -4784,6 +4812,7 @@ async function removeKkPendingScan(clientScanId) {
     await shelfOfflineTx(db, 'kkPendingScans', 'readwrite', s => s.delete(clientScanId));
   } catch (err) { /* bỏ qua */ }
   kkOfflinePendingScans = kkOfflinePendingScans.filter(p => p.clientScanId !== clientScanId);
+  renderKkOfflineModeBar();
 }
 // Đồng bộ ngược từng lượt quét trong hàng đợi — ĐÚNG khuôn trySyncPendingShelfRecords(): gặp lỗi MẠNG thì
 // dừng cả lượt ngay (thử lại lần sau); gặp lỗi SERVER thật (VD quầy kệ đã bị Khoá/Xác Nhận ngay trong lúc
@@ -4802,7 +4831,7 @@ async function trySyncPendingKkScans() {
       try {
         const res = await fetch('/api/stocktake/counts/scan', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: rec.sessionId, shelfLocationId: rec.shelfLocationId, mode: rec.mode, maHang: rec.maHang, maVach: rec.maVach, tenHang: rec.tenHang, qty: rec.qty })
+          body: JSON.stringify({ sessionId: rec.sessionId, shelfLocationId: rec.shelfLocationId, mode: rec.mode, maHang: rec.maHang, maVach: rec.maVach, tenHang: rec.tenHang, qty: rec.qty, clientScanId: rec.clientScanId })
         });
         if (res.status === 401) return handleSessionExpired();
         const body = await res.json().catch(() => ({}));
@@ -4824,6 +4853,7 @@ async function trySyncPendingKkScans() {
     }
   } finally {
     kkScanSyncInFlight = false;
+    renderKkOfflineModeBar();
     // Tải lại THẬT từ server (không chỉ vẽ lại cache cũ) cho tab đang mở đúng quầy kệ/kỳ — thay hẳn các
     // dòng "offline_..." tạm (xem applyOptimisticKkScan()) bằng id thật + số lượng đã được server cộng
     // dồn chính xác, tránh lệch nếu 2 thiết bị cùng offline-quét 1 quầy kệ rồi lần lượt đồng bộ.
@@ -4864,6 +4894,7 @@ async function queueKkConfirmOffline(kind, shelfLocationId, sessionId, action, c
   } catch (err) { console.warn('queueKkConfirmOffline: không lưu được vào IndexedDB —', err.message); }
   kkOfflinePendingConfirms = kkOfflinePendingConfirms.filter(p => p.key !== key);
   kkOfflinePendingConfirms.push(rec);
+  renderKkOfflineModeBar();
   return rec;
 }
 async function removeKkPendingConfirm(key) {
@@ -4872,6 +4903,7 @@ async function removeKkPendingConfirm(key) {
     await shelfOfflineTx(db, 'kkPendingConfirms', 'readwrite', s => s.delete(key));
   } catch (err) { /* bỏ qua */ }
   kkOfflinePendingConfirms = kkOfflinePendingConfirms.filter(p => p.key !== key);
+  renderKkOfflineModeBar();
 }
 function getKkPendingConfirm(kind, shelfLocationId) { return kkOfflinePendingConfirms.find(p => p.key === kkPendingConfirmKey(kind, shelfLocationId)) || null; }
 let kkConfirmSyncInFlight = false;
@@ -4895,7 +4927,15 @@ async function trySyncPendingKkConfirms() {
         }
         if (res.status === 401) return handleSessionExpired();
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error || 'Không thể đồng bộ Xác Nhận');
+        // 404 ở ĐÚNG lượt Gỡ Xác Nhận (MỚI, 12/2026 — chống báo sai "bị từ chối" khi mạng chập chờn): lần
+        // gửi TRƯỚC đã xoá thành công nhưng phản hồi bị rớt, client tưởng lỗi nên giữ lại thử tiếp — lần
+        // sau gọi lại DELETE cùng id sẽ nhận 404 "không tìm thấy", vì dòng đó ĐÃ bị xoá rồi — đây là THÀNH
+        // CÔNG (đạt đúng trạng thái mong muốn: không còn xác nhận), không phải lỗi, nên coi như xong, xoá
+        // khỏi hàng đợi, KHÔNG hiện cảnh báo "bị từ chối" (đúng tinh thần idempotent — khác Xác Nhận POST
+        // vốn đã tự idempotent sẵn phía server, không cần vá riêng).
+        if (!res.ok && !(rec.action === 'unconfirm' && res.status === 404)) {
+          throw new Error(body.error || 'Không thể đồng bộ Xác Nhận');
+        }
         await removeKkPendingConfirm(rec.key);
         changed = true;
       } catch (err) {
@@ -4921,6 +4961,51 @@ async function trySyncPendingKkConfirms() {
 if (!window.__shelfOfflineOnlineListenerAdded) {
   window.__shelfOfflineOnlineListenerAdded = true;
   window.addEventListener('online', () => { trySyncPendingShelfRecords(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); });
+}
+// Nhịp tự thử đồng bộ ĐỊNH KỲ mỗi 20 giây (MỚI, 12/2026, theo yêu cầu người dùng — mạng CHẬP CHỜN: đứng ở
+// vị trí sóng yếu, quét xong, đi ra chỗ có sóng nhưng KHÔNG chuyển tab nào/không có gì để trình duyệt tự
+// bắn sự kiện "online" — trước đây hàng đợi có thể bị "treo" khá lâu vì không có gì chủ động thử lại).
+// Hoàn toàn rẻ khi KHÔNG có gì để đồng bộ (2 hàm tự return ngay dòng đầu nếu hàng đợi rỗng) và khi thật sự
+// mất mạng (navigator.onLine false -> return ngay, KHÔNG gọi fetch() nào cả) — chỉ thực sự tốn 1 lượt gọi
+// mạng khi vừa có pending VỪA có vẻ đang có sóng, đúng lúc cần thử.
+if (!window.__kkOfflineHeartbeatAdded) {
+  window.__kkOfflineHeartbeatAdded = true;
+  setInterval(() => { trySyncPendingKkScans(); trySyncPendingKkConfirms(); }, 20000);
+}
+
+// ===== "✈️ Offline Thủ Công" (MỚI, 12/2026) — xem chú thích đầy đủ tại #kkOfflineModeBar/kiemKeSection.html
+// + submitKkScan(). Bật/tắt dùng CHUNG cho mọi hành động (Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận) — không
+// tách riêng từng tab vì thực tế là "đang đứng ở vị trí sóng yếu", không phải riêng từng thao tác. =====
+function toggleKkManualOfflineMode() {
+  kkManualOfflineMode = !kkManualOfflineMode;
+  if (!kkManualOfflineMode) { trySyncPendingKkScans(); trySyncPendingKkConfirms(); }
+  renderKkOfflineModeBar();
+}
+// Gọi lại MỖI LẦN hàng đợi (kkOfflinePendingScans/kkOfflinePendingConfirms) có thể đã đổi — xem các điểm
+// gọi ở queueKkScanOffline()/trySyncPendingKkScans()/queueKkConfirmOffline()/trySyncPendingKkConfirms()/
+// cancelKkPendingConfirm() — để số lượt đang chờ LUÔN đúng, hiện NGAY CẢ KHI đang ở sub-tab khác (không
+// phải đúng tab/đúng quầy kệ mới thấy, khác hẳn banner ⏳ riêng từng quầy kệ ở renderKkScanList()).
+function renderKkOfflineModeBar() {
+  const btn = document.getElementById('btnKkManualOfflineToggle');
+  const note = document.getElementById('kkOfflineModeNote');
+  const countEl = document.getElementById('kkPendingSyncCount');
+  if (!btn) return;
+  if (kkManualOfflineMode) {
+    btn.textContent = '🌐 Tắt Offline Thủ Công (quay lại trực tuyến)';
+    btn.className = 'px-2 py-1 rounded font-bold bg-amber-500 text-white';
+  } else {
+    btn.textContent = '✈️ Bật Offline Thủ Công';
+    btn.className = 'px-2 py-1 rounded font-bold bg-gray-200 text-gray-700';
+  }
+  if (note) {
+    note.classList.toggle('hidden', !kkManualOfflineMode);
+    note.textContent = kkManualOfflineMode ? '✈️ ĐANG Ở CHẾ ĐỘ OFFLINE THỦ CÔNG — mọi lượt quét/xác nhận CHƯA gửi lên server, nhớ tắt khi có sóng tốt trở lại.' : '';
+  }
+  const pendingTotal = kkOfflinePendingScans.length + kkOfflinePendingConfirms.length;
+  if (countEl) {
+    countEl.classList.toggle('hidden', pendingTotal === 0);
+    countEl.textContent = pendingTotal ? `⏳ ${pendingTotal} lượt đang chờ đồng bộ` : '';
+  }
 }
 
 // ===== Phần D — Quét mã vạch bằng camera ở "📷 Ghi Nhận" (11/2026) =====

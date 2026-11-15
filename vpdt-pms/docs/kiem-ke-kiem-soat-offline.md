@@ -101,6 +101,45 @@ tải lại trang, không có IndexedDB. Thêm 1 key cache riêng trong
 `hcrcShelfOfflineDb` + cùng cơ chế cache-first. Ưu tiên thấp nhất vì Báo
 Cáo thường được xem lúc có mạng (văn phòng/tổng hợp cuối ca).
 
+## Chống trùng khi đồng bộ + mạng chập chờn (bổ sung sau khi người dùng hỏi thêm)
+
+Rủi ro thật tìm thấy khi rà kỹ: `POST /api/stocktake/counts/scan` CỘNG DỒN
+(khác hẳn `/records/upsert` của Ghi Nhận vốn GHI ĐÈ giá trị cuối nên gửi
+lại vô hại) — nếu server đã cộng dồn xong nhưng PHẢN HỒI bị rớt giữa chừng
+(sóng yếu), client tưởng thất bại và giữ lại để gửi lại, lần gửi lại thành
+công sẽ cộng dồn THÊM 1 lần nữa nếu không chặn. Hàng đợi offline tự động
+thử lại khiến rủi ro này DỄ XẢY RA THẬT hơn so với trước (không còn phụ
+thuộc ý thức người dùng).
+
+**Giải pháp — idempotency key:**
+- `clientScanId` sinh NGAY lúc bấm "Thêm" (kể cả lượt gửi trực tuyến đầu
+  tiên, không chỉ lúc vào hàng đợi — vì mất phản hồi có thể xảy ra ngay ở
+  lượt đầu), dùng NGUYÊN VẸN cho mọi lần gửi lại của đúng lượt quét đó.
+- Server ghi nhớ các id đã áp dụng ngay trên dòng `stocktakeCounts`
+  (`appliedScanIds`, tự dọn theo vòng đời dòng, không cần bảng riêng) —
+  gặp lại 1 id đã có thì KHÔNG cộng dồn lại, trả nguyên dòng hiện tại.
+- Vá kèm: Gỡ Xác Nhận gửi lại sau khi đã xoá thành công nhận `404` — coi
+  là THÀNH CÔNG (đã đạt đúng trạng thái mong muốn), không phải lỗi.
+
+**Mạng chập chờn (vào/ra vùng sóng yếu liên tục, không chuyển tab nào):**
+3 lớp kích hoạt đồng bộ độc lập, không phụ thuộc 1 tín hiệu duy nhất —
+(1) sự kiện `online` của trình duyệt, (2) tự thử lại ngay sau MỖI lượt
+quét/xác nhận trực tuyến vừa thành công (tranh thủ đẩy nốt hàng đợi cũ),
+(3) nhịp heartbeat định kỳ mỗi 20 giây (rẻ: không gọi mạng gì nếu hàng đợi
+rỗng hoặc thiết bị báo mất mạng). Đảm bảo trong vòng tối đa ~20 giây kể từ
+lúc có sóng trở lại, hàng đợi tự trống, không cần thao tác gì thêm.
+
+**"✈️ Offline Thủ Công"** — công tắc dùng CHUNG cho Gom Mã/Kiểm Đếm/Kiểm
+Soát/Xác Nhận (1 công tắc, không tách riêng theo tab), cho phép chủ động
+bỏ qua bước thử gửi trực tuyến (tránh phải đợi 1 lượt `fetch()` "treo" khi
+sóng yếu mới biết là lỗi) mà KHÔNG cần tắt mạng cả thiết bị. Dùng CHUNG
+đường đi với hàng đợi offline tự động phát hiện — không có rủi ro trùng
+dữ liệu mới. Rủi ro thật là RỦI RO VẬN HÀNH (không phải kỹ thuật): để quên
+bật quá lâu dù sóng đã tốt → dữ liệu Khóa/Xác Nhận/Kỳ cache lâu không được
+làm mới, quản lý mất visibility real-time. Giảm thiểu bằng: banner nổi bật
+khi đang bật, luôn hiện số lượt đang chờ đồng bộ (không chỉ khi đúng quầy
+kệ đang chọn), không nhớ trạng thái qua lần đăng nhập sau.
+
 ## Thứ tự triển khai
 
 1. Kiểm Kê: Gom Mã / Kiểm Đếm / Kiểm Soát offline + cache quầy kệ/tồn

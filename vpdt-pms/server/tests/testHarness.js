@@ -1190,7 +1190,8 @@ function createDispatcher(state) {
           const loc = kkAssertScanAllowedMock(freshUser, mode, shelfLocationId, sessionId);
           const { upsertScanCount } = stockEngine2();
           const arr = state.stocktakeCounts || (state.stocktakeCounts = []);
-          const row = upsertScanCount(arr, body, { dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`, maVach: body?.maVach, tenHang: body?.tenHang }, freshUser);
+          const clientScanId = body?.clientScanId ? String(body.clientScanId).trim().slice(0, 100) : '';
+          const row = upsertScanCount(arr, body, { dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`, maVach: body?.maVach, tenHang: body?.tenHang }, freshUser, clientScanId);
           return { status: 200, body: { item: row } };
         } catch (err) { return { status: err.status || 500, body: { error: err.message } }; }
       }

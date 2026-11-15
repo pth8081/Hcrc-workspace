@@ -281,11 +281,26 @@ function validateScanInput(body) {
 
 // Quét/gõ mã — CỘNG DỒN vào đúng field theo mode (slGomMa/slKiemDem/slKiemSoat), đúng A5 "Quy tắc gộp"
 // áp dụng chung cho cả 3 hành động — mã chưa có ở quầy kệ này thì tạo dòng mới (các field còn lại = 0).
-function upsertScanCount(counts, input, extra, user) {
+//
+// clientScanId (MỚI, 12/2026, theo yêu cầu người dùng — chống trùng khi đồng bộ offline/mạng chập chờn):
+// VÌ thao tác này CỘNG DỒN (khác hẳn /records/upsert của Ghi Nhận vốn GHI ĐÈ giá trị cuối nên gọi lại vô
+// hại), gọi lại ĐÚNG 1 lượt quét đã áp dụng thành công ở server NHƯNG client không nhận được phản hồi
+// (mất mạng ngay lúc đó) sẽ cộng dồn 2 LẦN nếu không có cơ chế chặn — hàng đợi offline tự động thử lại
+// (trySyncPendingKkScans()) khiến rủi ro này DỄ XẢY RA THẬT hơn hẳn so với trước (người dùng không còn tự
+// ý thức "chắc gửi lại mã này lần nữa" như khi submit tay). clientScanId sinh ĐÚNG 1 LẦN ngay lúc bấm
+// "Thêm" (kể cả lượt gửi trực tuyến đầu tiên, không chỉ lúc đã vào hàng đợi — vì phản hồi có thể mất NGAY
+// Ở LƯỢT ĐẦU, trước khi kịp biết là cần queue), dùng lại NGUYÊN VẸN cho mọi lần gửi lại sau đó của ĐÚNG
+// lượt quét đó. Server ghi nhớ các id ĐÃ áp dụng ngay trên dòng `stocktakeCounts` (appliedScanIds, tự dọn
+// theo vòng đời dòng — không cần bảng riêng): gặp lại 1 id đã có trong mảng này thì KHÔNG cộng dồn lại,
+// trả nguyên dòng hiện tại (coi như đã đồng bộ xong, đúng tinh thần idempotency key).
+function upsertScanCount(counts, input, extra, user, clientScanId) {
   const { sessionId, shelfLocationId, maHang, mode, qty } = validateScanInput(input);
   const arr = Array.isArray(counts) ? counts : [];
   const field = MODE_ACCESS_FIELD[mode] === 'canGomMa' ? 'slGomMa' : (MODE_ACCESS_FIELD[mode] === 'canKiemDem' ? 'slKiemDem' : 'slKiemSoat');
   let row = findCountRow(arr, sessionId, shelfLocationId, maHang);
+  if (row && clientScanId && Array.isArray(row.appliedScanIds) && row.appliedScanIds.includes(clientScanId)) {
+    return row; // Lượt quét này ĐÃ áp dụng trước đó (gửi lại do mất phản hồi) — không cộng dồn lần 2.
+  }
   if (!row) {
     row = {
       id: Date.now() + Math.floor(Math.random() * 1000),
@@ -304,6 +319,10 @@ function upsertScanCount(counts, input, extra, user) {
   row.lastScannedAt = new Date().toISOString();
   row.lastScannedBy = user?.username || '';
   row.lastScannedByName = user?.name || user?.username || '';
+  if (clientScanId) {
+    row.appliedScanIds = Array.isArray(row.appliedScanIds) ? row.appliedScanIds : [];
+    row.appliedScanIds.push(clientScanId);
+  }
   return row;
 }
 

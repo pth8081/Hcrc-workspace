@@ -21,6 +21,17 @@
       <button data-op="setKiemKeSubTab" data-tab="USERACCESS" id="btnKkSubUserAccess" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 Cấu Hình Người Dùng</button>
     </div>
 
+    <!-- "✈️ Offline Thủ Công" (MỚI, 12/2026, theo yêu cầu người dùng — mạng chập chờn: không muốn đợi 1
+         lượt fetch() "treo" vài chục giây mới biết là lỗi, cũng không muốn tắt hẳn mạng điện thoại vì còn
+         cần app khác) — đặt NGAY NGOÀI mọi khung tab con (LUÔN hiện dù đang ở sub-tab nào của Kiểm Kê,
+         KHÔNG riêng Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận) để số lượt đang chờ đồng bộ luôn nhìn thấy được,
+         không phải đúng vào tab/chọn đúng quầy kệ mới thấy — xem renderKkOfflineModeBar(). -->
+    <div id="kkOfflineModeBar" class="flex flex-wrap items-center gap-2 text-xs bg-gray-50 border rounded px-3 py-2">
+      <button type="button" data-op="toggleKkManualOfflineMode" id="btnKkManualOfflineToggle" class="px-2 py-1 rounded font-bold bg-gray-200 text-gray-700">✈️ Bật Offline Thủ Công</button>
+      <span id="kkOfflineModeNote" class="hidden text-amber-700 font-bold"></span>
+      <span id="kkPendingSyncCount" class="hidden text-gray-600"></span>
+    </div>
+
     <!-- Tab 1: Kỳ Kiểm Kê -->
     <div id="kkPeriodWrap" class="space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
