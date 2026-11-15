@@ -30,6 +30,7 @@ const {
   filterShelfLocationsForUser, filterShelfRecordsForUser, filterShelfStockThresholdsForUser,
   filterStocktakeSessionsForUser, filterStocktakeCountsForUser, filterStocktakeUserAccessForUser,
   filterStocktakeShelfConfirmationsForUser,
+  filterStocktakeShelfKiemSoatConfirmationsForUser, filterStocktakeShelfGomMaConfirmationsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
@@ -63,9 +64,23 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 // xoá mất người nhận đã cấu hình của MỌI siêu thị khác. Phải luôn đi qua GET/PUT
 // /api/shelf-stock/recon-recipients (routes/shelfStock.js, dùng withLockedAppDataValue CHỈ sửa đúng 1
 // khoá = dept người gọi) — chặn TƯỜNG MINH ở đây cùng khuôn 5 key HR phía trên.
+// Kiểm Kê + Kiểm Soát Hàng Hóa (LỖI ĐÃ VÁ, phát hiện ở đợt audit chuyên sâu 12/2026, nhiều agent test
+// chéo): cùng bản chất lỗ hổng employeeProfiles/shelfReconExtraRecipients ở trên — route generic này
+// hoàn toàn KHÔNG có gate quyền/dept cho 9 key dưới đây (không nằm trong ADMIN_ONLY_KEYS lẫn
+// NON_ADMIN_GATED_KEYS), nghĩa là BẤT KỲ tài khoản đã đăng nhập nào (không cần quyền kiemKe*/shelf*
+// nào) cũng ghi đè/xoá trắng được TOÀN BỘ danh mục quầy kệ, Ghi Nhận, Ngưỡng Tồn, Kỳ Kiểm Kê, số liệu
+// Gom Mã/Kiểm Đếm/Kiểm Soát, và cả chính bảng allowlist stocktakeUserAccess (tự gán mình quyền quét
+// quầy kệ bất kỳ = leo thang quyền) của MỌI siêu thị — đã tái hiện được bằng HTTP PoC thật. Tất cả 9
+// collection này đều đã có route CRUD riêng đủ dùng + có validate/gác quyền đúng vai trò
+// (/api/stocktake/*, /api/shelf-stock/*, /api/create/shelfLocations|shelfRecords|shelfStockThresholds)
+// — không cần route generic này cho bất kỳ luồng hợp lệ nào (đã grep xác nhận client không gọi
+// /api/data/<key> trực tiếp cho key nào trong 9 key này).
 const SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE = new Set([
   'employeeProfiles', 'laborContracts', 'payslips', 'attendanceRecords', 'payrollPeriods',
-  'shelfReconExtraRecipients'
+  'shelfReconExtraRecipients',
+  'shelfLocations', 'shelfRecords', 'shelfStockThresholds',
+  'stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess',
+  'stocktakeShelfConfirmations', 'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations'
 ]);
 
 // Các collection chỉ Quản Trị Viên mới được GHI — đều là màn hình "Quản trị" trong admin panel
@@ -1879,6 +1894,11 @@ router.get('/', async (req, res) => {
     if (data.stocktakeCounts) data.stocktakeCounts = filterStocktakeCountsForUser(data.stocktakeCounts, req.freshUser);
     if (data.stocktakeUserAccess) data.stocktakeUserAccess = filterStocktakeUserAccessForUser(data.stocktakeUserAccess, req.freshUser);
     if (data.stocktakeShelfConfirmations) data.stocktakeShelfConfirmations = filterStocktakeShelfConfirmationsForUser(data.stocktakeShelfConfirmations, req.freshUser);
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12/2026): 2 collection song sinh của stocktakeShelfConfirmations
+    // ngay trên (Tab 6 Xác Nhận Kiểm Soát/Gom Mã, thêm SAU) bị bỏ sót khỏi lọc này — lộ chéo siêu thị
+    // qua GET /api/data chung cho mọi tài khoản đã đăng nhập.
+    if (data.stocktakeShelfKiemSoatConfirmations) data.stocktakeShelfKiemSoatConfirmations = filterStocktakeShelfKiemSoatConfirmationsForUser(data.stocktakeShelfKiemSoatConfirmations, req.freshUser);
+    if (data.stocktakeShelfGomMaConfirmations) data.stocktakeShelfGomMaConfirmations = filterStocktakeShelfGomMaConfirmationsForUser(data.stocktakeShelfGomMaConfirmations, req.freshUser);
     // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
     // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
     // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/

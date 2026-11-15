@@ -227,11 +227,20 @@ function upsertUserAccessRows(access, { username, dept, shelfLocationIds, canGom
     throw new HttpError(400, 'Vui lòng chọn ít nhất 1 hành động (Gom Mã/Kiểm Đếm/Kiểm Soát)');
   }
   const touched = [];
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12/2026): `Date.now() + Math.floor(Math.random()*1000)` KHÔNG đủ
+  // tránh trùng id khi vòng lặp này tạo NHIỀU dòng trong CÙNG 1 lần gọi đồng bộ (gán quyền hàng loạt
+  // nhiều quầy kệ 1 lúc) — toàn vòng lặp chạy xong trong <1ms nên Date.now() gần như luôn giữ nguyên 1
+  // giá trị, phần chống trùng chỉ còn đúng 1/1000 (đã tái hiện ~90% tỉ lệ trùng id với 60 quầy kệ trong
+  // 1 lần gán). 2 dòng allowlist khác quầy kệ bị trùng id khiến DELETE /user-access/:id (xoá đúng 1
+  // phần tử ĐẦU TIÊN khớp id) xoá nhầm dòng, trong khi client lại ẩn CẢ 2 dòng khỏi danh sách ngay lập
+  // tức — 1 dòng quyền "biến mất" khỏi màn hình nhưng vẫn CÒN HIỆU LỰC ngầm trong DB. Đổi sang 1 bộ đếm
+  // tăng dần THẬT trong đúng lần gọi này — đảm bảo DUY NHẤT tuyệt đối bất kể số quầy kệ chọn cùng lúc.
+  let nextId = Date.now();
   for (const shelfLocationId of ids) {
     let row = arr.find(a => a.username === uname && a.dept === d && a.shelfLocationId === shelfLocationId);
     if (!row) {
       row = {
-        id: Date.now() + Math.floor(Math.random() * 1000), // tránh trùng id khi tạo nhiều dòng liên tiếp trong 1 vòng lặp đồng bộ
+        id: nextId++,
         username: uname, dept: d, shelfLocationId,
         canGomMa: false, canKiemDem: false, canKiemSoat: false,
         createdBy: user?.username || '', createdByName: user?.name || user?.username || '', createdAt: new Date().toISOString()
