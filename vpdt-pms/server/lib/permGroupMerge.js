@@ -48,12 +48,25 @@ function mergeGroupsBasePermsServer(groupsPerms) {
         (APPROVER_AUTH_LEVEL_RANK_SERVER[v] || 0) > (APPROVER_AUTH_LEVEL_RANK_SERVER[best] || 0) ? v : best, 'NONE');
       return;
     }
+    // LỖI ĐÃ VÁ (12/2026, phát hiện trong đợt audit chéo bản vá moduleAccess ở mergePermsServer() trên —
+    // không phải lỗi mới phát sinh từ bản vá đó, đã tồn tại từ trước): `values` gồm moduleAccess của MỌI
+    // Nhóm user thuộc — TRƯỚC ĐÂY với 1 Nhóm CHƯA TỪNG cấu hình Mục 0 (v === undefined, không phải {}),
+    // nhánh `: true` khiến Nhóm đó bị tính là "ĐỒNG Ý cho qua" ở MỌI module con, kể cả module 1 Nhóm KHÁC
+    // user cũng thuộc đã CHẶN RÕ RÀNG (moduleAccess[k]===false) — 1 Nhóm "chưa quan tâm" tới Mục 0 vô
+    // tình đánh bại lệnh chặn tường minh của Nhóm khác chỉ vì user thuộc CẢ 2 Nhóm. Nay CHỈ các Nhóm ĐÃ
+    // CÓ cấu hình moduleAccess (object thật, kể cả rỗng {}) mới được tính là "có ý kiến" (bỏ phiếu) —
+    // Nhóm hoàn toàn chưa cấu hình Mục 0 THÌ KHÔNG bỏ phiếu cho bất kỳ module nào (không phải "đồng ý cho
+    // qua tất cả"), đúng tinh thần "Nhóm không có ý kiến thì không được tính là 1 phiếu ủng hộ". Nếu
+    // KHÔNG Nhóm nào user thuộc có cấu hình Mục 0, giữ nguyên hành vi cũ: trả {} (không giới hạn gì —
+    // khớp quy ước "basePerms.moduleAccess===undefined" ở isEmptyPermValue()/diffPerms()).
     if (key === 'moduleAccess') {
+      const configuredValues = values.filter(v => v && typeof v === 'object');
+      if (!configuredValues.length) { result[key] = {}; return; }
       const subKeys = new Set();
-      values.forEach(v => { if (v && typeof v === 'object') Object.keys(v).forEach(k => subKeys.add(k)); });
+      configuredValues.forEach(v => Object.keys(v).forEach(k => subKeys.add(k)));
       const merged = {};
       subKeys.forEach(k => {
-        merged[k] = values.some(v => (v && typeof v === 'object') ? v[k] !== false : true);
+        merged[k] = configuredValues.some(v => v[k] !== false);
       });
       result[key] = merged;
       return;
