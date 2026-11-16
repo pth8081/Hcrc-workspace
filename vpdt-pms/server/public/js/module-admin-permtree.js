@@ -348,12 +348,21 @@ function collectPermsFromForm() {
     // "27. Kiểm Kê"). Admin luôn bypass (kiểm tra ở lib/stocktakeEngine.js), 8 quyền này KHÔNG mặc định
     // bật cho ai.
     kiemKePeriodManage: document.getElementById('pKiemKePeriodManage').checked,
+    // kiemKePeriodCloseManage {all, depts[]} + kiemKePeriodReopenManage (boolean phẳng, MỚI 12/2026, TÁCH
+    // RIÊNG khỏi Đóng Kỳ theo yêu cầu người dùng "mở kỳ phải có quyền cao hơn") — xem chú thích đầy đủ ở
+    // renderKiemKePeriodCloseScopeCheckboxes() (module-admin.js)/systemSection.html.
+    kiemKePeriodCloseManage: scopeFromMultiSelectDropdown('pKiemKePeriodCloseAll', 'pKiemKePeriodCloseDeptContainer'),
+    kiemKePeriodReopenManage: document.getElementById('pKiemKePeriodReopenManage').checked,
     kiemKeGomMaDo: document.getElementById('pKiemKeGomMaDo').checked,
     kiemKeKiemDemDo: document.getElementById('pKiemKeKiemDemDo').checked,
     kiemKeKiemSoatDo: document.getElementById('pKiemKeKiemSoatDo').checked,
     kiemKeShelfConfigManage: document.getElementById('pKiemKeShelfConfigManage').checked,
-    kiemKeShelfLockManage: document.getElementById('pKiemKeShelfLockManage').checked,
-    kiemKeConfirmDo: document.getElementById('pKiemKeConfirmDo').checked,
+    // kiemKeShelfLockManage {all, depts[]} (12/2026, nâng cấp từ boolean) — xem chú thích đầy đủ ở
+    // renderKiemKeShelfLockScopeCheckboxes() (module-admin.js)/systemSection.html.
+    kiemKeShelfLockManage: scopeFromMultiSelectDropdown('pKiemKeShelfLockManageAll', 'pKiemKeShelfLockManageDeptContainer'),
+    // kiemKeConfirmDo {all, depts[]} (12/2026) — xem chú thích đầy đủ ở renderKiemKeConfirmDoScopeCheckboxes()
+    // (module-admin.js)/systemSection.html.
+    kiemKeConfirmDo: scopeFromMultiSelectDropdown('pKiemKeConfirmDoAll', 'pKiemKeConfirmDoDeptContainer'),
     kiemKeReportView: document.getElementById('pKiemKeReportView').checked,
     kiemKeUserAccessManage: document.getElementById('pKiemKeUserAccessManage').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
@@ -373,7 +382,19 @@ function collectPermsFromForm() {
 
 // Đổ 1 object perms lên toàn bộ khối checkbox (0-9) trên form — dùng chung cho cả Sửa Người Dùng
 // lẫn Sửa Nhóm Phân Quyền.
-function populatePermsForm(permsInput) {
+// targetDept (MỚI — vá lỗ hổng thật phát hiện qua audit chéo trước merge, 12/2026): trước đây dữ liệu CŨ
+// boolean `true` của kiemKeShelfLockManage/kiemKeConfirmDo luôn hiện lên FORM như {all:true} ("Tất Cả
+// Siêu Thị" được tick sẵn) — NHƯNG hành vi thật của server khi gặp `true` (canManageStocktakeShelfLockForDept/
+// canConfirmStocktakeForDept ở lib/stocktakeEngine.js) lại là "CHỈ đúng siêu thị của người đó", không phải
+// "mọi siêu thị". collectPermsFromForm() LUÔN ghi lại TOÀN BỘ object mỗi lần Lưu (kể cả khi admin chỉ sửa
+// 1 trường không liên quan) — nghĩa là MỞ form 1 người/nhóm đang có `true` cũ rồi bấm Lưu bất kỳ lúc nào
+// sẽ ÂM THẦM nâng quyền người đó lên "mọi siêu thị" dù không ai cố ý. Truyền `targetDept` (dept THẬT của
+// user đang sửa, nếu biết) để hiện ĐÚNG checkbox siêu thị đó (không phải "Tất Cả") — giữ nguyên hành vi cũ
+// khi Lưu lại mà không đụng gì tới 2 khối này. Không biết được targetDept (sửa Nhóm Phân Quyền — 1 nhóm
+// không có đúng 1 dept cố định) thì để trống cả 2 (không tick gì) — Lưu lại trong trường hợp này sẽ ghi
+// {all:false, depts:[]} (THU HẸP về không quyền) thay vì MỞ RỘNG ra mọi siêu thị — ưu tiên "lỗi về phía an
+// toàn" (mất quyền còn phát hiện/báo lại được, còn lộ quyền ra ngoài phạm vi thì khó phát hiện hơn).
+function populatePermsForm(permsInput, targetDept) {
   const perms = migrateLegacyPerms(permsInput).perms || defaultNewUserPerms();
 
   // Render trước 2 khối checkbox tạo động (module con lồng trong mục 0, checkbox phòng ban) rồi mới
@@ -484,12 +505,34 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistAtvstpExecute').checked = !!perms.checklistAtvstpExecute;
   document.getElementById('pChecklistAtvstpReportView').checked = !!perms.checklistAtvstpReportView;
   document.getElementById('pKiemKePeriodManage').checked = !!perms.kiemKePeriodManage;
+  // kiemKePeriodCloseManage {all, depts[]} + kiemKePeriodReopenManage (MỚI, 12/2026, TÁCH RIÊNG) — cả 2
+  // quyền hoàn toàn MỚI, không có dữ liệu cũ nào cần tương thích ngược (mặc định rỗng/false = chưa cấp).
+  const kiemKePeriodCloseScope = perms.kiemKePeriodCloseManage || {};
+  document.getElementById('pKiemKePeriodCloseAll').checked = !!kiemKePeriodCloseScope.all;
+  setKiemKePeriodCloseScopeCheckboxes(kiemKePeriodCloseScope.depts);
+  document.getElementById('pKiemKePeriodReopenManage').checked = !!perms.kiemKePeriodReopenManage;
   document.getElementById('pKiemKeGomMaDo').checked = !!perms.kiemKeGomMaDo;
   document.getElementById('pKiemKeKiemDemDo').checked = !!perms.kiemKeKiemDemDo;
   document.getElementById('pKiemKeKiemSoatDo').checked = !!perms.kiemKeKiemSoatDo;
   document.getElementById('pKiemKeShelfConfigManage').checked = !!perms.kiemKeShelfConfigManage;
-  document.getElementById('pKiemKeShelfLockManage').checked = !!perms.kiemKeShelfLockManage;
-  document.getElementById('pKiemKeConfirmDo').checked = !!perms.kiemKeConfirmDo;
+  // kiemKeShelfLockManage {all, depts[]} (12/2026, nâng cấp từ boolean) — tương thích ngược CÙNG khuôn
+  // kiemKeConfirmDo ngay dưới. Dữ liệu CŨ boolean `true` nghĩa là "chỉ đúng siêu thị của người đó" (xem
+  // canManageStocktakeShelfLockForDept() ở lib/stocktakeEngine.js: `v === true` -> `dept === user?.dept`)
+  // — KHÔNG phải "mọi siêu thị", nên hiện ĐÚNG checkbox siêu thị đó (targetDept) nếu biết, KHÔNG tick
+  // "Tất Cả" (xem chú thích đầy đủ ở khai báo hàm populatePermsForm()).
+  const kiemKeShelfLockScope = perms.kiemKeShelfLockManage === true
+    ? { all: false, depts: targetDept ? [targetDept] : [] }
+    : (perms.kiemKeShelfLockManage || {});
+  document.getElementById('pKiemKeShelfLockManageAll').checked = !!kiemKeShelfLockScope.all;
+  setKiemKeShelfLockScopeCheckboxes(kiemKeShelfLockScope.depts);
+  // kiemKeConfirmDo {all, depts[]} (12/2026) — tương thích ngược CÙNG lý do ở trên: dữ liệu CŨ boolean
+  // `true` = "chỉ đúng siêu thị của người đó" (canConfirmStocktakeForDept(): `v === true` -> own dept),
+  // hiện đúng checkbox siêu thị đó (targetDept) nếu biết, KHÔNG tick "Tất Cả".
+  const kiemKeConfirmDoScope = perms.kiemKeConfirmDo === true
+    ? { all: false, depts: targetDept ? [targetDept] : [] }
+    : (perms.kiemKeConfirmDo || {});
+  document.getElementById('pKiemKeConfirmDoAll').checked = !!kiemKeConfirmDoScope.all;
+  setKiemKeConfirmDoScopeCheckboxes(kiemKeConfirmDoScope.depts);
   document.getElementById('pKiemKeReportView').checked = !!perms.kiemKeReportView;
   document.getElementById('pKiemKeUserAccessManage').checked = !!perms.kiemKeUserAccessManage;
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
@@ -568,6 +611,9 @@ function populatePermsForm(permsInput) {
   });
   toggleOperationOrderReceiptScopeGroup();
   toggleChecklistExecuteScopeGroup();
+  toggleKiemKePeriodCloseScopeGroup();
+  toggleKiemKeShelfLockScopeGroup();
+  toggleKiemKeConfirmDoScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

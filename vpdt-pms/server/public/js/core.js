@@ -5914,6 +5914,11 @@ async function initDatabase(loggingInUser, opts) {
     DB.shelfRecords = data.shelfRecords || [];
     // shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror 2 dòng trên.
     DB.shelfStockThresholds = data.shelfStockThresholds || [];
+    // kiemKeShelfLocations (📋 Kiểm Kê > Tab 5, 12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê (tách khỏi
+    // DB.shelfLocations dùng chung ở trên, theo yêu cầu người dùng), cùng khuôn đồng bộ 1 lần lúc đăng
+    // nhập + giữ mới qua mutate thẳng mảng này sau mỗi lần Thêm/Sửa/Xoá/Khoá-Mở Khoá (không gọi lại route
+    // riêng), xem module-vanhanh.js.
+    DB.kiemKeShelfLocations = data.kiemKeShelfLocations || [];
 
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
@@ -12683,14 +12688,32 @@ function canAccessOperationModule(user) {
 // vì Kiểm Kê từng "sống" về điều hướng bên trong tab Vận Hành) — cùng khuôn canAccessPurchasingModule()
 // ở trên: admin luôn qua, còn lại cần hasModuleAccess(user,'kiemKe') (mặc định TRUE, xem BUSINESS_MODULES)
 // VÀ có ít nhất 1 trong 8 quyền thao tác/xem của module (không hiện module rỗng cho người không có quyền
-// nào bên trong, dù hasModuleAccess() mặc định cho qua).
+// nào bên trong, dù hasModuleAccess() mặc định cho qua). kiemKeShelfLockManage CỐ Ý KHÔNG liệt kê (thiết
+// kế gốc: quyền "sống trong Tab 5", luôn đi kèm kiemKeShelfConfigManage trên thực tế).
+// kiemKePeriodCloseManage/kiemKePeriodReopenManage (MỚI, 12/2026, theo yêu cầu người dùng: "đóng kỳ tôi
+// chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ phải có quyền cao hơn" — 2 quyền TÁCH RIÊNG, Đóng Kỳ
+// vẫn {all,depts[]} theo siêu thị, Mở Lại là cờ PHẲNG luôn áp dụng mọi siêu thị) — LỖI THẬT phát hiện khi
+// test: người CHỈ có đúng 1 trong 2 quyền MỚI này (không có kiemKePeriodManage/8 quyền khác, VD IT ở HQ
+// chỉ phụ trách đóng/mở kỳ cho vài siêu thị) bị canAccessStocktakeModule() chặn hẳn KHÔNG vào được module
+// (switchTab('kiemKe') alert "không có quyền" và return sớm) — quyền có mà không dùng được trên giao
+// diện. Đóng Kỳ phải tính là phạm vi THẬT SỰ không rỗng (all=true HOẶC depts có ít nhất 1 phần tử) —
+// object rỗng {all:false,depts:[]} không cấp được gì (canCloseStocktakePeriodForDept không có fallback
+// own-dept cho quyền MỚI này, khác hẳn kiemKeShelfLockManage/kiemKeConfirmDo) nên không tính là "có
+// quyền"; Mở Lại chỉ cần đúng `=== true`.
 function canAccessStocktakeModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'kiemKe')) return false;
+  const closeScope = user.perms?.kiemKePeriodCloseManage;
+  const hasCloseScope = !!(closeScope && typeof closeScope === 'object'
+    && (closeScope.all || (Array.isArray(closeScope.depts) && closeScope.depts.length > 0)));
+  const hasReopen = user.perms?.kiemKePeriodReopenManage === true;
+  const lockScope = user.perms?.kiemKeShelfLockManage;
+  const hasLockScope = lockScope === true || !!(lockScope && typeof lockScope === 'object'
+    && (lockScope.all || (Array.isArray(lockScope.depts) && lockScope.depts.length > 0)));
   return !!(user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
     || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
-    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage);
+    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage || hasCloseScope || hasReopen || hasLockScope);
 }
 // canViewShelfReportClient() (12/2026) — gác mục "📋 Kiểm Soát Hàng Hóa" trong REPORT_NAV_TREE
 // (module-baocaoquantri.js, REPORT_KEY_ACCESS_FN), cùng khuôn canViewChecklistReportsClient(): quyền

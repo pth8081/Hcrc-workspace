@@ -3684,9 +3684,42 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   VÀ 1 kỳ Kiểm Kê cùng "Đang hoạt động" song song, không xung đột nhau.
 - **Vòng đời Kỳ**: Nháp (tạo xong, chưa có hiệu lực) → Đang hoạt động (bấm
   "Kích Hoạt" — hệ thống CHẶN nếu siêu thị đó đã có 1 kỳ KHÁC CÙNG LOẠI đang
-  hoạt động) → Đã chốt (bấm "Đóng Kỳ", quyền quản lý kỳ bình thường làm
-  được) → Mở Lại (quay về Đang hoạt động — **CHỈ Admin**, quyền quản lý kỳ
-  thường KHÔNG mở lại được, chặn cả ở server nếu cố gọi thẳng API).
+  hoạt động) → Đã chốt (bấm "Đóng Kỳ") → Mở Lại (quay về Đang hoạt động).
+  **Sửa (✏️)/Xoá (🗑️) kỳ (MỚI)**: chỉ áp dụng cho kỳ còn ở trạng thái Nháp
+  (chưa Kích Hoạt) — Sửa đổi Tên Kỳ/khoảng thời gian dự kiến, Xoá bỏ hẳn nếu
+  tạo nhầm; kỳ đã Kích Hoạt/Đã chốt không Sửa/Xoá được nữa (chỉ đi theo đúng
+  vòng đời Đóng Kỳ/Mở Lại ở trên).
+- **Ô "📍 Siêu thị:" ở Tab 1 CHỈ để LỌC XEM, không phải để "chọn siêu thị sẽ
+  Kích Hoạt" (làm rõ theo phản hồi người dùng)**: đổi ô này chỉ đổi danh
+  sách kỳ đang xem, KHÔNG ảnh hưởng gì tới việc bấm "▶ Kích Hoạt" — nút Kích
+  Hoạt luôn áp dụng cho ĐÚNG kỳ đang bấm (và mọi kỳ cùng lượt tạo nếu dùng
+  "Chọn nhiều/tất cả siêu thị" ở trên, xem mục batch ngay dưới), không phụ
+  thuộc ô lọc này đang đứng ở siêu thị nào.
+- **Kích Hoạt đồng thời nhiều siêu thị đã tạo cùng 1 lượt (MỚI)**: nếu kỳ
+  được tạo bằng "Chọn nhiều/tất cả siêu thị" (xem mục Tạo Kỳ Mới ở trên), chỉ
+  cần bấm "▶ Kích Hoạt" ở ĐÚNG 1 siêu thị trong lượt đó — hệ thống TỰ kích
+  hoạt luôn mọi siêu thị còn lại cùng lượt tạo (vẫn đang ở Nháp), không cần
+  bấm từng siêu thị một. Kỳ tạo riêng lẻ (không qua chọn nhiều) thì Kích Hoạt
+  như cũ, chỉ đúng 1 siêu thị.
+- **Tách "Đóng Kỳ" và "Mở Lại Kỳ" thành 2 quyền ĐỘC LẬP (MỚI, theo yêu cầu
+  người dùng — Mở Lại là hành động "nhạy cảm hơn", không nên cấp nhỏ giọt
+  theo từng siêu thị như Đóng Kỳ)**:
+  - **"🔒 Đóng Kỳ Theo Siêu Thị"** (`kiemKePeriodCloseManage`) — quyền THEO
+    PHẠM VI siêu thị (giống khuôn Xác Nhận/Khoá Quầy Kệ dưới đây): gán "Tất
+    Cả Siêu Thị" hoặc chọn từng siêu thị cụ thể — người được gán chỉ Đóng Kỳ
+    được đúng (những) siêu thị đó, KHÔNG mở lại được kỳ nào (dù của chính
+    siêu thị mình quản lý).
+  - **"🔓 Mở Lại Kỳ Đã Chốt"** (`kiemKePeriodReopenManage`) — quyền PHẲNG
+    (không có ô chọn phạm vi) — có quyền này thì Mở Lại được kỳ Đã chốt của
+    **MỌI** siêu thị, không tách nhỏ theo siêu thị như Đóng Kỳ (chủ ý: Mở Lại
+    đồng nghĩa mở khoá tuyệt đối, chỉ nên giao cho rất ít người, đã đủ tin
+    tưởng ở mức toàn hệ thống).
+  - Người có quyền "📅 Quản Lý Kỳ Kiểm Kê" (tab 1 nói chung — tạo kỳ/Kích
+    Hoạt) vẫn tự Đóng Kỳ được cho ĐÚNG siêu thị của chính mình (hành vi cũ,
+    không đổi) — 2 quyền mới ở trên chỉ dùng khi cần giao thêm cho người
+    KHÁC siêu thị hoặc không có quyền Tab 1 đầy đủ (VD IT hỗ trợ đóng/mở kỳ
+    hộ nhiều siêu thị mà không cần cấp quyền tạo/Kích Hoạt kỳ).
+  - Admin luôn làm được cả 2, không cần gán gì thêm (đúng triết lý chung).
 - **Mỗi kỳ ĐỘC LẬP, không tạo được bản nháp chồng chéo (12/2026, theo yêu
   cầu người dùng "trong 1 kỳ kiểm kê chỉ được 1 lần, không tạo bản nháp")**:
   1 siêu thị đã có kỳ CÙNG LOẠI CHƯA ĐÓNG (Nháp hoặc Đang hoạt động) thì
@@ -3694,14 +3727,18 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   (cả trên giao diện lẫn server), không phải đợi tới lúc Kích Hoạt mới phát
   hiện trùng như trước. Đóng kỳ (Đã chốt) xong thì tạo được kỳ MỚI bình
   thường (mở vòng kiểm kê mới); muốn làm tiếp ĐÚNG kỳ cũ vừa đóng thì dùng
-  nút "↩️ Mở Lại" (chỉ Admin) ở trên, không tạo kỳ mới cho siêu thị đó.
+  nút "↩️ Mở Lại" ở trên (Admin, hoặc người có quyền "🔓 Mở Lại Kỳ Đã Chốt" —
+  xem mục tách quyền Đóng Kỳ/Mở Lại ngay dưới), không tạo kỳ mới cho siêu
+  thị đó.
 - **Thao tác**: 📋 Kiểm Kê (sidebar) → sub-tab "📅 Kỳ
   Kiểm Kê" → "+ Tạo Kỳ Mới" (chọn Loại Kỳ + đặt Tên Kỳ, tuỳ chọn khoảng thời
-  gian dự kiến) → "▶ Kích Hoạt" → "🔒 Đóng Kỳ" → (Admin) "↩️ Mở Lại". Người
-  có BẤT KỲ quyền Kiểm Kê nào (kể cả chỉ Gom Mã/Kiểm Đếm, chưa xây) vẫn vào
-  xem được danh sách kỳ (cần biết kỳ nào đang hoạt động trước khi thao tác ở
-  các tab sau), chỉ không thấy nút Tạo/Kích Hoạt/Đóng Kỳ nếu thiếu đúng
-  quyền "📅 Quản Lý Kỳ Kiểm Kê".
+  gian dự kiến) → "▶ Kích Hoạt" → "🔒 Đóng Kỳ" → "↩️ Mở Lại" (Admin hoặc
+  quyền "🔓 Mở Lại Kỳ Đã Chốt"). Người có BẤT KỲ quyền Kiểm Kê nào (kể cả chỉ
+  Gom Mã/Kiểm Đếm, chưa xây) vẫn vào xem được danh sách kỳ (cần biết kỳ nào
+  đang hoạt động trước khi thao tác ở các tab sau), chỉ không thấy nút
+  Tạo/Kích Hoạt nếu thiếu quyền "📅 Quản Lý Kỳ Kiểm Kê", và không thấy nút
+  Đóng Kỳ/Mở Lại ở siêu thị nào nếu thiếu đúng quyền phạm vi tương ứng (xem
+  mục tách quyền ngay dưới).
 - **Chọn nhiều/tất cả siêu thị cùng lúc lúc Tạo Kỳ Mới (12/2026, CHỈ Admin
   — người không cố định 1 siêu thị)**: ô "📍 Chọn Siêu Thị" là ô tìm-kiếm-
   chọn-nhiều (gõ tên để thêm, bấm "×" trên từng thẻ để bỏ), kèm 2 nút
@@ -3818,6 +3855,37 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   làm đúng quầy kệ đang được chỉ định, tránh làm nhầm/làm trước thứ tự.
   Admin luôn bypass khoá này (đúng triết lý chung của hệ thống), nhưng vẫn
   cần có allowlist Tab 8 riêng mới thao tác được (2 lớp độc lập).
+  Người CHỈ có quyền này (không có quyền Cấu Hình Quầy Kệ riêng) vào Tab 5
+  sẽ KHÔNG thấy khung "+ Thêm Quầy Kệ"/"Tải Mẫu Excel"/"Nhập Excel" (các
+  hành động đó cần quyền khác) — vẫn thấy "📊 Xuất Excel" (chỉ xuất lại
+  đúng dữ liệu đã xem được).
+- **🔒 Khoá/Mở Khoá Quầy Kệ + ✅ Xác Nhận Toàn Bộ Đợt: gán được THEO SIÊU
+  THỊ (MỚI, theo yêu cầu người dùng — "cho IT chỉ khoá mở ở một siêu thị
+  của họ thôi")**: 2 quyền này (`kiemKeShelfLockManage`,
+  `kiemKeConfirmDo`) nâng cấp cùng khuôn `kiemKePeriodCloseManage` ở trên —
+  gán "Tất Cả Siêu Thị" hoặc chọn từng siêu thị cụ thể, không bắt buộc
+  đúng siêu thị người đó đang làm việc. Dữ liệu cũ (`true` đơn giản, admin
+  chưa re-save qua Cây Phân Quyền mới) vẫn hiểu là "chỉ đúng siêu thị của
+  chính người đó", không đổi hành vi.
+- **Được gán quyền theo siêu thị KHÁC → tự động XEM ĐƯỢC dữ liệu siêu thị
+  đó, không cần thêm allowlist Tab 8 (làm rõ theo câu hỏi người dùng: "khi
+  được phân quyền siêu thị nào thì vào sẽ nhìn được siêu thị đấy, đúng
+  không?")**: người được gán `kiemKeConfirmDo`/`kiemKeShelfLockManage`/
+  `kiemKePeriodCloseManage`/`kiemKePeriodReopenManage` cho 1 siêu thị khác
+  siêu thị của mình thì:
+  - Ô "📍 Siêu thị:" (dùng CHUNG ở Tab 1/5/6) tự hiện thêm đúng (những)
+    siêu thị được gán để chọn qua xem, không cần Admin.
+  - Chuyển sang xem đúng siêu thị đó thì THẤY ĐƯỢC THẬT dữ liệu quầy kệ/
+    kỳ Kiểm Kê/số liệu Kiểm Đếm-Kiểm Soát của siêu thị đó NGAY (không còn
+    bị trống do thiếu allowlist Tab 8) — allowlist Tab 8 vẫn CHỈ dùng riêng
+    cho quyền Gom Mã/Kiểm Đếm/Kiểm Soát (tự THAO TÁC quét hộ), không liên
+    quan tới 4 quyền theo siêu thị này (chỉ xem/Đóng Kỳ/Mở Lại/Khoá-Mở
+    Khoá/Xác Nhận Toàn Bộ Đợt).
+  - Mỗi quyền vẫn CHỈ cho làm đúng hành động của nó ở đúng phạm vi được gán
+    (VD chỉ có `kiemKeShelfLockManage` cho siêu thị B thì xem/khoá-mở khoá
+    được quầy kệ siêu thị B, nhưng KHÔNG tự Xác Nhận/Đóng Kỳ được siêu thị
+    B nếu không có thêm quyền tương ứng) — 4 quyền này ĐỘC LẬP, không quyền
+    nào tự "bao" quyền khác.
 - **📡 Hoạt động Offline (MỚI, 12/2026, theo yêu cầu người dùng — kho/quầy
   kệ hay mất sóng/wifi chập chờn)**: Tab 2 "Gom Mã"/Tab 3 "Kiểm Đếm"/Tab 4
   "Kiểm Soát"/Tab 6 "Xác Nhận" đều hoạt động được KHI MẤT MẠNG. Mất mạng

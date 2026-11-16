@@ -24,7 +24,7 @@ const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, chá
 const SHELF_B1 = { id: 20, dept: DEPT2, code: 'B1', name: 'Kệ B1 — Quận 2', active: true };
 
 let appDataStore = {
-  shelfLocations: [SHELF_A1, SHELF_A2, SHELF_B1],
+  kiemKeShelfLocations: [SHELF_A1, SHELF_A2, SHELF_B1],
   stocktakeSessions: [
     { id: 2001, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê test', trangThai: 'DANG_HOAT_DONG' },
     { id: 2002, dept: DEPT1, loaiKy: 'GOM_MA', tenKy: 'Gom Mã test', trangThai: 'DANG_HOAT_DONG' }
@@ -150,7 +150,7 @@ function request(port, method, urlPath, username, body) {
 
     // 9) Khoá/mở khoá quầy kệ KHÔNG thuộc siêu thị mình (không-Admin) -> bị chặn rõ ràng.
     res = await request(port, 'POST', '/api/stocktake/shelf-locations/lock', 'itA', { shelfLocationIds: [20] });
-    check('IT siêu thị A không khoá được quầy kệ của siêu thị khác (B1)', res.status === 403 && /không thuộc siêu thị/.test(res.body.error || ''), res);
+    check('IT siêu thị A không khoá được quầy kệ của siêu thị khác (B1)', res.status === 403 && /không thuộc phạm vi siêu thị/.test(res.body.error || ''), res);
 
     // 10) Thiếu danh sách quầy kệ -> 400 rõ ràng, không âm thầm khoá rỗng.
     res = await request(port, 'POST', '/api/stocktake/shelf-locations/lock', 'itA', { shelfLocationIds: [] });

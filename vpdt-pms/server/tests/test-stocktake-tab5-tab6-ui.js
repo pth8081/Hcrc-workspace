@@ -1,6 +1,7 @@
 // tests/test-stocktake-tab5-tab6-ui.js — test Playwright THẬT (click/select thật, không gọi hàm nội bộ)
-// cho Tab 5 "🗄️ Cấu Hình Quầy Kệ" (chỉ xem, trỏ sang Kiểm Soát Hàng Hóa) + Tab 6 "✅ Xác Nhận" (xác nhận
-// từng quầy kệ khoá Kiểm Đếm không khoá Kiểm Soát + Xác Nhận Toàn Bộ Đợt đóng kỳ).
+// cho Tab 5 "🗄️ Cấu Hình Quầy Kệ" (danh mục quầy kệ RIÊNG của Kiểm Kê, ĐỔI 12/2026 — xem
+// test-stocktake-kiemke-shelf-config-crud.js cho CRUD/Import/Export riêng) + Tab 6 "✅ Xác Nhận" (xác
+// nhận từng quầy kệ khoá Kiểm Đếm không khoá Kiểm Soát + Xác Nhận Toàn Bộ Đợt đóng kỳ).
 // Chạy: node tests/test-stocktake-tab5-tab6-ui.js
 'use strict';
 const { createRunner, assert, assertEqual } = require('./testHarness');
@@ -9,16 +10,14 @@ async function main() {
   const { startStaticServer, createMockState, launchPage } = require('./testHarness');
   const PORT = 8999;
   const DEPT1 = 'Siêu thị Quận 1';
-  const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', category: 'Gia vị', active: true };
-  const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', category: 'Mì', active: true };
+  const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
+  const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', active: true };
   // qlA: Quản Lý Siêu Thị — Kiểm Đếm + Xác Nhận Toàn Bộ Đợt (kiemKeConfirmDo), đúng vai thực tế thường
   // gặp nhất (1 người vừa thao tác vừa chốt đợt ở siêu thị nhỏ).
   const MANAGER = {
     username: 'qlA', name: 'Quản Lý A', dept: DEPT1,
-    // shelfLocationManage (10/2026, Kiểm Soát Hàng Hóa) thêm kèm ở đây để test được NHÁNH THÀNH CÔNG của
-    // "Mở Quản Lý Quầy Kệ" — nhánh THIẾU quyền (báo lỗi rõ thay vì âm thầm rơi tab) test riêng bên dưới.
     // kiemKeGomMaDo (MỚI, 12/2026) thêm để test được bulk-select + Xác Nhận Gom Mã ở cuối file.
-    perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeConfirmDo: true, kiemKeShelfConfigManage: true, shelfLocationManage: true, kiemKeGomMaDo: true }, active: true, totpEnabled: true
+    perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeConfirmDo: true, kiemKeShelfConfigManage: true, kiemKeGomMaDo: true }, active: true, totpEnabled: true
   };
   // nv1: CHỈ có kiemKeKiemDemDo (KHÔNG kiemKeConfirmDo) — đúng vai nhân viên Kiểm Đếm thường, dùng để
   // xác nhận Tab 6 VẪN hiện cho vai này (tự Xác Nhận quầy kệ mình vừa đếm xong), chỉ ẩn nút Toàn Bộ Đợt.
@@ -27,7 +26,7 @@ async function main() {
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Thống Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [MANAGER, STAFF, ADMIN],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
@@ -73,7 +72,6 @@ async function main() {
       await page.waitForTimeout(150);
       const text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
       assert(text.includes('A1') && text.includes('A2'), `Phải hiện đủ 2 quầy kệ, thực tế: ${text}`);
-      assert(text.includes('Gia vị') && text.includes('Mì'), `Phải hiện đúng Ngành Hàng, thực tế: ${text}`);
     });
 
     await run.run('Tab 5: bộ lọc "Quầy Kệ" (mới, panel thu gọn mặc định) -> chỉ còn đúng 1 dòng khớp', async () => {
@@ -89,32 +87,7 @@ async function main() {
       await page.waitForTimeout(100);
     });
 
-    await run.run('Tab 5: "Mở Quản Lý Quầy Kệ" khi THIẾU quyền shelfLocationManage -> báo lỗi rõ, KHÔNG âm thầm chuyển tab', async () => {
-      const alertMsg = await page.evaluate(() => new Promise((resolve) => {
-        const origAlert = window.alert;
-        window.alert = (msg) => { window.alert = origAlert; resolve(msg); };
-        const origPerm = currentUser.perms.shelfLocationManage;
-        currentUser.perms.shelfLocationManage = false;
-        goToShelfLocationsManagement();
-        currentUser.perms.shelfLocationManage = origPerm;
-      }));
-      assert(/quyền/i.test(alertMsg) && /Quầy Kệ/i.test(alertMsg), `Phải báo rõ thiếu quyền, thực tế: ${alertMsg}`);
-      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('kiemKeSection').classList.contains('hidden'));
-      assert(stillOnKiemKe, 'Thiếu quyền thì KHÔNG được chuyển tab — vẫn phải đứng yên ở Kiểm Kê');
-    });
-
-    await run.run('Tab 5: bấm "Mở Quản Lý Quầy Kệ" -> chuyển đúng sang Kiểm Soát Hàng Hóa > Quầy Kệ', async () => {
-      await page.click('[data-op="goToShelfLocationsManagement"]');
-      await page.waitForTimeout(150);
-      const shelfTabVisible = await page.evaluate(() => !document.getElementById('vanHanhShelfWrap').classList.contains('hidden'));
-      const locationsSubtabActive = await page.evaluate(() => !document.getElementById('vanHanhShelfLocationsWrap').classList.contains('hidden'));
-      assert(shelfTabVisible, 'Phải chuyển sang tab Kiểm Soát Hàng Hóa');
-      assert(locationsSubtabActive, 'Phải chuyển đúng sub-tab Quầy Kệ');
-    });
-
-    // Quay lại Kiểm Kê, chuẩn bị dữ liệu Kiểm Đếm thật qua UI Tab 3 trước khi test Tab 6.
-    await page.evaluate(() => switchTab('kiemKe'));
-    await page.waitForTimeout(100);
+    // Chuẩn bị dữ liệu Kiểm Đếm thật qua UI Tab 3 trước khi test Tab 6.
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
     await page.selectOption('#kkKiemDemShelfSelect', '10');
@@ -423,7 +396,7 @@ async function main() {
     });
 
     await run.run('Tab 5 bộ lọc "Trạng Thái": phân biệt đúng quầy kệ Đang hoạt động / Ngừng hoạt động', async () => {
-      await page.evaluate(() => { const l = DB.shelfLocations.find(x => x.code === 'A2'); if (l) l.active = false; });
+      await page.evaluate(() => { const l = DB.kiemKeShelfLocations.find(x => x.code === 'A2'); if (l) l.active = false; });
       await page.click('#btnKkSubShelfConfig');
       await page.waitForTimeout(200);
       let text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
@@ -441,7 +414,7 @@ async function main() {
       await page.waitForTimeout(150);
       text = await page.evaluate(() => document.getElementById('kkShelfConfigListBody').textContent);
       assert(text.includes('A1') && !text.includes('A2'), `Lọc "Đang hoạt động" phải chỉ còn A1, thực tế: ${text}`);
-      await page.evaluate(() => { const l = DB.shelfLocations.find(x => x.code === 'A2'); if (l) l.active = true; });
+      await page.evaluate(() => { const l = DB.kiemKeShelfLocations.find(x => x.code === 'A2'); if (l) l.active = true; });
     });
 
     await run.run('Tab 2/3/4 ô "Tìm theo mã/tên": tự nạp gợi ý (sdd) từ đúng mã đã quét ở quầy kệ đang chọn', async () => {

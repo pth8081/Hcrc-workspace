@@ -15,15 +15,17 @@ const { getAllForCollection } = require('../lib/recordStore');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const {
   LOAI_KY, TRANG_THAI,
-  canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake,
-  buildNewSession, activateSession, closeSession, reopenSession, findActiveSession, listOpenSessionsByLoaiKy,
+  canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake, canConfirmStocktakeForDept,
+  canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
+  buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
+  findActiveSession, listOpenSessionsByLoaiKy,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds,
-  buildPriceMapFromRows, computeValueBreakdown, canManageStocktakeShelfLock
+  buildPriceMapFromRows, computeValueBreakdown, canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept
 } = require('../lib/stocktakeEngine');
 // Tab 7 "📊 Báo Cáo" (11/2026) — TÁI DÙNG đúng hạ tầng Tồn Kho Hệ Thống (API BRGMART) đã có cho "Kiểm
 // Soát Hàng Hóa" (routes/shelfStock.js) thay vì tự viết lại: cùng hàm đồng bộ/snapshot/gộp theo mã hàng,
@@ -35,6 +37,17 @@ const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryA
 const { getSnapshotForMaDiem, getSnapshotForMaDiemMerged } = require('../lib/priceSnapshotStore');
 const { syncStorePriceCatalog } = require('../jobs/priceSync');
 const { getSnapshotMapForMaDiems } = require('../lib/inventorySnapshotStore');
+// Tải mẫu/Nhập Excel cho Tab 5 "Cấu Hình Quầy Kệ" (danh mục RIÊNG của Kiểm Kê) + Tab 8 "Cấu Hình Người
+// Dùng" (MỚI, 12/2026, theo yêu cầu người dùng) — mirror ĐÚNG khuôn routes/budgetLinesImport.js.
+const multer = require('multer');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
+const { verifyFileSignature } = require('../lib/fileSignature');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
+const { buildKiemKeShelfLocationTemplateWorkbook, parseKiemKeShelfLocationsImportFile } = require('../lib/kiemKeShelfLocationsExcel');
+const { buildKiemKeUserAccessTemplateWorkbook, parseKiemKeUserAccessImportFile } = require('../lib/kiemKeUserAccessExcel');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -61,13 +74,42 @@ function requireKiemKeModuleAccess(req, res) {
   return true;
 }
 
+// canViewStocktakeSessionData() (MỚI, 12/2026, theo yêu cầu người dùng: "gán quyền Xác Nhận siêu thị nào
+// thì tự động xem được luôn, không cần gán thêm gì khác") — gộp ĐÚNG 4 nhánh hợp lệ dùng LẶP LẠI ở GET
+// /counts, /shelf-confirmations, /shelf-kiem-soat-confirmations: admin, đúng dept hồ sơ (home dept), có
+// allowlist Tab 8 tại đúng siêu thị của kỳ đó (Giám Sát Vùng — xem chú thích gốc ở từng route), HOẶC có
+// quyền Xác Nhận Toàn Bộ Đợt (kiemKeConfirmDo) phạm vi đúng siêu thị đó — nhánh THỨ 4 này MỚI: trước đây
+// kiemKeConfirmDo/canConfirmStocktakeForDept() chỉ gác được đúng nút "Xác Nhận Toàn Bộ Đợt" (route
+// confirm-all), KHÔNG gác được 3 route XEM dữ liệu này, khiến màn Tab 6 hiện TRỐNG dù người dùng đã có
+// quyền Xác Nhận đúng siêu thị đó (quyền có mà không dùng được, đúng lớp lỗi CLAUDE.md nhắc tránh).
+// canConfirmStocktake(freshUser) PHẢI kiểm tra trước (base gate) — canConfirmStocktakeForDept() một mình
+// có nhánh fallback "đúng dept của mình" cho MỌI user, kể cả người không có kiemKeConfirmDo chút nào.
+async function canViewStocktakeSessionData(freshUser, session) {
+  if (freshUser.perms?.admin || session.dept === freshUser.dept) return true;
+  if (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, session.dept)) return true;
+  await ensureStocktakeKey('stocktakeUserAccess');
+  const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+  return userHasAnyStocktakeAccessToDept(access, freshUser.username, session.dept);
+}
+
 // Xem danh sách kỳ — mở cho MỌI user có quyền module Kiểm Kê (không riêng kiemKePeriodManage): các tab
 // Gom Mã/Kiểm Đếm/Kiểm Soát khác (sẽ bổ sung sau) cần đọc danh sách này để biết kỳ nào đang hoạt động.
-// Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=.
+// Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=. 12/2026, MỞ
+// RỘNG: người được gán kiemKePeriodCloseManage/kiemKePeriodReopenManage (Đóng Kỳ/Mở Lại theo siêu thị) cũng xem được đúng
+// các siêu thị nằm trong phạm vi đó qua ?dept= (không phải admin vẫn cần XEM được thì mới Đóng/Mở Lại
+// được — quyền có mà không xem được danh sách thì vô dụng trên giao diện).
 router.get('/sessions', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {
-    const dept = req.freshUser.perms?.admin && req.query.dept ? String(req.query.dept) : req.freshUser.dept;
+    const requestedDept = req.query.dept ? String(req.query.dept) : null;
+    let dept = req.freshUser.dept;
+    if (requestedDept && requestedDept !== req.freshUser.dept) {
+      const allowed = req.freshUser.perms?.admin
+        || canCloseStocktakePeriodForDept(req.freshUser, requestedDept)
+        || canReopenStocktakePeriodForDept(req.freshUser, requestedDept)
+        || (canConfirmStocktake(req.freshUser) && canConfirmStocktakeForDept(req.freshUser, requestedDept));
+      if (allowed) dept = requestedDept;
+    }
     const all = (await getAppDataValue('stocktakeSessions')) || [];
     const items = all.filter(s => s.dept === dept);
     res.json({ items });
@@ -108,10 +150,13 @@ router.post('/sessions', async (req, res) => {
   }
   try {
     const dept = req.freshUser.perms?.admin && req.body?.dept ? String(req.body.dept).trim() : req.freshUser.dept;
+    // batchId (MỚI, 12/2026) chỉ admin mới gửi được (đúng luồng tạo nhiều siêu thị cùng lúc, UI non-admin
+    // không có ô này) — không bắt buộc, bỏ qua thì tạo kỳ đơn lẻ như trước.
+    const batchId = req.freshUser.perms?.admin && req.body?.batchId ? String(req.body.batchId).trim() : null;
     await ensureStocktakeSessionsKey();
     const newItem = await withLockedAppDataValue('stocktakeSessions', (list) => {
       const arr = Array.isArray(list) ? list : [];
-      const item = buildNewSession({ ...req.body, dept }, req.freshUser, arr);
+      const item = buildNewSession({ ...req.body, dept, batchId }, req.freshUser, arr);
       arr.unshift(item);
       return arr;
     }).then(arr => arr[0]);
@@ -121,7 +166,14 @@ router.post('/sessions', async (req, res) => {
   }
 });
 
-async function handleSessionTransition(req, res, routeLabel, checkPerm, transitionFn) {
+// handleSessionTransition(..., itemAccessCheck) — itemAccessCheck(user, item) MỚI (12/2026, tuỳ chọn):
+// khi truyền vào, THAY cho check cứng "admin hoặc đúng dept của chính mình" mặc định — dùng cho Đóng
+// Kỳ/Mở Lại (canCloseStocktakePeriodForDept/canReopenStocktakePeriodForDept, theo yêu cầu người dùng
+// "cho thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị"). Bỏ qua tham
+// số này (Kích Hoạt/Sửa/Xoá) thì hành vi y hệt trước đây — không đổi gì.
+// transitionFn có thể trả về chính item (Đóng/Mở Lại/Sửa) HOẶC {item, ...extra} (Kích Hoạt — kèm
+// `siblings` của activateSessionBatch()) — tự nhận diện qua `result && result.item !== undefined`.
+async function handleSessionTransition(req, res, routeLabel, checkPerm, transitionFn, itemAccessCheck) {
   if (!requireKiemKeModuleAccess(req, res)) return;
   if (!checkPerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' });
@@ -131,30 +183,55 @@ async function handleSessionTransition(req, res, routeLabel, checkPerm, transiti
   try {
     await ensureStocktakeSessionsKey();
     let updated = null;
-    const newArr = await withLockedAppDataValue('stocktakeSessions', (list) => {
+    let extra = null;
+    await withLockedAppDataValue('stocktakeSessions', (list) => {
       const arr = Array.isArray(list) ? list : [];
       const item = arr.find(s => s.id === id);
       if (!item) throw new HttpError(404, 'Không tìm thấy kỳ kiểm kê');
-      if (!req.freshUser.perms?.admin && item.dept !== req.freshUser.dept) {
-        throw new HttpError(403, 'Kỳ kiểm kê không thuộc siêu thị của bạn');
+      const accessOk = itemAccessCheck
+        ? itemAccessCheck(req.freshUser, item)
+        : !!(req.freshUser.perms?.admin || item.dept === req.freshUser.dept);
+      if (!accessOk) {
+        throw new HttpError(403, 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác');
       }
-      updated = transitionFn(arr, id, req.freshUser);
+      const result = transitionFn(arr, id, req.freshUser, req.body);
+      if (result && typeof result === 'object' && result.item !== undefined) {
+        updated = result.item;
+        extra = result;
+      } else {
+        updated = result;
+      }
       return arr;
     });
-    res.json({ item: updated });
+    res.json(extra ? { item: updated, siblings: extra.siblings } : { item: updated });
   } catch (err) {
     sendCatchError(res, err, routeLabel);
   }
 }
 
 router.post('/sessions/:id/activate', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/activate', canManageStocktakePeriod, activateSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/activate', canManageStocktakePeriod, activateSessionBatch));
 
 router.post('/sessions/:id/close', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canManageStocktakePeriod, closeSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canCloseStocktakePeriodAtAll, closeSession,
+    (user, item) => canCloseStocktakePeriodForDept(user, item.dept)));
 
 router.post('/sessions/:id/reopen', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakeSession, reopenSession));
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakePeriodAtAll, reopenSession,
+    (user, item) => canReopenStocktakePeriodForDept(user, item.dept)));
+
+// PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — chỉ đổi
+// Tên Kỳ/Thời Gian, giữ NGUYÊN gate/phạm vi y hệt Kích Hoạt (canManageStocktakePeriod + đúng dept của
+// mình, admin bypass) — không mở rộng phạm vi theo kiemKePeriodCloseManage/kiemKePeriodReopenManage (quyền đó CHỈ áp dụng
+// cho Đóng Kỳ/Mở Lại như người dùng nêu rõ, không phải Sửa).
+router.patch('/sessions/:id', (req, res) =>
+  handleSessionTransition(req, res, 'PATCH /api/stocktake/sessions/:id', canManageStocktakePeriod,
+    (arr, id) => editSessionMeta(arr, id, req.body)));
+
+// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê") — CHỈ xoá
+// được kỳ còn Nháp (deleteDraftSession() tự chặn trạng thái khác), cùng gate/phạm vi như Sửa/Kích Hoạt.
+router.delete('/sessions/:id', (req, res) =>
+  handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod, deleteDraftSession));
 
 // ===================== TAB 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
 // Theo tài liệu đề xuất mục B1: allowlist TUYỆT ĐỐI, không có cờ "tất cả"/"bất kỳ" nào — kể cả Admin khi
@@ -226,10 +303,65 @@ router.get('/assignable-users', async (req, res) => {
   }
 });
 
+// ===== Tải Mẫu/Nhập Excel cho Tab 8 "Cấu Hình Người Dùng" (MỚI, 12/2026, theo yêu cầu người dùng: "mã
+// nhân viên, siêu thị, quầy kệ, mapping vào") — mirror ĐÚNG khuôn import Tab 5 ngay trên. Xem trước rồi
+// client tự gọi POST /user-access (upsertUserAccessRows(), đã gộp sẵn nhiều quầy kệ/1 user×dept) cho
+// từng NHÓM (username, dept) hợp lệ — KHÔNG ghi gì ở route parse-import này. =====
+router.get('/user-access/import-template', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canManageStocktakeUserAccess(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' });
+  }
+  try {
+    const { getAppDataValueCached } = require('../lib/appData');
+    const storeNames = ((await getAppDataValueCached('stores')) || []).slice().sort((a, b) => String(a).localeCompare(b, 'vi'));
+    const wb = buildKiemKeUserAccessTemplateWorkbook(storeNames);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Cau_Hinh_Nguoi_Dung_Kiem_Ke.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/stocktake/user-access/import-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+router.post('/user-access/parse-import', uploadRateLimiter, (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canManageStocktakeUserAccess(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Cấu Hình Người Dùng của Kiểm Kê' });
+  }
+  kkUpload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/stocktake/user-access/parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+      const { getAppDataValueCached } = require('../lib/appData');
+      const allStores = (await getAppDataValueCached('stores')) || [];
+      const users = (await getAppDataValue('users')) || [];
+      const validUsernames = new Set(users.filter(u => u.active !== false).map(u => u.username));
+      const shelfLocations = await getAllForCollection('kiemKeShelfLocations');
+      const items = await parseKiemKeUserAccessImportFile(buffer, ext, { allStores, validUsernames, shelfLocations });
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/stocktake/user-access/parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
 // ===================== TAB 2/3/4 — Quầy kệ user được phép thao tác theo hành động =====================
-// Trả NGUYÊN danh sách quầy kệ (tra từ shelfLocations thật — Kiểm Kê KHÔNG có danh mục quầy kệ riêng,
-// dùng chung với Kiểm Soát Hàng Hóa, xem tài liệu đề xuất mục câu hỏi mở #1) mà user CÓ allowlist cho
-// ĐÚNG hành động — CÓ THỂ THUỘC NHIỀU SIÊU THỊ KHÁC NHAU (Giám Sát Vùng, xem ví dụ bảng B1), không lọc
+// Trả NGUYÊN danh sách quầy kệ (tra từ kiemKeShelfLocations — danh mục RIÊNG của Kiểm Kê, 12/2026, KHÔNG
+// còn dùng chung shelfLocations của Kiểm Soát Hàng Hóa nữa) mà user CÓ allowlist cho ĐÚNG hành động — CÓ THỂ THUỘC NHIỀU SIÊU THỊ KHÁC NHAU (Giám Sát Vùng, xem ví dụ bảng B1), không lọc
 // theo req.freshUser.dept như mọi route Kiểm Soát Hàng Hóa khác.
 router.get('/my-shelf-locations', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
@@ -244,7 +376,7 @@ router.get('/my-shelf-locations', async (req, res) => {
     (Array.isArray(access) ? access : []).forEach(a => {
       if (a.username === req.freshUser.username && a[MODE_ACCESS_FIELD[mode]] === true) allowedIds.add(a.shelfLocationId);
     });
-    const allLocations = await getAllForCollection('shelfLocations');
+    const allLocations = await getAllForCollection('kiemKeShelfLocations');
     const items = allLocations.filter(l => allowedIds.has(l.id) && l.active !== false);
     res.json({ items });
   } catch (err) {
@@ -326,9 +458,8 @@ router.get('/active-session-for-shelf', async (req, res) => {
 // được xử lý kiểm kê gom mã và kiểm soát, để sau này nghiệp vụ là xong một kệ hỏi báo IT và IT sẽ xác
 // nhận [khoá]. Và người ta muốn kiểm soát, kiểm đếm và gom mã kệ mới thì IT có thể mở khóa") — CHỈ người
 // có quyền RIÊNG canManageStocktakeShelfLock() (hoặc admin) mới khoá/mở khoá được, ghi field
-// `kiemKeLocked` thẳng lên BẢN GHI shelfLocations (collection DÙNG CHUNG với Kiểm Soát Hàng Hóa — field
-// mới này KHÔNG đụng gì tới `active`/các field khác, và route PATCH /api/shelf-stock/locations/:id của
-// Kiểm Soát Hàng Hóa KHÔNG đọc/ghi field này nên 2 bên không giẫm chân nhau). Chặn thực sự nằm ở
+// `kiemKeLocked` thẳng lên BẢN GHI kiemKeShelfLocations (danh mục RIÊNG của Kiểm Kê, 12/2026 — trước đây
+// nằm trên shelfLocations dùng chung với Kiểm Soát Hàng Hóa, nay đã tách hẳn). Chặn thực sự nằm ở
 // assertStocktakeScanAllowed() (Lớp mới, trước Lớp 2) — xem chú thích đầy đủ tại đó. =====
 function requireStocktakeShelfLockManage(req, res) {
   if (!requireKiemKeModuleAccess(req, res)) return false;
@@ -344,12 +475,12 @@ async function setStocktakeShelfLocked(req, res, locked) {
     const ids = Array.isArray(req.body?.shelfLocationIds) ? req.body.shelfLocationIds.map(Number).filter(Number.isFinite) : [];
     if (!ids.length) return res.status(400).json({ error: 'Thiếu danh sách quầy kệ' });
     const idSet = new Set(ids);
-    const updatedItems = await withLockedAppDataValue('shelfLocations', (list) => {
+    const updatedItems = await withLockedAppDataValue('kiemKeShelfLocations', (list) => {
       const arr = Array.isArray(list) ? list : [];
       arr.forEach((loc) => {
         if (!idSet.has(loc.id)) return;
-        if (!req.freshUser.perms?.admin && loc.dept !== req.freshUser.dept) {
-          throw new HttpError(403, `Quầy kệ "${loc.code}" không thuộc siêu thị của bạn`);
+        if (!canManageStocktakeShelfLockForDept(req.freshUser, loc.dept)) {
+          throw new HttpError(403, `Quầy kệ "${loc.code}" không thuộc phạm vi siêu thị bạn được phép Khoá/Mở Khoá`);
         }
         loc.kiemKeLocked = locked;
         if (locked) { loc.kiemKeLockedBy = req.freshUser.username; loc.kiemKeLockedByName = req.freshUser.name || req.freshUser.username; loc.kiemKeLockedAt = new Date().toISOString(); }
@@ -365,8 +496,175 @@ async function setStocktakeShelfLocked(req, res, locked) {
 router.post('/shelf-locations/lock', async (req, res) => { await setStocktakeShelfLocked(req, res, true); });
 router.post('/shelf-locations/unlock', async (req, res) => { await setStocktakeShelfLocked(req, res, false); });
 
+// ===== CRUD + Tải Mẫu/Nhập Excel cho danh mục kiemKeShelfLocations (Tab 5, MỚI 12/2026, theo yêu cầu
+// người dùng "Kiểm Kê không dùng chung quầy kệ với Kiểm Soát Hàng Hóa, phải định nghĩa quầy kệ riêng") =====
+function requireKiemKeShelfConfigManage(req, res) {
+  if (!requireKiemKeModuleAccess(req, res)) return false;
+  if (!canManageStocktakeShelfConfig(req.freshUser)) {
+    res.status(403).json({ error: 'Bạn không có quyền Cấu Hình Quầy Kệ' });
+    return false;
+  }
+  return true;
+}
+
+router.post('/shelf-locations', async (req, res) => {
+  if (!requireKiemKeShelfConfigManage(req, res)) return;
+  try {
+    const dept = String(req.body?.dept || '').trim();
+    const code = String(req.body?.code || '').trim();
+    const name = String(req.body?.name || '').trim();
+    if (!dept) return res.status(400).json({ error: 'Vui lòng chọn siêu thị' });
+    if (!code) return res.status(400).json({ error: 'Vui lòng nhập mã quầy kệ' });
+    if (!name) return res.status(400).json({ error: 'Vui lòng nhập tên quầy kệ' });
+    if (!req.freshUser.perms?.admin && dept !== req.freshUser.dept) {
+      return res.status(403).json({ error: 'Chỉ tạo được quầy kệ cho siêu thị của bạn' });
+    }
+    let created = null;
+    await withLockedAppDataValue('kiemKeShelfLocations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      if (arr.some(l => l.dept === dept && String(l.code).toLowerCase() === code.toLowerCase())) {
+        throw new HttpError(409, `Siêu thị "${dept}" đã có quầy kệ mã "${code}"`);
+      }
+      created = { id: Date.now() + Math.floor(Math.random() * 100000), dept, code, name, active: true };
+      arr.push(created);
+      return arr;
+    });
+    res.json({ item: created });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/stocktake/shelf-locations');
+  }
+});
+
+router.patch('/shelf-locations/:id', async (req, res) => {
+  if (!requireKiemKeShelfConfigManage(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    let updated = null;
+    await withLockedAppDataValue('kiemKeShelfLocations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const loc = arr.find(l => l.id === id);
+      if (!loc) throw new HttpError(404, 'Không tìm thấy quầy kệ');
+      if (!req.freshUser.perms?.admin && loc.dept !== req.freshUser.dept) {
+        throw new HttpError(403, 'Quầy kệ không thuộc siêu thị của bạn');
+      }
+      if (req.body?.code !== undefined) {
+        const newCode = String(req.body.code).trim();
+        if (!newCode) throw new HttpError(400, 'Mã quầy kệ không được để trống');
+        if (arr.some(l => l.id !== id && l.dept === loc.dept && String(l.code).toLowerCase() === newCode.toLowerCase())) {
+          throw new HttpError(409, `Siêu thị "${loc.dept}" đã có quầy kệ mã "${newCode}"`);
+        }
+        loc.code = newCode;
+      }
+      if (req.body?.name !== undefined) {
+        const newName = String(req.body.name).trim();
+        if (!newName) throw new HttpError(400, 'Tên quầy kệ không được để trống');
+        loc.name = newName;
+      }
+      if (req.body?.active !== undefined) loc.active = !!req.body.active;
+      updated = loc;
+      return arr;
+    });
+    res.json({ item: updated });
+  } catch (err) {
+    sendCatchError(res, err, 'PATCH /api/stocktake/shelf-locations/:id');
+  }
+});
+
+router.delete('/shelf-locations/:id', async (req, res) => {
+  if (!requireKiemKeShelfConfigManage(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await withLockedAppDataValue('kiemKeShelfLocations', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const idx = arr.findIndex(l => l.id === id);
+      if (idx === -1) throw new HttpError(404, 'Không tìm thấy quầy kệ');
+      if (!req.freshUser.perms?.admin && arr[idx].dept !== req.freshUser.dept) {
+        throw new HttpError(403, 'Quầy kệ không thuộc siêu thị của bạn');
+      }
+      arr.splice(idx, 1);
+      return arr;
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/stocktake/shelf-locations/:id');
+  }
+});
+
+router.get('/shelf-locations/import-template', async (req, res) => {
+  if (!requireKiemKeShelfConfigManage(req, res)) return;
+  try {
+    const { getAppDataValueCached } = require('../lib/appData');
+    const storeNames = ((await getAppDataValueCached('stores')) || []).slice().sort((a, b) => String(a).localeCompare(b, 'vi'));
+    const wb = buildKiemKeShelfLocationTemplateWorkbook(storeNames);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Quay_Ke_Kiem_Ke.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/stocktake/shelf-locations/import-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const ALLOWED_EXT = new Set(['.xlsx', '.xls', '.csv']);
+const kkUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ALLOWED_EXT.has(ext) ? ext : '';
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
+  }
+});
+const kkUpload = multer({
+  storage: kkUploadStorage,
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+    cb(null, true);
+  }
+});
+
+// POST /shelf-locations/parse-import — CHỈ đọc + trả xem trước (KHÔNG ghi gì) — client tự lọc dòng hợp
+// lệ rồi gọi POST /shelf-locations cho TỪNG dòng (tái dùng dup-check đã có), cùng khuôn
+// routes/budgetLinesImport.js.
+router.post('/shelf-locations/parse-import', uploadRateLimiter, (req, res) => {
+  if (!requireKiemKeShelfConfigManage(req, res)) return;
+  kkUpload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/stocktake/shelf-locations/parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh sách quầy kệ cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+      const { getAppDataValueCached } = require('../lib/appData');
+      const allStores = (await getAppDataValueCached('stores')) || [];
+      const existingLocations = await getAllForCollection('kiemKeShelfLocations');
+      const items = await parseKiemKeShelfLocationsImportFile(buffer, ext, allStores, existingLocations);
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/stocktake/shelf-locations/parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
 async function findShelfLocationOrThrow(shelfLocationId) {
-  const allLocations = await getAllForCollection('shelfLocations');
+  // kiemKeShelfLocations (12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê, KHÔNG còn dùng chung
+  // `shelfLocations` của Kiểm Soát Hàng Hóa nữa (theo yêu cầu người dùng).
+  const allLocations = await getAllForCollection('kiemKeShelfLocations');
   const loc = allLocations.find(l => l.id === shelfLocationId);
   if (!loc) throw new HttpError(404, 'Không tìm thấy quầy kệ');
   return loc;
@@ -470,12 +768,8 @@ router.get('/counts', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
     await ensureStocktakeKey('stocktakeCounts');
@@ -577,12 +871,8 @@ router.get('/shelf-confirmations', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     await ensureStocktakeKey('stocktakeShelfConfirmations');
     const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
@@ -647,12 +937,8 @@ router.get('/shelf-kiem-soat-confirmations', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
     const all = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
@@ -705,8 +991,16 @@ router.delete('/shelf-kiem-soat-confirmations/:id', async (req, res) => {
 });
 
 // ===== Xác Nhận Gom Mã từng quầy kệ (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom
-// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror NGUYÊN 3 route Kiểm Soát ngay trên, chỉ khác collection
-// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê). =====
+// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror khung route Kiểm Soát ngay trên, chỉ khác collection
+// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê).
+// CỐ Ý KHÔNG nâng cấp sang canViewStocktakeSessionData() như 3 route Kiểm Đếm/Kiểm Soát ở trên (audit
+// chéo trước merge có nêu lại điểm này — đã xác nhận KHÔNG phải thiếu sót): `canViewStocktakeSessionData()`
+// mở rộng xem chéo siêu thị dựa trên quyền kiemKeConfirmDo ("Xác Nhận Toàn Bộ Đợt") — quyền này CHỈ áp
+// dụng cho Kỳ Kiểm Kê (THONG_KE), hoàn toàn ĐỘC LẬP với Gom Mã (xem "Xác Nhận Gom Mã riêng" ở
+// Huong-dan-nghiep-vu.md: Gom Mã KHÔNG tham gia điều kiện "Xác Nhận Toàn Bộ Đợt", đóng Kỳ Gom Mã thủ
+// công riêng ở Tab 1). Người CHỈ có kiemKeConfirmDo cho 1 siêu thị khác (không có kiemKeGomMaDo/allowlist
+// Gom Mã đúng siêu thị đó) ĐÚNG RA không nên xem được Gom Mã của siêu thị đó qua route này — giữ nguyên
+// nhánh cũ (admin/đúng dept/allowlist Tab 8) là ĐÚNG, không phải lỗ hổng. =====
 router.get('/shelf-gom-ma-confirmations', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {
@@ -792,8 +1086,12 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
     const sessions = (await getAppDataValue('stocktakeSessions')) || [];
     const session = sessions.find(s => s.id === id);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
+    // canConfirmStocktakeForDept (MỚI, 12/2026) — thay cho chặn cứng "chỉ đúng siêu thị của mình" trước
+    // đây: admin tự gán qua Cây Phân Quyền được phạm vi {all} hoặc {depts:[...]} để IT/QA xác nhận được
+    // ĐÚNG các siêu thị được giao, tránh nhầm siêu thị. Giữ nguyên hành vi cũ (chỉ siêu thị của mình) cho
+    // user chưa được admin cấu hình lại qua UI mới.
+    if (!canConfirmStocktakeForDept(req.freshUser, session.dept)) {
+      return res.status(403).json({ error: `Bạn không có quyền Xác Nhận Toàn Bộ Đợt cho siêu thị "${session.dept}"` });
     }
     if (session.loaiKy !== LOAI_KY.THONG_KE) {
       return res.status(400).json({ error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Kiểm Kê' });
@@ -807,7 +1105,7 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
     const unconfirmedIds = listUnconfirmedCountedShelfIds(counts, confirmations, id);
     const unconfirmedSoatIds = listUnconfirmedSoatedShelfIds(counts, soatConfirmations, id);
     if (unconfirmedIds.length || unconfirmedSoatIds.length) {
-      const allLocations = await getAllForCollection('shelfLocations');
+      const allLocations = await getAllForCollection('kiemKeShelfLocations');
       const labelOf = (sid) => { const loc = allLocations.find(l => l.id === sid); return loc ? `${loc.code} — ${loc.name}` : `#${sid}`; };
       const parts = [];
       if (unconfirmedIds.length) parts.push(`${unconfirmedIds.length} quầy kệ đã Kiểm Đếm nhưng CHƯA Xác Nhận: ${unconfirmedIds.map(labelOf).join(', ')}`);

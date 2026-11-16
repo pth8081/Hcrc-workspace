@@ -994,6 +994,14 @@ const DEFAULTS = {
   // theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — CÙNG
   // khuôn stocktakeShelfKiemSoatConfirmations, dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê).
   stocktakeShelfGomMaConfirmations: [],
+  // kiemKeShelfLocations (Tab 5 Cấu Hình Quầy Kệ, 12/2026, theo yêu cầu người dùng — "Kiểm Kê không dùng
+  // chung quầy kệ với Kiểm Soát Hàng Hóa, phải định nghĩa quầy kệ riêng"): danh mục quầy kệ ĐỘC LẬP HOÀN
+  // TOÀN của riêng Kiểm Kê (tách khỏi `shelfLocations` dùng chung với Kiểm Soát Hàng Hóa) — mỗi dòng
+  // {id, dept, code, name, active, kiemKeLocked, kiemKeLockedBy, kiemKeLockedByName, kiemKeLockedAt}.
+  // Field `kiemKeLocked`/... (Khoá/Mở Khoá Quầy Kệ) dời theo sang collection mới này luôn (trước đây nằm
+  // trên bản ghi shelfLocations dùng chung). KHÔNG migrate dữ liệu cũ (xác nhận với người dùng) — bắt đầu
+  // lại từ đầu, Kiểm Kê còn mới nên an toàn.
+  kiemKeShelfLocations: [],
   // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
   // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
   // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn

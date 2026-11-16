@@ -20,6 +20,25 @@ function canDoStocktakeKiemDem(user) { return !!(user?.perms?.admin || user?.per
 function canDoStocktakeKiemSoat(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
 function canManageStocktakeShelfConfig(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
 function canConfirmStocktake(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canConfirmStocktakeForDept (MỚI, 12/2026, theo yêu cầu người dùng: "cho phép bộ phận IT xác nhận trên
+// siêu thị nào thôi thì đỡ bị nhầm") — kiemKeConfirmDo nâng cấp từ boolean đơn giản sang {all, depts[]}
+// (CÙNG khuôn shelfReportView đã có), giữ TƯƠNG THÍCH NGƯỢC với dữ liệu cũ (`kiemKeConfirmDo: true`,
+// user CHƯA được admin re-save qua UI mới) — tất cả các trường hợp TRUE đơn giản (cũ) CHỈ xác nhận được
+// ĐÚNG siêu thị của chính mình (y hệt hành vi gốc trước đợt này: `session.dept !== req.freshUser.dept`
+// từng chặn cứng ở route confirm-all) — PHẢI qua đúng cấu hình {all:true} hoặc {depts:[...]} (admin tự
+// gán qua Cây Phân Quyền) mới xác nhận được siêu thị KHÁC siêu thị đăng ký của mình. Hàm này CHỈ quyết
+// định phạm vi SIÊU THỊ — gọi SAU KHI đã xác nhận canConfirmStocktake(user) === true (có quyền nói
+// chung), không tự thay thế cho kiểm tra đó.
+function canConfirmStocktakeForDept(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeConfirmDo;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
 function canViewStocktakeReport(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeReportView); }
 function canManageStocktakeUserAccess(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 // canManageStocktakeShelfLock (MỚI, 12/2026 — quyền thứ 9, KHÔNG gắn 1 tab mới mà sống trong Tab 5 "🗄️
@@ -30,10 +49,57 @@ function canManageStocktakeUserAccess(user) { return !!(user?.perms?.admin || us
 // CHỈ người có quyền RIÊNG này (hoặc admin) mới bấm được, chặn CẢ 3 hành động Gom Mã/Kiểm Đếm/Kiểm Soát
 // trên quầy kệ đó bất kể ai đang có allowlist gì (xem assertStocktakeScanAllowed(), routes/stocktake.js).
 function canManageStocktakeShelfLock(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
+// canManageStocktakeShelfLockForDept (MỚI, 12/2026, theo yêu cầu người dùng: "cho IT chỉ khoá mở ở một
+// siêu thị của họ thôi" — CÙNG khuôn canConfirmStocktakeForDept() ở trên) — kiemKeShelfLockManage nâng
+// cấp từ boolean đơn giản sang {all, depts[]}, giữ TƯƠNG THÍCH NGƯỢC: `kiemKeShelfLockManage: true` (cũ)
+// CHỈ khoá/mở khoá được đúng siêu thị của chính mình (y hệt hành vi gốc — check cứng
+// `loc.dept !== req.freshUser.dept` từng áp dụng ở setStocktakeShelfLocked()). Gọi SAU KHI đã xác nhận
+// canManageStocktakeShelfLock(user) === true (có quyền nói chung).
+function canManageStocktakeShelfLockForDept(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeShelfLockManage;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
 
-// Mở lại Kỳ Đã Chốt — CHỈ Admin (cố ý KHÔNG nhận kiemKePeriodManage, xem tài liệu đề xuất mục B1 "chỉ
-// Admin có nút Mở Lại Kỳ" — người quản lý kỳ thường không đủ để tự ý mở khoá dữ liệu đã chốt).
+// Mở lại Kỳ Đã Chốt — trước đây CHỈ Admin (tài liệu đề xuất mục B1 "chỉ Admin có nút Mở Lại Kỳ"). Vẫn giữ
+// NGUYÊN hàm này (dùng làm "canReopenStocktakeSession" gốc, KHÔNG xoá — tương thích các nơi gọi cũ).
 function canReopenStocktakeSession(user) { return !!user?.perms?.admin; }
+
+// canCloseStocktakePeriodForDept (12/2026, theo yêu cầu người dùng: "cho thêm mục quyền đóng mở kỳ kiểm
+// kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — quyền RIÊNG kiemKePeriodCloseManage {all, depts[]}
+// CHỈ cấp ĐÓNG KỲ (không kèm Mở Lại — xem canReopenStocktakePeriodForDept() ngay dưới, quyền HOÀN TOÀN
+// TÁCH RIÊNG theo yêu cầu người dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ
+// phải có quyền cao hơn"). Giữ NGUYÊN hành vi gốc: người có kiemKePeriodManage (Tab 1) vẫn tự Đóng Kỳ được
+// đúng siêu thị của mình, KHÔNG cần gán thêm gì — quyền mới chỉ CỘNG THÊM khả năng đóng kỳ siêu thị KHÁC.
+function canCloseStocktakePeriodForDept(user, dept) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
+  const v = user?.perms?.kiemKePeriodCloseManage;
+  if (!v || typeof v !== 'object') return false;
+  if (v.all) return true;
+  return Array.isArray(v.depts) && v.depts.includes(dept);
+}
+// canReopenStocktakePeriodForDept (12/2026) — quyền RIÊNG kiemKePeriodReopenManage, THEO YÊU CẦU NGƯỜI
+// DÙNG là quyền "cao hơn" Đóng Kỳ nên CỐ Ý là 1 cờ PHẲNG đơn giản (KHÔNG có {all,depts[]} như Đóng Kỳ —
+// không cho chọn lẻ từng siêu thị): bật là Mở Lại được Ở MỌI SIÊU THỊ, không bật thì hoàn toàn không mở
+// lại được (trừ Admin) — không có mức trung gian. `dept` nhận vào chỉ để giữ chữ ký hàm đối xứng với
+// canCloseStocktakePeriodForDept()/các hàm ForDept khác, bản thân không dùng tới (phạm vi luôn là TẤT CẢ).
+function canReopenStocktakePeriodForDept(user, _dept) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
+}
+// Gate "có quyền này ở BẤT KỲ phạm vi nào không" — dùng làm checkPerm (gọi TRƯỚC khi tìm ra item/dept cụ
+// thể) ở handleSessionTransition(), routes/stocktake.js.
+function canCloseStocktakePeriodAtAll(user) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage || (user?.perms?.kiemKePeriodCloseManage && typeof user.perms.kiemKePeriodCloseManage === 'object'));
+}
+function canReopenStocktakePeriodAtAll(user) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
+}
 
 function isValidLoaiKy(v) { return v === LOAI_KY.GOM_MA || v === LOAI_KY.THONG_KE; }
 
@@ -104,9 +170,16 @@ function buildNewSession(input, user, existingSessions) {
       throw new HttpError(409, `Siêu thị "${dept}" đã có 1 kỳ ${LOAI_KY_LABEL[loaiKy]} chưa đóng ("${openConflict.tenKy}", ${TRANG_THAI_LABEL[openConflict.trangThai]}) — phải xử lý xong (đóng kỳ) rồi mới tạo kỳ mới cho siêu thị này. Muốn làm tiếp đúng kỳ cũ thì dùng kỳ đó, không tạo kỳ mới.`);
     }
   }
+  // batchId (MỚI, 12/2026, theo yêu cầu người dùng: "tôi đã tạo kỳ kiểm kê cho tất cả siêu thị, tôi chỉ
+  // cần ấn kích hoạt là nó kích hoạt vào tất cả siêu thị luôn") — client tự sinh 1 mã dùng chung khi tạo
+  // kỳ cho NHIỀU siêu thị cùng lúc (xem submitCreateKkPeriod(), module-vanhanh.js), gắn lên MỌI bản ghi
+  // độc lập tạo ra trong cùng đợt đó để activateSessionBatch() tìm lại nhóm khi Kích Hoạt. KHÔNG bắt buộc
+  // — tạo 1 kỳ tay như cũ thì không có batchId (null), hành vi Kích Hoạt y hệt trước đây (chỉ kỳ đó).
+  const batchId = input?.batchId ? String(input.batchId).trim().slice(0, 80) : null;
   return {
     id: Date.now(),
     dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc,
+    batchId: batchId || null,
     trangThai: TRANG_THAI.NHAP,
     createdBy: user?.username || '', createdByName: user?.name || user?.username || '',
     createdAt: new Date().toISOString(),
@@ -134,6 +207,43 @@ function activateSession(sessions, id, user) {
   item.activatedByName = user?.name || user?.username || '';
   item.activatedAt = new Date().toISOString();
   return item;
+}
+
+// activateSessionBatch() (MỚI, 12/2026) — kích hoạt kỳ chính (id) rồi, NẾU có batchId (tạo cùng đợt nhiều
+// siêu thị), tự kích hoạt luôn các kỳ "anh em" cùng batchId đang ở Nháp. Mỗi kỳ anh em được thử ĐỘC LẬP
+// (lỗi của 1 kỳ — VD siêu thị đó lỡ có kỳ khác đang hoạt động — KHÔNG làm hỏng cả batch, chỉ báo vào
+// `siblings[].error` để client hiện rõ "đã kích hoạt X/Y siêu thị"). Không có batchId -> `siblings` rỗng,
+// hành vi y hệt activateSession() đơn lẻ trước đây.
+// VÁ (audit chuyên sâu trước merge — phát hiện lỗ hổng thật): route gọi hàm này chỉ kiểm tra quyền trên
+// ĐÚNG kỳ `id` được bấm (admin hoặc đúng dept của chính người bấm — xem handleSessionTransition() ở
+// routes/stocktake.js, KHÔNG truyền itemAccessCheck riêng cho route Kích Hoạt) — KHÔNG kiểm tra lại gì cho
+// từng kỳ "anh em" trước khi activateSession() thẳng. Vì batch nhiều siêu thị CHỈ tạo được bởi Admin (ô
+// chọn nhiều siêu thị lúc Tạo Kỳ Mới là tính năng riêng của Admin), 1 quản lý/IT thường (kiemKePeriodManage
+// chỉ đúng dept mình) lại có thể vô tình kích hoạt luôn các siêu thị KHÁC trong batch đó nếu tình cờ bấm
+// đúng kỳ của mình nằm trong 1 batch admin tạo — ghi `activatedBy` sai, kích hoạt hộ kỳ họ không có quyền
+// quản lý. Chặn lại: mỗi kỳ anh em PHẢI qua lại ĐÚNG check admin-hoặc-đúng-dept (y hệt mặc định
+// handleSessionTransition() khi không truyền itemAccessCheck riêng) trước khi activateSession() — không
+// đủ quyền thì bỏ qua NGAY (không throw làm hỏng kỳ chính đã kích hoạt), báo rõ trong `siblings[].error`.
+function activateSessionBatch(sessions, id, user) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const item = activateSession(arr, id, user);
+  const siblings = [];
+  if (item.batchId) {
+    const toActivate = arr.filter(s => s.batchId === item.batchId && s.id !== item.id && s.trangThai === TRANG_THAI.NHAP);
+    for (const sib of toActivate) {
+      if (!(user?.perms?.admin || sib.dept === user?.dept)) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền kích hoạt kỳ của siêu thị này' });
+        continue;
+      }
+      try {
+        activateSession(arr, sib.id, user);
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: true });
+      } catch (err) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+      }
+    }
+  }
+  return { item, siblings };
 }
 
 function closeSession(sessions, id, user) {
@@ -167,6 +277,43 @@ function reopenSession(sessions, id, user) {
   item.reopenedAt = new Date().toISOString();
   item.reopenCount = (item.reopenCount || 0) + 1;
   return item;
+}
+
+// editSessionMeta() (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — CHỈ đổi
+// metadata thuần (Tên Kỳ/Thời Gian), KHÔNG đổi dept/loaiKy/trangThai (đổi siêu thị/loại kỳ sau khi tạo dễ
+// gây lẫn dữ liệu đã gắn vào kỳ — muốn đổi thì tạo kỳ mới) — cho sửa ở MỌI trạng thái (Nháp/Đang hoạt
+// động/Đã chốt) vì chỉ là sửa tên/thời gian hiển thị, không ảnh hưởng dữ liệu đã quét.
+function editSessionMeta(sessions, id, patch) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const item = arr.find(s => s.id === id);
+  if (!item) throw new HttpError(404, 'Không tìm thấy kỳ kiểm kê');
+  const tenKy = String(patch?.tenKy || '').trim();
+  if (!tenKy) throw new HttpError(400, 'Vui lòng nhập tên kỳ');
+  const thoiGianBatDau = patch?.thoiGianBatDau ? String(patch.thoiGianBatDau).trim() : '';
+  const thoiGianKetThuc = patch?.thoiGianKetThuc ? String(patch.thoiGianKetThuc).trim() : '';
+  if (thoiGianBatDau && thoiGianKetThuc && thoiGianKetThuc < thoiGianBatDau) {
+    throw new HttpError(400, 'Thời gian kết thúc không được trước thời gian bắt đầu');
+  }
+  item.tenKy = tenKy;
+  item.thoiGianBatDau = thoiGianBatDau;
+  item.thoiGianKetThuc = thoiGianKetThuc;
+  return item;
+}
+
+// deleteDraftSession() (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê") — CHỈ xoá
+// được kỳ còn Nháp (chưa kích hoạt — chắc chắn chưa có Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận nào gắn vào, vì
+// mọi thao tác quét đều đòi findActiveSession() === DANG_HOAT_DONG). Kỳ đã kích hoạt/đã chốt KHÔNG xoá
+// được qua đây dù đã Đóng xong — muốn "dọn" kỳ cũ thì để nguyên trong lịch sử, xem Báo Cáo.
+function deleteDraftSession(sessions, id) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const idx = arr.findIndex(s => s.id === id);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy kỳ kiểm kê');
+  const item = arr[idx];
+  if (item.trangThai !== TRANG_THAI.NHAP) {
+    throw new HttpError(409, `Chỉ xoá được kỳ ở trạng thái Nháp (hiện tại: ${TRANG_THAI_LABEL[item.trangThai] || item.trangThai}) — kỳ đã kích hoạt có thể đã gắn dữ liệu thật, không xoá được nữa.`);
+  }
+  arr.splice(idx, 1);
+  return { id };
 }
 
 // ===================== Tab 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
@@ -491,11 +638,12 @@ function computeValueBreakdown(rows, priceMap) {
 module.exports = {
   LOAI_KY, TRANG_THAI, LOAI_KY_LABEL, TRANG_THAI_LABEL,
   canManageStocktakePeriod, canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat,
-  canManageStocktakeShelfConfig, canConfirmStocktake, canViewStocktakeReport, canManageStocktakeUserAccess,
-  canManageStocktakeShelfLock,
+  canManageStocktakeShelfConfig, canConfirmStocktake, canConfirmStocktakeForDept, canViewStocktakeReport, canManageStocktakeUserAccess,
+  canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept,
   canReopenStocktakeSession,
+  canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
-  activateSession, closeSession, reopenSession,
+  activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,

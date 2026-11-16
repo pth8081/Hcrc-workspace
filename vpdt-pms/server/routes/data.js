@@ -31,6 +31,7 @@ const {
   filterStocktakeSessionsForUser, filterStocktakeCountsForUser, filterStocktakeUserAccessForUser,
   filterStocktakeShelfConfirmationsForUser,
   filterStocktakeShelfKiemSoatConfirmationsForUser, filterStocktakeShelfGomMaConfirmationsForUser,
+  filterKiemKeShelfLocationsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
@@ -80,7 +81,10 @@ const SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE = new Set([
   'shelfReconExtraRecipients',
   'shelfLocations', 'shelfRecords', 'shelfStockThresholds',
   'stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess',
-  'stocktakeShelfConfirmations', 'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations'
+  'stocktakeShelfConfirmations', 'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations',
+  // kiemKeShelfLocations (Tab 5, 12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê, thêm SAU đợt vá lỗ hổng
+  // ngay trên — chặn NGAY từ đầu (bài học rút ra từ chính các key phía trên), không để dành "làm sau".
+  'kiemKeShelfLocations'
 ]);
 
 // Các collection chỉ Quản Trị Viên mới được GHI — đều là màn hình "Quản trị" trong admin panel
@@ -1899,6 +1903,10 @@ router.get('/', async (req, res) => {
     // qua GET /api/data chung cho mọi tài khoản đã đăng nhập.
     if (data.stocktakeShelfKiemSoatConfirmations) data.stocktakeShelfKiemSoatConfirmations = filterStocktakeShelfKiemSoatConfirmationsForUser(data.stocktakeShelfKiemSoatConfirmations, req.freshUser);
     if (data.stocktakeShelfGomMaConfirmations) data.stocktakeShelfGomMaConfirmations = filterStocktakeShelfGomMaConfirmationsForUser(data.stocktakeShelfGomMaConfirmations, req.freshUser);
+    // kiemKeShelfLocations (Tab 5, 12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê (tách khỏi shelfLocations
+    // dùng chung với Kiểm Soát Hàng Hóa) — cùng lý do lọc chéo siêu thị như các collection Kiểm Kê khác ở
+    // trên, truyền thêm `data` để filter đọc được data.stocktakeUserAccess (allowlist đa siêu thị).
+    if (data.kiemKeShelfLocations) data.kiemKeShelfLocations = filterKiemKeShelfLocationsForUser(data.kiemKeShelfLocations, req.freshUser, data);
     // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
     // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
     // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/

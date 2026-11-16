@@ -429,12 +429,26 @@ const PERM_KEY_VN_LABELS = {
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",
   "checklistAtvstpReportView": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Báo Cáo ATVSTP (Dashboard VSATTP, mọi siêu thị)",
   "kiemKePeriodManage": "Kiểm Kê — 📅 Tab 1: Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã & Thống Kê)",
+  // kiemKePeriodCloseManage.all + kiemKePeriodReopenManage (MỚI, 12/2026, TÁCH RIÊNG theo yêu cầu người
+  // dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ phải có quyền cao hơn") — Đóng
+  // Kỳ CỘNG THÊM theo phạm vi siêu thị (chỉ tồn tại dạng object {all,depts[]}, không có dạng boolean cũ);
+  // Mở Lại là cờ PHẲNG riêng, luôn là MỌI siêu thị khi bật.
+  "kiemKePeriodCloseManage.all": "Kiểm Kê — 🔒 Tab 1: Đóng Kỳ Theo Siêu Thị (Tất Cả Siêu Thị)",
+  "kiemKePeriodReopenManage": "Kiểm Kê — 🔓 Tab 1: Mở Lại Kỳ Đã Chốt (Tất Cả Siêu Thị, quyền cao hơn Đóng Kỳ)",
   "kiemKeGomMaDo": "Kiểm Kê — 📷 Tab 2: Gom Mã",
   "kiemKeKiemDemDo": "Kiểm Kê — 🔢 Tab 3: Kiểm Đếm",
   "kiemKeKiemSoatDo": "Kiểm Kê — 🛡️ Tab 4: Kiểm Soát",
   "kiemKeShelfConfigManage": "Kiểm Kê — 🗄️ Tab 5: Cấu Hình Quầy Kệ",
   "kiemKeShelfLockManage": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ (IT)",
+  // kiemKeShelfLockManage.all (12/2026, nâng cấp từ boolean đơn giản sang {all,depts[]}) — nhãn RIÊNG cho
+  // dạng object mới; nhãn "kiemKeShelfLockManage" ngay trên vẫn giữ nguyên cho user CHƯA được admin
+  // re-save qua UI mới (dữ liệu cũ dạng boolean đơn giản).
+  "kiemKeShelfLockManage.all": "Kiểm Kê — 🔒 Tab 5: Khoá/Mở Khoá Quầy Kệ — Tất Cả Siêu Thị (IT)",
   "kiemKeConfirmDo": "Kiểm Kê — ✅ Tab 6: Xác Nhận",
+  // kiemKeConfirmDo.all (12/2026, nâng cấp từ boolean đơn giản sang {all,depts[]}) — nhãn RIÊNG cho
+  // dạng object mới (xem flattenPermsForMatrixInto()); nhãn "kiemKeConfirmDo" ngay trên vẫn giữ nguyên
+  // cho user CHƯA được admin re-save qua UI mới (dữ liệu cũ dạng boolean đơn giản).
+  "kiemKeConfirmDo.all": "Kiểm Kê — ✅ Tab 6: Xác Nhận Toàn Bộ Đợt (Tất Cả Siêu Thị)",
   "kiemKeReportView": "Kiểm Kê — 📊 Tab 7: Báo Cáo",
   "kiemKeUserAccessManage": "Kiểm Kê — 🔑 Tab 8: Cấu Hình Người Dùng",
   "contractAllowSelfApprove": "Hợp Đồng & Giấy Phép — ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Hợp Đồng (kể cả Tài Liệu Ký) Do Chính Mình Tạo/Trình",

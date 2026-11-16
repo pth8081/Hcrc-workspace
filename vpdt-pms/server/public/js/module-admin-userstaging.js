@@ -257,7 +257,7 @@ function editPendingNewUser(idx) {
   document.getElementById('uMaxConcurrentSessions').value = u.maxConcurrentSessions || '';
   document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
-  populatePermsForm(u.perms);
+  populatePermsForm(u.perms, u.dept);
   document.getElementById('uPin').value = u.pin || '';
   // Hàng chờ (chưa lưu lên server) chưa có tài khoản thật nào để tra thiết bị vân tay — ẩn khối này
   // (khớp resetUserForm(), đối lập editUser() vốn hiện lại khi sửa user ĐÃ có tài khoản thật).
@@ -415,7 +415,7 @@ function editUser(id) {
   // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
   // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
   // này thực tế chỉ là lớp phòng vệ bổ sung.
-  populatePermsForm(user.perms);
+  populatePermsForm(user.perms, user.dept);
   updatePermGroupNote(userGroupIds.length > 0);
   setAdminAccountPermsLocked(user.username === 'admin');
 

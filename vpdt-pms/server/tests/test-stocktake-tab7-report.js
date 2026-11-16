@@ -18,7 +18,7 @@ const DEPT1 = 'Siêu thị Quận 1';
 const DEPT2 = 'Siêu thị Quận 2';
 
 let appDataStore = {
-  shelfLocations: [],
+  kiemKeShelfLocations: [],
   stocktakeSessions: [],
   stocktakeUserAccess: [],
   stocktakeCounts: [],
@@ -149,7 +149,7 @@ function request(port, method, urlPath, username, body) {
     appDataStore.stocktakeUserAccess.push(
       { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 20, canGomMa: true, canKiemDem: true, canKiemSoat: true }
     );
-    appDataStore.shelfLocations.push({ id: 20, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true });
+    appDataStore.kiemKeShelfLocations.push({ id: 20, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true });
 
     // Chuẩn bị dữ liệu: Gom Mã Q1 quét SP001=46 (tham khảo), SP002=118 (lệch cao hơn Kiểm Đếm).
     await request(port, 'POST', '/api/stocktake/counts/scan', 'nv1', { sessionId: GOMMA_SESSION_ID, shelfLocationId: 20, maHang: 'SP001', mode: 'GOM_MA', qty: 46 });

@@ -1069,6 +1069,29 @@ function filterStocktakeShelfKiemSoatConfirmationsForUser(items, user) {
 function filterStocktakeShelfGomMaConfirmationsForUser(items, user) {
   return (items || []).filter(o => canViewStocktakeShelfConfirmation(user, o));
 }
+// kiemKeShelfLocations (Tab 5, 12/2026) — danh mục quầy kệ RIÊNG của Kiểm Kê (tách khỏi shelfLocations
+// dùng chung với Kiểm Soát Hàng Hóa). Hiện cho: admin; người có kiemKeUserAccessManage (Tab 8 cần thấy
+// MỌI siêu thị để gán quyền chéo — VD Giám Sát Vùng); đúng dept hồ sơ của user; HOẶC user có allowlist
+// Kiểm Kê (stocktakeUserAccess) bất kỳ tại dept đó (đã có thao tác thật ở siêu thị khác dept hồ sơ).
+// 12/2026, MỞ RỘNG thêm 2 nhánh (theo yêu cầu người dùng: "gán quyền Khoá/Mở Khoá hoặc Xác Nhận siêu thị
+// nào thì tự động xem được luôn, không cần gán thêm allowlist Tab 8 riêng"): người có phạm vi
+// kiemKeShelfLockManage (Khoá/Mở Khoá Quầy Kệ, Tab 5 riêng) HOẶC kiemKeConfirmDo (Xác Nhận Toàn Bộ Đợt,
+// Tab 6) đúng dept đó — cả 2 quyền này giờ VÔ NGHĨA trên giao diện nếu không kèm xem được quầy kệ của
+// đúng siêu thị được gán. require() lib/stocktakeEngine.js tại chỗ (không require ở đầu file) để tránh
+// phụ thuộc vòng nếu sau này stocktakeEngine.js cần dùng ngược lại module này.
+function canViewKiemKeShelfLocation(user, item, data) {
+  if (!user || !item) return false;
+  if (user.perms?.admin || user.perms?.kiemKeUserAccessManage) return true;
+  if (item.dept === user.dept) return true;
+  const { canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept, canConfirmStocktake, canConfirmStocktakeForDept } = require('./stocktakeEngine');
+  if (canManageStocktakeShelfLock(user) && canManageStocktakeShelfLockForDept(user, item.dept)) return true;
+  if (canConfirmStocktake(user) && canConfirmStocktakeForDept(user, item.dept)) return true;
+  const access = Array.isArray(data?.stocktakeUserAccess) ? data.stocktakeUserAccess : [];
+  return access.some(a => a.username === user.username && a.dept === item.dept && (a.canGomMa === true || a.canKiemDem === true || a.canKiemSoat === true));
+}
+function filterKiemKeShelfLocationsForUser(items, user, data) {
+  return (items || []).filter(o => canViewKiemKeShelfLocation(user, o, data));
+}
 // stocktakeUserAccess (Tab 8 Cấu Hình Người Dùng, 12/2026) — đây là DỮ LIỆU CẤU HÌNH QUYỀN (ai được quét
 // quầy kệ nào), không phải hồ sơ nghiệp vụ theo dept — lộ ra cho nhân viên quét hàng thường sẽ cho họ
 // biết đồng nghiệp khác được cấp quyền gì (không nguy hiểm bằng dữ liệu cá nhân nhưng vẫn không nên lộ
@@ -1798,7 +1821,7 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // (không gộp vào 'vanHanh' ở trên) vì đây là BUSINESS_MODULES key riêng, phân quyền module tách biệt
   // hoàn toàn khỏi Vận Hành (xem core.js).
   kiemKe: ['stocktakeSessions', 'stocktakeCounts', 'stocktakeUserAccess', 'stocktakeShelfConfirmations',
-    'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations'],
+    'stocktakeShelfKiemSoatConfirmations', 'stocktakeShelfGomMaConfirmations', 'kiemKeShelfLocations'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -2044,6 +2067,7 @@ module.exports = {
   canViewStocktakeCount, filterStocktakeCountsForUser,
   canViewStocktakeShelfConfirmation, filterStocktakeShelfConfirmationsForUser,
   filterStocktakeShelfKiemSoatConfirmationsForUser, filterStocktakeShelfGomMaConfirmationsForUser,
+  filterKiemKeShelfLocationsForUser,
   canViewStocktakeUserAccess, filterStocktakeUserAccessForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,

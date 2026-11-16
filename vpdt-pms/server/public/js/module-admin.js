@@ -1877,6 +1877,13 @@ function renderDeptCheckboxes() {
   // shelfReportView (Kiểm Soát Hàng Hóa > Xem Báo Cáo, 12/2026) — cùng lý do gọi kèm tại đây, nguồn là
   // DB.stores (siêu thị).
   renderShelfReportViewScopeCheckboxes();
+  // kiemKeConfirmDo (📋 Kiểm Kê > Tab 6 Xác Nhận Toàn Bộ Đợt, 12/2026) — cùng lý do gọi kèm tại đây.
+  renderKiemKeConfirmDoScopeCheckboxes();
+  // kiemKeShelfLockManage (📋 Kiểm Kê > Tab 5 riêng Khoá/Mở Khoá Quầy Kệ, 12/2026) + kiemKePeriodCloseManage
+  // (📋 Kiểm Kê > Tab 1 Đóng Kỳ, MỚI 12/2026, TÁCH RIÊNG khỏi Mở Lại — quyền đó là checkbox phẳng ở
+  // systemSection.html, không cần hàm render multi-select riêng) — cùng lý do gọi kèm tại đây.
+  renderKiemKeShelfLockScopeCheckboxes();
+  renderKiemKePeriodCloseScopeCheckboxes();
   // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
@@ -2032,6 +2039,74 @@ function setShelfReportViewScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pShelfReportViewDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi xem báo cáo...',
     emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xem được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKeConfirmDo {all, depts[]} (📋 Kiểm Kê > Tab 6 — Xác Nhận Toàn Bộ Đợt, 12/2026, theo yêu cầu người
+// dùng "cho phép bộ phận IT xác nhận trên siêu thị nào thôi thì đỡ bị nhầm") — CÙNG khuôn
+// renderShelfReportViewScopeCheckboxes()/toggleShelfReportViewScopeGroup()/setShelfReportViewScopeCheckboxes()
+// ngay trên, nguồn DB.stores.
+function renderKiemKeConfirmDoScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKeConfirmDoDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Xác Nhận Toàn Bộ Đợt...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xác nhận được mọi siêu thị).'
+  });
+}
+function toggleKiemKeConfirmDoScopeGroup() {
+  const isAll = document.getElementById('pKiemKeConfirmDoAll')?.checked;
+  document.getElementById('pKiemKeConfirmDoDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKeConfirmDoDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKeConfirmDoScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKeConfirmDoDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Xác Nhận Toàn Bộ Đợt...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xác nhận được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKeShelfLockManage {all, depts[]} (📋 Kiểm Kê > Tab 5 riêng — Khoá/Mở Khoá Quầy Kệ, 12/2026, theo
+// yêu cầu người dùng "cho IT chỉ khóa mở ở một siêu thị của họ thôi") — CÙNG khuôn kiemKeConfirmDo ở trên.
+function renderKiemKeShelfLockScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKeShelfLockManageDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Khoá/Mở Khoá Quầy Kệ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu khoá/mở khoá được mọi siêu thị).'
+  });
+}
+function toggleKiemKeShelfLockScopeGroup() {
+  const isAll = document.getElementById('pKiemKeShelfLockManageAll')?.checked;
+  document.getElementById('pKiemKeShelfLockManageDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKeShelfLockManageDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKeShelfLockScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKeShelfLockManageDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Khoá/Mở Khoá Quầy Kệ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu khoá/mở khoá được mọi siêu thị).',
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// kiemKePeriodCloseManage {all, depts[]} (📋 Kiểm Kê > Tab 1 — Đóng Kỳ theo siêu thị, MỚI 12/2026, theo
+// yêu cầu người dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi" — TÁCH RIÊNG khỏi Mở Lại, xem
+// chú thích đầy đủ ở systemSection.html) — CÙNG khuôn kiemKeConfirmDo ở trên. Quyền HOÀN TOÀN MỚI (không
+// có dữ liệu cũ cần tương thích ngược). Mở Lại Kỳ (kiemKePeriodReopenManage) là checkbox PHẲNG đơn giản ở
+// systemSection.html, không cần hàm render/toggle/set riêng (không có ô chọn siêu thị).
+function renderKiemKePeriodCloseScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKePeriodCloseDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng kỳ được mọi siêu thị).'
+  });
+}
+function toggleKiemKePeriodCloseScopeGroup() {
+  const isAll = document.getElementById('pKiemKePeriodCloseAll')?.checked;
+  document.getElementById('pKiemKePeriodCloseDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKePeriodCloseDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setKiemKePeriodCloseScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKePeriodCloseDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng kỳ được mọi siêu thị).',
     resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }
