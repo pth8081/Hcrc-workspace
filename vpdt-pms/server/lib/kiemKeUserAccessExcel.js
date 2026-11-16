@@ -25,7 +25,12 @@ function buildKiemKeUserAccessTemplateWorkbook(storeNames) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Gán Quyền');
   sheet.columns = [
-    { header: 'Mã Nhân Viên', key: 'username', width: 16 },
+    // LỖI ĐÃ VÁ (12/2026, theo yêu cầu người dùng — đổi nhãn cho rõ): cột này nhận TÀI KHOẢN ĐĂNG NHẬP
+    // (username), KHÔNG PHẢI Mã Nhân Viên bên Hồ Sơ Nhân Sự (BL####, 2 khái niệm khác hẳn nhau trong hệ
+    // thống) — nhãn cũ "Mã Nhân Viên" dễ gây nhầm với file mẫu "Nhập Excel Gán Chức Vụ" (Hồ Sơ Nhân Sự),
+    // nơi "Mã Nhân Viên" lại đúng nghĩa là mã BL####. Đổi nhãn cho khác hẳn, tránh nhầm lẫn giữa 2 tính
+    // năng. `key`/field nội bộ vẫn giữ nguyên 'username' (không đổi hành vi/API).
+    { header: 'Tài Khoản Đăng Nhập', key: 'username', width: 18 },
     { header: 'Siêu Thị', key: 'dept', width: 28 },
     { header: 'Mã Quầy Kệ', key: 'shelfCode', width: 14 },
     { header: 'Gom Mã (x)', key: 'gomMa', width: 12 },
@@ -40,7 +45,7 @@ function buildKiemKeUserAccessTemplateWorkbook(storeNames) {
 
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 110;
-  noteSheet.addRow(['"Mã Nhân Viên": gõ đúng Mã Nhân Viên (username đăng nhập) đã có trong hệ thống.']);
+  noteSheet.addRow(['"Tài Khoản Đăng Nhập": gõ đúng Tên Đăng Nhập (username) đã có trong hệ thống — KHÔNG phải Mã Nhân Viên bên Hồ Sơ Nhân Sự (BL####).']);
   noteSheet.addRow(['"Siêu Thị": gõ đúng tên 1 siêu thị đã có trong Danh Mục Siêu Thị.']);
   noteSheet.addRow(['"Mã Quầy Kệ": gõ đúng mã quầy kệ ĐÃ khai báo cho ĐÚNG siêu thị ở cột "Siêu Thị" (xem Tab 5 "Cấu Hình Quầy Kệ") — khai báo quầy kệ trước khi nhập file này.']);
   noteSheet.addRow(['3 cột "Gom Mã"/"Kiểm Đếm"/"Kiểm Soát": đánh dấu "x" (hoặc "y"/"1") ở hành động nào muốn gán quyền — để trống = không gán hành động đó. Mỗi dòng phải đánh dấu ÍT NHẤT 1 cột.']);
@@ -57,7 +62,9 @@ function normalizeHeader(s) {
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 const HEADER_HINTS = {
-  username: ['ma nhan vien'],
+  // 'ma nhan vien' (nhãn cũ) giữ lại để KHÔNG phá các file mẫu/CSV đã tải xuống/lưu lại TRƯỚC khi đổi
+  // nhãn cột ở trên — chỉ nới lỏng thêm nhận diện, không bớt.
+  username: ['tai khoan dang nhap', 'ma nhan vien'],
   dept: ['sieu thi'],
   shelfCode: ['ma quay ke'],
   gomMa: ['gom ma (x)', 'gom ma'],
@@ -77,7 +84,7 @@ function detectColumns(headerCells) {
 }
 function assertColumnsFound(cols) {
   if (cols.username === undefined || cols.dept === undefined || cols.shelfCode === undefined) {
-    throw new HttpError(400, 'Không tìm thấy đủ cột "Mã Nhân Viên"/"Siêu Thị"/"Mã Quầy Kệ" trong file — vui lòng dùng đúng mẫu tải xuống');
+    throw new HttpError(400, 'Không tìm thấy đủ cột "Tài Khoản Đăng Nhập"/"Siêu Thị"/"Mã Quầy Kệ" trong file — vui lòng dùng đúng mẫu tải xuống');
   }
 }
 function isYes(raw) { return YES_VALUES.has(String(raw || '').trim().toLowerCase()); }
@@ -92,8 +99,8 @@ function rowToItem(cells, cols, ctx) {
   const canKiemSoat = cols.kiemSoat !== undefined && isYes(cells[cols.kiemSoat]);
 
   const errors = [];
-  if (!username) errors.push('thiếu Mã Nhân Viên');
-  else if (!ctx.validUsernames.has(username)) errors.push(`Mã Nhân Viên "${username}" không có trong hệ thống`);
+  if (!username) errors.push('thiếu Tài Khoản Đăng Nhập');
+  else if (!ctx.validUsernames.has(username)) errors.push(`Tài Khoản Đăng Nhập "${username}" không có trong hệ thống`);
   if (!dept) errors.push('thiếu Siêu Thị');
   else if (!ctx.allStores.includes(dept)) errors.push(`Siêu Thị "${dept}" không có trong Danh Mục Siêu Thị`);
   let shelfLocationId = null;
