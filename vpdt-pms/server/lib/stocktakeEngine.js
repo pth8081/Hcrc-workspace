@@ -304,13 +304,31 @@ function editSessionMeta(sessions, id, patch) {
 // được kỳ còn Nháp (chưa kích hoạt — chắc chắn chưa có Gom Mã/Kiểm Đếm/Kiểm Soát/Xác Nhận nào gắn vào, vì
 // mọi thao tác quét đều đòi findActiveSession() === DANG_HOAT_DONG). Kỳ đã kích hoạt/đã chốt KHÔNG xoá
 // được qua đây dù đã Đóng xong — muốn "dọn" kỳ cũ thì để nguyên trong lịch sử, xem Báo Cáo.
-function deleteDraftSession(sessions, id) {
+// deleteDraftSession() — SỬA (theo phản hồi người dùng thật, 12/2026: "sao tôi không xoá được kỳ này,
+// kỳ Gom Mã này CHƯA THỰC HIỆN đâu, chưa có dữ liệu gì phải xoá nữa chứ"): ban đầu CHỈ cho xoá kỳ ở trạng
+// thái Nháp (lý do ghi trong thông báo lỗi cũ: "kỳ đã kích hoạt CÓ THỂ đã gắn dữ liệu thật") — đây là giả
+// định AN TOÀN tự đặt ra lúc code, KHÔNG phải yêu cầu gốc của người dùng ("cho tôi nút xoá kỳ kiểm kê").
+// Người dùng xác nhận ý muốn thật: 1 kỳ dù đã Kích Hoạt (Đang hoạt động) nhưng CHƯA có bất kỳ lượt quét
+// Gom Mã/Kiểm Đếm/Kiểm Soát nào (chưa đụng tới `stocktakeCounts`) thì vẫn nên xoá được — không có dữ liệu
+// thật nào để mất. Mở rộng: cho xoá khi (a) Nháp (như cũ, luôn xoá được), HOẶC (b) Đang hoạt động NHƯNG
+// hoàn toàn chưa có dòng `stocktakeCounts` nào gắn đúng sessionId này (counts tham số MỚI, optional —
+// không truyền vào thì giữ NGUYÊN hành vi cũ "chỉ xoá được Nháp", tránh phá vỡ caller/test cũ chưa cập
+// nhật). Kỳ Đã chốt (DA_CHOT) KHÔNG BAO GIỜ xoá được, bất kể có dữ liệu hay không — đã là hồ sơ lịch sử
+// chính thức, muốn làm lại thì Mở Lại rồi Đóng Kỳ lại, không xoá thẳng.
+function deleteDraftSession(sessions, id, counts) {
   const arr = Array.isArray(sessions) ? sessions : [];
   const idx = arr.findIndex(s => s.id === id);
   if (idx === -1) throw new HttpError(404, 'Không tìm thấy kỳ kiểm kê');
   const item = arr[idx];
-  if (item.trangThai !== TRANG_THAI.NHAP) {
-    throw new HttpError(409, `Chỉ xoá được kỳ ở trạng thái Nháp (hiện tại: ${TRANG_THAI_LABEL[item.trangThai] || item.trangThai}) — kỳ đã kích hoạt có thể đã gắn dữ liệu thật, không xoá được nữa.`);
+  const hasData = Array.isArray(counts) && counts.some(c => c.sessionId === id);
+  const allowed = item.trangThai === TRANG_THAI.NHAP
+    || (item.trangThai === TRANG_THAI.DANG_HOAT_DONG && Array.isArray(counts) && !hasData);
+  if (!allowed) {
+    let reason;
+    if (item.trangThai === TRANG_THAI.DA_CHOT) reason = 'kỳ đã chốt là hồ sơ lịch sử, không xoá được nữa — muốn sửa lại thì Mở Lại rồi Đóng Kỳ lại';
+    else if (hasData) reason = 'kỳ đã có dữ liệu Gom Mã/Kiểm Đếm/Kiểm Soát thật, không xoá được nữa — dùng "🔒 Đóng Kỳ" thay vì Xoá';
+    else reason = `trạng thái hiện tại: ${TRANG_THAI_LABEL[item.trangThai] || item.trangThai}`;
+    throw new HttpError(409, `Không xoá được kỳ này — ${reason}.`);
   }
   arr.splice(idx, 1);
   return { id };

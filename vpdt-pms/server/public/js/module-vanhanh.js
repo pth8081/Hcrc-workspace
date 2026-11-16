@@ -2753,11 +2753,14 @@ function renderKkPeriodList() {
     if (canReopenKiemKePeriodForDeptClient(currentUser, s.dept) && s.trangThai === 'DA_CHOT') {
       actions.push(`<button type="button" data-op="reopenKkPeriod" data-arg0="${s.id}" class="px-2 py-1 rounded border border-cyan-400 text-cyan-700 text-xs font-bold">↩️ Mở Lại</button>`);
     }
-    // Sửa (MỌI trạng thái) / Xoá (CHỈ Nháp) — MỚI 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa,
-    // có nút xóa kỳ kiểm kê".
+    // Sửa (MỌI trạng thái) / Xoá (Nháp, HOẶC Đang hoạt động nhưng CHƯA có dữ liệu quét nào — MỞ RỘNG
+    // theo phản hồi người dùng thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải xoá nữa chứ",
+    // xem deleteDraftSession() ở lib/stocktakeEngine.js) — MỚI 12/2026, theo yêu cầu người dùng "cho tôi
+    // có nút sửa, có nút xóa kỳ kiểm kê". `s.hasData` do server tính sẵn (GET /sessions), CHỈ có mặt trên
+    // session Đang hoạt động — session Nháp/Đã chốt không có field này (`undefined`, coi như falsy).
     if (canManage) {
       actions.push(`<button type="button" data-op="editKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-gray-300 text-gray-700 text-xs font-bold">✏️ Sửa</button>`);
-      if (s.trangThai === 'NHAP') {
+      if (s.trangThai === 'NHAP' || (s.trangThai === 'DANG_HOAT_DONG' && !s.hasData)) {
         actions.push(`<button type="button" data-op="deleteKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-red-300 text-red-600 text-xs font-bold">🗑️ Xoá</button>`);
       }
     }
@@ -2842,7 +2845,7 @@ async function deleteKkPeriodClick(idStr) {
   const id = Number(idStr);
   const item = kkPeriodSessionsCache.find(s => s.id === id);
   if (!item) return;
-  if (!confirm(`Xoá hẳn kỳ "${item.tenKy}"? Chỉ xoá được kỳ còn Nháp (chưa kích hoạt) — không thể hoàn tác.`)) return;
+  if (!confirm(`Xoá hẳn kỳ "${item.tenKy}"? Không thể hoàn tác.`)) return;
   try {
     const res = await fetch(`/api/stocktake/sessions/${id}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();

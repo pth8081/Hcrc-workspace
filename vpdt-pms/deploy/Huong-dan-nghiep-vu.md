@@ -3685,10 +3685,14 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
 - **Vòng đời Kỳ**: Nháp (tạo xong, chưa có hiệu lực) → Đang hoạt động (bấm
   "Kích Hoạt" — hệ thống CHẶN nếu siêu thị đó đã có 1 kỳ KHÁC CÙNG LOẠI đang
   hoạt động) → Đã chốt (bấm "Đóng Kỳ") → Mở Lại (quay về Đang hoạt động).
-  **Sửa (✏️)/Xoá (🗑️) kỳ (MỚI)**: chỉ áp dụng cho kỳ còn ở trạng thái Nháp
-  (chưa Kích Hoạt) — Sửa đổi Tên Kỳ/khoảng thời gian dự kiến, Xoá bỏ hẳn nếu
-  tạo nhầm; kỳ đã Kích Hoạt/Đã chốt không Sửa/Xoá được nữa (chỉ đi theo đúng
-  vòng đời Đóng Kỳ/Mở Lại ở trên).
+  **Sửa (✏️)**: áp dụng cho kỳ ở MỌI trạng thái (chỉ đổi Tên Kỳ/khoảng thời
+  gian dự kiến, không đổi siêu thị/loại kỳ/trạng thái). **Xoá (🗑️)**: áp dụng
+  cho kỳ còn Nháp, HOẶC kỳ Đang hoạt động nhưng CHƯA có bất kỳ dữ liệu Gom Mã/
+  Kiểm Đếm/Kiểm Soát nào (theo phản hồi người dùng thật: "kỳ chưa thực hiện,
+  chưa có dữ liệu gì phải xoá nữa chứ") — Kích Hoạt nhầm nhưng chưa ai quét gì
+  vẫn Xoá được bình thường, không cần Đóng Kỳ rồi bỏ không. Kỳ ĐÃ có dữ liệu
+  (dù đang hoạt động) hoặc Đã chốt thì KHÔNG Xoá được nữa — dùng "🔒 Đóng Kỳ"
+  để kết thúc thay vì Xoá.
 - **Ô "📍 Siêu thị:" ở Tab 1 CHỈ để LỌC XEM, không phải để "chọn siêu thị sẽ
   Kích Hoạt" (làm rõ theo phản hồi người dùng)**: đổi ô này chỉ đổi danh
   sách kỳ đang xem, KHÔNG ảnh hưởng gì tới việc bấm "▶ Kích Hoạt" — nút Kích

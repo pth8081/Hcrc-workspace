@@ -5,10 +5,13 @@
 //
 // GHI CHÚ QUAN TRỌNG rút ra từ chính code thật (đọc lib/stocktakeEngine.js TRƯỚC khi viết test, không
 // đoán): "✏️ Sửa" CHỦ ĐÍCH cho sửa ở MỌI trạng thái (Nháp/Đang hoạt động/Đã chốt — chỉ đổi Tên Kỳ/Thời
-// Gian, KHÔNG đổi dept/loaiKy/trangThai, xem chú thích editSessionMeta()), còn "🗑️ Xoá" CHỦ ĐÍCH CHỈ cho
-// kỳ còn Nháp (deleteDraftSession() tự chặn 409 cho trạng thái khác). Test này xác nhận ĐÚNG 2 hành vi
-// THIẾT KẾ đó bằng chứng thật (UI + gọi thẳng route, không chỉ ẩn nút) — KHÔNG giả định "Sửa phải bị chặn
-// ở kỳ đã kích hoạt" (giả định đó SAI với chủ đích thiết kế thật đã ghi rõ trong code).
+// Gian, KHÔNG đổi dept/loaiKy/trangThai, xem chú thích editSessionMeta()), còn "🗑️ Xoá" CHO Nháp HOẶC
+// Đang hoạt động NHƯNG CHƯA có dữ liệu quét nào (deleteDraftSession() tự chặn 409 cho Đã chốt, hoặc Đang
+// hoạt động mà ĐÃ có dữ liệu) — MỞ RỘNG sau phản hồi người dùng thật "kỳ Gom Mã này chưa thực hiện, chưa
+// có dữ liệu gì phải xoá nữa chứ" (ban đầu code chỉ cho Xoá đúng Nháp, giả định an toàn tự đặt ra lúc
+// code chứ không phải ý người dùng). Test này xác nhận ĐÚNG các hành vi THIẾT KẾ đó bằng chứng thật (UI +
+// gọi thẳng route, không chỉ ẩn nút) — KHÔNG giả định "Sửa phải bị chặn ở kỳ đã kích hoạt" (giả định đó
+// SAI với chủ đích thiết kế thật đã ghi rõ trong code).
 async function main() {
   const { createRunner, assert, assertEqual, startStaticServer, createMockState, launchPage } = require('./testHarness');
   const PORT = 8953;
@@ -16,12 +19,16 @@ async function main() {
   const ADMIN = { username: 'admin.editdel', name: 'Admin Edit/Del', dept: DEPT, perms: { admin: true }, active: true, totpEnabled: true };
 
   const draftSession = { id: 8801, dept: DEPT, loaiKy: 'GOM_MA', tenKy: 'Kỳ Nháp — sẽ Sửa rồi Xoá', trangThai: 'NHAP' };
-  const activeSession = { id: 8802, dept: DEPT, loaiKy: 'THONG_KE', tenKy: 'Kỳ Đang Hoạt Động — thử Sửa/Xoá', trangThai: 'DANG_HOAT_DONG' };
+  const activeSession = { id: 8802, dept: DEPT, loaiKy: 'THONG_KE', tenKy: 'Kỳ Đang Hoạt Động — CHƯA có dữ liệu — thử Sửa/Xoá', trangThai: 'DANG_HOAT_DONG' };
+  const activeSessionWithData = { id: 8804, dept: DEPT, loaiKy: 'GOM_MA', tenKy: 'Kỳ Đang Hoạt Động — ĐÃ có dữ liệu — không Xoá được', trangThai: 'DANG_HOAT_DONG' };
   const closedSession = { id: 8803, dept: DEPT, loaiKy: 'THONG_KE', tenKy: 'Kỳ Đã Chốt — thử Sửa/Xoá', trangThai: 'DA_CHOT' };
 
   const state = createMockState({
     depts: [DEPT], stores: [DEPT], users: [ADMIN],
-    stocktakeSessions: [draftSession, activeSession, closedSession]
+    stocktakeSessions: [draftSession, activeSession, activeSessionWithData, closedSession],
+    stocktakeCounts: [
+      { id: 1, sessionId: activeSessionWithData.id, shelfLocationId: 1, dept: DEPT, maHang: 'SP001', slGomMa: 3 }
+    ]
   });
 
   const server = await startStaticServer(PORT);
@@ -69,8 +76,10 @@ async function main() {
       assert(!listed.some(s => s.id === draftSession.id), `Kỳ Nháp (id ${draftSession.id}) phải biến mất khỏi dữ liệu thật phía server sau khi Xoá, thực tế items: ${JSON.stringify(listed.map(s => s.id))}`);
     });
 
-    // ===== Kỳ Đang hoạt động: Sửa VẪN được (ĐÚNG THIẾT KẾ — chỉ đổi Tên Kỳ/Thời Gian), nhưng KHÔNG có
-    // nút Xoá, và gọi thẳng route Xoá server phải chặn 409 (không phải ẩn UI suông) =====
+    // ===== Kỳ Đang hoạt động: Sửa VẪN được (ĐÚNG THIẾT KẾ — chỉ đổi Tên Kỳ/Thời Gian). Xoá: phụ thuộc
+    // ĐÃ có dữ liệu quét hay chưa (MỞ RỘNG theo phản hồi người dùng thật, xem chú thích đầu file) — CHƯA
+    // có dữ liệu (activeSession) thì VẪN Xoá được dù đã Kích Hoạt; ĐÃ có dữ liệu (activeSessionWithData)
+    // thì KHÔNG Xoá được nữa, kể cả tấn công trực tiếp qua route =====
     await run.run('[7] Kỳ Đang hoạt động: VẪN Sửa được Tên Kỳ qua UI thật (đúng chủ đích thiết kế, không bị chặn)', async () => {
       await page.click(`button[data-op="editKkPeriodClick"][data-arg0="${activeSession.id}"]`);
       await page.waitForTimeout(150);
@@ -81,15 +90,24 @@ async function main() {
       assertEqual(activeSession.trangThai, 'DANG_HOAT_DONG', 'Sửa KHÔNG được làm đổi trạng thái kỳ');
     });
 
-    await run.run('[7] Kỳ Đang hoạt động: KHÔNG có nút Xoá trên UI, VÀ gọi thẳng route DELETE bị server chặn 409 (không chỉ ẩn UI)', async () => {
+    await run.run('[7] Kỳ Đang hoạt động CHƯA có dữ liệu: CÓ nút Xoá, bấm qua UI thật -> xoá hẳn thành công (MỞ RỘNG mới)', async () => {
       const btn = await page.$(`button[data-op="deleteKkPeriodClick"][data-arg0="${activeSession.id}"]`);
-      assert(!btn, 'KHÔNG được thấy nút Xoá cho kỳ Đang hoạt động');
+      assert(!!btn, 'PHẢI thấy nút Xoá cho kỳ Đang hoạt động nhưng chưa có dữ liệu quét nào (hasData=false)');
+      await btn.click();
+      await page.waitForTimeout(250);
+      const listed = await page.evaluate(async (dept) => (await (await fetch(`/api/stocktake/sessions?dept=${encodeURIComponent(dept)}`)).json()).items, DEPT);
+      assert(!listed.some(s => s.id === activeSession.id), `Kỳ Đang hoạt động CHƯA có dữ liệu phải xoá được, thực tế items còn: ${JSON.stringify(listed.map(s => s.id))}`);
+    });
+
+    await run.run('[7] Kỳ Đang hoạt động ĐÃ có dữ liệu: KHÔNG có nút Xoá trên UI, VÀ gọi thẳng route DELETE bị server chặn 409 (không chỉ ẩn UI)', async () => {
+      const btn = await page.$(`button[data-op="deleteKkPeriodClick"][data-arg0="${activeSessionWithData.id}"]`);
+      assert(!btn, 'KHÔNG được thấy nút Xoá cho kỳ Đang hoạt động ĐÃ có dữ liệu quét');
       const res = await page.evaluate(async (id) => {
         const r = await fetch(`/api/stocktake/sessions/${id}`, { method: 'DELETE' });
         return { status: r.status, body: await r.json() };
-      }, activeSession.id);
-      assertEqual(res.status, 409, `Server phải chặn 409 (Conflict — sai trạng thái, không phải 403 thiếu quyền) khi cố Xoá kỳ Đang hoạt động, thực tế: ${JSON.stringify(res)}`);
-      assertEqual(activeSession.trangThai, 'DANG_HOAT_DONG', 'Kỳ KHÔNG được bị xoá sau đòn tấn công trực tiếp');
+      }, activeSessionWithData.id);
+      assertEqual(res.status, 409, `Server phải chặn 409 (Conflict) khi cố Xoá kỳ Đang hoạt động ĐÃ có dữ liệu, thực tế: ${JSON.stringify(res)}`);
+      assertEqual(activeSessionWithData.trangThai, 'DANG_HOAT_DONG', 'Kỳ KHÔNG được bị xoá sau đòn tấn công trực tiếp');
     });
 
     // ===== Kỳ Đã chốt: CÙNG hành vi — Sửa vẫn được, Xoá vẫn bị chặn 409 =====
