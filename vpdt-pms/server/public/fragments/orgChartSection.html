@@ -35,6 +35,13 @@
         <button type="button" id="btnOrgChartHeadcountReport" data-op="openOrgChartHeadcountModal" class="bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800">📋 Báo Cáo Định Biên Nhân Sự</button>
         <button type="button" id="btnOrgChartRenameVersion" data-op="renameOrgChartVersionClick" class="hidden bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-300">✏️ Đổi Tên</button>
         <button type="button" id="btnOrgChartValidateVersion" data-op="validateOrgChartVersionClick" class="hidden bg-blue-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-blue-700">🔍 Kiểm Tra Hợp Lệ</button>
+        <!-- "🔧 Tự Động Gắn Phòng Ban Chuẩn (departmentRef)" (11/2026, theo yêu cầu người dùng — ca thật:
+             Nhập Excel Gán Chức Vụ xem trước báo "sẵn sàng gán" hàng loạt nhưng Áp Dụng fail HÀNG LOẠT vì
+             node Phòng Ban/Siêu Thị cha chưa gắn departmentRef, chỉ có tên hiển thị tự do trên cây) — chỉ
+             hiện ở bản NHÁP (DRAFT), gắn departmentRef = ĐÚNG tên trong Danh Mục khi nodeName khớp đúng,
+             KHÔNG tự Áp Dụng thay admin (vẫn phải tự xem lại cây + bấm "✅ Áp Dụng" như bình thường). Xem
+             autoFillDepartmentRefClick(), lib/orgChart.js::planAutoFillDepartmentRef()/autoFillDepartmentRef(). -->
+        <button type="button" id="btnOrgChartAutofillDepartmentRef" data-op="autoFillDepartmentRefClick" class="hidden bg-orange-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-orange-700">🔧 Tự Động Gắn Phòng Ban Chuẩn</button>
         <button type="button" id="btnOrgChartApplyVersion" data-op="applyOrgChartVersionClick" class="hidden bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">✅ Áp Dụng Phiên Bản Này</button>
         <!-- "✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)" (11/2026) — CHỈ hiện khi bản nháp đang xem
              bắt nguồn TRỰC TIẾP từ ĐÚNG bản đang áp dụng hiện tại (xem loadOrgChartCurrentVersion(),
