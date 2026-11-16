@@ -5388,9 +5388,15 @@ if (!window.__shelfOfflineOnlineListenerAdded) {
 // Hoàn toàn rẻ khi KHÔNG có gì để đồng bộ (2 hàm tự return ngay dòng đầu nếu hàng đợi rỗng) và khi thật sự
 // mất mạng (navigator.onLine false -> return ngay, KHÔNG gọi fetch() nào cả) — chỉ thực sự tốn 1 lượt gọi
 // mạng khi vừa có pending VỪA có vẻ đang có sóng, đúng lúc cần thử.
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng thật — IT test offline "Ghi Nhận" ở chỗ sóng yếu/chập chờn: có
+// mạng lại nhưng KHÔNG tự đồng bộ, kiểm tra không thấy dữ liệu): nhịp tự thử đồng bộ 20 giây này tạo ra
+// SAU tính năng offline "Ghi Nhận" (trySyncPendingShelfRecords(), thuộc Kiểm Soát Hàng Hoá) nhưng chỉ
+// được thêm 2 hàm của Kiểm Kê (KkScans/KkConfirms) — bỏ sót đúng hàm Ghi Nhận, nên hàng đợi Ghi Nhận CHỈ
+// còn trông chờ đúng sự kiện "online" của trình duyệt (không phải lúc nào cũng bắn ra ở mạng chập chờn,
+// y hệt tình huống nhịp 20 giây này sinh ra để xử lý) — thêm vào đây cho ĐỦ cả 3 hàng đợi offline.
 if (!window.__kkOfflineHeartbeatAdded) {
   window.__kkOfflineHeartbeatAdded = true;
-  setInterval(() => { trySyncPendingKkScans(); trySyncPendingKkConfirms(); }, 20000);
+  setInterval(() => { trySyncPendingShelfRecords(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); }, 20000);
 }
 
 // ===== "✈️ Offline Thủ Công" (MỚI, 12/2026) — xem chú thích đầy đủ tại #kkOfflineModeBar/kiemKeSection.html

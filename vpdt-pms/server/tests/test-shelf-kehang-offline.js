@@ -12,6 +12,8 @@
 //     page.evaluate() cho đúng 2 kịch bản cần (thành công/DUPLICATE_OFFLINE_SYNC), không đụng gì tới
 //     _mock-backend.js/testHarness.js dùng chung cho các test khác.
 'use strict';
+const fs = require('fs');
+const path = require('path');
 const { createRunner, assert, assertEqual } = require('./testHarness');
 const { CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 
@@ -23,6 +25,22 @@ function shelfLoc(dept, id, code) {
 }
 
 async function nodeDirectTests(run) {
+  // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng thật — IT test offline "Ghi Nhận" ở chỗ sóng yếu/chập chờn: có
+  // mạng lại nhưng KHÔNG tự đồng bộ): nhịp tự thử đồng bộ 20 giây (__kkOfflineHeartbeatAdded, thêm 12/2026
+  // CHO Kiểm Kê) bỏ sót trySyncPendingShelfRecords() — hàng đợi Ghi Nhận chỉ còn trông chờ sự kiện "online"
+  // của trình duyệt (không đáng tin cậy ở mạng chập chờn, đúng tình huống nhịp 20 giây sinh ra để xử lý).
+  // Test TĨNH (đọc thẳng mã nguồn) thay vì mô phỏng bộ đếm giờ thật — giữ ĐỦ 3 hàm luôn cùng 1 chỗ đăng ký,
+  // không cần Playwright/mock setInterval (xem chú thích đầy đủ tại dòng setInterval, module-vanhanh.js).
+  await run.run('setInterval() nhịp 20s offline phải gọi ĐỦ cả 3 hàm đồng bộ (Ghi Nhận + Gom Mã/Kiểm Đếm + Xác Nhận), không bỏ sót Ghi Nhận', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'module-vanhanh.js'), 'utf8');
+    const m = src.match(/__kkOfflineHeartbeatAdded[\s\S]{0,300}?setInterval\(\(\) => \{([\s\S]*?)\}, 20000\)/);
+    assert(m, 'phải tìm thấy đúng khối đăng ký nhịp 20 giây (__kkOfflineHeartbeatAdded)');
+    const body = m[1];
+    assert(body.includes('trySyncPendingShelfRecords()'), `nhịp 20 giây thiếu trySyncPendingShelfRecords() — hàng đợi Ghi Nhận sẽ kẹt khi sự kiện "online" không bắn ra: ${body}`);
+    assert(body.includes('trySyncPendingKkScans()'), 'không được làm mất hàm Gom Mã/Kiểm Đếm đã có sẵn');
+    assert(body.includes('trySyncPendingKkConfirms()'), 'không được làm mất hàm Xác Nhận đã có sẵn');
+  });
+
   await run.run('shelfRecords: clientRecordId trùng TRONG CÙNG dept -> 409 DUPLICATE_OFFLINE_SYNC (coi là đã đồng bộ, không tạo bản ghi mới)', async () => {
     const user = userOf('Siêu thị Quận 1', { shelfRecordCreate: true });
     const appData = { shelfLocations: [shelfLoc('Siêu thị Quận 1', 1, 'A1')] };
