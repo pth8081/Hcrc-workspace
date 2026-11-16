@@ -91,7 +91,7 @@ async function main() {
     } catch (e) { threw = e; }
     assertEqual(!!threw, true, 'phải throw, không được lưu lặng lẽ');
     assertEqual(threw.status, 400);
-    assertIncludes(threw.message, 'Phòng Ban chuẩn');
+    assertIncludes(threw.message, 'nhánh Phòng Ban');
     assertEqual(profile.secondaryPositions.length, 0, 'KHÔNG được lưu dòng kiêm nhiệm nào khi throw');
   });
 
