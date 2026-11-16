@@ -10856,9 +10856,21 @@ function applyNavVisibility(user) {
       || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll
       || user.perms?.shelfAnyStoreAccess));
   updateVanHanhNavVisibility();
-  // Kiểm Kê (📋, 12/2026) — module TOP-LEVEL riêng (PROMOTE khỏi sub-tab Vận Hành), nút đơn giản không
-  // dropdown — gác bằng canAccessStocktakeModule() (core.js), cùng khuôn btnDocTab/btnTaskTab ở trên.
-  document.getElementById('btnKiemKeTab').classList.toggle('hidden', !canAccessStocktakeModule(user));
+  // Kiểm Kê (📋) — module TOP-LEVEL riêng (PROMOTE khỏi sub-tab Vận Hành), ĐỔI sang dropdown 8 tab con
+  // (12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong slide bar hiện ra các tab bên trong
+  // giống module vận hành") — mỗi nút con ẩn/hiện RIÊNG theo ĐÚNG quyền tab đó, CÙNG khuôn 3 nút Vận
+  // Hành ngay trên. PERIOD (Tab 1 "Kỳ Kiểm Kê") luôn hiện cho bất kỳ ai có BẤT KỲ quyền Kiểm Kê nào (xem
+  // chú thích renderKkPeriodList()/loadKkPeriodSessions() — mọi vai trò đều cần biết kỳ nào đang hoạt
+  // động), không có quyền riêng của chính nó.
+  document.getElementById('btnKkNavPeriod').classList.toggle('hidden', !canAccessStocktakeModule(user));
+  document.getElementById('btnKkNavGomMa').classList.toggle('hidden', !canDoStocktakeGomMaClient(user));
+  document.getElementById('btnKkNavKiemDem').classList.toggle('hidden', !canDoStocktakeKiemDemClient(user));
+  document.getElementById('btnKkNavKiemSoat').classList.toggle('hidden', !canDoStocktakeKiemSoatClient(user));
+  document.getElementById('btnKkNavShelfConfig').classList.toggle('hidden', !canSeeStocktakeShelfConfigTabClient(user));
+  document.getElementById('btnKkNavConfirm').classList.toggle('hidden', !canSeeStocktakeConfirmTabClient(user));
+  document.getElementById('btnKkNavReport').classList.toggle('hidden', !canViewStocktakeReportClient(user));
+  document.getElementById('btnKkNavUserAccess').classList.toggle('hidden', !canManageStocktakeUserAccessClient(user));
+  updateKiemKeNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
   updateOperationStoreSubTabVisibility(user);
@@ -11497,6 +11509,29 @@ function closeVanHanhDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('vanHanhDropdownPanel');
   const btn = document.getElementById('btnVanHanhTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Kiểm Kê" (📋, 12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong slide bar hiện ra các tab
+// bên trong giống module vận hành") — CÙNG khuôn dropdown "Vận Hành" ngay trên: bọc 8 tab con (module
+// "kiemKe", xem HTML #kiemKeNavWrap), mỗi nút con ẩn/hiện riêng theo đúng quyền tab đó (xem
+// applyPermsToUI() ở trên) — dropdown cha chỉ hiện khi có ÍT NHẤT 1 trong 8 tab con hiện.
+function updateKiemKeNavVisibility() {
+  const subItemIds = ['btnKkNavPeriod', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess'];
+  const anyVisible = subItemIds.some((id) => !document.getElementById(id).classList.contains('hidden'));
+  document.getElementById('kiemKeNavWrap').classList.toggle('hidden', !anyVisible);
+}
+function toggleKiemKeDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('kiemKeDropdownPanel')?.classList.toggle('hidden');
+}
+function closeKiemKeDropdown() {
+  document.getElementById('kiemKeDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('kiemKeDropdownPanel');
+  const btn = document.getElementById('btnKiemKeTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
@@ -12749,6 +12784,63 @@ function canViewShelfReportClient(user) {
 function canViewStocktakeReportClient(user) {
   return !!(user?.perms?.admin || user?.perms?.kiemKeReportView);
 }
+// Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
+// (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
+// CLAUDE.md nhắc tránh — áp dụng NGAY từ đầu cho 7 tab còn lại khi build thật, không để dành sửa sau).
+// CHUYỂN từ module-vanhanh.js sang ĐÂY (core.js, 12/2026 — đợt thêm dropdown sidebar "📋 Kiểm Kê" giống
+// "⚙️ Vận Hành") vì sidebar phải ẩn/hiện ĐÚNG từng mục con ngay khi đăng nhập xong (applyPermsToUI()),
+// TRƯỚC KHI module-vanhanh.js (tải lười) kịp tải — cùng khuôn canAccessOperationSubTab() ngay dưới đây.
+function canDoStocktakeGomMaClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeGomMaDo); }
+function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemDemDo); }
+function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
+function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
+// canManageStocktakeShelfLockClient — mirror canManageStocktakeShelfLock() server (lib/stocktakeEngine.js)
+// — gác khung "🔒 Khoá/Mở Khoá Quầy Kệ" ở Tab 5, KHÁC HẲN canManageStocktakeShelfConfigClient() (quyền
+// XEM Tab 5) và canConfirmStocktakeClient() (quyền Xác Nhận Toàn Bộ Đợt) — 3 quyền độc lập, không thay
+// thế nhau.
+function canManageStocktakeShelfLockClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
+// canManageStocktakeShelfLockForDeptClient (theo yêu cầu người dùng "cho IT chỉ khoá mở ở một siêu thị
+// của họ thôi") — mirror ĐÚNG canManageStocktakeShelfLockForDept() server (lib/stocktakeEngine.js).
+// kiemKeShelfLockManage nâng cấp boolean -> {all, depts[]}, tương thích ngược (`true` cũ = đúng dept của
+// mình).
+function canManageStocktakeShelfLockForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeShelfLockManage;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
+function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canSeeStocktakeShelfConfigTabClient — IT chỉ có kiemKeShelfLockManage (KHÔNG có kiemKeShelfConfigManage)
+// vẫn phải vào được Tab 5 dùng đúng khung Khoá/Mở Khoá, không cần thêm quyền Cấu Hình Quầy Kệ (CRUD danh
+// mục) không liên quan — OR cả 2 quyền, đối xứng với canSeeStocktakeConfirmTabClient() ngay dưới.
+function canSeeStocktakeShelfConfigTabClient(user) {
+  return canManageStocktakeShelfConfigClient(user) || canManageStocktakeShelfLockClient(user);
+}
+// canConfirmStocktakeForDeptClient — canConfirmStocktakeClient() ở trên KHÔNG xét dept, nên 1 người được
+// gán phạm vi HẸP (VD {all:false, depts:['Siêu thị A']}) vẫn THẤY nút "Xác Nhận Toàn Bộ Đợt" dù đang xem
+// 1 siêu thị KHÁC ngoài phạm vi — bấm vào mới bị 403 (đúng lớp lỗi "nút hiện nhưng bấm không được"
+// CLAUDE.md nhắc tránh). Mirror ĐÚNG canConfirmStocktakeForDept() server, dùng thay
+// canConfirmStocktakeClient() ở MỌI nơi cần biết phạm vi theo 1 siêu thị cụ thể.
+function canConfirmStocktakeForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  const v = user?.perms?.kiemKeConfirmDo;
+  if (v === true) return dept === user?.dept;
+  if (v && typeof v === 'object') {
+    if (v.all) return true;
+    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
+  }
+  return dept === user?.dept;
+}
+// canSeeStocktakeConfirmTabClient — Tab 6 có 2 vai ĐỘC LẬP: Xác Nhận TỪNG quầy kệ chỉ cần quyền Kiểm Đếm
+// (KHÔNG cần kiemKeConfirmDo), Xác Nhận TOÀN BỘ ĐỢT mới cần kiemKeConfirmDo riêng — hiện tab này cho CẢ
+// 2 vai, phần UI bên trong (updateKkConfirmAllVisibility(), module-vanhanh.js) tự ẩn nút Toàn Bộ Đợt
+// theo đúng quyền riêng của nó.
+function canSeeStocktakeConfirmTabClient(user) { return canConfirmStocktakeClient(user) || canDoStocktakeKiemDemClient(user); }
+function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
   if (user.perms?.admin) return true;
