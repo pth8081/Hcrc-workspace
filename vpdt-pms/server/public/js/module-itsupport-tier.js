@@ -346,15 +346,25 @@ function writeDeptWorkflowConfig(dbKey, dept, newConfig) {
 // isDeptWorkflowConfigured(dept): true nếu phòng ban này ĐANG CÓ cấu hình THẬT (không phải giá trị mặc
 // định tạm "Quy trình chung (1 bước)" chỉ để hiển thị) — dùng để CHỈ hiện nút "Xoá Cấu Hình" khi thật sự
 // có gì để xoá, và để resetAllDeptWorkflowConfigs() biết đúng danh sách phòng ban cần xoá.
-// hasTypes (Văn Bản Trình): CHỈ xét cấu hình RIÊNG của loại đang chọn (typeMap[dept]) — KHÔNG xét
-// legacyDbKey (cấu hình chung cũ, áp dụng cho MỌI loại chưa có cấu hình riêng) vì nút "Xoá Cấu Hình" ở
-// màn theo loại này chưa từng ghi được vào legacyDbKey (writeDeptWorkflowConfig() ở trên cũng KHÔNG đụng
-// legacyDbKey) — nếu 1 phòng ban vẫn bị Quick Apply coi là "đã cấu hình" chỉ vì có cấu hình chung cũ, cần
-// sửa/xoá ở màn cấu hình chung (không chọn loại tờ trình cụ thể), không phải ở đây.
+// LỖI ĐÃ VÁ (12/2026, người dùng báo "⚡ Áp Dụng Nhanh" cho Hợp Đồng - Phê Duyệt báo "không có gì để áp
+// dụng" dù "Xoá Cấu Hình" lại báo "không có gì để xoá" — 2 thông báo tưởng mâu thuẫn nhưng cùng 1 gốc):
+// hasTypes (Văn Bản Trình/Hợp Đồng - Phê Duyệt) TRƯỚC ĐÂY chỉ xét cấu hình RIÊNG của loại đang chọn
+// (typeMap[dept]) — KHÔNG xét legacyDbKey (cấu hình chung cũ, áp dụng cho MỌI loại chưa có cấu hình
+// riêng — xem resolveContractApprovalDeptWorkflow()/lib/workflowEngine.js, VẪN đang thật sự chi phối kết
+// quả duyệt nếu còn tồn tại). Comment cũ ở đây từng nói "cần sửa/xoá ở màn cấu hình chung (không chọn
+// loại tờ trình cụ thể)" — nhưng màn đó CHƯA TỪNG được xây (activeWfSubmissionType luôn ép về
+// types[0].key, không có tab/lựa chọn "Chung" nào) — khiến legacyDbKey tồn tại VĨNH VIỄN không ai thấy/
+// xoá được qua bất kỳ màn nào, trong khi collectQuickApplyUnconfiguredTargets() (module-workflow.js) VẪN
+// đúng đắn coi legacyMap[dept] là "đã cấu hình thật" (vì nó thật sự đang chi phối kết quả duyệt) nên từ
+// chối áp dụng đè lên — 2 phía "Xoá"/"Áp Dụng" lệch nhau đúng ở điểm này. Nay isDeptWorkflowConfigured()
+// cũng xét legacyDbKey, để "Xoá Cấu Hình" THẤY ĐƯỢC và xoá được các phòng ban chỉ còn cấu hình chung cũ
+// — xem clearDeptWorkflowConfig() ngay dưới (đã sửa cùng đợt, dọn luôn legacyDbKey khi xoá).
 function isDeptWorkflowConfigured(dept) {
   const modConfig = WF_MODULE_CONFIG[activeWfMod];
   if (modConfig.priceTypeNested) return !!resolveItPriceDeptWorkflowConfigClient(dept, activeWfSubmissionType);
-  if (modConfig.hasTypes) return !!(DB[modConfig.dbKey]?.[activeWfSubmissionType]?.[dept]);
+  if (modConfig.hasTypes) {
+    return !!(DB[modConfig.dbKey]?.[activeWfSubmissionType]?.[dept]) || !!(modConfig.legacyDbKey && DB[modConfig.legacyDbKey]?.[dept]);
+  }
   return !!(DB[modConfig.dbKey] || {})[dept];
 }
 
@@ -377,24 +387,64 @@ function clearDeptWorkflowConfig(dbKey, dept) {
     }
   } else if (modConfig.hasTypes) {
     if (DB[dbKey]?.[activeWfSubmissionType]) delete DB[dbKey][activeWfSubmissionType][dept];
+    // LỖI ĐÃ VÁ (12/2026, cùng đợt isDeptWorkflowConfigured() ở trên): xoá LUÔN entry legacyDbKey (cấu
+    // hình chung cũ) của đúng phòng ban này nếu còn — nếu không, "Xoá Cấu Hình" báo thành công/"CHƯA CẤU
+    // HÌNH" nhưng thực ra cấu hình chung cũ VẪN đang chi phối kết quả duyệt thật (xem
+    // resolveContractApprovalDeptWorkflow()/lib/workflowEngine.js), và "⚡ Áp Dụng Nhanh" vẫn tiếp tục từ
+    // chối áp dụng vì coi phòng ban đó "đã cấu hình". Lưu ý: legacyDbKey dùng CHUNG cho MỌI loại (không
+    // phân biệt theo activeWfSubmissionType) — xoá ở ĐÂY (từ bất kỳ tab loại nào) ảnh hưởng tới TẤT CẢ
+    // loại khác CHƯA có cấu hình riêng của chính loại đó (mất fallback, về mặc định WF_1STEP/admin) —
+    // đã cảnh báo rõ trong hộp thoại xác nhận ở resetDeptWorkflowConfig()/resetAllDeptWorkflowConfigs().
+    if (modConfig.legacyDbKey && DB[modConfig.legacyDbKey]) delete DB[modConfig.legacyDbKey][dept];
   } else if (DB[dbKey]) {
     delete DB[dbKey][dept];
   }
 }
 
+// clearAndSyncDeptWorkflowConfigs(depts) — XOÁ + LƯU (có snapshot/rollback) cho 1/nhiều phòng ban cùng
+// lúc, dùng CHUNG bởi resetDeptWorkflowConfig()/resetAllDeptWorkflowConfigs() (12/2026, tách ra khi sửa
+// 2 hàm đó phải ghi THÊM legacyDbKey — xem clearDeptWorkflowConfig() ở trên). Luôn ghi dbKey chính
+// TRƯỚC; CHỈ khi module có legacyDbKey (hasTypes) mới ghi THÊM legacyDbKey, và CHỈ SAU KHI dbKey chính
+// đã lưu THÀNH CÔNG — nếu lượt lưu legacyDbKey bị lỗi (409/mất mạng), KHÔNG rollback dbKey chính (đã lưu
+// đúng, không được mất), chỉ rollback + báo riêng phần legacyDbKey để admin tự bấm lại — cùng tinh thần
+// "await từng lượt, hoàn tác đúng collection ghi hỏng" đã áp dụng ở applyQuickApplyConfig()
+// (module-workflow.js).
+async function clearAndSyncDeptWorkflowConfigs(depts) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  const dbKey = modConfig.dbKey;
+  const hasLegacy = !!(modConfig.hasTypes && modConfig.legacyDbKey);
+  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
+  const legacySnapshot = hasLegacy ? JSON.parse(JSON.stringify(DB[modConfig.legacyDbKey] || {})) : null;
+  depts.forEach(dept => clearDeptWorkflowConfig(dbKey, dept));
+  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!modConfig.hasTypes })) {
+    DB[dbKey] = snapshot;
+    if (hasLegacy) DB[modConfig.legacyDbKey] = legacySnapshot;
+    renderWorkflowTab();
+    return false;
+  }
+  if (hasLegacy && !await syncStorage(modConfig.legacyDbKey, { baseline: legacySnapshot })) {
+    DB[modConfig.legacyDbKey] = legacySnapshot;
+    alert('⚠️ Đã xoá cấu hình riêng của loại đang chọn, nhưng LƯU "cấu hình chung" (áp dụng mọi loại chưa có cấu hình riêng) bị lỗi (xung đột/mất mạng) — phòng ban này có thể VẪN bị "⚡ Áp Dụng Nhanh" coi là đã cấu hình do cấu hình chung cũ còn giữ nguyên. Vui lòng bấm lại "Xoá Cấu Hình" 1 lần nữa.');
+  }
+  return true;
+}
+
+// legacyConfirmSuffix(n) — câu cảnh báo THÊM khi module có legacyDbKey (Văn Bản Trình/Hợp Đồng - Phê
+// Duyệt), chèn vào hộp thoại xác nhận của resetDeptWorkflowConfig()/resetAllDeptWorkflowConfigs() (xem
+// clearAndSyncDeptWorkflowConfigs() ở trên) — vì xoá ở ĐÂY xoá LUÔN "cấu hình chung" (dùng chéo mọi
+// loại), không chỉ đúng loại tờ trình/hợp đồng đang chọn ở tab hiện tại.
+function legacyConfirmSuffix(n) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  if (!modConfig.hasTypes || !modConfig.legacyDbKey) return '';
+  const noun = modConfig.typesFromContractCatalog ? 'Loại Hợp Đồng' : 'Loại Tờ Trình';
+  return `\n\n⚠️ Lưu ý: ${n > 1 ? 'Các phòng ban này' : 'Phòng ban này'} có thể còn đang dùng "cấu hình chung" (áp dụng cho MỌI ${noun} chưa có cấu hình riêng) — xoá sẽ xoá LUÔN cấu hình chung đó, ảnh hưởng tới các ${noun} KHÁC (tab khác) của ${n > 1 ? 'các phòng ban này' : 'phòng ban này'} nếu ${noun.toLowerCase()} đó chưa từng có cấu hình riêng (sẽ về mặc định "Quy trình chung 1 bước, admin duyệt" cho tới khi cấu hình lại).`;
+}
+
 async function resetDeptWorkflowConfig(dept) {
   if (!isDeptWorkflowConfigured(dept)) return;
-  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt đã gán) của phòng ban [${dept}] — đưa về trạng thái CHƯA CẤU HÌNH?\n\nSau khi xoá, "⚡ Áp Dụng Nhanh" sẽ coi phòng ban này là mục đang thiếu cấu hình và có thể áp dụng lại. Hành động này KHÔNG hoàn tác được (trừ khi bạn tự cấu hình lại bằng tay).`)) return;
+  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt đã gán) của phòng ban [${dept}] — đưa về trạng thái CHƯA CẤU HÌNH?${legacyConfirmSuffix(1)}\n\nSau khi xoá, "⚡ Áp Dụng Nhanh" sẽ coi phòng ban này là mục đang thiếu cấu hình và có thể áp dụng lại. Hành động này KHÔNG hoàn tác được (trừ khi bạn tự cấu hình lại bằng tay).`)) return;
 
-  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
-  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
-  clearDeptWorkflowConfig(dbKey, dept);
-  // nestedMap: xem chú thích đầy đủ ở saveAllDeptWorkflowConfigs() (cùng lý do/khuôn).
-  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
-    DB[dbKey] = snapshot;
-    renderWorkflowTab();
-    return;
-  }
+  if (!await clearAndSyncDeptWorkflowConfigs([dept])) return;
 
   delete pendingWfTemplate[dept];
   logSystemAction('CONFIG', 'RESET_DEPT_WORKFLOW', `Xoá cấu hình quy trình phòng ban [${dept}] (đưa về CHƯA CẤU HÌNH, module ${WF_MODULE_CONFIG[activeWfMod].label})`, 'SUCCESS', dept);
@@ -410,17 +460,9 @@ async function resetDeptWorkflowConfig(dept) {
 async function resetAllDeptWorkflowConfigs() {
   const targetDepts = getWorkflowParticipatingDepts(activeWfMod).filter(isDeptWorkflowConfigured);
   if (!targetDepts.length) return alert('✅ Không có phòng ban nào đang có cấu hình thật trong phạm vi hiện tại để xoá.');
-  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt) của ${targetDepts.length} phòng ban:\n- ${targetDepts.join('\n- ')}\n\nĐưa TẤT CẢ về trạng thái CHƯA CẤU HÌNH — "⚡ Áp Dụng Nhanh" sẽ có thể áp dụng lại cho các phòng ban này. Hành động này KHÔNG hoàn tác được. Tiếp tục?`)) return;
+  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt) của ${targetDepts.length} phòng ban:\n- ${targetDepts.join('\n- ')}\n\nĐưa TẤT CẢ về trạng thái CHƯA CẤU HÌNH — "⚡ Áp Dụng Nhanh" sẽ có thể áp dụng lại cho các phòng ban này.${legacyConfirmSuffix(targetDepts.length)}\n\nHành động này KHÔNG hoàn tác được. Tiếp tục?`)) return;
 
-  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
-  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
-  targetDepts.forEach(dept => clearDeptWorkflowConfig(dbKey, dept));
-  // nestedMap: xem chú thích đầy đủ ở saveAllDeptWorkflowConfigs() (cùng lý do/khuôn).
-  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
-    DB[dbKey] = snapshot;
-    renderWorkflowTab();
-    return;
-  }
+  if (!await clearAndSyncDeptWorkflowConfigs(targetDepts)) return;
 
   targetDepts.forEach(dept => delete pendingWfTemplate[dept]);
   logSystemAction('CONFIG', 'RESET_DEPT_WORKFLOW', `Xoá cấu hình quy trình TẤT CẢ phòng ban [${targetDepts.join(', ')}] (đưa về CHƯA CẤU HÌNH, module ${WF_MODULE_CONFIG[activeWfMod].label})`, 'SUCCESS', activeWfMod);
