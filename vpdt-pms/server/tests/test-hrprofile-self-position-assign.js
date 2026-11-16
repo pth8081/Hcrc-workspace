@@ -2,24 +2,20 @@
 
 // tests/test-hrprofile-self-position-assign.js
 //
-// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao — "hrProfileEdit tự gán chức vụ cho chính mình để tự nâng quyền
-// duyệt"): POST /api/hr-profile/by-code/:employeeCode/set-position (và Gán Chức Vụ hàng loạt qua Excel,
-// cả 2 dùng chung applyPositionAssignment()) + PATCH /api/hr-profile/by-code/:employeeCode (field
-// secondaryPositions — "Vị Trí Kiêm Nhiệm", applyProfileEdit()) đều chỉ đòi canEditProfiles()
-// (hrProfileManage/hrProfileEdit) — KHÔNG hề chặn khi hồ sơ đang sửa CHÍNH LÀ hồ sơ đã liên kết tài
-// khoản của NGƯỜI ĐANG THỰC HIỆN hành động. 1 nhân viên chỉ được cấp hrProfileEdit (để duy trì hồ sơ
-// nhân sự, KHÔNG có admin) nhưng đã có sẵn canBeApprover (cho 1 vị trí hợp lệ khác) có thể tự đổi chức
-// vụ CHÍNH THỨC (hoặc tự thêm Vị Trí Kiêm Nhiệm) của MÌNH sang bất kỳ node nào trong Cơ Cấu Tổ Chức —
-// kể cả node cấp cao ("Giám Đốc") — để tự khớp (jobTitle, dept) của bước phê duyệt "Theo vị trí"
-// (resolvePositionApprovers(), lib/positionApprovers.js) mà KHÔNG hề được thực sự bổ nhiệm.
+// LỊCH SỬ: re-audit lần 5 (mức Cao) từng phát hiện "hrProfileEdit tự gán chức vụ cho chính mình để tự
+// nâng quyền duyệt" và thêm chặn CỨNG assertNotSelfAssigningPosition() (403) cho CẢ
+// applyPositionAssignment() (vị trí CHÍNH THỨC) LẪN case 'secondaryPositions' (Vị Trí Kiêm Nhiệm).
 //
-// Đã vá: assertNotSelfAssigningPosition() (lib/employeeProfile.js) — chặn CỨNG (403), không phân biệt
-// actor có admin hay không (cùng khuôn các assertNotSelfDecidingXxx() khác đã bỏ hẳn nhánh admin-bypass
-// theo quyết định 11/2026 "Chặn admin tự duyệt ở TẤT CẢ module") — gọi từ CẢ applyPositionAssignment()
-// (vị trí CHÍNH THỨC) LẪN case 'secondaryPositions' trong applyProfileEdit() (Vị Trí Kiêm Nhiệm).
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "người xử lý hồ sơ nhân sự không gán được chức danh của
+// họ trong hồ sơ, đây là bug, chỉ cần quyền xử lý hồ sơ là đủ"): người dùng xác nhận rõ ràng (sau khi
+// được nêu lại đúng rủi ro tự nâng quyền duyệt ở trên) MUỐN BỎ HẲN chặn này — đã GỠ
+// assertNotSelfAssigningPosition() khỏi cả 2 nơi gọi (xem lib/employeeProfile.js). Các scenario dưới đây
+// ĐẢO NGƯỢC lại đúng 2 test từng assert.throws() 403 — nay assert.doesNotThrow() (tự gán được, kể cả vị
+// trí CAO HƠN) — giữ nguyên các scenario "HR khác gán hộ"/"hồ sơ chưa liên kết" làm regression guard
+// (không hồi quy ngược lại việc chặn SAI những trường hợp không nên chặn).
 //
 // Test gọi THẲNG 2 hàm lib (cùng khuôn test-hrprofile-export-salary-permission.js) — không cần dựng lại
-// toàn bộ route/HTTP để kiểm đúng phần MỚI: assertNotSelfAssigningPosition().
+// toàn bộ route/HTTP.
 //
 // Chạy: node server/tests/test-hrprofile-self-position-assign.js
 const assert = require('assert');
@@ -48,14 +44,11 @@ function freshProfile(overrides) {
 }
 
 (async () => {
-  await test('LỖI ĐÃ VÁ: applyPositionAssignment() — actor tự gán chức vụ CAO HƠN cho chính mình (hồ sơ đã liên kết đúng username actor) bị chặn 403', () => {
+  await test('LỖI ĐÃ VÁ (11/2026, gỡ chặn self-assign theo yêu cầu người dùng): applyPositionAssignment() — actor tự gán chức vụ CAO HƠN cho chính mình (hồ sơ đã liên kết đúng username actor) KHÔNG còn bị chặn', () => {
     const profile = freshProfile({ username: 'ketoan1' });
-    assert.throws(
-      () => employeeProfile.applyPositionAssignment(profile, ORG_CHART_VERSION, 'POS_GD', null, 'ketoan1', 'Nguyễn Kế Toán', null, null, null),
-      /không được tự gán.*chức vụ cho chính mình/i
-    );
-    // Hồ sơ KHÔNG bị đổi dù throw — xác nhận applyPositionAssignment() chặn TRƯỚC khi mutate.
-    assert.strictEqual(profile.positionKey, null);
+    assert.doesNotThrow(() => employeeProfile.applyPositionAssignment(profile, ORG_CHART_VERSION, 'POS_GD', null, 'ketoan1', 'Nguyễn Kế Toán', null, null, null));
+    assert.strictEqual(profile.positionKey, 'POS_GD');
+    assert.strictEqual(profile.jobTitle, 'Giám Đốc');
   });
 
   await test('applyPositionAssignment() — HR khác (username không khớp hồ sơ) gán chức vụ cho hồ sơ này vẫn hoạt động bình thường (không bị chặn oan)', () => {
@@ -72,13 +65,11 @@ function freshProfile(overrides) {
     assert.doesNotThrow(() => employeeProfile.applyPositionAssignment(profile, ORG_CHART_VERSION, 'POS_TPKT', null, 'hr.admin', 'Admin Nhân Sự', null, null, null));
   });
 
-  await test('LỖI ĐÃ VÁ: applyProfileEdit() case secondaryPositions — actor tự thêm "Vị Trí Kiêm Nhiệm" Giám Đốc cho chính mình bị chặn 403', () => {
+  await test('LỖI ĐÃ VÁ (11/2026, gỡ chặn self-assign theo yêu cầu người dùng): applyProfileEdit() case secondaryPositions — actor tự thêm "Vị Trí Kiêm Nhiệm" Giám Đốc cho chính mình KHÔNG còn bị chặn', () => {
     const profile = freshProfile({ username: 'ketoan1', positionKey: 'POS_TPKT', jobTitle: 'Trưởng Phòng', dept: 'Phòng Kế Toán' });
-    assert.throws(
-      () => employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS_GD' }] }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'ketoan1', 'Nguyễn Kế Toán', { orgChartAppliedVersion: ORG_CHART_VERSION }),
-      /không được tự gán.*chính mình/i
-    );
-    assert.deepStrictEqual(profile.secondaryPositions, []);
+    employeeProfile.applyProfileEdit(profile, { secondaryPositions: [{ positionKey: 'POS_GD' }] }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'ketoan1', 'Nguyễn Kế Toán', { orgChartAppliedVersion: ORG_CHART_VERSION });
+    assert.strictEqual(profile.secondaryPositions.length, 1);
+    assert.strictEqual(profile.secondaryPositions[0].jobTitle, 'Giám Đốc');
   });
 
   await test('applyProfileEdit() case secondaryPositions — HR khác gán Vị Trí Kiêm Nhiệm cho hồ sơ người khác vẫn hoạt động bình thường', () => {

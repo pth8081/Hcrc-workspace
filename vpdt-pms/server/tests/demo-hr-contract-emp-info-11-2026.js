@@ -149,6 +149,17 @@ async function main() {
   }, EMPLOYEE_DIRECTORY);
 
   await loginAs(hrUser.username);
+  // _seed.js (hạ tầng _harness-contract.js dùng chung) KHÔNG seed DB.laborContractTypes (danh mục "Loại
+  // HĐLĐ" tự cấu hình, xem defaults.js) — populateLaborContractTypeSelect() sẽ dựng <select> RỖNG không
+  // option nào nếu thiếu, khiến page.selectOption() bên dưới timeout tìm option không tồn tại. Seed tay
+  // đúng 3 mã hệ thống mặc định (khớp defaults.js::laborContractTypes) cho riêng demo này.
+  await page.evaluate(() => {
+    DB.laborContractTypes = [
+      { id: 'PROBATION', label: 'Thử việc', isSystemDefault: true, order: 0 },
+      { id: 'FIXED_TERM', label: 'Xác định thời hạn', isSystemDefault: true, order: 1 },
+      { id: 'INDEFINITE', label: 'Vô thời hạn', isSystemDefault: true, order: 2 }
+    ];
+  });
   await page.evaluate(() => switchTab('hrContract'));
   await page.waitForSelector('#hrContractSection:not(.hidden)', { timeout: 5000 });
   await page.waitForTimeout(200);
