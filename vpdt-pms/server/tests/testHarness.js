@@ -546,6 +546,17 @@ function createDispatcher(state) {
         const usernames = [...new Set((state.employeeProfiles || []).filter(p => p.username).map(p => p.username))];
         return { status: 200, body: { usernames } };
       }
+      // "🕐 Hồ Sơ Onboarding" (hàng đợi) — mirror ĐÚNG GET /api/hr-profile/onboarding-queue thật
+      // (routes/employeeProfile.js): lọc đúng 3 trạng thái PENDING/CANCELLED/CONFIRMED, KHÔNG strip hết
+      // field như stripForList() thật (test/demo ở đây không cần tối giản payload) — dùng cho
+      // demo-hr-process-sync-draft-profile-11-2026.js chụp ảnh hàng đợi TRƯỚC/SAU khi đồng bộ.
+      if (method === 'GET' && pathName === '/api/hr-profile/onboarding-queue') {
+        if (!freshUser.perms?.hrOnboardingManage && !freshUser.perms?.hrOnboardingProcessManage) {
+          return { status: 403, body: { error: 'Bạn không có quyền quản lý Onboarding' } };
+        }
+        const queue = (state.employeeProfiles || []).filter(p => ['PENDING', 'CANCELLED', 'CONFIRMED'].includes(p.onboardingQueueStatus));
+        return { status: 200, body: { profiles: queue } };
+      }
       function canManageSecondaryPositionsOnlyMock(user) {
         return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit || user?.perms?.hrSecondaryPositionManage);
       }
