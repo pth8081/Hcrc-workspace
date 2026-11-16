@@ -4448,6 +4448,18 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
     tạo lại đúng người).
   - Quy trình đã **Hoàn Tất**/**Đã Huỷ** không sửa được nữa — chỉ áp dụng cho
     quy trình còn "Đang thực hiện".
+- **"🔄 Đồng Bộ Hồ Sơ Nháp"** (MỚI 11/2026, theo yêu cầu người dùng — 1 số quy
+  trình Onboarding **cũ** (dữ liệu trước đợt này) bị **"mồ côi"**: quy trình
+  vẫn "Đang thực hiện" bình thường ở "📋 Danh Sách Quy Trình", nhưng KHÔNG hiện
+  trong hàng đợi **"🕐 Hồ Sơ Onboarding"** để HR Xác Nhận, vì hồ sơ Hồ Sơ Nhân
+  Sự Nháp đặt chỗ lúc tạo bị thiếu/mất liên kết) — nút riêng ngay trong Chi
+  Tiết Quy Trình (chỉ hiện ở quy trình **Onboarding** còn **"Đang thực
+  hiện"**), bấm 1 cái là tự tạo bù/liên kết lại hồ sơ Nháp theo đúng Mã Nhân
+  Viên hiện tại, quy trình lập tức vào lại hàng đợi Onboarding. KHÔNG cần bịa
+  ra 1 thay đổi giả ở "✏️ Sửa Quy Trình" để kích hoạt — dùng được ngay cả khi
+  không có field nào cần sửa. Bấm lại nhiều lần không sao (không tạo hồ sơ
+  trùng); nếu hồ sơ đã được Xác Nhận thành "Đang làm việc" rồi thì nút này báo
+  "đã đồng bộ sẵn" (không hồi tố hồ sơ đã xác nhận).
 - **Danh sách quy trình mặc định ẨN "Đã Huỷ"** (MỚI 11/2026, cùng đợt với
   "✏️ Sửa Quy Trình" ở trên — nay đã có lối sửa thay Huỷ, hồ sơ "Đã Huỷ" chỉ
   còn là trường hợp hiếm/lịch sử) — bộ lọc Trạng Thái mặc định mở vào **"Đang

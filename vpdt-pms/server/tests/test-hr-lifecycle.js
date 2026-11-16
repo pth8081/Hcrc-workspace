@@ -666,6 +666,39 @@ async function main() {
       assertEqual(after.employeeUsername, 'fin1', 'Tài Khoản KHÔNG được đổi — action này không có field nào sửa được Tài Khoản');
     });
 
+    // "🔄 Đồng Bộ Hồ Sơ Nháp" (11/2026, theo yêu cầu người dùng — "4 mã đang xử lý... cho nó thành 4 hồ
+    // sơ ở onboarding", 1 số quy trình Onboarding cũ bị "mồ côi" KHÔNG hiện trong hàng đợi "🕐 Hồ Sơ
+    // Onboarding" dù đang "Đang thực hiện" bình thường) — real click, mô phỏng ĐÚNG quy trình "mồ côi"
+    // bằng cách xoá tay khỏi state.employeeProfiles phía Node (KHÔNG phải DB.employeeProfiles phía
+    // trang — mock harness này KHÔNG tự đồng bộ DB.employeeProfiles từ state lúc tạo quy trình, giống hệt
+    // cách GET /api/data thật hoạt động: client chỉ thấy employeeProfiles mới nhất sau khi tự fetch lại,
+    // route /sync-draft-profile mutate state phía server, không trả lại "item" nào cho client áp dụng
+    // ngay — xem route thật routes/records.js). assert() ĐỌC THẲNG `state` (biến Node, KHÔNG qua
+    // page.evaluate) để xác nhận đúng side effect server-side, đúng với những gì "🕐 Hồ Sơ Onboarding"
+    // sẽ thấy ở lượt fetch kế tiếp.
+    await run.run('Real click "🔄 Đồng Bộ Hồ Sơ Nháp" (ONBOARDING "mồ côi") — không có hồ sơ Nháp liên kết -> bấm xong tự tạo bù, vào lại hàng đợi PENDING', async () => {
+      const created = await page.evaluate(async (payload) => {
+        const result = await callCreateAction('hrProcesses', payload);
+        DB.hrProcesses = DB.hrProcesses || [];
+        DB.hrProcesses.unshift(result.item);
+        return result.item;
+      }, onboardHoPayload({ employeeCode: 'NV0007', fullName: 'Đặng Văn Bảy' }));
+      // Mô phỏng "mồ côi" NGAY phía Node (state thật mock dùng để dispatch), không phải DB phía trang.
+      state.employeeProfiles = (state.employeeProfiles || []).filter(p => p.employeeCode !== 'NV0007');
+      assert(!state.employeeProfiles.some(p => p.employeeCode === 'NV0007'), 'setup: phải chưa có hồ sơ Nháp nào cho NV0007 trước khi đồng bộ (mô phỏng "mồ côi")');
+      await page.evaluate((id) => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); openHrProcessDetail(id); }, created.id);
+      await page.waitForSelector('#hrpDetailModal:not(.hidden)', { timeout: 5000 });
+      await page.click('button[data-op="hrpSyncDraftProfile"]');
+      await page.waitForFunction(() => window.__alerts.length > 0, null, { timeout: 5000 });
+      const alerts = await page.evaluate(() => window.__alerts.slice(-1));
+      assertIncludes(alerts[0], 'Đã đồng bộ lại hồ sơ Nháp', 'phải báo thành công rõ ràng');
+      const profile = state.employeeProfiles.find(p => p.employeeCode === 'NV0007');
+      assert(profile, 'phải tự tạo bù hồ sơ Nháp — quy trình "mồ côi" này giờ sẽ hiện trong hàng đợi Onboarding');
+      assertEqual(profile.processId, created.id);
+      assertEqual(profile.status, 'DRAFT');
+      assertEqual(profile.onboardingQueueStatus, 'PENDING');
+    });
+
     // ===================== VIEW-SCOPE (server-side) =====================
 
     await run.run('Người KHÔNG liên quan (không phải creator/quản lý/quản lý trực tiếp/được giao task) KHÔNG xem được quy trình của người khác; hrViewAll xem được TOÀN BỘ', async () => {

@@ -304,32 +304,41 @@ function buildActionHandlers(state) {
 // NẰM NGOÀI "item" — actionHandlers chung (dispatch chính) chỉ trả về đúng 1 "item" nên không gọi hàm
 // thật của route được, phải tự mutate state.employeeProfiles trực tiếp ở đây (closure qua buildActionHandlers(state),
 // cùng khuôn operationWorkItems:progress/accept ở trên).
-function registerHrProcessEditHandler(actionHandlers, state) {
+// syncDraftProfileOnOnboardingEdited() (routes/records.js) — dùng chung cho CẢ 2 action
+// "edit"/"sync-draft-profile" ngay dưới (route thật cũng gọi đúng 1 hàm này cho cả 2 route). Trả về
+// true/false — true nếu có backfill/relink hồ sơ Nháp (khớp "draftProfileSynced" route thật trả về).
+function mockSyncDraftProfileOnOnboardingEdited(updated, u, state) {
+  if (updated.processType !== 'ONBOARDING' || !updated.employeeCode) return false;
   const employeeProfile = require('../lib/employeeProfile');
+  state.employeeProfiles = state.employeeProfiles || [];
+  const arr = state.employeeProfiles;
+  const stale = arr.find(p => p.processId === updated.id && p.employeeCode !== updated.employeeCode && p.status === 'DRAFT');
+  if (stale) { stale.processId = null; stale.onboardingQueueStatus = null; }
+  let profile = arr.find(p => p.employeeCode === updated.employeeCode);
+  if (!profile) {
+    profile = employeeProfile.createDraftProfileForOnboarding(updated.employeeCode, u.username, u.name);
+    arr.push(profile);
+  }
+  profile.processId = updated.id;
+  if (profile.status === 'DRAFT') {
+    profile.onboardingQueueStatus = 'PENDING';
+    profile.onboardingQueueCancelReason = null; profile.onboardingQueueCancelledAt = null; profile.onboardingQueueCancelledBy = null;
+    return true;
+  }
+  return false;
+}
+
+function registerHrProcessEditHandler(actionHandlers, state) {
   actionHandlers['hrProcesses:edit'] = (u, item, body) => {
     const appData = buildAppDataForCreate('hrProcesses', state);
     appData.hrProcesses = state.hrProcesses;
     appData.employeeProfiles = state.employeeProfiles || [];
     const updated = recordActions.editHrProcess(u, item, body, appData);
-    if (updated.processType === 'ONBOARDING' && updated.employeeCode) {
-      state.employeeProfiles = state.employeeProfiles || [];
-      const arr = state.employeeProfiles;
-      const stale = arr.find(p => p.processId === updated.id && p.employeeCode !== updated.employeeCode && p.status === 'DRAFT');
-      if (stale) { stale.processId = null; stale.onboardingQueueStatus = null; }
-      let profile = arr.find(p => p.employeeCode === updated.employeeCode);
-      if (!profile) {
-        profile = employeeProfile.createDraftProfileForOnboarding(updated.employeeCode, u.username, u.name);
-        arr.push(profile);
-      }
-      profile.processId = updated.id;
-      if (profile.status === 'DRAFT') {
-        profile.onboardingQueueStatus = 'PENDING';
-        profile.onboardingQueueCancelReason = null; profile.onboardingQueueCancelledAt = null; profile.onboardingQueueCancelledBy = null;
-      }
-    }
+    mockSyncDraftProfileOnOnboardingEdited(updated, u, state);
     return updated;
   };
 }
+
 
 // Mirror ĐÚNG syncOperationWorkItemAncestors() (routes/records.js) — đệ quy tính lại trạng thái từng
 // cấp cha lên tới gốc ngay trong state.operationWorkItems (mock không có SQL Server thật để lock/đọc
@@ -929,6 +938,25 @@ function createDispatcher(state) {
           .forEach(w => { w.dependsOnWorkItemIds = w.dependsOnWorkItemIds.filter(x => !deletedSet.has(x)); });
         syncOperationWorkItemAncestorsInState(state, item.parentWorkItemId);
         return { status: 200, body: { ok: true } };
+      }
+
+      // "🔄 Đồng Bộ Hồ Sơ Nháp" (MỚI, 11/2026, theo yêu cầu người dùng — quy trình Onboarding "mồ côi"
+      // KHÔNG hiện trong hàng đợi "🕐 Hồ Sơ Onboarding" dù vẫn đang thực hiện bình thường) — mirror ĐÚNG
+      // routes/records.js POST /hrProcesses/:id/sync-draft-profile: KHÔNG mutate hrProcesses (chỉ validate
+      // quyền/trạng thái), side effect DUY NHẤT là employeeProfiles qua
+      // mockSyncDraftProfileOnOnboardingEdited() ở trên — TÁCH KHỎI actionHandlers chung (cùng lý do
+      // "create-it-ticket" ngay dưới: response cần "draftProfileSynced" thay vì "item").
+      if ((m = pathName.match(/^\/api\/records\/(hrProcesses)\/(\d+)\/sync-draft-profile$/)) && method === 'POST') {
+        const id = Number(m[2]);
+        const list = state.hrProcesses || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const item = list[idx];
+        if (!recordActions.canManageHrProcess(freshUser, item)) return { status: 403, body: { error: 'Bạn không có quyền đồng bộ hồ sơ của quy trình này' } };
+        if (item.processType !== 'ONBOARDING') return { status: 400, body: { error: 'Chỉ áp dụng cho quy trình Onboarding' } };
+        if (item.status !== 'IN_PROGRESS') return { status: 409, body: { error: 'Quy trình không còn ở trạng thái đang thực hiện' } };
+        const draftProfileSynced = mockSyncDraftProfileOnOnboardingEdited(item, freshUser, state);
+        return { status: 200, body: { ok: true, draftProfileSynced } };
       }
 
       // NHÂN SỰ > Onboarding/Offboarding v2 — "Tạo Ticket IT" cho 1 task nhãn IT cụ thể trong 1 quy

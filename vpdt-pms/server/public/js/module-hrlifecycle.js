@@ -842,6 +842,7 @@ function renderHrProcessDetailBody(item) {
       </div>
     </div>
     ${item.status === 'IN_PROGRESS' && canManage ? `<div class="text-right mt-3 flex justify-end gap-3">
+      ${item.processType === 'ONBOARDING' ? `<button type="button" data-op="hrpSyncDraftProfile" data-arg0="${item.id}" class="text-teal-600 font-bold text-xs hover:underline" title="Dùng khi quy trình này KHÔNG hiện trong hàng đợi &quot;🕐 Hồ Sơ Onboarding&quot; dù vẫn đang thực hiện bình thường ở đây">🔄 Đồng Bộ Hồ Sơ Nháp</button>` : ''}
       <button type="button" data-op="hrpEditProcess" data-arg0="${item.id}" class="text-indigo-600 font-bold text-xs hover:underline">✏️ Sửa Quy Trình</button>
       <button type="button" data-op="hrpCancelProcess" data-arg0="${item.id}" class="text-red-600 font-bold text-xs hover:underline">❌ Huỷ Quy Trình</button>
     </div>` : ''}
@@ -934,6 +935,21 @@ async function hrpCancelProcess(processId) {
   try {
     const result = await callRecordAction('hrProcesses', processId, 'cancel', { reason: reason.trim() });
     hrpApplyProcessUpdate(result.item);
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
+}
+
+// "🔄 Đồng Bộ Hồ Sơ Nháp" (11/2026, theo yêu cầu người dùng — quy trình Onboarding đang "Đang thực hiện"
+// bình thường nhưng KHÔNG hiện trong hàng đợi "🕐 Hồ Sơ Onboarding" vì hồ sơ employeeProfiles DRAFT liên
+// kết bị thiếu/mất — xem POST /hrProcesses/:id/sync-draft-profile, routes/records.js). KHÔNG trả về
+// "item" (route này không đụng hrProcesses) nên không gọi hrpApplyProcessUpdate() — chỉ báo kết quả.
+async function hrpSyncDraftProfile(processId) {
+  try {
+    const result = await callRecordAction('hrProcesses', processId, 'sync-draft-profile', {});
+    alert(result.draftProfileSynced
+      ? '✅ Đã đồng bộ lại hồ sơ Nháp — quy trình này giờ sẽ hiện trong hàng đợi "🕐 Hồ Sơ Onboarding".'
+      : 'ℹ️ Hồ sơ Nháp của quy trình này đã đồng bộ sẵn (không cần làm gì thêm).');
   } catch (err) {
     alert(`⛔ ${err.message}`);
   }
