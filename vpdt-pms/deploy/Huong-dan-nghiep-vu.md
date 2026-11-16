@@ -3855,6 +3855,10 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   làm đúng quầy kệ đang được chỉ định, tránh làm nhầm/làm trước thứ tự.
   Admin luôn bypass khoá này (đúng triết lý chung của hệ thống), nhưng vẫn
   cần có allowlist Tab 8 riêng mới thao tác được (2 lớp độc lập).
+  Người CHỈ có quyền này (không có quyền Cấu Hình Quầy Kệ riêng) vào Tab 5
+  sẽ KHÔNG thấy khung "+ Thêm Quầy Kệ"/"Tải Mẫu Excel"/"Nhập Excel" (các
+  hành động đó cần quyền khác) — vẫn thấy "📊 Xuất Excel" (chỉ xuất lại
+  đúng dữ liệu đã xem được).
 - **🔒 Khoá/Mở Khoá Quầy Kệ + ✅ Xác Nhận Toàn Bộ Đợt: gán được THEO SIÊU
   THỊ (MỚI, theo yêu cầu người dùng — "cho IT chỉ khoá mở ở một siêu thị
   của họ thôi")**: 2 quyền này (`kiemKeShelfLockManage`,
