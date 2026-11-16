@@ -130,6 +130,7 @@ async function loadOrgChartCurrentVersion(id) {
   const isArchived = _ocCurrentVersion.status === 'ARCHIVED';
   document.getElementById('btnOrgChartRenameVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartValidateVersion').classList.toggle('hidden', !(isDraft && canManageTree));
+  document.getElementById('btnOrgChartAutofillDepartmentRef').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartApplyVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   // Nút "✏️ Sửa Bản Đang Áp Dụng" + "✅ Áp Dụng (Giữ Nguyên Ngày)" (10/2026) — xem editAppliedOrgChartVersionClick()/
   // applyOrgChartVersionClick() + lib/orgChart.js::applyVersionInPlace() cho đầy đủ ngữ cảnh. Nút Sửa chỉ hiện khi
@@ -747,6 +748,27 @@ async function cloneOrgChartVersionClick() {
   } catch (err) { return alert(`⛔ ${err.message}`); }
   await renderOrgChartModule();
   document.getElementById('orgChartVersionSelect').value = String(result.version.id);
+  await onOrgChartVersionSelectChange();
+}
+// "🔧 Tự Động Gắn Phòng Ban Chuẩn (departmentRef)" (11/2026, theo yêu cầu người dùng — xem chú thích đầy
+// đủ tại nút trong orgChartSection.html + lib/orgChart.js::planAutoFillDepartmentRef()/
+// autoFillDepartmentRef()). Gọi route mới, hiện rõ bao nhiêu node được tự gắn + bao nhiêu node CÒN cần
+// gắn tay (nodeName không khớp tên nào trong Danh Mục Phòng Ban/Siêu Thị — không đoán bừa), rồi tải lại
+// đúng version đang xem để cây cập nhật ngay, KHÔNG tự Áp Dụng thay admin.
+async function autoFillDepartmentRefClick() {
+  if (!_ocCurrentVersion) return;
+  if (!confirm('Tự động gắn "departmentRef" cho mọi Phòng Ban/Siêu Thị trong bản nháp này đang thiếu, CHỈ khi tên hiển thị khớp ĐÚNG 1 tên thật trong Danh Mục Phòng Ban/Siêu Thị?\n\nNode không khớp tên nào sẽ KHÔNG bị đụng tới — vẫn cần bạn tự gắn tay.')) return;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/autofill-department-ref`, {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const lines = [`✅ Đã tự động gắn departmentRef cho ${result.toUpdate.length} Phòng Ban/Siêu Thị.`];
+  if (result.toUpdate.length) lines.push(...result.toUpdate.map(u => `   • ${u.nodeName} → ${u.matchedCatalogValue}`));
+  if (result.needsManualReview.length) {
+    lines.push(`\n⚠️ Còn ${result.needsManualReview.length} node KHÔNG khớp tên nào trong Danh Mục — cần tự gắn tay:`);
+    lines.push(...result.needsManualReview.map(r => `   • ${r.nodeName}`));
+  }
+  alert(lines.join('\n'));
   await onOrgChartVersionSelectChange();
 }
 // Nút "✨ Tạo Bản Mới (Trống)" (11/2026, theo yêu cầu người dùng: "chỉ tạo được bản nháp, tức là lấy

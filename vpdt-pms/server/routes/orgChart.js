@@ -166,6 +166,37 @@ router.post('/versions/:id/clone', async (req, res) => {
   }
 });
 
+// POST /api/org-chart/versions/:id/autofill-department-ref (11/2026, theo yêu cầu người dùng — ca
+// thật: Nhập Excel Gán Chức Vụ xem trước báo "sẵn sàng gán" hàng loạt nhưng Áp Dụng fail HÀNG LOẠT vì
+// node Phòng Ban/Siêu Thị cha chưa gắn departmentRef thật, chỉ có nodeName tự do) — tự động gắn
+// departmentRef cho MỌI node Phòng Ban đang thiếu, CHỈ khi nodeName khớp ĐÚNG 1 tên thật trong Danh Mục
+// Phòng Ban/Siêu Thị (an toàn, không ghi tên tự do). CHỈ áp dụng cho bản DRAFT (orgChart.requireDraft()
+// trong autoFillDepartmentRef() tự chặn APPLIED/ARCHIVED) — admin tự xem lại cây rồi bấm "Áp Dụng" như
+// bình thường (route /versions/:id/apply có sẵn ở trên), không tự động áp dụng thay admin.
+router.post('/versions/:id/autofill-department-ref', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let plan;
+    await withLockedAppDataValue('orgChartVersions', async (list) => {
+      const version = orgChart.requireVersion(list, Number(req.params.id));
+      const catalogDeptNames = [...((await getAppDataValue('depts')) || []), ...((await getAppDataValue('stores')) || [])];
+      plan = orgChart.autoFillDepartmentRef(version, catalogDeptNames);
+      return list;
+    });
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_AUTOFILL_DEPARTMENT_REF',
+      targetObject: `orgChartVersions#${req.params.id}`,
+      description: `Tự động gắn departmentRef cho bản nháp Cơ Cấu Tổ Chức [${req.params.id}] — ${plan.toUpdate.length} node được gắn, ${plan.needsManualReview.length} node cần gắn tay`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Tự Động Gắn departmentRef):', e.message));
+    res.json({ ok: true, ...plan });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/autofill-department-ref', 'Không thể tự động gắn departmentRef');
+  }
+});
+
 // POST /api/org-chart/versions/:id/delete — xoá hẳn 1 bản nháp (DRAFT) không dùng nữa (tạo thử/nhân
 // bản nhầm) — chỉ DRAFT, orgChart.deleteVersion() tự chặn APPLIED/ARCHIVED (phải giữ lại làm lịch sử).
 router.post('/versions/:id/delete', async (req, res) => {
