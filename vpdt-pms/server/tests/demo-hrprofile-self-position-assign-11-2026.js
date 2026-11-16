@@ -102,13 +102,16 @@ async function main() {
   epServer.APP_DATA.employeeProfiles.push(selfProfile);
 
   await page.exposeFunction('__hrProfileFetch', async (method, urlPath, bodyStr, username) => {
+    console.log('NODE_FETCH_START:', method, urlPath);
     const res = await fetch(`http://127.0.0.1:${epServer.port}${urlPath}`, {
       method,
       headers: Object.assign({ 'x-demo-user': username || '' }, bodyStr !== null ? { 'Content-Type': 'application/json' } : {}),
       body: bodyStr === null ? undefined : bodyStr
     });
+    console.log('NODE_FETCH_STATUS:', res.status);
     let body = null;
     try { body = await res.json(); } catch (e) { body = null; }
+    console.log('NODE_FETCH_BODY:', JSON.stringify(body));
     return { status: res.status, body };
   });
   await page.evaluate(() => {
