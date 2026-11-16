@@ -74,6 +74,24 @@ function requireKiemKeModuleAccess(req, res) {
   return true;
 }
 
+// canViewStocktakeSessionData() (MỚI, 12/2026, theo yêu cầu người dùng: "gán quyền Xác Nhận siêu thị nào
+// thì tự động xem được luôn, không cần gán thêm gì khác") — gộp ĐÚNG 4 nhánh hợp lệ dùng LẶP LẠI ở GET
+// /counts, /shelf-confirmations, /shelf-kiem-soat-confirmations: admin, đúng dept hồ sơ (home dept), có
+// allowlist Tab 8 tại đúng siêu thị của kỳ đó (Giám Sát Vùng — xem chú thích gốc ở từng route), HOẶC có
+// quyền Xác Nhận Toàn Bộ Đợt (kiemKeConfirmDo) phạm vi đúng siêu thị đó — nhánh THỨ 4 này MỚI: trước đây
+// kiemKeConfirmDo/canConfirmStocktakeForDept() chỉ gác được đúng nút "Xác Nhận Toàn Bộ Đợt" (route
+// confirm-all), KHÔNG gác được 3 route XEM dữ liệu này, khiến màn Tab 6 hiện TRỐNG dù người dùng đã có
+// quyền Xác Nhận đúng siêu thị đó (quyền có mà không dùng được, đúng lớp lỗi CLAUDE.md nhắc tránh).
+// canConfirmStocktake(freshUser) PHẢI kiểm tra trước (base gate) — canConfirmStocktakeForDept() một mình
+// có nhánh fallback "đúng dept của mình" cho MỌI user, kể cả người không có kiemKeConfirmDo chút nào.
+async function canViewStocktakeSessionData(freshUser, session) {
+  if (freshUser.perms?.admin || session.dept === freshUser.dept) return true;
+  if (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, session.dept)) return true;
+  await ensureStocktakeKey('stocktakeUserAccess');
+  const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+  return userHasAnyStocktakeAccessToDept(access, freshUser.username, session.dept);
+}
+
 // Xem danh sách kỳ — mở cho MỌI user có quyền module Kiểm Kê (không riêng kiemKePeriodManage): các tab
 // Gom Mã/Kiểm Đếm/Kiểm Soát khác (sẽ bổ sung sau) cần đọc danh sách này để biết kỳ nào đang hoạt động.
 // Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=. 12/2026, MỞ
@@ -88,7 +106,8 @@ router.get('/sessions', async (req, res) => {
     if (requestedDept && requestedDept !== req.freshUser.dept) {
       const allowed = req.freshUser.perms?.admin
         || canCloseStocktakePeriodForDept(req.freshUser, requestedDept)
-        || canReopenStocktakePeriodForDept(req.freshUser, requestedDept);
+        || canReopenStocktakePeriodForDept(req.freshUser, requestedDept)
+        || (canConfirmStocktake(req.freshUser) && canConfirmStocktakeForDept(req.freshUser, requestedDept));
       if (allowed) dept = requestedDept;
     }
     const all = (await getAppDataValue('stocktakeSessions')) || [];
@@ -749,12 +768,8 @@ router.get('/counts', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
     await ensureStocktakeKey('stocktakeCounts');
@@ -856,12 +871,8 @@ router.get('/shelf-confirmations', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     await ensureStocktakeKey('stocktakeShelfConfirmations');
     const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
@@ -926,12 +937,8 @@ router.get('/shelf-kiem-soat-confirmations', async (req, res) => {
     await ensureStocktakeSessionsKey();
     const session = ((await getAppDataValue('stocktakeSessions')) || []).find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: 'Không tìm thấy kỳ kiểm kê' });
-    if (!req.freshUser.perms?.admin && session.dept !== req.freshUser.dept) {
-      await ensureStocktakeKey('stocktakeUserAccess');
-      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
-      if (!userHasAnyStocktakeAccessToDept(access, req.freshUser.username, session.dept)) {
-        return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
-      }
+    if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
+      return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
     const all = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];

@@ -12708,9 +12708,12 @@ function canAccessStocktakeModule(user) {
   const hasCloseScope = !!(closeScope && typeof closeScope === 'object'
     && (closeScope.all || (Array.isArray(closeScope.depts) && closeScope.depts.length > 0)));
   const hasReopen = user.perms?.kiemKePeriodReopenManage === true;
+  const lockScope = user.perms?.kiemKeShelfLockManage;
+  const hasLockScope = lockScope === true || !!(lockScope && typeof lockScope === 'object'
+    && (lockScope.all || (Array.isArray(lockScope.depts) && lockScope.depts.length > 0)));
   return !!(user.perms?.kiemKePeriodManage || user.perms?.kiemKeGomMaDo || user.perms?.kiemKeKiemDemDo
     || user.perms?.kiemKeKiemSoatDo || user.perms?.kiemKeShelfConfigManage || user.perms?.kiemKeConfirmDo
-    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage || hasCloseScope || hasReopen);
+    || user.perms?.kiemKeReportView || user.perms?.kiemKeUserAccessManage || hasCloseScope || hasReopen || hasLockScope);
 }
 // canViewShelfReportClient() (12/2026) — gác mục "📋 Kiểm Soát Hàng Hóa" trong REPORT_NAV_TREE
 // (module-baocaoquantri.js, REPORT_KEY_ACCESS_FN), cùng khuôn canViewChecklistReportsClient(): quyền

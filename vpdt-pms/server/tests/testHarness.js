@@ -28,7 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
+const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterKiemKeShelfLocationsForUser } = require('../lib/recordViewScope');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
@@ -454,6 +454,11 @@ function createDispatcher(state) {
       data.uniformIssuances = filterUniformIssuancesForUser(state.uniformIssuances, viewer);
       data.uniformStockAdjustments = filterUniformStockAdjustmentsForUser(state.uniformStockAdjustments, viewer);
       data.uniformTransfers = filterUniformTransfersForUser(state.uniformTransfers, viewer);
+      // kiemKeShelfLocations (Tab 5, 12/2026) — cùng lý do các collection ở trên: mirror ĐÚNG bước lọc
+      // thật routes/data.js (filterKiemKeShelfLocationsForUser()), không tự đoán lại luật — trước đây mock
+      // trả nguyên state không lọc, không thể phát hiện lỗ hổng/thiếu sót ở canViewKiemKeShelfLocation()
+      // (VD đợt 12/2026 mở rộng thêm nhánh kiemKeShelfLockManage/kiemKeConfirmDo theo siêu thị).
+      if (data.kiemKeShelfLocations) data.kiemKeShelfLocations = filterKiemKeShelfLocationsForUser(state.kiemKeShelfLocations, viewer, data);
     }
     return data;
   }
@@ -956,12 +961,13 @@ function createDispatcher(state) {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
-        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept } = require('../lib/stocktakeEngine');
+        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canConfirmStocktake, canConfirmStocktakeForDept } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         const qsDept = new URL(url, 'http://x').searchParams.get('dept');
         let dept = freshUser.dept;
         if (qsDept && qsDept !== freshUser.dept) {
-          const allowed = freshUser.perms?.admin || canCloseStocktakePeriodForDept(freshUser, qsDept) || canReopenStocktakePeriodForDept(freshUser, qsDept);
+          const allowed = freshUser.perms?.admin || canCloseStocktakePeriodForDept(freshUser, qsDept) || canReopenStocktakePeriodForDept(freshUser, qsDept)
+            || (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, qsDept));
           if (allowed) dept = qsDept;
         }
         const items = (state.stocktakeSessions || []).filter(s => s.dept === dept);

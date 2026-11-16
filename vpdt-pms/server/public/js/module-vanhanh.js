@@ -377,6 +377,16 @@ function canManageStocktakeShelfLockForDeptClient(user, dept) {
   return dept === user?.dept;
 }
 function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
+// canSeeStocktakeShelfConfigTabClient (MỚI — phát hiện khi viết test cho câu hỏi người dùng "được phân
+// quyền siêu thị nào thì vào sẽ nhìn được siêu thị đấy": IT chỉ có kiemKeShelfLockManage (KHÔNG có
+// kiemKeShelfConfigManage) bị chặn luôn ở CỔNG vào Tab 5 — SHELFCONFIG trước đây chỉ gác bằng
+// canManageStocktakeShelfConfigClient, không đối xứng với CONFIRM (canSeeStocktakeConfirmTabClient =
+// canConfirmStocktakeClient || canDoStocktakeKiemDemClient) — nay OR thêm canManageStocktakeShelfLockClient
+// để IT chỉ được gán quyền Khoá/Mở Khoá vẫn vào được Tab 5 dùng đúng khung đó, không cần thêm quyền Cấu
+// Hình Quầy Kệ (CRUD danh mục) không liên quan.
+function canSeeStocktakeShelfConfigTabClient(user) {
+  return canManageStocktakeShelfConfigClient(user) || canManageStocktakeShelfLockClient(user);
+}
 // canConfirmStocktakeForDeptClient (LỖI THẬT đã vá, 12/2026 — phát hiện lại khi mirror cho
 // kiemKeShelfLockManage ở trên) — canConfirmStocktakeClient() ở trên KHÔNG xét dept, nên 1 người được gán
 // phạm vi HẸP (VD {all:false, depts:['Siêu thị A']}) vẫn THẤY nút "Xác Nhận Toàn Bộ Đợt" dù đang xem 1
@@ -402,8 +412,29 @@ function canConfirmStocktakeForDeptClient(user, dept) {
 // theo đúng quyền riêng của nó.
 function canSeeStocktakeConfirmTabClient(user) { return canConfirmStocktakeClient(user) || canDoStocktakeKiemDemClient(user); }
 function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
+// kkSelectableDepts() (MỚI, 12/2026 — TỔNG QUÁT HOÁ kkPeriodSelectableDepts() cũ, theo phát hiện khi trả
+// lời câu hỏi người dùng "được phân quyền siêu thị nào thì vào sẽ nhìn được siêu thị đấy, đúng không?":
+// ban đầu chỉ tính phạm vi kiemKePeriodCloseManage/kiemKePeriodReopenManage cho RIÊNG ô chọn Tab 1, nhưng
+// Tab 1/5/6 dùng CHUNG đúng 1 biến kkPeriodDeptSelected (đổi ở đâu cũng đồng bộ cả module) — nên phải tính
+// HỢP của CẢ 4 quyền theo siêu thị (kiemKePeriodCloseManage, kiemKePeriodReopenManage, kiemKeConfirmDo,
+// kiemKeShelfLockManage), không chỉ 2 quyền của riêng Tab 1, nếu không người chỉ được gán Xác Nhận/Khoá
+// Mở Khoá cho siêu thị khác sẽ không có cách nào chuyển ô "📍 Siêu thị:" sang đúng siêu thị đó — quyền có
+// mà không dùng được trên giao diện. Trả về danh sách siêu thị người này được PHÉP chọn: admin -> mọi
+// siêu thị; người thường -> đúng siêu thị của mình HỢP với phạm vi của CẢ 4 quyền trên (nếu có).
+function kkSelectableDepts(user) {
+  const allStores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
+  if (user?.perms?.admin) return allStores;
+  if (user?.perms?.kiemKePeriodReopenManage === true) return allStores;
+  const scopes = [user?.perms?.kiemKePeriodCloseManage, user?.perms?.kiemKeConfirmDo, user?.perms?.kiemKeShelfLockManage];
+  if (scopes.some(v => v && typeof v === 'object' && v.all)) return allStores;
+  const extra = new Set();
+  if (user?.dept) extra.add(user.dept);
+  scopes.forEach(v => { if (v && typeof v === 'object' && Array.isArray(v.depts)) v.depts.forEach(d => extra.add(d)); });
+  return allStores.filter(s => extra.has(s));
+}
 function kkEffectiveDept() {
-  return (currentUser.perms?.admin && kkPeriodDeptSelected) ? kkPeriodDeptSelected : currentUser.dept;
+  if (kkPeriodDeptSelected && kkSelectableDepts(currentUser).includes(kkPeriodDeptSelected)) return kkPeriodDeptSelected;
+  return currentUser.dept;
 }
 
 // Online/Offline Kiểm Kê (12/2026, theo yêu cầu người dùng — xem docs/kiem-ke-kiem-soat-offline.md): mở
@@ -419,7 +450,7 @@ function setKiemKeSubTab(tab) {
     ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
     ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
     ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],
-    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig', canManageStocktakeShelfConfigClient],
+    ['SHELFCONFIG', 'kkShelfConfigWrap', 'btnKkSubShelfConfig', canSeeStocktakeShelfConfigTabClient],
     ['CONFIRM', 'kkConfirmWrap', 'btnKkSubConfirm', canSeeStocktakeConfirmTabClient],
     ['REPORT', 'kkReportWrap', 'btnKkSubReport', canViewStocktakeReportClient],
     ['USERACCESS', 'kkUserAccessWrap', 'btnKkSubUserAccess', canManageStocktakeUserAccessClient]
@@ -1170,27 +1201,33 @@ let kkShelfLockSelected = new Set();
 // "Kỳ Kiểm Kê" (renderKkPeriodDeptRow() vẫn giữ nguyên <select> cũ, ĐÃ có 2 bộ test Playwright dùng
 // page.selectOption() trên đó — cố ý KHÔNG đổi để tránh phá test đang pass, đúng phạm vi người dùng yêu
 // cầu CHỈ riêng màn Khoá/Mở Khoá này).
+// renderKkShelfConfigDeptRow() — 12/2026, ĐỔI từ "CHỈ admin" sang dùng kkSelectableDepts() (dùng CHUNG
+// kkPeriodDeptSelected với Tab 1 — xem chú thích kkSelectableDepts()): người thường được gán phạm vi
+// kiemKeShelfLockManage/kiemKeConfirmDo/kiemKePeriodCloseManage/kiemKePeriodReopenManage cho siêu thị
+// KHÁC siêu thị mình giờ cũng thấy được ô chọn này để chuyển sang đúng siêu thị được gán.
 function renderKkShelfConfigDeptRow() {
   const row = document.getElementById('kkShelfConfigDeptRow');
   if (!row) return;
-  if (currentUser.perms?.admin) {
-    const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-    if (!kkPeriodDeptSelected) kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+  const stores = kkSelectableDepts(currentUser);
+  if (stores.length > 1) {
+    if (!kkPeriodDeptSelected || !stores.includes(kkPeriodDeptSelected)) kkPeriodDeptSelected = stores.includes(currentUser.dept) ? currentUser.dept : stores[0];
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
       <input id="kkShelfConfigDeptInput" value="${escapeHtml(kkPeriodDeptSelected)}" data-sdd-list="kkShelfConfigDeptDropdown" data-op-input="onKkShelfConfigDeptInputChanged" placeholder="Gõ tên siêu thị..." autocomplete="off" class="border rounded px-2 py-1 w-64">
       <div id="kkShelfConfigDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>`;
     sddSetOptions('kkShelfConfigDeptDropdown', stores);
   } else {
-    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(currentUser.dept || '')}</span>`;
+    kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(kkPeriodDeptSelected)}</span>`;
   }
 }
-// onKkShelfConfigDeptInputChanged() — CHỈ đổi siêu thị khi giá trị gõ KHỚP CHÍNH XÁC 1 siêu thị có thật
-// (tức là đã bấm chọn từ gợi ý, hoặc gõ đúng tuyệt đối tên) — gõ dở dang/sai chính tả thì GIỮ NGUYÊN siêu
-// thị đang chọn (không tự đổi sang rỗng/sai), tránh mất trạng thái khi admin đang gõ tìm.
+// onKkShelfConfigDeptInputChanged() — CHỈ đổi siêu thị khi giá trị gõ KHỚP CHÍNH XÁC 1 siêu thị người này
+// ĐƯỢC PHÉP chọn (kkSelectableDepts(), KHÔNG phải DB.stores suông — tránh gõ đúng tên 1 siêu thị có thật
+// nhưng ngoài phạm vi được gán) — gõ dở dang/sai chính tả thì GIỮ NGUYÊN siêu thị đang chọn (không tự đổi
+// sang rỗng/sai), tránh mất trạng thái khi đang gõ tìm.
 function onKkShelfConfigDeptInputChanged() {
   const input = document.getElementById('kkShelfConfigDeptInput');
   const raw = (input?.value || '').trim();
-  const stores = DB.stores || [];
+  const stores = kkSelectableDepts(currentUser);
   if (!stores.includes(raw) || raw === kkPeriodDeptSelected) return;
   kkPeriodDeptSelected = raw;
   kkShelfLockSelected = new Set();
@@ -1636,7 +1673,10 @@ async function enterKkConfirmTab() {
   const gomMaSel = document.getElementById('kkConfirmGomMaSessionSelect');
   const dept = kkEffectiveDept();
   try {
-    const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
+    // Luôn gửi ?dept= khi khác siêu thị của chính mình (KHÔNG còn chỉ riêng Admin) — người được gán
+    // kiemKeConfirmDo cho siêu thị khác (qua kkSelectableDepts()) cũng cần xem đúng kỳ của siêu thị đó;
+    // server GET /sessions tự gác lại đúng quyền (canConfirmStocktakeForDept) nên gửi thừa cũng an toàn.
+    const url = dept !== currentUser.dept ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
     const res = await fetch(url);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
@@ -2618,32 +2658,10 @@ function exportKkReportExcel() {
   }
 }
 
-// kkPeriodSelectableDepts() (MỚI, 12/2026, theo phát hiện khi thêm kiemKePeriodCloseManage/
-// kiemKePeriodReopenManage: quyền mới cho phép Đóng Kỳ/Mở Lại ở siêu thị KHÁC siêu thị của mình, nhưng ô
-// "📍 Siêu thị:" ở Tab 1 trước đây CHỈ admin mới có dropdown chọn — người thường dù được gán quyền mới vẫn
-// bị kẹt cứng đúng 1 siêu thị của mình, KHÔNG có cách nào chuyển sang xem/thao tác siêu thị khác được gán
-// — quyền có nhưng không dùng được trên giao diện, đúng lớp lỗi CLAUDE.md nhắc tránh). Trả về danh sách
-// siêu thị người này được PHÉP chọn ở Tab 1: admin -> mọi siêu thị; người thường -> đúng siêu thị của
-// mình HỢP với phạm vi kiemKePeriodCloseManage (nếu có) HOẶC mọi siêu thị nếu có kiemKePeriodReopenManage
-// (quyền phẳng, luôn là mọi siêu thị) — CHỈ ảnh hưởng ô chọn RIÊNG của Tab 1, không đụng kkEffectiveDept()/
-// DB.stores dùng chung cho các tab khác (Cấu Hình Quầy Kệ, Xác Nhận...).
-function kkPeriodSelectableDepts(user) {
-  const allStores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-  if (user?.perms?.admin) return allStores;
-  // kiemKePeriodReopenManage (quyền PHẲNG, luôn là MỌI siêu thị khi bật — xem lib/stocktakeEngine.js) ->
-  // cần xem được MỌI siêu thị để thật sự dùng được quyền Mở Lại ở bất kỳ đâu.
-  if (user?.perms?.kiemKePeriodReopenManage === true) return allStores;
-  const scope = user?.perms?.kiemKePeriodCloseManage;
-  if (scope && typeof scope === 'object' && scope.all) return allStores;
-  const extra = new Set();
-  if (user?.dept) extra.add(user.dept);
-  if (scope && typeof scope === 'object' && Array.isArray(scope.depts)) scope.depts.forEach(d => extra.add(d));
-  return allStores.filter(s => extra.has(s));
-}
 function renderKkPeriodDeptRow() {
   const row = document.getElementById('kkPeriodDeptRow');
   if (!row) return;
-  const stores = kkPeriodSelectableDepts(currentUser);
+  const stores = kkSelectableDepts(currentUser);
   if (stores.length > 1) {
     if (!kkPeriodDeptSelected || !stores.includes(kkPeriodDeptSelected)) kkPeriodDeptSelected = stores.includes(currentUser.dept) ? currentUser.dept : stores[0];
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
@@ -2677,11 +2695,10 @@ async function loadKkPeriodSessions() {
   const body = document.getElementById('kkPeriodListBody');
   if (body) body.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
   try {
-    // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán
-    // kiemKePeriodCloseManage/kiemKePeriodReopenManage phạm vi khác siêu thị của mình, xem
-    // kkPeriodSelectableDepts()) — KHÔNG chỉ riêng admin như trước (server GET /sessions đã mở rộng tương
-    // ứng, xem routes/stocktake.js).
-    const canPickDept = kkPeriodSelectableDepts(currentUser).length > 1;
+    // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán bất kỳ quyền
+    // nào trong 4 quyền theo siêu thị, xem kkSelectableDepts()) — KHÔNG chỉ riêng admin như trước (server
+    // GET /sessions đã mở rộng tương ứng, xem routes/stocktake.js).
+    const canPickDept = kkSelectableDepts(currentUser).length > 1;
     const qs = canPickDept ? `?dept=${encodeURIComponent(kkPeriodDeptSelected)}` : '';
     const res = await fetch(`/api/stocktake/sessions${qs}`);
     if (res.status === 401) return handleSessionExpired();
