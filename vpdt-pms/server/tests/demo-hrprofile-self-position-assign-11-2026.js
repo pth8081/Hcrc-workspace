@@ -79,8 +79,6 @@ async function main() {
   const { page, loginAs, stop } = h;
   await page.setViewportSize({ width: 1400, height: 1000 });
   page.on('dialog', (dialog) => dialog.accept());
-  page.on('console', (msg) => console.log('PAGE_CONSOLE:', msg.text()));
-  page.on('pageerror', (e) => console.log('PAGE_ERROR:', e && e.stack || e));
 
   const seedUsers = await page.evaluate(() => DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept, jobTitle: u.jobTitle, email: u.email, phone: u.phone, perms: u.perms, active: true })));
   // Tài khoản demo 'kd1' — CHỈ cấp hrProfileEdit (KHÔNG hrProfileManage, KHÔNG admin), đúng tình huống
@@ -102,16 +100,13 @@ async function main() {
   epServer.APP_DATA.employeeProfiles.push(selfProfile);
 
   await page.exposeFunction('__hrProfileFetch', async (method, urlPath, bodyStr, username) => {
-    console.log('NODE_FETCH_START:', method, urlPath);
     const res = await fetch(`http://127.0.0.1:${epServer.port}${urlPath}`, {
       method,
       headers: Object.assign({ 'x-demo-user': username || '' }, bodyStr !== null ? { 'Content-Type': 'application/json' } : {}),
       body: bodyStr === null ? undefined : bodyStr
     });
-    console.log('NODE_FETCH_STATUS:', res.status);
     let body = null;
     try { body = await res.json(); } catch (e) { body = null; }
-    console.log('NODE_FETCH_BODY:', JSON.stringify(body));
     return { status: res.status, body };
   });
   await page.evaluate(() => {
@@ -147,7 +142,12 @@ async function main() {
   // populateHrpfPositionDatalist() dựng, để resolveHrpfAssignPositionInput() trích đúng positionKey.
   await page.fill('#hrpfAssignPositionInput', 'Trưởng Phòng Phòng Kinh Doanh (POS_TPKD)');
   await page.click('button[data-op="confirmHrpfAssignPosition"]');
-  await page.waitForFunction(() => document.querySelector('#hrpfDetailBody')?.textContent?.includes('Trưởng Phòng Phòng Kinh Doanh'), { timeout: 5000 });
+  // profile.positionLabel sau khi gán chỉ là "Trưởng Phòng" (buildNodeDisplayName() không gộp tên
+  // Phòng Ban vào label — dept là field riêng) — chờ đúng chữ này THAY THẾ "(chưa gán)" cũ.
+  await page.waitForFunction(() => {
+    const t = document.querySelector('#hrpfDetailBody')?.textContent || '';
+    return t.includes('Trưởng Phòng') && !t.includes('(chưa gán)');
+  }, { timeout: 8000 });
 
   // ===== Ảnh 2: SAU khi tự gán — Chức Vụ hiện tại đã đổi, KHÔNG còn bị chặn 403 =====
   await page.screenshot({ path: path.join(OUT_DIR, '2-sau-khi-tu-gan-thanh-cong.png'), fullPage: true });
@@ -160,5 +160,4 @@ async function main() {
   console.log('DONE. Ảnh đã lưu tại', OUT_DIR);
 }
 
-const watchdog = setTimeout(() => { console.error('WATCHDOG: quá 25s, buộc thoát'); process.exit(1); }, 25000);
-main().then(() => clearTimeout(watchdog)).catch((e) => { clearTimeout(watchdog); console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
+main().catch((e) => { console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
