@@ -7451,6 +7451,112 @@ function cancelHrProcess(user, item, body) {
   return item;
 }
 
+// ===== "✏️ Sửa Quy Trình" (11/2026, theo yêu cầu người dùng — "hủy như này nó bị rác hồ sơ... có cho
+// phép sửa để nó chạy tiếp đến lúc hoàn thành thì thôi"): trước đây 1 quy trình Onboarding/Offboarding
+// gõ sai thông tin (VD sai Mã Nhân Viên) chỉ có đúng 1 lối ra là "Hủy" (cancelHrProcess() ở trên) —
+// giữ lại bản ghi "Đã huỷ" MÃI MÃI (gây rối màn theo dõi tiến độ) và MẤT HẾT checklist/tiến độ đã làm,
+// phải tạo lại từ đầu. editHrProcess() sửa lại ĐÚNG các field ĐỊNH DANH hay gõ sai mà KHÔNG đụng tới
+// checklist/lịch sử tasks[] đã có — quy trình tiếp tục chạy đúng chỗ đang dừng. CHỈ áp dụng cho quy
+// trình ĐANG "Đang thực hiện" (IN_PROGRESS) — quy trình đã Hoàn tất/Đã huỷ không còn sửa được nữa (dùng
+// "Hủy" cho trường hợp đó nếu còn IN_PROGRESS nhưng thật sự không cần nữa).
+//
+// CỐ Ý KHÔNG đưa Tài Khoản nhân viên (employeeUsername, Offboarding)/Người Kế Nhiệm vào đây — Tài Khoản
+// đang nghỉ việc SAI thì bản chất là quy trình SAI hoàn toàn (phải Hủy + tạo lại đúng người, không phải
+// lỗi gõ nhầm 1 field), còn Người Kế Nhiệm đã có action RIÊNG (assignHrSuccessor() ở trên) với cascade
+// đổi managerUsername cấp dưới đi kèm (syncManagerUsernameOnSuccessorAssigned(), routes/records.js) —
+// trộn 2 luồng vào chung 1 action dễ bỏ sót cascade đó.
+//
+// employeeCode (ONBOARDING) đổi được — route gọi hàm này (routes/records.js) chịu trách nhiệm đồng bộ
+// lại hồ sơ employeeProfiles DRAFT đặt chỗ SAU KHI hàm này trả về thành công (xem
+// syncDraftProfileOnOnboardingEdited()) — hàm NÀY chỉ validate + ghi vào CHÍNH hrProcesses, không động
+// tới collection khác (đúng nguyên tắc tách bạch đã áp dụng cho mọi action khác trong file này).
+function editHrProcess(user, item, body, appData) {
+  if (!canManageHrProcess(user, item)) throw new HttpError(403, 'Bạn không có quyền sửa quy trình này');
+  if (item.status !== 'IN_PROGRESS') throw new HttpError(409, 'Quy trình không còn ở trạng thái đang thực hiện');
+  appData = appData || {};
+  const changedFields = [];
+
+  if (item.processType === 'ONBOARDING') {
+    if ('fullName' in body) {
+      const fullName = String(body.fullName || '').trim().slice(0, 200);
+      if (!fullName) throw new HttpError(400, 'Vui lòng nhập Họ và Tên');
+      if (fullName !== item.fullName) { item.fullName = fullName; changedFields.push('fullName'); }
+    }
+    if ('employeePosType' in body || 'employeeDept' in body || 'employeeJobTitle' in body) {
+      const employeePosType = String(body.employeePosType || item.employeePosType || '').trim();
+      if (!['HO', 'STORE'].includes(employeePosType)) throw new HttpError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
+      const employeeDept = String(body.employeeDept ?? item.employeeDept ?? '').trim();
+      const validDepts = employeePosType === 'STORE' ? (appData.stores || []) : (appData.depts || []);
+      if (!employeeDept || !validDepts.includes(employeeDept)) {
+        throw new HttpError(400, employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị hợp lệ' : 'Vui lòng chọn Phòng Ban hợp lệ');
+      }
+      const employeeJobTitle = String(body.employeeJobTitle ?? item.employeeJobTitle ?? '').trim();
+      const validJobTitles = employeePosType === 'STORE' ? (appData.storeJobTitles || []).map(t => t.label) : (appData.jobTitles || []);
+      if (!employeeJobTitle || !validJobTitles.includes(employeeJobTitle)) throw new HttpError(400, 'Chức Danh không hợp lệ');
+      if (employeePosType !== item.employeePosType) { item.employeePosType = employeePosType; changedFields.push('employeePosType'); }
+      if (employeeDept !== item.employeeDept) { item.employeeDept = employeeDept; changedFields.push('employeeDept'); }
+      if (employeeJobTitle !== item.employeeJobTitle) { item.employeeJobTitle = employeeJobTitle; changedFields.push('employeeJobTitle'); }
+    }
+    if ('email' in body) {
+      const email = String(body.email || '').trim().slice(0, 200);
+      if (!email && item.employeePosType === 'STORE') throw new HttpError(400, 'Nhân viên Siêu Thị bắt buộc phải nhập Email');
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Email không đúng định dạng');
+      if (email !== item.email) { item.email = email; changedFields.push('email'); }
+    }
+    if ('phone' in body) {
+      const phone = String(body.phone || '').trim().slice(0, 30);
+      if (!phone) throw new HttpError(400, 'Vui lòng nhập Số Điện Thoại');
+      if (phone !== item.phone) { item.phone = phone; changedFields.push('phone'); }
+    }
+    if ('startDate' in body) {
+      const startDate = String(body.startDate || '').trim();
+      if (!startDate || Number.isNaN(new Date(startDate).getTime())) throw new HttpError(400, 'Vui lòng nhập Ngày Vào Làm Việc hợp lệ');
+      if (startDate !== item.startDate) { item.startDate = startDate; changedFields.push('startDate'); }
+    }
+    if ('employeeCode' in body) {
+      const newCode = String(body.employeeCode || '').trim().slice(0, 50);
+      if (!newCode) throw new HttpError(400, 'Vui lòng nhập Mã Nhân Viên');
+      if (newCode !== item.employeeCode) {
+        const profiles = appData.employeeProfiles || [];
+        const conflictProfile = profiles.find(p => p.employeeCode === newCode && p.processId !== item.id
+          && p.status !== 'DRAFT' && p.status !== 'INACTIVE');
+        if (conflictProfile) throw new HttpError(409, `Mã Nhân Viên "${newCode}" đang gắn với 1 hồ sơ đang hoạt động khác — không dùng được`);
+        const conflictProcess = (appData.hrProcesses || []).find(p => p.id !== item.id && p.processType === 'ONBOARDING'
+          && p.status === 'IN_PROGRESS' && p.employeeCode === newCode);
+        if (conflictProcess) throw new HttpError(409, `Mã Nhân Viên "${newCode}" đang được dùng ở 1 quy trình Onboarding khác đang thực hiện (#${conflictProcess.id})`);
+        item.employeeCode = newCode;
+        changedFields.push('employeeCode');
+      }
+    }
+  } else {
+    // OFFBOARDING — Tài Khoản/Người Kế Nhiệm KHÔNG sửa được ở đây, xem chú thích đầu hàm.
+    if ('lastWorkingDate' in body) {
+      const lastWorkingDate = String(body.lastWorkingDate || '').trim();
+      if (!lastWorkingDate || Number.isNaN(new Date(lastWorkingDate).getTime())) throw new HttpError(400, 'Vui lòng nhập Ngày nghỉ việc hợp lệ');
+      if (lastWorkingDate !== item.lastWorkingDate) {
+        item.lastWorkingDate = lastWorkingDate; item.targetEndDate = lastWorkingDate; changedFields.push('lastWorkingDate');
+      }
+    }
+    if ('reason' in body) {
+      const reason = String(body.reason || '').trim().slice(0, 1000);
+      if (reason !== (item.reason || '')) { item.reason = reason; changedFields.push('reason'); }
+    }
+    if ('resignationReason' in body) {
+      const resignationReason = body.resignationReason ? String(body.resignationReason).trim().slice(0, 200) : null;
+      if (resignationReason !== (item.resignationReason || null)) { item.resignationReason = resignationReason; changedFields.push('resignationReason'); }
+    }
+    if ('note' in body) {
+      const note = String(body.note || '').trim().slice(0, 1000);
+      if (note !== (item.note || '')) { item.note = note; changedFields.push('note'); }
+    }
+  }
+
+  if (!changedFields.length) throw new HttpError(400, 'Không có thay đổi nào để lưu');
+  item.history = item.history || [];
+  item.history.push({ action: 'EDITED', detail: `Sửa thông tin quy trình — field đổi: ${changedFields.join(', ')}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  return item;
+}
+
 // Đợt 4 (vá Phần B, mục A.6 tài liệu thiết kế) — chỉ định người kế nhiệm cho 1 quy trình Offboarding
 // đang giữ vị trí quản lý (còn người báo cáo trực tiếp, xem computeHrProcessProgress() ở trên). Field
 // successorUsername/successorName đã được scaffold sẵn từ createValidation.js (Đợt 2) nhưng chưa từng
@@ -9591,7 +9697,7 @@ module.exports = {
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead, canWithdrawHrFeedback, withdrawHrFeedback,
   canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
-  completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment, assignHrSuccessor,
+  completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, editHrProcess, addHrProcessAttachment, assignHrSuccessor,
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
   clearLinkedTicketOnHrProcessTask,
   closeItTicketOnHrProcessClosed,

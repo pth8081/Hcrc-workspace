@@ -4425,6 +4425,34 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   Việc kiểm tra dựa trên `managerUsername` SỐNG tại thời điểm đó (không dựa
   vào ô "đang giữ vị trí quản lý" HR tự tick lúc tạo — ô đó chỉ mang tính
   tham khảo, phòng trường hợp HR quên tick).
+- **"✏️ Sửa Quy Trình"** (MỚI 11/2026, theo yêu cầu người dùng — trước đây 1
+  quy trình gõ sai thông tin (VD sai Mã Nhân Viên) chỉ có đúng 1 lối ra là
+  "❌ Huỷ Quy Trình", để lại bản ghi "Đã huỷ" MÃI MÃI (gây rối màn theo dõi
+  tiến độ) và MẤT HẾT checklist/tiến độ đã làm, phải tạo lại từ đầu) — nút
+  **"✏️ Sửa Quy Trình"** ngay trong Chi Tiết Quy Trình (chỉ hiện khi quy trình
+  còn **"Đang thực hiện"** VÀ người xem có quyền quản lý) cho sửa lại ĐÚNG các
+  field định danh hay gõ sai mà KHÔNG đụng tới checklist/lịch sử tasks[] đã
+  có — quy trình tiếp tục chạy đúng chỗ đang dừng:
+  - **Onboarding**: Mã Nhân Viên, Họ Và Tên, Vị Trí/Phòng Ban/Siêu Thị, Chức
+    Danh, Email, Số Điện Thoại, Ngày Vào Làm Việc. Đổi Mã Nhân Viên bị chặn
+    nếu mã mới đang gắn 1 hồ sơ Hồ Sơ Nhân Sự đang hoạt động khác, hoặc đang
+    dùng ở 1 quy trình Onboarding khác đang thực hiện; đổi sang mã CHƯA ai
+    dùng (hoặc đang gắn hồ sơ Nháp/Đã nghỉ việc) thì hệ thống **tự đồng bộ
+    lại hồ sơ Nháp** ở hàng đợi "🕐 Hồ Sơ Onboarding" theo đúng mã mới (gỡ
+    liên kết hồ sơ Nháp cũ, tạo/liên kết hồ sơ Nháp ở mã mới) — kể cả quy
+    trình "mồ côi" (dữ liệu cũ chưa từng có hồ sơ Nháp liên kết) cũng được tự
+    tạo bổ sung hồ sơ Nháp ngay khi sửa.
+  - **Offboarding**: Ngày Nghỉ Dự Kiến, Lý Do Nghỉ Việc, Ghi Chú. **CỐ Ý
+    KHÔNG cho sửa** Tài Khoản nhân viên nghỉ việc/Người Kế Nhiệm ở đây (đổi
+    "ai đang nghỉ việc" không phải sửa lỗi gõ nhầm, phải Huỷ quy trình sai và
+    tạo lại đúng người).
+  - Quy trình đã **Hoàn Tất**/**Đã Huỷ** không sửa được nữa — chỉ áp dụng cho
+    quy trình còn "Đang thực hiện".
+- **Danh sách quy trình mặc định ẨN "Đã Huỷ"** (MỚI 11/2026, cùng đợt với
+  "✏️ Sửa Quy Trình" ở trên — nay đã có lối sửa thay Huỷ, hồ sơ "Đã Huỷ" chỉ
+  còn là trường hợp hiếm/lịch sử) — bộ lọc Trạng Thái mặc định mở vào **"Đang
+  thực hiện"** thay vì "Tất cả" như trước, đỡ rối màn theo dõi tiến độ hằng
+  ngày; chọn lại "Tất cả"/"Đã Huỷ" ở bộ lọc để xem đầy đủ như trước.
 - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không bắt
   buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh mục
   "🔑 Tài khoản / Đăng nhập", mục 4.2) để đội IT xử lý theo đúng quy trình sẵn
@@ -4456,9 +4484,13 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
     đang bật, hồ sơ Hồ Sơ Nhân Sự nháp vào hàng đợi "🕐 Hồ Sơ Onboarding")
     — đi qua ĐÚNG hàm dùng chung với "+ Tạo Onboarding" tạo tay, không có
     đường tắt bỏ qua business rule nào (cùng khuôn xem trước → xác nhận như
-    Nhập Excel Hợp Đồng Lao Động). Mã Nhân Viên để trống cho nhân viên hoàn
-    toàn mới (hệ thống tự sinh), chỉ điền khi là Tái Tuyển (mã của 1 hồ sơ
-    ĐÃ NGHỈ VIỆC). Giới hạn 300 dòng/lần nhập.
+    Nhập Excel Hợp Đồng Lao Động). **Mã Nhân Viên LUÔN phải để trống** (MỚI
+    11/2026, theo yêu cầu người dùng "mã sinh tự động mà không được điền
+    mã") — điền bất kỳ giá trị gì ở ĐÚNG đường nhập Excel hàng loạt này đều
+    bị báo lỗi dòng đó, kể cả khi mã điền khớp 1 hồ sơ Tái Tuyển hợp lệ; cần
+    Tái Tuyển (mã của 1 hồ sơ ĐÃ NGHỈ VIỆC) thì dùng nút "+ Tạo Onboarding"
+    tạo tay (có ô "Kiểm Tra Nhân Sự Cũ" riêng, không đổi gì). Giới hạn 300
+    dòng/lần nhập.
   - **"👉 Bỏ Qua Quy Trình"** — dùng cho nhân viên CŨ đã đang làm việc, không
     cần qua checklist Onboarding. Nút này chuyển thẳng sang Nhập Excel ở Hồ Sơ
     Nhân Sự (mục 4.5.3 bên dưới) — tạo hồ sơ "Đang làm việc" (ACTIVE) NGAY,

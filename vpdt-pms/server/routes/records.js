@@ -4764,11 +4764,12 @@ async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel)
   }
 }
 
-// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): TOÀN BỘ 8 route hành động /hrProcesses/... bên dưới
-// (assign-successor/delete/complete-task/skip-task/reassign-task/cancel/attachments/create-it-ticket)
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): TOÀN BỘ route hành động /hrProcesses/... bên dưới
+// (assign-successor/delete/complete-task/skip-task/reassign-task/cancel/edit/attachments/create-it-ticket)
 // trước đây KHÔNG gác hasModuleAccessServer() ("Khối 0") — chỉ kiểm quyền chi tiết theo bản ghi
 // (canActOnHrTask()/canManageHrProcess()...), khác 5 module con anh em (car/meeting/vpp/budget/vanHanh)
-// đã có middleware này. Mirror ĐÚNG khuôn router.use('/carRegs', ...) ở trên.
+// đã có middleware này. Mirror ĐÚNG khuôn router.use('/carRegs', ...) ở trên ("edit" thêm sau, 11/2026,
+// nằm SAU middleware này nên tự được gác — xem POST /hrProcesses/:id/edit).
 router.use('/hrProcesses', (req, res, next) => {
   if (!hasModuleAccessServer(req.freshUser, 'hrLifecycle')) {
     return res.status(403).json({ error: 'Module Onboarding/Offboarding đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
@@ -4839,6 +4840,44 @@ async function cleanupDraftProfileOnOnboardingClosed(hrProcessItem, actorUser, r
     return !!removed;
   } catch (err) {
     console.error(`${routeLabel}: lỗi dọn hồ sơ nhân sự Nháp khi đóng quy trình Onboarding:`, err.message);
+    return false;
+  }
+}
+
+// syncDraftProfileOnOnboardingEdited() (11/2026, cùng đợt "✏️ Sửa Quy Trình" — xem editHrProcess(),
+// lib/recordActions.js) — gọi SAU KHI sửa thành công 1 quy trình ONBOARDING, đảm bảo hồ sơ nhân sự
+// DRAFT đặt chỗ LUÔN khớp đúng employeeCode hiện tại của quy trình, dù:
+//   (a) employeeCode vừa bị ĐỔI (gõ sai lúc tạo) — hồ sơ DRAFT cũ (nếu còn trỏ processId này) được GỠ
+//       processId/onboardingQueueStatus (KHÔNG xoá — khác cleanupDraftProfileOnOnboardingClosed() ở
+//       trên, giữ lại để tra soát nếu cần), rồi hồ sơ ở Mã MỚI được link/tạo lại vào hàng đợi PENDING.
+//   (b) quy trình này TỪ TRƯỚC TỚI GIỜ chưa từng có hồ sơ DRAFT nào (VD do Nhập Excel hàng loạt cũ còn
+//       cho điền tay Mã Nhân Viên — đã chặn ở đợt này, nhưng dữ liệu CŨ có thể vẫn ở tình trạng này) —
+//       tự tạo bù 1 hồ sơ DRAFT mới, đưa vào hàng đợi PENDING, để HR cuối cùng cũng "Xác Nhận" được.
+// Fire-and-forget, best-effort (không chặn response chính nếu lỗi — cùng khuôn mọi hàm cleanup* ở trên).
+async function syncDraftProfileOnOnboardingEdited(hrProcessItem, actorUser, routeLabel) {
+  if (!hrProcessItem || hrProcessItem.processType !== 'ONBOARDING' || !hrProcessItem.employeeCode) return false;
+  try {
+    let linked = false;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const stale = arr.find(p => p.processId === hrProcessItem.id && p.employeeCode !== hrProcessItem.employeeCode && p.status === 'DRAFT');
+      if (stale) { stale.processId = null; stale.onboardingQueueStatus = null; }
+      let profile = arr.find(p => p.employeeCode === hrProcessItem.employeeCode);
+      if (!profile) {
+        profile = employeeProfile.createDraftProfileForOnboarding(hrProcessItem.employeeCode, actorUser.username, actorUser.name);
+        arr.push(profile);
+      }
+      profile.processId = hrProcessItem.id;
+      if (profile.status === 'DRAFT') {
+        profile.onboardingQueueStatus = 'PENDING';
+        profile.onboardingQueueCancelReason = null; profile.onboardingQueueCancelledAt = null; profile.onboardingQueueCancelledBy = null;
+        linked = true;
+      }
+      return arr;
+    });
+    return linked;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi đồng bộ hồ sơ nhân sự Nháp sau khi sửa Onboarding:`, err.message);
     return false;
   }
 }
@@ -5041,6 +5080,27 @@ router.post('/hrProcesses/:id/cancel', async (req, res) => {
     res.json({ ok: true, item: result, draftProfileRemoved, laborContractClosed, itTicketsClosed });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/cancel`, err);
+  }
+});
+
+// POST /hrProcesses/:id/edit — "✏️ Sửa Quy Trình" (11/2026) — xem chú thích đầy đủ ở editHrProcess()
+// (lib/recordActions.js). appData.hrProcesses/employeeProfiles đọc THÊM ở đây (KHÔNG có sẵn trong
+// getAllAppData() — cả 2 đều là collection dbo.Records riêng, cùng lý do các nhánh cross-lookup khác ở
+// routes/create.js) để editHrProcess() đối chiếu trùng Mã Nhân Viên với hồ sơ/quy trình khác.
+router.post('/hrProcesses/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    appData.hrProcesses = await getAllForCollection('hrProcesses');
+    appData.employeeProfiles = await getAllForCollection('employeeProfiles');
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.editHrProcess(freshUser, item, req.body, appData));
+    const draftProfileSynced = await syncDraftProfileOnOnboardingEdited(result, freshUser, `hrProcesses/${itemId}/edit`);
+    res.json({ ok: true, item: result, draftProfileSynced });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/edit`, err);
   }
 });
 
@@ -5854,6 +5914,15 @@ router.post('/hrProcesses/apply-create-import', async (req, res) => {
     for (const row of items) {
       const fullName = String(row?.fullName || '').trim();
       if (row?.action === 'skip') { skipped.push({ fullName: fullName || '(thiếu Họ Tên)', reason: 'Bỏ qua theo lựa chọn của người dùng' }); continue; }
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "mã sinh tự động mà không được điền mã"): lớp chặn
+      // THỨ 2 ở server (Zero-Trust, không tin riêng bước xem trước đã chặn ở rowToPreviewItem() —
+      // lib/hrProcessCreateImport.js) — request có thể bị sửa tay/console để vẫn gửi employeeCode. Chặn
+      // NGAY TẠI ĐÂY, không gọi tới createOnboardingProcessRecord() (hàm đó vẫn phải nhận employeeCode
+      // cho đường tạo tay đơn lẻ/Tái Tuyển, không đổi gì ở đó).
+      if (String(row?.fields?.employeeCode || '').trim()) {
+        skipped.push({ fullName: fullName || '(thiếu Họ Tên)', reason: 'Mã Nhân Viên phải để trống ở Nhập Excel hàng loạt — hệ thống tự sinh mã' });
+        continue;
+      }
       try {
         const appData = await getAllAppData();
         const payload = { processType: 'ONBOARDING', ...(row?.fields || {}) };

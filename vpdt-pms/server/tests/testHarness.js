@@ -278,6 +278,8 @@ function buildActionHandlers(state) {
 
     // ===== NHÂN SỰ — Onboarding/Offboarding v2 (checklist theo giai đoạn) — mirror ĐÚNG
     // routes/records.js POST /hrProcesses/:id/complete-task|skip-task|reassign-task|cancel|attachments.
+    // "edit" ("✏️ Sửa Quy Trình") KHÔNG nằm ở đây — xem registerHrProcessEditHandler() ngay dưới
+    // buildActionHandlers() (cần side effect mutate state.employeeProfiles ngoài "item").
     // "create-it-ticket" KHÔNG nằm ở đây (xem nhánh riêng bên dưới trong dispatch chính) vì response cần
     // kèm thêm "ticket" vừa tạo, khác mọi action khác chỉ trả về đúng 1 "item".
     // (Đợt 4 — vá gap #1 Phần B) complete-task/skip-task giờ nhận thêm state.users để cổng người-kế-
@@ -292,6 +294,40 @@ function buildActionHandlers(state) {
     'hrProcesses:cancel': (u, item, body) => recordActions.cancelHrProcess(u, item, body),
     'hrProcesses:attachments': (u, item, body) => recordActions.addHrProcessAttachment(u, item, body),
     'hrProcesses:assign-successor': (u, item, body) => recordActions.assignHrSuccessor(u, item, body, state.users)
+  };
+}
+
+// "✏️ Sửa Quy Trình" (MỚI, 11/2026, theo yêu cầu người dùng "hủy như này nó bị rác hồ sơ... có cho phép
+// sửa để nó chạy tiếp đến lúc hoàn thành thì thôi") — mirror ĐÚNG routes/records.js POST
+// /hrProcesses/:id/edit: gọi recordActions.editHrProcess() rồi tự đồng bộ employeeProfiles DRAFT đặt chỗ
+// ngay trong state (mirror syncDraftProfileOnOnboardingEdited(), routes/records.js), vì side effect đó
+// NẰM NGOÀI "item" — actionHandlers chung (dispatch chính) chỉ trả về đúng 1 "item" nên không gọi hàm
+// thật của route được, phải tự mutate state.employeeProfiles trực tiếp ở đây (closure qua buildActionHandlers(state),
+// cùng khuôn operationWorkItems:progress/accept ở trên).
+function registerHrProcessEditHandler(actionHandlers, state) {
+  const employeeProfile = require('../lib/employeeProfile');
+  actionHandlers['hrProcesses:edit'] = (u, item, body) => {
+    const appData = buildAppDataForCreate('hrProcesses', state);
+    appData.hrProcesses = state.hrProcesses;
+    appData.employeeProfiles = state.employeeProfiles || [];
+    const updated = recordActions.editHrProcess(u, item, body, appData);
+    if (updated.processType === 'ONBOARDING' && updated.employeeCode) {
+      state.employeeProfiles = state.employeeProfiles || [];
+      const arr = state.employeeProfiles;
+      const stale = arr.find(p => p.processId === updated.id && p.employeeCode !== updated.employeeCode && p.status === 'DRAFT');
+      if (stale) { stale.processId = null; stale.onboardingQueueStatus = null; }
+      let profile = arr.find(p => p.employeeCode === updated.employeeCode);
+      if (!profile) {
+        profile = employeeProfile.createDraftProfileForOnboarding(updated.employeeCode, u.username, u.name);
+        arr.push(profile);
+      }
+      profile.processId = updated.id;
+      if (profile.status === 'DRAFT') {
+        profile.onboardingQueueStatus = 'PENDING';
+        profile.onboardingQueueCancelReason = null; profile.onboardingQueueCancelledAt = null; profile.onboardingQueueCancelledBy = null;
+      }
+    }
+    return updated;
   };
 }
 
@@ -318,6 +354,7 @@ function syncOperationWorkItemAncestorsInState(state, parentWorkItemId) {
 // mà index.html thật sự đọc lại (callCreateAction()/callRecordAction() ở public/index.html).
 function createDispatcher(state) {
   const actionHandlers = buildActionHandlers(state);
+  registerHrProcessEditHandler(actionHandlers, state);
   // Overhaul quyền Vận Hành > Siêu Thị: tra sourceRecord (operationStoreOpenings/operationRepairs) đúng
   // 1 work item — mirror getOperationWorkItemSourceRecord() (routes/records.js) — dùng CHUNG cho
   // progress/accept (override "toàn quyền quản lý hồ sơ") mà KHÔNG cache, cùng lý do route thật.

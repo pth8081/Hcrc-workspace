@@ -87,7 +87,11 @@ async function partA() {
     assert.ok(items[0].errors.some(e => /Ngày Vào Làm Việc/.test(e)), JSON.stringify(items[0].errors));
   });
 
-  await test('parseCreateImportBuffer(): 2 dòng CÙNG employeeCode (điền tay, tái tuyển) -> dòng 2 bị đánh dấu duplicateInFile; 2 dòng employeeCode TRỐNG không bị đánh dấu trùng nhau', async () => {
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "mã sinh tự động mà không được điền mã"): TRƯỚC ĐÂY
+  // điền tay Mã Nhân Viên khớp 1 hồ sơ ĐÃ NGHỈ VIỆC (INACTIVE) được coi là Tái Tuyển hợp lệ qua đường
+  // Nhập Excel hàng loạt này — nay chặn CỨNG, bất kể mã có khớp hồ sơ nào hay không (Tái Tuyển phải qua
+  // "+ Tạo Onboarding" tạo tay, có ô "Kiểm Tra Nhân Sự Cũ" riêng).
+  await test('parseCreateImportBuffer(): điền tay Mã Nhân Viên (dù khớp hồ sơ ĐÃ NGHỈ VIỆC) -> báo lỗi, phải để trống; dòng KHÔNG mã vẫn hợp lệ và không bị đánh dấu trùng nhau', async () => {
     const wb = createImport.buildCreateTemplateWorkbook();
     const sheet = wb.getWorksheet('Onboarding (Theo Quy Trình)');
     sheet.spliceRows(2, 1);
@@ -100,14 +104,15 @@ async function partA() {
     const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [] });
     const withCode = items.filter(it => it.employeeCode === 'NV8001');
     assert.strictEqual(withCode.length, 2);
-    assert.strictEqual(withCode[0].duplicateInFile, false);
-    assert.strictEqual(withCode[1].duplicateInFile, true);
+    assert.ok(withCode.every(it => it.valid === false), 'cả 2 dòng điền mã đều phải bị báo lỗi, dù mã khớp hồ sơ INACTIVE');
+    assert.ok(withCode.every(it => it.errors.some(e => /phải để TRỐNG/.test(e))), JSON.stringify(withCode.map(it => it.errors)));
     const withoutCode = items.filter(it => !it.employeeCode);
     assert.strictEqual(withoutCode.length, 2);
+    assert.ok(withoutCode.every(it => it.valid === true), 'dòng KHÔNG mã vẫn hợp lệ bình thường');
     assert.ok(withoutCode.every(it => it.duplicateInFile === false), 'dòng KHÔNG mã không được coi là trùng nhau');
   });
 
-  await test('parseCreateImportBuffer(): employeeCode gõ tay trỏ hồ sơ ACTIVE người khác -> báo lỗi dòng đó', async () => {
+  await test('parseCreateImportBuffer(): điền tay Mã Nhân Viên trỏ hồ sơ ACTIVE người khác -> cũng báo lỗi "phải để trống" (không còn báo lỗi riêng "đang hoạt động")', async () => {
     const wb = createImport.buildCreateTemplateWorkbook();
     const sheet = wb.getWorksheet('Onboarding (Theo Quy Trình)');
     sheet.spliceRows(2, 1);
@@ -116,7 +121,7 @@ async function partA() {
     const profiles = [{ employeeCode: 'NV8002', status: 'ACTIVE', processId: 99 }];
     const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [] });
     assert.strictEqual(items[0].valid, false);
-    assert.ok(items[0].errors.some(e => /đang hoạt động/.test(e)), JSON.stringify(items[0].errors));
+    assert.ok(items[0].errors.some(e => /phải để TRỐNG/.test(e)), JSON.stringify(items[0].errors));
   });
 }
 
@@ -231,6 +236,25 @@ async function partB() {
       assert.strictEqual(r.json.created.length, 2, JSON.stringify(r.json));
       assert.notStrictEqual(r.json.created[0].employeeCode, r.json.created[1].employeeCode, 'không được trùng Mã NV giữa 2 dòng');
       assert.strictEqual(STORE.hrProcesses.length, beforeCount + 2);
+    });
+
+    // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "mã sinh tự động mà không được điền mã"): lớp chặn
+    // THỨ 2 ở server (routes/records.js) — request gửi THẲNG employeeCode (bỏ qua bước xem trước xử lý
+    // ở client) vẫn phải bị skip, KHÔNG được tạo quy trình/đặt chỗ hồ sơ nào với mã client tự gửi.
+    await test('apply-create-import: gửi THẲNG employeeCode trong fields (bỏ qua bước xem trước) -> vẫn bị skip ở server, không tạo gì', async () => {
+      const beforeCount = STORE.hrProcesses.length;
+      const r = await call('hr1', 'POST', '/api/records/hrProcesses/apply-create-import', {
+        items: [{ fullName: 'Cố Tình Điền Mã', action: 'add', fields: {
+          employeeCode: 'BL9999', fullName: 'Cố Tình Điền Mã', employeePosType: 'HO', employeeDept: 'Phòng Kế Toán',
+          employeeJobTitle: 'Nhân viên Kế Toán', phone: '0915', startDate: '2026-11-23'
+        } }]
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.created.length, 0, JSON.stringify(r.json));
+      assert.strictEqual(r.json.skipped.length, 1);
+      assert.ok(/phải để trống/.test(r.json.skipped[0].reason), JSON.stringify(r.json.skipped));
+      assert.strictEqual(STORE.hrProcesses.length, beforeCount, 'không được tạo quy trình nào');
+      assert.ok(!PROFILES.find(p => p.employeeCode === 'BL9999'), 'không được đặt chỗ hồ sơ nào với mã client tự gửi');
     });
 
     await test('apply-create-import: dòng thiếu Chức Danh hợp lệ -> bị skip với lý do rõ ràng, KHÔNG chặn dòng còn lại trong cùng lô', async () => {
