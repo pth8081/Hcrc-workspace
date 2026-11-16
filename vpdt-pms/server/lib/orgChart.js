@@ -388,45 +388,6 @@ function editNode(version, nodeId, patch) {
   return node;
 }
 
-// planAutoFillDepartmentRef()/autoFillDepartmentRef() (11/2026, ca thật người dùng báo: Nhập Excel Gán
-// Chức Vụ xem trước báo "sẵn sàng gán" hàng loạt (khớp được theo nodeName — bản vá "cứ lấy luôn đi"),
-// nhưng Áp Dụng lại fail HÀNG LOẠT vì applyPositionAssignment() vẫn bắt buộc departmentRef thật trên
-// node Phòng Ban/Siêu Thị cha — hầu hết các node đó CHƯA từng được gắn departmentRef qua dropdown riêng
-// khi tạo cây, chỉ có nodeName tự do). Thay vì bắt admin gắn tay từng node (vài chục/trăm siêu thị), cho
-// phép TỰ ĐỘNG gắn departmentRef = ĐÚNG tên trong Danh Mục Phòng Ban/Siêu Thị (catalogDeptNames) khi
-// nodeName của node đó khớp ĐÚNG 1 tên thật trong danh mục (so khớp qua normalizeMatchText — bỏ qua
-// Unicode/khoảng trắng/hoa-thường, CÙNG chuẩn đã dùng cho findPositionNodeForUser()) — AN TOÀN vì chỉ
-// gắn giá trị ĐÃ CÓ THẬT trong catalog, không bao giờ ghi 1 chuỗi tự do/rác vào departmentRef.
-// planAutoFillDepartmentRef() THUẦN (không mutate) — dùng để build preview hiển thị cho admin xem trước
-// khi quyết định áp dụng; autoFillDepartmentRef() mutate version (CHỈ cho phép trên bản DRAFT, cùng
-// ràng buộc requireDraft() như editNode() — không bao giờ sửa trực tiếp bản APPLIED).
-function planAutoFillDepartmentRef(version, catalogDeptNames) {
-  const catalogByNormalized = new Map();
-  (catalogDeptNames || []).forEach(name => {
-    const norm = normalizeMatchText(name);
-    if (norm && !catalogByNormalized.has(norm)) catalogByNormalized.set(norm, name);
-  });
-  const toUpdate = [];
-  const needsManualReview = [];
-  (version.nodes || []).forEach(n => {
-    if (n.nodeType !== 'DEPARTMENT' || n.departmentRef) return; // đã có departmentRef rồi thì bỏ qua, không ghi đè
-    const matched = n.nodeName ? catalogByNormalized.get(normalizeMatchText(n.nodeName)) : null;
-    if (matched) toUpdate.push({ nodeId: n.nodeId, nodeName: n.nodeName, matchedCatalogValue: matched });
-    else needsManualReview.push({ nodeId: n.nodeId, nodeName: n.nodeName || '(chưa đặt tên)' });
-  });
-  return { toUpdate, needsManualReview };
-}
-function autoFillDepartmentRef(version, catalogDeptNames) {
-  requireDraft(version);
-  const plan = planAutoFillDepartmentRef(version, catalogDeptNames);
-  const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
-  plan.toUpdate.forEach(({ nodeId, matchedCatalogValue }) => {
-    const node = byId.get(nodeId);
-    if (node) node.departmentRef = matchedCatalogValue;
-  });
-  return plan;
-}
-
 // collectCascadeNodeIds() (11/2026, tách ra khỏi deleteNodeCascade() để forceDeleteNodeCascade() dùng lại
 // ĐÚNG 1 logic duyệt cascade, không viết lại) — trả về Set các nodeId sẽ bị xoá nếu xoá `nodeId` (gồm
 // chính nó + toàn bộ nhánh con, đệ quy).
@@ -911,7 +872,6 @@ module.exports = {
   buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, diagnosePositionMismatch,
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
-  planAutoFillDepartmentRef, autoFillDepartmentRef,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
   bootstrapFirstVersion, createBlankVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteAllDraftVersions, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
