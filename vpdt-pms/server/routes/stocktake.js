@@ -991,8 +991,16 @@ router.delete('/shelf-kiem-soat-confirmations/:id', async (req, res) => {
 });
 
 // ===== Xác Nhận Gom Mã từng quầy kệ (12/2026, theo yêu cầu người dùng chọn nhiều quầy kệ Kiểm Đếm/Gom
-// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror NGUYÊN 3 route Kiểm Soát ngay trên, chỉ khác collection
-// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê). =====
+// Mã/Kiểm Soát để Xác Nhận/Gỡ Xác Nhận) — mirror khung route Kiểm Soát ngay trên, chỉ khác collection
+// `stocktakeShelfGomMaConfirmations` + mode 'GOM_MA' + dùng ĐÚNG Kỳ Gom Mã (không phải Kỳ Kiểm Kê).
+// CỐ Ý KHÔNG nâng cấp sang canViewStocktakeSessionData() như 3 route Kiểm Đếm/Kiểm Soát ở trên (audit
+// chéo trước merge có nêu lại điểm này — đã xác nhận KHÔNG phải thiếu sót): `canViewStocktakeSessionData()`
+// mở rộng xem chéo siêu thị dựa trên quyền kiemKeConfirmDo ("Xác Nhận Toàn Bộ Đợt") — quyền này CHỈ áp
+// dụng cho Kỳ Kiểm Kê (THONG_KE), hoàn toàn ĐỘC LẬP với Gom Mã (xem "Xác Nhận Gom Mã riêng" ở
+// Huong-dan-nghiep-vu.md: Gom Mã KHÔNG tham gia điều kiện "Xác Nhận Toàn Bộ Đợt", đóng Kỳ Gom Mã thủ
+// công riêng ở Tab 1). Người CHỈ có kiemKeConfirmDo cho 1 siêu thị khác (không có kiemKeGomMaDo/allowlist
+// Gom Mã đúng siêu thị đó) ĐÚNG RA không nên xem được Gom Mã của siêu thị đó qua route này — giữ nguyên
+// nhánh cũ (admin/đúng dept/allowlist Tab 8) là ĐÚNG, không phải lỗ hổng. =====
 router.get('/shelf-gom-ma-confirmations', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {

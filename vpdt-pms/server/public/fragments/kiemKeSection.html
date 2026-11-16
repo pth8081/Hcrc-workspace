@@ -176,7 +176,7 @@
          Tải Mẫu/Nhập/Xuất Excel riêng (kiemKeShelfLocations, xem module-vanhanh.js). -->
     <div id="kkShelfConfigWrap" class="hidden space-y-3">
       <div id="kkShelfConfigDeptRow" class="flex items-center gap-2 text-sm"></div>
-      <form data-op-submit="submitKiemKeShelfLocation" class="bg-cyan-50 border border-cyan-200 rounded p-3 flex flex-wrap items-end gap-2 text-sm">
+      <form id="kkShelfConfigAddForm" data-op-submit="submitKiemKeShelfLocation" class="bg-cyan-50 border border-cyan-200 rounded p-3 flex flex-wrap items-end gap-2 text-sm">
         <div class="font-bold text-cyan-800 w-full">+ Thêm Quầy Kệ</div>
         <div>
           <label class="block text-xs text-gray-500 mb-0.5">Mã Quầy Kệ</label>
@@ -190,9 +190,11 @@
       </form>
       <div class="bg-white border rounded p-3 flex flex-wrap items-center gap-2 text-xs">
         <span class="font-bold text-gray-600 mr-auto">📥📤 Nhập/Xuất Excel</span>
-        <button type="button" data-op="downloadKiemKeShelfLocationsTemplate" class="px-2.5 py-1.5 rounded bg-gray-200 text-gray-800 font-bold hover:bg-gray-300">📥 Tải Mẫu Excel</button>
-        <button type="button" data-op="triggerKiemKeShelfLocationsImportPicker" class="px-2.5 py-1.5 rounded bg-indigo-600 text-white font-bold hover:bg-indigo-700">📤 Nhập Excel</button>
-        <input type="file" id="kkScImportFileInput" accept=".xlsx,.xls,.csv" class="hidden" data-op-change="onKiemKeShelfLocationsImportFileChosen" data-arg-el="0">
+        <span id="kkShelfConfigImportBar" class="flex flex-wrap items-center gap-2">
+          <button type="button" data-op="downloadKiemKeShelfLocationsTemplate" class="px-2.5 py-1.5 rounded bg-gray-200 text-gray-800 font-bold hover:bg-gray-300">📥 Tải Mẫu Excel</button>
+          <button type="button" data-op="triggerKiemKeShelfLocationsImportPicker" class="px-2.5 py-1.5 rounded bg-indigo-600 text-white font-bold hover:bg-indigo-700">📤 Nhập Excel</button>
+          <input type="file" id="kkScImportFileInput" accept=".xlsx,.xls,.csv" class="hidden" data-op-change="onKiemKeShelfLocationsImportFileChosen" data-arg-el="0">
+        </span>
         <button type="button" data-op="exportKiemKeShelfLocationsExcel" class="px-2.5 py-1.5 rounded bg-teal-700 text-white font-bold hover:bg-teal-800">📊 Xuất Excel</button>
       </div>
       <div class="bg-white border rounded p-3">

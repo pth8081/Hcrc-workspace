@@ -1238,6 +1238,15 @@ function loadKkShelfConfigTab() {
   kkShelfLockSelected = new Set();
   clearKkShelfConfigFilters();
   sddSetOptions('kkscfStatusDropdown', Object.values(KK_SHELF_CONFIG_STATUS_LABELS));
+  // Ẩn "+ Thêm Quầy Kệ"/"Tải Mẫu Excel"/"Nhập Excel" cho người CHỈ có kiemKeShelfLockManage (không có
+  // kiemKeShelfConfigManage) — phát hiện khi audit 3 vai trò trước merge (12/2026): Tab 5 nay mở cổng vào
+  // cho CẢ 2 quyền (canSeeStocktakeShelfConfigTabClient), nhưng 3 khung này vẫn là HTML tĩnh không điều
+  // kiện, bấm vào chỉ nhận 403 từ server (requireKiemKeShelfConfigManage) — không phải lỗ hổng bảo mật,
+  // nhưng gây nhầm "tưởng có quyền mà không làm được" cho IT chỉ được giao Khoá/Mở Khoá. "📊 Xuất Excel"
+  // GIỮ hiện cho cả 2 (chỉ xuất lại đúng dữ liệu họ ĐÃ xem được, không cần quyền CRUD riêng).
+  const canManage = canManageStocktakeShelfConfigClient(currentUser);
+  document.getElementById('kkShelfConfigAddForm')?.classList.toggle('hidden', !canManage);
+  document.getElementById('kkShelfConfigImportBar')?.classList.toggle('hidden', !canManage);
 }
 let editingKkShelfLocationId = null;
 function renderKkShelfConfigList() {

@@ -214,6 +214,16 @@ function activateSession(sessions, id, user) {
 // (lỗi của 1 kỳ — VD siêu thị đó lỡ có kỳ khác đang hoạt động — KHÔNG làm hỏng cả batch, chỉ báo vào
 // `siblings[].error` để client hiện rõ "đã kích hoạt X/Y siêu thị"). Không có batchId -> `siblings` rỗng,
 // hành vi y hệt activateSession() đơn lẻ trước đây.
+// VÁ (audit chuyên sâu trước merge — phát hiện lỗ hổng thật): route gọi hàm này chỉ kiểm tra quyền trên
+// ĐÚNG kỳ `id` được bấm (admin hoặc đúng dept của chính người bấm — xem handleSessionTransition() ở
+// routes/stocktake.js, KHÔNG truyền itemAccessCheck riêng cho route Kích Hoạt) — KHÔNG kiểm tra lại gì cho
+// từng kỳ "anh em" trước khi activateSession() thẳng. Vì batch nhiều siêu thị CHỈ tạo được bởi Admin (ô
+// chọn nhiều siêu thị lúc Tạo Kỳ Mới là tính năng riêng của Admin), 1 quản lý/IT thường (kiemKePeriodManage
+// chỉ đúng dept mình) lại có thể vô tình kích hoạt luôn các siêu thị KHÁC trong batch đó nếu tình cờ bấm
+// đúng kỳ của mình nằm trong 1 batch admin tạo — ghi `activatedBy` sai, kích hoạt hộ kỳ họ không có quyền
+// quản lý. Chặn lại: mỗi kỳ anh em PHẢI qua lại ĐÚNG check admin-hoặc-đúng-dept (y hệt mặc định
+// handleSessionTransition() khi không truyền itemAccessCheck riêng) trước khi activateSession() — không
+// đủ quyền thì bỏ qua NGAY (không throw làm hỏng kỳ chính đã kích hoạt), báo rõ trong `siblings[].error`.
 function activateSessionBatch(sessions, id, user) {
   const arr = Array.isArray(sessions) ? sessions : [];
   const item = activateSession(arr, id, user);
@@ -221,6 +231,10 @@ function activateSessionBatch(sessions, id, user) {
   if (item.batchId) {
     const toActivate = arr.filter(s => s.batchId === item.batchId && s.id !== item.id && s.trangThai === TRANG_THAI.NHAP);
     for (const sib of toActivate) {
+      if (!(user?.perms?.admin || sib.dept === user?.dept)) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền kích hoạt kỳ của siêu thị này' });
+        continue;
+      }
       try {
         activateSession(arr, sib.id, user);
         siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: true });
