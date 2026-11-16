@@ -55,8 +55,9 @@ check('Khớp được vị trí dù lệch HOA/thường (jobTitle)',
 check('Khớp được vị trí dù lệch HOA/thường (dept/departmentRef)',
   orgChart.findPositionNodeForUser(version, { dept: 'SIÊU THỊ SỐ 275 NGUYỄN TRÃI', jobTitle: jobTitleNFC })?.nodeId === 3);
 
-// diagnosePositionMismatch(): gợi ý cụ thể khi nodeName (tên hiển thị cây) khớp nhưng departmentRef
-// (chọn qua dropdown riêng, ràng buộc DB.stores/DB.depts) lại khác — đúng kịch bản thật người dùng gặp.
+// CẬP NHẬT (theo yêu cầu TRỰC TIẾP của người dùng "cứ lấy luôn đi"): findPositionNodeForUser() nay
+// chấp nhận khớp theo CẢ departmentRef LẪN nodeName (tên hiển thị tự do trên cây) — gõ đúng tên hiển thị
+// trong Excel (dù departmentRef thật khác) vẫn khớp được, không cần sửa lại dropdown định danh.
 const versionDeptRefMismatch = {
   nodes: [
     { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY' },
@@ -64,11 +65,10 @@ const versionDeptRefMismatch = {
     { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Trưởng Quầy (TPTS)', requiresDept: true }
   ]
 };
-check('diagnosePositionMismatch(): báo đúng departmentRef thật khi nodeName khớp nhưng departmentRef khác',
-  (() => {
-    const hint = orgChart.diagnosePositionMismatch(versionDeptRefMismatch, { dept: 'Siêu thị số 275 Nguyễn Trãi', jobTitle: 'Trưởng Quầy (TPTS)' });
-    return hint && hint.type === 'DEPT_NAME_MATCHES_BUT_REF_DIFFERENT' && hint.message.includes('275 Nguyễn Trãi');
-  })());
+check('LỖI ĐÃ VÁ: gõ đúng TÊN HIỂN THỊ (nodeName) trong Excel vẫn khớp được, dù departmentRef thật khác',
+  orgChart.findPositionNodeForUser(versionDeptRefMismatch, { dept: 'Siêu thị số 275 Nguyễn Trãi', jobTitle: 'Trưởng Quầy (TPTS)' })?.nodeId === 3);
+check('Vẫn khớp được nếu gõ đúng departmentRef thật (không bị mất hành vi cũ)',
+  orgChart.findPositionNodeForUser(versionDeptRefMismatch, { dept: '275 Nguyễn Trãi', jobTitle: 'Trưởng Quầy (TPTS)' })?.nodeId === 3);
 
 // diagnosePositionMismatch(): Chức Danh có tồn tại nhưng ở Phòng Ban khác (gõ nhầm/chọn nhầm Phòng Ban).
 check('diagnosePositionMismatch(): báo đúng Chức Danh tồn tại ở Phòng Ban khác',
