@@ -209,11 +209,12 @@ function ocFindNearestDeptAncestor(nodes, node) {
   }
   return null;
 }
+// LUÔN đúng node.jobTitle, KHÔNG cộng tên phòng ban — mirror ĐÚNG buildNodeDisplayName() server
+// (lib/orgChart.js, xem chú thích đầy đủ ở đó — sửa theo phản hồi người dùng thật "chức danh dài ra bị
+// sai hồ sơ nhân sự").
 function ocBuildNodeDisplayName(nodes, node) {
   if (node.nodeType !== 'POSITION') return node.nodeName;
-  if (node.requiresDept === false) return node.jobTitle;
-  const deptNode = ocFindNearestDeptAncestor(nodes, node);
-  return deptNode ? `${node.jobTitle} ${deptNode.nodeName}` : node.jobTitle;
+  return node.jobTitle;
 }
 function ocResolvePositionOccupants(nodes, node, users) {
   if (!node || node.nodeType !== 'POSITION') return [];

@@ -521,9 +521,15 @@ router.get('/position-options', requireProfileEdit, async (req, res) => {
     const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(orgChartVersions);
     if (!applied) return res.json({ positions: [] });
+    // buildNodeDisplayNameWithDept() (không phải buildNodeDisplayName() — xem chú thích đầy đủ ở
+    // lib/orgChart.js, CÙNG lý do áp dụng cho GET /kpi-flow): ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân
+    // Sự là 1 danh sách PHẲNG toàn công ty, nhiều siêu thị/phòng ban có thể CÙNG 1 chức danh (VD "Giám
+    // đốc Siêu thị") — cần tên phòng ban để phân biệt khi CHỌN đúng vị trí; jobTitle THẬT lưu vào Hồ Sơ
+    // Nhân Sự sau khi chọn vẫn luôn sạch (applyPositionAssignment() ghi node.jobTitle, không phải label
+    // này), nên không ảnh hưởng gì tới Chức Danh hiển thị trong hồ sơ.
     const positions = (applied.nodes || [])
       .filter(n => n.nodeType === 'POSITION')
-      .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
+      .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayNameWithDept(applied, n) }))
       .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
     res.json({ positions });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/position-options'); }

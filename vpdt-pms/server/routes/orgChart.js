@@ -817,8 +817,12 @@ router.get('/kpi-flow', async (req, res) => {
       return {
         id: f.id, isAutoFromHierarchy: f.isAutoFromHierarchy,
         evaluatorNodeId: f.evaluatorNodeId, evaluateeNodeId: f.evaluateeNodeId,
-        evaluatorName: evaluator ? orgChart.buildNodeDisplayName(applied, evaluator) : '',
-        evaluateeName: evaluatee ? orgChart.buildNodeDisplayName(applied, evaluatee) : '',
+        // buildNodeDisplayNameWithDept() (không phải buildNodeDisplayName() — xem chú thích đầy đủ ở
+        // lib/orgChart.js): danh sách KPI Flow liệt kê PHẲNG toàn công ty, nhiều phòng ban/siêu thị có
+        // thể CÙNG 1 chức danh (VD "Trưởng phòng" ở cả Phòng Kinh Doanh lẫn Phòng IT) — cần tên phòng ban
+        // để phân biệt, không phải chỗ hiển thị "Chức Danh" trực tiếp của Hồ Sơ Nhân Sự.
+        evaluatorName: evaluator ? orgChart.buildNodeDisplayNameWithDept(applied, evaluator) : '',
+        evaluateeName: evaluatee ? orgChart.buildNodeDisplayNameWithDept(applied, evaluatee) : '',
         evaluatorOccupants: evaluator ? orgChart.resolvePositionOccupants(applied, evaluator, users, employeeProfiles) : [],
         evaluateeOccupants: evaluatee ? orgChart.resolvePositionOccupants(applied, evaluatee, users, employeeProfiles) : []
       };
