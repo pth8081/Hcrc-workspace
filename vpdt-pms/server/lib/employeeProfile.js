@@ -950,12 +950,21 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   // positionLabel ở trên (node.jobGrade rỗng nếu HR chưa gán ở Cơ Cấu Tổ Chức, xem lib/orgChart.js).
   const jobGrade = node.jobGrade || null;
   let dept = null;
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "phòng ban phải lấy từ cơ cấu tổ chức... đã gắn vị trí
+  // này vào phòng ban rồi [bằng cách để trong đúng thư mục/node Phòng Ban trên cây], ngầm định thì mình
+  // đã có gắn vào phòng ban rồi"): TRƯỚC ĐÂY bắt buộc phải có departmentRef (chọn qua dropdown riêng,
+  // KHÁC hẳn việc đặt node vị trí vào đúng NHÁNH Phòng Ban trên cây) mới cho gán — khiến rất nhiều vị trí
+  // ĐÃ nằm đúng nhánh Phòng Ban thật (admin xây cây bằng cách kéo-thả/đặt node cha-con, không nhất thiết
+  // còn bấm thêm vào ô departmentRef) không gán được dù vị trí đó rõ ràng ĐÃ thuộc đúng phòng ban theo
+  // cấu trúc cây. Nay chấp nhận departmentRef NẾU CÓ (ưu tiên, vì đây là giá trị chuẩn khớp Danh Mục),
+  // ĐẾN cùng tên hiển thị (nodeName) của chính node Phòng Ban cha đó khi chưa gắn departmentRef — cây tổ
+  // chức (ai là cha của vị trí này) MỚI là nguồn xác định phòng ban, không phải 1 field tuỳ chọn riêng.
   if (node.requiresDept !== false) {
     const deptNode = findNearestDeptAncestor(orgChartVersion, node);
-    if (!deptNode?.departmentRef) {
-      throw new HttpError(400, `Vị trí "${label}" chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán`);
+    dept = deptNode?.departmentRef || deptNode?.nodeName || null;
+    if (!dept) {
+      throw new HttpError(400, `Vị trí "${label}" chưa nằm trong nhánh Phòng Ban nào trên Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức đặt vị trí này vào đúng Phòng Ban trước khi gán`);
     }
-    dept = deptNode.departmentRef;
   }
   const nowStr = nowVN();
   const entry = {
@@ -1592,17 +1601,19 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
           // chọn thiếu Phòng Ban chuẩn trong Cơ Cấu Tổ Chức. Nay THROW cùng lỗi như vị trí chính thức,
           // chặn lưu ngay để người gán biết phải vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node đó trước.
           let dept = null;
+          // LỖI ĐÃ VÁ (11/2026, cùng lý do vị trí CHÍNH THỨC ở applyPositionAssignment() phía trên —
+          // "phòng ban phải lấy từ cơ cấu tổ chức"): nhận departmentRef NẾU CÓ, đến nodeName của node
+          // Phòng Ban cha khi chưa gắn departmentRef, trước khi coi là "chưa có phòng ban" thật sự.
           if (node.requiresDept !== false) {
             const deptNode = findNearestDeptAncestor(orgChartVersion, node);
-            if (!deptNode?.departmentRef) {
+            dept = deptNode?.departmentRef || deptNode?.nodeName || null;
+            if (!dept) {
               // Dòng MỚI thêm -> chặn ngay (lý do xem chú thích ở assertNotSelfAssigningPosition() phía
               // trên). Dòng ĐÃ CÓ TỪ TRƯỚC -> KHÔNG chặn (xem chú thích existingPositionKeys phía trên),
               // giữ nguyên hành vi cũ: lặng lẽ gán dept=null, actor vẫn lưu/bỏ dòng khác bình thường.
               if (!existingPositionKeys.has(positionKey)) {
-                throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán kiêm nhiệm`);
+                throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa nằm trong nhánh Phòng Ban nào trên Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức đặt vị trí này vào đúng Phòng Ban trước khi gán kiêm nhiệm`);
               }
-            } else {
-              dept = deptNode.departmentRef;
             }
           }
           return {

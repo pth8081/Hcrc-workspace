@@ -100,17 +100,6 @@ function rowToPreviewItem(cells, cols, appliedVersion, profiles) {
         // ngay không cần đoán mò/nhờ hỗ trợ thêm.
         const hint = orgChart.diagnosePositionMismatch(appliedVersion, { dept, jobTitle });
         errors.push(hint ? hint.message : `Không tìm thấy vị trí khớp đúng "${jobTitle}" tại "${dept}" trong Cơ Cấu Tổ Chức đang áp dụng`);
-      } else if (node.requiresDept !== false && !orgChart.findNearestDeptAncestor(appliedVersion, node)?.departmentRef) {
-        // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng thật — xem trước báo "418/418 sẵn sàng gán" (khớp được
-        // theo nodeName, bản vá "chấp nhận khớp theo tên hiển thị") nhưng bấm Áp Dụng lại báo "0/418"):
-        // findPositionNodeForUser() đã nới lỏng chấp nhận khớp theo nodeName khi node CHƯA chọn
-        // departmentRef qua dropdown riêng, nhưng applyPositionAssignment() (bước Áp Dụng THẬT, lib/
-        // employeeProfile.js) vẫn BẮT BUỘC departmentRef — "không cho gán bừa" (xem test-hr-profile-
-        // position-history.js, cố ý KHÔNG nới lỏng ở bước đó để "dept" lưu vào hồ sơ luôn là 1 giá trị
-        // THẬT có trong Danh Mục Phòng Ban/Siêu Thị, không phải tên tự do trên cây). Thiếu kiểm tra lại
-        // ĐÚNG điều kiện này ở bước xem trước khiến HR thấy "sẵn sàng gán" giả, Áp Dụng thất bại HÀNG
-        // LOẠT không rõ lý do. Báo lỗi NGAY ở đây, dùng ĐÚNG câu chữ applyPositionAssignment() sẽ báo.
-        errors.push(`Vị trí "${orgChart.buildNodeDisplayName(appliedVersion, node)}" chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán`);
       } else { positionKey = node.positionKey; positionLabel = orgChart.buildNodeDisplayName(appliedVersion, node); }
     }
   }

@@ -104,13 +104,27 @@ async function main() {
     assertEqual(profile.jobTitle, 'Tổng Giám Đốc', 'jobTitle vẫn set đúng');
   });
 
-  await run.run('applyPositionAssignment(): phòng ban cha CHƯA gắn departmentRef -> lỗi rõ ràng, không cho gán bừa', () => {
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "phòng ban phải lấy từ cơ cấu tổ chức", vị trí ĐÃ nằm
+  // đúng nhánh Phòng Ban trên cây thì coi như ĐÃ gắn phòng ban, không bắt buộc phải CÓ THÊM departmentRef
+  // riêng mới cho gán): TRƯỚC ĐÂY throw khi phòng ban cha chưa gắn departmentRef — nay chấp nhận NODENAME
+  // của chính node Phòng Ban cha ("Khối Chưa Gắn Phòng") làm dept khi thiếu departmentRef.
+  await run.run('applyPositionAssignment(): phòng ban cha CHƯA gắn departmentRef nhưng ĐÃ có nodeName -> dùng nodeName làm dept, KHÔNG throw', () => {
     const version = buildOrgVersion();
     const profile = employeeProfile.defaultProfile('NV005');
+    const result = employeeProfile.applyPositionAssignment(profile, version, 'POS-NO-DEPTREF', null, 'hr1', 'HR', null);
+    assertEqual(result.dept, 'Khối Chưa Gắn Phòng', 'dept phải lấy từ nodeName của node Phòng Ban cha khi thiếu departmentRef');
+    assertEqual(profile.dept, 'Khối Chưa Gắn Phòng', 'profile.dept đã set đúng theo nodeName');
+    assertEqual(profile.positionKey, 'POS-NO-DEPTREF', 'Hồ sơ vẫn được gán bình thường');
+  });
+
+  await run.run('applyPositionAssignment(): phòng ban cha KHÔNG CÓ cả departmentRef LẪN nodeName -> vẫn throw rõ ràng', () => {
+    const version = buildOrgVersion();
+    version.nodes.find(n => n.nodeId === 6).nodeName = null; // "Khối Chưa Gắn Phòng" -> bỏ luôn tên
+    const profile = employeeProfile.defaultProfile('NV005B');
     let threw = false;
     try { employeeProfile.applyPositionAssignment(profile, version, 'POS-NO-DEPTREF', null, 'hr1', 'HR', null); }
-    catch (e) { threw = true; assertIncludes(e.message, 'departmentRef', 'Lỗi phải nêu rõ nguyên nhân departmentRef'); }
-    assertEqual(threw, true, 'Phải throw khi phòng ban cha chưa gắn departmentRef');
+    catch (e) { threw = true; assertIncludes(e.message, 'Phòng Ban', 'Lỗi phải nêu rõ nguyên nhân thiếu Phòng Ban'); }
+    assertEqual(threw, true, 'Phải throw khi phòng ban cha không có cả departmentRef lẫn nodeName để xác định');
     assertEqual(profile.positionKey, null, 'Hồ sơ KHÔNG bị đổi gì (throw trước khi mutate field chính)');
   });
 

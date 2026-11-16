@@ -91,11 +91,12 @@ async function partA() {
     assert.ok(items[0].errors.some(e => /Không tìm thấy vị trí/.test(e)));
   });
 
-  await test('parseAssignImportBuffer(): khớp được theo nodeName (tên hiển thị) nhưng node CHƯA gắn departmentRef -> báo lỗi RÕ RÀNG ngay ở bước xem trước (không để "sẵn sàng gán" giả rồi Áp Dụng thất bại hàng loạt)', async () => {
+  await test('parseAssignImportBuffer(): khớp được theo nodeName (tên hiển thị) khi node CHƯA gắn departmentRef -> valid, trả đúng positionKey (preview và Áp Dụng thật nay ĐỒNG NHẤT — cả 2 đều chấp nhận nodeName làm Phòng Ban, "phòng ban phải lấy từ cơ cấu tổ chức")', async () => {
     // LỖI ĐÃ VÁ (11/2026, ca thật người dùng báo "Đã gán chức vụ 0/418 hồ sơ" dù xem trước báo cả 418
-    // dòng "sẵn sàng gán"): node Phòng Ban "Cửa hàng 5 Hàm Tử Quan" không có departmentRef (chỉ có
-    // nodeName) — findPositionNodeForUser() khớp được qua nodeName, nhưng applyPositionAssignment() ở
-    // bước Áp Dụng THẬT vẫn đòi departmentRef -> phải chặn NGAY ở preview, không để lọt qua.
+    // dòng "sẵn sàng gán" — RỒI người dùng phản hồi tiếp: "phòng ban phải lấy từ cơ cấu tổ chức... đã
+    // gắn vị trí này vào phòng ban rồi [bằng cách đặt đúng nhánh trên cây]"): applyPositionAssignment()
+    // (lib/employeeProfile.js) nay CŨNG chấp nhận nodeName làm dept khi thiếu departmentRef — preview và
+    // Áp Dụng thật lại khớp nhau, không còn vênh.
     const version = {
       id: 1, status: 'APPLIED',
       nodes: [
@@ -107,9 +108,8 @@ async function partA() {
     const buffer = await buildBufferWithRows([{ employeeCode: 'BL787', dept: 'Cửa hàng 5 Hàm Tử Quan', jobTitle: 'Trưởng quầy' }]);
     const appData = { employeeProfiles: [{ employeeCode: 'BL787' }], orgChartVersions: [version] };
     const items = await importLib.parseAssignImportBuffer(buffer, appData);
-    assert.strictEqual(items[0].valid, false, 'phải báo lỗi NGAY ở preview, không được "sẵn sàng gán" giả');
-    assert.ok(items[0].errors.some(e => e.includes('departmentRef')), `phải nêu đúng lý do thiếu departmentRef: ${JSON.stringify(items[0].errors)}`);
-    assert.strictEqual(items[0].positionKey, null, 'không được trả positionKey khi chưa đủ điều kiện Áp Dụng thật');
+    assert.strictEqual(items[0].valid, true, JSON.stringify(items[0].errors));
+    assert.strictEqual(items[0].positionKey, 'POS-TQ-HTQ');
   });
 
   await test('parseAssignImportBuffer(): khớp theo departmentRef ĐÃ gắn đầy đủ -> valid bình thường (không bị chặn oan bởi bản vá trên)', async () => {
