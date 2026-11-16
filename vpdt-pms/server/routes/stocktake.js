@@ -77,7 +77,7 @@ function requireKiemKeModuleAccess(req, res) {
 // Xem danh sách kỳ — mở cho MỌI user có quyền module Kiểm Kê (không riêng kiemKePeriodManage): các tab
 // Gom Mã/Kiểm Đếm/Kiểm Soát khác (sẽ bổ sung sau) cần đọc danh sách này để biết kỳ nào đang hoạt động.
 // Không-admin chỉ xem đúng siêu thị mình; admin xem được siêu thị bất kỳ qua query ?dept=. 12/2026, MỞ
-// RỘNG: người được gán kiemKePeriodCloseReopenManage (Đóng Kỳ/Mở Lại theo siêu thị) cũng xem được đúng
+// RỘNG: người được gán kiemKePeriodCloseManage/kiemKePeriodReopenManage (Đóng Kỳ/Mở Lại theo siêu thị) cũng xem được đúng
 // các siêu thị nằm trong phạm vi đó qua ?dept= (không phải admin vẫn cần XEM được thì mới Đóng/Mở Lại
 // được — quyền có mà không xem được danh sách thì vô dụng trên giao diện).
 router.get('/sessions', async (req, res) => {
@@ -203,7 +203,7 @@ router.post('/sessions/:id/reopen', (req, res) =>
 
 // PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — chỉ đổi
 // Tên Kỳ/Thời Gian, giữ NGUYÊN gate/phạm vi y hệt Kích Hoạt (canManageStocktakePeriod + đúng dept của
-// mình, admin bypass) — không mở rộng phạm vi theo kiemKePeriodCloseReopenManage (quyền đó CHỈ áp dụng
+// mình, admin bypass) — không mở rộng phạm vi theo kiemKePeriodCloseManage/kiemKePeriodReopenManage (quyền đó CHỈ áp dụng
 // cho Đóng Kỳ/Mở Lại như người dùng nêu rõ, không phải Sửa).
 router.patch('/sessions/:id', (req, res) =>
   handleSessionTransition(req, res, 'PATCH /api/stocktake/sessions/:id', canManageStocktakePeriod,

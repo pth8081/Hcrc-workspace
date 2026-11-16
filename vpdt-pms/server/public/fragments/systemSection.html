@@ -3441,22 +3441,29 @@
           <div class="p-3 pt-0 space-y-2">
             <p class="text-[11px] text-gray-500 italic">Module "📋 Kiểm Kê" — module chính riêng ở sidebar (từ 12/2026), kiểm kê định kỳ toàn bộ quầy kệ siêu thị, TÁCH RIÊNG hẳn khỏi khối quyền "22. Vận Hành" ở trên để dễ cấp/soát quyền. 8 quyền dưới đây tương ứng đúng 8 tab của module; thiếu quyền nào thì KHÔNG thấy/dùng được đúng tab đó, kể cả khi đã có quyền ở Tab 8 Cấu Hình Người Dùng (lớp phân quyền theo siêu thị/quầy kệ bên trong module — độc lập với 8 quyền PHẲNG này).</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pKiemKePeriodManage"> 📅 Tab 1 — Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã &amp; Thống Kê, đúng siêu thị của mình — xem thêm quyền "Đóng/Mở Lại Kỳ theo siêu thị" bên dưới để cấp phạm vi rộng hơn)
+              <input type="checkbox" id="pKiemKePeriodManage"> 📅 Tab 1 — Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã &amp; Thống Kê, đúng siêu thị của mình — xem thêm 2 quyền Đóng Kỳ/Mở Lại Kỳ riêng ngay dưới để cấp phạm vi rộng hơn)
             </label>
-            <!-- kiemKePeriodCloseReopenManage {all, depts[]} (MỚI, 12/2026, theo yêu cầu người dùng: "cho
-                 thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — quyền
-                 CỘNG THÊM, không thay thế pKiemKePeriodManage: người có pKiemKePeriodManage vẫn Đóng Kỳ
-                 được đúng siêu thị của mình như cũ; Mở Lại Kỳ Đã Chốt trước đây CHỈ Admin, nay IT/QA được
-                 gán quyền này có thể Đóng+Mở Lại cho đúng phạm vi siêu thị được chọn (không cần Admin).
-                 Xem canCloseStocktakePeriodForDept()/canReopenStocktakePeriodForDept(),
-                 lib/stocktakeEngine.js. -->
+            <!-- kiemKePeriodCloseManage {all, depts[]} + kiemKePeriodReopenManage (MỚI, 12/2026, theo yêu
+                 cầu người dùng: "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ phải có
+                 quyền cao hơn") — 2 QUYỀN TÁCH RIÊNG, KHÔNG dùng chung 1 khối như trước:
+                 - Đóng Kỳ (kiemKePeriodCloseManage): vẫn {all,depts[]} như shelfReportView — admin có thể
+                   gán đúng 1/nhiều/tất cả siêu thị, mức quyền "thấp", giao việc đóng kỳ thường xuyên được.
+                 - Mở Lại Kỳ Đã Chốt (kiemKePeriodReopenManage): CỐ Ý là 1 CHECKBOX PHẲNG duy nhất, KHÔNG có
+                   ô chọn siêu thị — bật là mở lại được MỌI siêu thị (không có mức hẹp hơn), đúng tinh thần
+                   "quyền cao hơn, không giao nhỏ giọt". Người có pKiemKePeriodManage vẫn tự Đóng Kỳ được
+                   đúng siêu thị của mình như cũ (không cần gán gì thêm) — 2 quyền mới chỉ CỘNG THÊM phạm
+                   vi/khả năng. Xem canCloseStocktakePeriodForDept()/canReopenStocktakePeriodForDept(),
+                   lib/stocktakeEngine.js. -->
             <div class="pt-1 border-t">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer mb-1">
-                <input type="checkbox" id="pKiemKePeriodCloseReopenAll" data-op-change="toggleKiemKePeriodCloseReopenScopeGroup"> 🔐 Đóng Kỳ/Mở Lại Kỳ Đã Chốt Theo Siêu Thị — Tất Cả Siêu Thị
+                <input type="checkbox" id="pKiemKePeriodCloseAll" data-op-change="toggleKiemKePeriodCloseScopeGroup"> 🔒 Đóng Kỳ Theo Siêu Thị — Tất Cả Siêu Thị
               </label>
-              <div id="pKiemKePeriodCloseReopenDeptContainer" class="pl-1"></div>
-              <p class="text-[11px] text-gray-500 italic">Chọn siêu thị người này được Đóng Kỳ/Mở Lại Kỳ Đã Chốt (kể cả không có Tab 1 ở trên) — để trống = không có quyền này (Mở Lại vẫn luôn cần Admin hoặc quyền này).</p>
+              <div id="pKiemKePeriodCloseDeptContainer" class="pl-1"></div>
+              <p class="text-[11px] text-gray-500 italic">Chọn siêu thị người này được Đóng Kỳ (kể cả không có Tab 1 ở trên) — để trống = không có quyền này.</p>
             </div>
+            <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKePeriodReopenManage"> 🔓 Mở Lại Kỳ Đã Chốt (Tất Cả Siêu Thị — quyền cao hơn Đóng Kỳ, không chọn lẻ từng siêu thị được)
+            </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pKiemKeGomMaDo"> 📷 Tab 2 — Gom Mã
             </label>

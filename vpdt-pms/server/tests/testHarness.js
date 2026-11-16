@@ -998,7 +998,7 @@ function createDispatcher(state) {
         }
       }
       // kkTransitionMatch (12/2026, mirror ĐÚNG routes/stocktake.js handleSessionTransition() sau khi
-      // thêm batch-activate + Đóng Kỳ/Mở Lại theo phạm vi siêu thị kiemKePeriodCloseReopenManage) — Kích
+      // thêm batch-activate + Đóng Kỳ/Mở Lại theo phạm vi siêu thị kiemKePeriodCloseManage/kiemKePeriodReopenManage) — Kích
       // Hoạt dùng activateSessionBatch() (kích hoạt luôn các kỳ cùng batchId), Đóng/Mở Lại dùng đúng
       // canCloseStocktakePeriodForDept()/canReopenStocktakePeriodForDept() thay vì check cứng own-dept.
       const kkTransitionMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)\/(activate|close|reopen)$/);

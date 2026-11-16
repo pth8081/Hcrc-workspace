@@ -348,9 +348,11 @@ function collectPermsFromForm() {
     // "27. Kiểm Kê"). Admin luôn bypass (kiểm tra ở lib/stocktakeEngine.js), 8 quyền này KHÔNG mặc định
     // bật cho ai.
     kiemKePeriodManage: document.getElementById('pKiemKePeriodManage').checked,
-    // kiemKePeriodCloseReopenManage {all, depts[]} (MỚI, 12/2026) — xem chú thích đầy đủ ở
-    // renderKiemKePeriodCloseReopenScopeCheckboxes() (module-admin.js)/systemSection.html.
-    kiemKePeriodCloseReopenManage: scopeFromMultiSelectDropdown('pKiemKePeriodCloseReopenAll', 'pKiemKePeriodCloseReopenDeptContainer'),
+    // kiemKePeriodCloseManage {all, depts[]} + kiemKePeriodReopenManage (boolean phẳng, MỚI 12/2026, TÁCH
+    // RIÊNG khỏi Đóng Kỳ theo yêu cầu người dùng "mở kỳ phải có quyền cao hơn") — xem chú thích đầy đủ ở
+    // renderKiemKePeriodCloseScopeCheckboxes() (module-admin.js)/systemSection.html.
+    kiemKePeriodCloseManage: scopeFromMultiSelectDropdown('pKiemKePeriodCloseAll', 'pKiemKePeriodCloseDeptContainer'),
+    kiemKePeriodReopenManage: document.getElementById('pKiemKePeriodReopenManage').checked,
     kiemKeGomMaDo: document.getElementById('pKiemKeGomMaDo').checked,
     kiemKeKiemDemDo: document.getElementById('pKiemKeKiemDemDo').checked,
     kiemKeKiemSoatDo: document.getElementById('pKiemKeKiemSoatDo').checked,
@@ -491,11 +493,12 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistAtvstpExecute').checked = !!perms.checklistAtvstpExecute;
   document.getElementById('pChecklistAtvstpReportView').checked = !!perms.checklistAtvstpReportView;
   document.getElementById('pKiemKePeriodManage').checked = !!perms.kiemKePeriodManage;
-  // kiemKePeriodCloseReopenManage {all, depts[]} (MỚI, 12/2026) — quyền hoàn toàn MỚI, không có dữ liệu
-  // cũ nào cần tương thích ngược (mặc định rỗng = chưa cấp).
-  const kiemKePeriodCloseReopenScope = perms.kiemKePeriodCloseReopenManage || {};
-  document.getElementById('pKiemKePeriodCloseReopenAll').checked = !!kiemKePeriodCloseReopenScope.all;
-  setKiemKePeriodCloseReopenScopeCheckboxes(kiemKePeriodCloseReopenScope.depts);
+  // kiemKePeriodCloseManage {all, depts[]} + kiemKePeriodReopenManage (MỚI, 12/2026, TÁCH RIÊNG) — cả 2
+  // quyền hoàn toàn MỚI, không có dữ liệu cũ nào cần tương thích ngược (mặc định rỗng/false = chưa cấp).
+  const kiemKePeriodCloseScope = perms.kiemKePeriodCloseManage || {};
+  document.getElementById('pKiemKePeriodCloseAll').checked = !!kiemKePeriodCloseScope.all;
+  setKiemKePeriodCloseScopeCheckboxes(kiemKePeriodCloseScope.depts);
+  document.getElementById('pKiemKePeriodReopenManage').checked = !!perms.kiemKePeriodReopenManage;
   document.getElementById('pKiemKeGomMaDo').checked = !!perms.kiemKeGomMaDo;
   document.getElementById('pKiemKeKiemDemDo').checked = !!perms.kiemKeKiemDemDo;
   document.getElementById('pKiemKeKiemSoatDo').checked = !!perms.kiemKeKiemSoatDo;
@@ -589,7 +592,7 @@ function populatePermsForm(permsInput) {
   });
   toggleOperationOrderReceiptScopeGroup();
   toggleChecklistExecuteScopeGroup();
-  toggleKiemKePeriodCloseReopenScopeGroup();
+  toggleKiemKePeriodCloseScopeGroup();
   toggleKiemKeShelfLockScopeGroup();
   toggleKiemKeConfirmDoScopeGroup();
 

@@ -67,42 +67,38 @@ function canManageStocktakeShelfLockForDept(user, dept) {
 }
 
 // Mở lại Kỳ Đã Chốt — trước đây CHỈ Admin (tài liệu đề xuất mục B1 "chỉ Admin có nút Mở Lại Kỳ"). Vẫn giữ
-// NGUYÊN hàm này (dùng làm "canReopenStocktakeSession" gốc, KHÔNG xoá — tương thích các nơi gọi cũ), từ
-// 12/2026 BỔ SUNG thêm canReopenStocktakePeriodForDept()/canCloseStocktakePeriodForDept() ngay dưới cho
-// quyền MỚI kiemKePeriodCloseReopenManage (theo yêu cầu người dùng: "cho thêm mục quyền đóng mở kỳ kiểm
-// kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — ĐÂY LÀ QUYỀN CỘNG THÊM, không thay thế: admin
-// vẫn luôn đóng/mở lại được MỌI siêu thị; người có kiemKePeriodManage (cũ) vẫn Đóng Kỳ được đúng siêu thị
-// của mình y hệt trước đây; người được gán MỚI kiemKePeriodCloseReopenManage={all/depts} có thêm khả năng
-// Đóng Kỳ VÀ Mở Lại (trước đây không ai ngoài Admin mở lại được) cho đúng phạm vi siêu thị được gán.
+// NGUYÊN hàm này (dùng làm "canReopenStocktakeSession" gốc, KHÔNG xoá — tương thích các nơi gọi cũ).
 function canReopenStocktakeSession(user) { return !!user?.perms?.admin; }
 
-function hasKiemKePeriodCloseReopenScopeForDept(user, dept) {
-  const v = user?.perms?.kiemKePeriodCloseReopenManage;
+// canCloseStocktakePeriodForDept (12/2026, theo yêu cầu người dùng: "cho thêm mục quyền đóng mở kỳ kiểm
+// kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — quyền RIÊNG kiemKePeriodCloseManage {all, depts[]}
+// CHỈ cấp ĐÓNG KỲ (không kèm Mở Lại — xem canReopenStocktakePeriodForDept() ngay dưới, quyền HOÀN TOÀN
+// TÁCH RIÊNG theo yêu cầu người dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ
+// phải có quyền cao hơn"). Giữ NGUYÊN hành vi gốc: người có kiemKePeriodManage (Tab 1) vẫn tự Đóng Kỳ được
+// đúng siêu thị của mình, KHÔNG cần gán thêm gì — quyền mới chỉ CỘNG THÊM khả năng đóng kỳ siêu thị KHÁC.
+function canCloseStocktakePeriodForDept(user, dept) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
+  const v = user?.perms?.kiemKePeriodCloseManage;
   if (!v || typeof v !== 'object') return false;
   if (v.all) return true;
   return Array.isArray(v.depts) && v.depts.includes(dept);
 }
-// canCloseStocktakePeriodForDept — giữ NGUYÊN hành vi Đóng Kỳ cũ (kiemKePeriodManage, đúng siêu thị của
-// chính mình) + CỘNG THÊM phạm vi mới kiemKePeriodCloseReopenManage.
-function canCloseStocktakePeriodForDept(user, dept) {
-  if (user?.perms?.admin) return true;
-  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
-  return hasKiemKePeriodCloseReopenScopeForDept(user, dept);
-}
-// canReopenStocktakePeriodForDept — KHÁC canCloseStocktakePeriodForDept: KHÔNG có nhánh kiemKePeriodManage
-// (trước đây Mở Lại vốn CHỈ Admin, giữ nguyên — không âm thầm cấp thêm quyền Mở Lại cho người chỉ có
-// kiemKePeriodManage cũ), CHỈ thêm đúng phạm vi MỚI kiemKePeriodCloseReopenManage.
-function canReopenStocktakePeriodForDept(user, dept) {
-  if (user?.perms?.admin) return true;
-  return hasKiemKePeriodCloseReopenScopeForDept(user, dept);
+// canReopenStocktakePeriodForDept (12/2026) — quyền RIÊNG kiemKePeriodReopenManage, THEO YÊU CẦU NGƯỜI
+// DÙNG là quyền "cao hơn" Đóng Kỳ nên CỐ Ý là 1 cờ PHẲNG đơn giản (KHÔNG có {all,depts[]} như Đóng Kỳ —
+// không cho chọn lẻ từng siêu thị): bật là Mở Lại được Ở MỌI SIÊU THỊ, không bật thì hoàn toàn không mở
+// lại được (trừ Admin) — không có mức trung gian. `dept` nhận vào chỉ để giữ chữ ký hàm đối xứng với
+// canCloseStocktakePeriodForDept()/các hàm ForDept khác, bản thân không dùng tới (phạm vi luôn là TẤT CẢ).
+function canReopenStocktakePeriodForDept(user, _dept) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
 }
 // Gate "có quyền này ở BẤT KỲ phạm vi nào không" — dùng làm checkPerm (gọi TRƯỚC khi tìm ra item/dept cụ
 // thể) ở handleSessionTransition(), routes/stocktake.js.
 function canCloseStocktakePeriodAtAll(user) {
-  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage || (user?.perms?.kiemKePeriodCloseReopenManage && typeof user.perms.kiemKePeriodCloseReopenManage === 'object'));
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage || (user?.perms?.kiemKePeriodCloseManage && typeof user.perms.kiemKePeriodCloseManage === 'object'));
 }
 function canReopenStocktakePeriodAtAll(user) {
-  return !!(user?.perms?.admin || (user?.perms?.kiemKePeriodCloseReopenManage && typeof user.perms.kiemKePeriodCloseReopenManage === 'object'));
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
 }
 
 function isValidLoaiKy(v) { return v === LOAI_KY.GOM_MA || v === LOAI_KY.THONG_KE; }

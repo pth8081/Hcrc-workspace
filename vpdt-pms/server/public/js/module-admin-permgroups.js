@@ -429,9 +429,12 @@ const PERM_KEY_VN_LABELS = {
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",
   "checklistAtvstpReportView": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Báo Cáo ATVSTP (Dashboard VSATTP, mọi siêu thị)",
   "kiemKePeriodManage": "Kiểm Kê — 📅 Tab 1: Quản Lý Kỳ Kiểm Kê (tạo/kích hoạt/đóng kỳ Gom Mã & Thống Kê)",
-  // kiemKePeriodCloseReopenManage.all (MỚI, 12/2026) — quyền CỘNG THÊM cho Đóng Kỳ/Mở Lại Kỳ Đã Chốt theo
-  // phạm vi siêu thị, hoàn toàn MỚI (chỉ tồn tại dạng object {all,depts[]}, không có dạng boolean cũ).
-  "kiemKePeriodCloseReopenManage.all": "Kiểm Kê — 🔐 Tab 1: Đóng Kỳ/Mở Lại Kỳ Đã Chốt Theo Siêu Thị (Tất Cả Siêu Thị)",
+  // kiemKePeriodCloseManage.all + kiemKePeriodReopenManage (MỚI, 12/2026, TÁCH RIÊNG theo yêu cầu người
+  // dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ phải có quyền cao hơn") — Đóng
+  // Kỳ CỘNG THÊM theo phạm vi siêu thị (chỉ tồn tại dạng object {all,depts[]}, không có dạng boolean cũ);
+  // Mở Lại là cờ PHẲNG riêng, luôn là MỌI siêu thị khi bật.
+  "kiemKePeriodCloseManage.all": "Kiểm Kê — 🔒 Tab 1: Đóng Kỳ Theo Siêu Thị (Tất Cả Siêu Thị)",
+  "kiemKePeriodReopenManage": "Kiểm Kê — 🔓 Tab 1: Mở Lại Kỳ Đã Chốt (Tất Cả Siêu Thị, quyền cao hơn Đóng Kỳ)",
   "kiemKeGomMaDo": "Kiểm Kê — 📷 Tab 2: Gom Mã",
   "kiemKeKiemDemDo": "Kiểm Kê — 🔢 Tab 3: Kiểm Đếm",
   "kiemKeKiemSoatDo": "Kiểm Kê — 🛡️ Tab 4: Kiểm Soát",

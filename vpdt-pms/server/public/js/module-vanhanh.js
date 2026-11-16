@@ -330,27 +330,25 @@ let kkPeriodSessionsCache = [];
 let kkPeriodDeptSelected = '';
 
 function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
-function canReopenKiemKePeriodClient(user) { return !!user?.perms?.admin; }
-// hasKiemKePeriodCloseReopenScopeForDeptClient/canCloseKiemKePeriodForDeptClient/
-// canReopenKiemKePeriodForDeptClient (MỚI, 12/2026, theo yêu cầu người dùng "cho thêm mục quyền đóng mở
-// kỳ kiểm kê có chọn 1 hoặc nhiều siêu thị hoặc all siêu thị") — mirror ĐÚNG canCloseStocktakePeriodForDept/
-// canReopenStocktakePeriodForDept (lib/stocktakeEngine.js). Quyền CỘNG THÊM — admin/kiemKePeriodManage
-// (đúng dept mình) vẫn Đóng Kỳ được như cũ; Mở Lại trước đây CHỈ admin, nay thêm scope mới
-// kiemKePeriodCloseReopenManage={all/depts}.
-function hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept) {
-  const v = user?.perms?.kiemKePeriodCloseReopenManage;
+// canCloseKiemKePeriodForDeptClient/canReopenKiemKePeriodForDeptClient (12/2026, theo yêu cầu người dùng:
+// "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi, còn mở kỳ phải có quyền cao hơn" — TÁCH HẲN 2
+// quyền, không dùng chung 1 khối {all,depts} nữa) — mirror ĐÚNG canCloseStocktakePeriodForDept/
+// canReopenStocktakePeriodForDept (lib/stocktakeEngine.js):
+// - Đóng Kỳ (kiemKePeriodCloseManage {all,depts[]}) — CỘNG THÊM, admin/kiemKePeriodManage (đúng dept
+//   mình) vẫn Đóng Kỳ được như cũ, quyền mới chỉ mở rộng thêm siêu thị KHÁC.
+// - Mở Lại Kỳ Đã Chốt (kiemKePeriodReopenManage) — CỐ Ý là cờ PHẲNG đơn giản (KHÔNG {all,depts}), vì đây
+//   là quyền "cao hơn" theo đúng yêu cầu người dùng: bật là mở lại được MỌI siêu thị, không có mức hẹp
+//   hơn — trước đây CHỈ Admin mở lại được, nay thêm được đúng 1 mức: bật cờ này = mọi siêu thị.
+function canCloseKiemKePeriodForDeptClient(user, dept) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
+  const v = user?.perms?.kiemKePeriodCloseManage;
   if (!v || typeof v !== 'object') return false;
   if (v.all) return true;
   return Array.isArray(v.depts) && v.depts.includes(dept);
 }
-function canCloseKiemKePeriodForDeptClient(user, dept) {
-  if (user?.perms?.admin) return true;
-  if (user?.perms?.kiemKePeriodManage && dept === user?.dept) return true;
-  return hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept);
-}
-function canReopenKiemKePeriodForDeptClient(user, dept) {
-  if (user?.perms?.admin) return true;
-  return hasKiemKePeriodCloseReopenScopeForDeptClient(user, dept);
+function canReopenKiemKePeriodForDeptClient(user, _dept) {
+  return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
 }
 // Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
 // (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
@@ -2620,18 +2618,22 @@ function exportKkReportExcel() {
   }
 }
 
-// kkPeriodSelectableDepts() (MỚI, 12/2026, theo phát hiện khi thêm kiemKePeriodCloseReopenManage: quyền
-// mới cho phép Đóng Kỳ/Mở Lại ở siêu thị KHÁC siêu thị của mình, nhưng ô "📍 Siêu thị:" ở Tab 1 trước đây
-// CHỈ admin mới có dropdown chọn — người thường dù được gán quyền mới vẫn bị kẹt cứng đúng 1 siêu thị của
-// mình, KHÔNG có cách nào chuyển sang xem/thao tác siêu thị khác được gán — quyền có nhưng không dùng
-// được trên giao diện, đúng lớp lỗi CLAUDE.md nhắc tránh). Trả về danh sách siêu thị người này được PHÉP
-// chọn ở Tab 1: admin -> mọi siêu thị; người thường -> đúng siêu thị của mình HỢP với phạm vi
-// kiemKePeriodCloseReopenManage (nếu có) — CHỈ ảnh hưởng ô chọn RIÊNG của Tab 1, không đụng
-// kkEffectiveDept()/DB.stores dùng chung cho các tab khác (Cấu Hình Quầy Kệ, Xác Nhận...).
+// kkPeriodSelectableDepts() (MỚI, 12/2026, theo phát hiện khi thêm kiemKePeriodCloseManage/
+// kiemKePeriodReopenManage: quyền mới cho phép Đóng Kỳ/Mở Lại ở siêu thị KHÁC siêu thị của mình, nhưng ô
+// "📍 Siêu thị:" ở Tab 1 trước đây CHỈ admin mới có dropdown chọn — người thường dù được gán quyền mới vẫn
+// bị kẹt cứng đúng 1 siêu thị của mình, KHÔNG có cách nào chuyển sang xem/thao tác siêu thị khác được gán
+// — quyền có nhưng không dùng được trên giao diện, đúng lớp lỗi CLAUDE.md nhắc tránh). Trả về danh sách
+// siêu thị người này được PHÉP chọn ở Tab 1: admin -> mọi siêu thị; người thường -> đúng siêu thị của
+// mình HỢP với phạm vi kiemKePeriodCloseManage (nếu có) HOẶC mọi siêu thị nếu có kiemKePeriodReopenManage
+// (quyền phẳng, luôn là mọi siêu thị) — CHỈ ảnh hưởng ô chọn RIÊNG của Tab 1, không đụng kkEffectiveDept()/
+// DB.stores dùng chung cho các tab khác (Cấu Hình Quầy Kệ, Xác Nhận...).
 function kkPeriodSelectableDepts(user) {
   const allStores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
   if (user?.perms?.admin) return allStores;
-  const scope = user?.perms?.kiemKePeriodCloseReopenManage;
+  // kiemKePeriodReopenManage (quyền PHẲNG, luôn là MỌI siêu thị khi bật — xem lib/stocktakeEngine.js) ->
+  // cần xem được MỌI siêu thị để thật sự dùng được quyền Mở Lại ở bất kỳ đâu.
+  if (user?.perms?.kiemKePeriodReopenManage === true) return allStores;
+  const scope = user?.perms?.kiemKePeriodCloseManage;
   if (scope && typeof scope === 'object' && scope.all) return allStores;
   const extra = new Set();
   if (user?.dept) extra.add(user.dept);
@@ -2676,8 +2678,9 @@ async function loadKkPeriodSessions() {
   if (body) body.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
   try {
     // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán
-    // kiemKePeriodCloseReopenManage phạm vi khác siêu thị của mình, xem kkPeriodSelectableDepts()) — KHÔNG
-    // chỉ riêng admin như trước (server GET /sessions đã mở rộng tương ứng, xem routes/stocktake.js).
+    // kiemKePeriodCloseManage/kiemKePeriodReopenManage phạm vi khác siêu thị của mình, xem
+    // kkPeriodSelectableDepts()) — KHÔNG chỉ riêng admin như trước (server GET /sessions đã mở rộng tương
+    // ứng, xem routes/stocktake.js).
     const canPickDept = kkPeriodSelectableDepts(currentUser).length > 1;
     const qs = canPickDept ? `?dept=${encodeURIComponent(kkPeriodDeptSelected)}` : '';
     const res = await fetch(`/api/stocktake/sessions${qs}`);
@@ -2701,7 +2704,6 @@ function renderKkPeriodList() {
   const body = document.getElementById('kkPeriodListBody');
   if (!body) return;
   const canManage = canManageKiemKePeriodClient(currentUser);
-  const canReopenKk = canReopenKiemKePeriodClient(currentUser);
   const items = kkPeriodSessionsCache
     .filter(s => !kkPeriodLoaiFilter || s.loaiKy === kkPeriodLoaiFilter)
     .slice()

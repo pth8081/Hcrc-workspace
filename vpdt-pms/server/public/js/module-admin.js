@@ -1879,10 +1879,11 @@ function renderDeptCheckboxes() {
   renderShelfReportViewScopeCheckboxes();
   // kiemKeConfirmDo (📋 Kiểm Kê > Tab 6 Xác Nhận Toàn Bộ Đợt, 12/2026) — cùng lý do gọi kèm tại đây.
   renderKiemKeConfirmDoScopeCheckboxes();
-  // kiemKeShelfLockManage (📋 Kiểm Kê > Tab 5 riêng Khoá/Mở Khoá Quầy Kệ, 12/2026) + kiemKePeriodCloseReopenManage
-  // (📋 Kiểm Kê > Tab 1 Đóng Kỳ/Mở Lại Kỳ, MỚI 12/2026) — cùng lý do gọi kèm tại đây.
+  // kiemKeShelfLockManage (📋 Kiểm Kê > Tab 5 riêng Khoá/Mở Khoá Quầy Kệ, 12/2026) + kiemKePeriodCloseManage
+  // (📋 Kiểm Kê > Tab 1 Đóng Kỳ, MỚI 12/2026, TÁCH RIÊNG khỏi Mở Lại — quyền đó là checkbox phẳng ở
+  // systemSection.html, không cần hàm render multi-select riêng) — cùng lý do gọi kèm tại đây.
   renderKiemKeShelfLockScopeCheckboxes();
-  renderKiemKePeriodCloseReopenScopeCheckboxes();
+  renderKiemKePeriodCloseScopeCheckboxes();
   // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
@@ -2086,25 +2087,26 @@ function setKiemKeShelfLockScopeCheckboxes(scopeKeyList) {
   });
 }
 
-// kiemKePeriodCloseReopenManage {all, depts[]} (📋 Kiểm Kê > Tab 1 — Đóng Kỳ/Mở Lại Kỳ Đã Chốt theo siêu
-// thị, MỚI 12/2026, theo yêu cầu người dùng "cho thêm mục quyền đóng mở kỳ kiểm kê có chọn 1 hoặc nhiều
-// siêu thị hoặc all siêu thị") — CÙNG khuôn kiemKeConfirmDo ở trên. Quyền HOÀN TOÀN MỚI (không có dữ liệu
-// cũ cần tương thích ngược).
-function renderKiemKePeriodCloseReopenScopeCheckboxes() {
-  renderMultiSelectDropdown('pKiemKePeriodCloseReopenDeptContainer', DB.stores || [], [], {
-    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ/Mở Lại Kỳ...',
-    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng/mở lại được mọi siêu thị).'
+// kiemKePeriodCloseManage {all, depts[]} (📋 Kiểm Kê > Tab 1 — Đóng Kỳ theo siêu thị, MỚI 12/2026, theo
+// yêu cầu người dùng "đóng kỳ tôi chỉ cho phép phân cho người đóng kỳ thôi" — TÁCH RIÊNG khỏi Mở Lại, xem
+// chú thích đầy đủ ở systemSection.html) — CÙNG khuôn kiemKeConfirmDo ở trên. Quyền HOÀN TOÀN MỚI (không
+// có dữ liệu cũ cần tương thích ngược). Mở Lại Kỳ (kiemKePeriodReopenManage) là checkbox PHẲNG đơn giản ở
+// systemSection.html, không cần hàm render/toggle/set riêng (không có ô chọn siêu thị).
+function renderKiemKePeriodCloseScopeCheckboxes() {
+  renderMultiSelectDropdown('pKiemKePeriodCloseDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng kỳ được mọi siêu thị).'
   });
 }
-function toggleKiemKePeriodCloseReopenScopeGroup() {
-  const isAll = document.getElementById('pKiemKePeriodCloseReopenAll')?.checked;
-  document.getElementById('pKiemKePeriodCloseReopenDeptContainer')?.classList.toggle('opacity-40', isAll);
-  document.getElementById('pKiemKePeriodCloseReopenDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+function toggleKiemKePeriodCloseScopeGroup() {
+  const isAll = document.getElementById('pKiemKePeriodCloseAll')?.checked;
+  document.getElementById('pKiemKePeriodCloseDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pKiemKePeriodCloseDeptContainer')?.classList.toggle('pointer-events-none', isAll);
 }
-function setKiemKePeriodCloseReopenScopeCheckboxes(scopeKeyList) {
-  renderMultiSelectDropdown('pKiemKePeriodCloseReopenDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
-    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ/Mở Lại Kỳ...',
-    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng/mở lại được mọi siêu thị).',
+function setKiemKePeriodCloseScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pKiemKePeriodCloseDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi Đóng Kỳ...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu đóng kỳ được mọi siêu thị).',
     resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }
