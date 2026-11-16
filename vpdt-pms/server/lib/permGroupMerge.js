@@ -5,12 +5,27 @@
 // prepareUsersForSave() — xem chú thích ở đó) cũng gọi được ĐÚNG 1 bộ hàm này, không viết lại logic.
 'use strict';
 
-// ===== Phần CŨ (nguyên vẹn, chỉ DỜI CHỖ — không đổi hành vi): mergePermsServer()/mergeGroupsBasePermsServer() =====
-// Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
+// LỖI ĐÃ VÁ (12/2026, người dùng báo "quyền cấp qua Nhóm không lên, cấp trực tiếp cho người dùng lại
+// được"): trước đây shallow spread `{...basePerms, ...overrides}` — nếu `overrides.moduleAccess` tồn
+// tại (user có BẤT KỲ tuỳ chỉnh Mục 0 riêng nào, dù chỉ giới hạn 1 module khác không liên quan), object
+// đó THAY THẾ NGUYÊN VẸN `basePerms.moduleAccess`, bỏ qua mọi module MỚI mà Nhóm vừa được cấp thêm SAU
+// THỜI ĐIỂM override riêng đó được lưu (vì object override là 1 snapshot "đóng băng", không tự có key
+// mới). Nay merge `moduleAccess` THEO TỪNG KEY CON (basePerms trước, overrides đè lên trên đúng key nào
+// override có) thay vì thay nguyên khối — 1 module MỚI Nhóm vừa cấp (không có trong override riêng của
+// user) sẽ LUÔN đi qua đúng từ basePerms, không bị override cũ che mất. Override riêng của user cho các
+// module ĐÃ CÓ trong snapshot cũ vẫn giữ nguyên hiệu lực (không mất tuỳ chỉnh đã có) — chỉ nới lỏng đúng
+// phần module MỚI chưa từng có trong override, không thu hẹp bất kỳ trường hợp nào khác. Áp dụng CHỈ cho
+// moduleAccess (khối duy nhất liên tục có module MỚI thêm theo thời gian) — các field khác (boolean,
+// scope {all,depts}...) giữ nguyên hành vi shallow-replace cũ (đúng ý nghĩa 1 override ghi đè TOÀN BỘ
+// giá trị của ĐÚNG 1 quyền cụ thể đó, không có khái niệm "key con mới phát sinh sau" như moduleAccess).
 // khớp Y HỆT mergePerms() ở public/js/core.js (2 cài đặt độc lập, client không import chung được với
 // server). PHẢI giữ giống hệt nếu sửa 1 bên.
 function mergePermsServer(basePerms, overrides) {
-  return { ...(basePerms || {}), ...(overrides || {}) };
+  const merged = { ...(basePerms || {}), ...(overrides || {}) };
+  if (overrides && overrides.moduleAccess && typeof overrides.moduleAccess === 'object') {
+    merged.moduleAccess = { ...(basePerms?.moduleAccess || {}), ...overrides.moduleAccess };
+  }
+  return merged;
 }
 
 const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
