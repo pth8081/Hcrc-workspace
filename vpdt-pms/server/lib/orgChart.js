@@ -103,9 +103,30 @@ function findNearestDeptAncestor(version, node) {
   return null;
 }
 
-// Tên hiển thị: "<Chức danh> <Tên phòng ban chứa node>" nếu requiresDept, ngược lại chỉ "<Chức danh>"
-// (VD Tổng Giám Đốc). Node DEPARTMENT/COMPANY dùng đúng tên admin tự gõ, không tự sinh gì.
+// Tên hiển thị: LUÔN đúng "<Chức danh>" (node.jobTitle), KHÔNG cộng thêm tên phòng ban — SỬA theo phản
+// hồi người dùng thật (12/2026): "tích thuộc phòng ban cụ thể nhưng cái chức danh nó vẫn là chức danh
+// ghi ở cái vị trí định biên thôi... nếu cộng vào thì bị sai hết đối với hồ sơ nhân sự". TRƯỚC ĐÂY (khi
+// requiresDept !== false) hàm này cộng thêm tên phòng ban cha gần nhất vào cuối ("Giám đốc Siêu thị" +
+// "Siêu thị số 390 Nguyễn Văn Cừ" -> "Giám đốc Siêu thị Siêu thị số 390 Nguyễn Văn Cừ") — mục đích BAN
+// ĐẦU là phân biệt các node CÙNG chức danh ở nhiều phòng ban/siêu thị khác nhau khi hiện trong 1 danh
+// sách phẳng (VD GET /api/hr-profile/position-options), nhưng làm sai lệch cảm nhận "Chức Danh" so với
+// field jobTitle thật lưu trong Hồ Sơ Nhân Sự (employeeProfiles.jobTitle LUÔN là node.jobTitle sạch, xem
+// applyPositionAssignment()/lib/employeeProfile.js — KHÔNG hề bị ảnh hưởng bởi hàm này, nhưng người dùng
+// nhìn THẤY tên dài ra ở Cơ Cấu Tổ Chức/các nơi dùng hàm này thì hiểu nhầm là sai dữ liệu). Nơi THẬT SỰ
+// cần phân biệt theo phòng ban trong 1 danh sách phẳng (routes/employeeProfile.js GET position-options)
+// nay tự thêm `deptHint` RIÊNG (không gộp vào label) thay vì dựa vào hàm này.
 function buildNodeDisplayName(version, node) {
+  if (node.nodeType !== 'POSITION') return node.nodeName;
+  return node.jobTitle;
+}
+
+// buildNodeDisplayNameWithDept() (MỚI, 12/2026 — tách ra khi sửa buildNodeDisplayName() ở trên) — giữ
+// NGUYÊN hành vi CŨ (cộng thêm tên phòng ban cha gần nhất), dùng RIÊNG cho 2 nơi THẬT SỰ cần phân biệt
+// nhiều node CÙNG chức danh ở nhiều phòng ban/siêu thị khi hiện trong 1 danh sách PHẲNG không theo cây:
+// luồng đánh giá KPI (routes/orgChart.js GET /kpi-flow — danh sách evaluator/evaluatee công ty) và ô
+// tìm-kiếm-gõ-chọn "Chức Vụ" (routes/employeeProfile.js GET /position-options). KHÔNG dùng hàm này cho
+// bất kỳ chỗ nào hiển thị trực tiếp như "Chức Danh" của Hồ Sơ Nhân Sự (xem buildNodeDisplayName() ở trên).
+function buildNodeDisplayNameWithDept(version, node) {
   if (node.nodeType !== 'POSITION') return node.nodeName;
   if (node.requiresDept === false) return node.jobTitle;
   const deptNode = findNearestDeptAncestor(version, node);
@@ -715,15 +736,18 @@ function resolveKpiEvaluatorsForUser(appliedVersion, user, users, employeeProfil
   if (!node) return null;
   const byId = new Map((appliedVersion.nodes || []).map(n => [n.nodeId, n]));
   const rows = (appliedVersion.kpiFlow || []).filter(f => f.evaluateeNodeId === node.nodeId);
+  // buildNodeDisplayNameWithDept() (không phải buildNodeDisplayName() — CÙNG lý do GET /kpi-flow, xem
+  // chú thích đầy đủ ở khai báo hàm đó): danh sách nhóm đánh giá có thể gồm nhiều vị trí CÙNG chức danh ở
+  // nhiều phòng ban khác nhau (VD "Trưởng phòng" nhiều phòng), cần tên phòng ban để phân biệt.
   const evaluatorGroups = rows.map(row => {
     const evalNode = byId.get(row.evaluatorNodeId);
     return {
-      positionName: evalNode ? buildNodeDisplayName(appliedVersion, evalNode) : '',
+      positionName: evalNode ? buildNodeDisplayNameWithDept(appliedVersion, evalNode) : '',
       isAutoFromHierarchy: row.isAutoFromHierarchy,
       evaluators: evalNode ? resolvePositionOccupants(appliedVersion, evalNode, users, employeeProfiles) : []
     };
   });
-  return { positionName: buildNodeDisplayName(appliedVersion, node), evaluatorGroups };
+  return { positionName: buildNodeDisplayNameWithDept(appliedVersion, node), evaluatorGroups };
 }
 
 // So sánh 2 version (dùng cho màn xem 1 bản ARCHIVED — "So sánh với bản đang áp dụng") — so theo
@@ -780,7 +804,7 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
-  buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser,
+  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser,
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,

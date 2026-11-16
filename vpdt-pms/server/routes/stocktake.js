@@ -111,7 +111,18 @@ router.get('/sessions', async (req, res) => {
       if (allowed) dept = requestedDept;
     }
     const all = (await getAppDataValue('stocktakeSessions')) || [];
-    const items = all.filter(s => s.dept === dept);
+    const filtered = all.filter(s => s.dept === dept);
+    // hasData (MỚI, theo phản hồi người dùng thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải
+    // xoá nữa chứ") — Tab 1 cần biết TRƯỚC (không đợi bấm Xoá mới biết) kỳ Đang hoạt động nào đã thật sự
+    // có dữ liệu quét để hiện đúng nút "🗑️ Xoá" (xem deleteDraftSession() ở lib/stocktakeEngine.js) —
+    // CHỈ tính khi có kỳ Đang hoạt động trong danh sách (đỡ phải đọc stocktakeCounts khi toàn Nháp/Đã chốt).
+    let items = filtered;
+    if (filtered.some(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG)) {
+      await ensureStocktakeKey('stocktakeCounts');
+      const counts = (await getAppDataValue('stocktakeCounts')) || [];
+      const sessionIdsWithData = new Set(counts.map(c => c.sessionId));
+      items = filtered.map(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
+    }
     res.json({ items });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/sessions');
@@ -228,10 +239,18 @@ router.patch('/sessions/:id', (req, res) =>
   handleSessionTransition(req, res, 'PATCH /api/stocktake/sessions/:id', canManageStocktakePeriod,
     (arr, id) => editSessionMeta(arr, id, req.body)));
 
-// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê") — CHỈ xoá
-// được kỳ còn Nháp (deleteDraftSession() tự chặn trạng thái khác), cùng gate/phạm vi như Sửa/Kích Hoạt.
-router.delete('/sessions/:id', (req, res) =>
-  handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod, deleteDraftSession));
+// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê"; mở rộng
+// SAU ĐÓ theo phản hồi thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải xoá nữa chứ" — xem
+// chú thích đầy đủ ở deleteDraftSession()) — xoá được kỳ Nháp HOẶC kỳ Đang hoạt động nhưng CHƯA có dữ
+// liệu quét nào, cùng gate/phạm vi như Sửa/Kích Hoạt. Phải đọc trước `stocktakeCounts` (NGOÀI transaction
+// khoá `stocktakeSessions` của handleSessionTransition() — route dùng chung này chỉ khoá đúng 1
+// collection) rồi truyền vào qua closure (CÙNG khuôn PATCH ngay trên truyền req.body).
+router.delete('/sessions/:id', async (req, res) => {
+  await ensureStocktakeKey('stocktakeCounts');
+  const counts = (await getAppDataValue('stocktakeCounts')) || [];
+  return handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod,
+    (arr, id) => deleteDraftSession(arr, id, counts));
+});
 
 // ===================== TAB 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====
 // Theo tài liệu đề xuất mục B1: allowlist TUYỆT ĐỐI, không có cờ "tất cả"/"bất kỳ" nào — kể cả Admin khi

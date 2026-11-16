@@ -970,7 +970,11 @@ function createDispatcher(state) {
             || (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, qsDept));
           if (allowed) dept = qsDept;
         }
-        const items = (state.stocktakeSessions || []).filter(s => s.dept === dept);
+        const filtered = (state.stocktakeSessions || []).filter(s => s.dept === dept);
+        // hasData — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó) để test Playwright xác nhận
+        // được đúng nút "🗑️ Xoá" hiện/ẩn theo dữ liệu thật, không chỉ theo trạng thái.
+        const sessionIdsWithData = new Set((state.stocktakeCounts || []).map(c => c.sessionId));
+        const items = filtered.map(s => s.trangThai === 'DANG_HOAT_DONG' ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
         return { status: 200, body: { items } };
       }
       if (pathName === '/api/stocktake/sessions/open-depts' && method === 'GET') {
@@ -1063,7 +1067,7 @@ function createDispatcher(state) {
             const updated = editSessionMeta(arr, id, body);
             return { status: 200, body: { item: updated } };
           }
-          const result = deleteDraftSession(arr, id);
+          const result = deleteDraftSession(arr, id, state.stocktakeCounts || []);
           return { status: 200, body: { item: result } };
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
