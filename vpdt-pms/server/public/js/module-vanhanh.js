@@ -350,68 +350,12 @@ function canCloseKiemKePeriodForDeptClient(user, dept) {
 function canReopenKiemKePeriodForDeptClient(user, _dept) {
   return !!(user?.perms?.admin || user?.perms?.kiemKePeriodReopenManage === true);
 }
-// Mirror ĐÚNG lib/stocktakeEngine.js (bản server) — dùng để ẩn/hiện 8 nút sub-tab theo ĐÚNG quyền thật
-// (LỖI ĐÃ VÁ ở Tab 1 trước đó, xem chú thích loadKkPeriodSessions() — "nút hiện nhưng bấm không được"
-// CLAUDE.md nhắc tránh — áp dụng NGAY từ đầu cho 7 tab còn lại khi build thật, không để dành sửa sau).
-function canDoStocktakeGomMaClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeGomMaDo); }
-function canDoStocktakeKiemDemClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemDemDo); }
-function canDoStocktakeKiemSoatClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeKiemSoatDo); }
-function canManageStocktakeShelfConfigClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfConfigManage); }
-// canManageStocktakeShelfLockClient (MỚI, 12/2026) — mirror canManageStocktakeShelfLock() server
-// (lib/stocktakeEngine.js) — gác khung "🔒 Khoá/Mở Khoá Quầy Kệ" MỚI ở Tab 5, KHÁC HẲN
-// canManageStocktakeShelfConfigClient() (quyền XEM Tab 5) và canConfirmStocktakeClient() (quyền Xác Nhận
-// Toàn Bộ Đợt) — 3 quyền độc lập, không thay thế nhau.
-function canManageStocktakeShelfLockClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeShelfLockManage); }
-// canManageStocktakeShelfLockForDeptClient (MỚI, 12/2026, theo yêu cầu người dùng "cho IT chỉ khoá mở ở
-// một siêu thị của họ thôi") — mirror ĐÚNG canManageStocktakeShelfLockForDept() server
-// (lib/stocktakeEngine.js). kiemKeShelfLockManage nâng cấp boolean -> {all, depts[]}, tương thích ngược
-// (`true` cũ = đúng dept của mình).
-function canManageStocktakeShelfLockForDeptClient(user, dept) {
-  if (user?.perms?.admin) return true;
-  const v = user?.perms?.kiemKeShelfLockManage;
-  if (v === true) return dept === user?.dept;
-  if (v && typeof v === 'object') {
-    if (v.all) return true;
-    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
-  }
-  return dept === user?.dept;
-}
-function canConfirmStocktakeClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeConfirmDo); }
-// canSeeStocktakeShelfConfigTabClient (MỚI — phát hiện khi viết test cho câu hỏi người dùng "được phân
-// quyền siêu thị nào thì vào sẽ nhìn được siêu thị đấy": IT chỉ có kiemKeShelfLockManage (KHÔNG có
-// kiemKeShelfConfigManage) bị chặn luôn ở CỔNG vào Tab 5 — SHELFCONFIG trước đây chỉ gác bằng
-// canManageStocktakeShelfConfigClient, không đối xứng với CONFIRM (canSeeStocktakeConfirmTabClient =
-// canConfirmStocktakeClient || canDoStocktakeKiemDemClient) — nay OR thêm canManageStocktakeShelfLockClient
-// để IT chỉ được gán quyền Khoá/Mở Khoá vẫn vào được Tab 5 dùng đúng khung đó, không cần thêm quyền Cấu
-// Hình Quầy Kệ (CRUD danh mục) không liên quan.
-function canSeeStocktakeShelfConfigTabClient(user) {
-  return canManageStocktakeShelfConfigClient(user) || canManageStocktakeShelfLockClient(user);
-}
-// canConfirmStocktakeForDeptClient (LỖI THẬT đã vá, 12/2026 — phát hiện lại khi mirror cho
-// kiemKeShelfLockManage ở trên) — canConfirmStocktakeClient() ở trên KHÔNG xét dept, nên 1 người được gán
-// phạm vi HẸP (VD {all:false, depts:['Siêu thị A']}) vẫn THẤY nút "Xác Nhận Toàn Bộ Đợt" dù đang xem 1
-// siêu thị KHÁC ngoài phạm vi — bấm vào mới bị 403 (đúng lớp lỗi "nút hiện nhưng bấm không được" CLAUDE.md
-// nhắc tránh). Mirror ĐÚNG canConfirmStocktakeForDept() server, dùng thay canConfirmStocktakeClient() ở
-// MỌI nơi cần biết phạm vi theo 1 siêu thị cụ thể (xem updateKkConfirmAllVisibility()).
-function canConfirmStocktakeForDeptClient(user, dept) {
-  if (user?.perms?.admin) return true;
-  const v = user?.perms?.kiemKeConfirmDo;
-  if (v === true) return dept === user?.dept;
-  if (v && typeof v === 'object') {
-    if (v.all) return true;
-    if (Array.isArray(v.depts) && v.depts.includes(dept)) return true;
-  }
-  return dept === user?.dept;
-}
-// canSeeStocktakeConfirmTabClient (12/2026) — Tab 6 có 2 vai ĐỘC LẬP (xem chú thích #kkConfirmWrap/
-// vanHanhSection.html): Xác Nhận TỪNG quầy kệ chỉ cần quyền Kiểm Đếm (KHÔNG cần kiemKeConfirmDo), Xác
-// Nhận TOÀN BỘ ĐỢT mới cần kiemKeConfirmDo riêng. Nếu CHỈ gác tab theo canConfirmStocktakeClient (như 7
-// tab kia dùng đúng 1 quyền/tab), nhân viên Kiểm Đếm thường (không có kiemKeConfirmDo) sẽ KHÔNG THẤY
-// được Tab 6 để tự xác nhận quầy kệ mình vừa đếm xong — sai đúng vai trò tài liệu đề xuất mô tả. Nên
-// hiện tab này cho CẢ 2 vai, phần UI bên trong (updateKkConfirmAllVisibility()) tự ẩn nút Toàn Bộ Đợt
-// theo đúng quyền riêng của nó.
-function canSeeStocktakeConfirmTabClient(user) { return canConfirmStocktakeClient(user) || canDoStocktakeKiemDemClient(user); }
-function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
+// canDoStocktakeGomMaClient/KiemDemClient/KiemSoatClient, canManageStocktakeShelfConfigClient/
+// ShelfLockClient/ShelfLockForDeptClient, canConfirmStocktakeClient/ForDeptClient,
+// canSeeStocktakeShelfConfigTabClient/ConfirmTabClient, canManageStocktakeUserAccessClient — CHUYỂN sang
+// core.js (12/2026, đợt thêm dropdown sidebar "📋 Kiểm Kê" giống "⚙️ Vận Hành", xem updateKiemKeNavVisibility())
+// vì sidebar cần các hàm này NGAY khi đăng nhập, trước khi module này (tải lười) kịp tải — cùng khuôn
+// canAccessOperationSubTab() đã sống sẵn ở core.js cho Vận Hành.
 // kkSelectableDepts() (MỚI, 12/2026 — TỔNG QUÁT HOÁ kkPeriodSelectableDepts() cũ, theo phát hiện khi trả
 // lời câu hỏi người dùng "được phân quyền siêu thị nào thì vào sẽ nhìn được siêu thị đấy, đúng không?":
 // ban đầu chỉ tính phạm vi kiemKePeriodCloseManage/kiemKePeriodReopenManage cho RIÊNG ô chọn Tab 1, nhưng

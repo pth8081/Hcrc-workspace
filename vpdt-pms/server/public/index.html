@@ -291,14 +291,30 @@
       </div>
 
       <!-- Kiểm Kê — module TOP-LEVEL riêng (12/2026, PROMOTE khỏi sub-tab Vận Hành theo yêu cầu người
-           dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng"). Nút đơn giản
-           (KHÔNG dropdown — module đã có sẵn 8 tab con RIÊNG ngay bên trong #kiemKeSection, xem
-           setKiemKeSubTab()/module-vanhanh.js), cùng khuôn btnDocTab/btnTaskTab ở trên — bấm vào mở
-           thẳng module, tự vào đúng tab con gần nhất đang dùng (activeKiemKeSubTab). Gác theo
-           canAccessStocktakeModule() (core.js) — xem applyNavVisibility(). -->
-      <button id="btnKiemKeTab" data-op="switchTab" data-arg0="kiemKe" class="hidden sidebar-item">
-        <span class="sidebar-icon">📋</span><span class="sidebar-label">Kiểm Kê</span>
-      </button>
+           dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng"). ĐỔI sang dropdown
+           hiện 8 tab con ngay trên sidebar (12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong
+           slide bar hiện ra các tab bên trong giống module vận hành") — CÙNG khuôn #vanHanhNavWrap ở
+           trên: bấm nút cha mở/đóng panel, mỗi nút con dùng data-op-seq "đóng dropdown|chuyển tab|vào
+           đúng sub-tab" (setKiemKeSubTab(), module-vanhanh.js). Mỗi nút con ẩn/hiện RIÊNG theo ĐÚNG quyền
+           của tab đó (các hàm canDoStocktakeGomMaClient()/... đã CHUYỂN sang core.js để sidebar dùng được
+           ngay khi đăng nhập, không cần đợi module-vanhanh.js tải lười xong — xem
+           updateKiemKeNavVisibility()). Bấm nút cha "📋 Kiểm Kê" CHỈ mở/đóng danh sách tab con (KHÔNG tự
+           chuyển tab — CÙNG hành vi nút cha "⚙️ Vận Hành"), phải bấm đúng 1 tab con mới thật sự vào module. -->
+      <div id="kiemKeNavWrap" class="hidden">
+        <button id="btnKiemKeTab" data-op="toggleKiemKeDropdown" data-arg-event="0" class="sidebar-item">
+          <span class="sidebar-icon">📋</span><span class="sidebar-label flex-1">Kiểm Kê</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="kiemKeDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnKkNavPeriod" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(PERIOD)" class="hidden sidebar-subitem">📅 Kỳ Kiểm Kê</button>
+          <button id="btnKkNavGomMa" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(GOMMA)" class="hidden sidebar-subitem">📷 Gom Mã</button>
+          <button id="btnKkNavKiemDem" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(KIEMDEM)" class="hidden sidebar-subitem">🔢 Kiểm Đếm</button>
+          <button id="btnKkNavKiemSoat" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(KIEMSOAT)" class="hidden sidebar-subitem">🛡️ Kiểm Soát</button>
+          <button id="btnKkNavShelfConfig" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(SHELFCONFIG)" class="hidden sidebar-subitem">🗄️ Cấu Hình Quầy Kệ</button>
+          <button id="btnKkNavConfirm" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(CONFIRM)" class="hidden sidebar-subitem">✅ Xác Nhận</button>
+          <button id="btnKkNavReport" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(REPORT)" class="hidden sidebar-subitem">📊 Báo Cáo</button>
+          <button id="btnKkNavUserAccess" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(USERACCESS)" class="hidden sidebar-subitem">🔑 Cấu Hình Người Dùng</button>
+        </div>
+      </div>
 
       <!-- Mua Hàng — module TOP-LEVEL riêng (v23.30), đặt NGAY DƯỚI Vận Hành trên sidebar (9/2026, theo
            yêu cầu người dùng: mua hàng tập trung cho CHUỖI siêu thị) — cùng khuôn dropdown
