@@ -577,6 +577,93 @@ async function main() {
       const result = await page.evaluate(async (id) => await callRecordAction('hrProcesses', id, 'cancel', { reason: 'Ứng viên từ chối nhận việc' }), item3.id);
       assertEqual(result.item.status, 'CANCELLED', 'Quy trình phải chuyển CANCELLED');
       assertEqual(result.item.cancelReason, 'Ứng viên từ chối nhận việc', 'cancelReason phải khớp đúng lý do vừa nhập');
+
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "hủy như này nó bị rác hồ sơ"): quy trình "Đã
+      // huỷ" (giữ lại vĩnh viễn để tra soát) KHÔNG còn tự hiện lẫn vào màn theo dõi tiến độ MỖI LẦN mở
+      // màn — bộ lọc Trạng Thái mặc định đổi 'ALL' -> 'IN_PROGRESS' (xem module-hrlifecycle.js).
+      // callRecordAction() (core.js) chỉ gọi fetch() thuần, KHÔNG tự cập nhật DB.hrProcesses phía trình
+      // duyệt (đó là việc của hàm xử lý click thật, VD hrpApplyUpdate() dạng tương tự ở module khác) —
+      // tự vá lại item trong DB.hrProcesses ở đây để render đúng dữ liệu vừa huỷ, mirror đúng việc UI
+      // thật sẽ làm sau khi bấm nút "Hủy" thật.
+      const vis = await page.evaluate((item) => {
+        const idx = DB.hrProcesses.findIndex(p => p.id === item.id);
+        if (idx !== -1) DB.hrProcesses[idx] = item; else DB.hrProcesses.push(item);
+        setHrLifecycleView('LIST');
+        setHrpListFilterStatus('IN_PROGRESS');
+        const defaultHtml = document.getElementById('hrpListContainer').innerHTML;
+        setHrpListFilterStatus('CANCELLED');
+        const cancelledHtml = document.getElementById('hrpListContainer').innerHTML;
+        setHrpListFilterStatus('ALL');
+        const allHtml = document.getElementById('hrpListContainer').innerHTML;
+        return { defaultHtml, cancelledHtml, allHtml };
+      }, result.item);
+      assert(!vis.defaultHtml.includes('Đỗ Văn Tư'), 'Mặc định "Đang thực hiện" KHÔNG được hiện quy trình vừa Huỷ');
+      assert(vis.cancelledHtml.includes('Đỗ Văn Tư'), 'Đổi bộ lọc sang "Đã huỷ" vẫn phải tra soát lại được');
+      assert(vis.allHtml.includes('Đỗ Văn Tư'), '"Tất cả" vẫn phải hiện đủ, không mất dữ liệu');
+    });
+
+    // ===================== "✏️ Sửa Quy Trình" (11/2026, theo yêu cầu người dùng) =====================
+
+    await run.run('Real click "✏️ Sửa Quy Trình" (ONBOARDING) — modal điền sẵn đúng dữ liệu hiện tại, sửa Mã NV + Họ Tên, lưu thành công, modal Chi Tiết TỰ cập nhật ngay', async () => {
+      // callCreateAction() (core.js) chỉ gọi fetch() thuần, KHÔNG tự thêm vào DB.hrProcesses — đó là việc
+      // CHÍNH submit handler thật làm NGAY SAU (DB.hrProcesses.unshift(newItem), xem showHrCreateForm()
+      // submit ở trên) — mirror lại đúng bước đó ở đây để openHrProcessDetail() tìm thấy bản ghi vừa tạo.
+      const created = await page.evaluate(async (payload) => {
+        const result = await callCreateAction('hrProcesses', payload);
+        DB.hrProcesses = DB.hrProcesses || [];
+        DB.hrProcesses.unshift(result.item);
+        return result.item;
+      }, onboardHoPayload({ employeeCode: 'NV0006', fullName: 'Vũ Thị Sáu' }));
+      await page.evaluate((id) => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); openHrProcessDetail(id); }, created.id);
+      await page.waitForSelector('#hrpDetailModal:not(.hidden)', { timeout: 5000 });
+      await page.click('button[data-op="hrpEditProcess"]');
+      await page.waitForSelector('#genericConfirmModal:not(.hidden)', { timeout: 5000 });
+      const prefill = await page.evaluate(() => ({
+        code: document.getElementById('hrpEditEmployeeCode').value,
+        name: document.getElementById('hrpEditFullName').value,
+        deptWrapHidden: document.getElementById('hrpEditDeptWrap').classList.contains('hidden'),
+        storeWrapHidden: document.getElementById('hrpEditStoreWrap').classList.contains('hidden')
+      }));
+      assertEqual(prefill.code, 'NV0006', 'Mã NV phải điền sẵn đúng giá trị hiện tại');
+      assertEqual(prefill.name, 'Vũ Thị Sáu', 'Họ Tên phải điền sẵn đúng giá trị hiện tại');
+      assertEqual(prefill.deptWrapHidden, false, 'Vị Trí HO -> phải hiện ô Phòng Ban');
+      assertEqual(prefill.storeWrapHidden, true, 'Vị Trí HO -> phải ẩn ô Siêu Thị');
+      await page.fill('#hrpEditEmployeeCode', 'NV0006-FIXED');
+      await page.fill('#hrpEditFullName', 'Vũ Thị Sáu Đã Sửa');
+      await page.click('#genericConfirmOkBtn');
+      await page.waitForFunction((id) => DB.hrProcesses.find(p => p.id === id)?.employeeCode === 'NV0006-FIXED', created.id, { timeout: 5000 });
+      const after = await page.evaluate((id) => ({
+        item: DB.hrProcesses.find(p => p.id === id),
+        detailHtml: document.getElementById('hrpDetailBody').innerHTML
+      }), created.id);
+      assertEqual(after.item.fullName, 'Vũ Thị Sáu Đã Sửa');
+      assertIncludes(after.detailHtml, 'Vũ Thị Sáu Đã Sửa', 'Modal Chi Tiết phải tự cập nhật ngay, không cần đóng mở lại');
+      assert((after.item.history || []).some(h => h.action === 'EDITED'), 'Phải ghi 1 dòng lịch sử EDITED');
+    });
+
+    await run.run('Real click "✏️ Sửa Quy Trình" (OFFBOARDING) — sửa Ngày Nghỉ Dự Kiến + Ghi Chú, lưu thành công, KHÔNG đổi Tài Khoản', async () => {
+      const created = await page.evaluate(async () => {
+        const result = await callCreateAction('hrProcesses', {
+          processType: 'OFFBOARDING', employeeUsername: 'fin1', lastWorkingDate: '2026-12-01', reason: 'Nghỉ việc theo nguyện vọng'
+        });
+        DB.hrProcesses = DB.hrProcesses || [];
+        DB.hrProcesses.unshift(result.item);
+        return result.item;
+      });
+      await page.evaluate((id) => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); openHrProcessDetail(id); }, created.id);
+      await page.waitForSelector('#hrpDetailModal:not(.hidden)', { timeout: 5000 });
+      await page.click('button[data-op="hrpEditProcess"]');
+      await page.waitForSelector('#genericConfirmModal:not(.hidden)', { timeout: 5000 });
+      const prefillDate = await page.evaluate(() => document.getElementById('hrpEditLastWorkingDate').value);
+      assertEqual(prefillDate, '2026-12-01', 'Ngày Nghỉ Dự Kiến phải điền sẵn đúng giá trị hiện tại');
+      await page.fill('#hrpEditLastWorkingDate', '2026-12-20');
+      await page.fill('#hrpEditNote', 'Đã bàn giao xong tài sản');
+      await page.click('#genericConfirmOkBtn');
+      await page.waitForFunction((id) => DB.hrProcesses.find(p => p.id === id)?.lastWorkingDate === '2026-12-20', created.id, { timeout: 5000 });
+      const after = await page.evaluate((id) => DB.hrProcesses.find(p => p.id === id), created.id);
+      assertEqual(after.targetEndDate, '2026-12-20', 'targetEndDate phải tự đồng bộ theo lastWorkingDate');
+      assertEqual(after.note, 'Đã bàn giao xong tài sản');
+      assertEqual(after.employeeUsername, 'fin1', 'Tài Khoản KHÔNG được đổi — action này không có field nào sửa được Tài Khoản');
     });
 
     // ===================== VIEW-SCOPE (server-side) =====================
@@ -729,6 +816,11 @@ async function main() {
       await page.evaluate(() => { switchTab('hrLifecycle'); });
       const snap = await page.evaluate(() => {
         setHrLifecycleView('LIST');
+        // hrpListFilterStatus mặc định 'IN_PROGRESS' (11/2026, theo yêu cầu người dùng — ẩn "Đã huỷ"
+        // khỏi màn theo dõi mặc định, xem module-hrlifecycle.js) — onboardId (Trần Văn Mới) đã chuyển
+        // COMPLETED ở 1 test TRƯỚC đó trong file này (hoàn thành hết task bắt buộc), nên tự đổi lại
+        // "Tất cả" ở đây để xác nhận ĐÚNG việc render chứa đủ dữ liệu, không phải kiểm tra bộ lọc mặc định.
+        setHrpListFilterStatus('ALL');
         const list = {
           listHidden: document.getElementById('hrpViewList').classList.contains('hidden'),
           myTasksHidden: document.getElementById('hrpViewMyTasks').classList.contains('hidden'),

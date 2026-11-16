@@ -71,7 +71,7 @@ function buildCreateTemplateWorkbook(appData) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Onboarding (Theo Quy Trình)');
   sheet.columns = [
-    { header: 'Mã Nhân Viên (để trống nếu là nhân viên MỚI — hệ thống tự sinh mã)', key: 'employeeCode', width: 20 },
+    { header: 'Mã Nhân Viên (LUÔN để trống — hệ thống tự sinh mã)', key: 'employeeCode', width: 20 },
     ...CORE_COLUMNS, ...OPTIONAL_COLUMNS
   ];
   styleHeaderRow(sheet.getRow(1));
@@ -93,7 +93,7 @@ function buildCreateTemplateWorkbook(appData) {
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 110;
   noteSheet.addRow(['File này TẠO MỚI quy trình Onboarding ĐẦY ĐỦ (đủ các bước/việc cần làm như tạo tay) — dùng cho nhân viên CHƯA onboarding qua hệ thống. Nếu là nhân viên CŨ đã đang làm việc (chỉ cần có hồ sơ ngay, không cần qua checklist), dùng "Bỏ Qua Quy Trình" (Nhập Excel ở màn Hồ Sơ Nhân Sự) thay vì file này.']);
-  noteSheet.addRow(['"Mã Nhân Viên": để TRỐNG cho nhân viên hoàn toàn mới (hệ thống tự sinh mã). CHỈ điền khi đây là Tái Tuyển (mã của 1 hồ sơ ĐÃ NGHỈ VIỆC) — mã không khớp đúng điều kiện này sẽ bị báo lỗi.']);
+  noteSheet.addRow(['"Mã Nhân Viên": LUÔN để TRỐNG — hệ thống tự sinh mã tuần tự cho mọi dòng (kể cả Tái Tuyển). Điền bất kỳ giá trị gì vào cột này sẽ bị báo lỗi ở bước xem trước — nếu là Tái Tuyển (nhân viên cũ đã nghỉ việc), dùng "+ Tạo Onboarding" tạo tay (có ô "Kiểm Tra Nhân Sự Cũ" riêng) thay vì nhập hàng loạt.']);
   noteSheet.addRow(['"Vị Trí": gõ "Khối VP/HO" hoặc "Siêu Thị" (hoặc mã HO/STORE đều được).']);
   noteSheet.addRow(['"Phòng Ban/Siêu Thị"/"Chức Danh": phải gõ ĐÚNG tên đang có trong danh mục tương ứng với "Vị Trí" đã chọn (Phòng Ban/Chức Danh Khối VP cho HO, Siêu Thị/Chức Danh Siêu Thị cho STORE) — sai chính tả sẽ bị báo lỗi ở bước xem trước.']);
   noteSheet.addRow(['"Email": bắt buộc với nhân viên Siêu Thị; nhân viên Khối VP có thể để trống (đợi IT cấp sau).']);
@@ -180,12 +180,13 @@ function rowToPreviewItem(cells, cols, profiles, users) {
     errors.push(`Không tìm thấy tài khoản Quản Lý Trực Tiếp "${directManagerUsername}" (hoặc đã bị khoá)`);
   }
 
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "mã sinh tự động mà không được điền mã"): TRƯỚC ĐÂY
+  // chấp nhận điền Mã Nhân Viên cho dòng Tái Tuyển (khớp 1 hồ sơ ĐÃ NGHỈ VIỆC). Nay chặn CỨNG mọi trường
+  // hợp điền mã ở ĐÚNG đường Nhập Excel hàng loạt này — mã LUÔN phải để trống, hệ thống tự sinh. Đường
+  // tạo tay đơn lẻ (POST /api/create/hrProcesses, có ô "Kiểm Tra Nhân Sự Cũ" riêng để Tái Tuyển) KHÔNG
+  // đổi gì — vẫn nhận employeeCode client gửi như trước (xem createOnboardingProcessRecord()).
   if (employeeCode) {
-    const existing = (profiles || []).find(p => p.employeeCode === employeeCode);
-    if (!existing) errors.push(`Mã Nhân Viên "${employeeCode}" không có trong Hồ Sơ Nhân Sự — để trống nếu là nhân viên mới`);
-    else if (existing.status !== 'INACTIVE' && !(existing.status === 'DRAFT' && existing.processId == null)) {
-      errors.push(`Mã Nhân Viên "${employeeCode}" đang gắn với 1 hồ sơ đang hoạt động — chỉ dùng lại mã cũ cho Tái Tuyển (hồ sơ ĐÃ NGHỈ VIỆC)`);
-    }
+    errors.push(`Mã Nhân Viên phải để TRỐNG (hệ thống tự sinh mã) — không được điền "${employeeCode}" ở Nhập Excel hàng loạt. Nếu là Tái Tuyển, dùng "+ Tạo Onboarding" tạo tay thay vì nhập hàng loạt.`);
   }
 
   const dateOfBirth = parseDateCell(get('dateOfBirth'));

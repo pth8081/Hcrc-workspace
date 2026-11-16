@@ -435,7 +435,12 @@ function resetHrpOffboardingForm() {
 }
 
 // ----- Danh sách quy trình -----
-let hrpListFilterType = 'ALL', hrpListFilterStatus = 'ALL';
+// hrpListFilterStatus mặc định 'IN_PROGRESS' (11/2026, theo yêu cầu người dùng — "hủy như này nó bị
+// rác hồ sơ", xem mockup đề xuất đã xác nhận): trước đây mặc định 'ALL' khiến các quy trình "Đã huỷ"
+// (giữ lại vĩnh viễn để tra soát, xem cancelHrProcess()/lib/recordActions.js) tự hiện lẫn vào màn theo
+// dõi tiến độ MỖI LẦN mở màn, gây rối (nhất là khi Mã Nhân Viên được dùng lại — xem employeeCodeReleased
+// badge). Bộ lọc vẫn giữ nguyên đủ 4 lựa chọn, người dùng tự đổi lại "Tất cả"/"Đã huỷ" khi cần tra soát.
+let hrpListFilterType = 'ALL', hrpListFilterStatus = 'IN_PROGRESS';
 function setHrpListFilterType(v) { hrpListFilterType = v; renderHrProcessList(); }
 function setHrpListFilterStatus(v) { hrpListFilterStatus = v; renderHrProcessList(); }
 
@@ -836,7 +841,10 @@ function renderHrProcessDetailBody(item) {
         ${historyList}
       </div>
     </div>
-    ${item.status === 'IN_PROGRESS' && canManage ? `<div class="text-right mt-3"><button type="button" data-op="hrpCancelProcess" data-arg0="${item.id}" class="text-red-600 font-bold text-xs hover:underline">❌ Huỷ Quy Trình</button></div>` : ''}
+    ${item.status === 'IN_PROGRESS' && canManage ? `<div class="text-right mt-3 flex justify-end gap-3">
+      <button type="button" data-op="hrpEditProcess" data-arg0="${item.id}" class="text-indigo-600 font-bold text-xs hover:underline">✏️ Sửa Quy Trình</button>
+      <button type="button" data-op="hrpCancelProcess" data-arg0="${item.id}" class="text-red-600 font-bold text-xs hover:underline">❌ Huỷ Quy Trình</button>
+    </div>` : ''}
   `;
   populateHrpTaskAssignDropdowns();
 }
@@ -926,6 +934,143 @@ async function hrpCancelProcess(processId) {
   try {
     const result = await callRecordAction('hrProcesses', processId, 'cancel', { reason: reason.trim() });
     hrpApplyProcessUpdate(result.item);
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
+}
+
+// ===== "✏️ Sửa Quy Trình" (11/2026, theo yêu cầu người dùng — "hủy như này nó bị rác hồ sơ... có cho
+// phép sửa để nó chạy tiếp đến lúc hoàn thành thì thôi") — xem chú thích đầy đủ ở editHrProcess()
+// (lib/recordActions.js). Dùng showConfirmModal() dựng form ĐỘNG theo processType thay vì thêm DOM cố
+// định mới vào hrLifecycleSection.html — field điền sẵn giá trị HIỆN TẠI, server tự so sánh field nào
+// THỰC SỰ đổi (xem editHrProcess()), KHÔNG đụng checklist/tasks[] đã làm.
+function hrpEditProcess(processId) {
+  const item = findHrProcessById(processId);
+  if (!item) return;
+  const bodyHTML = item.processType === 'ONBOARDING' ? hrpBuildEditOnboardingFormHTML(item) : hrpBuildEditOffboardingFormHTML(item);
+  showConfirmModal({
+    title: '✏️ Sửa Thông Tin Quy Trình',
+    bodyHTML,
+    confirmLabel: '💾 Lưu Thay Đổi',
+    onConfirm: () => hrpSubmitEditProcess(item)
+  });
+  if (item.processType === 'ONBOARDING') {
+    sddSetOptions('hrpEditDeptDatalist', DB.depts || []);
+    sddSetOptions('hrpEditStoreDatalist', DB.stores || []);
+    hrpOnEditPosTypeChange();
+  } else {
+    sddSetOptions('hrpEditResignationReasonDatalist', DB.resignationReasons || []);
+  }
+}
+
+function hrpBuildEditOnboardingFormHTML(item) {
+  return `
+    <div class="space-y-2 text-sm text-left">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Mã Nhân Viên</label>
+        <input type="text" id="hrpEditEmployeeCode" value="${escapeHtml(item.employeeCode || '')}" class="w-full border p-1.5 rounded">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Họ Và Tên</label>
+        <input type="text" id="hrpEditFullName" value="${escapeHtml(item.fullName || '')}" class="w-full border p-1.5 rounded">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Vị Trí</label>
+        <select id="hrpEditPosType" data-op-change="hrpOnEditPosTypeChange" class="w-full border p-1.5 rounded bg-white">
+          <option value="HO" ${item.employeePosType === 'HO' ? 'selected' : ''}>Khối VP/HO</option>
+          <option value="STORE" ${item.employeePosType === 'STORE' ? 'selected' : ''}>Siêu Thị</option>
+        </select>
+      </div>
+      <div id="hrpEditDeptWrap">
+        <label class="block text-xs text-gray-500 mb-0.5">Phòng Ban</label>
+        <input type="text" id="hrpEditDept" data-sdd-list="hrpEditDeptDatalist" autocomplete="off" value="${escapeHtml(item.employeePosType !== 'STORE' ? (item.employeeDept || '') : '')}" class="w-full border p-1.5 rounded">
+        <div id="hrpEditDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <div id="hrpEditStoreWrap">
+        <label class="block text-xs text-gray-500 mb-0.5">Siêu Thị</label>
+        <input type="text" id="hrpEditStore" data-sdd-list="hrpEditStoreDatalist" autocomplete="off" value="${escapeHtml(item.employeePosType === 'STORE' ? (item.employeeDept || '') : '')}" class="w-full border p-1.5 rounded">
+        <div id="hrpEditStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Chức Danh</label>
+        <input type="text" id="hrpEditJobTitle" data-sdd-list="hrpEditJobTitleDatalist" autocomplete="off" value="${escapeHtml(item.employeeJobTitle || '')}" class="w-full border p-1.5 rounded">
+        <div id="hrpEditJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <div>
+        <label id="hrpEditEmailLabel" class="block text-xs text-gray-500 mb-0.5">Email</label>
+        <input type="email" id="hrpEditEmail" value="${escapeHtml(item.email || '')}" class="w-full border p-1.5 rounded">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Số Điện Thoại</label>
+        <input type="text" id="hrpEditPhone" value="${escapeHtml(item.phone || '')}" class="w-full border p-1.5 rounded">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Ngày Vào Làm Việc</label>
+        <input type="date" id="hrpEditStartDate" value="${escapeHtml(item.startDate || '')}" class="w-full border p-1.5 rounded">
+      </div>
+    </div>`;
+}
+
+function hrpBuildEditOffboardingFormHTML(item) {
+  return `
+    <div class="space-y-2 text-sm text-left">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Ngày Nghỉ Dự Kiến</label>
+        <input type="date" id="hrpEditLastWorkingDate" value="${escapeHtml(item.lastWorkingDate || '')}" class="w-full border p-1.5 rounded">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Lý Do Nghỉ Việc</label>
+        <input type="text" id="hrpEditResignationReason" data-sdd-list="hrpEditResignationReasonDatalist" autocomplete="off" value="${escapeHtml(item.resignationReason || '')}" class="w-full border p-1.5 rounded">
+        <div id="hrpEditResignationReasonDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Ghi Chú</label>
+        <textarea id="hrpEditNote" class="w-full border p-1.5 rounded" rows="2">${escapeHtml(item.note || '')}</textarea>
+      </div>
+    </div>`;
+}
+
+// Mirror onHrpOnboardingPosTypeChange() (form Tạo Onboarding) — đổi hiện/ẩn Phòng Ban/Siêu Thị + nạp
+// lại gợi ý Chức Danh theo đúng posType, KHÔNG xoá dữ liệu đã gõ (khác form Tạo, vì đây là SỬA — giữ
+// nguyên Chức Danh cũ nếu posType không đổi so với lúc mở form).
+function hrpOnEditPosTypeChange() {
+  const posType = document.getElementById('hrpEditPosType')?.value;
+  if (!posType) return;
+  document.getElementById('hrpEditDeptWrap').classList.toggle('hidden', posType !== 'HO');
+  document.getElementById('hrpEditStoreWrap').classList.toggle('hidden', posType !== 'STORE');
+  const jobTitleOptions = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+  sddSetOptions('hrpEditJobTitleDatalist', jobTitleOptions);
+  const emailLabel = document.getElementById('hrpEditEmailLabel');
+  if (emailLabel) emailLabel.textContent = posType === 'STORE' ? 'Email (bắt buộc — nhân viên Siêu Thị)' : 'Email (để trống nếu chưa cấp)';
+}
+
+async function hrpSubmitEditProcess(item) {
+  let payload;
+  if (item.processType === 'ONBOARDING') {
+    const employeePosType = document.getElementById('hrpEditPosType').value;
+    const employeeDept = (employeePosType === 'STORE'
+      ? document.getElementById('hrpEditStore').value
+      : document.getElementById('hrpEditDept').value).trim();
+    payload = {
+      employeeCode: document.getElementById('hrpEditEmployeeCode').value.trim(),
+      fullName: document.getElementById('hrpEditFullName').value.trim(),
+      employeePosType, employeeDept,
+      employeeJobTitle: document.getElementById('hrpEditJobTitle').value.trim(),
+      email: document.getElementById('hrpEditEmail').value.trim(),
+      phone: document.getElementById('hrpEditPhone').value.trim(),
+      startDate: document.getElementById('hrpEditStartDate').value
+    };
+  } else {
+    payload = {
+      lastWorkingDate: document.getElementById('hrpEditLastWorkingDate').value,
+      resignationReason: document.getElementById('hrpEditResignationReason').value.trim(),
+      note: document.getElementById('hrpEditNote').value.trim()
+    };
+  }
+  try {
+    const result = await callRecordAction('hrProcesses', item.id, 'edit', payload);
+    hrpApplyProcessUpdate(result.item);
+    alert('✅ Đã lưu thay đổi.');
   } catch (err) {
     alert(`⛔ ${err.message}`);
   }
