@@ -916,28 +916,19 @@ function canFullViewProfiles(user) {
 // lib/laborContract.js::addAmendment(). Mặc định null để không phá vỡ lượt gọi tự động lúc Onboarding
 // hoàn tất (routes/employeeProfile.js dòng ~322 — gán vị trí lần đầu, không có ngữ cảnh "quyết định" nào
 // để đính kèm) — chỉ route "gán/đổi chức vụ" thủ công (set-position) truyền tham số này.
-// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao — "hrProfileEdit tự gán chức vụ cho chính mình để tự nâng quyền
-// duyệt"): route gán/đổi chức vụ (POST .../set-position, Gán Chức Vụ hàng loạt qua Excel) chỉ đòi
-// canEditProfiles() (hrProfileManage/hrProfileEdit) — KHÔNG có bất kỳ chặn nào nếu hồ sơ đang sửa lại
-// CHÍNH LÀ hồ sơ đã liên kết tài khoản của NGƯỜI ĐANG THỰC HIỆN hành động. 1 nhân viên CHỈ được cấp
-// hrProfileEdit (để duy trì hồ sơ nhân sự, KHÔNG có admin) nhưng đã có sẵn canBeApprover (cho 1 vị trí
-// hợp lệ khác) có thể tự đổi chức vụ CHÍNH THỨC của mình (jobTitle/dept, đồng bộ cả xuống tài khoản
-// users.*) sang BẤT KỲ node vị trí nào trong Cơ Cấu Tổ Chức — kể cả node cấp cao (VD "Giám Đốc") — để tự
-// khớp (jobTitle, dept) của bước phê duyệt "Theo vị trí" (resolvePositionApprovers(), lib/positionApprovers.js)
-// mà KHÔNG hề được thực sự bổ nhiệm. Cùng tinh thần "không ai tự duyệt được thứ do chính mình tạo"
-// (lib/recordActions.js, assertNotSelfDecidingXxx() — áp dụng CHO MỌI module, KHÔNG có ngoại lệ admin
-// theo quyết định 11/2026) — chặn CỨNG việc tự gán/đổi chức vụ cho chính mình, không phân biệt actor có
-// admin hay không (giống khuôn các assertNotSelfDecidingXxx() khác đã bỏ hẳn nhánh admin-bypass).
-function assertNotSelfAssigningPosition(profile, actorUsername) {
-  if (profile?.username && profile.username === actorUsername) {
-    throw new HttpError(403, 'Không được tự gán/đổi chức vụ cho chính mình — cần HR/Admin khác thực hiện, tránh tự nâng quyền phê duyệt');
-  }
-}
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "người xử lý hồ sơ nhân sự không gán được chức danh của
+// họ trong hồ sơ, đây là bug, chỉ cần quyền xử lý hồ sơ là đủ"): trước đây CHẶN CỨNG (403) việc actor tự
+// gán/đổi chức vụ CHÍNH THỨC (và Vị Trí Kiêm Nhiệm) cho CHÍNH hồ sơ đã liên kết tài khoản của mình (xem
+// assertNotSelfAssigningPosition(), thêm ở re-audit lần 5 để chặn 1 nhân viên tự đổi chức vụ mình lên vị
+// trí cao hơn nhằm tự đủ điều kiện duyệt phê duyệt "Theo vị trí" — resolvePositionApprovers(),
+// lib/positionApprovers.js). Người dùng xác nhận rõ ràng (sau khi được nêu lại đúng rủi ro ban đầu của
+// chặn này) MUỐN BỎ HẲN chặn này — người xử lý hồ sơ Nhân Sự (hrProfileManage/hrProfileEdit) phải tự gán
+// được chức vụ của chính mình trong hồ sơ, không cần nhờ 1 HR/Admin khác. Đã GỠ assertNotSelfAssigningPosition()
+// khỏi applyPositionAssignment() (vị trí CHÍNH THỨC) VÀ case 'secondaryPositions' (Vị Trí Kiêm Nhiệm).
 
 function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiveDate, actorUsername, actorName, note, fileUrl, fileName) {
   const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
   const { assertUploadedFileUrl } = require('./createValidation'); // require trễ — tránh vòng lặp require
-  assertNotSelfAssigningPosition(profile, actorUsername);
   assertUploadedFileUrl(fileUrl, 'Tệp quyết định');
   if (!orgChartVersion) throw new HttpError(400, 'Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng — vào Cơ Cấu Tổ Chức tạo và áp dụng cây tổ chức trước khi gán chức vụ');
   const node = (orgChartVersion.nodes || []).find(n => n.positionKey === positionKey && n.nodeType === 'POSITION');
@@ -1332,9 +1323,10 @@ function assertValidEducation(edu, idx) {
 // nói chung) có thể tự XOÁ TRẮNG lịch sử kỷ luật của chính mình (gửi `disciplinaryActions: []`), hoặc tự
 // CHÈN THÊM 1 dòng "Bổ nhiệm/Điều động" giả cho chính mình (VD tự "bổ nhiệm" lên 1 đơn vị/chức danh khác
 // trong lịch sử — dù KHÔNG đổi positionKey/jobTitle hiện tại, dữ liệu lịch sử này vẫn dùng để tra soát/
-// đối chiếu báo cáo nhân sự). Cùng tinh thần "không ai tự xử lý được thứ liên quan tới chính mình" đã áp
-// dụng cho assertNotSelfAssigningPosition() ở trên — chặn CỨNG, không phân biệt actor có admin hay
-// không (giống khuôn mọi assertNotSelfDecidingXxx() khác, quyết định 11/2026).
+// đối chiếu báo cáo nhân sự). Chặn CỨNG, không phân biệt actor có admin hay không (giống khuôn mọi
+// assertNotSelfDecidingXxx() khác, quyết định 11/2026) — LƯU Ý: khác với self-assign chức vụ (đã GỠ
+// chặn theo yêu cầu người dùng, xem applyPositionAssignment()), chặn RIÊNG này (kỷ luật/bổ nhiệm) VẪN
+// GIỮ NGUYÊN, không nằm trong phạm vi yêu cầu gỡ bỏ.
 const SELF_EDIT_RESTRICTED_FIELDS = new Set(['disciplinaryActions', 'transfers']);
 function assertNotSelfEditingDisciplinaryOrTransfers(profile, actorUsername, touchedFields) {
   if (!profile?.username || profile.username !== actorUsername) return;
@@ -1560,10 +1552,8 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
       // Chặn trùng với vị trí CHÍNH THỨC hiện tại (kiêm nhiệm đúng vị trí mình đang giữ là vô nghĩa) và
       // trùng lặp NỘI BỘ trong chính danh sách đang gửi lên.
       case 'secondaryPositions': {
-        // Cùng lớp lỗi "tự gán chức vụ cho chính mình" đã vá ở applyPositionAssignment() (xem
-        // assertNotSelfAssigningPosition() — mirror nguyên vẹn, kiêm nhiệm cũng khớp (jobTitle, dept) vào
-        // resolvePositionApprovers() y hệt vị trí chính thức): chặn luôn cả đường "Vị Trí Kiêm Nhiệm".
-        assertNotSelfAssigningPosition(profile, actorUsername);
+        // (11/2026) Đã GỠ chặn "tự gán chức vụ cho chính mình" ở đây — xem chú thích đầy đủ ngay trên
+        // applyPositionAssignment() (phần vị trí CHÍNH THỨC) lý do gỡ.
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách Vị trí kiêm nhiệm không hợp lệ');
         const orgChartVersion = options && options.orgChartAppliedVersion;
         const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart'); // require trễ — tránh vòng lặp require (cùng khuôn applyPositionAssignment())
@@ -1608,9 +1598,9 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
             const deptNode = findNearestDeptAncestor(orgChartVersion, node);
             dept = deptNode?.departmentRef || deptNode?.nodeName || null;
             if (!dept) {
-              // Dòng MỚI thêm -> chặn ngay (lý do xem chú thích ở assertNotSelfAssigningPosition() phía
-              // trên). Dòng ĐÃ CÓ TỪ TRƯỚC -> KHÔNG chặn (xem chú thích existingPositionKeys phía trên),
-              // giữ nguyên hành vi cũ: lặng lẽ gán dept=null, actor vẫn lưu/bỏ dòng khác bình thường.
+              // Dòng MỚI thêm -> chặn ngay. Dòng ĐÃ CÓ TỪ TRƯỚC -> KHÔNG chặn (xem chú thích
+              // existingPositionKeys phía trên), giữ nguyên hành vi cũ: lặng lẽ gán dept=null, actor vẫn
+              // lưu/bỏ dòng khác bình thường.
               if (!existingPositionKeys.has(positionKey)) {
                 throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1} ("${buildNodeDisplayName(orgChartVersion, node)}"): chưa nằm trong nhánh Phòng Ban nào trên Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức đặt vị trí này vào đúng Phòng Ban trước khi gán kiêm nhiệm`);
               }
