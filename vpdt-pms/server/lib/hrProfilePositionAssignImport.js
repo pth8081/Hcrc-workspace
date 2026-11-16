@@ -92,8 +92,15 @@ function rowToPreviewItem(cells, cols, appliedVersion, profiles) {
       errors.push('Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng');
     } else {
       const node = orgChart.findPositionNodeForUser(appliedVersion, { dept, jobTitle });
-      if (!node) errors.push(`Không tìm thấy vị trí khớp đúng "${jobTitle}" tại "${dept}" trong Cơ Cấu Tổ Chức đang áp dụng`);
-      else { positionKey = node.positionKey; positionLabel = orgChart.buildNodeDisplayName(appliedVersion, node); }
+      if (!node) {
+        // diagnosePositionMismatch() (12/2026, người dùng vẫn báo lỗi khớp vị trí SAU bản vá Unicode/
+        // khoảng trắng — kiểm tra file Excel thật xác nhận dữ liệu sạch, nghi ngờ lệch nodeName (tên
+        // hiển thị trên cây) với departmentRef (chọn qua dropdown riêng) — xem chú thích đầy đủ ở
+        // lib/orgChart.js) — cho gợi ý cụ thể hơn thay vì chỉ 1 câu chung chung, giúp admin tự sửa được
+        // ngay không cần đoán mò/nhờ hỗ trợ thêm.
+        const hint = orgChart.diagnosePositionMismatch(appliedVersion, { dept, jobTitle });
+        errors.push(hint ? hint.message : `Không tìm thấy vị trí khớp đúng "${jobTitle}" tại "${dept}" trong Cơ Cấu Tổ Chức đang áp dụng`);
+      } else { positionKey = node.positionKey; positionLabel = orgChart.buildNodeDisplayName(appliedVersion, node); }
     }
   }
 

@@ -216,8 +216,17 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
 // khác nhau thật sự), chỉ nới lỏng đúng phần khác biệt vô hình/không có ý nghĩa nghiệp vụ. Chỉ LÀM LỎNG
 // điều kiện khớp (mọi cặp TRƯỚC ĐÂY đã khớp vẫn khớp nguyên vẹn), không thu hẹp — an toàn cho 2 nơi gọi
 // khác đang dùng hàm này (đồng bộ managerUsername toàn hệ thống, applyVersion()).
+// CẬP NHẬT (12/2026, người dùng vẫn báo lỗi SAU bản vá trên — kiểm tra trực tiếp file Excel thật của
+// người dùng xác nhận dữ liệu Excel HOÀN TOÀN SẠCH, không lệch Unicode/khoảng trắng gì): thêm hạ chữ
+// thường (toLowerCase) vào chuẩn hoá — khả năng cao gốc rễ thật là lệch HOA/thường giữa nodeName (tên
+// hiển thị TỰ DO trên cây, VD "Siêu thị số 275 Nguyễn Trãi") và departmentRef (chọn qua dropdown RIÊNG,
+// ràng buộc đúng 1 giá trị có thật trong DB.stores/DB.depts — xem orgChartNodeDeptRefSelect ở
+// module-orgchart.js) — 2 trường ĐỘC LẬP, admin có thể gõ nodeName và chọn departmentRef lệch nhau 1
+// chút (hoa/thường, "Siêu Thị" vs "Siêu thị"...) mà mắt thường khó nhận ra khi nhìn cây (chỉ hiện
+// nodeName, không hiện departmentRef). Diagnose thêm ở diagnosePositionMismatch() bên dưới để lộ rõ lệch
+// này ngay trong thông báo lỗi, thay vì bắt đoán mò tiếp.
 function normalizeMatchText(s) {
-  return String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  return String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 // Vị trí (node POSITION) khớp đúng dept+jobTitle hiện tại của 1 user — ngược lại resolvePositionOccupants().
 function findPositionNodeForUser(version, user) {
@@ -232,6 +241,47 @@ function findPositionNodeForUser(version, user) {
     const deptRef = deptNode?.departmentRef;
     return !!deptRef && normalizeMatchText(deptRef) === userDept;
   }) || null;
+}
+
+// diagnosePositionMismatch() (12/2026, cùng đợt vá nodeName/departmentRef lệch nhau ở trên) — CHỈ dùng
+// để DỰNG THÔNG BÁO LỖI rõ ràng hơn cho hrProfilePositionAssignImport.js khi findPositionNodeForUser()
+// không khớp được dòng Excel nào — KHÔNG dùng để quyết định khớp/không khớp (đó vẫn là
+// findPositionNodeForUser() duy nhất). Trả về gợi ý cụ thể theo đúng thứ tự ưu tiên:
+//  1. Có 1 Phòng Ban/Siêu Thị NODENAME khớp (tên hiển thị trên cây, không phải departmentRef) nhưng
+//     departmentRef thật của nó lại khác -> đây CHÍNH LÀ lỗi "nhìn giống hệt nhưng không khớp" hay gặp
+//     nhất (nodeName gõ tự do, departmentRef chọn qua dropdown riêng — xem module-orgchart.js) -> trả
+//     departmentRef thật để người dùng sửa đúng vào Excel (hoặc sửa lại Cơ Cấu Tổ Chức cho khớp tên).
+//  2. Không có nodeName nào khớp, nhưng CÓ 1+ vị trí (POSITION) khác cùng đúng Chức Danh ở (các)
+//     Phòng Ban/Siêu Thị KHÁC -> liệt kê để người dùng biết Chức Danh có tồn tại, chỉ sai Phòng Ban.
+//  3. Không tìm thấy gì liên quan -> trả null, hrProfilePositionAssignImport.js dùng thông báo gốc.
+function diagnosePositionMismatch(version, { dept, jobTitle }) {
+  const nodes = version?.nodes || [];
+  const wantDept = normalizeMatchText(dept);
+  const wantJobTitle = normalizeMatchText(jobTitle);
+  if (wantDept) {
+    const deptNode = nodes.find(n => n.nodeType === 'DEPARTMENT' && normalizeMatchText(n.nodeName) === wantDept);
+    if (deptNode && normalizeMatchText(deptNode.departmentRef) !== wantDept) {
+      return {
+        type: 'DEPT_NAME_MATCHES_BUT_REF_DIFFERENT',
+        message: `Tìm thấy Phòng Ban/Siêu Thị có TÊN HIỂN THỊ khớp "${dept}" trên Cơ Cấu Tổ Chức, nhưng giá trị định danh (departmentRef, chọn qua ô "Mã/Tên Phòng Ban-Siêu Thị" lúc tạo node) của nó lại là "${deptNode.departmentRef || '(chưa gán)'}" — vui lòng dùng ĐÚNG giá trị này trong file Excel, hoặc vào Cơ Cấu Tổ Chức sửa lại departmentRef cho khớp tên hiển thị.`
+      };
+    }
+  }
+  if (wantJobTitle) {
+    const sameTitleNodes = nodes.filter(n => n.nodeType === 'POSITION' && normalizeMatchText(n.jobTitle) === wantJobTitle);
+    if (sameTitleNodes.length) {
+      const depts = [...new Set(sameTitleNodes.map(n => {
+        if (n.requiresDept === false) return '(không theo Phòng Ban)';
+        const d = findNearestDeptAncestor(version, n);
+        return d?.departmentRef || d?.nodeName || '(chưa gắn Phòng Ban)';
+      }))];
+      return {
+        type: 'JOBTITLE_MATCHES_OTHER_DEPT',
+        message: `Chức Danh "${jobTitle}" có tồn tại trong Cơ Cấu Tổ Chức, nhưng KHÔNG phải ở "${dept}" — đang thấy ở: ${depts.map(d => `"${d}"`).join(', ')}.`
+      };
+    }
+  }
+  return null;
 }
 
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
@@ -824,7 +874,7 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
-  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser,
+  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, diagnosePositionMismatch,
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
