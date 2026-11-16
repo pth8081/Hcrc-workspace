@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**30.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.68 (2026-11): Nhân Sự — "✏️ Sửa Quy Trình" Onboarding/Offboarding + "🔄 Đồng Bộ Hồ Sơ Nháp" + chặn Mã NV ở Nhập Excel hàng loạt
+
+Theo yêu cầu người dùng ("hủy như này nó bị rác hồ sơ... có cho phép sửa để nó chạy tiếp đến lúc hoàn
+thành thì thôi"):
+
+- **"✏️ Sửa Quy Trình"** — quy trình Onboarding/Offboarding đang "Đang thực hiện" giờ sửa được field định
+  danh gõ sai (Mã NV, Họ Tên, Phòng Ban, Chức Danh, Email, SĐT, Ngày Vào Làm/Onboarding; Ngày Nghỉ Dự
+  Kiến/Lý Do/Ghi Chú/Offboarding) mà KHÔNG mất checklist/tiến độ đã làm — thay cho phải "❌ Huỷ Quy Trình"
+  (mất hết, để lại rác hồ sơ "Đã huỷ" mãi mãi). Đổi Mã NV (Onboarding) tự đồng bộ lại hồ sơ Hồ Sơ Nhân Sự
+  Nháp ở hàng đợi "🕐 Hồ Sơ Onboarding".
+- **"🔄 Đồng Bộ Hồ Sơ Nháp"** — nút riêng cho quy trình Onboarding "mồ côi" (đang thực hiện bình thường
+  nhưng không hiện trong hàng đợi Onboarding vì hồ sơ Nháp bị thiếu/mất liên kết, VD dữ liệu cũ) — bấm 1
+  cái tự tạo bù/liên kết lại, không cần bịa 1 thay đổi giả như "✏️ Sửa Quy Trình".
+- Danh sách quy trình mặc định ẩn "Đã Huỷ" (chọn lại "Tất cả"/"Đã huỷ" ở bộ lọc để xem như cũ).
+- Nhập Excel hàng loạt Onboarding: chặn cứng mọi trường hợp điền tay Mã Nhân Viên (mã luôn phải để trống,
+  hệ thống tự sinh) — cần Tái Tuyển thì dùng "+ Tạo Onboarding" tạo tay.
 
 ## v30.50 (2026-12): Vá 2 lỗ hổng bảo mật NGHIÊM TRỌNG + 2 lỗi thật ở "📋 Kiểm Kê"/"📋 Kiểm Soát Hàng Hóa" (đợt audit chuyên sâu nhiều agent độc lập, theo yêu cầu người dùng "rà soát sâu xem có lỗi tiềm ẩn gì không")
 
