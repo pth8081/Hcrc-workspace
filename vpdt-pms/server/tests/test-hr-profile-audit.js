@@ -188,6 +188,40 @@ function baseAppData(overrides) {
     assert.ok(!findings.some(f => f.type === 'MISSING_NATIONAL_ID' && f.employeeCode === 'BL0033'));
   });
 
+  // ===== H5: Mã Nhân Viên khác Tài Khoản VPDT đã liên kết =====
+  await run('H5: employeeCode khác username đã liên kết -> WARNING EMPLOYEE_CODE_USERNAME_MISMATCH', async () => {
+    CONTRACTS = [];
+    const appData = baseAppData({ employeeProfiles: [{ employeeCode: 'BL378', username: 'BL787', status: 'ACTIVE' }] });
+    const findings = await auditHrProfileGaps(appData, {});
+    const f = findings.find(f => f.type === 'EMPLOYEE_CODE_USERNAME_MISMATCH' && f.employeeCode === 'BL378');
+    assert.ok(f && f.severity === 'WARNING', 'phải có finding EMPLOYEE_CODE_USERNAME_MISMATCH/WARNING');
+    assert.ok(f.reason.includes('BL378') && f.reason.includes('BL787'), 'phải nêu đúng cả 2 mã trong lý do');
+  });
+
+  await run('H5: employeeCode trùng ĐÚNG username đã liên kết -> KHÔNG báo', async () => {
+    CONTRACTS = [];
+    const appData = baseAppData({ employeeProfiles: [{ employeeCode: 'BL0040', username: 'BL0040', status: 'ACTIVE' }] });
+    const findings = await auditHrProfileGaps(appData, {});
+    assert.ok(!findings.some(f => f.type === 'EMPLOYEE_CODE_USERNAME_MISMATCH' && f.employeeCode === 'BL0040'));
+  });
+
+  await run('H5: hồ sơ CHƯA liên kết tài khoản (username null/trống) -> KHÔNG báo dù trông giống nhau hay khác nhau', async () => {
+    CONTRACTS = [];
+    const appData = baseAppData({ employeeProfiles: [
+      { employeeCode: 'BL0041', username: null, status: 'DRAFT' },
+      { employeeCode: 'BL0042', username: '', status: 'DRAFT' }
+    ] });
+    const findings = await auditHrProfileGaps(appData, {});
+    assert.ok(!findings.some(f => f.type === 'EMPLOYEE_CODE_USERNAME_MISMATCH'), 'chưa liên kết tài khoản thì không có gì để so sánh');
+  });
+
+  await run('H5: xét CẢ hồ sơ DRAFT lẫn ACTIVE (không chỉ ACTIVE như H2/H4)', async () => {
+    CONTRACTS = [];
+    const appData = baseAppData({ employeeProfiles: [{ employeeCode: 'BL0043', username: 'BL9999', status: 'DRAFT' }] });
+    const findings = await auditHrProfileGaps(appData, {});
+    assert.ok(findings.some(f => f.type === 'EMPLOYEE_CODE_USERNAME_MISMATCH' && f.employeeCode === 'BL0043'), 'H5 không giới hạn theo status như H2/H4');
+  });
+
   // ===== computeFindingsSignature(): thứ tự độc lập, không gồm `reason` =====
   await run('computeFindingsSignature(): không đổi khi chỉ đổi thứ tự findings', async () => {
     const a = [{ type: 'X', employeeCode: 'E1', severity: 'WARNING', reason: 'r1' }, { type: 'Y', employeeCode: 'E2', severity: 'CRITICAL', reason: 'r2' }];

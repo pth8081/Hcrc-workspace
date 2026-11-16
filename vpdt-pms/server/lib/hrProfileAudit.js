@@ -135,6 +135,23 @@ function auditIncompleteProfiles(out, appData) {
   });
 }
 
+// H5: hồ sơ ĐÃ liên kết tài khoản VPDT (username) nhưng Mã Nhân Viên lại KHÁC username liên kết — dấu
+// hiệu dữ liệu di trú cũ chưa đồng bộ (11/2026, theo yêu cầu người dùng: "audit các cái mã hồ sơ không
+// khớp với mã đăng nhập, để tôi biết mã nào cần điều chỉnh lại" — phát hiện từ ca thật Mã Nhân Viên
+// "BL378" nhưng Tài Khoản VPDT liên kết lại là "BL787"). KHÔNG phải lỗi hệ thống — 2 field được THIẾT KẾ
+// có thể khác nhau (employeeCode có thể sửa lại sau khi đã liên kết tài khoản, username không tự đổi
+// theo) — chỉ cảnh báo WARNING để HR tự rà soát, không chặn/ảnh hưởng gì tới nghiệp vụ khác.
+function auditEmployeeCodeUsernameMismatch(out, appData) {
+  const profiles = appData.employeeProfiles || [];
+  profiles.forEach(p => {
+    if (!p || !p.username) return; // chưa liên kết tài khoản nào thì không có gì để so
+    if (p.employeeCode === p.username) return;
+    const name = resolveProfileDisplayName(p, appData.users, appData.hrProcesses);
+    pushFinding(out, 'EMPLOYEE_CODE_USERNAME_MISMATCH', 'WARNING', p.employeeCode, name,
+      `Mã Nhân Viên ("${p.employeeCode}") khác với Tài Khoản VPDT đã liên kết ("${p.username}") — kiểm tra lại xem Mã Nhân Viên có bị gõ sai/còn sót dữ liệu cũ không.`);
+  });
+}
+
 async function auditHrProfileGaps(appData, config) {
   const draftStaleDays = Number(config?.draftStaleDaysThreshold) > 0 ? Number(config.draftStaleDaysThreshold) : 30;
   const expirySoonDays = Number(config?.contractExpirySoonDays) > 0 ? Number(config.contractExpirySoonDays) : 30;
@@ -146,6 +163,7 @@ async function auditHrProfileGaps(appData, config) {
   try { auditMissingOrDraftContract(out, appData, contracts); } catch (err) { console.error('⛔ [Audit Nhân Sự] auditMissingOrDraftContract lỗi:', err.message); }
   try { auditContractExpiry(out, contracts, expirySoonDays); } catch (err) { console.error('⛔ [Audit Nhân Sự] auditContractExpiry lỗi:', err.message); }
   try { auditIncompleteProfiles(out, appData); } catch (err) { console.error('⛔ [Audit Nhân Sự] auditIncompleteProfiles lỗi:', err.message); }
+  try { auditEmployeeCodeUsernameMismatch(out, appData); } catch (err) { console.error('⛔ [Audit Nhân Sự] auditEmployeeCodeUsernameMismatch lỗi:', err.message); }
   return out;
 }
 
