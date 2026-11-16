@@ -5096,15 +5096,21 @@ function mergeGroupsBasePerms(groupsPerms) {
         (APPROVER_AUTH_LEVEL_RANK[v] || 0) > (APPROVER_AUTH_LEVEL_RANK[best] || 0) ? v : best, 'NONE');
       return;
     }
-    // PQ-02b: mirror ĐÚNG bản sửa ở mergeGroupsBasePermsServer() (routes/data.js) — moduleAccess là
-    // object lồng {moduleKey: boolean}, phải OR TỪNG KEY con thay vì lấy nguyên object của nhóm cuối
+    // PQ-02b: mirror ĐÚNG bản sửa ở mergeGroupsBasePermsServer() (lib/permGroupMerge.js) — moduleAccess
+    // là object lồng {moduleKey: boolean}, phải OR TỪNG KEY con thay vì lấy nguyên object của nhóm cuối
     // (xem chú thích đầy đủ ở đó).
+    // LỖI ĐÃ VÁ (12/2026, mirror Y HỆT bản vá server — PHẢI giữ giống hệt): CHỈ Nhóm ĐÃ CÓ cấu hình
+    // moduleAccess mới được tính là "có ý kiến" (bỏ phiếu) — Nhóm hoàn toàn CHƯA cấu hình Mục 0
+    // (v===undefined) KHÔNG được tự động "vote cho qua" mọi module, đánh bại lệnh chặn tường minh của
+    // 1 Nhóm KHÁC user cũng thuộc.
     if (key === 'moduleAccess') {
+      const configuredValues = values.filter(v => v && typeof v === 'object');
+      if (!configuredValues.length) { result[key] = {}; return; }
       const subKeys = new Set();
-      values.forEach(v => { if (v && typeof v === 'object') Object.keys(v).forEach(k => subKeys.add(k)); });
+      configuredValues.forEach(v => Object.keys(v).forEach(k => subKeys.add(k)));
       const merged = {};
       subKeys.forEach(k => {
-        merged[k] = values.some(v => (v && typeof v === 'object') ? v[k] !== false : true);
+        merged[k] = configuredValues.some(v => v[k] !== false);
       });
       result[key] = merged;
       return;
