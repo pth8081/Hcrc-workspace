@@ -79,6 +79,8 @@ async function main() {
   const { page, loginAs, stop } = h;
   await page.setViewportSize({ width: 1400, height: 1000 });
   page.on('dialog', (dialog) => dialog.accept());
+  page.on('console', (msg) => console.log('PAGE_CONSOLE:', msg.text()));
+  page.on('pageerror', (e) => console.log('PAGE_ERROR:', e && e.stack || e));
 
   const seedUsers = await page.evaluate(() => DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept, jobTitle: u.jobTitle, email: u.email, phone: u.phone, perms: u.perms, active: true })));
   // Tài khoản demo 'kd1' — CHỈ cấp hrProfileEdit (KHÔNG hrProfileManage, KHÔNG admin), đúng tình huống
@@ -155,4 +157,5 @@ async function main() {
   console.log('DONE. Ảnh đã lưu tại', OUT_DIR);
 }
 
-main().catch((e) => { console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
+const watchdog = setTimeout(() => { console.error('WATCHDOG: quá 25s, buộc thoát'); process.exit(1); }, 25000);
+main().then(() => clearTimeout(watchdog)).catch((e) => { clearTimeout(watchdog); console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
