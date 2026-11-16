@@ -202,15 +202,35 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
   return [...accountMatches, ...profileMatches.map(m => ({ username: m.username, name: m.name }))];
 }
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "Nhập Excel Gán Chức Vụ Hàng Loạt" báo KHÔNG khớp vị trí dù nhìn
+// bằng mắt y hệt tên trong Cơ Cấu Tổ Chức, VD "Trưởng Quầy (TPTS)" tại "Siêu thị số 275 Nguyễn Trãi"):
+// so khớp CŨ dùng `!==`/`===` NGUYÊN VĂN (byte-exact) — 2 chuỗi NHÌN GIỐNG HỆT NHAU trên màn hình vẫn có
+// thể khác nhau ở tầng byte vì (a) khoảng trắng kép/khoảng trắng không ngắt dòng (NBSP, hay dính khi
+// copy từ Excel/Word) không bị dọn (chỉ jobTitle/dept phía Excel được .trim() ở
+// hrProfilePositionAssignImport.js, KHÔNG dọn khoảng trắng Ở GIỮA chuỗi), hoặc (b) chuỗi có dấu tiếng
+// Việt được lưu ở 2 DẠNG CHUẨN HOÁ UNICODE khác nhau (NFC dựng sẵn 1 ký tự/dấu, hay NFD tổ hợp chữ cái +
+// dấu rời — cùng 1 chữ "ầ" nhưng khác chuỗi byte) tuỳ nguồn gõ/copy-paste tạo ra chuỗi đó (gõ trực tiếp
+// trên trình duyệt thường ra NFC, nhưng file Excel do 1 số công cụ/máy tạo ra có thể ở NFD). Thêm
+// normalizeMatchText() chuẩn hoá CẢ 2 vế về CÙNG 1 dạng (NFC) + gộp mọi khoảng trắng liên tiếp (kể cả
+// NBSP) thành 1 dấu cách + trim trước khi so khớp — KHÔNG xoá dấu tiếng Việt (vẫn phân biệt đúng 2 tên
+// khác nhau thật sự), chỉ nới lỏng đúng phần khác biệt vô hình/không có ý nghĩa nghiệp vụ. Chỉ LÀM LỎNG
+// điều kiện khớp (mọi cặp TRƯỚC ĐÂY đã khớp vẫn khớp nguyên vẹn), không thu hẹp — an toàn cho 2 nơi gọi
+// khác đang dùng hàm này (đồng bộ managerUsername toàn hệ thống, applyVersion()).
+function normalizeMatchText(s) {
+  return String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+}
 // Vị trí (node POSITION) khớp đúng dept+jobTitle hiện tại của 1 user — ngược lại resolvePositionOccupants().
 function findPositionNodeForUser(version, user) {
   if (!user?.jobTitle) return null;
+  const userJobTitle = normalizeMatchText(user.jobTitle);
+  const userDept = normalizeMatchText(user.dept);
   return (version.nodes || []).find(n => {
     if (n.nodeType !== 'POSITION') return false;
-    if (n.jobTitle !== user.jobTitle) return false;
+    if (normalizeMatchText(n.jobTitle) !== userJobTitle) return false;
     if (n.requiresDept === false) return true;
     const deptNode = findNearestDeptAncestor(version, n);
-    return !!deptNode?.departmentRef && deptNode.departmentRef === user.dept;
+    const deptRef = deptNode?.departmentRef;
+    return !!deptRef && normalizeMatchText(deptRef) === userDept;
   }) || null;
 }
 
