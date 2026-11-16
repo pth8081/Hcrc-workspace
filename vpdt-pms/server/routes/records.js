@@ -4769,7 +4769,7 @@ async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel)
 // trước đây KHÔNG gác hasModuleAccessServer() ("Khối 0") — chỉ kiểm quyền chi tiết theo bản ghi
 // (canActOnHrTask()/canManageHrProcess()...), khác 5 module con anh em (car/meeting/vpp/budget/vanHanh)
 // đã có middleware này. Mirror ĐÚNG khuôn router.use('/carRegs', ...) ở trên ("edit" thêm sau, 11/2026,
-// nằm SAU middleware này nên tự được gác — xem POST /hrProcesses/:id/edit).
+// nằm SAU middleware này nên tự được gác — xem POST /hrProcesses/:id/edit/sync-draft-profile).
 router.use('/hrProcesses', (req, res, next) => {
   if (!hasModuleAccessServer(req.freshUser, 'hrLifecycle')) {
     return res.status(403).json({ error: 'Module Onboarding/Offboarding đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
@@ -5101,6 +5101,34 @@ router.post('/hrProcesses/:id/edit', async (req, res) => {
     res.json({ ok: true, item: result, draftProfileSynced });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/edit`, err);
+  }
+});
+
+// POST /hrProcesses/:id/sync-draft-profile — "🔄 Đồng Bộ Lại Hồ Sơ Nháp" (11/2026, theo yêu cầu người
+// dùng — "Bạn xem ở trong phần onboarding tôi thấy là 4 hồ sơ đang xử lý, nhưng tôi vào chỗ hồ sơ... thì
+// lại chỉ có 2 hồ sơ... 3882, 3883 thì không thấy", sau đó xác nhận "Cho nó thành 4 hồ sơ ở onboarding
+// đi nhé"): 1 số quy trình ONBOARDING (dữ liệu cũ, hoặc do lỗi/thao tác nào đó trước đây) bị "mồ côi" —
+// KHÔNG có hồ sơ employeeProfiles DRAFT liên kết, nên KHÔNG hiện trong hàng đợi "🕐 Hồ Sơ Onboarding" dù
+// quy trình vẫn "Đang thực hiện" bình thường ở Danh Sách Quy Trình. "✏️ Sửa Quy Trình" (editHrProcess())
+// CHỈ đồng bộ lại hồ sơ Nháp khi THỰC SỰ có field đổi (chặn lưu no-op) — nút RIÊNG này cho HR chủ động
+// đồng bộ lại NGAY, không cần bịa 1 thay đổi giả để kích hoạt. KHÔNG mutate hrProcesses (chỉ đọc để kiểm
+// tra quyền/trạng thái) — side effect DUY NHẤT là employeeProfiles, qua ĐÚNG hàm dùng chung
+// syncDraftProfileOnOnboardingEdited() (xem ngay phía trên, cùng hàm route "/edit" gọi).
+router.post('/hrProcesses/:id/sync-draft-profile', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const hrProcesses = await getAllForCollection('hrProcesses');
+    const item = hrProcesses.find((x) => x.id === itemId);
+    if (!item) throw new HttpError(404, 'Không tìm thấy quy trình');
+    if (!recordActions.canManageHrProcess(freshUser, item)) throw new HttpError(403, 'Bạn không có quyền đồng bộ hồ sơ của quy trình này');
+    if (item.processType !== 'ONBOARDING') throw new HttpError(400, 'Chỉ áp dụng cho quy trình Onboarding');
+    if (item.status !== 'IN_PROGRESS') throw new HttpError(409, 'Quy trình không còn ở trạng thái đang thực hiện');
+    const draftProfileSynced = await syncDraftProfileOnOnboardingEdited(item, freshUser, `hrProcesses/${itemId}/sync-draft-profile`);
+    res.json({ ok: true, draftProfileSynced });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/sync-draft-profile`, err);
   }
 });
 

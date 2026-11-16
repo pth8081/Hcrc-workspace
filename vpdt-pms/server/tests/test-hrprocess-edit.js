@@ -274,6 +274,64 @@ async function partB() {
     assert.strictEqual(r.status, 409, JSON.stringify(r.json));
   });
 
+  // ===== "🔄 Đồng Bộ Hồ Sơ Nháp" (POST /hrProcesses/:id/sync-draft-profile) — theo yêu cầu người dùng:
+  // "4 mã đang xử lý... cho nó thành 4 hồ sơ ở onboarding" (quy trình "mồ côi" KHÔNG hiện trong hàng đợi
+  // "🕐 Hồ Sơ Onboarding" dù vẫn đang thực hiện bình thường) — nút RIÊNG, không cần bịa 1 field thay đổi
+  // giả để kích hoạt editHrProcess() như test ở trên (BL1003).
+  STORE.hrProcesses.push(
+    { id: 5, processType: 'ONBOARDING', status: 'IN_PROGRESS', creator: 'hr1', employeeCode: 'BL1005', fullName: 'Mồ Côi D', history: [] },
+    { id: 6, processType: 'ONBOARDING', status: 'CANCELLED', creator: 'hr1', employeeCode: 'BL1006', fullName: 'Đã Huỷ Khác', history: [] },
+    { id: 7, processType: 'OFFBOARDING', status: 'IN_PROGRESS', creator: 'hr1', employeeUsername: 'kd2', fullName: 'Nhân Viên E', employeeDept: 'Phòng Kinh Doanh', lastWorkingDate: '2026-05-01', targetEndDate: '2026-05-01', reason: '', note: '', history: [] }
+  );
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: người không có quyền bị chặn 403', async () => {
+    const r = await call('emp1', 'POST', '/api/records/hrProcesses/5/sync-draft-profile', {});
+    assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: id không tồn tại -> 404', async () => {
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/999/sync-draft-profile', {});
+    assert.strictEqual(r.status, 404, JSON.stringify(r.json));
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: OFFBOARDING -> 400 (chỉ áp dụng Onboarding)', async () => {
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/7/sync-draft-profile', {});
+    assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: quy trình đã CANCELLED -> 409', async () => {
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/6/sync-draft-profile', {});
+    assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: quy trình "mồ côi" -> tự BACKFILL hồ sơ DRAFT mới vào hàng đợi PENDING, KHÔNG cần sửa field nào, KHÔNG đụng hrProcesses (không trả "item")', async () => {
+    assert.ok(!PROFILES.find(p => p.employeeCode === 'BL1005'), 'trước khi đồng bộ: chưa có hồ sơ nào cho BL1005');
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/5/sync-draft-profile', {});
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    assert.strictEqual(r.json.draftProfileSynced, true);
+    assert.strictEqual(r.json.item, undefined, 'route này KHÔNG mutate/trả lại hrProcesses');
+    const profile = PROFILES.find(p => p.employeeCode === 'BL1005');
+    assert.ok(profile, 'phải tự tạo bù hồ sơ DRAFT — HR cuối cùng cũng thấy quy trình này trong hàng đợi');
+    assert.strictEqual(profile.processId, 5);
+    assert.strictEqual(profile.onboardingQueueStatus, 'PENDING');
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: gọi LẠI LẦN NỮA sau khi đã đồng bộ -> vẫn 200/true (mirror ĐÚNG syncDraftProfileOnOnboardingEdited() — hồ sơ còn DRAFT thì luôn báo true, idempotent, KHÔNG tạo thêm hồ sơ trùng)', async () => {
+    const before = PROFILES.length;
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/5/sync-draft-profile', {});
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    assert.strictEqual(r.json.draftProfileSynced, true);
+    assert.strictEqual(PROFILES.length, before, 'không được tạo thêm hồ sơ trùng');
+  });
+
+  await test('POST /hrProcesses/:id/sync-draft-profile: hồ sơ đã CONFIRMED (không còn DRAFT) -> draftProfileSynced=false (không còn gì để đồng bộ, không hồi tố hồ sơ đã xác nhận)', async () => {
+    STORE.hrProcesses.push({ id: 8, processType: 'ONBOARDING', status: 'IN_PROGRESS', creator: 'hr1', employeeCode: 'BL1008', fullName: 'Đã Xác Nhận', history: [] });
+    PROFILES.push({ employeeCode: 'BL1008', status: 'ACTIVE', processId: 8, onboardingQueueStatus: 'CONFIRMED' });
+    const r = await call('hr1', 'POST', '/api/records/hrProcesses/8/sync-draft-profile', {});
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    assert.strictEqual(r.json.draftProfileSynced, false);
+  });
+
   server.close();
 }
 
