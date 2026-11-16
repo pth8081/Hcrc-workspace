@@ -84,7 +84,17 @@ test('diffPerms(): basePerms.moduleAccess=undefined + formPerms.moduleAccess CÓ
   const formPerms = { admin: false, moduleAccess: { car: true, payment: false } };
   const basePerms = { admin: false };
   const result = diffPerms(formPerms, basePerms);
-  assert.deepStrictEqual(result.moduleAccess, { car: true, payment: false });
+  // LỖI ĐÃ VÁ (12/2026, đợt vá moduleAccess merge theo key con): diffPerms() nay CHỈ ghi đúng key CON
+  // thực sự khác nền (payment:false) vào override, KHÔNG còn "mang" theo key car:true (vốn không hề bị
+  // giới hạn, nền chưa cấu hình gì nên mặc định đã cho qua) — tránh chính override này sau này che mất
+  // module MỚI Nhóm cấp thêm (xem test-permoverrides-moduleaccess-groupgrant-not-shadowed.js). Hành vi
+  // HIỆU LỰC (effective access) giữ NGUYÊN giống hệt bản cũ: car vẫn được truy cập (key vắng mặt =
+  // "ma[key] !== false" = true, hasModuleAccess() đọc đúng), payment vẫn bị chặn.
+  // So bằng JSON.stringify — object trả về từ diffPerms() chạy trong vm sandbox khác "realm" với object
+  // literal ở ngoài, assert.deepStrictEqual coi khác prototype gốc là KHÔNG bằng dù cùng giá trị (artifact
+  // của cách test này nạp code qua vm, không phải lỗi thật — xem cùng ghi chú ở
+  // test-permoverrides-moduleaccess-groupgrant-not-shadowed.js).
+  assert.strictEqual(JSON.stringify(result.moduleAccess), JSON.stringify({ payment: false }));
 });
 
 test('diffPerms(): kiểm tra hậu quả thật — sau fix, nhóm tắt thêm module SAU ĐÓ không còn bị override cũ chặn (vì override không hề được tạo)', () => {

@@ -623,8 +623,15 @@ function renderHrProcessList() {
         <tbody>
           ${visible.map(p => {
             const employeeLabel = p.processType === 'ONBOARDING' ? `${p.fullName} (${p.employeeCode})` : `${p.fullName} (${p.employeeUsername})`;
+            // employeeCodeReleased (LỖI ĐÃ VÁ 12/2026 — xem cleanupDraftProfileOnOnboardingClosed() ở
+            // routes/records.js): quy trình ONBOARDING này đã bị Hủy VÀ Mã Nhân Viên của nó đã được giải
+            // phóng, có thể đang gắn với 1 hồ sơ MỚI khác trong danh sách — cảnh báo rõ để không nhầm là
+            // lỗi trùng mã.
+            const releasedBadge = p.employeeCodeReleased
+              ? ' <span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold align-middle" title="Quy trình này đã bị Hủy — Mã Nhân Viên đã được giải phóng và có thể đang gắn với 1 hồ sơ Onboarding MỚI khác">⚠️ Mã đã dùng lại</span>'
+              : '';
             return `<tr class="border-t">
-              <td class="p-2 font-semibold">${escapeHtml(employeeLabel)}</td>
+              <td class="p-2 font-semibold">${escapeHtml(employeeLabel)}${releasedBadge}</td>
               <td class="p-2">${escapeHtml(p.employeeDept || '')}${p.employeeJobTitle ? ' — ' + escapeHtml(p.employeeJobTitle) : ''}</td>
               <td class="p-2">${p.processType === 'ONBOARDING' ? '🆕 Onboarding' : '🚪 Offboarding'}</td>
               <td class="p-2">${escapeHtml(HR_STAGE_LABELS[p.stage] || p.stage)}</td>
@@ -793,10 +800,13 @@ function renderHrProcessDetailBody(item) {
   const canViewLinkedProfile = item.processType === 'ONBOARDING' &&
     !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit);
 
+  const releasedBadgeDetail = item.employeeCodeReleased
+    ? ' <span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold align-middle" title="Quy trình này đã bị Hủy — Mã Nhân Viên đã được giải phóng và có thể đang gắn với 1 hồ sơ Onboarding MỚI khác">⚠️ Mã đã dùng lại</span>'
+    : '';
   document.getElementById('hrpDetailBody').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <div class="font-bold text-base">${escapeHtml(employeeLabel)}</div>
+        <div class="font-bold text-base">${escapeHtml(employeeLabel)}${releasedBadgeDetail}</div>
         <div class="text-xs text-gray-500">${escapeHtml(item.employeeDept || '')}${item.employeeJobTitle ? ' — ' + escapeHtml(item.employeeJobTitle) : ''} — ${item.processType === 'ONBOARDING' ? '🆕 Onboarding' : '🚪 Offboarding'}</div>
       </div>
       <div class="flex items-center gap-2">

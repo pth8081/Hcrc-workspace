@@ -4821,6 +4821,20 @@ async function cleanupDraftProfileOnOnboardingClosed(hrProcessItem, actorUser, r
         description: `Xoá hồ sơ nhân sự còn ở trạng thái Nháp [${removed.employeeCode}] khi quy trình Onboarding #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) bị huỷ/xoá — giải phóng Mã Nhân Viên để dùng lại`,
         status: 'SUCCESS'
       }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (xoá hồ sơ DRAFT):', e.message));
+      // LỖI ĐÃ VÁ (12/2026, người dùng báo 2 quy trình Onboarding của 2 người KHÁC NHAU cùng hiện 1 Mã
+      // Nhân Viên — hoá ra quy trình trước đã bị Hủy, mã được giải phóng rồi cấp lại cho người sau đúng
+      // như thiết kế ở trên, nhưng danh sách "Quy Trình" không hề báo hiệu gì nên nhìn như lỗi trùng mã
+      // thật): đánh dấu employeeCodeReleased=true lên CHÍNH quy trình vừa đóng (chỉ còn ý nghĩa ở nhánh
+      // HUỶ — nhánh XOÁ hẳn thì bản ghi không còn tồn tại để đánh dấu, bước dưới tự bỏ qua an toàn qua
+      // 404 bắt ở catch chung của hàm này) để client hiện rõ "⚠️ Mã đã được dùng lại cho hồ sơ khác" bên
+      // cạnh Mã Nhân Viên của quy trình CŨ — KHÔNG đổi giá trị employeeCode thật (tránh rủi ro phá bất kỳ
+      // chỗ nào khác đang tra cứu theo đúng mã đó), chỉ thêm 1 cờ hiển thị thuần tuý.
+      try {
+        await withLockedRecordForCollection('hrProcesses', hrProcessItem.id, (item) =>
+          Object.assign({}, item, { employeeCodeReleased: true }));
+      } catch (err) {
+        if (!(err instanceof HttpError) || err.status !== 404) throw err;
+      }
     }
     return !!removed;
   } catch (err) {
@@ -5012,6 +5026,12 @@ router.post('/hrProcesses/:id/cancel', async (req, res) => {
     // Dọn hồ sơ nhân sự còn ở trạng thái Nháp đã đặt chỗ lúc tạo quy trình — xem
     // cleanupDraftProfileOnOnboardingClosed() ở trên.
     const draftProfileRemoved = await cleanupDraftProfileOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
+    // draftProfileRemoved=true -> cleanupDraftProfileOnOnboardingClosed() đã ghi employeeCodeReleased=true
+    // lên ĐÚNG bản ghi này trong DB (xem hàm đó) — `result` ở đây là tham chiếu CŨ chụp TRƯỚC lượt ghi đó
+    // (withLockedRecordForCollection() trả object MỚI, không mutate ngược `result`), nên phải tự vá lại
+    // để response trả về cho client (và các action sau nếu trả thẳng `result`) phản ánh đúng ngay lập
+    // tức, không cần client tự F5/gọi lại mới thấy cờ cảnh báo.
+    if (draftProfileRemoved) result.employeeCodeReleased = true;
     // Đóng Hợp Đồng Lao Động tự sinh (DRAFT/ACTIVE) còn "mồ côi" khi huỷ quy trình — xem
     // cleanupLaborContractOnOnboardingClosed() ở trên.
     const laborContractClosed = await cleanupLaborContractOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);

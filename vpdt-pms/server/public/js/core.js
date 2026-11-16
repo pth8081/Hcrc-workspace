@@ -5020,6 +5020,30 @@ function diffPerms(formPerms, basePerms) {
   Object.keys(formPerms || {}).forEach(key => {
     const baseVal = basePerms ? basePerms[key] : undefined;
     if (baseVal === undefined && isEmptyPermValue(formPerms[key])) return;
+    // moduleAccess (object lồng {moduleKey: boolean}, LỖI ĐÃ VÁ 12/2026 — người dùng báo "quyền cấp qua
+    // Nhóm không lên, cấp trực tiếp cho người dùng lại được"): so khớp NGUYÊN CẢ KHỐI như field thường
+    // khiến 1 lần lưu có TUỲ CHỈNH RIÊNG dù chỉ ở ĐÚNG 1 module (VD chặn riêng 1 module không liên quan)
+    // cũng ĐÓNG BĂNG nguyên snapshot mọi module khác đang hiện trên form tại THỜI ĐIỂM đó vào override —
+    // module MỚI Nhóm cấp thêm SAU NÀY (VD "Hồ Sơ Onboarding") không có mặt trong snapshot cũ, bị xem là
+    // "override đã giới hạn" dù admin chưa từng động tới. Nay chỉ ghi vào override ĐÚNG các KEY CON thực
+    // sự khác basePerms[key] tại thời điểm lưu — module nào form/nền đang khớp nhau thì bỏ qua hẳn, để
+    // override luôn chỉ chứa ĐÚNG phần admin thực sự tuỳ chỉnh, không "mang" theo module khác ăn theo (mọi
+    // module Nhóm cấp/đổi SAU NÀY mà user chưa từng tự giới hạn riêng sẽ luôn đi thẳng từ Nhóm, không bị
+    // override cũ che). Mirror Y HỆT phía server nếu cần tính lại (recomputeEffectivePerms không gọi hàm
+    // này — hàm này CHỈ chạy ở client lúc Lưu — nhưng phải khớp đúng khuôn merge-theo-key-con ở
+    // mergePerms()/mergePermsServer() ngay dưới để không "ghi thừa" key không cần).
+    if (key === 'moduleAccess' && formPerms[key] && typeof formPerms[key] === 'object' && !Array.isArray(formPerms[key])) {
+      const baseModuleAccess = (baseVal && typeof baseVal === 'object') ? baseVal : {};
+      const subOverrides = {};
+      Object.keys(formPerms[key]).forEach(subKey => {
+        const baseSub = baseModuleAccess[subKey];
+        const formSub = formPerms[key][subKey];
+        if (baseSub === undefined && formSub !== false) return;
+        if (formSub !== baseSub) subOverrides[subKey] = formSub;
+      });
+      if (Object.keys(subOverrides).length) overrides[key] = subOverrides;
+      return;
+    }
     if (JSON.stringify(formPerms[key]) !== JSON.stringify(baseVal)) {
       overrides[key] = formPerms[key];
     }
@@ -5030,8 +5054,16 @@ function diffPerms(formPerms, basePerms) {
 // Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> ra quyền hiệu lực thực tế
 // (user.perms) — dùng cho MỌI hàm kiểm tra quyền trong ứng dụng, nên luôn phải tính lại giá trị này
 // mỗi khi lưu người dùng HOẶC lưu nhóm phân quyền (xem saveUser()/savePermGroup()).
+// LỖI ĐÃ VÁ (12/2026, cùng đợt với diffPerms() ở trên): moduleAccess merge THEO TỪNG KEY CON thay vì
+// thay nguyên khối — mirror Y HỆT mergePermsServer() (lib/permGroupMerge.js), PHẢI giữ giống hệt nếu sửa
+// 1 bên. Override riêng của user cho module ĐÃ CÓ trong snapshot cũ vẫn giữ nguyên hiệu lực; module MỚI
+// Nhóm vừa cấp (không có trong override) luôn đi qua đúng từ basePerms, không bị snapshot cũ che mất.
 function mergePerms(basePerms, overrides) {
-  return { ...(basePerms || {}), ...(overrides || {}) };
+  const merged = { ...(basePerms || {}), ...(overrides || {}) };
+  if (overrides && overrides.moduleAccess && typeof overrides.moduleAccess === 'object') {
+    merged.moduleAccess = { ...(basePerms?.moduleAccess || {}), ...overrides.moduleAccess };
+  }
+  return merged;
 }
 
 const APPROVER_AUTH_LEVEL_RANK = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
