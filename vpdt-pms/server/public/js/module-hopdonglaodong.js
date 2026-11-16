@@ -59,16 +59,27 @@ function getHrContractList() {
   return (DB.laborContracts || []).slice().sort((a, b) => (b.id || 0) - (a.id || 0));
 }
 
+// hrcEmployeeInfo() — tra Họ Tên/Chức Danh/Phòng Ban theo Mã NV từ hrcEmployeeDirectoryCache (MỚI,
+// 11/2026, theo yêu cầu người dùng "Nhân Sự muốn xem Họ Tên/Chức Danh/Phòng Ban ở cả màn Hợp Đồng Lao
+// Động, không chỉ Hồ Sơ Nhân Sự") — lấy đúng giá trị Chức Danh/Phòng Ban hiện tại đã resolve từ Cơ Cấu
+// Tổ Chức (dept/jobTitle trên profile), KHÔNG dùng field dept snapshot tĩnh trên bản thân hợp đồng
+// (laborContracts[].dept chỉ ghi 1 lần lúc tạo hợp đồng, có thể cũ nếu nhân viên đổi phòng ban sau đó).
+function hrcEmployeeInfo(employeeCode) {
+  const p = hrcEmployeeDirectoryCache.find(x => x.employeeCode === employeeCode);
+  return { fullName: p?.fullName || '', jobTitle: p?.jobTitle || '', dept: p?.dept || '' };
+}
+
 function renderHrContractTable() {
   const kwInputEl = document.getElementById('hrcFilterEmployeeCode');
   const kw = (kwInputEl?.value || '').trim();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
   let list = getHrContractList();
-  // Mở rộng tìm kiếm (10/2026) — trước đây chỉ lọc employeeCode theo includes() thủ công, giờ thêm Mã
-  // HĐLĐ + Họ Tên (tra qua hrcEmployeeDirectoryCache, nạp sẵn ở đây nếu chưa có — laborContracts không
-  // tự lưu tên, xem chú thích đầy đủ ở exportHrContractListToExcel() cùng file).
+  // Nạp danh bạ Hồ Sơ Nhân Sự nếu chưa có (10/2026 dùng để tìm kiếm theo Họ Tên; MỞ RỘNG 11/2026 để LUÔN
+  // hiển thị Họ Tên/Chức Danh/Phòng Ban ở bảng, không chỉ khi đang gõ tìm kiếm) — laborContracts không tự
+  // lưu các field này, tra qua hrcEmployeeDirectoryCache (xem chú thích đầy đủ ở exportHrContractListToExcel()
+  // cùng file).
+  if (!hrcEmployeeDirectoryCache.length) { loadHrcEmployeeDirectory().then(() => renderHrContractTable()); }
   if (kw) {
-    if (!hrcEmployeeDirectoryCache.length) { loadHrcEmployeeDirectory().then(() => renderHrContractTable()); }
     const nameByCode = {};
     hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
     list = list.filter(c => matchesAnyKeyword([c.employeeCode, c.code, nameByCode[c.employeeCode], ...customDataSearchValues(c.customData)], kwInputEl?._multiKeywords, kw));
@@ -79,10 +90,15 @@ function renderHrContractTable() {
   const empty = document.getElementById('hrcTableEmpty');
   if (!tbody) return;
   empty.classList.toggle('hidden', list.length > 0);
-  tbody.innerHTML = list.map(c => `
+  tbody.innerHTML = list.map(c => {
+    const info = hrcEmployeeInfo(c.employeeCode);
+    return `
     <tr class="border-b hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(c.code || '')}</td>
       <td class="p-2">${escapeHtml(c.employeeCode || '')}</td>
+      <td class="p-2">${escapeHtml(info.fullName)}</td>
+      <td class="p-2">${escapeHtml(info.jobTitle)}</td>
+      <td class="p-2">${escapeHtml(info.dept)}</td>
       <td class="p-2">${escapeHtml(laborContractTypeLabel(c.contractType))}</td>
       <td class="p-2">${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</td>
       <td class="p-2">${escapeHtml(c.startDate || '')}</td>
@@ -91,7 +107,8 @@ function renderHrContractTable() {
         <button type="button" data-op="openHrContractDetailModal" data-arg0="${c.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-[11px] hover:bg-teal-700">Chi Tiết</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function onHrContractFilterChange() { renderHrContractTable(); }
@@ -276,9 +293,14 @@ function findHrContractById(id) {
   return (DB.laborContracts || []).find(c => c.id === Number(id)) || null;
 }
 
-function openHrContractDetailModal(id) {
+async function openHrContractDetailModal(id) {
   const c = findHrContractById(id);
   if (!c) return;
+  // Nạp danh bạ Hồ Sơ Nhân Sự trước khi dựng HTML nếu chưa có (MỚI, 11/2026) — buildHrContractDetailHTML()
+  // đọc hrcEmployeeDirectoryCache qua hrcEmployeeInfo() để hiện Họ Tên/Chức Danh/Phòng Ban; renderHrContractTable()
+  // thường đã nạp sẵn (gọi trước khi mở modal), await thêm 1 lần ở đây để chắc chắn có dữ liệu kể cả khi
+  // mở modal trước khi bảng kịp nạp xong (lần đầu vào màn).
+  if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();
   document.getElementById('hrcDetailBody').innerHTML = buildHrContractDetailHTML(c);
   document.getElementById('hrContractDetailModal').classList.remove('hidden');
 }
@@ -310,6 +332,9 @@ const HRC_INCOME_EDIT_ID_PREFIX = 'hrcEditIncome_';
 const HRC_PROBATION_RATE_EDIT_ID = 'hrcEditProbationSalaryRate';
 
 function buildHrContractDetailHTML(c) {
+  // Họ Tên/Chức Danh/Phòng Ban (MỚI, 11/2026, theo yêu cầu người dùng) — xem chú thích đầy đủ ở
+  // hrcEmployeeInfo() ngay trên.
+  const empInfo = hrcEmployeeInfo(c.employeeCode);
   const fileRow = c.fileUrl
     ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName, c.code)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
     : '<span class="text-gray-400">Chưa có tệp</span>';
@@ -391,6 +416,9 @@ function buildHrContractDetailHTML(c) {
     <div class="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded">
       <div><span class="text-gray-500">Mã HĐ:</span> <span class="font-mono font-semibold">${escapeHtml(c.code || '')}</span></div>
       <div><span class="text-gray-500">Mã NV:</span> <span class="font-semibold">${escapeHtml(c.employeeCode || '')}</span></div>
+      <div><span class="text-gray-500">Họ Và Tên:</span> <span class="font-semibold">${escapeHtml(empInfo.fullName || '(chưa rõ)')}</span></div>
+      <div><span class="text-gray-500">Chức Danh:</span> ${escapeHtml(empInfo.jobTitle || '(chưa rõ)')}</div>
+      <div><span class="text-gray-500">Phòng Ban:</span> ${escapeHtml(empInfo.dept || '(chưa rõ)')}</div>
       <div><span class="text-gray-500">Loại HĐ:</span> ${escapeHtml(laborContractTypeLabel(c.contractType))}</div>
       <div><span class="text-gray-500">Trạng thái:</span> ${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</div>
       <div><span class="text-gray-500">Ngày hiệu lực:</span> ${escapeHtml(c.startDate || '')}</div>

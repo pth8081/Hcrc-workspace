@@ -361,7 +361,12 @@ router.get('/employee-directory', async (req, res) => {
       // người" — xem bindPeopleMultiSelectBulkPaste(), core.js): CHỈ thêm field này, KHÔNG đổi gì field
       // cũ — 2 nơi tiêu thụ hiện có (module-conghop.js/module-hopdonglaodong.js) chỉ đọc employeeCode/
       // fullName nên không bị ảnh hưởng. null nếu hồ sơ chưa liên kết tài khoản VPDT nào.
-      username: p.username || null
+      username: p.username || null,
+      // dept/jobTitle (11/2026, theo yêu cầu người dùng — Nhân Sự muốn xem Chức Danh/Phòng Ban ngay ở
+      // màn Hợp Đồng Lao Động, không chỉ Mã NV): KHÔNG phải field nhạy cảm, lấy đúng giá trị đã resolve
+      // từ Cơ Cấu Tổ Chức (applyPositionAssignment()), không phải snapshot tĩnh lúc tạo hợp đồng.
+      dept: p.dept || null,
+      jobTitle: p.jobTitle || null
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }
