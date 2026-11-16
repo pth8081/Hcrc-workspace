@@ -91,6 +91,43 @@ async function partA() {
     assert.ok(items[0].errors.some(e => /Không tìm thấy vị trí/.test(e)));
   });
 
+  await test('parseAssignImportBuffer(): khớp được theo nodeName (tên hiển thị) nhưng node CHƯA gắn departmentRef -> báo lỗi RÕ RÀNG ngay ở bước xem trước (không để "sẵn sàng gán" giả rồi Áp Dụng thất bại hàng loạt)', async () => {
+    // LỖI ĐÃ VÁ (11/2026, ca thật người dùng báo "Đã gán chức vụ 0/418 hồ sơ" dù xem trước báo cả 418
+    // dòng "sẵn sàng gán"): node Phòng Ban "Cửa hàng 5 Hàm Tử Quan" không có departmentRef (chỉ có
+    // nodeName) — findPositionNodeForUser() khớp được qua nodeName, nhưng applyPositionAssignment() ở
+    // bước Áp Dụng THẬT vẫn đòi departmentRef -> phải chặn NGAY ở preview, không để lọt qua.
+    const version = {
+      id: 1, status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Cửa hàng 5 Hàm Tử Quan', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
+        { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Trưởng quầy', requiresDept: true, posType: 'STORE', positionKey: 'POS-TQ-HTQ' }
+      ]
+    };
+    const buffer = await buildBufferWithRows([{ employeeCode: 'BL787', dept: 'Cửa hàng 5 Hàm Tử Quan', jobTitle: 'Trưởng quầy' }]);
+    const appData = { employeeProfiles: [{ employeeCode: 'BL787' }], orgChartVersions: [version] };
+    const items = await importLib.parseAssignImportBuffer(buffer, appData);
+    assert.strictEqual(items[0].valid, false, 'phải báo lỗi NGAY ở preview, không được "sẵn sàng gán" giả');
+    assert.ok(items[0].errors.some(e => e.includes('departmentRef')), `phải nêu đúng lý do thiếu departmentRef: ${JSON.stringify(items[0].errors)}`);
+    assert.strictEqual(items[0].positionKey, null, 'không được trả positionKey khi chưa đủ điều kiện Áp Dụng thật');
+  });
+
+  await test('parseAssignImportBuffer(): khớp theo departmentRef ĐÃ gắn đầy đủ -> valid bình thường (không bị chặn oan bởi bản vá trên)', async () => {
+    const version = {
+      id: 1, status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Cửa hàng 5 Hàm Tử Quan', departmentRef: 'Cửa hàng 5 Hàm Tử Quan', jobTitle: null, requiresDept: null, positionKey: null },
+        { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Trưởng quầy', requiresDept: true, posType: 'STORE', positionKey: 'POS-TQ-HTQ' }
+      ]
+    };
+    const buffer = await buildBufferWithRows([{ employeeCode: 'BL787', dept: 'Cửa hàng 5 Hàm Tử Quan', jobTitle: 'Trưởng quầy' }]);
+    const appData = { employeeProfiles: [{ employeeCode: 'BL787' }], orgChartVersions: [version] };
+    const items = await importLib.parseAssignImportBuffer(buffer, appData);
+    assert.strictEqual(items[0].valid, true, JSON.stringify(items[0].errors));
+    assert.strictEqual(items[0].positionKey, 'POS-TQ-HTQ');
+  });
+
   await test('parseAssignImportBuffer(): Mã Nhân Viên KHÔNG có trong Hồ Sơ Nhân Sự -> báo lỗi dòng đó', async () => {
     const buffer = await buildBufferWithRows([{ employeeCode: 'NV999', dept: 'Phòng Kinh Doanh', jobTitle: 'Trưởng Phòng' }]);
     const appData = { employeeProfiles: [], orgChartVersions: [buildOrgVersion()] };
