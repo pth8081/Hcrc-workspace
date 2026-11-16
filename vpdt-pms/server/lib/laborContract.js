@@ -162,8 +162,23 @@ const INCOME_FIELD_LABELS = {
 // không ép cứng ở field (hợp đồng nào cũng có thể gõ, HR tự biết field nào liên quan loại nào).
 const PROBATION_SALARY_RATES = new Set([85, 100]);
 
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng thật — Audit Nhân Sự báo "ACTIVE nhưng chưa có hợp đồng" cho
+// nhiều hồ sơ dù hệ thống ĐÃ từng tự tạo hợp đồng thử việc lúc hoàn thành Onboarding, log pm2 thật xác
+// nhận: "Cannot insert the value NULL into column 'Id', table 'VPDT_DMS.dbo.LaborContracts'; column
+// does not allow nulls"): defaultContract() TRƯỚC ĐÂY không tự gán "id" — 2 nơi gọi tạo hợp đồng TỰ ĐỘNG
+// (buildProbationDraftPayload() lúc hoàn thành task "Gửi thư mời nhận việc", và nextContractPayload ở
+// applyPostProbationDecision() lúc qua thử việc) đều KHÔNG tự truyền id riêng, nên record.id luôn
+// undefined -> insertDedicatedRecord() (lib/recordStore.js) ghi NULL vào cột Id (NOT NULL, không có
+// default/identity) -> INSERT lỗi, hợp đồng KHÔNG được lưu dù hồ sơ vẫn chuyển ACTIVE bình thường (lỗi
+// bị bắt + chỉ log, không chặn luồng chính — xem syncLaborContractOnHrTaskEvent(), routes/records.js).
+// KHÁC hẳn đường tạo tay/Nhập Excel (routes/create.js::validateAndPrepareCreate(), luôn tự gán
+// id:Date.now() trước khi gọi createForCollectionSerialized()) — nên chỉ ảnh hưởng ĐÚNG 2 nhánh tự động
+// này. Gán id mặc định NGAY TẠI ĐÂY (factory dùng chung CẢ 2 nhánh) thay vì sửa riêng từng nơi gọi, cùng
+// công thức Date.now()+random đã dùng khi insertDedicatedRecord() tự retry lúc đụng Id (collision cực
+// hiếm vẫn được xử lý ở đó như cũ, không đổi gì thêm).
 function defaultContract(overrides) {
   return Object.assign({
+    id: Date.now() + Math.floor(Math.random() * 1000),
     code: null, employeeCode: null, employeeUsername: null, hrProcessId: null,
     contractType: 'PROBATION', renewalIndex: 0,
     startDate: null, endDate: null, baseSalary: null,

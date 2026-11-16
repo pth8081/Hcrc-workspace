@@ -33,6 +33,11 @@ async function partA() {
     assert.strictEqual(draft.employeeCode, 'NV3001');
     assert.strictEqual(draft.hrProcessId, 100);
     assert.strictEqual(draft.code, 'HDLD-NV3001-1');
+    // LỖI ĐÃ VÁ (11/2026): phải tự có "id" (số, != null/undefined) — trước đây defaultContract() không
+    // gán, record.id undefined khiến insertDedicatedRecord() ghi NULL vào cột Id (NOT NULL) -> INSERT
+    // lỗi âm thầm (bị catch+log ở syncLaborContractOnHrTaskEvent(), routes/records.js), hợp đồng KHÔNG
+    // được lưu dù hồ sơ vẫn chuyển ACTIVE -> Audit Nhân Sự báo nhầm "chưa có hợp đồng nào".
+    assert.strictEqual(typeof draft.id, 'number', 'draft.id phải là số, không được undefined/null');
     // Idempotent: nếu đã tồn tại 1 hợp đồng cho process này -> trả về null (không tạo trùng)
     list.push(Object.assign({ id: 1 }, draft));
     const draft2 = laborContract.buildProbationDraftPayload(hrProcess, list);
@@ -60,6 +65,10 @@ async function partA() {
     assert.strictEqual(nextContractPayload.renewalIndex, 1);
     assert.strictEqual(nextContractPayload.status, 'DRAFT');
     assert.strictEqual(nextContractPayload.endDate, null, 'HR điền ngày hết hạn cụ thể sau, chưa có sẵn');
+    // LỖI ĐÃ VÁ (11/2026) — cùng lý do ở test buildProbationDraftPayload() trên, nhánh TỰ ĐỘNG thứ 2
+    // (qua thử việc -> tạo hợp đồng kế tiếp) dùng CHUNG defaultContract() nên cũng cần đủ id.
+    assert.strictEqual(typeof nextContractPayload.id, 'number', 'nextContractPayload.id phải là số, không được undefined/null');
+    assert.notStrictEqual(nextContractPayload.id, closedContract.id, 'hợp đồng mới phải có id KHÁC hợp đồng vừa đóng');
   });
 
   await test('applyPostProbationDecision(TERMINATE) đóng PROBATION -> TERMINATED, không tạo hợp đồng kế tiếp', () => {
