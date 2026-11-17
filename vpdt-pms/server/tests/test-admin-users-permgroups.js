@@ -1809,6 +1809,67 @@ async function scenario(name, fn) {
       /Vui lòng nhập Email hoặc Họ và Tên/.test(r.alerts[0] || ''), JSON.stringify(r));
   });
 
+  // (u4)-(u7): autoFillStartDateFromOnboarding() (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người dùng "tôi
+  // muốn tự động link, không có mới bấm nút kéo") — gắn data-op-change trên #uEmail/#uFullName, tự điền
+  // NGAY không cần bấm nút, hoàn toàn im lặng (không alert).
+  await scenario('(u4) autoFillStartDateFromOnboarding(): rời khỏi ô Email (data-op-change THẬT, không gọi hàm trực tiếp) -> tự điền NGAY, không cần bấm nút, không alert', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [
+        { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
+      ];
+      resetUserForm();
+      window.__alerts.length = 0;
+      const input = document.getElementById('uEmail');
+      input.value = 'tanbinh@hcrc.local';
+      input.dispatchEvent(new Event('change', { bubbles: true })); // mô phỏng ĐÚNG hành vi rời khỏi ô (blur) ngoài đời thật
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u4) Rời khỏi ô Email khớp đúng 1 hồ sơ -> tự điền Ngày Vào Làm Việc, KHÔNG hiện alert nào (tự động, im lặng)',
+      r.startDateValue === '2026-09-01' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(u5) autoFillStartDateFromOnboarding(): Ngày Vào Làm Việc ĐÃ CÓ giá trị sẵn -> KHÔNG tự ghi đè', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [
+        { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
+      ];
+      resetUserForm();
+      document.getElementById('uStartDate').value = '2026-01-15'; // admin đã tự gõ/đã có sẵn (VD đang Sửa 1 user cũ)
+      document.getElementById('uEmail').value = 'tanbinh@hcrc.local';
+      autoFillStartDateFromOnboarding();
+      return document.getElementById('uStartDate').value;
+    });
+    record('(u5) Ô đã có sẵn giá trị -> giữ nguyên, KHÔNG bị tự động ghi đè bởi kết quả Onboarding', r === '2026-01-15', r);
+  });
+
+  await scenario('(u6) autoFillStartDateFromOnboarding(): KHÔNG khớp hồ sơ nào -> im lặng, ô vẫn trống (dùng nút "📋 Tìm Trong Onboarding" để tra thủ công)', async () => {
+    const r = await page.evaluate(() => {
+      resetUserForm();
+      window.__alerts.length = 0;
+      document.getElementById('uEmail').value = 'khongkhoptenaocahet@hcrc.local';
+      autoFillStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u6) Không khớp -> ô vẫn trống, KHÔNG hiện alert nào (tự động không làm phiền, để nút bấm tay xử lý)',
+      r.startDateValue === '' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(u7) autoFillStartDateFromOnboarding(): CÓ NHIỀU hồ sơ cùng khớp -> im lặng bỏ qua (mơ hồ, để nút bấm tay cho tự chọn)', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [
+        { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Văn Trùng Tên', email: 'tentrung1@hcrc.local', startDate: '2026-09-01' },
+        { processType: 'ONBOARDING', employeeCode: 'BL002', fullName: 'Nguyễn Văn Trùng Tên', email: 'tentrung2@hcrc.local', startDate: '2026-10-01' }
+      ];
+      resetUserForm();
+      window.__alerts.length = 0;
+      document.getElementById('uFullName').value = 'Nguyễn Văn Trùng Tên';
+      autoFillStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u7) Nhiều hồ sơ cùng khớp Họ Tên -> KHÔNG tự chọn bừa 1 trong 2, ô vẫn trống, không alert',
+      r.startDateValue === '' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
   await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[]/workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] đang gán (không để lại "ma")', async () => {
     if (khoiKinhDoanhId == null) { record('(v) deleteDept() cascade vào deptGroups', false, 'skipped: no group id'); return; }
     const r = await page.evaluate((khoiId) => {

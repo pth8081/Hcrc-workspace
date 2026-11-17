@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**30.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.78 (2026-11): "Ngày Vào Làm Việc" (form Người Dùng) tự động liên kết từ Onboarding, không cần bấm nút
+
+Theo yêu cầu TRỰC TIẾP người dùng ("tôi muốn tự động link, không có mới bấm nút kéo") — tiếp nối bản vá
+v30.77 (field `p.type` sai → `p.processType`):
+
+- Thêm `autoFillStartDateFromOnboarding()` (`public/js/module-admin-submissiongroups.js`), gắn
+  `data-op-change` trên CẢ ô **Họ và Tên** lẫn **Email** (Hệ Thống → Quản Trị → Người Dùng) — rời khỏi 1
+  trong 2 ô này là tự dò khớp quy trình Onboarding NGAY, tự điền "Ngày Vào Làm Việc", hoàn toàn im lặng
+  (không alert).
+- Chỉ tự điền khi khớp ĐÚNG 1 kết quả rõ ràng VÀ ô "Ngày Vào Làm Việc" đang trống (không ghi đè ngày admin
+  đã tự sửa/đã có sẵn lúc Sửa 1 tài khoản cũ). Khi 0 hoặc nhiều kết quả cùng khớp — im lặng bỏ qua, admin
+  dùng nút **"📋 Tìm Trong Onboarding (nếu chưa tự điền)"** (đổi tên từ "Lấy từ Onboarding") để tra/chọn
+  tay — đúng như người dùng yêu cầu ("không có mới bấm nút kéo").
+- Tách logic khớp dùng chung (`findOnboardingStartDateCandidates()`) để cả bản tự động lẫn nút bấm tay
+  dùng ĐÚNG 1 nguồn, không lệch nhau.
+- Thêm 4 test mới (u4)-(u7) xác nhận: tự điền qua sự kiện `change` thật (không chỉ gọi hàm), không ghi đè
+  giá trị có sẵn, im lặng khi không khớp/khớp nhiều.
 
 ## v30.77 (2026-11): Fix "📋 Lấy từ Onboarding" (Ngày Vào Làm Việc, form Người Dùng) luôn báo "Không tìm thấy"
 

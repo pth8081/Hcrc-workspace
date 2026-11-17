@@ -900,23 +900,48 @@ function onUserKhoiBanChange() {
   populateUserDeptOptions(khoiId, '');
 }
 
-// Gợi ý "Ngày Vào Làm Việc" từ Onboarding đã có (10/2026, theo phân tích đã xác nhận với người dùng) —
-// tránh phải gõ lại tay ngày này khi IT tạo tài khoản VPDT cho 1 nhân viên đã có quy trình Onboarding
-// (DB.hrProcesses, processType ONBOARDING) — 2 field "Ngày Vào Làm Việc" này TRƯỚC ĐÂY độc lập hoàn toàn,
-// dễ lệch nhau. Chỉ GỢI Ý (điền vào ô để admin tự xác nhận/sửa lại), KHÔNG tự khoá/ép giá trị — khớp theo
-// Email/Họ Tên đã điền ở phần trên form (chưa có tài khoản nào để liên kết theo username lúc này).
+// findOnboardingStartDateCandidates(email, name) — tra DB.hrProcesses (ONBOARDING) khớp theo Email HOẶC
+// Họ Tên đã điền — tách riêng khỏi 2 hàm dùng nó ngay dưới (tự động lúc gõ VÀ nút bấm tay) để chỉ giữ
+// ĐÚNG 1 nguồn logic khớp, không lặp lại.
 //
 // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "ngày vào ở phân quyền không hiển thị, không tự liên kết"):
 // điều kiện lọc gõ nhầm `p.type === 'ONBOARDING'` — field THẬT trên bản ghi hrProcesses là `processType`
 // (xem lib/createValidation.js/lib/recordActions.js), KHÔNG có field `type` nào cả. `p.type` luôn
 // `undefined`, nên `candidates` LUÔN rỗng — nút "📋 Lấy từ Onboarding" báo "Không tìm thấy" với MỌI
 // trường hợp, kể cả khi quy trình Onboarding khớp đúng Email/Họ Tên đã tồn tại thật.
+function findOnboardingStartDateCandidates(email, name) {
+  return (DB.hrProcesses || []).filter(p => p.processType === 'ONBOARDING' && p.startDate &&
+    ((email && (p.email || '').trim().toLowerCase() === email) || (name && (p.fullName || '').trim().toLowerCase() === name)));
+}
+
+// autoFillStartDateFromOnboarding() (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người dùng — "tôi muốn tự động
+// link, không có mới bấm nút kéo") — gắn data-op-change trên CẢ #uEmail lẫn #uFullName: rời khỏi 1 trong
+// 2 ô này (sau khi gõ xong) tự dò khớp Onboarding NGAY, KHÔNG cần bấm nút. Im lặng hoàn toàn (không alert)
+// — chỉ tự điền khi khớp ĐÚNG 1 kết quả RÕ RÀNG, không đụng tới ô "Ngày Vào Làm Việc" nếu đã có sẵn giá
+// trị (tránh ghi đè ngày admin đã tự sửa tay, hoặc ngày đã có sẵn lúc Sửa 1 tài khoản cũ) và không tự
+// chọn khi có NHIỀU hồ sơ cùng khớp (mơ hồ, để admin tự bấm nút "📋 Lấy từ Onboarding" bên dưới chọn tay).
+// Nút đó vẫn giữ nguyên hành vi CŨ (báo rõ kết quả/cho chọn khi nhiều kết quả) — chỉ còn cần dùng khi tự
+// động KHÔNG tìm thấy gì (0 hoặc nhiều kết quả), đúng như người dùng yêu cầu.
+function autoFillStartDateFromOnboarding() {
+  const startDateInput = document.getElementById('uStartDate');
+  if (!startDateInput || startDateInput.value) return; // đã có sẵn giá trị -> không tự ghi đè
+  const email = document.getElementById('uEmail').value.trim().toLowerCase();
+  const name = document.getElementById('uFullName').value.trim().toLowerCase();
+  if (!email && !name) return;
+  const candidates = findOnboardingStartDateCandidates(email, name);
+  if (candidates.length === 1) startDateInput.value = candidates[0].startDate;
+}
+
+// Gợi ý "Ngày Vào Làm Việc" từ Onboarding đã có (10/2026, theo phân tích đã xác nhận với người dùng) —
+// nút bấm tay, dùng khi autoFillStartDateFromOnboarding() ở trên không tự tìm được (0 hoặc nhiều hồ sơ
+// cùng khớp) hoặc khi admin muốn tìm/ghi đè lại CÓ CHỦ Ý (nút này KHÔNG tự chặn khi ô đã có giá trị, khác
+// bản tự động). Khớp theo Email/Họ Tên đã điền ở phần trên form (chưa có tài khoản nào để liên kết theo
+// username lúc này).
 function suggestStartDateFromOnboarding() {
   const email = document.getElementById('uEmail').value.trim().toLowerCase();
   const name = document.getElementById('uFullName').value.trim().toLowerCase();
   if (!email && !name) return alert('Vui lòng nhập Email hoặc Họ và Tên trước để tìm đúng hồ sơ Onboarding.');
-  const candidates = (DB.hrProcesses || []).filter(p => p.processType === 'ONBOARDING' && p.startDate &&
-    ((email && (p.email || '').trim().toLowerCase() === email) || (name && (p.fullName || '').trim().toLowerCase() === name)));
+  const candidates = findOnboardingStartDateCandidates(email, name);
   if (!candidates.length) return alert('Không tìm thấy quy trình Onboarding nào khớp Email/Họ Tên đã nhập.');
   if (candidates.length === 1) {
     document.getElementById('uStartDate').value = candidates[0].startDate;
