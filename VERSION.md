@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**30.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.75 (2026-11): Báo Cáo Định Biên — tự đồng bộ "Thai Sản/Nghỉ Ốm" + thêm cột Full Time/Part Time
+
+Theo yêu cầu người dùng (qua ảnh chụp báo cáo định biên thật, phát hiện "nghỉ thai sản" không lên báo
+cáo dù hồ sơ đã có ghi chú chi tiết):
+
+- **Vá lỗ hổng thật**: `employeeProfiles.status` (ACTIVE/ON_LEAVE — field Báo Cáo Định Biên THẬT SỰ đếm
+  "Thai Sản/Nghỉ Ốm") và `currentWorkStatusDetail` ("Tình trạng làm việc hiện tại (chi tiết)" — field HR
+  chọn "Nghỉ thai sản"/"Nghỉ ốm dài ngày"/"Không lương"...) trước đây **hoàn toàn độc lập** — HR điền chi
+  tiết mà quên bấm chuyển trạng thái thì báo cáo vẫn đếm nhầm là đang đi làm bình thường. Từ nay, chọn 1
+  trong 3 giá trị "Nghỉ thai sản"/"Nghỉ ốm dài ngày"/"Không lương" **tự động** chuyển status sang ON_LEAVE
+  (`lib/employeeProfile.js::AUTO_ON_LEAVE_WORK_STATUS_DETAILS`, áp dụng ngay trong `applyProfileEdit()`),
+  tự trả lại ACTIVE khi đổi chi tiết khác/xoá, hoặc khi hết hạn "Đến ngày" (job hằng ngày mới
+  `jobs/workStatusAutoRevert.js::checkWorkStatusAutoRevert()`). HR tự bấm tay đổi trạng thái (route
+  `PATCH /api/hr-profile/by-code/:code/status`) LUÔN thắng cơ chế tự động (tự xoá cờ `workStatusAutoSetLeave`).
+- **Thêm 2 cột "Full Time"/"Part Time"** vào Báo Cáo Định Biên Nhân Sự (màn xem + Xuất Excel) — đếm theo
+  danh mục "Hình thức làm việc" (`employeeProfiles.employmentType`, khớp chứa chữ "Full"/"Part" không
+  phân biệt hoa/thường — người dùng xác nhận production hiện chỉ còn đúng 2 giá trị "Full-Time"/
+  "Part-Time"), `lib/headcountReport.js::classifyEmploymentType()`. Cùng triết lý cột "Kiêm Nhiệm" đã có
+  — CHỈ để tham khảo/báo cáo, KHÔNG ảnh hưởng gì tới "Thực Tế"/"Chênh Lệch".
+- Test mới: `tests/test-work-status-auto-sync.js` (16 kịch bản — tự chuyển/tự trả/job hết hạn/tay thắng
+  tự động/tích hợp với headcountReport), mở rộng `tests/test-orgchart-headcount-breakdown-columns.js` +
+  `tests/test-hr-profile.js`. Không có regression ở 10+ bộ test liên quan (orgchart headcount, hr-profile,
+  hr-lifecycle...).
 
 ## v30.74 (2026-11): Fix lỗi THẬT trên production — "✏️ Sửa Mã NV" báo "Đã có lỗi xảy ra"
 

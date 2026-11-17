@@ -4245,9 +4245,28 @@ theo đúng vị trí trong cây**.
   - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 3
     cột con: **Đang Làm Việc** (hồ sơ Hồ Sơ Nhân Sự đang gán đúng vị trí đó,
     trạng thái Đang làm việc) + **Đang Bàn Giao Nghỉ Việc** (đang có quy
-    trình Offboarding CHƯA hoàn tất) + **Thai Sản/Nghỉ Ốm** (trạng thái Đang
-    nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2 lý do
-    riêng). **KHÔNG gồm Kiêm Nhiệm** (11/2026 ĐỢT 3 — xem ngay dưới).
+    trình Offboarding CHƯA hoàn tất — xem "Quy Trình Nhân Sự", KHÔNG liên
+    quan tới field nào trên chính hồ sơ) + **Thai Sản/Nghỉ Ốm** (trạng thái
+    Đang nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2
+    lý do riêng). **KHÔNG gồm Kiêm Nhiệm/Full Time/Part Time** (11/2026 ĐỢT
+    3 + đợt sau — xem ngay dưới).
+  - **"Thai Sản/Nghỉ Ốm" TỰ ĐỘNG đồng bộ với "Tình trạng làm việc hiện tại
+    (chi tiết)" (11/2026, vá lỗ hổng thật người dùng phát hiện)** — trước
+    đây field "Tình trạng làm việc hiện tại (chi tiết)" ở Hồ Sơ Nhân Sự
+    (chọn "Nghỉ thai sản"/"Nghỉ ốm dài ngày"/"Không lương"/"Hưu trí"/"HĐ thứ
+    2"/"Khác") và trạng thái hồ sơ (Đang làm việc/Nghỉ dài hạn — field báo
+    cáo định biên THẬT SỰ đếm theo) là **2 field HOÀN TOÀN ĐỘC LẬP**: HR chỉ
+    điền chi tiết mà quên bấm chuyển trạng thái thì báo cáo vẫn tính người
+    đó như đang đi làm bình thường. Từ nay, chọn 1 trong 3 giá trị **"Nghỉ
+    thai sản"/"Nghỉ ốm dài ngày"/"Không lương"** ở "Tình trạng làm việc hiện
+    tại (chi tiết)" sẽ **TỰ ĐỘNG** chuyển trạng thái hồ sơ sang "Nghỉ dài
+    hạn" ngay — không cần bấm thêm bước nào, và báo cáo định biên tự đếm
+    đúng ngay lần xem kế tiếp. Đổi chi tiết sang giá trị khác (hoặc xoá) thì
+    tự trả về "Đang làm việc"; hết hạn "Đến ngày" (nếu có đặt) mà HR quên
+    đổi tay thì có job hằng ngày tự trả lại "Đang làm việc" giúp. **HR tự
+    bấm tay đổi trạng thái (nút "Chuyển Nghỉ Dài Hạn"/"Chuyển Đang Làm
+    Việc") LUÔN được ưu tiên** — một khi đã tự tay đổi, cơ chế tự động ở
+    trên sẽ không còn tự ý đổi lại nữa cho hồ sơ đó.
   - **Kiêm Nhiệm (11/2026, tách hẳn khỏi Thực Tế từ ĐỢT 3)**: tính hệ số
     ×0.5/người, lấy từ "Vị Trí Kiêm Nhiệm" đã gán ở hồ sơ Người Dùng — hiện
     THÀNH CỘT RIÊNG, hoàn toàn độc lập với Thực Tế/Chênh Lệch, chỉ để
@@ -4264,6 +4283,14 @@ theo đúng vị trí trong cây**.
     "Thai Sản-Nghỉ Ốm" cũng hiện THÀNH CỘT RIÊNG ngay sau cột "Thực Tế" (cả
     màn xem lẫn file Excel xuất ra) để xem chi tiết từng thành phần mà không
     cần tính nhẩm.
+  - **"Full Time"/"Part Time" (11/2026, theo yêu cầu người dùng "thêm 2 cột
+    hợp đồng part time/full time")**: đếm theo danh mục **"Hình thức làm
+    việc"** ở Hồ Sơ Nhân Sự (khớp chứa chữ "Full"/"Part", không phân biệt
+    hoa/thường — chịu được nếu đổi cách viết hoa/gạch ngang, miễn còn giữ
+    đúng chữ gốc) — cùng triết lý Kiêm Nhiệm: 2 cột này **CHỈ để tham khảo/
+    báo cáo**, hoàn toàn độc lập với Thực Tế/Chênh Lệch, không cộng/trừ gì
+    vào 2 cột đó. Hồ sơ không khớp cả 2 (rỗng, hoặc danh mục đổi hẳn sang
+    giá trị khác không còn chữ Full/Part) không rơi vào cột nào.
   - **Chênh Lệch** = Định Biên − Thực Tế (đơn giản, nhất quán — vì Thực Tế
     đã không còn chứa Kiêm Nhiệm nên không cần công thức riêng nữa). Dương
     (tô cam) = còn thiếu người, cần tuyển thêm đúng số đó; âm (tô đỏ) = đang
@@ -4296,8 +4323,9 @@ theo đúng vị trí trong cây**.
     file Excel xuất ra đổi từ kiểu "cây thụt lề 1 cột" sang đúng khuôn file
     mẫu thật của HR: **STT | BAN/PHÒNG | BAN/PHÒNG/BỘ PHẬN | BỘ PHẬN/NHÓM |
     CHỨC DANH | CẤP BẬC | Mã vị trí | Định Biên | Thực Tế | Kiêm Nhiệm | Đang
-    Bàn Giao Nghỉ Việc | Thai Sản/Nghỉ Ốm | Chênh Lệch** (3 cột breakdown
-    thêm 11/2026, xem chi tiết công thức ở trên).
+    Bàn Giao Nghỉ Việc | Thai Sản/Nghỉ Ốm | Full Time | Part Time | Chênh
+    Lệch** (5 cột breakdown thêm 11/2026 qua 2 đợt, xem chi tiết công thức ở
+    trên).
     - Phòng Ban/Khối nằm **trực tiếp dưới Công Ty** (cấp 1) được đánh số La
       Mã **I, II, III...**; Phòng Ban con của nó (cấp 2) đánh **I.1, I.2...**.
       Phòng Ban nằm **sâu hơn cấp 2** (VD Ban → Phòng → Tổ) **không** có số

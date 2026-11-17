@@ -23,6 +23,23 @@ const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
 
 const ACTIVE_LIKE_STATUSES = new Set(['ACTIVE', 'ON_LEAVE']);
 
+// classifyEmploymentType() (11/2026, theo yêu cầu người dùng "thêm 2 cột hợp đồng Part Time/Full Time"
+// vào Báo Cáo Định Biên) — người dùng xác nhận trực tiếp: danh mục "Hình thức làm việc"
+// (employeeProfiles.employmentType, admin tự sửa qua Quản Lý Danh Mục) trên hệ thống THẬT hiện CHỈ còn
+// đúng 2 giá trị "Full-Time"/"Part-Time" (đã đổi khỏi 4 giá trị mặc định cũ "Chính thức/Thời vụ/Bán thời
+// gian/Cộng tác viên" ở lib/employeeProfile.js — xem ảnh demo người dùng gửi). Khớp theo chứa chữ
+// "full"/"part" (bỏ dấu hoa/thường, bỏ khoảng trắng/gạch ngang) thay vì so khớp CHÍNH XÁC 1 chuỗi cố
+// định — chịu được nếu admin đổi cách viết (VD "Full Time"/"FULL-TIME"/"Fulltime") miễn còn giữ đúng chữ
+// gốc. Hồ sơ KHÔNG khớp cả 2 (rỗng, hoặc danh mục đổi hẳn sang giá trị khác) không tính vào cột nào —
+// KHÔNG ảnh hưởng gì tới Thực Tế/Chênh Lệch (2 cột này chỉ để tham khảo thêm, cùng triết lý cột Kiêm
+// Nhiệm — xem computePositionStats() bên dưới).
+function classifyEmploymentType(employmentType) {
+  const norm = String(employmentType || '').toLowerCase();
+  if (norm.includes('part')) return 'PART_TIME';
+  if (norm.includes('full')) return 'FULL_TIME';
+  return null;
+}
+
 function buildChildrenMap(nodes) {
   const byParent = new Map();
   for (const n of nodes || []) {
@@ -54,10 +71,13 @@ function countSecondaryHolders(version, node, users) {
 }
 
 function computePositionStats(version, node, employeeProfiles, offboardingUsernames, users) {
-  let active = 0, onLeave = 0, offboarding = 0;
+  let active = 0, onLeave = 0, offboarding = 0, fullTime = 0, partTime = 0;
   for (const p of employeeProfiles || []) {
     if (!p || p.positionKey !== node.positionKey) continue;
     if (!ACTIVE_LIKE_STATUSES.has(p.status)) continue;
+    const empType = classifyEmploymentType(p.employmentType);
+    if (empType === 'FULL_TIME') fullTime++;
+    else if (empType === 'PART_TIME') partTime++;
     if (p.username && offboardingUsernames.has(p.username)) { offboarding++; continue; }
     if (p.status === 'ON_LEAVE') { onLeave++; continue; }
     active++;
@@ -74,10 +94,10 @@ function computePositionStats(version, node, employeeProfiles, offboardingUserna
   // Chênh Lệch = Định Biên - Thực Tế, ĐƠN GIẢN/NHẤT QUÁN trở lại (Thực Tế đã không còn chứa Kiêm Nhiệm
   // nên không cần công thức riêng như đợt trước nữa).
   const variance = quota == null ? null : quota - actualTotal;
-  return { active, onLeave, offboarding, secondary, actualTotal, quota, variance };
+  return { active, onLeave, offboarding, secondary, fullTime, partTime, actualTotal, quota, variance };
 }
 
-const EMPTY_STATS = { active: 0, onLeave: 0, offboarding: 0, secondary: 0, actualTotal: 0, quota: 0, variance: 0 };
+const EMPTY_STATS = { active: 0, onLeave: 0, offboarding: 0, secondary: 0, fullTime: 0, partTime: 0, actualTotal: 0, quota: 0, variance: 0 };
 
 function addStats(a, b) {
   return {
@@ -85,6 +105,8 @@ function addStats(a, b) {
     onLeave: a.onLeave + b.onLeave,
     offboarding: a.offboarding + b.offboarding,
     secondary: a.secondary + b.secondary,
+    fullTime: a.fullTime + b.fullTime,
+    partTime: a.partTime + b.partTime,
     actualTotal: a.actualTotal + b.actualTotal,
     quota: (a.quota || 0) + (b.quota || 0),
     hasAnyQuota: !!a.hasAnyQuota || !!b.hasAnyQuota
@@ -111,7 +133,8 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
         displayName: buildNodeDisplayName(version, node),
         jobTitle: node.jobTitle, jobGrade: node.jobGrade || '', positionKey: node.positionKey,
         quota: stats.quota, active: stats.active, onLeave: stats.onLeave, offboarding: stats.offboarding,
-        secondary: stats.secondary, actualTotal: stats.actualTotal, variance: stats.variance
+        secondary: stats.secondary, fullTime: stats.fullTime, partTime: stats.partTime,
+        actualTotal: stats.actualTotal, variance: stats.variance
       });
       return { ...stats, hasAnyQuota: stats.quota != null };
     }
@@ -128,7 +151,7 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
     rows.push({
       nodeId: node.nodeId, nodeType: node.nodeType, level,
       displayName: node.nodeName, jobTitle: '', jobGrade: '', positionKey: null,
-      quota: 0, active: 0, onLeave: 0, offboarding: 0, secondary: 0, actualTotal: 0, variance: 0
+      quota: 0, active: 0, onLeave: 0, offboarding: 0, secondary: 0, fullTime: 0, partTime: 0, actualTotal: 0, variance: 0
     });
     for (const child of children) {
       const childAgg = visit(child, level + 1);
@@ -141,6 +164,8 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
     rows[rowIndex].onLeave = displayAgg.onLeave;
     rows[rowIndex].offboarding = displayAgg.offboarding;
     rows[rowIndex].secondary = displayAgg.secondary;
+    rows[rowIndex].fullTime = displayAgg.fullTime;
+    rows[rowIndex].partTime = displayAgg.partTime;
     rows[rowIndex].actualTotal = displayAgg.actualTotal;
     // CÙNG quyết định 11/2026 ĐỢT 3 ở computePositionStats() — actualTotal cộng dồn đã KHÔNG còn chứa
     // Kiêm Nhiệm (secondary) nữa nên variance cộng dồn trở lại ĐƠN GIẢN "quota - actualTotal".
@@ -208,7 +233,8 @@ function buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses,
       kind: 'POSITION', nodeId: posNode.nodeId, stt, banPhong, banPhongBoPhan, boPhanNhom,
       chucDanh: posNode.jobTitle, capBac: posNode.jobGrade || '', maViTri: nextCode(),
       quota: s.quota, actualTotal: s.actualTotal, variance: s.variance,
-      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary
+      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary,
+      fullTime: s.fullTime, partTime: s.partTime
     });
   }
   function pushGroupRow(kind, sttLabel, deptNode) {
@@ -216,7 +242,8 @@ function buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses,
     rows.push({
       kind, nodeId: deptNode.nodeId, sttLabel, label: deptNode.nodeName, abbr: abbrForNode(deptNode, deptAbbrs),
       quota: s.quota, actualTotal: s.actualTotal, variance: s.variance,
-      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary
+      active: s.active, onLeave: s.onLeave, offboarding: s.offboarding, secondary: s.secondary,
+      fullTime: s.fullTime, partTime: s.partTime
     });
   }
 
@@ -280,6 +307,11 @@ function buildFlatHeadcountReportWorkbook(report) {
     { header: 'Kiêm Nhiệm', key: 'secondary', width: 10 },
     { header: 'Đang Bàn Giao Nghỉ Việc', key: 'offboarding', width: 14 },
     { header: 'Thai Sản/Nghỉ Ốm', key: 'onLeave', width: 12 },
+    // 2 cột breakdown MỚI (11/2026, theo yêu cầu người dùng "thêm 2 cột hợp đồng part time/full time") —
+    // cùng triết lý "Kiêm Nhiệm" ở trên: CHỈ để tham khảo/báo cáo, KHÔNG nằm trong "Thực tế"/"Chênh lệch".
+    // Đếm theo danh mục "Hình thức làm việc" (employeeProfiles.employmentType) — xem classifyEmploymentType().
+    { header: 'Full Time', key: 'fullTime', width: 10 },
+    { header: 'Part Time', key: 'partTime', width: 10 },
     { header: 'Chênh lệch', key: 'variance', width: 10 }
   ];
   const header = sheet.getRow(1);
@@ -298,6 +330,7 @@ function buildFlatHeadcountReportWorkbook(report) {
     stt: 'A', banPhong: report.rootLabel, banPhongBoPhan: report.rootAbbr || '',
     quota: report.rootStats?.quota ?? '', actualTotal: report.rootStats?.actualTotal,
     secondary: report.rootStats?.secondary, offboarding: report.rootStats?.offboarding, onLeave: report.rootStats?.onLeave,
+    fullTime: report.rootStats?.fullTime, partTime: report.rootStats?.partTime,
     variance: report.rootStats?.variance ?? ''
   });
   rRoot.eachCell(c => { c.fill = FILL_ROOT; c.font = { bold: true }; });
@@ -308,18 +341,20 @@ function buildFlatHeadcountReportWorkbook(report) {
         stt: r.sttLabel, banPhong: r.label, banPhongBoPhan: r.abbr || '',
         quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
         secondary: r.secondary, offboarding: r.offboarding, onLeave: r.onLeave,
+        fullTime: r.fullTime, partTime: r.partTime,
         variance: r.variance == null ? '' : r.variance
       });
       row.eachCell(c => { c.fill = FILL_GROUP; });
       sheet.getCell(`B${row.number}`).font = r.kind === 'GROUP1' ? { bold: true, color: { argb: 'FFDC2626' } } : { bold: true, color: { argb: 'FF111827' } };
-      // H=Định biên, I=Thực tế, J=Kiêm Nhiệm, K=Đang Bàn Giao Nghỉ Việc, L=Thai Sản/Nghỉ Ốm, M=Chênh lệch.
-      ['H', 'I', 'J', 'K', 'L', 'M'].forEach(col => { sheet.getCell(`${col}${row.number}`).font = { bold: true }; });
+      // H=Định biên, I=Thực tế, J=Kiêm Nhiệm, K=Đang Bàn Giao Nghỉ Việc, L=Thai Sản/Nghỉ Ốm, M=Full Time, N=Part Time, O=Chênh lệch.
+      ['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'].forEach(col => { sheet.getCell(`${col}${row.number}`).font = { bold: true }; });
     } else {
       const row = sheet.addRow({
         stt: r.stt, banPhong: r.banPhong, banPhongBoPhan: r.banPhongBoPhan, boPhanNhom: r.boPhanNhom,
         chucDanh: r.chucDanh, capBac: r.capBac, maViTri: r.maViTri,
         quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
         secondary: r.secondary, offboarding: r.offboarding, onLeave: r.onLeave,
+        fullTime: r.fullTime, partTime: r.partTime,
         variance: r.variance == null ? '' : r.variance
       });
       sheet.getCell(`G${row.number}`).font = { italic: true, color: { argb: 'FF2563EB' } };

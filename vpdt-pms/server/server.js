@@ -101,6 +101,7 @@ const { checkShelfStockReconDigestAlerts } = require('./jobs/shelfStockReconDige
 const { syncSystemInventory } = require('./jobs/inventorySync');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
+const { checkWorkStatusAutoRevert } = require('./jobs/workStatusAutoRevert');
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
 const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
 const { checkItApprovalDeadlineReminders } = require('./jobs/itApprovalDeadlineReminder');
@@ -581,6 +582,11 @@ async function start() {
       // Onboarding hoàn tất, không có gì tự tạo lại cho năm sau) — xem jobs/leaveBalanceYearRollover.js.
       ensureLeaveBalancesForCurrentYear();
       setInterval(ensureLeaveBalancesForCurrentYear, 24 * 60 * 60 * 1000);
+      // Trả hồ sơ về "Đang làm việc" khi hết hạn "Đến ngày" của 1 đợt Thai Sản/Nghỉ Ốm Dài Ngày/Không
+      // Lương do HỆ THỐNG TỰ ĐỘNG đặt (vá lỗ hổng thật 11/2026 — Báo Cáo Định Biên không đếm được những
+      // hồ sơ này vì status/currentWorkStatusDetail trước đây hoàn toàn độc lập) — xem jobs/workStatusAutoRevert.js.
+      checkWorkStatusAutoRevert();
+      setInterval(checkWorkStatusAutoRevert, 24 * 60 * 60 * 1000);
       // Nhắc hạn Báo Cáo Định Kỳ cho phòng ban CHƯA nộp (vá lỗ hổng thật — tài liệu Nghiệp Vụ tuyên bố có
       // tính năng này nhưng chưa từng được cài đặt) — xem jobs/reportPeriodDeadlineReminder.js.
       checkReportPeriodDeadlineReminders();

@@ -1158,6 +1158,10 @@ router.patch('/by-code/:employeeCode/status', async (req, res) => {
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
       employeeProfile.assertValidManualStatusTransition(profile.status, req.body?.status);
       profile.status = req.body.status;
+      // HR tự bấm tay LUÔN thắng cờ tự động (xem AUTO_ON_LEAVE_WORK_STATUS_DETAILS ở lib/employeeProfile.js)
+      // — xoá cờ dù đổi sang chiều nào, để job autoRevertExpiredWorkStatusLeaves() không tự ý đổi lại
+      // ACTIVE sau này (HR đã chủ động quyết định trạng thái này, không phải hệ thống tự đặt nữa).
+      profile.workStatusAutoSetLeave = false;
       profile.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       profile.updatedBy = req.freshUser.username;
       updated = profile;

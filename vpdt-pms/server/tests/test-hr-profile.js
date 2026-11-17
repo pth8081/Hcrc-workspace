@@ -321,6 +321,24 @@ async function main() {
       assertEqual(fromInactive.status, 400, 'Hồ sơ đã INACTIVE không đổi trạng thái tay được');
     });
 
+    // 11/2026, theo yêu cầu người dùng (vá "Nghỉ thai sản không lên Báo Cáo Định Biên" — xem
+    // lib/employeeProfile.js::AUTO_ON_LEAVE_WORK_STATUS_DETAILS): đổi status TAY qua route này LUÔN phải
+    // xoá cờ workStatusAutoSetLeave (dù đổi sang chiều nào) — nếu không xoá, job autoRevertExpiredWorkStatusLeaves()
+    // (jobs/workStatusAutoRevert.js) có thể tự ý đổi lại ACTIVE sau này dù HR đã chủ động quyết định.
+    await run.run('PATCH /by-code/:code/status — đổi tay LUÔN xoá cờ workStatusAutoSetLeave (tay thắng tự động)', async () => {
+      resetAppData();
+      seedLinkedProfile({ status: 'ON_LEAVE', workStatusAutoSetLeave: true, currentWorkStatusDetail: 'Nghỉ thai sản' });
+      const toActive = await api('PATCH', '/api/hr-profile/by-code/NV001/status', { status: 'ACTIVE' }, HR_MGR);
+      assertEqual(toActive.status, 200, 'ON_LEAVE -> ACTIVE (tay) phải thành công');
+      assertEqual(toActive.body.profile.workStatusAutoSetLeave, false, 'Đổi tay phải xoá cờ tự động, dù hồ sơ đó trước đó do hệ thống tự đặt ON_LEAVE');
+
+      resetAppData();
+      seedLinkedProfile({ status: 'ACTIVE', workStatusAutoSetLeave: true }); // dữ liệu rác giả định, vẫn phải xoá an toàn
+      const toLeaveManual = await api('PATCH', '/api/hr-profile/by-code/NV001/status', { status: 'ON_LEAVE' }, HR_MGR);
+      assertEqual(toLeaveManual.status, 200);
+      assertEqual(toLeaveManual.body.profile.workStatusAutoSetLeave, false, 'Đổi tay sang ON_LEAVE cũng phải xoá cờ (đây là HR tự bấm, không phải hệ thống tự đặt)');
+    });
+
     await run.run('POST /by-code/:code/link-account — chặn liên kết trùng', async () => {
       resetAppData();
       APP_DATA.employeeProfiles.push(employeeProfile.defaultProfile('NV002'));

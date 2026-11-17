@@ -51,9 +51,13 @@ async function main() {
   // Nhân viên bán hàng (quota=7): 5 đang làm việc, 1 đang bàn giao nghỉ việc, 1 thai sản/nghỉ ốm, 1 người
   // kiêm nhiệm (secondary=0.5, KHÔNG cộng vào Thực Tế) -> actualTotal (Thực Tế) = 5+1+1 = 7; Chênh Lệch =
   // Định Biên − Thực Tế = 7-7 = 0.
+  // employmentType (11/2026, theo yêu cầu người dùng "thêm 2 cột hợp đồng part time/full time" — khớp
+  // theo danh mục "Hình thức làm việc" thật trên production CHỈ còn 2 giá trị "Full-Time"/"Part-Time",
+  // xem classifyEmploymentType() ở lib/headcountReport.js): u1="Full-Time", u2="Part-Time" (còn lại
+  // không set — không khớp cột nào, vẫn tính actualTotal như cũ, chỉ không rơi vào Full/Part Time).
   const employeeProfiles = [
-    { username: 'u1', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
-    { username: 'u2', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
+    { username: 'u1', positionKey: posBanHang.positionKey, status: 'ACTIVE', employmentType: 'Full-Time' },
+    { username: 'u2', positionKey: posBanHang.positionKey, status: 'ACTIVE', employmentType: 'Part-Time' },
     { username: 'u3', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
     { username: 'u4', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
     { username: 'u5', positionKey: posBanHang.positionKey, status: 'ACTIVE' },
@@ -61,7 +65,7 @@ async function main() {
     { username: 'u7', positionKey: posBanHang.positionKey, status: 'ON_LEAVE' },
     // Thu ngân (quota=4): 1 đang làm việc, 2 người kiêm nhiệm (secondary=1.0, KHÔNG cộng vào Thực Tế) ->
     // actualTotal (Thực Tế) = 1; Chênh Lệch = 4-1 = 3.
-    { username: 'u8', positionKey: posThuNgan.positionKey, status: 'ACTIVE' }
+    { username: 'u8', positionKey: posThuNgan.positionKey, status: 'ACTIVE', employmentType: 'Part-Time' }
   ];
   const hrProcesses = [{ processType: 'OFFBOARDING', status: 'IN_PROGRESS', employeeUsername: 'u6' }];
   const users = [
@@ -79,12 +83,16 @@ async function main() {
     assertEqual(rBanHang.secondary, 0.5, 'Nhân viên bán hàng: 1 người kiêm nhiệm × 0.5 (chỉ để báo cáo riêng)');
     assertEqual(rBanHang.actualTotal, 7, 'Thực Tế = 5+1+1 = 7, KHÔNG cộng 0.5 Kiêm Nhiệm nữa');
     assertEqual(rBanHang.variance, 0, 'Chênh Lệch = Định Biên − Thực Tế = 7-7 = 0');
+    assertEqual(rBanHang.fullTime, 1, 'Nhân viên bán hàng: 1 người Full-Time (u1)');
+    assertEqual(rBanHang.partTime, 1, 'Nhân viên bán hàng: 1 người Part-Time (u2)');
 
     const rThuNgan = rows.find(r => r.nodeId === posThuNgan.nodeId);
     assertEqual(rThuNgan.active, 1, 'Thu ngân: 1 đang làm việc');
     assertEqual(rThuNgan.secondary, 1.0, 'Thu ngân: 2 người kiêm nhiệm × 0.5 = 1.0 (chỉ để báo cáo riêng)');
     assertEqual(rThuNgan.actualTotal, 1, 'Thực Tế = 1, KHÔNG cộng 1.0 Kiêm Nhiệm nữa');
     assertEqual(rThuNgan.variance, 3, 'Chênh Lệch = Định Biên − Thực Tế = 4-1 = 3');
+    assertEqual(rThuNgan.fullTime, 0, 'Thu ngân: 0 người Full-Time');
+    assertEqual(rThuNgan.partTime, 1, 'Thu ngân: 1 người Part-Time (u8)');
   });
 
   await run.run('2. Cộng dồn DEPARTMENT/COMPANY cũng áp dụng ĐÚNG công thức mới (không chỉ node lá)', () => {
@@ -93,16 +101,18 @@ async function main() {
     // Tổng active=5+1=6, offboarding=1, onLeave=1, secondary=0.5+1.0=1.5 (chỉ để báo cáo), quota=7+4=11.
     assertEqual(rPhong.actualTotal, 8, 'Thực Tế cộng dồn = 6+1+1 = 8, KHÔNG cộng 1.5 Kiêm Nhiệm cộng dồn');
     assertEqual(rPhong.variance, 3, 'Chênh Lệch cộng dồn = Định Biên − Thực Tế = 11-8 = 3');
+    assertEqual(rPhong.fullTime, 1, 'Full-Time cộng dồn = 1 (chỉ u1)');
+    assertEqual(rPhong.partTime, 2, 'Part-Time cộng dồn = 2 (u2 + u8)');
   });
 
-  await run.run('3. buildFlatHeadcountReportWorkbook(): đủ 3 cột mới đúng vị trí + giá trị', () => {
+  await run.run('3. buildFlatHeadcountReportWorkbook(): đủ 5 cột mới đúng vị trí + giá trị', () => {
     const report = buildFlatGroupedHeadcountReport(v, employeeProfiles, hrProcesses, users, {});
     const wb = buildFlatHeadcountReportWorkbook(report);
     const sheet = wb.getWorksheet('Định Biên Nhân Sự');
     const headerRow = sheet.getRow(1);
     const headers = [];
     headerRow.eachCell((c) => headers.push(c.value));
-    assertEqual(JSON.stringify(headers), JSON.stringify(['STT', 'BAN/PHÒNG', 'BAN/PHÒNG/BỘ PHẬN', 'BỘ PHẬN/NHÓM', 'CHỨC DANH', 'CẤP BẬC', 'Mã vị trí', 'Định biên', 'Thực tế', 'Kiêm Nhiệm', 'Đang Bàn Giao Nghỉ Việc', 'Thai Sản/Nghỉ Ốm', 'Chênh lệch']), '3 cột mới nằm ĐÚNG sau "Thực tế", trước "Chênh lệch"');
+    assertEqual(JSON.stringify(headers), JSON.stringify(['STT', 'BAN/PHÒNG', 'BAN/PHÒNG/BỘ PHẬN', 'BỘ PHẬN/NHÓM', 'CHỨC DANH', 'CẤP BẬC', 'Mã vị trí', 'Định biên', 'Thực tế', 'Kiêm Nhiệm', 'Đang Bàn Giao Nghỉ Việc', 'Thai Sản/Nghỉ Ốm', 'Full Time', 'Part Time', 'Chênh lệch']), '5 cột mới nằm ĐÚNG sau "Thực tế", trước "Chênh lệch"');
 
     let banHangRow = null;
     sheet.eachRow((row, rowNumber) => {
@@ -114,7 +124,9 @@ async function main() {
     assertEqual(banHangRow.getCell(10).value, 0.5, 'Cột J (Kiêm Nhiệm) = 0.5');
     assertEqual(banHangRow.getCell(11).value, 1, 'Cột K (Đang Bàn Giao Nghỉ Việc) = 1');
     assertEqual(banHangRow.getCell(12).value, 1, 'Cột L (Thai Sản/Nghỉ Ốm) = 1');
-    assertEqual(banHangRow.getCell(13).value, 0, 'Cột M (Chênh lệch) = Định Biên − Thực Tế = 7-7 = 0');
+    assertEqual(banHangRow.getCell(13).value, 1, 'Cột M (Full Time) = 1 (u1)');
+    assertEqual(banHangRow.getCell(14).value, 1, 'Cột N (Part Time) = 1 (u2)');
+    assertEqual(banHangRow.getCell(15).value, 0, 'Cột O (Chênh lệch) = Định Biên − Thực Tế = 7-7 = 0');
   });
 
   await run.run('4. buildHeadcountTemplateWorkbook(): đủ 3 cột THAM KHẢO đúng giá trị, "Định Biên Mới (*)" vẫn ở cột cuối, round-trip nhập lại vẫn hoạt động', async () => {

@@ -67,6 +67,19 @@ const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly h�
 // không truyền catalogs thật qua options — nguồn THẬT là appData.currentWorkStatusDetails/
 // appData.nationalIdIssuePlaces, admin tự sửa qua Quản Lý Danh Mục, xem defaults.js).
 const CURRENT_WORK_STATUS_DETAILS = new Set(['Hưu trí', 'HĐ thứ 2', 'Không lương', 'Nghỉ ốm dài ngày', 'Nghỉ thai sản', 'Khác']);
+// AUTO_ON_LEAVE_WORK_STATUS_DETAILS (11/2026, theo yêu cầu người dùng — phát hiện thật trên production:
+// Báo Cáo Định Biên (lib/headcountReport.js) đếm "Thai Sản/Nghỉ Ốm" theo profile.status==='ON_LEAVE',
+// nhưng HR chỉ điền currentWorkStatusDetail="Nghỉ thai sản" (field ghi chú RIÊNG, độc lập hoàn toàn với
+// status) mà KHÔNG bấm chuyển status tay — báo cáo vẫn tính người đó như đang đi làm bình thường. Từ nay
+// chọn 1 trong 3 giá trị detail dưới đây sẽ TỰ ĐỘNG chuyển status ACTIVE -> ON_LEAVE ngay trong
+// applyProfileEdit() (case 'currentWorkStatusDetail' bên dưới) — không cần HR bấm thêm bước nào.
+// profile.workStatusAutoSetLeave đánh dấu ON_LEAVE này là TỰ ĐỘNG đặt (không phải HR bấm tay) để:
+//   1) Tự trả về ACTIVE khi detail đổi sang giá trị khác/bị xoá (cùng case này), hoặc khi "Đến ngày"
+//      (currentWorkStatusTo) đã qua (xem autoRevertExpiredWorkStatusLeaves() + jobs/workStatusAutoRevert.js).
+//   2) KHÔNG đụng tới trường hợp HR đã tự bấm ON_LEAVE tay vì lý do khác (cờ không bật -> không tự trả
+//      về ACTIVE nhầm) — xem PATCH /api/hr-profile/by-code/:code/status (routes/employeeProfile.js) tự
+//      xoá cờ này mỗi khi HR đổi status TAY (dù đổi chiều nào), để tay luôn thắng tự động.
+const AUTO_ON_LEAVE_WORK_STATUS_DETAILS = new Set(['Nghỉ thai sản', 'Nghỉ ốm dài ngày', 'Không lương']);
 const NATIONAL_ID_ISSUE_PLACES = new Set(['Bộ Công An', 'Cục cảnh sát QLHC về TTXH', 'Cục cảnh sát ĐKQL cư trú và DLQG về dân cư']);
 // TRANSFER_TYPES/TRANSFER_STATUSES (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel
 // "DATA_DIEUCHUYEN&THU THACH" — "Danh Sách Theo Dõi Bổ Nhiệm/Điều Động CB") — mỗi dòng transfers[] là 1
@@ -1469,7 +1482,17 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         const allowedWorkStatusDetails = (options && Array.isArray(options.currentWorkStatusDetails) && options.currentWorkStatusDetails.length)
           ? new Set(options.currentWorkStatusDetails) : CURRENT_WORK_STATUS_DETAILS;
         if (val != null && val !== '' && !allowedWorkStatusDetails.has(val)) throw new HttpError(400, 'Tình trạng làm việc hiện tại không hợp lệ');
-        profile.currentWorkStatusDetail = val || null;
+        const nextWorkStatusDetail = val || null;
+        // Tự đồng bộ status <-> currentWorkStatusDetail (xem AUTO_ON_LEAVE_WORK_STATUS_DETAILS ở trên).
+        const shouldAutoLeave = !!(nextWorkStatusDetail && AUTO_ON_LEAVE_WORK_STATUS_DETAILS.has(nextWorkStatusDetail));
+        if (shouldAutoLeave && profile.status === 'ACTIVE') {
+          profile.status = 'ON_LEAVE';
+          profile.workStatusAutoSetLeave = true;
+        } else if (!shouldAutoLeave && profile.workStatusAutoSetLeave && profile.status === 'ON_LEAVE') {
+          profile.status = 'ACTIVE';
+          profile.workStatusAutoSetLeave = false;
+        }
+        profile.currentWorkStatusDetail = nextWorkStatusDetail;
         break;
       }
       // 7 field "ngày" thuần mới (xem NEW_PLAIN_DATE_FIELDS) — dùng CHUNG 1 case, cùng khuôn validate
@@ -1669,6 +1692,27 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
   }
   if (currentStatus === 'DRAFT') throw new HttpError(400, 'Hồ sơ còn ở giai đoạn chuẩn bị (chưa hoàn tất Onboarding), chưa đổi trạng thái tay được');
   if (currentStatus === 'INACTIVE') throw new HttpError(400, 'Hồ sơ đã nghỉ việc — không đổi trạng thái tay được');
+}
+
+// autoRevertExpiredWorkStatusLeaves(list) — job hằng ngày (xem jobs/workStatusAutoRevert.js): hồ sơ nào
+// đang ON_LEAVE do TỰ ĐỘNG đặt (profile.workStatusAutoSetLeave===true, xem AUTO_ON_LEAVE_WORK_STATUS_DETAILS
+// ở applyProfileEdit() case 'currentWorkStatusDetail') MÀ "Đến ngày" (currentWorkStatusTo) đã qua, thì tự
+// trả status về ACTIVE + xoá cờ — KHÔNG đụng tới currentWorkStatusDetail/From/To (giữ nguyên để HR còn
+// thấy lịch sử, tự xoá tay khi nào thấy cần). KHÔNG đụng tới hồ sơ ON_LEAVE do HR tự bấm tay (cờ không
+// bật). Trả về mảng employeeCode đã bị đổi (để job ghi log/thống kê, không bắt buộc dùng).
+function autoRevertExpiredWorkStatusLeaves(list) {
+  const today = todayISO();
+  const reverted = [];
+  for (const p of list || []) {
+    if (!p || p.status !== 'ON_LEAVE' || !p.workStatusAutoSetLeave) continue;
+    if (!p.currentWorkStatusTo || p.currentWorkStatusTo >= today) continue;
+    p.status = 'ACTIVE';
+    p.workStatusAutoSetLeave = false;
+    p.updatedAt = nowVN();
+    p.updatedBy = 'system';
+    reverted.push(p.employeeCode);
+  }
+  return reverted;
 }
 
 // ===== Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) =====
@@ -2039,5 +2083,6 @@ module.exports = {
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, clearPositionAssignmentForce, assertValidManualStatusTransition, resolveProfileDisplayName,
-  computeHrReportSummary, computeTenureYears
+  computeHrReportSummary, computeTenureYears,
+  AUTO_ON_LEAVE_WORK_STATUS_DETAILS, autoRevertExpiredWorkStatusLeaves
 };
