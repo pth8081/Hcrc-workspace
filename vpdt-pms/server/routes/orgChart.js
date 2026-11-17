@@ -551,13 +551,16 @@ router.get('/versions/:id/export-xlsx', async (req, res) => {
 async function loadHeadcountReport(versionId) {
   const list = (await getAppDataValue('orgChartVersions')) || [];
   const version = orgChart.requireVersion(list, Number(versionId));
-  const [employeeProfiles, hrProcesses, users, deptAbbrs] = await Promise.all([
+  // laborContracts (11/2026, theo yêu cầu người dùng "thêm cột Đang Thử Việc") — CHỈ dùng để đếm
+  // contractType='PROBATION' + status='ACTIVE', xem lib/headcountReport.js.
+  const [employeeProfiles, hrProcesses, users, deptAbbrs, laborContracts] = await Promise.all([
     getAppDataValue('employeeProfiles').then(v => v || []),
     getAllForCollection('hrProcesses'),
     getAppDataValue('users').then(v => v || []),
-    getAppDataValue('deptAbbrs').then(v => v || {})
+    getAppDataValue('deptAbbrs').then(v => v || {}),
+    getAllForCollection('laborContracts')
   ]);
-  return { version, report: buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs) };
+  return { version, report: buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs, laborContracts) };
 }
 router.get('/versions/:id/headcount-report', async (req, res) => {
   if (!requireView(req, res)) return;

@@ -1246,6 +1246,7 @@ function renderOrgChartHeadcountTable(report) {
     <td class="p-1.5 text-right">${ocFmtNum(report.rootStats?.onLeave)}</td>
     <td class="p-1.5 text-right">${ocFmtNum(report.rootStats?.fullTime)}</td>
     <td class="p-1.5 text-right">${ocFmtNum(report.rootStats?.partTime)}</td>
+    <td class="p-1.5 text-right">${ocFmtNum(report.rootStats?.probation)}</td>
     <td class="p-1.5 text-right ${varianceCls(report.rootStats?.variance)}">${report.rootStats?.variance == null ? '—' : report.rootStats.variance}</td>
   </tr>`;
   const bodyRows = (report.rows || []).map(r => {
@@ -1262,6 +1263,7 @@ function renderOrgChartHeadcountTable(report) {
         <td class="p-1.5 text-right font-bold">${ocFmtNum(r.onLeave)}</td>
         <td class="p-1.5 text-right font-bold">${ocFmtNum(r.fullTime)}</td>
         <td class="p-1.5 text-right font-bold">${ocFmtNum(r.partTime)}</td>
+        <td class="p-1.5 text-right font-bold">${ocFmtNum(r.probation)}</td>
         <td class="p-1.5 text-right font-bold ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
       </tr>`;
     }
@@ -1280,6 +1282,7 @@ function renderOrgChartHeadcountTable(report) {
       <td class="p-1.5 text-right">${ocFmtNum(r.onLeave)}</td>
       <td class="p-1.5 text-right">${ocFmtNum(r.fullTime)}</td>
       <td class="p-1.5 text-right">${ocFmtNum(r.partTime)}</td>
+      <td class="p-1.5 text-right">${ocFmtNum(r.probation)}</td>
       <td class="p-1.5 text-right ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
     </tr>`;
   }).join('');
@@ -1290,12 +1293,12 @@ async function openOrgChartHeadcountModal() {
   document.getElementById('btnOrgChartHeadcountExportXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report/export-xlsx`;
   document.getElementById('btnOrgChartHeadcountTemplateXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-template/export-xlsx`;
   document.getElementById('orgChartHeadcountModal').classList.remove('hidden');
-  document.getElementById('orgChartHeadcountTableBody').innerHTML = '<tr><td colspan="15" class="p-2 text-center text-gray-400">Đang tải...</td></tr>';
+  document.getElementById('orgChartHeadcountTableBody').innerHTML = '<tr><td colspan="16" class="p-2 text-center text-gray-400">Đang tải...</td></tr>';
   try {
     const report = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
     renderOrgChartHeadcountTable(report);
   } catch (err) {
-    document.getElementById('orgChartHeadcountTableBody').innerHTML = `<tr><td colspan="15" class="p-2 text-center text-red-600">⛔ ${escapeHtml(err.message)}</td></tr>`;
+    document.getElementById('orgChartHeadcountTableBody').innerHTML = `<tr><td colspan="16" class="p-2 text-center text-red-600">⛔ ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 function closeOrgChartHeadcountModal() {

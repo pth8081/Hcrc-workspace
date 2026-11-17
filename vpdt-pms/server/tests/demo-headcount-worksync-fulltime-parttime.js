@@ -104,6 +104,8 @@ async function main() {
 
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(String(err && err.message || err)));
+  page.on('console', (msg) => console.log('[console]', msg.type(), msg.text()));
+  page.on('requestfailed', (req) => console.log('[requestfailed]', req.url(), req.failure()?.errorText));
 
   await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'load' });
 

@@ -4291,6 +4291,18 @@ theo đúng vị trí trong cây**.
     báo cáo**, hoàn toàn độc lập với Thực Tế/Chênh Lệch, không cộng/trừ gì
     vào 2 cột đó. Hồ sơ không khớp cả 2 (rỗng, hoặc danh mục đổi hẳn sang
     giá trị khác không còn chữ Full/Part) không rơi vào cột nào.
+  - **"Đang Thử Việc" (11/2026, theo yêu cầu người dùng)**: đếm theo **Hợp
+    Đồng Lao Động** của đúng nhân viên đang giữ vị trí đó — `Loại hợp đồng =
+    Thử việc` VÀ `Trạng thái = Đang hiệu lực`. **KHÔNG lấy từ Quy Trình
+    Onboarding** (Onboarding chỉ có 3 trạng thái IN_PROGRESS/COMPLETED/
+    CANCELLED, không phân biệt được "đang thử việc" khỏi các giai đoạn
+    khác trong quy trình) — Hợp Đồng Lao Động là nguồn chuẩn nhất, không bị
+    ảnh hưởng bởi quyết định ở bước Đánh Giá Thử Việc hay việc hồ sơ nhân
+    sự có kịp cập nhật hay không. Cùng triết lý Kiêm Nhiệm/Full Time/Part
+    Time: CHỈ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch.
+    Lưu ý: nếu HR quên xử lý bước Đánh Giá Thử Việc sau khi hết hạn thử
+    việc, người đó vẫn bị đếm vào cột này cho tới khi HR xử lý (xem mục
+    "✏️ Chấm Dứt Thử Việc" ngay dưới).
   - **Chênh Lệch** = Định Biên − Thực Tế (đơn giản, nhất quán — vì Thực Tế
     đã không còn chứa Kiêm Nhiệm nên không cần công thức riêng nữa). Dương
     (tô cam) = còn thiếu người, cần tuyển thêm đúng số đó; âm (tô đỏ) = đang

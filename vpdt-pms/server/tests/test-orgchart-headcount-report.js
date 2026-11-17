@@ -190,7 +190,9 @@ stubModule('lib/auth', {
   },
   blockIfMustChangePassword: (req, res, next) => next()
 });
-stubModule('lib/recordStore', { getAllForCollection: async () => [] });
+// getAllForCollection('laborContracts') (11/2026, theo yêu cầu người dùng "thêm cột Đang Thử Việc") —
+// đọc từ APP_DATA.laborContracts (test tự set khi cần), các collection khác vẫn trả [] như cũ.
+stubModule('lib/recordStore', { getAllForCollection: async (collection) => (collection === 'laborContracts' ? (APP_DATA.laborContracts || []) : []) });
 
 const express = require('express');
 const orgChartRoutes = require('../routes/orgChart');
@@ -230,7 +232,7 @@ async function main() {
     await runPureTests(run);
     await runSelfOnlyTests(run);
 
-    let versionId, posNodeId;
+    let versionId, posNodeId, posPositionKey;
     await run.run('POST /nodes: headcountQuota hợp lệ -> lưu đúng; âm/không phải số -> 400', async () => {
       resetAppData();
       const created = await api('POST', '/api/org-chart/bootstrap', { versionName: 'CCTC Test' }, ADMIN);
@@ -243,6 +245,7 @@ async function main() {
       assertEqual(ok.status, 200, 'headcountQuota hợp lệ phải tạo được');
       assertEqual(ok.body.node.headcountQuota, 4, 'headcountQuota lưu đúng giá trị 4');
       posNodeId = ok.body.node.nodeId;
+      posPositionKey = ok.body.node.positionKey;
     });
 
     await run.run('PATCH /nodes/:id: sửa headcountQuota (số mới rồi về null) -> lưu đúng cả 2 lượt', async () => {
@@ -264,6 +267,27 @@ async function main() {
       assertEqual(posRow.quota, 2, 'Dòng báo cáo phản ánh đúng headcountQuota=2 vừa đặt');
       assertEqual(posRow.actualTotal, 0, 'Chưa có ai giữ vị trí -> actualTotal=0');
       assertEqual(posRow.variance, 2, 'variance = 2 - 0 = 2 (cần tuyển 2)');
+      assertEqual(posRow.probation, 0, 'Chưa có ai giữ vị trí -> probation=0');
+    });
+
+    // "Đang Thử Việc" (11/2026, theo yêu cầu người dùng) — qua route THẬT GET /headcount-report, xác
+    // nhận loadHeadcountReport() (routes/orgChart.js) có gọi getAllForCollection('laborContracts') và
+    // truyền đúng xuống buildFlatGroupedHeadcountReport().
+    await run.run('GET /headcount-report: cột "probation" đếm đúng qua laborContracts THẬT (route thật, không chỉ hàm thuần)', async () => {
+      APP_DATA.employeeProfiles = [{ employeeCode: 'TEST001', positionKey: posPositionKey, status: 'ACTIVE' }];
+      APP_DATA.laborContracts = [{ employeeCode: 'TEST001', contractType: 'PROBATION', status: 'ACTIVE' }];
+      const ok = await api('GET', `/api/org-chart/versions/${versionId}/headcount-report`, undefined, ADMIN);
+      assertEqual(ok.status, 200);
+      const posRow = ok.body.rows.find(r => r.nodeId === posNodeId);
+      assertEqual(posRow.probation, 1, 'Route thật phải đọc laborContracts và đếm đúng 1 người Đang Thử Việc');
+      // Hợp đồng Thử việc đã TERMINATED (không còn ACTIVE) -> KHÔNG tính nữa.
+      APP_DATA.laborContracts = [{ employeeCode: 'TEST001', contractType: 'PROBATION', status: 'TERMINATED' }];
+      const after = await api('GET', `/api/org-chart/versions/${versionId}/headcount-report`, undefined, ADMIN);
+      const posRowAfter = after.body.rows.find(r => r.nodeId === posNodeId);
+      assertEqual(posRowAfter.probation, 0, 'Hợp đồng Thử việc đã Chấm dứt -> không còn tính Đang Thử Việc');
+      // dọn lại để không ảnh hưởng các test sau.
+      APP_DATA.employeeProfiles = [];
+      APP_DATA.laborContracts = [];
     });
 
     await run.run('GET /headcount-report/export-xlsx: 200, Content-Type Excel, buffer là file zip hợp lệ', async () => {
