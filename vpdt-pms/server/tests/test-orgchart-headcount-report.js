@@ -190,9 +190,10 @@ stubModule('lib/auth', {
   },
   blockIfMustChangePassword: (req, res, next) => next()
 });
-// getAllForCollection('laborContracts') (11/2026, theo yêu cầu người dùng "thêm cột Đang Thử Việc") —
-// đọc từ APP_DATA.laborContracts (test tự set khi cần), các collection khác vẫn trả [] như cũ.
-stubModule('lib/recordStore', { getAllForCollection: async (collection) => (collection === 'laborContracts' ? (APP_DATA.laborContracts || []) : []) });
+// getAllForCollection('hrProcesses') (11/2026, ĐỔI NGUỒN "Đang Thử Việc" theo yêu cầu TRỰC TIẾP người
+// dùng — xem chú thích đầy đủ ở computeHeadcountReport(), lib/headcountReport.js) — đọc từ
+// APP_DATA.hrProcesses (test tự set khi cần), các collection khác vẫn trả [] như cũ.
+stubModule('lib/recordStore', { getAllForCollection: async (collection) => (collection === 'hrProcesses' ? (APP_DATA.hrProcesses || []) : []) });
 
 const express = require('express');
 const orgChartRoutes = require('../routes/orgChart');
@@ -270,24 +271,26 @@ async function main() {
       assertEqual(posRow.probation, 0, 'Chưa có ai giữ vị trí -> probation=0');
     });
 
-    // "Đang Thử Việc" (11/2026, theo yêu cầu người dùng) — qua route THẬT GET /headcount-report, xác
-    // nhận loadHeadcountReport() (routes/orgChart.js) có gọi getAllForCollection('laborContracts') và
-    // truyền đúng xuống buildFlatGroupedHeadcountReport().
-    await run.run('GET /headcount-report: cột "probation" đếm đúng qua laborContracts THẬT (route thật, không chỉ hàm thuần)', async () => {
+    // "Đang Thử Việc" (11/2026, ĐỔI NGUỒN theo yêu cầu TRỰC TIẾP người dùng — "trong hợp đồng làm gì có
+    // cái nào là đang thử việc nhỉ?... Lên báo cáo thử việc, bạn phải lấy ở module onboarding, nhưng mà
+    // tình trạng là đang thực hiện. Nếu mà hủy hoặc chấm dứt thử việc thì là sẽ mất đi") — qua route THẬT
+    // GET /headcount-report, xác nhận loadHeadcountReport() (routes/orgChart.js) có gọi
+    // getAllForCollection('hrProcesses') và truyền đúng xuống buildFlatGroupedHeadcountReport().
+    await run.run('GET /headcount-report: cột "probation" đếm đúng qua hrProcesses ONBOARDING IN_PROGRESS THẬT (route thật, không chỉ hàm thuần)', async () => {
       APP_DATA.employeeProfiles = [{ employeeCode: 'TEST001', positionKey: posPositionKey, status: 'ACTIVE' }];
-      APP_DATA.laborContracts = [{ employeeCode: 'TEST001', contractType: 'PROBATION', status: 'ACTIVE' }];
+      APP_DATA.hrProcesses = [{ processType: 'ONBOARDING', status: 'IN_PROGRESS', employeeCode: 'TEST001' }];
       const ok = await api('GET', `/api/org-chart/versions/${versionId}/headcount-report`, undefined, ADMIN);
       assertEqual(ok.status, 200);
       const posRow = ok.body.rows.find(r => r.nodeId === posNodeId);
-      assertEqual(posRow.probation, 1, 'Route thật phải đọc laborContracts và đếm đúng 1 người Đang Thử Việc');
-      // Hợp đồng Thử việc đã TERMINATED (không còn ACTIVE) -> KHÔNG tính nữa.
-      APP_DATA.laborContracts = [{ employeeCode: 'TEST001', contractType: 'PROBATION', status: 'TERMINATED' }];
+      assertEqual(posRow.probation, 1, 'Route thật phải đọc hrProcesses và đếm đúng 1 người Đang Thử Việc');
+      // Quy trình Onboarding đã CANCELLED (chấm dứt thử việc) -> KHÔNG tính nữa.
+      APP_DATA.hrProcesses = [{ processType: 'ONBOARDING', status: 'CANCELLED', employeeCode: 'TEST001' }];
       const after = await api('GET', `/api/org-chart/versions/${versionId}/headcount-report`, undefined, ADMIN);
       const posRowAfter = after.body.rows.find(r => r.nodeId === posNodeId);
-      assertEqual(posRowAfter.probation, 0, 'Hợp đồng Thử việc đã Chấm dứt -> không còn tính Đang Thử Việc');
+      assertEqual(posRowAfter.probation, 0, 'Quy trình Onboarding đã Huỷ/Chấm dứt thử việc -> không còn tính Đang Thử Việc');
       // dọn lại để không ảnh hưởng các test sau.
       APP_DATA.employeeProfiles = [];
-      APP_DATA.laborContracts = [];
+      APP_DATA.hrProcesses = [];
     });
 
     await run.run('GET /headcount-report/export-xlsx: 200, Content-Type Excel, buffer là file zip hợp lệ', async () => {

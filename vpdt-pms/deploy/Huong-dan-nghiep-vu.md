@@ -4291,20 +4291,30 @@ theo đúng vị trí trong cây**.
     báo cáo**, hoàn toàn độc lập với Thực Tế/Chênh Lệch, không cộng/trừ gì
     vào 2 cột đó. Hồ sơ không khớp cả 2 (rỗng, hoặc danh mục đổi hẳn sang
     giá trị khác không còn chữ Full/Part) không rơi vào cột nào.
-  - **"Đang Thử Việc" (11/2026, theo yêu cầu người dùng)**: đếm theo **Hợp
-    Đồng Lao Động** của đúng nhân viên đang giữ vị trí đó — `Loại hợp đồng =
-    Thử việc` VÀ `Trạng thái = Đang hiệu lực`. **KHÔNG lấy từ Quy Trình
-    Onboarding** (Onboarding chỉ có 3 trạng thái IN_PROGRESS/COMPLETED/
-    CANCELLED, không phân biệt được "đang thử việc" khỏi các giai đoạn
-    khác trong quy trình) — Hợp Đồng Lao Động là nguồn chuẩn nhất, không bị
-    ảnh hưởng bởi quyết định ở bước Đánh Giá Thử Việc hay việc hồ sơ nhân
-    sự có kịp cập nhật hay không. Cùng triết lý Kiêm Nhiệm/Full Time/Part
-    Time: CHỈ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch.
-    Lưu ý: nếu HR quên xử lý bước Đánh Giá Thử Việc sau khi hết hạn thử
-    việc, người đó vẫn bị đếm vào cột này cho tới khi HR xử lý — bấm
-    **"✏️ Chấm Dứt Thử Việc"** (mục 4.5.4 Hợp Đồng Lao Động, hoặc ngay
-    trong Chi Tiết quy trình Onboarding liên kết) nếu quyết định không
-    tiếp tục sử dụng lao động.
+  - **"Đang Thử Việc" (11/2026, ĐỔI NGUỒN theo phản hồi TRỰC TIẾP của người
+    dùng sau khi dùng thật)**: đếm theo **Quy Trình Onboarding** của đúng
+    nhân viên đang giữ vị trí đó — `processType = ONBOARDING` VÀ `Trạng
+    thái = Đang thực hiện (IN_PROGRESS)`. Quyết định ban đầu (đọc từ Hợp
+    Đồng Lao Động, `Loại hợp đồng = Thử việc` + `Trạng thái = Đang hiệu
+    lực`) bị người dùng phát hiện **không phản ánh đúng thực tế sử dụng**:
+    Hợp Đồng Lao Động loại Thử việc chỉ tự tạo/kích hoạt khi HR hoàn thành
+    đúng 2 việc checklist cụ thể trong Onboarding ("Gửi thư mời nhận việc &
+    hợp đồng lao động" rồi "Đón tiếp, ký hợp đồng chính thức") — trong thực
+    tế hầu như không làm đủ 2 bước này nên cột gần như luôn ra 0 dù nhân
+    viên rõ ràng đang thử việc. Nay đếm thẳng theo quy trình Onboarding:
+    vào "Đang Thử Việc" ngay khi tạo Onboarding, **tự mất khỏi cột này**
+    khi quy trình **Hoàn Tất** (qua thử việc/lên chính thức) hoặc bị **Huỷ/
+    Chấm Dứt Thử Việc** (status chuyển COMPLETED/CANCELLED) — không cần
+    thêm bước tạo Hợp Đồng Lao Động riêng mới thấy số đúng. Cùng triết lý
+    Kiêm Nhiệm/Full Time/Part Time: CHỈ để tham khảo/báo cáo, không ảnh
+    hưởng Thực Tế/Chênh Lệch. Muốn 1 người không còn tính vào cột này
+    trước khi quy trình tự Hoàn Tất (nghỉ ngang/không đạt thử việc) — bấm
+    **"❌ Huỷ Quy Trình"** ngay trong Chi Tiết quy trình Onboarding đó (luôn
+    dùng được, không cần đã có Hợp Đồng Lao Động nào), hoặc **"✏️ Chấm Dứt
+    Thử Việc"** (mục 4.5.4 Hợp Đồng Lao Động, hoặc ngay trong Chi Tiết quy
+    trình Onboarding liên kết — CHỈ dùng được khi đã có Hợp Đồng Lao Động
+    Thử việc cho người đó, cascade thêm việc chuyển Hồ Sơ Nhân Sự sang "Đã
+    nghỉ" ngay).
   - **Chênh Lệch** = Định Biên − Thực Tế (đơn giản, nhất quán — vì Thực Tế
     đã không còn chứa Kiêm Nhiệm nên không cần công thức riêng nữa). Dương
     (tô cam) = còn thiếu người, cần tuyển thêm đúng số đó; âm (tô đỏ) = đang

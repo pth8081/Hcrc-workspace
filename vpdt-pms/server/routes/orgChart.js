@@ -551,16 +551,16 @@ router.get('/versions/:id/export-xlsx', async (req, res) => {
 async function loadHeadcountReport(versionId) {
   const list = (await getAppDataValue('orgChartVersions')) || [];
   const version = orgChart.requireVersion(list, Number(versionId));
-  // laborContracts (11/2026, theo yêu cầu người dùng "thêm cột Đang Thử Việc") — CHỈ dùng để đếm
-  // contractType='PROBATION' + status='ACTIVE', xem lib/headcountReport.js.
-  const [employeeProfiles, hrProcesses, users, deptAbbrs, laborContracts] = await Promise.all([
+  // "Đang Thử Việc" (11/2026, ĐỔI NGUỒN theo yêu cầu TRỰC TIẾP người dùng — xem chú thích đầy đủ ở
+  // computeHeadcountReport(), lib/headcountReport.js): đếm trực tiếp từ hrProcesses (processType=
+  // 'ONBOARDING' && status='IN_PROGRESS'), KHÔNG còn cần đọc riêng collection laborContracts nữa.
+  const [employeeProfiles, hrProcesses, users, deptAbbrs] = await Promise.all([
     getAppDataValue('employeeProfiles').then(v => v || []),
     getAllForCollection('hrProcesses'),
     getAppDataValue('users').then(v => v || []),
-    getAppDataValue('deptAbbrs').then(v => v || {}),
-    getAllForCollection('laborContracts')
+    getAppDataValue('deptAbbrs').then(v => v || {})
   ]);
-  return { version, report: buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs, laborContracts) };
+  return { version, report: buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs) };
 }
 router.get('/versions/:id/headcount-report', async (req, res) => {
   if (!requireView(req, res)) return;

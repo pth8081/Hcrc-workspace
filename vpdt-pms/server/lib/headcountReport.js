@@ -78,10 +78,9 @@ function computePositionStats(version, node, employeeProfiles, offboardingUserna
     const empType = classifyEmploymentType(p.employmentType);
     if (empType === 'FULL_TIME') fullTime++;
     else if (empType === 'PART_TIME') partTime++;
-    // "Đang Thử Việc" (11/2026, theo yêu cầu người dùng) — KHÔNG lấy từ hrProcesses (Onboarding chỉ có
-    // IN_PROGRESS/COMPLETED/CANCELLED, không phân biệt được "đang thử việc" khỏi các giai đoạn khác) —
-    // lấy từ Hợp Đồng Lao Động: contractType='PROBATION' VÀ status='ACTIVE' là nguồn CHUẨN NHẤT, không
-    // bị ảnh hưởng bởi quyết định Onboarding/hồ sơ (xem probationEmployeeCodes ở computeHeadcountReport()).
+    // "Đang Thử Việc" (11/2026, ĐỔI NGUỒN theo yêu cầu TRỰC TIẾP người dùng — xem chú thích đầy đủ ở
+    // probationEmployeeCodes trong computeHeadcountReport()): lấy từ quy trình Onboarding (hrProcesses)
+    // đang IN_PROGRESS, KHÔNG còn lấy từ Hợp Đồng Lao Động (contractType=PROBATION) nữa.
     if (p.employeeCode && probationEmployeeCodes && probationEmployeeCodes.has(p.employeeCode)) probation++;
     if (p.username && offboardingUsernames.has(p.username)) { offboarding++; continue; }
     if (p.status === 'ON_LEAVE') { onLeave++; continue; }
@@ -121,7 +120,7 @@ function addStats(a, b) {
 
 // Trả về { rows } — mảng phẳng (DFS, giữ nguyên thứ tự hiển thị cây) gồm cả node DEPARTMENT/COMPANY
 // (dòng cộng dồn, không có jobTitle/positionKey riêng) lẫn node POSITION (dòng lá, đủ breakdown).
-function computeHeadcountReport(version, employeeProfiles, hrProcesses, users, laborContracts = []) {
+function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
   const nodes = version?.nodes || [];
   const childrenByParent = buildChildrenMap(nodes);
   const offboardingUsernames = new Set(
@@ -129,12 +128,19 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users, l
       .filter(h => h?.processType === 'OFFBOARDING' && h?.status === 'IN_PROGRESS' && h.employeeUsername)
       .map(h => h.employeeUsername)
   );
-  // probationEmployeeCodes — xem chú thích đầy đủ ở computePositionStats(). contractType='PROBATION' VÀ
-  // status='ACTIVE' là nguồn CHUẨN cho "Đang Thử Việc", KHÔNG đọc gì từ hrProcesses/employeeProfiles.
+  // probationEmployeeCodes — ĐỔI NGUỒN (11/2026, theo yêu cầu TRỰC TIẾP người dùng sau khi xem lại thực
+  // tế: "trong hợp đồng làm gì có cái nào là đang thử việc nhỉ? Khi mà tạo onboarding là nó báo là làm
+  // việc luôn đấy chứ" — nguồn CŨ (laborContracts, contractType='PROBATION' + status='ACTIVE') đòi HR
+  // phải hoàn thành ĐÚNG 2 việc checklist cụ thể trong Onboarding (xem lib/laborContract.js) mới có hợp
+  // đồng Thử việc ACTIVE — trong thực tế hầu như không ai làm đủ 2 bước đó nên cột này gần như luôn ra
+  // 0). Nguồn MỚI: trực tiếp quy trình Onboarding (hrProcesses) đang "Đang thực hiện" (processType=
+  // 'ONBOARDING' && status='IN_PROGRESS') — tự mất khỏi cột này khi quy trình Hoàn Tất (qua thử việc) hoặc
+  // bị Huỷ/Chấm Dứt Thử Việc (status chuyển COMPLETED/CANCELLED), đúng nghĩa "đang trong giai đoạn thử
+  // việc" mà không cần tạo thêm Hợp Đồng Lao Động riêng.
   const probationEmployeeCodes = new Set(
-    (laborContracts || [])
-      .filter(c => c?.contractType === 'PROBATION' && c?.status === 'ACTIVE' && c.employeeCode)
-      .map(c => c.employeeCode)
+    (hrProcesses || [])
+      .filter(h => h?.processType === 'ONBOARDING' && h?.status === 'IN_PROGRESS' && h.employeeCode)
+      .map(h => h.employeeCode)
   );
   const rows = [];
 
@@ -229,8 +235,8 @@ function collectPositionsInBucket(node, childrenByParent, extraPathParts, out) {
   }
 }
 
-function buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs, laborContracts = []) {
-  const { rows: statRows } = computeHeadcountReport(version, employeeProfiles, hrProcesses, users, laborContracts);
+function buildFlatGroupedHeadcountReport(version, employeeProfiles, hrProcesses, users, deptAbbrs) {
+  const { rows: statRows } = computeHeadcountReport(version, employeeProfiles, hrProcesses, users);
   const statsByNodeId = new Map(statRows.map(r => [r.nodeId, r]));
   const nodes = version?.nodes || [];
   const childrenByParent = buildFlatChildrenMap(nodes);
@@ -326,9 +332,10 @@ function buildFlatHeadcountReportWorkbook(report) {
     // Đếm theo danh mục "Hình thức làm việc" (employeeProfiles.employmentType) — xem classifyEmploymentType().
     { header: 'Full Time', key: 'fullTime', width: 10 },
     { header: 'Part Time', key: 'partTime', width: 10 },
-    // "Đang Thử Việc" (11/2026, theo yêu cầu người dùng) — đếm theo Hợp Đồng Lao Động contractType=
-    // PROBATION + status=ACTIVE (KHÔNG lấy từ Onboarding — xem chú thích computePositionStats()). Cùng
-    // triết lý Kiêm Nhiệm/Full Time/Part Time: CHỈ tham khảo, KHÔNG nằm trong Thực tế/Chênh lệch.
+    // "Đang Thử Việc" (11/2026, ĐỔI NGUỒN theo yêu cầu TRỰC TIẾP người dùng — xem chú thích đầy đủ ở
+    // computeHeadcountReport()) — đếm theo quy trình Onboarding (hrProcesses) đang IN_PROGRESS, KHÔNG
+    // còn lấy từ Hợp Đồng Lao Động. Cùng triết lý Kiêm Nhiệm/Full Time/Part Time: CHỈ tham khảo, KHÔNG
+    // nằm trong Thực tế/Chênh lệch.
     { header: 'Đang Thử Việc', key: 'probation', width: 12 },
     { header: 'Chênh lệch', key: 'variance', width: 10 }
   ];

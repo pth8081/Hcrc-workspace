@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**30.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.85 (2026-11): Báo Cáo Định Biên — đổi nguồn cột "Đang Thử Việc" sang Quy Trình Onboarding (ĐÃ VÁ theo phản hồi người dùng)
+
+Người dùng phản hồi TRỰC TIẾP sau khi dùng thử cột "Đang Thử Việc" thêm ở đợt trước (nguồn cũ: Hợp Đồng
+Lao Động `contractType=PROBATION` + `status=ACTIVE`): "trong hợp đồng làm gì có cái nào là đang thử việc
+nhỉ? Khi mà tạo onboarding là nó báo là làm việc luôn đấy chứ... Lên báo cáo thử việc, bạn phải lấy ở
+module onboarding, nhưng mà tình trạng là đang thực hiện. Nếu mà hủy hoặc chấm dứt thử việc thì là sẽ
+mất đi."
+
+- Nguyên nhân thật: Hợp Đồng Lao Động loại Thử việc chỉ tự tạo (DRAFT) khi HR hoàn thành việc checklist
+  "Gửi thư mời nhận việc & hợp đồng lao động" rồi tự kích hoạt (ACTIVE) khi hoàn thành tiếp "Đón tiếp, ký
+  hợp đồng chính thức" — trong thực tế hầu như không ai làm đủ 2 bước cụ thể này nên cột gần như luôn ra
+  0, dù nhân viên rõ ràng đang trong thời gian thử việc.
+- Sửa: `lib/headcountReport.js::computeHeadcountReport()`/`buildFlatGroupedHeadcountReport()` đổi nguồn
+  đếm "Đang Thử Việc" sang trực tiếp `hrProcesses` (`processType='ONBOARDING' && status='IN_PROGRESS'`),
+  bỏ hẳn tham số `laborContracts` (không còn cần đọc collection này cho báo cáo này nữa).
+  `routes/orgChart.js::loadHeadcountReport()` bỏ fetch `getAllForCollection('laborContracts')` tương ứng.
+  Tự mất khỏi cột khi quy trình Hoàn Tất (qua thử việc) hoặc bị Huỷ/Chấm Dứt Thử Việc (status chuyển
+  COMPLETED/CANCELLED) — đúng yêu cầu người dùng.
+- Cập nhật chú thích trợ giúp ngay trong modal "📋 Báo Cáo Định Biên Nhân Sự" (`public/index.html`) +
+  mục 4.5.1 `Huong-dan-nghiep-vu.md`.
+- Cập nhật test: `tests/test-orgchart-headcount-breakdown-columns.js` (seed `hrProcesses` ONBOARDING
+  IN_PROGRESS/COMPLETED thay vì `laborContracts`), `tests/test-orgchart-headcount-report.js` (stub
+  `getAllForCollection` đổi từ `laborContracts` sang `hrProcesses`, test route thật xác nhận CANCELLED
+  không còn tính). Chạy lại toàn bộ test liên quan Hợp Đồng Lao Động/Chấm Dứt Thử Việc
+  (`test-labor-contract.js` 27/27, `test-terminate-probation.js` 11/11,
+  `test-payroll-probation-salary-rate.js` 5/5) xác nhận KHÔNG bị ảnh hưởng — 2 luồng nghiệp vụ này vẫn
+  hoạt động độc lập với báo cáo Định Biên.
 
 ## v30.84 (2026-11): Onboarding — Phòng Ban/Siêu Thị/Chức Danh đổi sang ô tìm-kiếm-gõ-chọn + LỖI ĐÃ VÁ: "Ngày Vào Làm Việc" không tự điền từ Hồ Sơ Nhân Sự
 
