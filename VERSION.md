@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**30.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.87 (2026-11): Kiểm Kê — vá lỗ hổng pre-warm cache tồn kho offline + thêm tab "📦 Tồn Kho" (có phân quyền riêng)
+
+Người dùng phản hồi TRỰC TIẾP: "trong phần kiểm kê ấy, ở đây tôi không thấy chỗ nào đồng bộ tồn kho mã
+hàng giống ở kiểm soát nhỉ... cho tôi một tab tồn kho để tôi kiểm tra được tất cả tồn kho của siêu thị"
+— kèm phát hiện đúng gốc rễ: Gom Mã/Kiểm Đếm/Kiểm Soát quét offline cần cache Tồn Kho Hệ Thống đã tải
+sẵn trong trình duyệt để tra tên hàng, nhưng trước đây cache này CHỈ được tải khi vào ĐÚNG 1 trong 3 tab
+quét — vào thẳng tab khác rồi mất mạng sẽ có cache rỗng, quét mã nào cũng không ra tên hàng.
+
+- **Fix pre-warm**: `ensureShelfSystemInventoryCacheLoaded()` nay chạy UNCONDITIONAL ngay khi vào module
+  Kiểm Kê ở BẤT KỲ tab nào (`setKiemKeSubTab()`, `module-vanhanh.js`), không chờ đúng tab mới tải.
+- **Tab mới "📦 Tồn Kho"**: xem trực tiếp tình trạng đồng bộ (đã đồng bộ lúc nào / chưa có dữ liệu) +
+  bảng Mã Hàng/Tên Hàng/Tồn Kho theo 1 hoặc nhiều siêu thị (ô tìm-kiếm-đa-chọn), có cache offline riêng.
+  Server: `GET /api/stocktake/system-inventory` (routes/stocktake.js), phạm vi siêu thị tự suy qua
+  `resolveKiemKeInventoryDepts()` (lib/stocktakeEngine.js).
+- **Quyền riêng (SIẾT LẠI sau khi người dùng xem demo bản đầu — "chỉ có admin mới xem... thêm một cái
+  quyền phẳng nữa")**: quyền MỚI `kiemKeInventoryView` (Phân Quyền → khối "27. Kiểm Kê" → "📦 Tab Tồn
+  Kho") — CHỈ admin hoặc người được gán quyền này mới thấy nút tab và vào được route (403 nếu không có,
+  chặn cả ở server không chỉ ẩn nút). Độc lập với `kiemKeReportView`/các quyền kiemKe* khác.
+  **Quan trọng**: nhân viên KHÔNG có quyền này vẫn pre-warm cache tồn kho đúng siêu thị mình bình thường
+  (không qua tab này) nên Gom Mã/Kiểm Đếm/Kiểm Soát offline vẫn hoạt động — chỉ không có màn riêng để
+  tự xem số lượng tồn kho.
+- Thêm 33 kịch bản test mới (`test-stocktake-system-inventory-tab.js` 24/24,
+  `test-stocktake-inventory-tab-ui.js` 9/9), chạy lại toàn bộ test Kiểm Kê/Kiểm Soát Hàng Hóa liên quan —
+  không regression (2 lỗi "Mock chỉ hỗ trợ patch-mode" xác nhận có sẵn từ trước, không liên quan đợt vá
+  này). Cập nhật `Huong-dan-nghiep-vu.md`.
 
 ## v30.86 (2026-11): "Ghi Nhận Trên Kệ" offline — cho lưu tạm được khi đang chọn siêu thị khác (ĐÃ VÁ theo phản hồi người dùng)
 
