@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**30.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.80 (2026-11): Vá 6 test lỗi thời phát hiện lúc chạy regression cho v30.79 (KHÔNG đổi hành vi sản phẩm)
+
+Lúc chạy full regression cho bản vá Tái Tuyển (v30.79), phát hiện 6 file test đỏ SẴN TỪ TRƯỚC (xác nhận
+bằng git-stash: y hệt lỗi dù có/không có thay đổi v30.79) — rà từng file, xác nhận TẤT CẢ là lỗi ở chính
+bài test (hạ tầng giả lập/assertion lỗi thời), KHÔNG phải lỗi sản phẩm thật, nên bản vá này CHỈ sửa file
+test, không đổi bất kỳ hành vi nào của `lib/`/`routes/`/`public/`:
+
+- **`test-hr-discipline-jobgrade-resignation.js`**: gọi `CREATE_MODULE_CONFIGS.hrProcesses.extraValidate()`
+  với tham số thứ 2 (phải là MẢNG hrProcesses thật, dùng để chặn trùng quy trình Offboarding đang chạy)
+  nhưng lại truyền CHUỖI `'hrProcesses'` — copy nhầm khuôn gọi của vài test khác (operationStoreOpenings/
+  operationRepairs) mà `extraValidate()` của 2 module đó KHÔNG hề đọc tham số này nên không lộ ra. Sửa
+  lại truyền đúng `[]`.
+- **`test-hr-profile-90field-ui.js`/`test-hr-profile-field-visibility.js`/`test-hr-onboarding-queue-export.js`**:
+  cả 3 chỉ seed user test MỚI vào `DB.users` (phía browser) mà QUÊN seed thêm vào `h.state.users` (hạ
+  tầng `_mockBackend.js` dùng chung cho mọi route khác ngoài route Hồ Sơ Nhân Sự riêng của từng bài —
+  2 mảng ĐỘC LẬP, không tự đồng bộ). `prefetchLazyTabResources()` (chạy ngầm ngay sau đăng nhập) gọi vài
+  API khác (tab Truyền Thông Nội Bộ/Báo Cáo Nhân Sự/Hệ Thống) đi qua `_mockBackend.js` — user mới không
+  có trong `h.state.users` nên bị 401 "Chưa đăng nhập" dù KHÔNG liên quan gì tới chính tính năng đang
+  test, kích hoạt `handleSessionExpired()` tự đăng xuất GIỮA bài test (currentUser bất ngờ về null) —
+  đúng nguyên nhân các lỗi "Cannot read properties of null (reading 'perms')"/timeout chờ phần tử DOM.
+  Sửa: seed thêm đúng y hệt user đó vào `h.state.users`.
+- **`test-hr-profile-field-visibility.js`**: 2 assertion đếm "đủ 33 field nhạy cảm" đã lỗi thời — field
+  `transfers` được thêm vào `SENSITIVE_FIELDS` (11/2026) sau khi bài test này viết, số thật hiện tại là
+  34. Sửa lại số mong đợi, không đổi `SENSITIVE_FIELDS`.
+- **`test-hr-profile-legacy-fields.js`**: ô "Quan hệ" người phụ thuộc (`.hrpf-dep-rel`) đã đổi từ input
+  chữ sang `<select>` nguồn `DB.relationshipTypes` (cùng đợt đổi "Trình độ học vấn" sang select trước
+  đó) nhưng bài test vẫn gọi `page.fill()` (chỉ dùng được cho input/textarea) — sửa seed danh mục trước
+  khi thêm dòng + đổi sang `page.selectOption()`, đúng khuôn `.hrpf-edu-degree` đã có sẵn.
+- **`test-hr-profile.js`**: assertion "danh sách nhẹ KHÔNG được lộ username" đã lỗi thời — field
+  `username` được THÊM có chủ đích vào `GET /employee-directory` (11/2026, theo yêu cầu người dùng "dán
+  nhiều Mã Nhân Viên để tự động thêm vào ô chọn người") — sửa lại assertion khớp hành vi hiện tại
+  (username PHẢI có mặt, không còn ẩn).
 
 ## v30.79 (2026-11): Fix "🔍 Kiểm Tra Nhân Sự Cũ" (Tái Tuyển, tạo Onboarding) không tìm thấy nhân sự cũ bằng CCCD/CMND
 

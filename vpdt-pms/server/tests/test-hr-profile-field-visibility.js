@@ -93,6 +93,18 @@ async function main() {
     // (perms: {admin:true} thôi) trước khi bài test này chạy; push thêm 1 bản "admin" khác sẽ để lại 2
     // phần tử trùng username, và DB.users.find() (xem loginAs() ở _harness-contract.js) luôn khớp bản
     // ĐẦU TIÊN (bản seed mặc định, KHÔNG có hrProfileManage) — ghi đè thay vì push mới sửa đúng bản.
+    //
+    // LỖI ĐÃ VÁ: cũng PHẢI upsert h.state.users (hạ tầng _mockBackend.js, mảng ĐỘC LẬP với DB.users —
+    // xem buildBrowserDB() ở _seed.js, DB.users chỉ là 1 bản CLONE gửi sang browser lúc khởi tạo, không
+    // còn đồng bộ ngược sau đó) — nếu không, getUser() của _mockBackend.js ném 401 cho qltt01/nv001emp
+    // (không có trong seed mặc định) ở bất kỳ request ngầm nào đi qua nó (vd prefetchLazyTabResources()
+    // sau finishLogin()), khiến handleSessionExpired() tự logout() giữa bài test, currentUser bị null
+    // bất ngờ — đúng nguyên nhân timeout chờ "#hrpfMeContainer" (EMP1 xem Hồ Sơ Của Tôi) không hiện ra.
+    [ADMIN, MGR1, EMP1].forEach((u) => {
+      const idx = h.state.users.findIndex((x) => x.username === u.username);
+      if (idx >= 0) h.state.users[idx] = u; else h.state.users.push(u);
+    });
+
     await page.evaluate((users) => {
       users.forEach((u) => {
         const idx = DB.users.findIndex((x) => x.username === u.username);
@@ -133,7 +145,7 @@ async function main() {
     await page.waitForSelector('#hrpfSelfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const selfCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-self-field-config-cb').length);
-    check('Modal "Trường Xem Của Tôi" liệt kê đủ 33 field nhạy cảm (10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột +bankAccountHolderName +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan — đợt vá rò rỉ field nhạy cảm)', selfCbCount === 33);
+    check('Modal "Trường Xem Của Tôi" liệt kê đủ 34 field nhạy cảm (10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột +bankAccountHolderName +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan — đợt vá rò rỉ field nhạy cảm; 11/2026: +transfers)', selfCbCount === 34);
     await page.check('.hrpf-self-field-config-cb[value="dateOfBirth"]');
     await page.click('#hrpfSelfFieldConfigModal [data-op="saveHrpfSelfFieldConfig"]');
     await page.waitForTimeout(200);
@@ -145,7 +157,7 @@ async function main() {
     await page.waitForSelector('#hrpfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const mgrCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-field-config-cb').length);
-    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 33 field (đã mở rộng 10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột +bankAccountHolderName +6 field wired — đợt vá rò rỉ field nhạy cảm)', mgrCbCount === 33);
+    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 34 field (đã mở rộng 10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột +bankAccountHolderName +6 field wired — đợt vá rò rỉ field nhạy cảm; 11/2026: +transfers)', mgrCbCount === 34);
     await page.check('.hrpf-field-config-cb[value="dependents"]');
     await page.click('#hrpfFieldConfigModal [data-op="saveHrpfFieldConfig"]');
     await page.waitForTimeout(200);

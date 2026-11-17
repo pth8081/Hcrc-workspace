@@ -164,21 +164,24 @@ function main() {
       processType: 'OFFBOARDING', employeeUsername: 'nv1', lastWorkingDate: '2026-11-01',
       resignationReason: '  Nghỉ việc theo nguyện vọng cá nhân  '
     };
-    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload1, 'hrProcesses', HR, appData);
+    // LƯU Ý: tham số thứ 2 của extraValidate() PHẢI là mảng hrProcesses THẬT (dùng để chặn trùng quy
+    // trình Offboarding IN_PROGRESS — xem dupOffboarding ở createValidation.js), KHÔNG phải tên chuỗi
+    // của collection. Mảng rỗng [] ở đây có nghĩa là chưa có quy trình Offboarding nào khác đang chạy.
+    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload1, [], HR, appData);
     check('OFFBOARDING resignationReason: trim khoảng trắng 2 đầu', payload1.resignationReason === 'Nghỉ việc theo nguyện vọng cá nhân');
 
     const payload2 = {
       processType: 'OFFBOARDING', employeeUsername: 'nv1', lastWorkingDate: '2026-11-01',
       resignationReason: 'A'.repeat(500)
     };
-    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload2, 'hrProcesses', HR, appData);
+    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload2, [], HR, appData);
     check('OFFBOARDING resignationReason: cắt tối đa 200 ký tự', payload2.resignationReason.length === 200);
 
     const payload3 = {
       processType: 'OFFBOARDING', employeeUsername: 'nv1', lastWorkingDate: '2026-11-01',
       reason: 'Ghi chú thêm tự do', resignationReason: ''
     };
-    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload3, 'hrProcesses', HR, appData);
+    CREATE_MODULE_CONFIGS.hrProcesses.extraValidate(payload3, [], HR, appData);
     check('OFFBOARDING resignationReason trống -> null, KHÔNG ảnh hưởng field "reason" tự do riêng biệt',
       payload3.resignationReason === null && payload3.reason === 'Ghi chú thêm tự do');
   }

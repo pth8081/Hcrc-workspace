@@ -271,7 +271,10 @@ async function main() {
         assertEqual(codes.includes('NV003'), false, 'NV003 (INACTIVE) KHÔNG được có trong danh sách');
         const nv001 = ok.body.directory.find(d => d.employeeCode === 'NV001');
         assertEqual(nv001.fullName, 'Nhân Viên Một', 'NV001 tra tên qua username đã liên kết (DB.users)');
-        assertEqual('username' in nv001, false, 'Danh sách nhẹ KHÔNG được lộ username');
+        // username (11/2026, theo yêu cầu người dùng "dán nhiều Mã Nhân Viên để tự động thêm vào ô chọn
+        // người") — ĐÃ ĐƯỢC THÊM có chủ đích vào response này (xem chú thích tại route), KHÔNG còn là
+        // field bị ẩn như trước — assertion cũ (mong đợi false) đã lỗi thời, sửa lại khớp hành vi hiện tại.
+        assertEqual(nv001.username, 'emp1', 'Danh sách nhẹ (11/2026) PHẢI có username đã liên kết, phục vụ dán hàng loạt Mã NV');
         assertEqual('status' in nv001, false, 'Danh sách nhẹ KHÔNG được lộ status');
         const nv002 = ok.body.directory.find(d => d.employeeCode === 'NV002');
         assertEqual(nv002.fullName, 'Nguyễn Văn Chưa Liên Kết', 'NV002 (chưa liên kết) tra tên qua processId (DB.hrProcesses)');

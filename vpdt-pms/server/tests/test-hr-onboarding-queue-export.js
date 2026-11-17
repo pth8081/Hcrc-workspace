@@ -82,6 +82,16 @@ async function main() {
 
     epServer = await startEmployeeProfileServer([HR_ONBOARD], [pendingProfile, cancelledProfile]);
 
+    // LỖI ĐÃ VÁ: chỉ seed DB.users (browser) mà quên seed h.state.users (hạ tầng _mockBackend.js dùng
+    // chung — mảng ĐỘC LẬP, xem buildBrowserDB() ở _seed.js) — getUser() của _mockBackend.js ném 401
+    // "Chưa đăng nhập" cho MỌI request ngầm đi qua nó (vd prefetchLazyTabResources() sau finishLogin())
+    // nếu username không có trong h.state.users, khiến handleSessionExpired() tự logout() giữa bài test
+    // (currentUser = null bất ngờ) — đúng nguyên nhân timeout chờ "#hrpfOnboardingQueueTableBody tr".
+    [HR_ONBOARD].forEach((u) => {
+      const idx = h.state.users.findIndex((x) => x.username === u.username);
+      if (idx >= 0) h.state.users[idx] = u; else h.state.users.push(u);
+    });
+
     await page.evaluate((u) => {
       const idx = DB.users.findIndex((x) => x.username === u.username);
       if (idx >= 0) DB.users[idx] = u; else DB.users.push(u);

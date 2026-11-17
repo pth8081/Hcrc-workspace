@@ -103,6 +103,19 @@ async function main() {
       currentWorkStatusDetails: ['Nghỉ thai sản'], nationalIdIssuePlaces: ['Cục cảnh sát QLHC về TTXH']
     });
 
+    // LỖI ĐÃ VÁ: chỉ seed DB.users (phía browser, finishLogin() đọc) mà QUÊN seed thêm vào
+    // h.state.users (hạ tầng _mockBackend.js dùng chung, KHÔNG phải array cùng tham chiếu — 2 bản độc
+    // lập, xem buildBrowserDB() ở _seed.js) — getUser() của _mockBackend.js ném 401 "Chưa đăng nhập"
+    // cho MỌI request đi qua nó (kể cả các tab prefetch ngầm không liên quan gì — vd
+    // prefetchLazyTabResources() sau finishLogin()) nếu username không có trong h.state.users. 401 đó
+    // khiến handleSessionExpired() tự logout() NGAY GIỮA bài test (currentUser = null bất ngờ), gây lỗi
+    // "Cannot read properties of null (reading 'perms')" ở các bước sau — KHÔNG liên quan gì tới chính
+    // tính năng 90 trường đang kiểm chứng.
+    [HR_MGR].forEach((u) => {
+      const idx = h.state.users.findIndex((x) => x.username === u.username);
+      if (idx >= 0) h.state.users[idx] = u; else h.state.users.push(u);
+    });
+
     await page.evaluate((users) => {
       users.forEach((u) => {
         const idx = DB.users.findIndex((x) => x.username === u.username);

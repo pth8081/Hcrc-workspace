@@ -148,9 +148,14 @@ async function main() {
     check('Khối #hrpfEducationRows tồn tại trong DOM (trước đây bị ẩn hoàn toàn -> null)', hasEducationRowsDiv);
 
     // Bấm "+ Thêm dòng" thật, điền dữ liệu, Lưu — xác minh round-trip THẬT qua server (không chỉ render).
+    // LỖI ĐÃ VÁ: "Quan hệ" (.hrpf-dep-rel) cũng đã đổi từ input text sang <select> nguồn DB.relationshipTypes
+    // (cùng đợt 10/2026 đổi "degree" sang select bên dưới) — page.fill() không gọi được trên <select>
+    // ("Element is not an <input>..."), phải seed danh mục TRƯỚC KHI thêm dòng (render options ngay lúc
+    // đó) rồi dùng page.selectOption(), đúng khuôn .hrpf-edu-degree ngay dưới.
+    await page.evaluate(() => { DB.relationshipTypes = ['Con']; });
     await page.click('#hrpfDetailBody [data-op="addHrpfDependentRow"]');
     await page.fill('.hrpf-dependent-row .hrpf-dep-name', 'Nguyễn Văn Con');
-    await page.fill('.hrpf-dependent-row .hrpf-dep-rel', 'Con');
+    await page.selectOption('.hrpf-dependent-row .hrpf-dep-rel', 'Con');
     // degree (10/2026, báo cáo rà soát mẫu Excel mới) — đổi từ input text sang <select> nguồn
     // DB.educationDegrees, harness này không seed danh mục đó nên tự thêm 1 giá trị TRƯỚC KHI thêm dòng
     // (select render options ngay lúc đó, đặt sau sẽ không có tác dụng).
