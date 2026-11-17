@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**30.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.88 (2026-11): Kiểm Kê — cột "Mã Vạch" ở mọi tab hiện mã sản phẩm + xác nhận dùng chung logic quét camera với Kiểm Soát Hàng Hóa
+
+Người dùng phản hồi TRỰC TIẾP: "ở tất cả các tab của kiểm kê thì phải riêng phần mã thì có hai mã nhé, là
+mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy".
+
+- Thêm cột "Mã Vạch" (bên cạnh "Mã Hàng" nội bộ đã có) vào: tab "📦 Tồn Kho", Gom Mã/Kiểm Đếm/Kiểm Soát
+  (bảng quét, kể cả dòng offline chưa đồng bộ), và tab "📊 Báo Cáo" (bảng Chi Tiết Theo Mã Hàng + Xuất
+  Excel + sheet So Sánh Kỳ).
+- Server (`sumCountsByMaHang()`/`computeSessionPrimaryRows()`/`GET /api/stocktake/report`,
+  `routes/stocktake.js`) nay gộp và truyền `maVach` đi cùng `tenHang` như trước đây.
+- Thêm 6 kịch bản test mới (`test-stocktake-mavach-columns.js`).
+
+Người dùng hỏi tiếp: "chắc lấy lại cái logic quét mã ở trong kiểm soát ấy là nó đong được cả mã vạch này,
+mã nội bộ này, với cả mã barcode đấy. Dùng luôn cho cả gom mã kiểm đếm và kiểm soát đi. Đúng cái đó làm
+nó được chưa?" — XÁC NHẬN qua code + test mới (`test-stocktake-camera-scan-reuse.js`, 6/6 pass): Gom Mã/
+Kiểm Đếm/Kiểm Soát ĐÃ dùng chung 100% với "📷 Ghi Nhận"/"💲 Kiểm Tra Giá" bên Kiểm Soát Hàng Hóa — cả logic
+nhận diện (`resolveKkScanItemFromCode()` gọi thẳng `matchShelfSystemInventoryByMaVach()`/`ByMaHang()`/
+`BySuffix()`, nhận cả mã vạch phụ `dsMaVach`) LẪN nút "📷 Quét Mã" bằng camera (`openShelfBarcodeModalForKkScan()`
+dùng chung đúng 1 modal/ZXing/BarcodeDetector) — không phải reimplement riêng, không cần sửa gì thêm.
 
 ## v30.87 (2026-11): Kiểm Kê — vá lỗ hổng pre-warm cache tồn kho offline + thêm tab "📦 Tồn Kho" (có phân quyền riêng)
 
