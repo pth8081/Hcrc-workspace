@@ -125,8 +125,46 @@ function createMockState(seed) {
     // kiemKeShelfLocations (Tab 5, MỚI 12/2026 — danh mục quầy kệ RIÊNG của Kiểm Kê, tách khỏi
     // shelfLocations dùng chung Kiểm Soát Hàng Hóa) — seed rỗng SẴN (khác shelfLocations ở trên vốn CỐ Ý
     // không seed vì dùng chung 2 module) để test không liên quan không cần tự khai báo.
-    kiemKeShelfLocations: []
+    kiemKeShelfLocations: [],
+    // orgChartVersions — (11/2026, Onboarding Phòng Ban/Chức Danh ĐỔI SANG lấy từ Cơ Cấu Tổ Chức, xem
+    // lib/createValidation.js/lib/recordActions.js) — mặc định rỗng (không có bản APPLIED nào) để test
+    // không liên quan không cần tự khai báo; test nào có tạo/sửa Onboarding PHẢI tự seed qua
+    // buildOrgChartFixture() (export cuối file) đúng {dept, jobTitle} dùng ở fixture, nếu không
+    // extraValidate() mới sẽ luôn chặn "Không tìm thấy Vị Trí..." (không có bản APPLIED nào để khớp).
+    orgChartVersions: []
   }, seed || {});
+}
+
+// buildOrgChartFixture(pairs) — (11/2026, hỗ trợ test Onboarding org-chart hard-block MỚI) — dựng 1 bản
+// APPLIED tối giản gồm đúng các node DEPARTMENT/POSITION cần cho từng {dept, jobTitle} trong `pairs`, để
+// orgChart.findPositionNodeForUser() khớp được — mirror đúng field thật addNode() sinh ra (xem
+// lib/orgChart.js), KHÔNG cần gọi qua route admin thật. Mỗi dept lặp lại dùng CHUNG 1 node DEPARTMENT
+// (dedupe theo dept, departmentRef = chính tên dept), mỗi {dept, jobTitle} có đúng 1 node POSITION riêng
+// (requiresDept: true — Onboarding luôn cần đúng 1 Phòng Ban, khớp listOnboardingPositionOptions()).
+function buildOrgChartFixture(pairs) {
+  const nodes = [];
+  let nextId = 1;
+  const deptNodeIdByName = new Map();
+  for (const { dept, jobTitle } of pairs) {
+    if (!deptNodeIdByName.has(dept)) {
+      const deptNodeId = nextId++;
+      nodes.push({
+        nodeId: deptNodeId, parentNodeId: null, nodeType: 'DEPARTMENT',
+        nodeName: dept, departmentRef: dept, posType: null, jobTitle: null,
+        requiresDept: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: false,
+        positionKey: null, displayOrder: 0
+      });
+      deptNodeIdByName.set(dept, deptNodeId);
+    }
+    const posNodeId = nextId++;
+    nodes.push({
+      nodeId: posNodeId, parentNodeId: deptNodeIdByName.get(dept), nodeType: 'POSITION',
+      nodeName: null, departmentRef: null, jobTitle, requiresDept: true, posType: null,
+      jobGrade: null, headcountQuota: null, headcountSelfOnly: null,
+      positionKey: `test-pos-${posNodeId}`, displayOrder: 0
+    });
+  }
+  return { id: 'test-applied-v1', status: 'APPLIED', nodes };
 }
 
 // Bản mock của validateAndPrepareCreate()'s "appData" tham số — khớp đúng cách routes/create.js tự
@@ -191,7 +229,11 @@ function buildAppDataForCreate(moduleKey, state) {
     depts: state.depts, jobTitles: state.jobTitles, storeJobTitles: state.storeJobTitles,
     // hrTaskTemplates — hrProcesses.extraValidate() cần để tự sinh tasks[] từ danh mục checklist chuẩn
     // ĐANG BẬT đúng processType lúc tạo quy trình (xem lib/createValidation.js).
-    hrTaskTemplates: state.hrTaskTemplates
+    hrTaskTemplates: state.hrTaskTemplates,
+    // orgChartVersions — (11/2026) hrProcesses.extraValidate() (CẢ tạo mới LẪN editHrProcess(), dùng
+    // chung appData này) đối chiếu employeeDept/employeeJobTitle với bản APPLIED qua
+    // orgChart.findPositionNodeForUser() — mirror routes/create.js: getAllAppData() thật LUÔN có sẵn.
+    orgChartVersions: state.orgChartVersions
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
   // operationExecutionPeriods — extraValidate() cần tra cứu chéo hồ sơ nguồn (operationStoreOpenings/
@@ -2202,5 +2244,6 @@ function assertIncludes(haystack, needle, message) {
 
 module.exports = {
   startStaticServer, createMockState, createDispatcher, launchPage, createRunner,
+  buildOrgChartFixture,
   assert, assertEqual, assertIncludes
 };

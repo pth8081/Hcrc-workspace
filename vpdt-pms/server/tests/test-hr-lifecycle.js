@@ -19,6 +19,7 @@
 // Chạy: node server/tests/test-hr-lifecycle.js
 const {
   startStaticServer, createMockState, createDispatcher, launchPage, createRunner,
+  buildOrgChartFixture,
   assert, assertEqual, assertIncludes
 } = require('./testHarness');
 
@@ -91,7 +92,14 @@ const state = createMockState({
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
   users: [HR1, HR_NOPERM, HR_VIEWER, HR_ONBOARDING_PROCESS_MANAGER, HR_OFFBOARDING_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, EMP_ISO, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
-  hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES]
+  hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES],
+  // orgChartVersions — (11/2026, Onboarding Phòng Ban/Chức Danh ĐỔI SANG lấy từ Cơ Cấu Tổ Chức, hard-block
+  // nếu không khớp vị trí thật — xem lib/createValidation.js) — 2 cặp dept/jobTitle DUY NHẤT file này
+  // thật sự dùng để TẠO Onboarding (onboardHoPayload() mặc định + override STORE ở test "thiếu Email").
+  orgChartVersions: [buildOrgChartFixture([
+    { dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên' },
+    { dept: 'Siêu Thị A', jobTitle: 'Nhân viên bán hàng' }
+  ])]
 });
 
 async function loginAs(page, user) {

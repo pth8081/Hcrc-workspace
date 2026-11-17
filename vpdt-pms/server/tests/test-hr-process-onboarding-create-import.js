@@ -13,6 +13,24 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 
+// require('../lib/createValidation') NGAY Ở ĐÂY, TRƯỚC bất kỳ require nào khác trong file (11/2026,
+// PHÁT HIỆN THẬT lúc vá org-chart hard-block cho Onboarding) — lib/createValidation.js <-> lib/orgChart.js
+// <-> lib/recordViewScope.js <-> lib/recordActions.js tạo 1 vòng phụ thuộc: nếu lib/orgChart.js được
+// require TRỰC TIẾP trước (VD lib/hrProcessCreateImport.js ở Phần A dưới gọi `require('./orgChart')` ở
+// đầu file), rồi SAU ĐÓ mới có thứ gì require tới lib/createValidation.js (VD routes/records.js ở Phần
+// B), thì createValidation.js sẽ require lại orgChart.js lúc nó CHƯA chạy xong (đang kẹt ở nhánh
+// orgChart->recordViewScope->recordActions->createValidation lồng nhau) — module.exports của orgChart.js
+// gán LẠI 1 object MỚI ở cuối file (không mutate object cũ), nên tham khảo `orgChart` bên trong
+// createValidation.js bị "đông cứng" vĩnh viễn ở bản RỖNG ban đầu -> mọi lệnh gọi
+// orgChart.getAppliedVersion() bên trong createValidation.js ném "orgChart.getAppliedVersion is not a
+// function" (đã tự tái hiện bằng `node -e` độc lập, không phải lỗi riêng của mock test này). Production
+// (server.js) AN TOÀN vì routes/data.js (dòng 32) là route ĐẦU TIÊN chạm tới cụm này, và nó require
+// createValidation.js TRƯỚC — khiến orgChart.js luôn được nạp xong TRỌN VẸN theo đúng nhánh lồng nhau an
+// toàn trước khi bất kỳ module nào khác (VD lib/hrProcessCreateImport.js) require thẳng nó. Dòng require
+// này CHỈ ép ĐÚNG lại thứ tự an toàn đó cho file test (vốn chạy Phần A trước Phần B, ngược thứ tự an
+// toàn) — không che giấu lỗi thật, không đổi hành vi được test.
+require('../lib/createValidation');
+
 let passed = 0, failed = 0;
 async function test(name, fn) {
   try { await fn(); passed++; console.log(`  ✅ ${name}`); }
@@ -24,6 +42,22 @@ function stubModule(relPath, exportsObj) {
   require.cache[full] = { id: full, filename: full, path: path.dirname(full), loaded: true, exports: exportsObj, children: [], paths: [] };
   return exportsObj;
 }
+
+// ORG_CHART_FIXTURE — (11/2026, Onboarding Phòng Ban/Chức Danh ĐỔI SANG lấy từ Cơ Cấu Tổ Chức, xem
+// lib/createValidation.js/lib/hrProcessCreateImport.js) — 1 bản APPLIED tối giản khớp đúng các cặp
+// {dept, jobTitle} dùng ở các dòng "hợp lệ" của test này (mirror field addNode() thật, lib/orgChart.js).
+// Cặp "Chức Danh Không Tồn Tại"/"Chức Danh Không Tồn Tại" CỐ Ý không có trong fixture này (vẫn phải bị
+// chặn, đúng tinh thần hard-block).
+const ORG_CHART_FIXTURE = [{
+  id: 'test-applied-v1', status: 'APPLIED',
+  nodes: [
+    { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Phòng Kế Toán', departmentRef: 'Phòng Kế Toán', jobTitle: null, requiresDept: null, posType: null, positionKey: null },
+    { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân viên Kế Toán', requiresDept: true, posType: null, positionKey: 'test-pos-2' },
+    { nodeId: 3, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'NV', requiresDept: true, posType: null, positionKey: 'test-pos-3' },
+    { nodeId: 4, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị Quận 1', departmentRef: 'Siêu thị Quận 1', jobTitle: null, requiresDept: null, posType: null, positionKey: null },
+    { nodeId: 5, parentNodeId: 4, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân viên Siêu thị', requiresDept: true, posType: null, positionKey: 'test-pos-5' }
+  ]
+}];
 
 // ===================== Phần A: lib/hrProcessCreateImport.js (thuần) =====================
 async function partA() {
@@ -50,7 +84,7 @@ async function partA() {
       employeeJobTitle: 'Nhân viên Kế Toán', email: '', phone: '0909999999', startDate: '2026-11-15'
     });
     const buffer = await wb.xlsx.writeBuffer();
-    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [] });
+    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [], orgChartVersions: ORG_CHART_FIXTURE });
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].valid, true, JSON.stringify(items[0].errors));
     assert.strictEqual(items[0].fields.fullName, 'Trần Thị B');
@@ -68,7 +102,7 @@ async function partA() {
       employeeJobTitle: 'Nhân viên Siêu thị', email: '', phone: '0901111111', startDate: '2026-11-15'
     });
     const buffer = await wb.xlsx.writeBuffer();
-    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [] });
+    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [], orgChartVersions: ORG_CHART_FIXTURE });
     assert.strictEqual(items[0].valid, false);
     assert.ok(items[0].errors.some(e => /Email/.test(e)), JSON.stringify(items[0].errors));
   });
@@ -82,7 +116,7 @@ async function partA() {
       employeeJobTitle: 'Nhân viên Kế Toán', phone: '0902222222', startDate: ''
     });
     const buffer = await wb.xlsx.writeBuffer();
-    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [] });
+    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: [], users: [], orgChartVersions: ORG_CHART_FIXTURE });
     assert.strictEqual(items[0].valid, false);
     assert.ok(items[0].errors.some(e => /Ngày Vào Làm Việc/.test(e)), JSON.stringify(items[0].errors));
   });
@@ -101,7 +135,7 @@ async function partA() {
     sheet.addRow({ fullName: 'D (mới, không mã)', employeePosType: 'HO', employeeDept: 'Phòng Kế Toán', employeeJobTitle: 'NV', phone: '04', startDate: '2026-01-01' });
     const buffer = await wb.xlsx.writeBuffer();
     const profiles = [{ employeeCode: 'NV8001', status: 'INACTIVE', processId: null }];
-    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [] });
+    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [], orgChartVersions: ORG_CHART_FIXTURE });
     const withCode = items.filter(it => it.employeeCode === 'NV8001');
     assert.strictEqual(withCode.length, 2);
     assert.ok(withCode.every(it => it.valid === false), 'cả 2 dòng điền mã đều phải bị báo lỗi, dù mã khớp hồ sơ INACTIVE');
@@ -119,7 +153,7 @@ async function partA() {
     sheet.addRow({ employeeCode: 'NV8002', fullName: 'E', employeePosType: 'HO', employeeDept: 'Phòng Kế Toán', employeeJobTitle: 'NV', phone: '05', startDate: '2026-01-01' });
     const buffer = await wb.xlsx.writeBuffer();
     const profiles = [{ employeeCode: 'NV8002', status: 'ACTIVE', processId: 99 }];
-    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [] });
+    const items = await createImport.parseCreateImportBuffer(buffer, { employeeProfiles: profiles, users: [], orgChartVersions: ORG_CHART_FIXTURE });
     assert.strictEqual(items[0].valid, false);
     assert.ok(items[0].errors.some(e => /phải để TRỐNG/.test(e)), JSON.stringify(items[0].errors));
   });
@@ -163,6 +197,7 @@ async function partB() {
       users: USERS, employeeProfiles: PROFILES, hrProcesses: STORE.hrProcesses,
       depts: ['Phòng Kế Toán'], stores: ['Siêu thị Quận 1'], jobTitles: ['Nhân viên Kế Toán'],
       storeJobTitles: [{ label: 'Nhân viên Siêu thị' }], employmentTypes: [], workSchedules: [],
+      orgChartVersions: ORG_CHART_FIXTURE,
       hrTaskTemplates: [
         { id: 1, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Gửi thư mời nhận việc', department: 'HR', dueDaysOffset: -3, isRequired: true, isActive: true, displayOrder: 1 },
         { id: 7, processType: 'ONBOARDING', stage: 'FIRST_DAY', taskName: 'Đón tiếp, ký HĐ chính thức', department: 'HR', dueDaysOffset: 0, isRequired: true, isActive: true, displayOrder: 2 }

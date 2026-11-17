@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**30.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.76 (2026-11): Onboarding lấy Phòng Ban/Chức Danh từ Cơ Cấu Tổ Chức + cột "Đang Thử Việc" + "✏️ Chấm Dứt Thử Việc"
+
+Gộp 3 đợt việc liên quan tới nhau (theo đúng loạt yêu cầu người dùng về Báo Cáo Định Biên + cách quản lý
+giai đoạn thử việc), merge 1 lần theo đúng quy trình đã xác nhận ("phân tích → xác nhận → làm + merge
+luôn, không chờ demo"):
+
+- **Báo Cáo Định Biên: thêm cột "Đang Thử Việc"** — đếm theo **Hợp Đồng Lao Động** của đúng nhân viên
+  đang giữ vị trí đó (`contractType = PROBATION` VÀ `status = ACTIVE`), KHÔNG lấy từ Quy Trình Onboarding
+  (Onboarding chỉ có 3 trạng thái IN_PROGRESS/COMPLETED/CANCELLED, không tách được "đang thử việc" khỏi
+  các giai đoạn khác) — Hợp Đồng Lao Động là nguồn chuẩn nhất, không bị ảnh hưởng bởi HR quên xử lý bước
+  Đánh Giá Thử Việc. Cùng triết lý Kiêm Nhiệm/Full Time/Part Time: CHỈ tham khảo/báo cáo, không ảnh hưởng
+  Thực Tế/Chênh Lệch (`lib/headcountReport.js`, `lib/orgChart.js`).
+
+- **Onboarding: Phòng Ban/Chức Danh ĐỔI HẲN nguồn sang Cơ Cấu Tổ Chức, không còn lấy từ danh mục Phân
+  Quyền** (theo yêu cầu TRỰC TIẾP người dùng: "Chức danh phải lấy từ cơ cấu tổ chức và phòng ban cũng lấy
+  từ cơ cấu tổ chức, không lấy từ phân quyền — lấy phân quyền hiện tại đang sai"):
+  - 2 ô Phòng Ban/Siêu Thị + Chức Danh ở form "+ Tạo Onboarding" và "✏️ Sửa Quy Trình" đổi từ ô tìm-kiếm-
+    gõ-chọn tự do sang `<select>` **CHỌN ĐÚNG** node Cơ Cấu Tổ Chức (`GET /api/hr-processes/
+    onboarding-position-options`, đọc đúng bản APPLIED hiện tại, `lib/orgChart.js::listOnboardingPositionOptions()`) —
+    Chức Danh CASCADE theo đúng Phòng Ban/Siêu Thị đang chọn.
+  - **Chặn cứng (400)** nếu cặp Phòng Ban/Chức Danh không khớp 1 vị trí thật nào trong Cơ Cấu Tổ Chức —
+    áp dụng ở CẢ 3 nơi: tạo tay, "✏️ Sửa Quy Trình" (chỉ khi THỰC SỰ đổi — xem "điều khoản ông bà" ngay
+    dưới), và bước xem trước Nhập Excel hàng loạt (báo lỗi NGAY ở bảng xem trước, không đợi tới lúc Xác
+    Nhận hàng loạt) — để bộ phận tuyển dụng liên hệ ngay bộ phận C&B bổ sung vị trí còn thiếu
+    (`lib/createValidation.js`, `lib/recordActions.js::editHrProcess()`, `lib/hrProcessCreateImport.js`).
+  - **"Điều khoản ông bà" khi Sửa Quy Trình**: hồ sơ Onboarding CŨ (tạo trước khi Cơ Cấu Tổ Chức đổi
+    tên/xoá vị trí đó) vẫn sửa được field KHÁC bình thường dù Phòng Ban/Chức Danh đang lưu không còn khớp
+    cây hiện tại — chỉ chặn khi người dùng chủ động đổi SANG 1 cặp khác không khớp vị trí thật nào.
+
+- **"✏️ Chấm Dứt Thử Việc"** (MỚI, theo yêu cầu TRỰC TIẾP người dùng, xác nhận qua AskUserQuestion) — phủ
+  2 khoảng trống phát hiện khi phân tích state machine thử việc: nhân viên "nghỉ ngang" giữa thử việc
+  (chưa tới ngày Đánh Giá Thử Việc) VÀ HR muốn chấm dứt SỚM không cần đợi tới hạn review. 1 nút GỘP đặt ở
+  **CẢ 2 nơi** — màn Hợp Đồng Lao Động (`POST /api/records/laborContracts/:id/terminate-probation`) VÀ
+  Chi Tiết Quy Trình Onboarding (`POST /api/records/hrProcesses/:id/terminate-probation`, tự tra đúng hợp
+  đồng Thử Việc gắn quy trình đó) — gọi ĐÚNG 1 logic dùng chung, bấm 1 lần làm ĐỒNG THỜI cả 3 việc: (1)
+  đóng hợp đồng Thử việc, (2) huỷ quy trình Onboarding liên kết nếu còn "Đang thực hiện", (3) chuyển Hồ
+  Sơ Nhân Sự sang "Đã nghỉ" NGAY — không cần đợi qua Offboarding (người có thể CHƯA TỪNG có tài khoản
+  VPDT nếu bị loại sớm). Gác bằng quyền "📝 Quản Lý Hợp Đồng Lao Động" ở CẢ 2 điểm vào (`lib/laborContract.js::terminateProbationContract()`,
+  `lib/employeeProfile.js::terminateProbationProfile()`, `routes/records.js`).
 
 ## v30.75 (2026-11): Báo Cáo Định Biên — tự đồng bộ "Thai Sản/Nghỉ Ốm" + thêm cột Full Time/Part Time
 

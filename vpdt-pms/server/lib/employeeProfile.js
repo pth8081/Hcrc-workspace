@@ -675,6 +675,38 @@ function cancelOnboardingQueueProfile(list, employeeCode, reason, actorUsername,
   return profile;
 }
 
+// terminateProbationProfile() — (11/2026, "✏️ Chấm Dứt Thử Việc" MỚI, theo yêu cầu TRỰC TIẾP người dùng
+// xác nhận qua AskUserQuestion) — chuyển TRỰC TIẾP hồ sơ sang INACTIVE ("Đã nghỉ"), KHÁC HẲN
+// assertValidManualStatusTransition() (cố ý khoá cứng ACTIVE/DRAFT -> INACTIVE tay — INACTIVE bình thường
+// CHỈ đạt được qua Offboarding hoàn tất, đòi hỏi 1 tài khoản VPDT đã cấp) vì người đang thử việc CÓ THỂ
+// CHƯA TỪNG có tài khoản VPDT (IT chưa kịp cấp/không cần cấp nếu bị loại ngay giữa thử việc) — không thể
+// bắt đi qua Offboarding thông thường. Route gọi hàm này (routes/records.js POST /laborContracts/:id/
+// terminate-probation) chịu trách nhiệm cascade đóng hợp đồng Thử Việc (terminateProbationContract(),
+// lib/laborContract.js) + huỷ quy trình Onboarding liên kết nếu còn IN_PROGRESS — hàm NÀY chỉ đổi ĐÚNG
+// hồ sơ, không động tới 2 collection khác (đúng nguyên tắc tách bạch, cùng khuôn
+// cancelOnboardingQueueProfile() ở trên).
+function terminateProbationProfile(list, employeeCode, reason, actorUsername, actorName) {
+  const arr = list || [];
+  const profile = findProfile(arr, employeeCode);
+  if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ nhân sự ứng với Mã Nhân Viên này');
+  if (!['ACTIVE', 'ON_LEAVE'].includes(profile.status)) {
+    throw new HttpError(409, 'Chỉ áp dụng cho hồ sơ đang "Đang làm việc"/"Nghỉ dài hạn" (đang trong thời gian thử việc) — hồ sơ đã nghỉ việc/chưa hoàn tất Onboarding không áp dụng được');
+  }
+  const trimmedReason = String(reason || '').trim();
+  if (!trimmedReason) throw new HttpError(400, 'Vui lòng nhập lý do chấm dứt thử việc');
+  profile.status = 'INACTIVE';
+  profile.workStatusAutoSetLeave = false;
+  profile.profileEditHistory = profile.profileEditHistory || [];
+  profile.profileEditHistory.push({
+    id: randomUUID(), type: 'PROBATION_TERMINATED', changedFields: ['status'],
+    by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
+    detail: `Chấm dứt thử việc (chuyển "Đã nghỉ") — Lý do: ${trimmedReason.slice(0, 500)}`,
+    createdAt: nowVN()
+  });
+  profile.updatedAt = nowVN(); profile.updatedBy = actorUsername || 'system';
+  return profile;
+}
+
 // HR/admin tạo tay 1 hồ sơ MỚI cho nhân viên đã có sẵn (đã đang làm việc thật, chỉ chưa có hồ sơ trong hệ
 // thống vì chưa từng qua quy trình Onboarding) — KHÁC ensureDraftProfile() (chỉ tạo DRAFT rỗng lúc bắt đầu
 // Onboarding cho nhân viên MỚI). Mặc định status ACTIVE luôn (không qua DRAFT) vì đây là hồ sơ hồi tố cho
@@ -2078,7 +2110,7 @@ module.exports = {
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, renameEmployeeCode, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername,
-  cancelOnboardingQueueProfile,
+  cancelOnboardingQueueProfile, terminateProbationProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,

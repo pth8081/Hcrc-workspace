@@ -4289,24 +4289,39 @@ const CREATE_MODULE_CONFIGS = {
         if (!payload.fullName || !String(payload.fullName).trim()) throw new CreateError(400, 'Vui lòng nhập Họ và Tên');
         payload.fullName = String(payload.fullName).trim().slice(0, 200);
 
-        // posType/dept/jobTitle của NHÂN VIÊN MỚI — cùng cơ chế cascading HO/STORE đã dùng ở form Người
-        // Dùng đầy đủ (xem #uPosType/onUserPosTypeChange() ở public/index.html): posType quyết định dept
-        // tra theo DB.depts hay DB.stores, jobTitle tra theo DB.jobTitles (mảng chuỗi phẳng) hay
-        // DB.storeJobTitles (mảng {label}).
+        // posType/dept/jobTitle của NHÂN VIÊN MỚI — posType (HO/Siêu Thị) chỉ còn là gợi ý hiển thị phía
+        // client (dropdown nào nên hiện trước), KHÔNG còn quyết định tra theo danh mục nào nữa. TỪ
+        // 11/2026 (theo yêu cầu người dùng "Phòng Ban/Chức Danh phải lấy từ Cơ Cấu Tổ Chức, không lấy từ
+        // danh mục Phân Quyền"): THAY catalog-only check (DB.depts/DB.stores/DB.jobTitles/
+        // DB.storeJobTitles — chỉ xác nhận TÊN có trong danh mục, KHÔNG xác nhận có Vị Trí THẬT nào khớp)
+        // bằng xác nhận khớp ĐÚNG 1 node POSITION có thật trong Cơ Cấu Tổ Chức bản APPLIED — tái dùng
+        // NGUYÊN orgChart.findPositionNodeForUser() (đã dùng cho "Gán Chức Vụ hàng loạt",
+        // lib/hrProfilePositionAssignImport.js — không viết lại logic khớp mới).
         if (!['HO', 'STORE'].includes(payload.employeePosType)) throw new CreateError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
         const employeeDept = String(payload.employeeDept || '').trim();
         if (!employeeDept) throw new CreateError(400, payload.employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị' : 'Vui lòng chọn Phòng Ban');
-        const validDepts = payload.employeePosType === 'STORE' ? (appData?.stores || []) : (appData?.depts || []);
-        if (!validDepts.includes(employeeDept)) throw new CreateError(400, 'Phòng Ban/Siêu Thị không hợp lệ');
         payload.employeeDept = employeeDept;
 
         const employeeJobTitle = String(payload.employeeJobTitle || '').trim();
         if (!employeeJobTitle) throw new CreateError(400, 'Vui lòng chọn Chức Danh');
-        const validJobTitles = payload.employeePosType === 'STORE'
-          ? (appData?.storeJobTitles || []).map(t => t.label)
-          : (appData?.jobTitles || []);
-        if (!validJobTitles.includes(employeeJobTitle)) throw new CreateError(400, 'Chức Danh không hợp lệ');
         payload.employeeJobTitle = employeeJobTitle;
+
+        // require trễ (không để ở đầu file) — orgChart.js require ngược lib/recordViewScope.js, mà
+        // recordViewScope.js lại require thẳng lib/recordActions.js, mà recordActions.js lại require
+        // thẳng CHÍNH FILE NÀY (createValidation.js) ở đầu file nó: để orgChart ở đầu file NÀY tạo
+        // vòng lặp 3 tầng khiến HR_ONBOARDING_STAGES/HR_OFFBOARDING_STAGES (và nhiều export khác định
+        // nghĩa SAU dòng require đó) đều thành undefined bên lib/recordActions.js (phát hiện thật khi
+        // chạy test, xem lỗi "Cannot read properties of undefined (reading 'length')" ở
+        // computeHrProcessProgress()).
+        const orgChart = require('./orgChart');
+        const appliedOrgChartVersion = orgChart.getAppliedVersion(appData?.orgChartVersions || []);
+        const matchedPositionNode = appliedOrgChartVersion
+          ? orgChart.findPositionNodeForUser(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle })
+          : null;
+        if (!matchedPositionNode) {
+          const hint = appliedOrgChartVersion ? orgChart.diagnosePositionMismatch(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle }) : null;
+          throw new CreateError(400, hint ? hint.message : `Không tìm thấy Vị Trí "${employeeJobTitle}" tại "${employeeDept}" trong Cơ Cấu Tổ Chức — vui lòng liên hệ bộ phận C&B (Nhân Sự) để bổ sung vị trí này trước khi tạo hồ sơ.`);
+        }
 
         // Email — để trống hợp lệ NẾU đợi IT cấp mới (mặc định), NHƯNG bắt buộc với nhân viên Siêu Thị
         // (đúng yêu cầu nghiệp vụ đã xác nhận trước đây: "đối với nhân viên siêu thị thì phải nhập email").

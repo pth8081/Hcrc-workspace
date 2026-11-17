@@ -408,6 +408,16 @@ function buildHrContractDetailHTML(c) {
   const closeBtn = c.status === 'ACTIVE'
     ? `<button type="button" data-op="closeHrContractManual" data-arg0="${c.id}" class="bg-red-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-red-700">⛔ Đóng Hợp Đồng (Chấm Dứt)</button>`
     : '';
+  // terminateProbationBtn — "✏️ Chấm Dứt Thử Việc" (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người dùng, xác
+  // nhận qua AskUserQuestion: 1 nút GỘP, đặt ở CẢ 2 nơi — màn này VÀ Chi Tiết Quy Trình Onboarding, xem
+  // terminateProbationFromOnboarding() ở module-hrlifecycle.js) — CHỈ hiện cho hợp đồng Thử Việc (PROBATION)
+  // còn Nháp/Đang hiệu lực, KHÁC HẲN closeBtn ngay trên (đóng BẤT KỲ hợp đồng ACTIVE nào, không cascade gì
+  // thêm) — nút này đóng hợp đồng + huỷ Onboarding liên kết (nếu còn Đang thực hiện) + chuyển Hồ Sơ Nhân
+  // Sự sang "Đã nghỉ" NGAY trong 1 lần bấm (POST .../terminate-probation, xem lib/laborContract.js +
+  // lib/employeeProfile.js + routes/records.js).
+  const terminateProbationBtn = (c.contractType === 'PROBATION' && ['DRAFT', 'ACTIVE'].includes(c.status))
+    ? `<button type="button" data-op="terminateProbationContract" data-arg0="${c.id}" class="bg-orange-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-orange-700">✏️ Chấm Dứt Thử Việc</button>`
+    : '';
   const deleteBtn = currentUser?.perms?.admin
     ? `<button type="button" data-op="deleteHrContractRecord" data-arg0="${c.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded font-semibold hover:bg-gray-600">🗑️ Xoá (Admin)</button>`
     : '';
@@ -458,7 +468,7 @@ function buildHrContractDetailHTML(c) {
       <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Lương Cơ Bản</button>
     </div>` : ''}
 
-    <div class="flex flex-wrap gap-2">${activateBtn}${closeBtn}${deleteBtn}</div>
+    <div class="flex flex-wrap gap-2">${activateBtn}${terminateProbationBtn}${closeBtn}${deleteBtn}</div>
 
     <div class="border-t pt-2">
       <div class="font-semibold mb-1">📋 Lịch Sử Thay Đổi (Phụ Lục)</div>
@@ -578,6 +588,49 @@ function closeHrContractManual(id) {
       }
     }
   });
+}
+
+// terminateProbationContract() — "✏️ Chấm Dứt Thử Việc" (MỚI 11/2026, xem chú thích đầy đủ ở
+// terminateProbationBtn/buildHrContractDetailHTML() ngay trên) — CÙNG khuôn modal lý do như
+// closeHrContractManual() (tái dùng DB.contractTerminationReasons), nhưng gọi action RIÊNG
+// "terminate-probation" (cascade cả Onboarding + Hồ Sơ Nhân Sự, khác hẳn "status" chỉ đóng đúng hợp
+// đồng). Dùng được từ CẢ 2 nơi — gọi trực tiếp ở đây (id = laborContracts.id), hoặc qua
+// terminateProbationFromOnboarding() (module-hrlifecycle.js, tự tra đúng id hợp đồng từ quy trình đang
+// xem rồi gọi lại ĐÚNG hàm này).
+function terminateProbationContract(id) {
+  showConfirmModal({
+    title: '✏️ Chấm Dứt Thử Việc',
+    bodyHTML: `
+      <p class="text-xs text-gray-600 mb-2">Áp dụng khi nhân viên KHÔNG đạt yêu cầu thử việc hoặc tự nghỉ ngang giữa thời gian thử việc — hệ thống sẽ ĐỒNG THỜI: đóng hợp đồng Thử Việc, huỷ quy trình Onboarding liên kết (nếu còn "Đang thực hiện"), VÀ chuyển Hồ Sơ Nhân Sự sang "Đã nghỉ" ngay (không cần đợi qua Offboarding).</p>
+      <p class="text-xs text-gray-600 mb-2">Vui lòng chọn/nhập lý do:</p>
+      <select id="hrcTerminateProbationReasonSelect" data-op-change="toggleHrcTerminateProbationReasonOther" class="w-full border p-1.5 rounded text-sm bg-white mb-2">
+        <option value="">-- Chọn lý do --</option>
+        ${(DB.contractTerminationReasons || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+      </select>
+      <input type="text" id="hrcTerminateProbationReasonOther" placeholder="Nhập lý do..." class="hidden w-full border p-1.5 rounded text-sm">
+    `,
+    confirmLabel: '✏️ Xác Nhận Chấm Dứt Thử Việc',
+    onConfirm: async () => {
+      const sel = document.getElementById('hrcTerminateProbationReasonSelect').value;
+      const reason = sel === 'Khác' ? document.getElementById('hrcTerminateProbationReasonOther').value.trim() : sel.trim();
+      if (!reason) return alert('⛔ Vui lòng chọn/nhập lý do chấm dứt thử việc.');
+      try {
+        const result = await callRecordAction('laborContracts', id, 'terminate-probation', { reason });
+        hrcApplyUpdate(result.item);
+        openHrContractDetailModal(id);
+        alert(`✅ Đã chấm dứt thử việc.${result.hrProcess ? ' Đã huỷ quy trình Onboarding liên kết.' : ''} Hồ sơ "${result.profile?.employeeCode || ''}" đã chuyển sang "Đã nghỉ".`);
+      } catch (err) {
+        alert('⛔ ' + err.message);
+      }
+    }
+  });
+}
+function toggleHrcTerminateProbationReasonOther() {
+  const sel = document.getElementById('hrcTerminateProbationReasonSelect');
+  const other = document.getElementById('hrcTerminateProbationReasonOther');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== 'Khác');
+  if (sel.value !== 'Khác') other.value = '';
 }
 
 // toggleHrcAmendmentTypeOther() — hiện/ẩn ô nhập tay #hrcNewAmendmentTypeOther khi chọn "Khác" ở

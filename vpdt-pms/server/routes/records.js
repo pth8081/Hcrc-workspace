@@ -6072,6 +6072,138 @@ router.post('/laborContracts/:id/status', async (req, res) => {
   }
 });
 
+// POST /laborContracts/:id/terminate-probation — "✏️ Chấm Dứt Thử Việc" (MỚI 11/2026, theo yêu cầu TRỰC
+// TIẾP người dùng, xác nhận qua AskUserQuestion: 1 nút GỘP đặt ở CẢ 2 nơi — màn Hợp Đồng Lao Động VÀ màn
+// Quy Trình Onboarding, xem #btnHrpTerminateProbation ở module-hrlifecycle.js tra lại đúng hợp đồng qua
+// hrProcessId rồi gọi CHUNG route này). Dùng ĐƯỢC BẤT KỲ LÚC NÀO trong thời gian thử việc (KHÁC hẳn quyết
+// định templateId=15 "Ra quyết định" chỉ đúng lúc Đánh Giá Thử Việc cuối kỳ) — phủ 2 lỗ hổng đã xác nhận
+// với người dùng: "nghỉ ngang" giữa thử việc (chưa tới ngày review) + chấm dứt SỚM không cần đợi tới hạn.
+// 3 bước, atomically theo đúng nghĩa "mỗi bước tự khoá đúng 1 collection, làm TUẦN TỰ, lỗi ở bước sau
+// KHÔNG rollback bước trước" (đúng tinh thần toàn hệ thống — xem syncLaborContractOnHrTaskEvent() ở
+// trên, KHÔNG có transaction chéo collection thật):
+//   1) Đóng hợp đồng Thử Việc (terminateProbationContract(), lib/laborContract.js).
+//   2) Huỷ quy trình Onboarding liên kết (qua hrProcessId lưu trên hợp đồng) NẾU còn "Đang thực hiện" —
+//      tái dùng cancelHrProcess() (lib/recordActions.js, CÙNG hàm nút "Hủy Quy Trình" dùng, chỉ 1 nguồn
+//      xử lý huỷ quy trình duy nhất). Quy trình đã Hoàn Tất/Đã Huỷ từ trước thì bỏ qua bước này.
+//   3) Chuyển hồ sơ Hồ Sơ Nhân Sự sang "Đã nghỉ" NGAY (terminateProbationProfile(), lib/employeeProfile.js)
+//      — KHÔNG đợi qua Offboarding (người có thể CHƯA TỪNG có tài khoản VPDT nếu bị loại sớm).
+// Gác bằng assertContractManage() (CÙNG quyền mọi route /laborContracts/:id/* khác) — huỷ Onboarding/đổi
+// Hồ Sơ Nhân Sự chỉ là HIỆU ỨNG PHỤ tất yếu của 1 sự kiện chấm dứt hợp đồng, không cần xin thêm quyền
+// riêng (cùng tinh thần cancelOnboardingQueueProfile() cascade cancelHrProcess() mà không đòi thêm quyền
+// Hợp Đồng Lao Động ở chiều ngược lại).
+// handleTerminateProbation() — tách riêng khỏi route để dùng CHUNG cho CẢ 2 điểm vào ("✏️ Chấm Dứt Thử
+// Việc" ở màn Hợp Đồng Lao Động, TRỰC TIẾP biết contractId; VÀ ở màn Quy Trình Onboarding, CHỈ biết
+// hrProcessId — xem route POST /hrProcesses/:id/terminate-probation ngay dưới tự tra contractId trước
+// khi gọi lại hàm này) — tránh lặp lại cùng 1 cascade 3 bước ở 2 route khác nhau (dễ lệch nhau dần theo
+// thời gian, đúng bài học đã rút ra ở syncLaborContractOnHrTaskEvent()/cancelOnboardingQueueProfile()).
+async function handleTerminateProbation(req, res, contractId, logRouteLabel) {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do chấm dứt thử việc');
+
+    const peekList = await getAllForCollection('laborContracts');
+    const peekTarget = peekList.find(c => c.id === contractId);
+    if (!peekTarget) throw new HttpError(404, 'Không tìm thấy hợp đồng lao động');
+
+    const result = await withAppLock(`labor_contract_terminate_probation:${peekTarget.employeeCode}`, async () => {
+      const terminatedContract = await withLockedRecordForCollection('laborContracts', contractId, (item) => {
+        laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
+        return laborContract.terminateProbationContract(item, reason, freshUser.username);
+      });
+
+      let cancelledHrProcess = null;
+      if (terminatedContract.hrProcessId) {
+        const hrList = await getAllForCollection('hrProcesses');
+        const hrProcessItem = hrList.find(p => p.id === terminatedContract.hrProcessId);
+        if (hrProcessItem && hrProcessItem.status === 'IN_PROGRESS') {
+          // KHÔNG gọi recordActions.cancelHrProcess() ở đây — hàm đó TỰ kiểm canManageHrProcess() (đòi
+          // hrOnboardingProcessManage/hrOnboardingManage/là creator), 1 QUYỀN KHÁC HẲN assertContractManage()
+          // đã gác ở route này. Người CHỈ có hrContractManage (không có bất kỳ quyền Onboarding nào) vẫn
+          // phải chấm dứt thử việc được — việc huỷ quy trình Onboarding liên kết chỉ là HIỆU ỨNG PHỤ của
+          // 1 hành động đã được CHÍNH route này cấp quyền, không phải 1 "Huỷ Quy Trình" độc lập cần xin lại
+          // quyền riêng (cùng tinh thần đã ghi ở chú thích handleTerminateProbation() phía trên) — mutate
+          // trực tiếp, mirror ĐÚNG field cancelHrProcess() ghi (status/cancelReason/history).
+          const cancelReasonText = `Chấm dứt thử việc — ${reason}`.slice(0, 500);
+          cancelledHrProcess = await withLockedRecordForCollection('hrProcesses', hrProcessItem.id, (item) => {
+            if (item.status === 'IN_PROGRESS') {
+              item.status = 'CANCELLED';
+              item.cancelReason = cancelReasonText;
+              item.history.push({ action: 'CANCELLED', detail: `Huỷ quy trình — Lý do: ${cancelReasonText}`, actionBy: freshUser.username, actionByName: freshUser.name, actionAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) });
+            }
+            return item;
+          });
+        }
+      }
+
+      let updatedProfile = null;
+      await withLockedAppDataValue('employeeProfiles', (list) => {
+        updatedProfile = employeeProfile.terminateProbationProfile(list, terminatedContract.employeeCode, reason, freshUser.username, freshUser.name);
+        return list;
+      });
+
+      return { contract: terminatedContract, cancelledHrProcess, profile: updatedProfile };
+    });
+
+    logLaborContractAction(req, freshUser, 'TERMINATE_PROBATION', result.contract.code || String(contractId), `Chấm dứt thử việc [${result.contract.code || contractId}] — Lý do: ${reason}`);
+    // item = hợp đồng vừa chấm dứt (đích thật của route /laborContracts/:id/...) — hrProcess = quy trình
+    // Onboarding vừa bị huỷ (nếu có, cascade) RIÊNG, để caller tự chọn đúng collection cần cập nhật ở
+    // client (hrcApplyUpdate() dùng `item`; hrpApplyProcessUpdate() ở màn Onboarding dùng `hrProcess`,
+    // KHÔNG được lẫn 2 thứ vào field "item" chung — khác collection hoàn toàn).
+    res.json({ ok: true, item: result.contract, hrProcess: result.cancelledHrProcess, profile: result.profile });
+  } catch (err) {
+    handleError(res, logRouteLabel, err);
+  }
+}
+
+// POST /laborContracts/:id/terminate-probation — "✏️ Chấm Dứt Thử Việc" (MỚI 11/2026, theo yêu cầu TRỰC
+// TIẾP người dùng, xác nhận qua AskUserQuestion: 1 nút GỘP đặt ở CẢ 2 nơi — màn Hợp Đồng Lao Động VÀ màn
+// Quy Trình Onboarding). Dùng ĐƯỢC BẤT KỲ LÚC NÀO trong thời gian thử việc (KHÁC hẳn quyết định
+// templateId=15 "Ra quyết định" chỉ đúng lúc Đánh Giá Thử Việc cuối kỳ) — phủ 2 lỗ hổng đã xác nhận với
+// người dùng: "nghỉ ngang" giữa thử việc (chưa tới ngày review) + chấm dứt SỚM không cần đợi tới hạn.
+// 3 bước, atomically theo đúng nghĩa "mỗi bước tự khoá đúng 1 collection, làm TUẦN TỰ, lỗi ở bước sau
+// KHÔNG rollback bước trước" (đúng tinh thần toàn hệ thống — xem syncLaborContractOnHrTaskEvent() ở
+// trên, KHÔNG có transaction chéo collection thật):
+//   1) Đóng hợp đồng Thử Việc (terminateProbationContract(), lib/laborContract.js).
+//   2) Huỷ quy trình Onboarding liên kết (qua hrProcessId lưu trên hợp đồng) NẾU còn "Đang thực hiện" —
+//      tái dùng cancelHrProcess() (lib/recordActions.js, CÙNG hàm nút "Hủy Quy Trình" dùng, chỉ 1 nguồn
+//      xử lý huỷ quy trình duy nhất). Quy trình đã Hoàn Tất/Đã Huỷ từ trước thì bỏ qua bước này.
+//   3) Chuyển hồ sơ Hồ Sơ Nhân Sự sang "Đã nghỉ" NGAY (terminateProbationProfile(), lib/employeeProfile.js)
+//      — KHÔNG đợi qua Offboarding (người có thể CHƯA TỪNG có tài khoản VPDT nếu bị loại sớm).
+// Gác bằng assertContractManage() (CÙNG quyền mọi route /laborContracts/:id/* khác) — huỷ Onboarding/đổi
+// Hồ Sơ Nhân Sự chỉ là HIỆU ỨNG PHỤ tất yếu của 1 sự kiện chấm dứt hợp đồng, không cần xin thêm quyền
+// riêng (cùng tinh thần cancelOnboardingQueueProfile() cascade cancelHrProcess() mà không đòi thêm quyền
+// Hợp Đồng Lao Động ở chiều ngược lại).
+router.post('/laborContracts/:id/terminate-probation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  await handleTerminateProbation(req, res, itemId, `laborContracts/${req.params.id}/terminate-probation`);
+});
+
+// POST /hrProcesses/:id/terminate-probation — ALIAS GỌN cho màn Quy Trình Onboarding (module-hrlifecycle.js,
+// nút đặt NGAY TRONG Chi Tiết Quy Trình, xem renderHrProcessDetailBody()) — màn đó chỉ biết hrProcessId,
+// không có sẵn DB.laborContracts (module-hopdonglaodong.js nạp lười RIÊNG, không cùng nhóm với hrlifecycle
+// — xem MODULE_LOAD_GROUPS ở core.js) nên tự tra ĐÚNG hợp đồng Thử Việc đang gắn quy trình này
+// (findLatestContractForProcess()) ở ĐÂY rồi gọi lại NGUYÊN VẸN handleTerminateProbation() ở trên — tránh
+// lặp code cascade 3 bước.
+router.post('/hrProcesses/:id/terminate-probation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const hrList = await getAllForCollection('hrProcesses');
+    const hrProcessItem = hrList.find(p => p.id === itemId);
+    if (!hrProcessItem) throw new HttpError(404, 'Không tìm thấy quy trình');
+    if (hrProcessItem.processType !== 'ONBOARDING') throw new HttpError(400, '"Chấm Dứt Thử Việc" chỉ áp dụng cho quy trình Onboarding');
+    const contractList = await getAllForCollection('laborContracts');
+    const contract = laborContract.findLatestContractForProcess(contractList, itemId);
+    if (!contract) throw new HttpError(404, 'Không tìm thấy hợp đồng Thử Việc gắn với quy trình này');
+    await handleTerminateProbation(req, res, contract.id, `hrProcesses/${req.params.id}/terminate-probation`);
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/terminate-probation`, err);
+  }
+});
+
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): trước đây dùng deleteAdminOnly() (gác bằng cờ
 // admin chung) — giờ gác bằng ĐÚNG assertContractManage()/hrContractManage như mọi route thao tác khác
 // của laborContracts ở trên (edit/activate/add-amendment/status), xem chú thích đầy đủ ở deleteWithGuard().

@@ -83,7 +83,18 @@ function resetAppData() {
     // hrProcesses được tạo (không rơi vào guard "catalog rỗng -> bỏ qua", vốn chỉ dành cho lúc admin lỡ
     // xoá trắng danh mục thật ngoài đời — xem test bên dưới xác nhận KHÔNG orphan hrProcesses).
     employmentTypes: ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'],
-    workSchedules: ['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay']
+    workSchedules: ['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay'],
+    // orgChartVersions (11/2026) — hrProcesses.extraValidate() (ONBOARDING) giờ đối chiếu
+    // employeeDept/employeeJobTitle với bản APPLIED qua orgChart.findPositionNodeForUser() thay cho
+    // danh mục depts/jobTitles ở trên — seed đúng 1 node POSITION khớp onboardingPayload() mặc định
+    // ("Kinh Doanh"/"Nhân Viên") để các test ở file này không bị chặn "Không tìm thấy Vị Trí...".
+    orgChartVersions: [{
+      id: 'v1', status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Kinh Doanh', departmentRef: 'Kinh Doanh' },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', jobTitle: 'Nhân Viên', requiresDept: true, positionKey: 'pos-kd-nv' }
+      ]
+    }]
   };
 }
 resetAppData(); resetStore();

@@ -4301,8 +4301,10 @@ theo đúng vị trí trong cây**.
     sự có kịp cập nhật hay không. Cùng triết lý Kiêm Nhiệm/Full Time/Part
     Time: CHỈ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch.
     Lưu ý: nếu HR quên xử lý bước Đánh Giá Thử Việc sau khi hết hạn thử
-    việc, người đó vẫn bị đếm vào cột này cho tới khi HR xử lý (xem mục
-    "✏️ Chấm Dứt Thử Việc" ngay dưới).
+    việc, người đó vẫn bị đếm vào cột này cho tới khi HR xử lý — bấm
+    **"✏️ Chấm Dứt Thử Việc"** (mục 4.5.4 Hợp Đồng Lao Động, hoặc ngay
+    trong Chi Tiết quy trình Onboarding liên kết) nếu quyết định không
+    tiếp tục sử dụng lao động.
   - **Chênh Lệch** = Định Biên − Thực Tế (đơn giản, nhất quán — vì Thực Tế
     đã không còn chứa Kiêm Nhiệm nên không cần công thức riêng nữa). Dương
     (tô cam) = còn thiếu người, cần tuyển thêm đúng số đó; âm (tô đỏ) = đang
@@ -4408,9 +4410,34 @@ Mô hình quy trình có checklist theo giai đoạn (thay hẳn bản cũ "1 y�
 ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
 
 - **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
-  Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ
-  thống, Email **để trống nếu chưa cấp, bắt buộc với nhân viên Siêu Thị**,
-  SĐT, Ngày vào làm, Quản lý trực tiếp tuỳ chọn) rồi bấm "Tạo Quy Trình".
+  Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh, Email **để trống nếu
+  chưa cấp, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm, Quản lý
+  trực tiếp tuỳ chọn) rồi bấm "Tạo Quy Trình".
+  - **Phòng Ban/Chức Danh LẤY TỪ CƠ CẤU TỔ CHỨC, không còn lấy từ danh mục
+    Phân Quyền** (11/2026, theo yêu cầu TRỰC TIẾP người dùng: "Chức danh
+    phải lấy từ cơ cấu tổ chức và phòng ban cũng lấy từ cơ cấu tổ chức,
+    không lấy từ phân quyền — lấy phân quyền hiện tại đang sai") — 2 ô chọn
+    là **`<select>` chọn đúng** (không còn gõ tự do), nạp từ đúng bản
+    **APPLIED** của Cơ Cấu Tổ Chức (4.9): chọn Phòng Ban/Siêu Thị trước,
+    Chức Danh tự lọc lại theo ĐÚNG Phòng Ban/Siêu Thị đã chọn (chỉ liệt kê
+    những Chức Danh có 1 vị trí thật tại đó trong cây). Nếu Cơ Cấu Tổ Chức
+    chưa có bản APPLIED, hoặc chưa có vị trí nào, 2 ô này hiện trống kèm
+    nhắc liên hệ bộ phận Cơ Cấu Tổ Chức.
+  - **Chặn cứng (400) nếu cặp Phòng Ban/Chức Danh không khớp vị trí thật
+    nào** trong Cơ Cấu Tổ Chức — áp dụng đồng thời ở CẢ 3 nơi: tạo tay
+    đơn lẻ, **"✏️ Sửa Quy Trình"** (chỉ khi THỰC SỰ đổi Phòng Ban/Chức
+    Danh/Vị Trí — xem ngay dưới), VÀ bước xem trước Nhập Excel hàng loạt
+    (báo lỗi NGAY trong bảng xem trước, không phải đợi đến lúc Xác Nhận
+    hàng loạt mới biết dòng nào sai) — để bộ phận tuyển dụng liên hệ ngay
+    bộ phận C&B (Nhân Sự) bổ sung vị trí còn thiếu vào Cơ Cấu Tổ Chức
+    trước khi tạo/sửa hồ sơ, tránh tạo ra hồ sơ mang Phòng Ban/Chức Danh
+    "ma" không tồn tại vị trí định biên nào.
+  - **"Điều khoản ông bà" khi Sửa Quy Trình** — hồ sơ Onboarding CŨ (tạo
+    trước khi Cơ Cấu Tổ Chức đổi tên/xoá vị trí đó) vẫn sửa được các field
+    KHÁC (SĐT, Ngày Vào Làm...) bình thường dù Phòng Ban/Chức Danh đang
+    lưu không còn khớp cây hiện tại — chỉ bị chặn khi người dùng **chủ
+    động đổi SANG** 1 Phòng Ban/Chức Danh/Vị Trí khác mà cặp mới đó không
+    khớp vị trí thật nào.
 - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
   tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày Nghỉ Việc
   (bắt buộc, validate cả server)**, tuỳ chọn tick "đang giữ vị trí quản lý" +
@@ -4500,6 +4527,13 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   không có field nào cần sửa. Bấm lại nhiều lần không sao (không tạo hồ sơ
   trùng); nếu hồ sơ đã được Xác Nhận thành "Đang làm việc" rồi thì nút này báo
   "đã đồng bộ sẵn" (không hồi tố hồ sơ đã xác nhận).
+- **"✏️ Chấm Dứt Thử Việc"** (MỚI 11/2026) — nút riêng, chỉ hiện ở quy trình
+  **Onboarding** còn **"Đang thực hiện"** — dùng khi nhân viên không đạt/tự
+  nghỉ ngang giữa thời gian thử việc, BẤT KỲ LÚC NÀO (không cần đợi tới
+  bước "Ra quyết định" cuối kỳ). Đóng luôn hợp đồng Thử việc + huỷ quy
+  trình này + chuyển Hồ Sơ Nhân Sự sang "Đã nghỉ" trong 1 lần bấm — xem chi
+  tiết đầy đủ ở mục 4.5.4 Hợp Đồng Lao Động (nút tương đương cũng có ở màn
+  đó).
 - **Danh sách quy trình mặc định ẨN "Đã Huỷ"** (MỚI 11/2026, cùng đợt với
   "✏️ Sửa Quy Trình" ở trên — nay đã có lối sửa thay Huỷ, hồ sơ "Đã Huỷ" chỉ
   còn là trường hợp hiếm/lịch sử) — bộ lọc Trạng Thái mặc định mở vào **"Đang
@@ -4542,7 +4576,11 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
     bị báo lỗi dòng đó, kể cả khi mã điền khớp 1 hồ sơ Tái Tuyển hợp lệ; cần
     Tái Tuyển (mã của 1 hồ sơ ĐÃ NGHỈ VIỆC) thì dùng nút "+ Tạo Onboarding"
     tạo tay (có ô "Kiểm Tra Nhân Sự Cũ" riêng, không đổi gì). Giới hạn 300
-    dòng/lần nhập.
+    dòng/lần nhập. **Phòng Ban/Chức Danh mỗi dòng cũng phải khớp ĐÚNG 1 vị
+    trí có thật trong Cơ Cấu Tổ Chức** (11/2026, cùng quy tắc "+ Tạo
+    Onboarding" tạo tay ở trên) — báo lỗi NGAY ở bảng xem trước (trước khi
+    bấm "Xác Nhận" tạo hàng loạt), không phải đợi tạo xong mới biết dòng
+    nào sai.
   - **"👉 Bỏ Qua Quy Trình"** — dùng cho nhân viên CŨ đã đang làm việc, không
     cần qua checklist Onboarding. Nút này chuyển thẳng sang Nhập Excel ở Hồ Sơ
     Nhân Sự (mục 4.5.3 bên dưới) — tạo hồ sơ "Đang làm việc" (ACTIVE) NGAY,
@@ -4970,6 +5008,26 @@ còn tự động xoá được hợp đồng lao động nữa.
   chặn cả ở server, không chỉ ở giao diện) — tick **"Không lấy từ hồ sơ (nhập
   mã ngoài hệ thống)"** mới chuyển sang ô nhập tay tự do, dùng cho nhân viên
   cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
+- **"✏️ Chấm Dứt Thử Việc"** (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người
+  dùng — phủ 2 khoảng trống: nhân viên "nghỉ ngang" giữa thử việc chưa tới
+  ngày Đánh Giá Thử Việc, VÀ HR muốn chấm dứt SỚM không cần đợi tới hạn) —
+  nút này **KHÁC HẲN** quyết định "Chấm dứt sau thử việc" ở việc "Ra quyết
+  định..." nêu trên (đó CHỈ dùng được đúng lúc cuối kỳ thử việc, trong
+  checklist Onboarding) — dùng được **BẤT KỲ LÚC NÀO** trong thời gian thử
+  việc, đặt ở **CẢ 2 nơi**: màn Hợp Đồng Lao Động (Chi Tiết hợp đồng Thử
+  việc đang Nháp/Đang hiệu lực) VÀ màn Quy Trình Onboarding (Chi Tiết quy
+  trình, chỉ hiện khi đang "Đang thực hiện"). Bấm 1 lần, nhập lý do, hệ
+  thống **ĐỒNG THỜI** thực hiện cả 3 việc:
+  1. Đóng hợp đồng Thử việc (chuyển "Đã chấm dứt").
+  2. **Huỷ quy trình Onboarding liên kết** nếu còn "Đang thực hiện" (quy
+     trình đã Hoàn Tất/Đã Huỷ từ trước thì bỏ qua, không hồi tố).
+  3. **Chuyển Hồ Sơ Nhân Sự sang "Đã nghỉ" NGAY** — **KHÔNG cần đợi qua
+     Offboarding** như bình thường (Offboarding đòi hỏi 1 tài khoản VPDT đã
+     cấp, nhưng người thử việc bị loại sớm có thể CHƯA TỪNG được cấp tài
+     khoản).
+  Gác bằng đúng quyền **"📝 Quản Lý Hợp Đồng Lao Động"** (dùng được ở CẢ 2
+  màn, không cần thêm quyền Onboarding riêng — huỷ quy trình/đổi Hồ Sơ Nhân
+  Sự chỉ là hiệu ứng phụ tất yếu của hành động chấm dứt hợp đồng).
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, **2 mốc
   thời gian riêng** ("Ngày áp dụng" — TUỲ CHỌN, khi quyết định được áp
   dụng/ban hành; và "Ngày hiệu lực" — BẮT BUỘC, khi thay đổi thật sự có hiệu

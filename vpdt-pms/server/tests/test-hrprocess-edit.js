@@ -55,7 +55,21 @@ function partA() {
   const APP_DATA = {
     depts: ['Phòng Kế Toán', 'Phòng Kinh Doanh'], stores: ['Siêu thị Quận 1'],
     jobTitles: ['Nhân viên Kế Toán', 'Trưởng Phòng Kế Toán'], storeJobTitles: [{ label: 'Nhân viên Siêu thị' }],
-    employeeProfiles: [], hrProcesses: []
+    employeeProfiles: [], hrProcesses: [],
+    // orgChartVersions — (11/2026) editHrProcess() ONBOARDING giờ bắt buộc employeeDept/employeeJobTitle
+    // khớp 1 node POSITION thật trong bản APPLIED (xem lib/recordActions.js) — seed đúng 2 cặp dept/
+    // jobTitle các kịch bản dưới đây mong đợi THÀNH CÔNG ('Phòng Kế Toán'/'Nhân viên Kế Toán' và
+    // 'Siêu thị Quận 1'/'Nhân viên Siêu thị'). 'Phòng Không Tồn Tại' CỐ Ý không có node nào — vẫn phải
+    // bị chặn 400 (chỉ đổi thông báo lỗi mong đợi, không nới lỏng ý định của test).
+    orgChartVersions: [{
+      id: 'v1', status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Phòng Kế Toán', departmentRef: 'Phòng Kế Toán', jobTitle: null, requiresDept: null, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: false },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân viên Kế Toán', requiresDept: true, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: null, positionKey: 'pos-ketoan-nv' },
+        { nodeId: 3, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Siêu thị Quận 1', departmentRef: 'Siêu thị Quận 1', jobTitle: null, requiresDept: null, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: false },
+        { nodeId: 4, parentNodeId: 3, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân viên Siêu thị', requiresDept: true, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: null, positionKey: 'pos-st-nv' }
+      ]
+    }]
   };
 
   test('editHrProcess(): người không có hrOnboardingManage/không phải creator bị chặn 403', () => {
@@ -85,7 +99,10 @@ function partA() {
 
   test('editHrProcess(): ONBOARDING sửa Phòng Ban không có trong danh mục -> 400', () => {
     const item = freshOnboarding();
-    assert.throws(() => recordActions.editHrProcess(HR1, item, { employeePosType: 'HO', employeeDept: 'Phòng Không Tồn Tại', employeeJobTitle: 'Nhân viên Kế Toán' }, APP_DATA), /phòng ban/i);
+    // Chức Danh "Nhân viên Kế Toán" tồn tại thật (ở "Phòng Kế Toán") nên diagnosePositionMismatch()
+    // (lib/orgChart.js) trả thông báo gợi ý cụ thể hơn ("...nhưng KHÔNG phải ở...") thay vì thông báo
+    // chung "Không tìm thấy Vị Trí..." — vẫn đúng 400, chỉ đổi đúng nội dung thông báo mong đợi.
+    assert.throws(() => recordActions.editHrProcess(HR1, item, { employeePosType: 'HO', employeeDept: 'Phòng Không Tồn Tại', employeeJobTitle: 'Nhân viên Kế Toán' }, APP_DATA), /không tìm thấy vị trí|không phải ở/i);
   });
 
   test('editHrProcess(): ONBOARDING đổi sang Siêu Thị nhưng để trống Email -> 400 bắt buộc Email', () => {

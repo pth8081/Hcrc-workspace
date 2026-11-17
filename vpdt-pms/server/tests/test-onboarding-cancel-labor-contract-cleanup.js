@@ -100,7 +100,17 @@ function resetAppData() {
       { id: 99, processType: 'ONBOARDING', taskName: 'Việc khác chưa xong', department: 'HR', stage: 'TRAINING', isRequired: true, isActive: true, displayOrder: 3, dueDaysOffset: 5 }
     ],
     formTemplates: [],
-    employeeProfiles: []
+    employeeProfiles: [],
+    // orgChartVersions — (11/2026) Onboarding employeeDept/employeeJobTitle giờ đối chiếu Cơ Cấu Tổ Chức
+    // (orgChart.findPositionNodeForUser(), xem lib/createValidation.js) thay vì chỉ check có trong
+    // depts[]/jobTitles[] — seed 1 bản APPLIED khớp đúng "Kinh Doanh"/"Nhân Viên" dùng ở onboardingPayload().
+    orgChartVersions: [{
+      id: 'v1', status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Kinh Doanh', departmentRef: 'Kinh Doanh' },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', jobTitle: 'Nhân Viên', requiresDept: true, positionKey: 'pos-kd-nv' }
+      ]
+    }]
   };
 }
 resetAppData();

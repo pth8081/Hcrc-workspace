@@ -1542,58 +1542,82 @@ async function main() {
     // DB.hrTaskTemplates) — form Tạo Mới đổi tên hrpOnboardingForm/hrpOnbXxx, chỉ hiện sau khi bấm
     // "+ Tạo Onboarding" (showHrCreateForm('ONBOARDING'), #btnHrpCreateOnboarding).
     await check(
-      'Nhân Sự > Onboarding: "Làm Mới" đưa cascading picker Vị Trí về ĐÚNG mặc định HO (dropdown Chức Danh re-populate lại đúng danh mục HO, KHÔNG còn sót option Siêu Thị vừa chọn) + trắng toàn bộ form',
+      'Nhân Sự > Onboarding: Phòng Ban/Siêu Thị/Chức Danh lấy ĐÚNG từ Cơ Cấu Tổ Chức (select CHỌN ĐÚNG, Chức Danh CASCADE theo dept đang chọn), "Làm Mới" đưa cascading picker Vị Trí về ĐÚNG mặc định HO + trắng toàn bộ form',
       async () => {
-        // hrProcesses/hrTaskTemplates: không thuộc 3 module gốc — bổ sung tay. DB.stores/DB.storeJobTitles
-        // seed thêm nội dung THẤY ĐƯỢC để phân biệt rõ với DB.jobTitles (HO) khi kiểm tra cascading.
+        // hrProcesses/hrTaskTemplates: không thuộc 3 module gốc — bổ sung tay.
         await page.evaluate(() => {
           // 11/2026: canAccessHrLifecycleModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu
           // người dùng) -> cấp riêng hrOnboardingManage để kịch bản này (không liên quan gì tới phân
           // quyền, chỉ test "Làm Mới" cascading picker) vẫn vào được màn Onboarding/Offboarding.
           currentUser.perms.hrOnboardingManage = true;
           DB.hrProcesses = []; DB.hrTaskTemplates = [];
-          DB.stores = ['Siêu Thị Quận 7'];
-          DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }, { label: 'Quản lý ca' }];
-          switchTab('hrLifecycle');
         });
+        // (11/2026) Phòng Ban/Chức Danh Onboarding ĐỔI HẲN nguồn sang GET /api/hr-processes/
+        // onboarding-position-options (đọc bản APPLIED Cơ Cấu Tổ Chức, KHÔNG còn DB.depts/DB.jobTitles/
+        // DB.stores/DB.storeJobTitles) — mock riêng route này, seed 1 vị trí HO + 2 vị trí CÙNG 1 Siêu
+        // Thị (khác jobTitle) để kiểm tra CASCADE đúng theo dept đang chọn, không chỉ theo posType như
+        // cơ chế CŨ.
+        await page.evaluate(() => {
+          const originalFetch = window.fetch;
+          window.fetch = async (url, opts) => {
+            if (typeof url === 'string' && url.indexOf('/api/hr-processes/onboarding-position-options') !== -1) {
+              return {
+                ok: true, status: 200, json: async () => ({
+                  options: [
+                    { dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên Kế Toán' },
+                    { dept: 'Siêu Thị Quận 7', jobTitle: 'Nhân viên bán hàng' },
+                    { dept: 'Siêu Thị Quận 7', jobTitle: 'Quản lý ca' }
+                  ]
+                })
+              };
+            }
+            return originalFetch(url, opts);
+          };
+        });
+        await page.evaluate(() => switchTab('hrLifecycle'));
         await page.click('#btnHrpCreateOnboarding');
 
         const initialState = await page.evaluate(() => ({
           posType: document.getElementById('hrpOnbPosType').value,
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          // hrpOnbJobTitle: nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*" (v17.6, xem CLAUDE.md) — danh sách gợi
-          // ý giờ nằm ở dropdown._sddItems (sddSetOptions()), KHÔNG còn <select>.options.
-          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value)
+          deptOptions: Array.from(document.getElementById('hrpOnbDept').options).map(o => o.value).filter(Boolean),
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean)
         }));
         assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở form, thực tế "${initialState.posType}"`);
         assertTrue(initialState.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN khi đang ở HO (tiền đề bài test)');
         assertTrue(initialState.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN khi đang ở HO (tiền đề bài test)');
-        assertTrue(!initialState.jobTitleOptions.includes('Nhân viên bán hàng'), 'Chức Danh lúc đầu (HO) KHÔNG được có option Siêu Thị (tiền đề bài test)');
+        assertTrue(initialState.deptOptions.includes('Phòng Kế Toán'), `Phòng Ban phải nạp từ Cơ Cấu Tổ Chức, thực tế ${JSON.stringify(initialState.deptOptions)}`);
+        assertTrue(initialState.jobTitleOptions.length === 0, `Chức Danh phải RỖNG khi chưa chọn Phòng Ban (tiền đề bài test, chọn-đúng-node), thực tế ${JSON.stringify(initialState.jobTitleOptions)}`);
 
-        // Chuyển sang Siêu Thị -> cascading phải đổi đúng: ẩn Phòng Ban, hiện Siêu Thị, Chức Danh đổi
-        // sang danh mục Siêu Thị, Email chuyển bắt buộc.
+        // Chọn Phòng Ban -> Chức Danh cascade đúng theo dept đó.
+        await page.selectOption('#hrpOnbDept', 'Phòng Kế Toán');
+        const afterDeptOptions = await page.evaluate(() => Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean));
+        assertTrue(afterDeptOptions.length === 1 && afterDeptOptions[0] === 'Nhân viên Kế Toán', `Chức Danh phải cascade ĐÚNG 1 vị trí của "Phòng Kế Toán", thực tế ${JSON.stringify(afterDeptOptions)}`);
+
+        // Chuyển sang Siêu Thị -> cascading phải đổi đúng: ẩn Phòng Ban, hiện Siêu Thị, Chức Danh XOÁ
+        // (đổi Vị Trí = đổi hẳn ngữ cảnh, bắt chọn Siêu Thị trước), Email chuyển bắt buộc.
         await page.selectOption('#hrpOnbPosType', 'STORE');
         const storeState = await page.evaluate(() => ({
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value),
+          storeOptions: Array.from(document.getElementById('hrpOnbStore').options).map(o => o.value).filter(Boolean),
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean),
           emailRequired: document.getElementById('hrpOnbEmail').required
         }));
         assertTrue(storeState.deptWrapHidden === true, 'Khối Phòng Ban phải ẨN khi đang ở Siêu Thị (tiền đề bài test)');
         assertTrue(storeState.storeWrapHidden === false, 'Khối Siêu Thị phải HIỆN khi đang ở Siêu Thị (tiền đề bài test)');
-        assertTrue(storeState.jobTitleOptions.includes('Nhân viên bán hàng') && storeState.jobTitleOptions.includes('Quản lý ca'), `Chức Danh phải đổi sang danh mục Siêu Thị, thực tế ${JSON.stringify(storeState.jobTitleOptions)}`);
+        assertTrue(storeState.storeOptions.includes('Siêu Thị Quận 7'), `Siêu Thị phải nạp từ Cơ Cấu Tổ Chức, thực tế ${JSON.stringify(storeState.storeOptions)}`);
+        assertTrue(storeState.jobTitleOptions.length === 0, `Đổi Vị Trí phải XOÁ Chức Danh (bắt chọn Siêu Thị trước), thực tế ${JSON.stringify(storeState.jobTitleOptions)}`);
         assertTrue(storeState.emailRequired === true, 'Email phải chuyển bắt buộc khi đang ở Siêu Thị (tiền đề bài test)');
+
+        await page.selectOption('#hrpOnbStore', 'Siêu Thị Quận 7');
+        const afterStoreOptions = await page.evaluate(() => Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean));
+        assertTrue(afterStoreOptions.includes('Nhân viên bán hàng') && afterStoreOptions.includes('Quản lý ca'), `Chức Danh phải đổi sang 2 vị trí của "Siêu Thị Quận 7", thực tế ${JSON.stringify(afterStoreOptions)}`);
 
         await page.fill('#hrpOnbEmployeeCode', 'NV9999');
         await page.fill('#hrpOnbFullName', 'Nguyễn Văn Kiểm Thử');
-        // hrpOnbStore cũng đã đổi sang ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — gõ thẳng đúng nhãn như
-        // hrpOnbJobTitle ngay dưới, không còn <select> để dùng selectOption().
-        await page.fill('#hrpOnbStore', 'Siêu Thị Quận 7');
-        // hrpOnbJobTitle giờ là ô tìm-kiếm-gõ-chọn (input tự do + gợi ý) — gõ thẳng đúng nhãn, không
-        // cần bấm chọn gợi ý (value đọc lúc submit chính là input.value, khớp cách mọi ô "sdd*" khác
-        // hoạt động khi gõ đúng khớp 1 gợi ý).
-        await page.fill('#hrpOnbJobTitle', 'Nhân viên bán hàng');
+        await page.selectOption('#hrpOnbJobTitle', 'Nhân viên bán hàng');
         await page.fill('#hrpOnbEmail', 'test@company.com');
         await page.fill('#hrpOnbPhone', '0912345678');
         await page.fill('#hrpOnbStartDate', '2026-10-01');
@@ -1605,7 +1629,9 @@ async function main() {
           posType: document.getElementById('hrpOnbPosType').value,
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value),
+          deptValue: document.getElementById('hrpOnbDept').value,
+          storeValue: document.getElementById('hrpOnbStore').value,
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean),
           jobTitleValue: document.getElementById('hrpOnbJobTitle').value,
           emailRequired: document.getElementById('hrpOnbEmail').required,
           employeeCode: document.getElementById('hrpOnbEmployeeCode').value,
@@ -1620,8 +1646,10 @@ async function main() {
         assertTrue(state.posType === 'HO', `Vị Trí phải về ĐÚNG mặc định HO sau Làm Mới, thực tế "${state.posType}"`);
         assertTrue(state.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN lại sau Làm Mới (đã về HO)');
         assertTrue(state.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN lại sau Làm Mới (đã về HO), KHÔNG được kẹt lại ở trạng thái Siêu Thị vừa chọn');
-        assertTrue(!state.jobTitleOptions.includes('Nhân viên bán hàng'), `Chức Danh phải re-populate lại ĐÚNG danh mục HO (không còn sót option Siêu Thị "Nhân viên bán hàng"), thực tế ${JSON.stringify(state.jobTitleOptions)}`);
-        assertTrue(state.jobTitleValue === '', `Chức Danh (input) phải về rỗng sau Làm Mới, thực tế "${state.jobTitleValue}"`);
+        assertTrue(state.deptValue === '', `Phòng Ban phải về rỗng sau Làm Mới, thực tế "${state.deptValue}"`);
+        assertTrue(state.storeValue === '', `Siêu Thị phải về rỗng sau Làm Mới (KHÔNG kẹt lại "Siêu Thị Quận 7" vừa chọn), thực tế "${state.storeValue}"`);
+        assertTrue(!state.jobTitleOptions.includes('Nhân viên bán hàng'), `Chức Danh phải re-populate lại RỖNG (chưa chọn lại Phòng Ban), không còn sót option Siêu Thị "Nhân viên bán hàng", thực tế ${JSON.stringify(state.jobTitleOptions)}`);
+        assertTrue(state.jobTitleValue === '', `Chức Danh phải về rỗng sau Làm Mới, thực tế "${state.jobTitleValue}"`);
         assertTrue(state.emailRequired === false, 'Email phải hết bắt buộc sau khi về lại HO');
         assertTrue(state.employeeCode === '', 'hrpOnbEmployeeCode phải về rỗng');
         assertTrue(state.fullName === '', 'hrpOnbFullName phải về rỗng');

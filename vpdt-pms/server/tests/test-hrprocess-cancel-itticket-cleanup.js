@@ -100,7 +100,17 @@ function resetAppData() {
       { id: 51, processType: 'OFFBOARDING', taskName: 'Việc khác chưa xong', department: 'HR', stage: 'SETTLEMENT', isRequired: true, isActive: true, displayOrder: 2, dueDaysOffset: 0 }
     ],
     formTemplates: [],
-    employeeProfiles: []
+    employeeProfiles: [],
+    // orgChartVersions — Onboarding (11/2026) giờ bắt buộc employeeDept/employeeJobTitle phải khớp 1
+    // node POSITION thật trong bản APPLIED (xem lib/createValidation.js) — onboardingPayload() ở dưới
+    // dùng dept 'Kinh Doanh' + jobTitle 'Nhân Viên', seed đúng 1 node DEPARTMENT + 1 node POSITION khớp.
+    orgChartVersions: [{
+      id: 'v1', status: 'APPLIED',
+      nodes: [
+        { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Kinh Doanh', departmentRef: 'Kinh Doanh', jobTitle: null, requiresDept: null, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: false },
+        { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên', requiresDept: true, posType: null, jobGrade: null, headcountQuota: null, headcountSelfOnly: null, positionKey: 'pos-kd-nv' }
+      ]
+    }]
   };
 }
 resetAppData();

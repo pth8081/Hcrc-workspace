@@ -135,7 +135,7 @@ function setHrLifecycleView(view) {
 }
 
 // ----- Tạo mới -----
-function showHrCreateForm(type) {
+async function showHrCreateForm(type) {
   activeHrCreateForm = type;
   document.getElementById('hrpCreateOnboardWrap').classList.toggle('hidden', type !== 'ONBOARDING');
   document.getElementById('hrpCreateOffboardWrap').classList.toggle('hidden', type !== 'OFFBOARDING');
@@ -146,8 +146,8 @@ function showHrCreateForm(type) {
     // (chưa module nào khác nạp trước), ô tìm kiếm hiện trống ngay lần bấm đầu, chỉ hiện đúng tên sau khi
     // có thao tác KHÁC (mở form Offboarding, hoặc module khác dùng chung datalist này) tình cờ nạp nó.
     populateSystemUsersDatalist();
-    populateHrpOnboardingDeptDropdowns();
     document.getElementById('hrpOnbPosType').value = 'HO';
+    await populateHrpOnboardingDeptDropdowns();
     onHrpOnboardingPosTypeChange();
     document.getElementById('hrpOnbRehirePanel')?.classList.add('hidden');
     document.getElementById('hrpOnbRehireResultsWrap')?.classList.add('hidden');
@@ -167,31 +167,82 @@ function hideHrCreateForms() {
   document.getElementById('hrpCreateOffboardWrap').classList.add('hidden');
 }
 
-// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát toàn hệ thống ô <select> danh mục dài): hrpOnbDept/
-// hrpOnbStore trước đây là <select> dựng cứng toàn bộ <option> — cuộn dài khi DB.depts/DB.stores nhiều.
-// Nâng cấp sang sddSetOptions() (ô tìm-kiếm-gõ-chọn), cùng khuôn hrpOnbJobTitle đã chuyển đợt trước.
-function populateHrpOnboardingDeptDropdowns() {
-  sddSetOptions('hrpOnbDeptDatalist', DB.depts || []);
-  sddSetOptions('hrpOnbStoreDatalist', DB.stores || []);
+// hrpOnboardingPositionOptions — (11/2026, theo yêu cầu TRỰC TIẾP người dùng: "Chức danh phải lấy từ cơ
+// cấu tổ chức và phòng ban cũng lấy từ cơ cấu tổ chức, không lấy từ phân quyền ... khi upload file bằng
+// onboarding mà không có những cái vị trí cơ cấu tổ chức và phòng ban ... phải báo lỗi ngay") — cache
+// GET /api/hr-processes/onboarding-position-options (mảng {dept, jobTitle} từ ĐÚNG bản APPLIED Cơ Cấu
+// Tổ Chức hiện tại, xem orgChart.listOnboardingPositionOptions()). Dùng CHUNG cho cả form Tạo VÀ form
+// Sửa Onboarding (loadHrpOnboardingPositionOptions() gọi lại mỗi lần mở 1 trong 2 form để luôn lấy đúng
+// bản APPLIED mới nhất, phòng trường hợp Cơ Cấu Tổ Chức vừa đổi từ lúc trang được tải).
+let hrpOnboardingPositionOptions = [];
+async function loadHrpOnboardingPositionOptions() {
+  try {
+    const res = await fetch('/api/hr-processes/onboarding-position-options');
+    const data = await res.json().catch(() => ({}));
+    hrpOnboardingPositionOptions = (res.ok && Array.isArray(data.options)) ? data.options : [];
+  } catch (err) {
+    hrpOnboardingPositionOptions = [];
+  }
+  return hrpOnboardingPositionOptions;
 }
-// PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hrpOnbJobTitle trước đây là <select> gõ-cứng-toàn-bộ (không
-// tìm-kiếm được khi danh mục chức danh dài) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*" bắt buộc dùng cho
-// mọi ô mới từ giờ (xem CLAUDE.md), việc lọc theo posType (Văn Phòng/Siêu Thị) VẪN giữ đúng logic cũ,
-// chỉ đổi cách nạp danh sách gợi ý (sddSetOptions thay vì dựng <option>).
-function populateHrpOnboardingJobTitleOptions(posType) {
-  const input = document.getElementById('hrpOnbJobTitle');
-  if (!input) return;
-  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
-  sddSetOptions('hrpOnbJobTitleDatalist', options);
-  // Đổi posType -> chức danh đã gõ trước đó (nếu có) có thể không còn thuộc danh mục mới -> xoá để
-  // tránh gửi nhầm 1 chức danh KHÔNG khớp posType vừa chọn.
-  input.value = '';
+function hrpDistinctOnboardingDepts() {
+  return [...new Set(hrpOnboardingPositionOptions.map(o => o.dept))].sort((a, b) => a.localeCompare(b, 'vi'));
+}
+function hrpJobTitlesForOnboardingDept(dept) {
+  if (!dept) return [];
+  return [...new Set(hrpOnboardingPositionOptions.filter(o => o.dept === dept).map(o => o.jobTitle))].sort((a, b) => a.localeCompare(b, 'vi'));
+}
+// hrpBuildStrictSelectOptionsHTML() — dựng <option> cho 1 <select> CHỌN ĐÚNG (không cho gõ tự do, xác
+// nhận trực tiếp bởi người dùng qua AskUserQuestion: "Chỉ cho chọn đúng node Cơ Cấu Tổ Chức") — nếu
+// `currentValue` KHÔNG có trong `values` (hồ sơ CŨ mang dept/jobTitle đã lỗi thời so với Cơ Cấu Tổ Chức
+// hiện tại, VD vị trí đã bị đổi tên/xoá sau khi hồ sơ được tạo), vẫn giữ nguyên 1 <option> riêng cho giá
+// trị đó (đánh dấu "⚠️ không còn trong Cơ Cấu Tổ Chức") để KHÔNG âm thầm đổi giá trị đang lưu khi mở form
+// (xem editHrProcess() lib/recordActions.js — chỉ chặn cứng khi THỰC SỰ đổi dept/jobTitle, giữ nguyên giá
+// trị cũ dù không còn khớp vẫn lưu được các field khác bình thường).
+function hrpBuildStrictSelectOptionsHTML(values, currentValue, placeholder) {
+  const opts = [`<option value="">${escapeHtml(placeholder || (values.length ? '-- Chọn --' : '(Chưa có dữ liệu trong Cơ Cấu Tổ Chức)'))}</option>`];
+  const all = values.slice();
+  if (currentValue && !all.includes(currentValue)) all.unshift(currentValue);
+  for (const v of all) {
+    const label = (v === currentValue && !values.includes(v)) ? `⚠️ ${v} (không còn trong Cơ Cấu Tổ Chức)` : v;
+    opts.push(`<option value="${escapeHtml(v)}" ${v === currentValue ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+  }
+  return opts.join('');
+}
+
+// populateHrpOnboardingDeptDropdowns() — ĐỔI HẲN nguồn dữ liệu (11/2026): TRƯỚC ĐÂY lấy DB.depts/
+// DB.stores (danh mục Phân Quyền, có thể không khớp vị trí thật nào) qua ô tìm-kiếm-gõ-chọn tự do
+// (sdd*) — nay lấy ĐÚNG Cơ Cấu Tổ Chức qua hrpOnboardingPositionOptions + đổi hẳn sang <select> CHỌN
+// ĐÚNG, khớp đúng extraValidate() mới (lib/createValidation.js) chặn cứng dept/jobTitle không khớp 1 Vị
+// Trí có thật. hrpOnbDept (Phòng Ban, HO) và hrpOnbStore (Siêu Thị) CÙNG dùng 1 danh sách dept đầy đủ từ
+// Cơ Cấu Tổ Chức (node POSITION không tự phân biệt HO/Siêu Thị theo dept cha) — người dùng tự chọn đúng ô
+// đang hiện theo Vị Trí (posType) đã chọn ở trên.
+async function populateHrpOnboardingDeptDropdowns() {
+  await loadHrpOnboardingPositionOptions();
+  const depts = hrpDistinctOnboardingDepts();
+  const deptSel = document.getElementById('hrpOnbDept');
+  const storeSel = document.getElementById('hrpOnbStore');
+  if (deptSel) deptSel.innerHTML = hrpBuildStrictSelectOptionsHTML(depts, deptSel.value, depts.length ? '-- Chọn Phòng Ban --' : null);
+  if (storeSel) storeSel.innerHTML = hrpBuildStrictSelectOptionsHTML(depts, storeSel.value, depts.length ? '-- Chọn Siêu Thị --' : null);
+  populateHrpOnboardingJobTitleOptions();
+}
+// populateHrpOnboardingJobTitleOptions() — Chức Danh CASCADE theo đúng Phòng Ban/Siêu Thị đang chọn
+// (không còn tách riêng theo posType như trước — TRƯỚC ĐÂY lấy DB.jobTitles/DB.storeJobTitles theo
+// posType, nay lọc ĐÚNG hrpOnboardingPositionOptions theo dept đang chọn, khớp 1-1 với cách server khớp
+// findPositionNodeForUser(), tránh cho chọn 1 cặp dept/jobTitle không tồn tại vị trí thật nào).
+function populateHrpOnboardingJobTitleOptions() {
+  const select = document.getElementById('hrpOnbJobTitle');
+  if (!select) return;
+  const posType = document.getElementById('hrpOnbPosType')?.value;
+  const dept = posType === 'STORE' ? document.getElementById('hrpOnbStore')?.value : document.getElementById('hrpOnbDept')?.value;
+  const options = hrpJobTitlesForOnboardingDept(dept);
+  select.innerHTML = hrpBuildStrictSelectOptionsHTML(options, '', dept ? (options.length ? '-- Chọn Chức Danh --' : '(Không có Chức Danh nào thuộc Phòng Ban/Siêu Thị này)') : '-- Chọn Phòng Ban/Siêu Thị trước --');
 }
 function onHrpOnboardingPosTypeChange() {
   const posType = document.getElementById('hrpOnbPosType').value;
   document.getElementById('hrpOnbDeptWrap').classList.toggle('hidden', posType !== 'HO');
   document.getElementById('hrpOnbStoreWrap').classList.toggle('hidden', posType !== 'STORE');
-  populateHrpOnboardingJobTitleOptions(posType);
+  populateHrpOnboardingJobTitleOptions();
   const emailLabel = document.getElementById('hrpOnbEmailLabel');
   const emailInput = document.getElementById('hrpOnbEmail');
   if (posType === 'STORE') {
@@ -303,6 +354,11 @@ function onHrpOnbPlannedContractTypeChange() {
 async function submitHrpOnboarding(e) {
   e.preventDefault();
   const posType = document.getElementById('hrpOnbPosType').value;
+  const activeDeptValue = posType === 'STORE' ? document.getElementById('hrpOnbStore').value : document.getElementById('hrpOnbDept').value;
+  // (11/2026) Phòng Ban/Chức Danh BẮT BUỘC phải chọn đúng 1 Vị Trí có thật trong Cơ Cấu Tổ Chức — báo lỗi
+  // ngay ở client trước khi gọi API (server vẫn chặn cứng lại lần cuối ở extraValidate(), đây chỉ là UX).
+  if (!activeDeptValue) return alert(`⛔ Vui lòng chọn ${posType === 'STORE' ? 'Siêu Thị' : 'Phòng Ban'} theo Cơ Cấu Tổ Chức.`);
+  if (!document.getElementById('hrpOnbJobTitle').value) return alert('⛔ Vui lòng chọn Chức Danh theo Cơ Cấu Tổ Chức.');
   const requiredOnbTemplates = hrpRequiredCreateTemplates('ONBOARDING');
   const missingOnbAssign = requiredOnbTemplates.filter(t => !hrpCreateTaskAssignments.ONBOARDING[t.id]);
   if (missingOnbAssign.length) {
@@ -843,6 +899,7 @@ function renderHrProcessDetailBody(item) {
     </div>
     ${item.status === 'IN_PROGRESS' && canManage ? `<div class="text-right mt-3 flex justify-end gap-3">
       ${item.processType === 'ONBOARDING' ? `<button type="button" data-op="hrpSyncDraftProfile" data-arg0="${item.id}" class="text-teal-600 font-bold text-xs hover:underline" title="Dùng khi quy trình này KHÔNG hiện trong hàng đợi &quot;🕐 Hồ Sơ Onboarding&quot; dù vẫn đang thực hiện bình thường ở đây">🔄 Đồng Bộ Hồ Sơ Nháp</button>` : ''}
+      ${item.processType === 'ONBOARDING' ? `<button type="button" data-op="hrpTerminateProbationFromProcess" data-arg0="${item.id}" class="text-orange-600 font-bold text-xs hover:underline" title="Nhân viên không đạt/nghỉ ngang giữa thử việc — đóng hợp đồng Thử Việc + huỷ quy trình này + chuyển Hồ Sơ Nhân Sự sang &quot;Đã nghỉ&quot; ngay">✏️ Chấm Dứt Thử Việc</button>` : ''}
       <button type="button" data-op="hrpEditProcess" data-arg0="${item.id}" class="text-indigo-600 font-bold text-xs hover:underline">✏️ Sửa Quy Trình</button>
       <button type="button" data-op="hrpCancelProcess" data-arg0="${item.id}" class="text-red-600 font-bold text-xs hover:underline">❌ Huỷ Quy Trình</button>
     </div>` : ''}
@@ -940,6 +997,59 @@ async function hrpCancelProcess(processId) {
   }
 }
 
+// hrpTerminateProbationFromProcess() — "✏️ Chấm Dứt Thử Việc" gọi TỪ màn Quy Trình Onboarding (MỚI
+// 11/2026, xem chú thích đầy đủ ở terminateProbationBtn/terminateProbationContract()
+// module-hopdonglaodong.js — CÙNG action, CHỈ khác điểm vào) — gọi route ALIAS POST /hrProcesses/:id/
+// terminate-probation (routes/records.js, tự tra đúng hợp đồng Thử Việc gắn quy trình này) thay vì đòi
+// màn này phải tự có sẵn DB.laborContracts (module-hopdonglaodong.js nạp lười RIÊNG, không cùng nhóm với
+// hrlifecycle — xem MODULE_LOAD_GROUPS, core.js). CÙNG khuôn modal lý do (tái dùng
+// DB.contractTerminationReasons, danh mục chung toàn hệ thống — không cần module Hợp Đồng Lao Động đã
+// nạp).
+function hrpTerminateProbationFromProcess(processId) {
+  showConfirmModal({
+    title: '✏️ Chấm Dứt Thử Việc',
+    bodyHTML: `
+      <p class="text-xs text-gray-600 mb-2">Áp dụng khi nhân viên KHÔNG đạt yêu cầu thử việc hoặc tự nghỉ ngang giữa thời gian thử việc — hệ thống sẽ ĐỒNG THỜI: đóng hợp đồng Thử Việc, huỷ quy trình Onboarding này, VÀ chuyển Hồ Sơ Nhân Sự sang "Đã nghỉ" ngay (không cần đợi qua Offboarding).</p>
+      <p class="text-xs text-gray-600 mb-2">Vui lòng chọn/nhập lý do:</p>
+      <select id="hrpTerminateProbationReasonSelect" data-op-change="toggleHrpTerminateProbationReasonOther" class="w-full border p-1.5 rounded text-sm bg-white mb-2">
+        <option value="">-- Chọn lý do --</option>
+        ${(DB.contractTerminationReasons || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+      </select>
+      <input type="text" id="hrpTerminateProbationReasonOther" placeholder="Nhập lý do..." class="hidden w-full border p-1.5 rounded text-sm">
+    `,
+    confirmLabel: '✏️ Xác Nhận Chấm Dứt Thử Việc',
+    onConfirm: async () => {
+      const sel = document.getElementById('hrpTerminateProbationReasonSelect').value;
+      const reason = sel === 'Khác' ? document.getElementById('hrpTerminateProbationReasonOther').value.trim() : sel.trim();
+      if (!reason) return alert('⛔ Vui lòng chọn/nhập lý do chấm dứt thử việc.');
+      try {
+        // LƯU Ý: result.item ở route NÀY là hợp đồng Thử Việc vừa chấm dứt (khác collection) — quy trình
+        // Onboarding vừa bị huỷ (nếu còn Đang thực hiện) nằm ở result.hrProcess riêng, xem chú thích đầy
+        // đủ ở POST /hrProcesses/:id/terminate-probation (routes/records.js).
+        const result = await callRecordAction('hrProcesses', processId, 'terminate-probation', { reason });
+        if (result.hrProcess) hrpApplyProcessUpdate(result.hrProcess);
+        // Cập nhật luôn cache DB.laborContracts NẾU module Hợp Đồng Lao Động đã từng nạp trong phiên này
+        // (tránh hiện lại trạng thái CŨ nếu người dùng chuyển sang màn đó ngay sau) — không sao nếu
+        // DB.laborContracts chưa từng nạp (mảng rỗng/undefined), màn đó sẽ tự nạp mới khi mở lần đầu.
+        if (Array.isArray(DB.laborContracts) && result.item) {
+          const idx = DB.laborContracts.findIndex(c => c.id === result.item.id);
+          if (idx >= 0) DB.laborContracts[idx] = result.item;
+        }
+        alert(`✅ Đã chấm dứt thử việc + huỷ quy trình Onboarding này. Hồ sơ "${result.profile?.employeeCode || ''}" đã chuyển sang "Đã nghỉ".`);
+      } catch (err) {
+        alert(`⛔ ${err.message}`);
+      }
+    }
+  });
+}
+function toggleHrpTerminateProbationReasonOther() {
+  const sel = document.getElementById('hrpTerminateProbationReasonSelect');
+  const other = document.getElementById('hrpTerminateProbationReasonOther');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== 'Khác');
+  if (sel.value !== 'Khác') other.value = '';
+}
+
 // "🔄 Đồng Bộ Hồ Sơ Nháp" (11/2026, theo yêu cầu người dùng — quy trình Onboarding đang "Đang thực hiện"
 // bình thường nhưng KHÔNG hiện trong hàng đợi "🕐 Hồ Sơ Onboarding" vì hồ sơ employeeProfiles DRAFT liên
 // kết bị thiếu/mất — xem POST /hrProcesses/:id/sync-draft-profile, routes/records.js). KHÔNG trả về
@@ -960,9 +1070,14 @@ async function hrpSyncDraftProfile(processId) {
 // (lib/recordActions.js). Dùng showConfirmModal() dựng form ĐỘNG theo processType thay vì thêm DOM cố
 // định mới vào hrLifecycleSection.html — field điền sẵn giá trị HIỆN TẠI, server tự so sánh field nào
 // THỰC SỰ đổi (xem editHrProcess()), KHÔNG đụng checklist/tasks[] đã làm.
-function hrpEditProcess(processId) {
+async function hrpEditProcess(processId) {
   const item = findHrProcessById(processId);
   if (!item) return;
+  // (11/2026) Phòng Ban/Siêu Thị/Chức Danh ở form Sửa Onboarding CŨNG đổi sang chọn đúng Cơ Cấu Tổ Chức
+  // (cùng lý do form Tạo — xem hrpBuildStrictSelectOptionsHTML()) — tải TRƯỚC khi dựng bodyHTML để
+  // <option> hiện đúng ngay từ lúc mở modal (khác form Tạo — form Tạo dựng HTML rồi tải sau, ở đây modal
+  // chỉ build 1 lần lúc mở nên phải chờ xong trước).
+  if (item.processType === 'ONBOARDING') await loadHrpOnboardingPositionOptions();
   const bodyHTML = item.processType === 'ONBOARDING' ? hrpBuildEditOnboardingFormHTML(item) : hrpBuildEditOffboardingFormHTML(item);
   showConfirmModal({
     title: '✏️ Sửa Thông Tin Quy Trình',
@@ -971,15 +1086,16 @@ function hrpEditProcess(processId) {
     onConfirm: () => hrpSubmitEditProcess(item)
   });
   if (item.processType === 'ONBOARDING') {
-    sddSetOptions('hrpEditDeptDatalist', DB.depts || []);
-    sddSetOptions('hrpEditStoreDatalist', DB.stores || []);
-    hrpOnEditPosTypeChange();
+    hrpApplyEditPosTypeWrapVisibility(item.employeePosType);
   } else {
     sddSetOptions('hrpEditResignationReasonDatalist', DB.resignationReasons || []);
   }
 }
 
 function hrpBuildEditOnboardingFormHTML(item) {
+  const depts = hrpDistinctOnboardingDepts();
+  const currentDept = item.employeePosType !== 'STORE' ? (item.employeeDept || '') : '';
+  const currentStore = item.employeePosType === 'STORE' ? (item.employeeDept || '') : '';
   return `
     <div class="space-y-2 text-sm text-left">
       <div>
@@ -999,18 +1115,15 @@ function hrpBuildEditOnboardingFormHTML(item) {
       </div>
       <div id="hrpEditDeptWrap">
         <label class="block text-xs text-gray-500 mb-0.5">Phòng Ban</label>
-        <input type="text" id="hrpEditDept" data-sdd-list="hrpEditDeptDatalist" autocomplete="off" value="${escapeHtml(item.employeePosType !== 'STORE' ? (item.employeeDept || '') : '')}" class="w-full border p-1.5 rounded">
-        <div id="hrpEditDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        <select id="hrpEditDept" data-op-change="hrpOnEditDeptOrStoreChange" class="w-full border p-1.5 rounded bg-white">${hrpBuildStrictSelectOptionsHTML(depts, currentDept, '-- Chọn Phòng Ban --')}</select>
       </div>
       <div id="hrpEditStoreWrap">
         <label class="block text-xs text-gray-500 mb-0.5">Siêu Thị</label>
-        <input type="text" id="hrpEditStore" data-sdd-list="hrpEditStoreDatalist" autocomplete="off" value="${escapeHtml(item.employeePosType === 'STORE' ? (item.employeeDept || '') : '')}" class="w-full border p-1.5 rounded">
-        <div id="hrpEditStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        <select id="hrpEditStore" data-op-change="hrpOnEditDeptOrStoreChange" class="w-full border p-1.5 rounded bg-white">${hrpBuildStrictSelectOptionsHTML(depts, currentStore, '-- Chọn Siêu Thị --')}</select>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-0.5">Chức Danh</label>
-        <input type="text" id="hrpEditJobTitle" data-sdd-list="hrpEditJobTitleDatalist" autocomplete="off" value="${escapeHtml(item.employeeJobTitle || '')}" class="w-full border p-1.5 rounded">
-        <div id="hrpEditJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        <select id="hrpEditJobTitle" class="w-full border p-1.5 rounded bg-white">${hrpBuildStrictSelectOptionsHTML(hrpJobTitlesForOnboardingDept(item.employeeDept), item.employeeJobTitle || '', '-- Chọn Chức Danh --')}</select>
       </div>
       <div>
         <label id="hrpEditEmailLabel" class="block text-xs text-gray-500 mb-0.5">Email</label>
@@ -1046,18 +1159,46 @@ function hrpBuildEditOffboardingFormHTML(item) {
     </div>`;
 }
 
-// Mirror onHrpOnboardingPosTypeChange() (form Tạo Onboarding) — đổi hiện/ẩn Phòng Ban/Siêu Thị + nạp
-// lại gợi ý Chức Danh theo đúng posType, KHÔNG xoá dữ liệu đã gõ (khác form Tạo, vì đây là SỬA — giữ
-// nguyên Chức Danh cũ nếu posType không đổi so với lúc mở form).
+// hrpApplyEditPosTypeWrapVisibility(posType) — (11/2026) CHỈ đổi hiện/ẩn khung Phòng Ban/Siêu Thị + nhãn
+// Email theo posType, KHÔNG đụng Chức Danh — dùng lúc MỞ modal lần đầu (hrpEditProcess()) để giữ nguyên
+// <option> Chức Danh đã dựng sẵn ở hrpBuildEditOnboardingFormHTML() (có thể đang giữ 1 giá trị CŨ không
+// còn khớp Cơ Cấu Tổ Chức hiện tại — KHÔNG được xoá oan chỉ vì mở lại form Sửa, xem
+// hrpBuildStrictSelectOptionsHTML()). Tách riêng khỏi hrpOnEditPosTypeChange() ngay dưới (handler THẬT
+// khi người dùng CHỦ ĐỘNG đổi Vị Trí giữa lúc sửa — lúc đó MỚI cần xoá Chức Danh bắt chọn lại).
+function hrpApplyEditPosTypeWrapVisibility(posType) {
+  document.getElementById('hrpEditDeptWrap').classList.toggle('hidden', posType !== 'HO');
+  document.getElementById('hrpEditStoreWrap').classList.toggle('hidden', posType !== 'STORE');
+  const emailLabel = document.getElementById('hrpEditEmailLabel');
+  if (emailLabel) emailLabel.textContent = posType === 'STORE' ? 'Email (bắt buộc — nhân viên Siêu Thị)' : 'Email (để trống nếu chưa cấp)';
+}
+// hrpEditActiveDeptValue() — Phòng Ban/Siêu Thị ĐANG được dùng để lọc Chức Danh, tuỳ posType hiện tại.
+function hrpEditActiveDeptValue() {
+  const posType = document.getElementById('hrpEditPosType')?.value;
+  return posType === 'STORE' ? document.getElementById('hrpEditStore')?.value : document.getElementById('hrpEditDept')?.value;
+}
+// hrpResetEditJobTitleOptions() — nạp lại <option> Chức Danh theo ĐÚNG Phòng Ban/Siêu Thị đang chọn,
+// LUÔN xoá giá trị đang chọn (khác lúc MỞ modal) — đổi Vị Trí/Phòng Ban/Siêu Thị đồng nghĩa đổi hẳn ngữ
+// cảnh, Chức Danh cũ gần như chắc chắn không còn khớp, bắt chọn lại (khớp đúng hành vi
+// onHrpOnboardingPosTypeChange() form Tạo).
+function hrpResetEditJobTitleOptions() {
+  const select = document.getElementById('hrpEditJobTitle');
+  if (!select) return;
+  const dept = hrpEditActiveDeptValue();
+  const options = hrpJobTitlesForOnboardingDept(dept);
+  select.innerHTML = hrpBuildStrictSelectOptionsHTML(options, '', dept ? (options.length ? '-- Chọn Chức Danh --' : '(Không có Chức Danh nào thuộc Phòng Ban/Siêu Thị này)') : '-- Chọn Phòng Ban/Siêu Thị trước --');
+}
+// hrpOnEditPosTypeChange() — handler THẬT (data-op-change #hrpEditPosType) khi NGƯỜI DÙNG chủ động đổi
+// Vị Trí giữa lúc Sửa.
 function hrpOnEditPosTypeChange() {
   const posType = document.getElementById('hrpEditPosType')?.value;
   if (!posType) return;
-  document.getElementById('hrpEditDeptWrap').classList.toggle('hidden', posType !== 'HO');
-  document.getElementById('hrpEditStoreWrap').classList.toggle('hidden', posType !== 'STORE');
-  const jobTitleOptions = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
-  sddSetOptions('hrpEditJobTitleDatalist', jobTitleOptions);
-  const emailLabel = document.getElementById('hrpEditEmailLabel');
-  if (emailLabel) emailLabel.textContent = posType === 'STORE' ? 'Email (bắt buộc — nhân viên Siêu Thị)' : 'Email (để trống nếu chưa cấp)';
+  hrpApplyEditPosTypeWrapVisibility(posType);
+  hrpResetEditJobTitleOptions();
+}
+// hrpOnEditDeptOrStoreChange() — handler THẬT (data-op-change #hrpEditDept/#hrpEditStore) khi người dùng
+// đổi Phòng Ban/Siêu Thị.
+function hrpOnEditDeptOrStoreChange() {
+  hrpResetEditJobTitleOptions();
 }
 
 async function hrpSubmitEditProcess(item) {

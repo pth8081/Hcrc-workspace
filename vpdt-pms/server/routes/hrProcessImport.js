@@ -11,6 +11,7 @@ const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { canCreateHrProcess } = require('../lib/recordActions');
 const { buildCreateTemplateWorkbook, parseCreateImportBuffer } = require('../lib/hrProcessCreateImport');
+const orgChart = require('../lib/orgChart');
 const { getAllAppData } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -63,6 +64,25 @@ const upload = multer({
       return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
+  }
+});
+
+// GET /api/hr-processes/onboarding-position-options — (11/2026, theo yêu cầu người dùng "Phòng Ban/Chức
+// Danh ở form tạo Onboarding phải lấy từ Cơ Cấu Tổ Chức, không lấy từ danh mục Phân Quyền" — trước đó 2
+// ô này lấy thẳng DB.depts/DB.jobTitles, có thể tạo hồ sơ với 1 cặp Phòng Ban/Chức Danh không tồn tại
+// vị trí thật nào). Trả {dept, jobTitle}[] từ bản APPLIED hiện tại — dùng để dựng 2 ô chọn ở
+// public/js/module-hrlifecycle.js. Đặt Ở ĐÂY (không phải routes/orgChart.js) vì router đó gác CẢ module
+// "orgChart" (hasModuleAccessServer) lẫn quyền orgChartManage/nhanSuManage — người tạo Onboarding
+// thường CHỈ có hrOnboardingManage, không có quyền Cơ Cấu Tổ Chức; route này tái dùng ĐÚNG module gate
+// "hrLifecycle" + requireOnboardingCreate (canCreateHrProcess, KHÔNG admin bypass) đã có sẵn ở trên.
+router.get('/onboarding-position-options', requireOnboardingCreate, async (req, res) => {
+  try {
+    const orgChartVersions = (await getAllAppData()).orgChartVersions || [];
+    const appliedVersion = orgChart.getAppliedVersion(orgChartVersions);
+    const options = appliedVersion ? orgChart.listOnboardingPositionOptions(appliedVersion) : [];
+    res.json({ options });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/hr-processes/onboarding-position-options');
   }
 });
 

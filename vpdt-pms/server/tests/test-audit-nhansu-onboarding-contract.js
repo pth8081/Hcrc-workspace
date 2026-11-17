@@ -93,6 +93,18 @@ const USERS = [
   { username: 'nv.a', name: 'Nguyễn Văn A', dept: 'Kinh Doanh', perms: {}, active: true }
 ];
 
+// ORG_CHART_FIXTURE — (11/2026, Onboarding Phòng Ban/Chức Danh ĐỔI SANG lấy từ Cơ Cấu Tổ Chức, xem
+// lib/createValidation.js) — khớp ĐÚNG 1 cặp {dept, jobTitle} dùng ở onboardingPayload() mặc định
+// ('Kinh Doanh'/'Nhân Viên', KHÔNG override ở bất kỳ test nào trong file này) — mirror field thật
+// addNode() sinh ra (lib/orgChart.js).
+const ORG_CHART_FIXTURE = [{
+  id: 'test-applied-v1', status: 'APPLIED',
+  nodes: [
+    { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Kinh Doanh', departmentRef: 'Kinh Doanh', jobTitle: null, requiresDept: null, posType: null, positionKey: null },
+    { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên', requiresDept: true, posType: null, positionKey: 'test-pos-2' }
+  ]
+}];
+
 let APP_DATA;
 function resetAppData() {
   APP_DATA = {
@@ -103,7 +115,8 @@ function resetAppData() {
     storeJobTitles: [{ label: 'Nhân Viên Bán Hàng' }],
     hrTaskTemplates: [],
     formTemplates: [],
-    employeeProfiles: []
+    employeeProfiles: [],
+    orgChartVersions: ORG_CHART_FIXTURE
   };
 }
 resetAppData();

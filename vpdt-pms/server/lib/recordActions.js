@@ -7486,13 +7486,34 @@ function editHrProcess(user, item, body, appData) {
       const employeePosType = String(body.employeePosType || item.employeePosType || '').trim();
       if (!['HO', 'STORE'].includes(employeePosType)) throw new HttpError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
       const employeeDept = String(body.employeeDept ?? item.employeeDept ?? '').trim();
-      const validDepts = employeePosType === 'STORE' ? (appData.stores || []) : (appData.depts || []);
-      if (!employeeDept || !validDepts.includes(employeeDept)) {
-        throw new HttpError(400, employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị hợp lệ' : 'Vui lòng chọn Phòng Ban hợp lệ');
-      }
+      if (!employeeDept) throw new HttpError(400, employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị' : 'Vui lòng chọn Phòng Ban');
       const employeeJobTitle = String(body.employeeJobTitle ?? item.employeeJobTitle ?? '').trim();
-      const validJobTitles = employeePosType === 'STORE' ? (appData.storeJobTitles || []).map(t => t.label) : (appData.jobTitles || []);
-      if (!employeeJobTitle || !validJobTitles.includes(employeeJobTitle)) throw new HttpError(400, 'Chức Danh không hợp lệ');
+      if (!employeeJobTitle) throw new HttpError(400, 'Vui lòng chọn Chức Danh');
+      const isChangingPosition = employeePosType !== item.employeePosType || employeeDept !== item.employeeDept || employeeJobTitle !== item.employeeJobTitle;
+      // ĐỒNG BỘ createValidation.js (tạo mới ONBOARDING) — xác nhận khớp 1 Vị Trí có thật trong Cơ Cấu
+      // Tổ Chức bản APPLIED, KHÔNG còn chỉ đối chiếu DANH MỤC (11/2026, theo yêu cầu người dùng). CHỈ chặn
+      // khi THỰC SỰ đổi posType/dept/jobTitle (isChangingPosition) — client luôn gửi kèm cả 3 field này ở
+      // MỌI lần Sửa (dù chỉ sửa SĐT/Ngày Vào Làm), validate vô điều kiện sẽ khoá cứng việc sửa BẤT KỲ field
+      // khác của các hồ sơ CŨ có dept/jobTitle không còn khớp Cơ Cấu Tổ Chức hiện tại (VD đã đổi tên/xoá
+      // vị trí đó sau khi hồ sơ được tạo) — chỉ bắt khớp lại khi người dùng CHỦ ĐỘNG đổi sang dept/jobTitle
+      // khác giá trị đang lưu.
+      if (isChangingPosition) {
+        // require trễ (không để ở đầu file) — orgChart.js require ngược lib/recordViewScope.js, mà
+        // recordViewScope.js lại require thẳng file NÀY (recordActions.js) ở đầu file nó: để ở đầu file
+        // NÀY sẽ tạo vòng lặp 2 tầng khiến HR_ONBOARDING_STAGES/HR_OFFBOARDING_STAGES (destructure từ
+        // createValidation.js ở trên) lẫn các hàm recordViewScope.js destructure từ chính file này đều
+        // thành undefined (phát hiện thật khi chạy test, xem lỗi "Cannot read properties of undefined
+        // (reading 'length')" ở computeHrProcessProgress()).
+        const orgChart = require('./orgChart');
+        const appliedOrgChartVersion = orgChart.getAppliedVersion(appData.orgChartVersions || []);
+        const matchedPositionNode = appliedOrgChartVersion
+          ? orgChart.findPositionNodeForUser(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle })
+          : null;
+        if (!matchedPositionNode) {
+          const hint = appliedOrgChartVersion ? orgChart.diagnosePositionMismatch(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle }) : null;
+          throw new HttpError(400, hint ? hint.message : `Không tìm thấy Vị Trí "${employeeJobTitle}" tại "${employeeDept}" trong Cơ Cấu Tổ Chức — vui lòng liên hệ bộ phận C&B (Nhân Sự) để bổ sung vị trí này trước khi sửa hồ sơ.`);
+        }
+      }
       if (employeePosType !== item.employeePosType) { item.employeePosType = employeePosType; changedFields.push('employeePosType'); }
       if (employeeDept !== item.employeeDept) { item.employeeDept = employeeDept; changedFields.push('employeeDept'); }
       if (employeeJobTitle !== item.employeeJobTitle) { item.employeeJobTitle = employeeJobTitle; changedFields.push('employeeJobTitle'); }

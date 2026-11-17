@@ -298,6 +298,33 @@ function applyPostProbationDecision(contract, decision, existingList, actorUsern
   return { closedContract: contract, nextContractPayload };
 }
 
+// "✏️ Chấm Dứt Thử Việc" (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người dùng, xác nhận qua AskUserQuestion —
+// "Đồng ý" cho phương án 1 nút gộp, đặt ở CẢ 2 nơi: Quy Trình Onboarding VÀ Hợp Đồng Lao Động) — dùng ĐƯỢC
+// BẤT KỲ LÚC NÀO trong thời gian thử việc (KHÁC applyPostProbationDecision() ở trên, CHỈ chạy đúng lúc
+// hoàn thành task templateId=15 "Ra quyết định" ở cuối kỳ thử việc) — phủ 2 lỗ hổng đã xác nhận với người
+// dùng: (1) nhân viên "nghỉ ngang" giữa thử việc (chưa tới ngày Đánh Giá Thử Việc), (2) HR muốn chấm dứt
+// SỚM không đợi tới hạn review. Route gọi hàm này (routes/records.js POST /laborContracts/:id/
+// terminate-probation) chịu trách nhiệm cascade huỷ quy trình Onboarding liên kết (nếu còn IN_PROGRESS)
+// + chuyển hồ sơ Hồ Sơ Nhân Sự sang "Đã nghỉ" NGAY (xem employeeProfile.terminateProbationProfile()) —
+// hàm NÀY chỉ đóng ĐÚNG hợp đồng, không động tới 2 collection khác (đúng nguyên tắc tách bạch của file
+// này, cùng khuôn applyPostProbationDecision()/applyOffboardingTermination() ở trên/dưới).
+function terminateProbationContract(contract, reason, actorUsername) {
+  if (!contract) throw new HttpError(404, 'Không tìm thấy hợp đồng thử việc');
+  if (contract.contractType !== 'PROBATION') throw new HttpError(400, '"Chấm Dứt Thử Việc" chỉ áp dụng cho hợp đồng Thử Việc');
+  if (!['DRAFT', 'ACTIVE'].includes(contract.status)) {
+    throw new HttpError(409, 'Hợp đồng thử việc không còn ở trạng thái Nháp/Đang hiệu lực (có thể đã được xử lý trước đó)');
+  }
+  const trimmedReason = String(reason || '').trim();
+  if (!trimmedReason) throw new HttpError(400, 'Vui lòng nhập lý do chấm dứt thử việc');
+  const nowStr = nowVN();
+  contract.status = 'TERMINATED';
+  contract.terminationDate = todayISO();
+  contract.terminationReason = trimmedReason.slice(0, 500);
+  contract.history.push({ action: 'TERMINATED', by: actorUsername || 'system', byName: actorUsername || 'Hệ Thống', time: nowStr, detail: `Chấm dứt thử việc — Lý do: ${contract.terminationReason}` });
+  contract.updatedAt = nowStr; contract.updatedBy = actorUsername || 'system';
+  return contract;
+}
+
 // OFFBOARDING hoàn tất (COMPLETED) -> đóng hợp đồng đang ACTIVE của nhân viên này lại (nếu có).
 function applyOffboardingTermination(contract, hrProcessItem) {
   if (!contract || contract.status !== 'ACTIVE') return contract; // không có hợp đồng active hoặc đã xử lý rồi
@@ -516,6 +543,6 @@ module.exports = {
   canManageContracts, assertNotSelfDecidingLaborContract, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,
-  applyOnboardingCancelTermination,
+  applyOnboardingCancelTermination, terminateProbationContract,
   applyManualEdit, applyActivateManual, addAmendment, assertValidManualStatusTransition, assertValidTerminationDate
 };

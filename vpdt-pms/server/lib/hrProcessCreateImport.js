@@ -17,6 +17,13 @@ const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 const { markDuplicateItems } = require('./importDedup');
 const { applyDropdownValidation } = require('./adminExport');
+// orgChart — xác nhận NGAY ở bước XEM TRƯỚC (11/2026, theo yêu cầu người dùng "khi upload file Onboarding
+// mà không có vị trí/phòng ban trong Cơ Cấu Tổ Chức phải báo lỗi ngay để bộ phận tuyển dụng liên hệ C&B")
+// — trước đây bước xem trước CHỈ kiểm tra không rỗng, để dành toàn bộ việc đối chiếu danh mục cho bước
+// xác nhận thật (createOnboardingProcessRecord() -> hrProcesses.extraValidate) mới báo lỗi, nghĩa là
+// tuyển dụng phải bấm "Xác Nhận" hàng loạt rồi mới biết dòng nào sai — nay báo NGAY trong bảng xem
+// trước, cùng khuôn orgChart.findPositionNodeForUser() đã dùng ở createValidation.js/recordActions.js.
+const orgChart = require('./orgChart');
 
 const MAX_ROWS_PER_IMPORT = 300; // cùng ngưỡng lib/laborContractCreateImport.js (mỗi dòng 1 lượt khoá/giao dịch riêng).
 
@@ -146,7 +153,7 @@ function detectColumns(headerCells) {
 // Validate NHẸ ở bước xem trước — createOnboardingProcessRecord()/hrProcesses.extraValidate ở bước xác
 // nhận thật vẫn tự validate lại toàn bộ từ đầu (Zero-Trust), bao gồm cả đối chiếu danh mục Phòng Ban/
 // Siêu Thị/Chức Danh thật + chặn trùng CCCD + quyền hrOnboardingManage.
-function rowToPreviewItem(cells, cols, profiles, users) {
+function rowToPreviewItem(cells, cols, profiles, users, appliedOrgChartVersion) {
   const get = (field) => (cols[field] !== undefined ? cells[cols[field]] : undefined);
   const fullName = toTrimmedString(get('fullName'));
   const employeeCode = toTrimmedString(get('employeeCode'));
@@ -164,6 +171,18 @@ function rowToPreviewItem(cells, cols, profiles, users) {
 
   const employeeJobTitle = toTrimmedString(get('employeeJobTitle'));
   if (!employeeJobTitle) errors.push('Vui lòng chọn Chức Danh');
+
+  // Khớp Cơ Cấu Tổ Chức NGAY ở bước xem trước (xem chú thích require orgChart ở đầu file) — chỉ kiểm
+  // khi cả dept lẫn jobTitle đều đã có giá trị (tránh chồng lỗi "thiếu" + "không khớp" cùng lúc).
+  if (employeeDept && employeeJobTitle) {
+    const matchedPositionNode = appliedOrgChartVersion
+      ? orgChart.findPositionNodeForUser(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle })
+      : null;
+    if (!matchedPositionNode) {
+      const hint = appliedOrgChartVersion ? orgChart.diagnosePositionMismatch(appliedOrgChartVersion, { dept: employeeDept, jobTitle: employeeJobTitle }) : null;
+      errors.push(hint ? hint.message : `Không tìm thấy Vị Trí "${employeeJobTitle}" tại "${employeeDept}" trong Cơ Cấu Tổ Chức — vui lòng liên hệ bộ phận C&B (Nhân Sự) để bổ sung vị trí này.`);
+    }
+  }
 
   const email = toTrimmedString(get('email'));
   if (!email && employeePosType === 'STORE') errors.push('Nhân viên Siêu Thị bắt buộc phải nhập Email');
@@ -229,6 +248,7 @@ function rowToPreviewItem(cells, cols, profiles, users) {
 async function parseCreateImportBuffer(buffer, appData) {
   const profiles = appData?.employeeProfiles || [];
   const users = appData?.users || [];
+  const appliedOrgChartVersion = orgChart.getAppliedVersion(appData?.orgChartVersions || []);
 
   let cols = null;
   let sawAnyRow = false;
@@ -244,7 +264,7 @@ async function parseCreateImportBuffer(buffer, appData) {
       }
       return true;
     }
-    const item = rowToPreviewItem(cells, cols, profiles, users);
+    const item = rowToPreviewItem(cells, cols, profiles, users, appliedOrgChartVersion);
     if (item) items.push(item);
     if (items.length > MAX_ROWS_PER_IMPORT) { overLimit = true; return false; }
     return true;

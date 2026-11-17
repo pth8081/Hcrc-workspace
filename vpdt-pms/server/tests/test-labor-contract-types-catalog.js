@@ -163,6 +163,17 @@ async function partC() {
     blockIfMustChangePassword: (req, res, next) => next()
   });
   const EMPLOYEE_PROFILES = [{ employeeCode: 'NV5001', status: 'ACTIVE', username: null, processId: null }];
+  // orgChartVersions (11/2026) — Onboarding employeeDept/employeeJobTitle nay phải khớp ĐÚNG 1 Vị Trí có
+  // thật trong Cơ Cấu Tổ Chức bản APPLIED (xem lib/createValidation.js hrProcesses.extraValidate) — dựng
+  // 1 bản APPLIED tối giản khớp đúng dept='Nhân Sự'/jobTitle='NV' mà kịch bản Phần C dùng, không liên
+  // quan gì tới nội dung Phần C đang kiểm (danh mục Loại HĐLĐ).
+  const ORG_CHART_FIXTURE = [{
+    id: 'v1', status: 'APPLIED',
+    nodes: [
+      { nodeId: 1, parentNodeId: null, nodeType: 'DEPARTMENT', nodeName: 'Nhân Sự', departmentRef: 'Nhân Sự' },
+      { nodeId: 2, parentNodeId: 1, nodeType: 'POSITION', jobTitle: 'NV', requiresDept: true, positionKey: 'pos-1' }
+    ]
+  }];
   stubModule('lib/appData', {
     getAppDataValue: async (key) => {
       if (key === 'users') return USERS;
@@ -170,7 +181,7 @@ async function partC() {
       if (key === 'laborContractTypes') return CATALOG;
       return null;
     },
-    getAllAppData: async () => ({ users: USERS, employeeProfiles: EMPLOYEE_PROFILES, depts: ['Nhân Sự'], stores: [], jobTitles: ['NV'], laborContractTypes: CATALOG, hrTaskTemplates: [] }),
+    getAllAppData: async () => ({ users: USERS, employeeProfiles: EMPLOYEE_PROFILES, depts: ['Nhân Sự'], stores: [], jobTitles: ['NV'], laborContractTypes: CATALOG, hrTaskTemplates: [], orgChartVersions: ORG_CHART_FIXTURE }),
     withLockedAppDataValue: async (key, fn) => fn(key === 'users' ? USERS : [])
   });
 

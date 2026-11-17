@@ -279,6 +279,27 @@ function diagnosePositionMismatch(version, { dept, jobTitle }) {
   return null;
 }
 
+// listOnboardingPositionOptions(version) — (11/2026, theo yêu cầu người dùng: "Phòng Ban/Chức Danh ở
+// form tạo Onboarding phải lấy từ Cơ Cấu Tổ Chức, không lấy từ danh mục Phân Quyền" — phát hiện trước đó
+// 2 ô này đang lấy thẳng DB.depts/DB.jobTitles, hoàn toàn độc lập với Cơ Cấu Tổ Chức, nên có thể tạo hồ
+// sơ với 1 cặp Phòng Ban/Chức Danh không tồn tại vị trí thật nào). Trả về mảng phẳng {dept, jobTitle}
+// cho MỌI node POSITION requiresDept!==false (Onboarding luôn cần đúng 1 Phòng Ban, không áp dụng cho
+// vị trí "không theo Phòng Ban"), dept = departmentRef||nodeName của phòng ban cha gần nhất — TÁI DÙNG
+// findNearestDeptAncestor() đã có, cùng quy ước departmentRef-hoặc-nodeName như findPositionNodeForUser()
+// ở trên. Node chưa gắn Phòng Ban nào (orphan) bị bỏ qua — không đủ rõ ràng để cho chọn.
+function listOnboardingPositionOptions(version) {
+  const nodes = version?.nodes || [];
+  const out = [];
+  for (const n of nodes) {
+    if (n.nodeType !== 'POSITION' || n.requiresDept === false) continue;
+    const deptNode = findNearestDeptAncestor(version, n);
+    const dept = deptNode?.departmentRef || deptNode?.nodeName || null;
+    if (!dept || !n.jobTitle) continue;
+    out.push({ dept, jobTitle: n.jobTitle });
+  }
+  return out;
+}
+
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
 
 function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, headcountQuota, headcountSelfOnly, displayOrder }) {
@@ -869,7 +890,7 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
-  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, diagnosePositionMismatch,
+  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, diagnosePositionMismatch, listOnboardingPositionOptions,
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
