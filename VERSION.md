@@ -1,8 +1,24 @@
 # Phiên bản hiện tại
 
-**30.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.77 (2026-11): Fix "📋 Lấy từ Onboarding" (Ngày Vào Làm Việc, form Người Dùng) luôn báo "Không tìm thấy"
+
+Theo báo cáo người dùng (ảnh chụp Hồ Sơ Nhân Sự — "Ngày vào HCRC" đã có đúng từ Onboarding, nhưng
+"ngày vào" ở màn Hệ Thống → Quản Trị → Người Dùng không tự liên kết được):
+
+- **Lỗi thật**: `suggestStartDateFromOnboarding()` (`public/js/module-admin-submissiongroups.js`, nút
+  "📋 Lấy từ Onboarding" cạnh ô "Ngày Vào Làm Việc" khi tạo/sửa tài khoản VPDT) lọc `DB.hrProcesses` theo
+  `p.type === 'ONBOARDING'` — field THẬT trên bản ghi hrProcesses là `processType`, KHÔNG có field `type`
+  nào cả (xem `lib/createValidation.js`). `p.type` luôn `undefined` nên danh sách khớp LUÔN rỗng — nút
+  này báo "Không tìm thấy quy trình Onboarding nào khớp Email/Họ Tên" với MỌI trường hợp, kể cả khi quy
+  trình Onboarding khớp đúng đã tồn tại thật. Đổi lại đúng `p.processType === 'ONBOARDING'`.
+- Fixture test liên quan (`tests/test-admin-users-permgroups.js`, scenario (u)) trước đây VÔ TÌNH seed
+  cùng field sai (`type:` thay vì `processType:`) nên test tưởng PASS nhưng không hề bắt được lỗi thật —
+  sửa lại fixture cho khớp dữ liệu THẬT, xác nhận test này giờ THẬT SỰ bắt được lỗi (revert code, test
+  FAIL đúng như lỗi người dùng báo; áp code mới, test PASS).
 
 ## v30.76 (2026-11): Onboarding lấy Phòng Ban/Chức Danh từ Cơ Cấu Tổ Chức + cột "Đang Thử Việc" + "✏️ Chấm Dứt Thử Việc"
 

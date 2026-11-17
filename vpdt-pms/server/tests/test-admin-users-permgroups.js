@@ -1768,8 +1768,13 @@ async function scenario(name, fn) {
 
   await scenario('(u) suggestStartDateFromOnboarding(): 1 kết quả khớp Email -> tự điền + báo thành công', async () => {
     const r = await page.evaluate(() => {
+      // LỖI ĐÃ VÁ (11/2026): fixture TRƯỚC ĐÂY dùng `type: 'ONBOARDING'` — khớp ĐÚNG field SAI mà
+      // suggestStartDateFromOnboarding() từng gõ nhầm (`p.type` thay vì `p.processType`), nên test này
+      // tưởng PASS nhưng thực ra không hề phát hiện được lỗi thật (field đúng trên hrProcesses là
+      // `processType`, xem lib/createValidation.js) — đổi lại cho khớp dữ liệu THẬT, không phải khớp
+      // theo code đang lỗi.
       DB.hrProcesses = [
-        { type: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
+        { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
       ];
       resetUserForm();
       document.getElementById('uEmail').value = 'tanbinh@hcrc.local';

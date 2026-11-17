@@ -902,14 +902,20 @@ function onUserKhoiBanChange() {
 
 // Gợi ý "Ngày Vào Làm Việc" từ Onboarding đã có (10/2026, theo phân tích đã xác nhận với người dùng) —
 // tránh phải gõ lại tay ngày này khi IT tạo tài khoản VPDT cho 1 nhân viên đã có quy trình Onboarding
-// (DB.hrProcesses, type ONBOARDING) — 2 field "Ngày Vào Làm Việc" này TRƯỚC ĐÂY độc lập hoàn toàn, dễ
-// lệch nhau. Chỉ GỢI Ý (điền vào ô để admin tự xác nhận/sửa lại), KHÔNG tự khoá/ép giá trị — khớp theo
+// (DB.hrProcesses, processType ONBOARDING) — 2 field "Ngày Vào Làm Việc" này TRƯỚC ĐÂY độc lập hoàn toàn,
+// dễ lệch nhau. Chỉ GỢI Ý (điền vào ô để admin tự xác nhận/sửa lại), KHÔNG tự khoá/ép giá trị — khớp theo
 // Email/Họ Tên đã điền ở phần trên form (chưa có tài khoản nào để liên kết theo username lúc này).
+//
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "ngày vào ở phân quyền không hiển thị, không tự liên kết"):
+// điều kiện lọc gõ nhầm `p.type === 'ONBOARDING'` — field THẬT trên bản ghi hrProcesses là `processType`
+// (xem lib/createValidation.js/lib/recordActions.js), KHÔNG có field `type` nào cả. `p.type` luôn
+// `undefined`, nên `candidates` LUÔN rỗng — nút "📋 Lấy từ Onboarding" báo "Không tìm thấy" với MỌI
+// trường hợp, kể cả khi quy trình Onboarding khớp đúng Email/Họ Tên đã tồn tại thật.
 function suggestStartDateFromOnboarding() {
   const email = document.getElementById('uEmail').value.trim().toLowerCase();
   const name = document.getElementById('uFullName').value.trim().toLowerCase();
   if (!email && !name) return alert('Vui lòng nhập Email hoặc Họ và Tên trước để tìm đúng hồ sơ Onboarding.');
-  const candidates = (DB.hrProcesses || []).filter(p => p.type === 'ONBOARDING' && p.startDate &&
+  const candidates = (DB.hrProcesses || []).filter(p => p.processType === 'ONBOARDING' && p.startDate &&
     ((email && (p.email || '').trim().toLowerCase() === email) || (name && (p.fullName || '').trim().toLowerCase() === name)));
   if (!candidates.length) return alert('Không tìm thấy quy trình Onboarding nào khớp Email/Họ Tên đã nhập.');
   if (candidates.length === 1) {
