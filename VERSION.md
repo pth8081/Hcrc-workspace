@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**30.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.79 (2026-11): Fix "🔍 Kiểm Tra Nhân Sự Cũ" (Tái Tuyển, tạo Onboarding) không tìm thấy nhân sự cũ bằng CCCD/CMND
+
+Theo báo cáo người dùng ("onboarding tái tuyển đang ko tìm thấy nhân sự cũ bằng cccd và ngày sinh, tôi
+đã thử cccd của 1 nhân sự nhưng ko ra"):
+
+- **Lỗi thật**: `searchInactiveProfilesForRehire()` (`lib/employeeProfile.js`, dùng bởi
+  `GET /api/hr-profile/search-inactive`) so khớp CCCD/CMND CHẶT TUYỆT ĐỐI (`p.nationalId !== nid`), chỉ
+  trim phía CCCD gõ vào ô tìm kiếm, KHÔNG chuẩn hoá phía giá trị ĐÃ LƯU trong hồ sơ. Hồ sơ cũ (tạo tay/
+  import Excel TRƯỚC thời điểm `applyProfileEdit()` bắt buộc đúng 12 số liền nhau, bổ sung từ 11/2026) có
+  thể vẫn đang lưu kèm khoảng trắng/gạch ngang (VD dán từ file scan "001 234 567 890") — gõ lại đúng 12 số
+  liền nhau khi tìm Tái Tuyển sẽ KHÔNG BAO GIỜ khớp được, dù đúng là cùng 1 người.
+- **Fix**: thêm `normalizeNationalIdForMatch()` dùng chung — bỏ khoảng trắng/gạch ngang/chấm ở CẢ 2 phía
+  trước khi so sánh (không đụng tới chữ số, không bỏ số 0 đầu — "001..." và "1..." vẫn là 2 số khác
+  nhau). Áp dụng cho CẢ `searchInactiveProfilesForRehire()` (Tái Tuyển) lẫn `assertNationalIdNotDuplicated()`
+  (chặn trùng CCCD lúc tạo/sửa hồ sơ) — cùng 1 khái niệm "có phải CÙNG 1 số CCCD/CMND hay không".
+- Thêm 7 test mới (`tests/test-hrprofile-rehire-search.js`) + 3 test mới
+  (`tests/test-hrprofile-nationalid-dup-leak.js`) xác nhận bắt đúng bug (revert code → test FAIL đúng như
+  lỗi người dùng báo; áp code mới → test PASS).
+- **Giới hạn đã biết (không phải lỗi code)**: nếu CCCD đang lưu trong hồ sơ cũ là một SỐ THẬT SỰ KHÁC (VD
+  CMND 9 số cũ đã đổi hẳn sang CCCD 12 số mới, không chỉ khác định dạng), bản vá này KHÔNG thể tự khớp —
+  cần HR tự kiểm tra/cập nhật lại đúng số CCCD hiện tại trong hồ sơ cũ (màn Hồ Sơ Nhân Sự → Sửa), hoặc tìm
+  Tái Tuyển bằng Ngày sinh/tên thay vì CCCD.
 
 ## v30.78 (2026-11): "Ngày Vào Làm Việc" (form Người Dùng) tự động liên kết từ Onboarding, không cần bấm nút
 

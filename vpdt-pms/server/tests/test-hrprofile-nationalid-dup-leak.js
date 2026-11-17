@@ -106,5 +106,35 @@ test('createManualProfile(): options.canViewFull=true -> 409 vẫn nêu đầy �
   }
 });
 
+// ===== normalizeNationalIdForMatch() — (11/2026, báo cáo người dùng: Tái Tuyển không tìm thấy nhân sự
+// cũ bằng CCCD) — assertNationalIdNotDuplicated() phải so khớp bỏ qua khoảng trắng/gạch ngang/chấm =====
+
+test('trùng CCCD nhưng hồ sơ cũ lưu kèm khoảng trắng ("001 090 001 234" vs "001090001234") -> VẪN phát hiện trùng', () => {
+  const list = [{ employeeCode: 'NV001', nationalId: '001 090 001 234', status: 'ACTIVE' }];
+  try {
+    employeeProfile.assertNationalIdNotDuplicated(list, '001090001234', null, true);
+    assert.fail('phải throw');
+  } catch (err) {
+    assert.strictEqual(err.status, 409);
+    assert.ok(err.message.includes('NV001'), `phải phát hiện trùng dù khác định dạng: ${err.message}`);
+  }
+});
+
+test('trùng CCCD nhưng hồ sơ cũ lưu kèm gạch ngang ("001-090-001-234") -> VẪN phát hiện trùng', () => {
+  const list = [{ employeeCode: 'NV001', nationalId: '001-090-001-234', status: 'ACTIVE' }];
+  try {
+    employeeProfile.assertNationalIdNotDuplicated(list, '001090001234', null, true);
+    assert.fail('phải throw');
+  } catch (err) {
+    assert.strictEqual(err.status, 409);
+    assert.ok(err.message.includes('NV001'), `phải phát hiện trùng dù khác định dạng: ${err.message}`);
+  }
+});
+
+test('CCCD khác nhau thật (không chỉ khác định dạng) -> KHÔNG throw dù có đệm số 0 nhìn giống', () => {
+  const list = [{ employeeCode: 'NV001', nationalId: '001090001234', status: 'ACTIVE' }];
+  employeeProfile.assertNationalIdNotDuplicated(list, '1090001234', null, true); // thiếu "00" đầu -> số khác, không throw
+});
+
 console.log(`\n${passed}/${passed + failed} scenario(s) passed.`);
 if (failed) process.exitCode = 1;

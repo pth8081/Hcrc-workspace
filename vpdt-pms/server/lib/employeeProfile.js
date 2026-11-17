@@ -720,6 +720,21 @@ function terminateProbationProfile(list, employeeCode, reason, actorUsername, ac
 // (VD nhân viên cũ đã có mã theo hệ thống HR khác từ trước, hoặc luồng Tái Tuyển muốn GIỮ NGUYÊN đúng mã
 // cũ — xem reactivateForRehire() bên dưới).
 
+// normalizeNationalIdForMatch() — (11/2026, báo cáo người dùng: "tôi đã thử cccd của 1 nhân sự nhưng
+// không ra" ở "🔍 Kiểm Tra Nhân Sự Cũ" lúc tạo Onboarding) — applyProfileEdit() (case 'nationalId') CHỈ
+// bắt buộc đúng 12 số KHÔNG dấu cách/gạch ngang cho dữ liệu ghi MỚI (quy tắc thêm từ 11/2026), nhưng hồ
+// sơ CŨ tạo TRƯỚC thời điểm đó (tạo tay/import Excel giai đoạn trước, khi applyProfileEdit() case này
+// còn `default:` chỉ trim+cắt 300 ký tự, không kiểm định dạng) có thể vẫn đang lưu kèm dấu cách/gạch
+// ngang (VD dán từ file scan "001 234 567 890" hoặc "001-234-567-890"). So khớp CHẶT TUYỆT ĐỐI
+// (`p.nationalId !== nid`, không qua hàm này) sẽ bỏ sót NHỮNG trường hợp CHỈ khác nhau ở dấu cách/gạch
+// ngang thuần tuý — CHỈ bỏ ký tự PHÂN CÁCH (khoảng trắng/gạch ngang/chấm), TUYỆT ĐỐI KHÔNG đụng tới chữ
+// số (không bỏ số 0 đầu — "001..." và "1..." LÀ 2 SỐ KHÁC NHAU, không phải cùng 1 số có đệm 0). Dùng
+// CHUNG cho cả searchInactiveProfilesForRehire() (Tái Tuyển) lẫn assertNationalIdNotDuplicated() (chặn
+// trùng lúc tạo/sửa) — cùng 1 khái niệm "có phải CÙNG 1 số CCCD/CMND hay không", không nên lệch nhau.
+function normalizeNationalIdForMatch(s) {
+  return String(s || '').replace(/[\s.\-]/g, '').trim();
+}
+
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): việc chặn trùng CCCD/CMND trước đây
 // chỉ nằm NỘI TUYẾN trong createManualProfile() — 2 đường GHI còn lại của hồ sơ đi vòng hoàn toàn:
 // PATCH /api/hr-profile/by-code/:code (HR sửa hồ sơ đã có) và dòng import Excel chọn "Ghi đè thông tin"
@@ -742,7 +757,8 @@ function terminateProbationProfile(list, employeeCode, reason, actorUsername, ac
 function assertNationalIdNotDuplicated(list, rawNationalId, exceptEmployeeCode, canViewFull) {
   const nationalId = String(rawNationalId || '').trim();
   if (!nationalId) return;
-  const dup = (list || []).find(p => p.nationalId === nationalId && p.employeeCode !== exceptEmployeeCode);
+  const normalizedTarget = normalizeNationalIdForMatch(nationalId);
+  const dup = (list || []).find(p => normalizeNationalIdForMatch(p.nationalId) === normalizedTarget && p.employeeCode !== exceptEmployeeCode);
   if (!dup) return;
   if (!canViewFull && dup.status !== 'INACTIVE') {
     throw new HttpError(409, `CCCD/CMND "${nationalId}" đã tồn tại trong hệ thống — vui lòng liên hệ bộ phận Nhân Sự có quyền xem hồ sơ để xác minh trước khi tạo mới.`);
@@ -833,12 +849,12 @@ function updateProfileFromImport(list, employeeCode, payload, actorUsername, act
 // (cả 2 -> phải khớp CẢ 2; chỉ 1 -> khớp đúng field đó là đủ) — vẫn có thể trả về NHIỀU kết quả (VD chỉ
 // gõ ngày sinh, trùng ngày với người khác), HR tự chọn đúng người trong danh sách trả về.
 function searchInactiveProfilesForRehire(list, nationalId, dateOfBirth) {
-  const nid = String(nationalId || '').trim();
+  const nid = normalizeNationalIdForMatch(nationalId);
   const dob = String(dateOfBirth || '').trim();
   if (!nid && !dob) return [];
   return (list || []).filter(p => {
     if (p.status !== 'INACTIVE') return false;
-    if (nid && p.nationalId !== nid) return false;
+    if (nid && normalizeNationalIdForMatch(p.nationalId) !== nid) return false;
     if (dob && p.dateOfBirth !== dob) return false;
     return true;
   });
