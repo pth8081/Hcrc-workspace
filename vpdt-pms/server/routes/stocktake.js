@@ -1162,7 +1162,7 @@ async function getDeptSystemInventoryMap(dept, storeExternalCodes) {
   if (!cached) return null;
   const rows = aggregateSystemInventoryRowsByMaHang(cached.rows);
   const map = new Map();
-  rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '' }); });
+  rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '', maVach: r.maVach || '' }); });
   return map;
 }
 
@@ -1173,9 +1173,13 @@ function sumCountsByMaHang(counts, sessionId, valueFn) {
   (Array.isArray(counts) ? counts : []).forEach(c => {
     if (c.sessionId !== sessionId || !c.maHang) return;
     const key = String(c.maHang);
-    const existing = map.get(key) || { tenHang: c.tenHang || '', total: 0 };
+    const existing = map.get(key) || { tenHang: c.tenHang || '', maVach: c.maVach || '', total: 0 };
     existing.total += valueFn(c);
     if (!existing.tenHang && c.tenHang) existing.tenHang = c.tenHang;
+    // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng "bắt buộc phải có hai cột đấy" ở mọi tab Kiểm Kê) —
+    // giữ mã vạch đầu tiên khớp mã hàng này (CÙNG cách giữ tenHang ngay trên), không gộp nhiều mã vạch
+    // khác nhau của cùng 1 mã hàng (hiếm khi xảy ra trong thực tế quét tại 1 kỳ).
+    if (!existing.maVach && c.maVach) existing.maVach = c.maVach;
     map.set(key, existing);
   });
   return map;
@@ -1200,6 +1204,7 @@ function computeSessionPrimaryRows(session, allCounts) {
       const kd = kiemDemMap.get(maHang), ks = kiemSoatMap.get(maHang), fin = finalMap.get(maHang);
       return {
         maHang, tenHang: (kd && kd.tenHang) || (ks && ks.tenHang) || '',
+        maVach: (kd && kd.maVach) || (ks && ks.maVach) || '',
         kiemDemQty: kd ? kd.total : 0,
         kiemSoatQty: hasKiemSoatMap.get(maHang) ? (ks ? ks.total : 0) : null,
         finalQty: fin ? fin.total : 0
@@ -1209,7 +1214,7 @@ function computeSessionPrimaryRows(session, allCounts) {
   }
   // Kỳ Gom Mã tự xem báo cáo của chính nó: không có Kiểm Đếm/Kiểm Soát.
   const gomMaMap = sumCountsByMaHang(allCounts, session.id, c => Number(c.slGomMa) || 0);
-  const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, finalQty: v.total }));
+  const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, maVach: v.maVach || '', finalQty: v.total }));
   return { rows, finalMap: gomMaMap };
 }
 
@@ -1256,6 +1261,7 @@ router.get('/report', async (req, res) => {
       const sysEntry = systemMap ? systemMap.get(maHang) : null;
       return {
         maHang, tenHang: (base && base.tenHang) || (sysEntry && sysEntry.tenHang) || '',
+        maVach: (base && base.maVach) || (sysEntry && sysEntry.maVach) || '',
         systemQty: sysEntry ? sysEntry.soLuongTon : null,
         kiemDemQty: base ? base.kiemDemQty : undefined,
         kiemSoatQty: base ? base.kiemSoatQty : undefined,

@@ -1623,7 +1623,7 @@ function createDispatcher(state) {
           if (!raw) return null;
           const rows = aggregateSystemInventoryRowsByMaHang(raw);
           const map = new Map();
-          rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '' }); });
+          rows.forEach(r => { if (r.maHang) map.set(String(r.maHang), { soLuongTon: Number(r.soLuongTon) || 0, tenHang: r.tenHang || '', maVach: r.maVach || '' }); });
           return map;
         };
         const sumByMaHang = (sid, valueFn) => {
@@ -1631,9 +1631,10 @@ function createDispatcher(state) {
           (state.stocktakeCounts || []).forEach(c => {
             if (c.sessionId !== sid || !c.maHang) return;
             const key = String(c.maHang);
-            const existing = map.get(key) || { tenHang: c.tenHang || '', total: 0 };
+            const existing = map.get(key) || { tenHang: c.tenHang || '', maVach: c.maVach || '', total: 0 };
             existing.total += valueFn(c);
             if (!existing.tenHang && c.tenHang) existing.tenHang = c.tenHang;
+            if (!existing.maVach && c.maVach) existing.maVach = c.maVach;
             map.set(key, existing);
           });
           return map;
@@ -1652,6 +1653,7 @@ function createDispatcher(state) {
               const kd = kiemDemMap.get(maHang), ks = kiemSoatMap.get(maHang), fin = finalMap.get(maHang);
               return {
                 maHang, tenHang: (kd && kd.tenHang) || (ks && ks.tenHang) || '',
+                maVach: (kd && kd.maVach) || (ks && ks.maVach) || '',
                 kiemDemQty: kd ? kd.total : 0,
                 kiemSoatQty: hasKiemSoat.get(maHang) ? (ks ? ks.total : 0) : null,
                 finalQty: fin ? fin.total : 0
@@ -1660,7 +1662,7 @@ function createDispatcher(state) {
             return { rows, finalMap };
           }
           const gomMaMap = sumByMaHang(sess.id, c => Number(c.slGomMa) || 0);
-          const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, finalQty: v.total }));
+          const rows = [...gomMaMap.entries()].map(([maHang, v]) => ({ maHang, tenHang: v.tenHang, maVach: v.maVach || '', finalQty: v.total }));
           return { rows, finalMap: gomMaMap };
         };
         const systemMap = getSystemMap(session.dept);
@@ -1674,6 +1676,7 @@ function createDispatcher(state) {
           const sysEntry = systemMap ? systemMap.get(maHang) : null;
           return {
             maHang, tenHang: (base && base.tenHang) || (sysEntry && sysEntry.tenHang) || '',
+            maVach: (base && base.maVach) || (sysEntry && sysEntry.maVach) || '',
             systemQty: sysEntry ? sysEntry.soLuongTon : null,
             kiemDemQty: base ? base.kiemDemQty : undefined,
             kiemSoatQty: base ? base.kiemSoatQty : undefined,

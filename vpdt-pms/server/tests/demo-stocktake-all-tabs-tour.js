@@ -38,13 +38,15 @@ const DEPT2 = 'Siêu thị Quận 2';
       { id: 2, username: 'admin', dept: DEPT1, shelfLocationId: 11, canGomMa: true, canKiemDem: true, canKiemSoat: true },
       { id: 3, username: 'admin', dept: DEPT2, shelfLocationId: 12, canGomMa: true, canKiemDem: true, canKiemSoat: true }
     ],
+    // maVach (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
+    // mã thì có hai mã nhé, là mã vạch và mã nội bộ") — seed kèm mã vạch để demo đúng cột mới ở mọi tab.
     stocktakeCounts: [
-      { id: 1, sessionId: GOM_MA_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', slGomMa: 46 },
-      { id: 2, sessionId: GOM_MA_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', slGomMa: 118 },
-      { id: 3, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', slKiemDem: 48, slKiemSoat: 48 },
-      { id: 4, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', slKiemDem: 120, slKiemSoat: 108 },
-      { id: 5, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 11, maHang: 'SP003', tenHang: 'Sữa Tươi Vinamilk 1L', slKiemDem: 76 },
-      { id: 6, sessionId: THONG_KE_DEPT2.id, dept: DEPT2, shelfLocationId: 12, maHang: 'SP003', tenHang: 'Sữa Tươi Vinamilk 1L', slKiemDem: 60 }
+      { id: 1, sessionId: GOM_MA_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', slGomMa: 46 },
+      { id: 2, sessionId: GOM_MA_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP002', maVach: '8934000000002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', slGomMa: 118 },
+      { id: 3, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', slKiemDem: 48, slKiemSoat: 48 },
+      { id: 4, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 10, maHang: 'SP002', maVach: '8934000000002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', slKiemDem: 120, slKiemSoat: 108 },
+      { id: 5, sessionId: THONG_KE_SESSION.id, dept: DEPT1, shelfLocationId: 11, maHang: 'SP003', maVach: '8934000000003', tenHang: 'Sữa Tươi Vinamilk 1L', slKiemDem: 76 },
+      { id: 6, sessionId: THONG_KE_DEPT2.id, dept: DEPT2, shelfLocationId: 12, maHang: 'SP003', maVach: '8934000000003', tenHang: 'Sữa Tươi Vinamilk 1L', slKiemDem: 60 }
     ],
     // Xác Nhận SẴN quầy kệ A1 (Kiểm Đếm + Kiểm Soát) — Tab 6 hiện CẢ dòng ✅ đã xác nhận LẪN dòng ⏳ chưa
     // (A2 chưa xác nhận), đúng cảnh thật đang dùng dở, không phải toàn bộ trống hay toàn bộ xong.
@@ -64,8 +66,8 @@ const DEPT2 = 'Siêu thị Quận 2';
   state.__mockKkInventoryByDept = {
     [DEPT1]: {
       rows: [
-        { maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 50 },
-        { maHang: 'SP002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', soLuongTon: 125 }
+        { maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 50 },
+        { maHang: 'SP002', maVach: '8934000000002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', soLuongTon: 125 }
       ],
       fetchedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString()
     },
@@ -74,11 +76,11 @@ const DEPT2 = 'Siêu thị Quận 2';
   // Tab "📊 Báo Cáo" (GET /api/stocktake/report) — tồn kho hệ thống để tính "Giá Trị Thừa/Thiếu".
   state.__mockStocktakeReportInventoryByDept = {
     [DEPT1]: [
-      { maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 50 },
-      { maHang: 'SP002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', soLuongTon: 108 },
-      { maHang: 'SP003', tenHang: 'Sữa Tươi Vinamilk 1L', soLuongTon: 76 }
+      { maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 50 },
+      { maHang: 'SP002', maVach: '8934000000002', tenHang: 'Mì Hảo Hảo Tôm Chua Cay', soLuongTon: 108 },
+      { maHang: 'SP003', maVach: '8934000000003', tenHang: 'Sữa Tươi Vinamilk 1L', soLuongTon: 76 }
     ],
-    [DEPT2]: [{ maHang: 'SP003', tenHang: 'Sữa Tươi Vinamilk 1L', soLuongTon: 65 }]
+    [DEPT2]: [{ maHang: 'SP003', maVach: '8934000000003', tenHang: 'Sữa Tươi Vinamilk 1L', soLuongTon: 65 }]
   };
 
   const server = await startStaticServer(PORT);

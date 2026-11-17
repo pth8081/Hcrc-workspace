@@ -990,7 +990,7 @@ function applyOptimisticKkScanRow(st, cfg, resolved, qty) {
   } else {
     st.counts.push({
       id: `offline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      maHang: resolved.maHang, tenHang: resolved.tenHang, [cfg.qtyField]: qty,
+      maHang: resolved.maHang, maVach: resolved.maVach || null, tenHang: resolved.tenHang, [cfg.qtyField]: qty,
       lastScannedAt: new Date().toISOString(), createdAt: new Date().toISOString()
     });
   }
@@ -1045,8 +1045,12 @@ function renderKkScanList(tabKey) {
   // (field slKiemDem, KHÔNG sửa được ở đây) để người soát so sánh ngay số đã đếm trước khi quyết định có
   // cần soát lại mã đó hay không — 2 tab Gom Mã/Kiểm Đếm không cần cột này.
   const showKiemDemRef = tabKey === 'KIEMSOAT';
+  // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
+  // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — c.maVach đã có sẵn
+  // trên mỗi dòng stocktakeCounts (ghi lại từ lúc quét, xem upsertScanCount()/submitKkScan()), chỉ cần
+  // thêm cột hiển thị, không cần tính toán gì thêm.
   listBody.innerHTML = banners + `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1">Mã Hàng</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
+    <th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
     sorted.map(c => {
       // Dòng CHƯA đồng bộ (id tạm "offline_...", xem applyOptimisticKkScan()) — CHỈ XEM, không sửa/xoá
       // trực tiếp được (chưa có id thật từ server) — chờ đồng bộ xong (trySyncPendingKkScans() sẽ tải lại
@@ -1056,7 +1060,8 @@ function renderKkScanList(tabKey) {
         ? `<span class="text-amber-600 font-semibold" title="Chưa đồng bộ">⏳ ${Number(c[cfg.qtyField]) || 0}</span>`
         : `<input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">`;
       return `<tr class="border-b last:border-0${pending ? ' bg-amber-50' : ''}">
-      <td class="py-1 font-mono">${escapeHtml(c.maHang)}</td>
+      <td class="py-1 pr-2 font-mono">${escapeHtml(c.maHang)}</td>
+      <td class="pr-2 font-mono">${escapeHtml(c.maVach || '—')}</td>
       <td>${escapeHtml(c.tenHang || '')}</td>
       ${showKiemDemRef ? `<td class="text-right text-gray-500">${Number(c.slKiemDem) || 0}</td>` : ''}
       <td class="text-right">${qtyCell}</td>
@@ -2482,7 +2487,7 @@ function kkReportMergeCompareRows() {
   const maHangSet = new Set([...mapA.keys(), ...mapB.keys()]);
   return [...maHangSet].map(maHang => {
     const a = mapA.get(maHang), b = mapB.get(maHang);
-    return { maHang, tenHang: (a && a.tenHang) || (b && b.tenHang) || '', valueA: a ? a.finalQty : 0, valueB: b ? b.finalQty : 0 };
+    return { maHang, maVach: (a && a.maVach) || (b && b.maVach) || '', tenHang: (a && a.tenHang) || (b && b.tenHang) || '', valueA: a ? a.finalQty : 0, valueB: b ? b.finalQty : 0 };
   });
 }
 
@@ -2525,7 +2530,7 @@ function kkReportFilteredRows(filterText) {
   const rows = (kkReportData && kkReportData.rows) || [];
   const q = stripVnDiacritics((filterText || '').trim().toLowerCase());
   if (!q) return rows;
-  return rows.filter(r => stripVnDiacritics(`${r.maHang} ${r.tenHang || ''}`.toLowerCase()).includes(q));
+  return rows.filter(r => stripVnDiacritics(`${r.maHang} ${r.maVach || ''} ${r.tenHang || ''}`.toLowerCase()).includes(q));
 }
 
 // kkReportHasValueCols() — chỉ hiện 2 cột "Giá"/"Giá Trị" khi server trả valueReport (CHỈ Kỳ Kiểm Kê +
@@ -2539,20 +2544,24 @@ function renderKkReportTable(filterText) {
   if (!thead || !tbody || !kkReportData) return;
   const isGomMa = kkReportIsGomMaKy();
   const hasValue = kkReportHasValueCols();
-  thead.innerHTML = `<th class="py-1">Mã Hàng</th><th>Tên Hàng</th>
+  // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê... bắt buộc phải có
+  // hai cột đấy" — Mã Hàng nội bộ + Mã Vạch) — r.maVach do server gộp từ stocktakeCounts/tồn kho hệ
+  // thống (xem sumCountsByMaHang()/computeSessionPrimaryRows(), routes/stocktake.js).
+  thead.innerHTML = `<th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên Hàng</th>
     <th class="text-right">Tồn Kho Hệ Thống</th>
     ${isGomMa ? '<th class="text-right">SL Gom Mã</th>' : '<th class="text-right">Kiểm Đếm</th><th class="text-right">Kiểm Soát</th><th class="text-right">SL Cuối Cùng</th>'}
     <th class="text-right">Chênh Lệch</th>
     ${hasValue ? '<th class="text-right">Giá (Thường)</th><th class="text-right">Giá Trị</th>' : ''}`;
   const filtered = kkReportFilteredRows(filterText).slice().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
-  const colCount = (isGomMa ? 5 : 7) + (hasValue ? 2 : 0);
+  const colCount = (isGomMa ? 6 : 8) + (hasValue ? 2 : 0);
   const paginationEl = document.getElementById('paginationContainer_kkReport');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('kkReport', 'renderKkReportTable');
   const items = paginateList('kkReport', filtered, 'renderKkReportTable', 'mã hàng');
   tbody.innerHTML = items.length ? items.map(r => {
     const diff = r.systemQty === null ? null : (r.finalQty - r.systemQty);
     return `<tr class="border-b last:border-0">
-      <td class="py-1 font-mono">${escapeHtml(r.maHang)}</td>
+      <td class="py-1 pr-2 font-mono">${escapeHtml(r.maHang)}</td>
+      <td class="pr-2 font-mono">${escapeHtml(r.maVach || '—')}</td>
       <td>${escapeHtml(r.tenHang || '')}</td>
       <td class="text-right">${r.systemQty === null ? '—' : escapeHtml(String(r.systemQty))}</td>
       ${isGomMa ? `<td class="text-right font-semibold">${escapeHtml(String(r.finalQty))}</td>` : `
@@ -2576,7 +2585,7 @@ function exportKkReportExcel() {
   const isGomMa = kkReportIsGomMaKy();
   const hasValue = kkReportHasValueCols();
   const detailColumns = [
-    { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
+    { header: 'Mã Hàng', key: 'maHang' }, { header: 'Mã Vạch', key: 'maVach' }, { header: 'Tên Hàng', key: 'tenHang' },
     { header: 'Tồn Kho Hệ Thống', key: 'systemQty' },
     ...(isGomMa
       ? [{ header: 'SL Gom Mã', key: 'finalQty' }]
@@ -2585,7 +2594,7 @@ function exportKkReportExcel() {
     ...(hasValue ? [{ header: 'Giá (Thường)', key: 'giaThuong' }, { header: 'Giá Trị', key: 'giaTri' }] : [])
   ];
   const detailRows = (kkReportData.rows || []).map(r => ({
-    maHang: r.maHang, tenHang: r.tenHang || '',
+    maHang: r.maHang, maVach: r.maVach || '', tenHang: r.tenHang || '',
     systemQty: r.systemQty === null ? '' : r.systemQty,
     kiemDemQty: r.kiemDemQty === undefined ? '' : r.kiemDemQty,
     kiemSoatQty: (r.kiemSoatQty === null || r.kiemSoatQty === undefined) ? '' : r.kiemSoatQty,
@@ -2615,7 +2624,7 @@ function exportKkReportExcel() {
   }
   if (kkReportData.compare) {
     const compareColumns = [
-      { header: 'Mã Hàng', key: 'maHang' }, { header: 'Tên Hàng', key: 'tenHang' },
+      { header: 'Mã Hàng', key: 'maHang' }, { header: 'Mã Vạch', key: 'maVach' }, { header: 'Tên Hàng', key: 'tenHang' },
       { header: kkReportData.session.tenKy, key: 'valueA' }, { header: kkReportData.compare.session.tenKy, key: 'valueB' }
     ];
     const compareRowsOut = kkReportMergeCompareRows().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
@@ -2761,15 +2770,20 @@ function renderKkInventoryStoresBody() {
     const syncNote = entry && entry.fetchedAt
       ? `<span class="text-emerald-700">✅ Đã đồng bộ lúc: ${escapeHtml(new Date(entry.fetchedAt).toLocaleString('vi-VN'))}</span>`
       : `<span class="text-amber-700">⚠️ Chưa có dữ liệu đồng bộ cho siêu thị này — quét mã offline ở Gom Mã/Kiểm Đếm/Kiểm Soát có thể không tra ra tên hàng.</span>`;
+    // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
+    // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — rows đã qua
+    // aggregateSystemInventoryRowsByMaHang() ở server (GET /api/stocktake/system-inventory) nên đã sẵn
+    // field `maVach` (mã vạch MẶC ĐỊNH của mã hàng, API đối tác), không cần tính toán gì thêm ở client.
     const tableHtml = rows.length
       ? `<div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
           <table class="w-full text-[11px]">
             <thead class="bg-gray-50 sticky top-0"><tr>
-              <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
+              <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Mã Vạch</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
             </tr></thead>
             <tbody>${rows.slice().sort((a, b) => String(a.maHang).localeCompare(String(b.maHang))).map(r => `
               <tr class="border-t">
                 <td class="p-1.5">${escapeHtml(r.maHang)}</td>
+                <td class="p-1.5 font-mono">${escapeHtml(r.maVach || '—')}</td>
                 <td class="p-1.5">${escapeHtml(r.tenHang || '')}</td>
                 <td class="p-1.5 text-right font-semibold">${(r.soLuongTon || 0).toLocaleString('vi-VN')}</td>
               </tr>`).join('')}</tbody>
