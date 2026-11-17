@@ -1443,7 +1443,7 @@ async function renameFieldValueInCollection(collection, mutateFn) {
     await tx.begin();
     try {
       const readReq = new sql.Request(tx);
-      const readResult = await readReq.query(`SELECT Id, Payload, Code FROM ${table} WITH (UPDLOCK, HOLDLOCK)`);
+      const readResult = await readReq.query(`SELECT Id, Payload, ${cfg.hasCode ? 'Code' : 'NULL AS Code'} FROM ${table} WITH (UPDLOCK, HOLDLOCK)`);
       let changedCount = 0;
       for (const row of readResult.recordset) {
         const item = toRecord(row);
