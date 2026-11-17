@@ -99,6 +99,7 @@ const SYSTEM_NAV = [
     { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
     { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
     { key: 'sysPermMatrix', icon: '🧮', label: 'Ma Trận Phân Quyền' },
+    { key: 'sysUsernameMapping', icon: '🆔', label: 'Mã NV ↔ Tài Khoản' },
   ]},
   // 3 màn Audit GOM VỀ 1 NHÓM (11/2026, theo yêu cầu người dùng "cho đồng bộ") — CẢ 3 đều là 3 nút LIỀN
   // KỀ thật trên màn (Hệ Thống → ⚙️ Quản Trị → "🔍 Audit Quy Trình"/"Audit Người Dùng"/"Audit Hệ Thống",
@@ -1867,6 +1868,31 @@ const SYSTEM_DOCS = {
     ], right: [
       { label: 'KHÔNG bị ảnh hưởng bởi màn này', text: 'admin, quyền quản lý/tổng hợp toàn công ty (budgetManage/paymentManage/itPriceSupport...), và người đang được cấu hình làm người duyệt bước đó (dù khác phòng ban) — các lớp xem này LUÔN giữ nguyên dù cấu hình gì ở đây.' },
       { label: 'Tài Liệu — đã làm gọn (v24.75)', text: 'bỏ hẳn 4 quyền phẳng cũ "Xem Bản Nháp"/"Xem Đã Duyệt" (Ma Trận Phân Quyền) — Tài Liệu giờ xét quyền xem HOÀN TOÀN qua đúng 4 lớp chung này (admin/người tạo/người duyệt/mục này), Ma Trận Phân Quyền chỉ còn đúng 1 quyền "Tải Tài Liệu" (tách riêng cho endpoint tải file, không quyết định hồ sơ có hiện trong danh sách hay không).' },
+    ] },
+  },
+  sysUsernameMapping: {
+    icon: '🆔', title: 'Mã NV ↔ Tài Khoản', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Mới 11/2026 (theo yêu cầu người dùng): đối chiếu Mã Nhân Viên (Hồ Sơ Nhân Sự) với Tên Đăng Nhập (VPDT) cho từng hồ sơ đang THẬT SỰ làm việc (Đang làm/Nghỉ phép) — quy tắc hệ thống là 2 giá trị này LUÔN phải trùng nhau. Chỉ nhóm "Chưa có tài khoản" cho phép Admin chọn + tạo hàng loạt ngay tại đây; nhóm "Lệch mã" (đã có tài khoản nhưng khác Mã NV, thường là dữ liệu cũ trước khi có quy tắc này) CHỈ hiển thị để Admin tự rà/sửa tay, không có thao tác hàng loạt.',
+    flow: { ariaLabel: 'Quy trình tạo hàng loạt tài khoản từ Mã Nhân Viên', chain: [
+      { label: 'Làm Mới', sub: 'Quét Hồ Sơ Nhân Sự + Người Dùng' },
+      { label: 'Chọn hồ sơ "Chưa có tài khoản"', sub: 'Tick từng dòng hoặc nhiều dòng' },
+      { label: 'Xác nhận — sửa Phòng Ban/Chức Danh/SĐT/Email nếu cần', sub: 'Chỉ áp lên tài khoản mới, KHÔNG đổi Hồ Sơ Nhân Sự', kind: 'decision' },
+      { label: 'Tạo Tài Khoản', sub: 'username = Mã NV, mật khẩu mặc định, tự liên kết Hồ Sơ Nhân Sự', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Hợp lệ (Mã NV còn trống, chưa trùng ai)', rejectLabel: 'Trùng/đã có tài khoản', rejectBox: { label: 'Bỏ qua dòng đó', sub: 'Báo rõ lý do, các dòng còn lại vẫn tạo' }, loopBackToIndex: 1, loopBackLabel: 'Tải lại danh sách rồi chọn lại' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🆔 Mã NV ↔ Tài Khoản</b> (tab con, cùng hàng với Phân Quyền/Người Dùng/Ma Trận Phân Quyền) — màn tự quét ngay khi mở, hoặc bấm <b>"🔄 Làm Mới"</b> để quét lại.' },
+      { role: 'Quản trị viên', text: 'xem 4 thẻ thống kê: <b>Hồ sơ đang làm việc</b> (tổng), <b>✅ Đã khớp</b>, <b>⚠️ Lệch mã</b>, <b>❌ Chưa có tài khoản</b>. Bộ lọc mặc định "Chỉ hiện vấn đề" (Lệch mã + Chưa có tài khoản) — đổi sang "Hiện tất cả hồ sơ" nếu cần xem luôn cả nhóm Đã khớp.' },
+      { role: 'Quản trị viên', text: 'dòng <b>⚠️ Lệch mã</b>: bấm tên nhân viên để mở thẳng hồ sơ ở "Hồ Sơ Nhân Sự" — tự rà/sửa tay qua chức năng "Liên Kết Tài Khoản" sẵn có ở đó (KHÔNG đổi tên đăng nhập hàng loạt ở màn này, vì tên đăng nhập là định danh tham chiếu ở rất nhiều nơi khác trong hệ thống, đổi sai sẽ ảnh hưởng dữ liệu liên quan).' },
+      { role: 'Quản trị viên', text: 'dòng <b>❌ Chưa có tài khoản</b>: tick checkbox từng dòng cần tạo → thanh "N mục đã chọn" hiện ra → bấm <b>"🆕 Tạo Tài Khoản Cho Mục Đã Chọn"</b>.' },
+      { role: 'Quản trị viên', text: 'ở màn xác nhận: chọn <b>Nhóm Phân Quyền</b> áp dụng chung cho mọi tài khoản tạo trong lượt này (để trống = không gán quyền nào, an toàn nhất, tự cấu hình sau) — mỗi nhân viên có 1 khối riêng cho phép sửa <b>Phòng Ban/Chức Danh/Số Điện Thoại/Email</b> (gợi ý sẵn từ Hồ Sơ Nhân Sự, sửa tự do) TRƯỚC khi tạo — 4 trường này CHỈ ghi vào tài khoản mới, KHÔNG ghi ngược lại Hồ Sơ Nhân Sự.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Tạo Tài Khoản"</b> — tên đăng nhập = Mã Nhân Viên, mật khẩu mặc định <code>Brg@123456</code> (buộc đổi ngay lần đăng nhập đầu), tự liên kết tài khoản mới vào đúng hồ sơ Hồ Sơ Nhân Sự tương ứng. Kết quả hiện rõ bao nhiêu tài khoản tạo thành công, bao nhiêu bị bỏ qua kèm lý do (VD hồ sơ vừa được liên kết bởi thao tác khác, hoặc Mã NV trùng tên đăng nhập 1 tài khoản khác đang hoạt động).' },
+    ],
+    footer: { left: [
+      { label: 'Chỉ nhóm "Chưa có tài khoản" được tạo hàng loạt', text: 'nhóm "Lệch mã" KHÔNG có nút tự sửa — đổi tên đăng nhập 1 tài khoản đang hoạt động thật rủi ro cao (username được tham chiếu ở rất nhiều collection khác: người quản lý, người được giao, người tạo, người duyệt...), nên chỉ hiển thị để Admin tự quyết định sửa tay.' },
+      { label: 'Phòng Ban/Chức Danh/SĐT/Email sửa ở màn này KHÔNG đụng Hồ Sơ Nhân Sự', text: '4 trường cho sửa ngay lúc xác nhận tạo tài khoản chỉ nằm trên tài khoản VPDT mới (dùng cho đăng nhập/phân quyền) — hồ sơ gốc ở "Hồ Sơ Nhân Sự" giữ nguyên, không bị ghi đè.' },
+    ], right: [
+      { label: 'Dùng lại đúng cơ chế tạo tài khoản chung', text: 'mật khẩu được hash, cờ "buộc đổi mật khẩu", và quyền tính từ Nhóm Phân Quyền đều đi qua ĐÚNG hàm xử lý dùng chung cho mọi lượt tạo tài khoản khác (form thủ công, Nhập Excel, đặt lại mật khẩu) — không có luồng tạo tài khoản riêng/khác biệt ở đây.' },
+      { label: 'Chỉ quét hồ sơ Đang làm/Nghỉ phép', text: 'hồ sơ Nháp (ứng viên Onboarding chưa xác nhận) và Đã nghỉ việc không hiện ở màn này — tạo/đối chiếu tài khoản đăng nhập cho 2 nhóm đó không có ý nghĩa nghiệp vụ.' },
     ] },
   },
   sysCatalog: {

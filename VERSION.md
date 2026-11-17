@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**30.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.69 (2026-11): Nhân Sự — "🆔 Mã NV ↔ Tài Khoản" (admin-only, đối chiếu + tạo hàng loạt)
+
+Theo yêu cầu người dùng ("tôi muốn làm một cái chức năng... kiểm tra mã nhân viên và tài khoản truy cập
+có giống nhau hay không... admin có thể ấn mapping giữa mã nhân viên và mã truy cập, tìm kiếm giống
+nhau, và cái nào chưa thấy tạo phải hiện thông báo, cho phép tạo hàng loạt tài khoản với password mặc
+định"):
+
+- Màn mới **Hệ Thống → Quản Trị → 🆔 Mã NV ↔ Tài Khoản** (chỉ Quản Trị Viên) — quét toàn bộ hồ sơ Hồ Sơ
+  Nhân Sự đang Đang làm/Nghỉ phép, chia 3 nhóm: **✅ Đã khớp** (Tên Đăng Nhập = Mã Nhân Viên), **⚠️ Lệch
+  mã** (đã có tài khoản nhưng khác Mã NV — chỉ hiển thị để tự sửa tay, không có thao tác hàng loạt vì
+  Tên Đăng Nhập được tham chiếu ở rất nhiều nơi khác), **❌ Chưa có tài khoản** (nhóm duy nhất cho tạo
+  hàng loạt).
+- Tạo hàng loạt: tick các hồ sơ "Chưa có tài khoản" → xác nhận (cho sửa Phòng Ban/Chức Danh/SĐT/Email
+  riêng từng người + chọn Nhóm Phân Quyền áp dụng chung, KHÔNG ghi ngược Hồ Sơ Nhân Sự) → tạo tài khoản
+  Tên Đăng Nhập = Mã Nhân Viên, mật khẩu mặc định `Brg@123456` (buộc đổi ngay lần đầu), tự liên kết vào
+  đúng hồ sơ — dùng lại đúng pipeline tạo tài khoản dùng chung (`prepareUsersForSave`), không viết logic
+  riêng.
+- Xem chi tiết hướng dẫn sử dụng tại `deploy/Huong-dan-nghiep-vu.md` mục 7.7b.
 
 ## v30.68 (2026-11): Nhân Sự — "✏️ Sửa Quy Trình" Onboarding/Offboarding + "🔄 Đồng Bộ Hồ Sơ Nháp" + chặn Mã NV ở Nhập Excel hàng loạt
 

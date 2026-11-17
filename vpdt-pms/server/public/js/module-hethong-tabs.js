@@ -192,6 +192,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubAuditWorkflow').classList.toggle('hidden', subTab !== 'AUDITWORKFLOW');
   document.getElementById('adminSubAuditUser').classList.toggle('hidden', subTab !== 'AUDITUSER');
   document.getElementById('adminSubAuditSystem').classList.toggle('hidden', subTab !== 'AUDITSYSTEM');
+  document.getElementById('adminSubUsernameMap').classList.toggle('hidden', subTab !== 'USERNAMEMAP');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -207,6 +208,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubAuditWorkflow').className = subTab === 'AUDITWORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubAuditUser').className = subTab === 'AUDITUSER' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubAuditSystem').className = subTab === 'AUDITSYSTEM' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubUsernameMap').className = subTab === 'USERNAMEMAP' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'PARTNERAPI') setPartnerApiSubTab(activePartnerApiSubTab);
@@ -218,6 +220,7 @@ function setAdminSubTab(subTab) {
   if (subTab === 'AUDITWORKFLOW') renderWorkflowAuditPanel();
   if (subTab === 'AUDITUSER') renderUserAuditPanel();
   if (subTab === 'AUDITSYSTEM') renderSystemAuditPanel();
+  if (subTab === 'USERNAMEMAP') loadUsernameMappingReport();
 }
 
 // "🔌 Cấu Hình API Đối Tác" (11/2026, gộp 2 panel "Đơn Hàng"/"Tồn Kho" vào 1 tab cấp 1 có tab con riêng —
@@ -1221,6 +1224,202 @@ async function toggleSystemAuditAutoScan() {
   } catch (err) {
     alert(`⛔ ${err.message}`);
     toggleEl.checked = !desired;
+  }
+}
+
+// ===== "🆔 Mã NV ↔ Tài Khoản" (11/2026, theo yêu cầu người dùng — quy tắc hệ thống: Tên Đăng Nhập LUÔN
+// được tạo trùng Mã Nhân Viên). Gọi route riêng /api/admin/username-mapping* (routes/hrUsernameMapping.js)
+// — admin-only, CÙNG khuôn 3 Audit ngay trên (ẩn panel nếu 403, không chỉ chặn ở client). Xem chú thích
+// đầy đủ về 3 nhóm MATCHED/MISMATCH/MISSING ở lib/hrUsernameMapping.js.
+let _umapReport = { rows: [], stats: {} };
+let _umapSelected = new Set(); // Mã NV đang chọn — CHỈ áp dụng cho dòng "❌ Chưa có tài khoản" (MISSING)
+
+async function loadUsernameMappingReport() {
+  const panelEl = document.getElementById('adminSubUsernameMap');
+  if (!panelEl) return;
+  _umapSelected = new Set();
+  try {
+    const res = await fetch('/api/admin/username-mapping');
+    if (res.status === 403) { panelEl.classList.add('hidden'); return; }
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Lỗi máy chủ (${res.status})`);
+    _umapReport = await res.json();
+    renderUsernameMappingStats(_umapReport.stats);
+    renderUsernameMappingTable();
+  } catch (err) {
+    alert(`⛔ Tải "Mã NV ↔ Tài Khoản" thất bại: ${err.message}`);
+  }
+}
+
+function renderUsernameMappingStats(stats) {
+  const row = document.getElementById('umapStatsRow');
+  if (!row) return;
+  row.classList.toggle('hidden', !stats || !stats.total);
+  document.getElementById('umapStatTotal').innerText = stats?.total || 0;
+  document.getElementById('umapStatMatched').innerText = stats?.matched || 0;
+  document.getElementById('umapStatMismatch').innerText = stats?.mismatch || 0;
+  document.getElementById('umapStatMissing').innerText = stats?.missing || 0;
+}
+
+const UMAP_STATUS_BADGE = {
+  MATCHED: '<span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">✅ Khớp</span>',
+  MISMATCH: '<span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold">⚠️ Lệch mã</span>',
+  MISSING: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">❌ Chưa có TK</span>'
+};
+
+function renderUsernameMappingTable() {
+  const wrap = document.getElementById('umapTableWrap');
+  if (!wrap) return;
+  const filter = document.getElementById('umapFilter')?.value || 'ISSUES';
+  const rows = (_umapReport.rows || []).filter(r => filter === 'ALL' || r.status !== 'MATCHED');
+  if (!rows.length) {
+    wrap.innerHTML = '<p class="text-xs text-emerald-700 font-semibold p-2">✅ Không có hồ sơ nào cần xử lý.</p>';
+    umapUpdateSelFooter();
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="w-full text-xs border-collapse">
+      <thead><tr class="bg-gray-50 border-b text-left text-[10px] uppercase text-gray-500">
+        <th class="p-2 w-8"></th><th class="p-2">Mã NV</th><th class="p-2">Họ Tên</th><th class="p-2">Phòng Ban / Chức Danh</th>
+        <th class="p-2">Mapping</th><th class="p-2">Tài Khoản Hiện Tại</th><th class="p-2">Thao Tác</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `
+        <tr class="border-b ${r.status === 'MATCHED' ? 'opacity-60' : ''}">
+          <td class="p-2">${r.status === 'MISSING' ? `<input type="checkbox" data-op-change="umapToggleSelect" data-arg0="${escapeHtml(r.employeeCode)}" data-arg-el="1" ${_umapSelected.has(r.employeeCode) ? 'checked' : ''}>` : ''}</td>
+          <td class="p-2 font-mono">${escapeHtml(r.employeeCode)}</td>
+          <td class="p-2 font-semibold">${escapeHtml(r.name)}</td>
+          <td class="p-2 text-gray-600">${escapeHtml([r.dept, r.jobTitle].filter(Boolean).join(' — ') || '—')}</td>
+          <td class="p-2">${UMAP_STATUS_BADGE[r.status] || ''}</td>
+          <td class="p-2 font-mono">${escapeHtml(r.currentUsername || '—')}</td>
+          <td class="p-2">${r.status === 'MISMATCH' ? `<button type="button" data-op="umapGoToProfile" data-arg0="${escapeHtml(r.employeeCode)}" class="text-teal-700 font-bold hover:underline">Xem Hồ Sơ →</button>` : ''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  umapUpdateSelFooter();
+}
+
+function umapToggleSelect(code, checkboxEl) {
+  if (checkboxEl.checked) _umapSelected.add(code); else _umapSelected.delete(code);
+  umapUpdateSelFooter();
+}
+
+function umapUpdateSelFooter() {
+  const countEl = document.getElementById('umapSelCount');
+  const btn = document.getElementById('umapBulkCreateBtn');
+  if (countEl) countEl.innerText = _umapSelected.size;
+  if (btn) btn.disabled = _umapSelected.size === 0;
+}
+
+// "Xem Hồ Sơ" (hồ sơ ⚠️ Lệch mã) — điều hướng sang Hồ Sơ Nhân Sự > Quản Lý Hồ Sơ để Admin tự sửa TAY
+// (CỐ Ý KHÔNG có thao tác hàng loạt cho nhóm này — "sửa cho khớp" ở đây là ĐỔI TÊN ĐĂNG NHẬP của 1 tài
+// khoản đang hoạt động thật, xem chú thích đầy đủ ở lib/hrUsernameMapping.js). await switchTab('hrProfile')
+// tự nạp xong cụm module-hrprofile.js trước khi gọi 2 hàm thật của cụm đó — cùng idiom
+// openHrProfileFromProcess() (module-hrlifecycle.js).
+async function umapGoToProfile(employeeCode) {
+  await switchTab('hrProfile');
+  setHrProfileView('MANAGE');
+  await openHrpfDetailModal(employeeCode, true);
+}
+
+// "🆕 Tạo Tài Khoản Cho Mục Đã Chọn" — showConfirmModal() dựng form ĐỘNG (cùng khuôn hrpEditProcess(),
+// module-hrlifecycle.js): Nhóm Phân Quyền áp dụng CHUNG + 1 khối Phòng Ban/Chức Danh/SĐT/Email RIÊNG cho
+// từng người (gợi ý sẵn từ Hồ Sơ Nhân Sự, sửa thoải mái — 4 ô này CHỈ áp dụng cho tài khoản mới, KHÔNG
+// ghi ngược Hồ Sơ Nhân Sự, theo đúng yêu cầu người dùng đã xác nhận).
+function umapOpenBulkCreateModal() {
+  const codes = [..._umapSelected];
+  if (!codes.length) return;
+  const rows = codes.map(code => (_umapReport.rows || []).find(r => r.employeeCode === code)).filter(Boolean);
+  const bodyHTML = umapBuildBulkCreateFormHTML(rows);
+  showConfirmModal({
+    title: `🆕 Tạo Tài Khoản Cho ${rows.length} Hồ Sơ`,
+    bodyHTML,
+    confirmLabel: `✅ Xác Nhận Tạo ${rows.length} Tài Khoản`,
+    onConfirm: () => umapSubmitBulkCreate(rows)
+  });
+  rows.forEach((r, idx) => {
+    sddSetOptions(`umapDeptDatalist_${idx}`, r.posType === 'STORE' ? (DB.stores || []) : (DB.depts || []));
+    sddSetOptions(`umapJobTitleDatalist_${idx}`, r.posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []));
+  });
+}
+
+function umapBuildBulkCreateFormHTML(rows) {
+  const groupOptions = (DB.permGroups || []).map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+  const cardsHTML = rows.map((r, idx) => `
+    <div class="border rounded p-2 bg-gray-50 mb-2">
+      <div class="text-xs mb-1.5"><span class="font-mono text-gray-500">${escapeHtml(r.employeeCode)}</span> <b>${escapeHtml(r.name)}</b></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-500 mb-0.5 uppercase">Phòng Ban</label>
+          <input id="umapDept_${idx}" data-sdd-list="umapDeptDatalist_${idx}" autocomplete="off" value="${escapeHtml(r.dept || '')}" class="w-full border p-1.5 rounded text-xs">
+          <div id="umapDeptDatalist_${idx}" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-500 mb-0.5 uppercase">Chức Danh</label>
+          <input id="umapJobTitle_${idx}" data-sdd-list="umapJobTitleDatalist_${idx}" autocomplete="off" value="${escapeHtml(r.jobTitle || '')}" class="w-full border p-1.5 rounded text-xs">
+          <div id="umapJobTitleDatalist_${idx}" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-500 mb-0.5 uppercase">SĐT</label>
+          <input id="umapPhone_${idx}" value="${escapeHtml(r.contactPhone || '')}" class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-500 mb-0.5 uppercase">Email</label>
+          <input id="umapEmail_${idx}" type="email" value="${escapeHtml(r.workEmail || r.personalEmail || '')}" class="w-full border p-1.5 rounded text-xs">
+        </div>
+      </div>
+    </div>`).join('');
+  return `
+    <div class="space-y-3 text-left">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Đăng Nhập</label>
+        <p class="text-[11px] text-gray-500">Tự động lấy đúng bằng Mã Nhân Viên của từng hồ sơ — không gõ tay.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Mật Khẩu Mặc Định Cho Cả ${rows.length} Tài Khoản</label>
+        <div class="border rounded p-2 bg-gray-50 font-mono text-xs">Brg@123456</div>
+        <p class="text-[11px] text-gray-500 mt-1">Bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền Áp Dụng Cho Tài Khoản Mới</label>
+        <select id="umapGroupSelect" class="w-full border p-1.5 rounded text-xs bg-white">
+          <option value="">— Không gán quyền nào (Admin tự cấu hình sau) —</option>
+          ${groupOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Thông Tin Tài Khoản — Từng Người (gợi ý sẵn từ Hồ Sơ Nhân Sự, sửa thoải mái)</label>
+        ${cardsHTML}
+        <p class="text-[11px] text-gray-500">4 ô trên CHỈ áp dụng cho tài khoản đăng nhập mới tạo — không ghi đè/đổi gì trên Hồ Sơ Nhân Sự.</p>
+      </div>
+    </div>`;
+}
+
+async function umapSubmitBulkCreate(rows) {
+  const selections = rows.map((r, idx) => ({
+    employeeCode: r.employeeCode,
+    dept: document.getElementById(`umapDept_${idx}`)?.value.trim() || '',
+    jobTitle: document.getElementById(`umapJobTitle_${idx}`)?.value.trim() || '',
+    phone: document.getElementById(`umapPhone_${idx}`)?.value.trim() || '',
+    email: document.getElementById(`umapEmail_${idx}`)?.value.trim() || ''
+  }));
+  const groupSelect = document.getElementById('umapGroupSelect');
+  const groupIds = groupSelect && groupSelect.value ? [groupSelect.value] : [];
+  try {
+    const res = await fetch('/api/admin/username-mapping/bulk-create-accounts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selections, groupIds })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (${res.status})`);
+    const created = body.created || [];
+    const skipped = body.skipped || [];
+    let msg = '';
+    if (created.length) msg += `✅ Đã tạo thành công ${created.length} tài khoản: ${created.map(c => c.employeeCode).join(', ')}.\n`;
+    if (skipped.length) msg += `⛔ Bỏ qua ${skipped.length} hồ sơ:\n${skipped.map(s => `- ${s.employeeCode} (${s.name}): ${s.reason}`).join('\n')}`;
+    alert(msg || 'Không có gì thay đổi.');
+    await loadUsernameMappingReport();
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
   }
 }
 

@@ -2717,3 +2717,8 @@ module.exports.mergeGroupsBasePermsServer = mergeGroupsBasePermsServer;
 // gọi thẳng, kiểm phát hiện #2 (đợt audit chuyên sâu 12 cụm, mức Cao: bộ lọc tải trước "user này có đang
 // là approver ở BẤT KỲ tier nào không" trước đây bỏ sót operationOrderStoreMixedApprovalRules hoàn toàn).
 module.exports.isApproverForAnyOperationOrderTier = isApproverForAnyOperationOrderTier;
+// Cùng lý do 2 export ngay trên — CHỈ để routes/hrUsernameMapping.js ("🆔 Mã NV ↔ Tài Khoản", 11/2026)
+// tạo tài khoản MỚI hàng loạt đi qua ĐÚNG 1 đường validate/hash mật khẩu/tính quyền từ Nhóm Phân Quyền
+// (prepareUsersForSave() dùng CHUNG cho mọi lượt lưu "users": form Sửa tay, Nhập Excel, Đặt Lại Mật Khẩu
+// Hàng Loạt...), không viết lại logic nghiệp vụ đó ở route khác.
+module.exports.prepareUsersForSave = prepareUsersForSave;

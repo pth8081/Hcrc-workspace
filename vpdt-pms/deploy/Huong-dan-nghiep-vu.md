@@ -8034,6 +8034,56 @@ chỉ khác hoa/thường (VD "NV001" và "nv001") giờ bị coi là **TRÙNG**
 thống báo lỗi "đã bị trùng... (không phân biệt hoa/thường)" và không cho lưu
 cả 2 song song, tránh nhầm lẫn/lỗi đăng nhập tương tự về sau.
 
+### 7.7b. Mã NV ↔ Tài Khoản (mới 11/2026)
+
+**Hệ Thống → Quản Trị → 🆔 Mã NV ↔ Tài Khoản** (tab con, cùng hàng với Phân
+Quyền/Người Dùng/Ma Trận Phân Quyền, **chỉ Quản Trị Viên** vào được, gác
+cứng cả ở server) — đối chiếu **Mã Nhân Viên** (Hồ Sơ Nhân Sự) với **Tên
+Đăng Nhập** (VPDT) cho từng hồ sơ đang **Đang làm/Nghỉ phép** (hồ sơ Nháp
+chưa xác nhận Onboarding và Đã nghỉ việc không hiện ở màn này, không có ý
+nghĩa đối chiếu tài khoản đăng nhập). Quy tắc hệ thống từ trước tới nay là
+2 giá trị này **luôn phải trùng nhau**; màn này giúp Admin tìm nhanh những
+chỗ chưa khớp, thay vì phải rà tay từng hồ sơ.
+
+Màn tự quét ngay khi mở (hoặc bấm "🔄 Làm Mới" để quét lại), chia 3 nhóm:
+
+- **✅ Đã khớp** — Tên Đăng Nhập = Mã Nhân Viên, đúng quy tắc, không cần làm
+  gì.
+- **⚠️ Lệch mã** — đã có tài khoản nhưng Tên Đăng Nhập KHÁC Mã Nhân Viên
+  (thường là dữ liệu cũ, tạo trước khi có quy tắc này). Nhóm này **CHỈ hiển
+  thị để Admin tự rà/sửa tay** (bấm tên nhân viên để mở thẳng hồ sơ ở "Hồ Sơ
+  Nhân Sự" rồi dùng "Liên Kết Tài Khoản" sẵn có) — **KHÔNG có thao tác hàng
+  loạt** cho nhóm này, vì đổi Tên Đăng Nhập của 1 tài khoản đang hoạt động
+  thật rủi ro cao (Tên Đăng Nhập là định danh được tham chiếu ở rất nhiều
+  nơi khác trong hệ thống: người quản lý, người được giao việc, người tạo,
+  người duyệt...).
+- **❌ Chưa có tài khoản** — hồ sơ Hồ Sơ Nhân Sự chưa liên kết tài khoản nào.
+  Đây là nhóm **DUY NHẤT** cho phép Admin chọn + **"🆕 Tạo Tài Khoản Cho Mục
+  Đã Chọn"** hàng loạt ngay tại màn này.
+
+Bộ lọc mặc định "Chỉ hiện vấn đề" (gộp Lệch mã + Chưa có tài khoản) — đổi
+sang "Hiện tất cả hồ sơ" nếu cần xem luôn cả nhóm Đã khớp.
+
+**Tạo hàng loạt tài khoản (nhóm "Chưa có tài khoản")**: tick checkbox từng
+dòng cần tạo → bấm "🆕 Tạo Tài Khoản Cho Mục Đã Chọn" → màn xác nhận cho
+chọn 1 **Nhóm Phân Quyền** áp dụng chung cho mọi tài khoản tạo trong lượt
+này (để trống = không gán quyền nào, an toàn nhất), và mỗi nhân viên có 1
+khối riêng cho sửa **Phòng Ban/Chức Danh/Số Điện Thoại/Email** (gợi ý sẵn
+từ Hồ Sơ Nhân Sự, sửa tự do) — **4 trường này CHỈ ghi vào tài khoản mới,
+KHÔNG ghi ngược lại Hồ Sơ Nhân Sự**. Bấm "Tạo Tài Khoản":
+
+- Tên đăng nhập = Mã Nhân Viên, mật khẩu mặc định `Brg@123456` (buộc đổi
+  ngay lần đăng nhập đầu — dùng ĐÚNG cơ chế "buộc đổi mật khẩu" có sẵn cho
+  mọi tài khoản mới, không có luồng riêng), tự liên kết tài khoản mới vào
+  đúng hồ sơ Hồ Sơ Nhân Sự tương ứng.
+- Quyền hạn tính từ Nhóm Phân Quyền đã chọn qua ĐÚNG hàm xử lý dùng chung
+  cho mọi lượt tạo tài khoản khác (form thủ công, Nhập Excel mục 7.7, đặt
+  lại mật khẩu) — không có luồng tính quyền riêng biệt ở đây.
+- Kết quả hiện rõ bao nhiêu tài khoản tạo thành công, bao nhiêu bị bỏ qua
+  kèm lý do (VD hồ sơ vừa được liên kết bởi thao tác khác, hoặc Mã Nhân
+  Viên trùng Tên Đăng Nhập 1 tài khoản khác đang hoạt động — các trường hợp
+  này cần Admin xử lý tay, không tự động xử lý).
+
 ### 7.8. Cấu Hình Email
 
 **Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/

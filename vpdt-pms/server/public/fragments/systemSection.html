@@ -686,6 +686,13 @@
       <button type="button" data-op="setAdminSubTab" data-arg0="AUDITWORKFLOW" id="btnAdminSubAuditWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Quy Trình</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="AUDITUSER" id="btnAdminSubAuditUser" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Người Dùng</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="AUDITSYSTEM" id="btnAdminSubAuditSystem" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔍 Audit Hệ Thống</button>
+      <!-- "🆔 Mã NV ↔ Tài Khoản" (11/2026, theo yêu cầu người dùng — quy tắc hệ thống: Tên Đăng Nhập LUÔN
+           được tạo trùng Mã Nhân Viên). Admin-only (gác isCurrentlyAdmin() ở routes/hrUsernameMapping.js,
+           CÙNG lớp gác admin đã có sẵn cho cả tab "Hệ Thống" ở setSystemSubTab()) — rà soát hồ sơ Hồ Sơ
+           Nhân Sự đang làm việc/nghỉ phép CHƯA có tài khoản, cho tạo hàng loạt (Tên đăng nhập = Mã NV,
+           mật khẩu mặc định, bắt đổi ngay lần đăng nhập đầu). Xem renderUsernameMappingPanel()/
+           umapOpenBulkCreateModal() (module-hethong-tabs.js). -->
+      <button type="button" data-op="setAdminSubTab" data-arg0="USERNAMEMAP" id="btnAdminSubUsernameMap" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🆔 Mã NV ↔ Tài Khoản</button>
     </div>
 
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
@@ -1407,6 +1414,39 @@
         <input type="checkbox" id="systemAuditAutoScanToggle" data-op-change="toggleSystemAuditAutoScan"> 📧 Tự động quét hằng ngày + gửi email khi có thay đổi
       </label>
       <div id="systemAuditFindingsList" class="space-y-1.5"></div>
+    </div>
+
+    <!-- "🆔 Mã NV ↔ Tài Khoản" (11/2026) — xem renderUsernameMappingPanel()/umapOpenBulkCreateModal()
+         ngay dưới trong module-hethong-tabs.js. Chỉ hồ sơ Hồ Sơ Nhân Sự ACTIVE/ON_LEAVE (đang làm việc/
+         nghỉ phép thật) — DRAFT/INACTIVE không hiện ở đây. 3 nhóm: ✅ Khớp (username===Mã NV, không cần
+         làm gì) / ⚠️ Lệch mã (đã có tài khoản nhưng khác Mã NV — CHỈ xem, không có thao tác hàng loạt, tự
+         vào "Hồ Sơ Nhân Sự" sửa tay) / ❌ Chưa có tài khoản (chọn + "Tạo Hàng Loạt" — Tên đăng nhập = Mã
+         NV, mật khẩu mặc định, bắt đổi ngay lần đăng nhập đầu). -->
+    <div id="adminSubUsernameMap" class="hidden bg-white border rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🆔 Mã NV ↔ Tài Khoản</h3>
+          <p class="text-[11px] text-gray-500 mt-0.5">Đối chiếu Mã Nhân Viên (Hồ Sơ Nhân Sự) với Tên Đăng Nhập (VPDT) của mọi nhân viên đang làm việc/đang nghỉ phép — quy tắc hệ thống: 2 mã luôn trùng nhau.</p>
+        </div>
+        <button type="button" data-op="loadUsernameMappingReport" class="btn-primary text-xs">🔄 Làm Mới</button>
+      </div>
+      <div id="umapStatsRow" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div class="bg-gray-50 border rounded p-2 text-center"><div id="umapStatTotal" class="text-lg font-bold text-gray-700">0</div><div class="text-[10px] text-gray-500">Hồ sơ đang làm việc</div></div>
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-2 text-center"><div id="umapStatMatched" class="text-lg font-bold text-emerald-700">0</div><div class="text-[10px] text-emerald-600">✅ Đã khớp</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="umapStatMismatch" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">⚠️ Lệch mã</div></div>
+        <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="umapStatMissing" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">❌ Chưa có tài khoản</div></div>
+      </div>
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2 text-xs text-gray-600">
+          <span><b id="umapSelCount">0</b> mục "Chưa có tài khoản" đã chọn</span>
+          <select id="umapFilter" data-op-change="renderUsernameMappingTable" class="border rounded px-2 py-1 text-xs">
+            <option value="ISSUES">Chỉ hiện vấn đề (Lệch mã + Chưa có tài khoản)</option>
+            <option value="ALL">Hiện tất cả hồ sơ</option>
+          </select>
+        </div>
+        <button type="button" id="umapBulkCreateBtn" data-op="umapOpenBulkCreateModal" class="btn-primary text-xs" disabled>🆕 Tạo Tài Khoản Cho Mục Đã Chọn</button>
+      </div>
+      <div id="umapTableWrap" class="overflow-x-auto"></div>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
