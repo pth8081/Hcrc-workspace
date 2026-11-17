@@ -196,6 +196,55 @@ async function playwrightTests(run) {
       assertEqual(len, 1, 'lỗi mạng thật thì KHÔNG được xoá khỏi hàng đợi — còn offline, phải thử lại sau');
       await page.evaluate(() => { window.fetch = window.__origFetch; delete window.__origFetch; });
     });
+
+    // queueShelfRecordOffline()/trySyncPendingShelfRecords() + storeOverrideDept (11/2026, theo yêu cầu
+    // người dùng — "nếu theo đúng logic offline thì tôi vẫn lưu được, sau đó tự đồng bộ ngược lên" lúc
+    // đang bật "🔑 Chọn Siêu Thị Bất Kỳ"): TRƯỚC ĐÂY chặn hẳn lưu tạm trong tình huống này — nay phải lưu
+    // được + CHỤP LẠI đúng siêu thị đang chọn tạm, gửi lại kèm ĐÚNG header X-Shelf-Store-Override đó khi
+    // đồng bộ (KHÔNG dùng shelfStoreOverrideDept đang chọn ở phiên hiện tại, có thể đã đổi/khác từ lúc
+    // queue tới giờ — xem assert thứ 2 dưới đây, cố tình đổi override SANG SIÊU THỊ KHÁC trước khi đồng
+    // bộ để chứng minh rec.storeOverrideDept lưu lúc queue mới là giá trị được dùng, không phải biến
+    // sống hiện tại). Dùng spy thay window.fetch (cùng kỹ thuật scenario TypeError ngay trên) để bắt lại
+    // đúng header mỗi request gửi đi, không cần sửa gì thêm ở testHarness.js dùng chung.
+    await run.run('queueShelfRecordOffline()/trySyncPendingShelfRecords(): có storeOverrideDept -> gửi kèm ĐÚNG header X-Shelf-Store-Override đã CHỤP LẠI lúc lưu tạm (không phải override hiện tại); KHÔNG có override -> không gửi header', async () => {
+      // Dọn sạch hàng đợi trước (scenario TypeError ngay trên CỐ Ý để lại đúng 1 bản ghi kẹt trong hàng
+      // đợi — không liên quan gì tới scenario này, chỉ dọn cho gọn để đếm request chính xác).
+      await page.evaluate(async () => {
+        const db = await openShelfOfflineDb();
+        for (const rec of shelfOfflinePendingCache.slice()) {
+          await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.delete(rec.clientRecordId));
+        }
+        shelfOfflinePendingCache = [];
+      });
+      await page.evaluate(async () => {
+        // (a) KHÔNG override — hành vi cũ không đổi.
+        await queueShelfRecordOffline(
+          { shelfLocationId: 1, productName: 'Bánh Oreo', maHang: 'SKU-NO-OVERRIDE', maVach: '', quantity: 3, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-no-override' },
+          { code: 'A1', name: 'Nước giải khát' }, null);
+        // (b) CÓ override lúc queue — "Siêu thị Quận 7".
+        await queueShelfRecordOffline(
+          { shelfLocationId: 2, productName: 'Snack Oishi', maHang: 'SKU-WITH-OVERRIDE', maVach: '', quantity: 4, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-with-override' },
+          { code: 'B1', name: 'Bánh kẹo' }, 'Siêu thị Quận 7');
+      });
+      // Đổi override hiện tại sang 1 giá trị KHÁC hẳn trước khi đồng bộ — chứng minh sync dùng đúng giá
+      // trị đã lưu trên từng bản ghi, không phải biến shelfStoreOverrideDept sống tại thời điểm đồng bộ.
+      await page.evaluate(() => { shelfStoreOverrideDept = 'Siêu thị Quận 1'; });
+      await page.evaluate(() => {
+        window.__origFetch2 = window.fetch;
+        window.__capturedHeaders = [];
+        window.fetch = async (url, opts) => {
+          window.__capturedHeaders.push({ url, override: (opts && opts.headers && opts.headers['X-Shelf-Store-Override']) || null });
+          return { ok: true, status: 200, json: async () => ({ item: { id: Date.now(), ...JSON.parse(opts.body) }, wasUpdate: false }) };
+        };
+      });
+      await page.evaluate(() => trySyncPendingShelfRecords());
+      const captured = await page.evaluate(() => window.__capturedHeaders);
+      await page.evaluate(() => { window.fetch = window.__origFetch2; delete window.__origFetch2; delete window.__capturedHeaders; shelfStoreOverrideDept = ''; });
+      assertEqual(captured.length, 2, `phải gửi đúng 2 request (1 không override, 1 có override), thực tế: ${captured.length}`);
+      assertEqual(captured[0].override, null, 'bản ghi KHÔNG override lúc queue -> KHÔNG được gửi kèm header');
+      assertEqual(captured[1].override, encodeURIComponent('Siêu thị Quận 7'), 'bản ghi CÓ override lúc queue -> phải gửi header đúng giá trị đã CHỤP LẠI lúc đó (không phải "Siêu thị Quận 1" vừa đổi)');
+      assertEqual(await page.evaluate(() => shelfOfflinePendingCache.length), 0, 'cả 2 đồng bộ thành công -> hàng đợi phải trống');
+    });
   } finally {
     await browser.close();
     server.close();

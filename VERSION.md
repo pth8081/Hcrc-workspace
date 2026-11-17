@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**30.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.86 (2026-11): "Ghi Nhận Trên Kệ" offline — cho lưu tạm được khi đang chọn siêu thị khác (ĐÃ VÁ theo phản hồi người dùng)
+
+Người dùng phản hồi TRỰC TIẾP khi test offline thật trên điện thoại (tắt mạng, đang bật "🔑 Chọn Siêu Thị
+Bất Kỳ" chọn tạm 1 siêu thị khác, quét mã rồi bấm "Lưu Ghi Nhận"): "Nếu theo đúng logic này, cái offline
+tôi vẫn lưu được, sau đó nó sẽ tự đồng bộ ngược lên trên server. Logic này nó đang bị sai khi tôi vừa lưu
+ấy" — hệ thống báo lỗi chặn hẳn, không cho lưu tạm, đúng như thiết kế TRƯỚC ĐÓ (lo đồng bộ lại sẽ gán
+nhầm sang siêu thị thật của tài khoản thay vì siêu thị đang chọn tạm lúc lưu).
+
+- `queueShelfRecordOffline()` (`module-vanhanh.js`) nay CHỤP LẠI đúng `shelfStoreOverrideDept` đang chọn
+  NGAY LÚC lưu tạm, lưu kèm trên bản ghi hàng đợi (IndexedDB) — gỡ hẳn khối chặn cũ.
+- `trySyncPendingShelfRecords()` khi đồng bộ lại dùng ĐÚNG giá trị đã lưu trên từng bản ghi (header
+  `X-Shelf-Store-Override`), KHÔNG dùng `shelfStoreOverrideDept` đang chọn ở phiên hiện tại (có thể đã
+  đổi/khác từ lúc lưu tạm tới lúc có mạng lại) — an toàn vì server tự re-check quyền/tính hợp lệ MỖI LẦN
+  qua `getShelfEffectiveUserFromReq()` (đã có sẵn, không tin suông giá trị cũ); mất quyền/siêu thị không
+  còn hợp lệ giữa chừng thì bản ghi vẫn GIỮ NGUYÊN trong hàng đợi, không mất dữ liệu, không tự ý gán nhầm.
+- Bản ghi đang chờ đồng bộ kiểu này hiện thêm dòng nhỏ "Sẽ đồng bộ về: &lt;tên siêu thị&gt;" trong danh
+  sách Ghi Nhận gần đây, để dễ đối chiếu trước khi có mạng lại.
+- Cập nhật mục 4.5.1-tương-đương "🔑 Được Chọn Siêu Thị Bất Kỳ" trong `Huong-dan-nghiep-vu.md`.
+- Thêm 1 kịch bản test mới vào `tests/test-shelf-kehang-offline.js` (dùng spy thay `window.fetch` để bắt
+  lại header mỗi request, xác nhận: không override thì không gửi header; có override lúc queue thì gửi
+  đúng giá trị đã lưu dù phiên hiện tại đã đổi sang siêu thị khác trước khi đồng bộ) — 12/12 scenario pass.
+  Chạy lại toàn bộ test Kiểm Soát Hàng Hóa/siêu thị-bất-kỳ liên quan
+  (`test-shelf-any-store-access.js` 17/17, `test-shelf-location-import-multi-store.js` 12/12,
+  `test-shelf-recon-digest.js` 22/22, `test-shelf-recon-export-stale-dept-fix.js` 7/7,
+  `test-shelf-report-allstores-scope.js` 8/8) — không bị ảnh hưởng.
 
 ## v30.85 (2026-11): Báo Cáo Định Biên — đổi nguồn cột "Đang Thử Việc" sang Quy Trình Onboarding (ĐÃ VÁ theo phản hồi người dùng)
 

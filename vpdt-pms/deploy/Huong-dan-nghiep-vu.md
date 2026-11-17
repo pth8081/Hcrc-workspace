@@ -3586,11 +3586,20 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   - Chỉ nên gán cho RẤT ÍT người thật sự cần kiểm tra/xử lý hộ nhiều siêu
     thị (VD Ban điều hành đi kiểm tra đột xuất quầy kệ/giá bán của nhiều
     siêu thị) — không phải quyền phổ biến cho nhân viên siêu thị thường.
-  - **Không áp dụng cho offline-first**: hàng đợi "Lưu Ghi Nhận" lúc mất
-    mạng luôn gắn theo ĐÚNG siêu thị thật của tài khoản (không theo siêu
-    thị đang chọn tạm) — nếu đang chọn siêu thị khác mà đúng lúc mất mạng
-    khi bấm Lưu, hệ thống báo lỗi và KHÔNG lưu tạm, để tránh ghi nhận bị
-    gán nhầm siêu thị khi có mạng lại.
+  - **Offline-first vẫn hoạt động khi đang chọn siêu thị khác (11/2026,
+    theo phản hồi TRỰC TIẾP người dùng)**: hàng đợi "Lưu Ghi Nhận" lúc mất
+    mạng CHỤP LẠI đúng siêu thị đang chọn tạm ngay lúc bấm Lưu, gắn kèm
+    theo bản ghi offline đó — khi có mạng lại, hệ thống tự gửi lên lại
+    ĐÚNG siêu thị đã chọn lúc đó (không phải siêu thị thật của tài khoản,
+    và cũng không phải siêu thị đang chọn tạm ở thời điểm có mạng lại, nếu
+    giữa chừng đã đổi sang siêu thị khác). Quyết định ban đầu (chặn hẳn lưu
+    tạm trong tình huống này) bị người dùng phát hiện không đúng kỳ vọng —
+    nay cho lưu tạm bình thường, server vẫn xác thực lại quyền/tính hợp lệ
+    của siêu thị đó NGAY LÚC đồng bộ (không tin suông giá trị đã lưu) —
+    mất quyền/siêu thị không còn hợp lệ giữa chừng thì bản ghi vẫn GIỮ
+    NGUYÊN trong hàng đợi (không mất dữ liệu), không tự ý gán sang siêu thị
+    khác. Trong màn hình, bản ghi đang chờ đồng bộ kiểu này hiện thêm dòng
+    nhỏ "Sẽ đồng bộ về: &lt;tên siêu thị&gt;" để dễ đối chiếu.
 - **Báo cáo**: 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Soát Hàng Hóa" — xuất Excel
   dùng nút có sẵn trong màn Báo Cáo.
 - **Offline-first**: khi máy mất mạng, mỗi lượt "Lưu Ghi Nhận" lưu tạm trên

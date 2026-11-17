@@ -3986,16 +3986,16 @@ async function submitShelfRecord(e) {
       // rơi tiếp xuống nhánh lưu offline.
     }
   }
-  // shelfAnyStoreAccess: hàng đợi offline LUÔN gửi lại cho ĐÚNG siêu thị thật của thiết bị khi có mạng
-  // lại (xem chú thích tại ensureShelfOfflineReady()/trySyncPendingShelfRecords(), KHÔNG mang theo siêu
-  // thị đang chọn tạm) — nếu đang chọn siêu thị KHÁC mà mất mạng ngay lúc này, chặn hẳn việc lưu tạm để
-  // tránh ghi nhận bị gán NHẦM sang siêu thị thật của mình khi đồng bộ lại, thay vì đúng siêu thị đang
-  // chọn lúc bấm Lưu.
-  if (shelfStoreOverrideDept) {
-    return alert('⛔ Mất kết nối trong khi đang chọn siêu thị khác để thao tác — vui lòng kiểm tra lại mạng và thử lưu lại (không thể lưu tạm ngoại tuyến khi đang chọn siêu thị khác, để tránh ghi nhận nhầm siêu thị).');
-  }
-  await queueShelfRecordOffline(payload, matchedLocation);
-  alert('🔌 Đang offline — đã lưu tạm trên máy, sẽ tự đồng bộ khi có mạng lại.');
+  // shelfAnyStoreAccess (11/2026, theo yêu cầu người dùng — "nếu theo đúng logic offline thì tôi vẫn lưu
+  // được, sau đó tự đồng bộ ngược lên"): TRƯỚC ĐÂY chặn hẳn lưu tạm khi đang chọn siêu thị khác (sợ đồng
+  // bộ lại gán NHẦM sang siêu thị thật của mình) — nay queueShelfRecordOffline() CHỤP LẠI đúng siêu thị
+  // đang chọn tạm (shelfStoreOverrideDept) ngay lúc này, trySyncPendingShelfRecords() gửi lại kèm ĐÚNG
+  // header override đó khi có mạng lại (server re-check quyền/tính hợp lệ MỖI LẦN, không tin suông giá
+  // trị cũ — xem getShelfEffectiveUserFromReq()) — không còn cần chặn nữa.
+  await queueShelfRecordOffline(payload, matchedLocation, shelfStoreOverrideDept);
+  alert(shelfStoreOverrideDept
+    ? `🔌 Đang offline — đã lưu tạm trên máy cho siêu thị "${shelfStoreOverrideDept}", sẽ tự đồng bộ khi có mạng lại.`
+    : '🔌 Đang offline — đã lưu tạm trên máy, sẽ tự đồng bộ khi có mạng lại.');
   document.getElementById('srForm').reset();
   document.getElementById('srShelfLocationId').value = '';
   setShelfMaHangMatchNote('', false);
@@ -4257,7 +4257,7 @@ function renderShelfRecordRecentList() {
   if (!tbody) return;
   const pendingRows = (shelfOfflinePendingCache || []).map(rec => `
     <tr class="border-b bg-amber-50">
-      <td class="p-2">${escapeHtml(rec.shelfLocationLabel || '')}</td>
+      <td class="p-2">${escapeHtml(rec.shelfLocationLabel || '')}${rec.storeOverrideDept ? `<div class="text-[10px] text-amber-700 font-normal">Sẽ đồng bộ về: ${escapeHtml(rec.storeOverrideDept)}</div>` : ''}</td>
       <td class="p-2">${escapeHtml(rec.payload.productName || '')}</td>
       <td class="p-2">${escapeHtml(rec.payload.maVach || '')}</td>
       <td class="p-2">${escapeHtml(rec.payload.maHang || '')}</td>
@@ -5074,10 +5074,15 @@ async function syncShelfPriceCatalogSilently() {
 // Lưu tạm 1 ghi nhận vào hàng đợi offline (mất mạng lúc bấm "Lưu Ghi Nhận") — shelfLocationLabel chỉ để
 // HIỆN cho người dùng thấy ngay (tên quầy kệ), KHÔNG phải dữ liệu gửi lên server (server tự tra lại từ
 // payload.shelfLocationId khi đồng bộ, xem extraValidate shelfRecords).
-async function queueShelfRecordOffline(payload, matchedLocation) {
+// storeOverrideDept (11/2026, theo yêu cầu người dùng — "nếu theo đúng logic offline thì tôi vẫn lưu
+// được, sau đó tự đồng bộ ngược lên") — CHỤP LẠI đúng siêu thị đang chọn tạm (shelfStoreOverrideDept)
+// NGAY LÚC LƯU, để trySyncPendingShelfRecords() gửi lại ĐÚNG siêu thị này khi đồng bộ sau, thay vì chặn
+// hẳn việc lưu tạm như trước (xem chú thích CŨ đã gỡ tại submitShelfRecord()).
+async function queueShelfRecordOffline(payload, matchedLocation, storeOverrideDept) {
   const rec = {
     clientRecordId: payload.clientRecordId, payload,
     shelfLocationLabel: matchedLocation ? `${matchedLocation.code} — ${matchedLocation.name}` : '',
+    storeOverrideDept: storeOverrideDept || null,
     queuedAt: new Date().toISOString()
   };
   try {
@@ -5108,12 +5113,17 @@ async function trySyncPendingShelfRecords() {
     const queue = shelfOfflinePendingCache.slice();
     for (const rec of queue) {
       try {
-        // CỐ Ý dùng fetch() thường ở đây (KHÔNG phải shelfFetch()) — hàng đợi offline LUÔN thuộc ĐÚNG
-        // siêu thị thật của thiết bị (xem chú thích tại ensureShelfOfflineReady()), gửi kèm header
-        // override (nếu người dùng đang chọn siêu thị KHÁC lúc mạng vừa có lại) sẽ khiến bản ghi cũ bị
-        // nhầm sang siêu thị đang chọn tạm, không phải siêu thị đã ghi nhận lúc mất mạng.
+        // CỐ Ý dùng fetch() thường ở đây (KHÔNG phải shelfFetch()) — hàng đợi offline gửi lại đúng siêu
+        // thị đã CHỤP LẠI ngay lúc lưu tạm (rec.storeOverrideDept, nếu lúc đó đang chọn siêu thị khác —
+        // xem queueShelfRecordOffline()), KHÔNG dùng shelfStoreOverrideDept đang chọn ở phiên hiện tại
+        // (có thể đã đổi/khác từ lúc đó tới giờ). Không override thì gửi trơn như cũ (siêu thị thật của
+        // thiết bị). Server tự re-check quyền/tính hợp lệ MỖI LẦN (getShelfEffectiveUserFromReq()), không
+        // tin suông giá trị đã lưu — mất quyền/siêu thị không còn hợp lệ giữa chừng sẽ bị 403/400 rõ ràng,
+        // rơi đúng nhánh "lỗi server thật" bên dưới (giữ lại hàng đợi, không mất dữ liệu).
+        const headers = { 'Content-Type': 'application/json' };
+        if (rec.storeOverrideDept) headers['X-Shelf-Store-Override'] = encodeURIComponent(rec.storeOverrideDept);
         const res = await fetch('/api/shelf-stock/records/upsert', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec.payload)
+          method: 'POST', headers, body: JSON.stringify(rec.payload)
         });
         if (res.status === 401) return handleSessionExpired();
         const body = await res.json().catch(() => ({}));
