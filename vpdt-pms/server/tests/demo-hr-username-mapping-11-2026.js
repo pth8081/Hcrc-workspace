@@ -164,6 +164,27 @@ async function main() {
     ? '✅ XÁC NHẬN: NV0099 đã chuyển từ "⚠️ Lệch mã" sang "✅ Đã khớp" sau khi Sửa Mapping.'
     : '⛔ Thống kê không đúng kỳ vọng — cần điều tra thêm.');
 
+  // ===== DEMO MỚI: "✏️ Sửa Mã NV" cho hồ sơ "BL 3900" dính khoảng trắng (theo yêu cầu người dùng: "Do
+  // upload sai một số hồ sơ có dấu cách và muốn sửa lại... sửa lại mã hồ sơ để có báo cáo chính xác") =====
+  await page.evaluate(() => document.querySelector('#umapWhitespaceEmployeeCodes button[data-op="umapOpenFixEmployeeCodeModal"]').click());
+  await page.waitForTimeout(200);
+  await shot(page, '8-modal-sua-ma-nv', '#genericConfirmModal');
+
+  await page.evaluate(() => window.__confirmPending());
+  await page.waitForTimeout(300);
+  const fixCodeAlertMsg = await page.evaluate(() => window.__alerts[window.__alerts.length - 1]);
+  console.log('💬 Thông báo "Sửa Mã NV":', fixCodeAlertMsg);
+  await shot(page, '9-ket-qua-sau-khi-sua-ma-nv', '#adminSubUsernameMap');
+
+  const afterCodeFix = await page.evaluate(() => ({
+    whitespaceBlockHidden: document.getElementById('umapWhitespaceBlock').classList.contains('hidden'),
+    rowsShown: [...document.querySelectorAll('#umapTableWrap tbody tr td:nth-child(2)')].map(td => td.innerText)
+  }));
+  console.log('📊 Sau khi sửa Mã NV:', afterCodeFix);
+  console.log(afterCodeFix.rowsShown.includes('BL3900') && !afterCodeFix.rowsShown.some(c => c.includes('·'))
+    ? '✅ XÁC NHẬN: "BL 3900" đã đổi thành "BL3900" (sạch khoảng trắng), không còn hiện dấu "·" trên bảng.'
+    : '⛔ Kết quả không đúng kỳ vọng — cần điều tra thêm.');
+
   await browser.close();
   server.close();
   console.log('✅ Demo xong.');

@@ -1961,6 +1961,41 @@ function createDispatcher(state) {
         const whitespaceIssues = findWhitespaceIssues(mockAppData);
         return { status: 200, body: { ...report, whitespaceIssues } };
       }
+      // POST /rename-employee-code (11/2026, demo "✏️ Sửa Mã NV" — xem umapSubmitFixEmployeeCode(),
+      // module-hethong-tabs.js) — dùng ĐÚNG renameEmployeeCode() thuần (lib/employeeProfile.js) để đổi
+      // employeeProfiles, rồi tự cascade sang các collection mock CÓ SẴN trong state (mirror tinh thần
+      // cascadeEmployeeCodeRename() thật, lib/catalogRename.js — đơn giản hoá vì mock không qua
+      // recordStore/SQL, chỉ cần đủ để test xác nhận ĐÚNG field nào được cascade).
+      if (pathName === '/api/admin/username-mapping/rename-employee-code' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser?.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới dùng được chức năng này' } };
+        const { renameEmployeeCode } = require('../lib/employeeProfile');
+        const oldCode = String(body?.employeeCode || '').trim();
+        const newCode = String(body?.newEmployeeCode || '').trim();
+        let renamedCode;
+        try {
+          const profile = renameEmployeeCode(state.employeeProfiles || [], oldCode, newCode, username);
+          renamedCode = profile.employeeCode;
+        } catch (err) {
+          return { status: err.status || 400, body: { error: err.message } };
+        }
+        const EMPLOYEE_CODE_FIELD_COLLECTIONS_MOCK = [
+          ['laborContracts', ['employeeCode']], ['attendanceRecords', ['employeeCode']],
+          ['leaveBalances', ['employeeCode']], ['leaveRequests', ['employeeCode']],
+          ['shiftRoster', ['employeeCode']], ['shiftSwapRequests', ['requesterEmployeeCode', 'targetEmployeeCode']],
+          ['payslips', ['employeeCode']], ['hrProcesses', ['employeeCode']]
+        ];
+        for (const [coll, fields] of EMPLOYEE_CODE_FIELD_COLLECTIONS_MOCK) {
+          if (!Array.isArray(state[coll])) continue;
+          state[coll] = state[coll].map(item => {
+            let changed = false;
+            const next = { ...item };
+            for (const f of fields) { if (next[f] === oldCode) { next[f] = renamedCode; changed = true; } }
+            return changed ? next : item;
+          });
+        }
+        return { status: 200, body: { ok: true, employeeCode: renamedCode } };
+      }
       if (pathName === '/api/admin/username-mapping/bulk-create-accounts' && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser?.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới dùng được chức năng này' } };

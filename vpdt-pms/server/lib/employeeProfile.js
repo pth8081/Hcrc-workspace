@@ -593,6 +593,28 @@ function relinkAccount(list, employeeCode, newUsername, actorUsername, actorName
   return profile;
 }
 
+// renameEmployeeCode(list, oldCode, newCode, actorUsername) — (11/2026, theo yêu cầu người dùng: "Do
+// upload sai một số hồ sơ có dấu cách và muốn sửa lại... cập nhật lại tài khoản cho nhân sự... muốn sửa
+// lại mã hồ sơ để có báo cáo chính xác"). Mã Nhân Viên là ĐỊNH DANH CHÍNH của hồ sơ, được tham chiếu
+// NGUYÊN CHUỖI ở rất nhiều collection khác (hợp đồng lao động, chấm công, phép, lương, ca làm/đổi ca,
+// quy trình Onboarding/Offboarding...) — hàm này CHỈ đổi field employeeCode của ĐÚNG 1 hồ sơ, KHÔNG tự
+// cascade gì (cùng triết lý linkAccount()/relinkAccount() ở trên không tự cascade username) — caller
+// (routes/hrUsernameMapping.js) chịu trách nhiệm gọi cascadeEmployeeCodeRename() (lib/catalogRename.js)
+// NGAY SAU KHI hàm này đã ghi 'employeeProfiles' thành công.
+function renameEmployeeCode(list, oldCode, newCode, actorUsername) {
+  const arr = list || [];
+  const next = String(newCode || '').trim();
+  if (!next) throw new HttpError(400, 'Mã Nhân Viên mới không được để trống');
+  if (next.length > 50) throw new HttpError(400, 'Mã Nhân Viên quá dài (tối đa 50 ký tự)');
+  const profile = findProfile(arr, oldCode);
+  if (!profile) throw new HttpError(404, `Không tìm thấy hồ sơ ứng với Mã Nhân Viên "${oldCode}"`);
+  if (profile.employeeCode === next) throw new HttpError(400, 'Mã Nhân Viên mới giống hệt mã hiện tại — chưa đổi gì');
+  if (findProfile(arr, next)) throw new HttpError(400, `Mã Nhân Viên "${next}" đã có hồ sơ khác — không thể đổi trùng`);
+  profile.employeeCode = next;
+  profile.updatedAt = nowVN(); profile.updatedBy = actorUsername || 'system';
+  return profile;
+}
+
 // Gọi khi 1 quy trình ONBOARDING/OFFBOARDING tự động COMPLETED (xem computeHrProcessProgress() ở
 // lib/recordActions.js) — chuyển đúng trạng thái hồ sơ, không đụng tới các trường dữ liệu khác.
 // hrProcessItem: bản ghi hrProcesses đã COMPLETED — ONBOARDING tra theo employeeCode, OFFBOARDING tra
@@ -2010,7 +2032,7 @@ module.exports = {
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
-  findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, renameEmployeeCode, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,

@@ -1655,6 +1655,41 @@ async function cascadeUsernameChangesToShelfThresholdExtraRecipients(renamed, de
   });
 }
 
+// EMPLOYEE_CODE_FIELD_COLLECTIONS (11/2026, theo yêu cầu người dùng — "upload sai một số hồ sơ có dấu
+// cách... sửa lại mã hồ sơ để có báo cáo chính xác"): mọi collection lưu NGUYÊN CHUỖI Mã Nhân Viên làm
+// khoá TRA CỨU THẬT (không phải cosmetic) — xác nhận qua rà soát sâu toàn repo, dùng cho
+// cascadeEmployeeCodeRename() ngay dưới. KHÔNG gồm employeeProfiles (đó là NGUỒN, route tự đổi riêng qua
+// renameEmployeeCode(), lib/employeeProfile.js, TRƯỚC khi gọi cascade này) — cũng KHÔNG đụng vào các
+// chuỗi mã đã SINH SẴN kiểu "HDLD-<employeeCode>-N"/"PL-<periodId>-<employeeCode>" (laborContracts.code/
+// payslips.code) — đó là định danh LỊCH SỬ đã phát sinh, giữ nguyên dù employeeCode gốc đổi sau đó, cùng
+// triết lý không retrofit username cũ vào text log đã ghi.
+const EMPLOYEE_CODE_FIELD_COLLECTIONS = [
+  { collection: 'laborContracts', fields: ['employeeCode'] },
+  { collection: 'attendanceRecords', fields: ['employeeCode'] },
+  { collection: 'leaveBalances', fields: ['employeeCode'] },
+  { collection: 'leaveRequests', fields: ['employeeCode'] },
+  { collection: 'shiftRoster', fields: ['employeeCode'] },
+  { collection: 'shiftSwapRequests', fields: ['requesterEmployeeCode', 'targetEmployeeCode'] },
+  { collection: 'payslips', fields: ['employeeCode'] },
+  // hrProcesses.employeeCode: TRƯỚC ĐÂY chỉ có cascade RIÊNG, hẹp hơn (CHỈ hồ sơ employeeProfiles còn
+  // DRAFT lúc "✏️ Sửa Quy Trình" Onboarding đổi Mã NV, xem syncDraftProfileOnOnboardingEdited(),
+  // routes/records.js) — ở ĐÂY cascade ĐẦY ĐỦ mọi trạng thái quy trình (kể cả đã CONFIRMED/COMPLETED từ
+  // lâu), vì renameEmployeeCode() áp dụng cho hồ sơ đã THẬT SỰ đi làm, quy trình Onboarding gốc gần như
+  // chắc chắn đã COMPLETED từ trước.
+  { collection: 'hrProcesses', fields: ['employeeCode'] }
+];
+
+// cascadeEmployeeCodeRename(oldCode, newCode) — gọi NGAY SAU KHI renameEmployeeCode() (lib/employeeProfile.js)
+// đã ghi employeeProfiles THÀNH CÔNG (xem routes/hrUsernameMapping.js POST /rename-employee-code) — lan
+// toả Mã Nhân Viên mới sang MỌI collection đang lưu nguyên chuỗi mã cũ làm khoá tra cứu, dùng ĐÚNG
+// renameFieldValueInCollection() có sẵn (tự lo cả cột mirror SQL của collection đã migrate, xem
+// lib/recordStore.js — không cần tự đồng bộ cột mirror thủ công ở đây).
+async function cascadeEmployeeCodeRename(oldCode, newCode) {
+  for (const { collection, fields } of EMPLOYEE_CODE_FIELD_COLLECTIONS) {
+    await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldCode, newCode));
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1669,5 +1704,6 @@ module.exports = {
   cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees,
   cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads,
   cascadeUsernameChangesToOperationEstimateAssignees,
-  cascadeUsernameChangesToShelfReconExtraRecipients, cascadeUsernameChangesToShelfThresholdExtraRecipients
+  cascadeUsernameChangesToShelfReconExtraRecipients, cascadeUsernameChangesToShelfThresholdExtraRecipients,
+  cascadeEmployeeCodeRename
 };

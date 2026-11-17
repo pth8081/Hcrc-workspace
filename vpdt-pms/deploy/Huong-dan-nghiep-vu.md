@@ -8122,15 +8122,36 @@ Mã Nhân Viên/Tên Đăng Nhập hiện có trong hệ thống (không giới 
 làm/Nghỉ phép như bảng chính — kể cả hồ sơ Nháp/Đã nghỉ việc, hoặc 1 tài
 khoản chưa từng liên kết hồ sơ nào) để tìm dữ liệu **CŨ** đã lỡ dính
 khoảng trắng dư thừa (từ trước khi mục 7.7 "Nhập Excel Hồ Sơ Nhân Sự" tự
-cắt khoảng trắng). Khoảng trắng hiển thị bằng dấu `·` ngay trên mã/tên
-đăng nhập (cả ở khối cảnh báo lẫn ngay tại dòng tương ứng trong bảng
-chính) để Admin thấy rõ vị trí dính lỗi. **Đây là CÔNG CỤ QUÉT + LIỆT KÊ
-THUẦN TUÝ, KHÔNG có nút tự sửa** — Mã Nhân Viên/Tên Đăng Nhập là định danh
-được tham chiếu ở rất nhiều nơi khác trong hệ thống (người quản lý, người
-được giao việc, người tạo, người duyệt, hợp đồng lao động...), nên Admin
-phải tự vào "👥 Người Dùng"/"Hồ Sơ Nhân Sự" sửa tay từng trường hợp (số
-lượng thường rất ít, vì từ nay các lượt "Nhập Excel" mới không còn phát
-sinh thêm nữa).
+cắt khoảng trắng, hoặc do upload sai). Khoảng trắng hiển thị bằng dấu `·`
+ngay trên mã/tên đăng nhập (cả ở khối cảnh báo lẫn ngay tại dòng tương
+ứng trong bảng chính) để Admin thấy rõ vị trí dính lỗi.
+
+- Mục **Tên Đăng Nhập**: CHỈ liệt kê, KHÔNG có nút tự sửa ở đây — vào
+  "👥 Người Dùng" tự sửa tay, hoặc dùng "✏️ Sửa Mapping" (mục ngay trên)
+  nếu hồ sơ đó đang ở nhóm "⚠️ Lệch mã".
+- Mục **Mã Nhân Viên**: có nút **"✏️ Sửa Mã NV"** (11/2026, theo yêu cầu
+  người dùng — "upload sai một số hồ sơ có dấu cách... sửa lại mã hồ sơ để
+  có báo cáo chính xác") ngay tại dòng — bấm vào mở hộp thoại:
+  - **Mã Nhân Viên hiện tại** — hiển thị để đối chiếu (khoảng trắng hiện
+    bằng dấu `·`).
+  - **Mã Nhân Viên mới** — ô nhập, **gợi ý sẵn đã cắt hết khoảng trắng**,
+    sửa lại được nếu cần giá trị khác.
+
+  Bấm "✅ Xác Nhận Đổi Mã Nhân Viên": đổi THẲNG `employeeCode` của Hồ Sơ
+  Nhân Sự, đồng thời **tự động cập nhật MỌI nơi đang tham chiếu Mã Nhân
+  Viên cũ** — hợp đồng lao động, chấm công, phép, lương, ca làm/đổi ca,
+  và quy trình Onboarding/Offboarding liên quan. Chặn nếu Mã Nhân Viên mới
+  đã trùng 1 hồ sơ khác (báo lỗi rõ, không đổi gì). **KHÔNG đụng tới các
+  chuỗi mã đã sinh sẵn trong lịch sử** (VD mã hợp đồng `HDLD-BL 3900-1`) —
+  những chuỗi đó giữ nguyên như đã phát sinh, chỉ field Mã Nhân Viên thật
+  (dùng để tra cứu) được đổi. **Không thể hoàn tác tự động** sau khi xác
+  nhận — chỉ dùng cho đúng trường hợp sửa lỗi dữ liệu (dính khoảng trắng/
+  gõ sai), không dùng để đổi Mã Nhân Viên vì mục đích nghiệp vụ khác.
+
+Cả "✏️ Sửa Mapping" và "✏️ Sửa Mã NV" đều là thao tác sửa **TỪNG DÒNG
+MỘT** (không có nút "sửa hàng loạt") — đổi tên đăng nhập/Mã Nhân Viên cần
+xem kỹ từng trường hợp, đặc biệt "✏️ Sửa Mã NV" có phạm vi cascade RỘNG
+HƠN hẳn (7 collection khác, xem danh sách ở trên) nên càng cần thận trọng.
 
 ### 7.8. Cấu Hình Email
 

@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**30.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.73 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — thêm "✏️ Sửa Mã NV" (đổi employeeCode + cascade đầy đủ)
+
+Theo yêu cầu người dùng ("Do upload sai một số hồ sơ có dấu cách và muốn sửa lại... cập nhật lại tài
+khoản cho nhân sự... sửa lại mã hồ sơ để có báo cáo chính xác"): khối "🧹 Khoảng Trắng Dư Thừa" (v30.71)
+giờ có nút **"✏️ Sửa Mã NV"** ngay tại mỗi Mã Nhân Viên dính khoảng trắng — đổi THẲNG `employeeCode` của
+Hồ Sơ Nhân Sự (gợi ý sẵn đã cắt khoảng trắng, sửa lại được nếu cần).
+
+Mã Nhân Viên là định danh tham chiếu ở **7 collection khác** (rà soát sâu toàn repo, xác nhận không có
+cascade nào trước đây): hợp đồng lao động, chấm công, phép, lương, ca làm, đổi ca, quy trình Onboarding/
+Offboarding. Route mới `POST /api/admin/username-mapping/rename-employee-code` tự cascade đầy đủ cả 7
+collection này (`cascadeEmployeeCodeRename()`, `lib/catalogRename.js`) NGAY SAU KHI đổi `employeeProfiles`
+thành công — dùng lại nguyên primitive `renameFieldValueInCollection()` có sẵn (tự lo cả cột mirror SQL),
+KHÔNG viết logic ghi dữ liệu riêng. KHÔNG đụng tới các chuỗi mã đã sinh sẵn trong lịch sử (VD mã hợp đồng
+`HDLD-<employeeCode cũ>-N`). Chặn trùng Mã Nhân Viên, chặn khi không tìm thấy hồ sơ, ghi Nhật Ký Hệ Thống
+mức WARNING.
+
+15 test mới (`test-hr-username-mapping-rename-employeecode.js`, phủ cả 7 collection cascade + edge-case
+xung đột/không tìm thấy) pass. CSP sạch, không có regression ở các cascade rename khác (dept/store/
+username) đã có từ trước.
 
 ## v30.72 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — thêm "✏️ Sửa Mapping" cho dòng Lệch mã
 

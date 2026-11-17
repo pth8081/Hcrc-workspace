@@ -1288,12 +1288,59 @@ function renderUsernameMappingWhitespaceBlock(issues) {
   if (total === 0) return;
   document.getElementById('umapWhitespaceEmployeeCodes').innerHTML = employeeCodes.length
     ? `<p class="font-semibold mb-1">📇 ${employeeCodes.length} Mã Nhân Viên (Hồ Sơ Nhân Sự):</p><ul class="space-y-0.5">${
-        employeeCodes.map(e => `<li>${umapWhitespaceChip(e.employeeCode)} — ${escapeHtml(e.name)} <span class="text-gray-500">(${escapeHtml(e.status || '')})</span></li>`).join('')
+        employeeCodes.map(e => `<li>${umapWhitespaceChip(e.employeeCode)} — ${escapeHtml(e.name)} <span class="text-gray-500">(${escapeHtml(e.status || '')})</span> <button type="button" data-op="umapOpenFixEmployeeCodeModal" data-arg0="${escapeHtml(e.employeeCode)}" class="text-indigo-700 font-bold hover:underline">✏️ Sửa Mã NV</button></li>`).join('')
       }</ul>` : '';
   document.getElementById('umapWhitespaceUsernames').innerHTML = usernames.length
     ? `<p class="font-semibold mb-1 mt-2">🆔 ${usernames.length} Tên Đăng Nhập (VPDT):</p><ul class="space-y-0.5">${
         usernames.map(u => `<li>${umapWhitespaceChip(u.username)} — ${escapeHtml(u.name)}${u.active === false ? ' <span class="text-gray-500">(đã khoá)</span>' : ''}</li>`).join('')
       }</ul>` : '';
+}
+
+// "✏️ Sửa Mã NV" (MỚI, theo yêu cầu người dùng: "Do upload sai một số hồ sơ có dấu cách và muốn sửa
+// lại... sửa lại mã hồ sơ để có báo cáo chính xác") — ĐỔI THẲNG employeeCode của Hồ Sơ Nhân Sự (KHÁC
+// "✏️ Sửa Mapping" ở bảng chính — đó đổi username tài khoản, KHÔNG đụng employeeCode). Mã Nhân Viên là
+// định danh tham chiếu ở rất nhiều collection khác (hợp đồng lao động, chấm công, phép, lương, ca làm/
+// đổi ca, quy trình Onboarding/Offboarding...) nên route thật (POST .../rename-employee-code) tự cascade
+// đầy đủ (xem cascadeEmployeeCodeRename(), lib/catalogRename.js) — KHÔNG viết lại logic cascade ở đây.
+function umapOpenFixEmployeeCodeModal(employeeCode) {
+  const suggestion = employeeCode.replace(/\s+/g, '');
+  const bodyHTML = `
+    <div class="space-y-3 text-left text-xs">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên hiện tại (dính khoảng trắng)</label>
+        <div class="border rounded p-2 bg-gray-100 font-mono">${umapWhitespaceChip(employeeCode)}</div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên mới</label>
+        <input id="umapFixEmployeeCodeInput" value="${escapeHtml(suggestion)}" autocomplete="off" class="w-full border p-1.5 rounded font-mono">
+        <p class="text-[11px] text-gray-500 mt-1">Gợi ý sẵn đã cắt hết khoảng trắng — sửa lại nếu cần giá trị khác.</p>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">⚠️ Đổi Mã Nhân Viên sẽ tự động cập nhật mọi nơi đang tham chiếu mã cũ (hợp đồng lao động, chấm công, phép, lương, ca làm/đổi ca, quy trình Onboarding/Offboarding liên quan). Không thể hoàn tác tự động sau khi xác nhận.</p>
+    </div>`;
+  showConfirmModal({
+    title: `✏️ Sửa Mã Nhân Viên — ${employeeCode}`,
+    bodyHTML,
+    confirmLabel: '✅ Xác Nhận Đổi Mã Nhân Viên',
+    onConfirm: () => umapSubmitFixEmployeeCode(employeeCode)
+  });
+}
+
+async function umapSubmitFixEmployeeCode(oldCode) {
+  const newCode = document.getElementById('umapFixEmployeeCodeInput')?.value.trim();
+  if (!newCode) return alert('Vui lòng nhập Mã Nhân Viên mới.');
+  if (newCode === oldCode) return alert('Mã Nhân Viên mới giống hệt mã hiện tại — chưa đổi gì.');
+  try {
+    const res = await fetch('/api/admin/username-mapping/rename-employee-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeCode: oldCode, newEmployeeCode: newCode })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (${res.status})`);
+    alert(`✅ Đã đổi Mã Nhân Viên "${oldCode}" → "${body.employeeCode}".`);
+    await loadUsernameMappingReport();
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
 }
 
 function renderUsernameMappingTable() {
