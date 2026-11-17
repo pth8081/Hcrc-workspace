@@ -3771,6 +3771,35 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   (12/2026, đã tách khỏi nhóm "Vận Hành" thành mục riêng cùng đợt promote
   sidebar — gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền
   module phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
+- **Tab "📦 Tồn Kho" (MỚI, 11/2026, theo yêu cầu TRỰC TIẾP người dùng, đặt
+  ngay sau "📅 Kỳ Kiểm Kê")** — trả lời câu hỏi "tồn kho mã hàng đã đồng bộ
+  về thiết bị chưa?" trước khi đi kiểm kê ở nơi hay mất mạng:
+  - **Vì sao cần tab này**: Gom Mã/Kiểm Đếm/Kiểm Soát quét OFFLINE cần tra
+    tên hàng từ MỘT cache Tồn Kho Hệ Thống đã tải sẵn trong trình duyệt
+    (CÙNG cache dùng chung với "Ghi Nhận" của Kiểm Soát Hàng Hóa) — quét 1
+    mã mà cache chưa có thì KHÔNG tra ra được tên hàng. Trước đây cache này
+    chỉ được tải khi vào ĐÚNG 1 trong 3 tab quét, không có màn nào để tự
+    xác nhận "đã tải chưa" — người dùng chỉ biết được khi quét thử và thất
+    bại. Từ bản vá này, vào module Kiểm Kê ở BẤT KỲ tab nào cũng tự tải
+    trước (pre-warm) cache này ngay, và tab "📦 Tồn Kho" cho xem trực tiếp
+    kết quả.
+  - **Thao tác**: chọn 1 hoặc nhiều siêu thị ở ô tìm-kiếm-đa-chọn phía trên
+    (chỉ hiện siêu thị mình được phép xem — xem phạm vi ngay dưới) → mỗi
+    siêu thị chọn hiện 1 khung riêng: "✅ Đã đồng bộ lúc: ..." (kèm giờ
+    đồng bộ gần nhất) hoặc "⚠️ Chưa có dữ liệu đồng bộ" (cảnh báo rõ quét
+    offline có thể không tra ra tên hàng), cùng bảng Mã Hàng/Tên Hàng/Tồn
+    Kho của siêu thị đó.
+  - **Phạm vi siêu thị xem được**: Admin và người có quyền "📊 Tab 7: Xem
+    Báo Cáo" (kiemKeReportView) xem được TẤT CẢ siêu thị; người khác chỉ
+    xem đúng siêu thị hồ sơ (dept) của mình + bất kỳ siêu thị nào mình có
+    dòng allowlist ở Tab 8 "🔑 Cấu Hình Người Dùng" (Gom Mã/Kiểm Đếm/Kiểm
+    Soát bất kỳ hành động nào, kiểu Giám Sát Vùng). Không cần cấp quyền
+    riêng để XEM tab này (chỉ xem, không sửa gì) — mở cho mọi người vào
+    được module Kiểm Kê, cùng triết lý tab "📊 Đối Chiếu" bên Kiểm Soát
+    Hàng Hóa.
+  - **Offline**: tab tự lưu lại kết quả lần xem gần nhất vào máy — mất
+    mạng vẫn xem được số liệu cũ (có ghi rõ "🔌 Ngoại tuyến — dữ liệu lúc
+    ..." để biết là số liệu có thể chưa phải mới nhất).
 - **Tab 8 "🔑 Cấu Hình Người Dùng" (12/2026)**: trước khi dùng được Tab 2/3
   dưới đây, Admin/người có quyền "🔑 Tab 8: Cấu Hình Người Dùng" phải vào
   đây GÁN TRƯỚC cho từng người: được thao tác Gom Mã/Kiểm Đếm/Kiểm Soát ở

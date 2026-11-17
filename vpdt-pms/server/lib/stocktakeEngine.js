@@ -374,6 +374,23 @@ function userHasAnyStocktakeAccessToDept(access, username, dept) {
   );
 }
 
+// resolveKiemKeInventoryDepts() (MỚI, 11/2026 — tab "📦 Tồn Kho" mới, theo yêu cầu TRỰC TIẾP người dùng:
+// "tôi không thấy chỗ nào đồng bộ tồn kho mã hàng giống ở kiểm soát... cho tôi một tab tồn kho") — danh
+// sách siêu thị người gọi ĐƯỢC PHÉP xem Tồn Kho Hệ Thống qua tab này, xác nhận qua AskUserQuestion: admin
+// hoặc có kiemKeReportView (= canViewStocktakeReport(), đã bypass mọi siêu thị cho Tab 7 Báo Cáo) thì xem
+// được TẤT CẢ siêu thị; còn lại chỉ xem đúng siêu thị hồ sơ (home dept) + bất kỳ siêu thị nào có dòng
+// allowlist stocktakeUserAccess (Giám Sát Vùng, tái dùng CHÍNH field `dept` đã có sẵn trên mỗi dòng —
+// KHÔNG cần tra ngược qua kiemKeShelfLocations như các hàm theo shelfLocationId ở trên).
+function resolveKiemKeInventoryDepts(user, allStores, access) {
+  if (canViewStocktakeReport(user)) return allStores || [];
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  (Array.isArray(access) ? access : []).forEach(a => {
+    if (a.username === user?.username && (a.canGomMa === true || a.canKiemDem === true || a.canKiemSoat === true)) depts.add(a.dept);
+  });
+  return [...depts];
+}
+
 // Gán quyền HÀNG LOẠT cho 1 user × nhiều quầy kệ cùng lúc (tiện nhập liệu, xem tài liệu đề xuất mục B1 —
 // "vẫn lưu lại từng dòng tường minh, không lưu 1 cờ tất cả nào"). Với MỖI shelfLocationId: tìm dòng đã
 // có (username+dept+shelfLocationId) để CẬP NHẬT 3 cờ (không tạo trùng), chưa có thì tạo mới. flags chỉ
@@ -663,6 +680,7 @@ module.exports = {
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
   activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
+  resolveKiemKeInventoryDepts,
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,

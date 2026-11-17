@@ -1,0 +1,93 @@
+// tests/test-stocktake-inventory-tab-ui.js — UI THẬT (Playwright) cho tab MỚI "📦 Tồn Kho" (Kiểm Kê,
+// 11/2026, theo yêu cầu TRỰC TIẾP người dùng — xem lib/stocktakeEngine.js::resolveKiemKeInventoryDepts()
+// + routes/stocktake.js GET /system-inventory + loadKkInventoryTab() ở module-vanhanh.js). Phần quyền/
+// phạm vi server-side đã kiểm đủ ở tests/test-stocktake-system-inventory-tab.js (HTTP thuần) — test này
+// CHỈ kiểm hành vi UI: ô tìm-kiếm-đa-chọn hiện đúng danh sách siêu thị trả về, mặc định chọn TẤT CẢ, lọc
+// đúng khi bỏ bớt, cảnh báo rõ siêu thị CHƯA đồng bộ, và fallback offline dùng cache lần xem gần nhất.
+// Chạy: node tests/test-stocktake-inventory-tab-ui.js
+'use strict';
+const { createRunner, assert, assertEqual } = require('./testHarness');
+
+async function main() {
+  const { startStaticServer, createMockState, launchPage } = require('./testHarness');
+  const PORT = 8996;
+  const DEPT1 = 'Siêu thị Quận 1';
+  const DEPT2 = 'Siêu thị Quận 2';
+  // nv1 CỐ Ý được gán thêm allowlist Kiểm Đếm ở DEPT2 (kiểu Giám Sát Vùng) — để test được CẢ 2 siêu thị
+  // cùng lúc trong 1 phiên UI (phạm vi THUẦN theo đúng dept hồ sơ, không allowlist, đã kiểm riêng ở
+  // tests/test-stocktake-system-inventory-tab.js, không lặp lại ở đây).
+  const NV1 = { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true, totpEnabled: true };
+  const state = createMockState({
+    depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [NV1],
+    stocktakeUserAccess: [{ id: 1, username: 'nv1', dept: DEPT2, shelfLocationId: 1, canGomMa: false, canKiemDem: true, canKiemSoat: false }]
+  });
+  state.__mockKkInventoryByDept = {
+    [DEPT1]: { rows: [{ maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 120 }], fetchedAt: new Date().toISOString() },
+    [DEPT2]: { rows: [], fetchedAt: null }
+  };
+
+  const server = await startStaticServer(PORT);
+  const { browser, page } = await launchPage(PORT, state);
+  const run = createRunner();
+  const jsErrors = [];
+  page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().includes('Mock chỉ hỗ trợ patch-mode')) jsErrors.push('[console.error] ' + msg.text()); });
+  page.on('pageerror', (err) => jsErrors.push('[pageerror] ' + (err && err.stack || String(err))));
+
+  const goOffline = () => page.evaluate(() => { window.__origFetch = window.fetch; window.fetch = () => { throw new TypeError('Failed to fetch'); }; });
+  const goOnline = () => page.evaluate(() => { if (window.__origFetch) { window.fetch = window.__origFetch; delete window.__origFetch; } });
+
+  try {
+    await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, NV1);
+    await page.evaluate(() => switchTab('kiemKe'));
+    await page.waitForTimeout(100);
+    await page.click('#btnKkSubInventory');
+    await page.waitForTimeout(300);
+
+    await run.run('Mặc định (chưa chọn gì) -> tự chọn TẤT CẢ siêu thị trả về (DEPT1 + DEPT2)', async () => {
+      const selected = await page.evaluate(() => getMultiSelectValues('kkInventoryStoreMultiSelect'));
+      assertEqual(selected.length, 2, `Phải mặc định chọn đủ 2 siêu thị, thực tế: ${JSON.stringify(selected)}`);
+    });
+
+    await run.run('DEPT1 (đã đồng bộ) hiện đúng bảng Mã Hàng + ghi chú "Đã đồng bộ lúc"', async () => {
+      const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(text.includes('SP001'), `Phải hiện SP001, thực tế: ${text}`);
+      assert(text.includes('Đã đồng bộ lúc'), 'Phải có ghi chú thời điểm đồng bộ');
+    });
+
+    await run.run('DEPT2 (CHƯA đồng bộ) hiện CẢNH BÁO rõ ràng, không giả vờ có dữ liệu', async () => {
+      const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(text.includes('Chưa có dữ liệu đồng bộ'), `Phải cảnh báo rõ chưa đồng bộ, thực tế: ${text}`);
+    });
+
+    await run.run('Bỏ chọn DEPT2 trên ô đa-chọn -> bảng chỉ còn đúng DEPT1', async () => {
+      await page.evaluate(() => gmsRemove('kkInventoryStoreMultiSelect', 'Siêu thị Quận 2'));
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(!text.includes('Quận 2'), `Không được còn hiện DEPT2 sau khi bỏ chọn, thực tế: ${text}`);
+      assert(text.includes('Quận 1'), 'Vẫn phải còn hiện DEPT1');
+    });
+
+    await goOffline();
+    await page.evaluate(() => switchTab('kiemKe'));
+    await page.click('#btnKkSubInventory');
+    await page.waitForTimeout(300);
+    await run.run('Mất mạng (TypeError) -> fallback đúng cache lần xem gần nhất, hiện banner 🔌 Ngoại tuyến', async () => {
+      const offlineNote = await page.evaluate(() => document.getElementById('kkInventoryOfflineNote')?.textContent || '');
+      assert(offlineNote.includes('Ngoại tuyến'), `Phải hiện banner ngoại tuyến, thực tế: ${offlineNote}`);
+      const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(text.includes('SP001'), `Offline vẫn phải hiện dữ liệu cache cũ (SP001), thực tế: ${text}`);
+    });
+    await goOnline();
+
+    await run.run('Không có lỗi JS/console nào phát sinh', async () => {
+      assert(jsErrors.length === 0, 'Lỗi JS: ' + jsErrors.join(' | '));
+    });
+
+    run.summary();
+  } finally {
+    await browser.close();
+    server.close();
+  }
+}
+
+main().catch((err) => { console.error('FATAL:', err && err.stack || err); process.exitCode = 1; });

@@ -12,6 +12,13 @@
        phải dựng lại khung điều hướng. ===== -->
     <div class="flex gap-2 flex-wrap border-b pb-2">
       <button data-op="setKiemKeSubTab" data-tab="PERIOD" id="btnKkSubPeriod" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📅 Kỳ Kiểm Kê</button>
+      <!-- Tab "📦 Tồn Kho" (MỚI, 11/2026, theo yêu cầu TRỰC TIẾP người dùng kèm phát hiện gốc rễ: Gom
+           Mã/Kiểm Đếm/Kiểm Soát cần Tồn Kho Hệ Thống cache sẵn ở trình duyệt MỚI tra được tên hàng khi
+           quét offline — trước đây KHÔNG có màn nào để tự xác nhận "đã đồng bộ về chưa", xem
+           loadKkInventoryTab()/setKiemKeSubTab() module-vanhanh.js) — đặt NGAY SAU "Kỳ Kiểm Kê" (xem
+           tồn kho trước khi quyết định thao tác gì), mở cho MỌI người vào được module (chỉ XEM, không
+           sửa — không cần quyền riêng, cùng triết lý "📊 Đối Chiếu" bên Kiểm Soát Hàng Hóa). -->
+      <button data-op="setKiemKeSubTab" data-tab="INVENTORY" id="btnKkSubInventory" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 Tồn Kho</button>
       <button data-op="setKiemKeSubTab" data-tab="GOMMA" id="btnKkSubGomMa" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📷 Gom Mã</button>
       <button data-op="setKiemKeSubTab" data-tab="KIEMDEM" id="btnKkSubKiemDem" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔢 Kiểm Đếm</button>
       <button data-op="setKiemKeSubTab" data-tab="KIEMSOAT" id="btnKkSubKiemSoat" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🛡️ Kiểm Soát</button>
@@ -88,6 +95,25 @@
       <div id="kkPeriodListBody" class="space-y-2">
         <p class="text-gray-400 text-sm">Đang tải...</p>
       </div>
+    </div>
+
+    <!-- Tab "📦 Tồn Kho" (MỚI, 11/2026) — xem lib/stocktakeEngine.js::resolveKiemKeInventoryDepts() +
+         routes/stocktake.js GET /system-inventory + loadKkInventoryTab() (module-vanhanh.js). Ô chọn
+         siêu thị là widget tìm-kiếm-đa-chọn renderMultiSelectDropdown() (CLAUDE.md: không <select> dài,
+         không <datalist> gốc) — nạp đúng các siêu thị người dùng ĐƯỢC PHÉP xem (server tự trả về, client
+         KHÔNG tự đoán/gửi danh sách lên). -->
+    <div id="kkInventoryWrap" class="hidden space-y-3">
+      <div class="bg-white border rounded p-3 space-y-2">
+        <h3 class="font-bold text-sm text-gray-800">📦 Tồn Kho Hệ Thống</h3>
+        <p class="text-[11px] text-gray-500">Xem đúng bảng Tồn Kho Hệ Thống (API đối tác, CÙNG dữ liệu dùng để tra mã khi quét ở Gom Mã/Kiểm Đếm/Kiểm Soát) — kiểm tra xem đã đồng bộ về chưa trước khi thao tác, đặc biệt lúc chuẩn bị đi kiểm kê ở nơi hay mất mạng.</p>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn siêu thị (gõ để tìm, chọn được nhiều)</label>
+          <div id="kkInventoryStoreMultiSelect"></div>
+        </div>
+        <div id="kkInventoryOfflineNote" class="hidden text-amber-700 text-xs font-semibold"></div>
+        <div id="kkInventoryStatusNote" class="text-gray-400 text-sm">Đang tải...</div>
+      </div>
+      <div id="kkInventoryStoresBody" class="space-y-3"></div>
     </div>
 
     <!-- Tab 2 "Gom Mã" / Tab 3 "Kiểm Đếm" / Tab 4 "Kiểm Soát" (12/2026) — CÙNG 1 khuôn HTML, chỉ khác

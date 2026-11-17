@@ -388,9 +388,25 @@ function kkEffectiveDept() {
 // enterKkConfirmTab() tự await ensureShelfOfflineReady() riêng khi thật sự cần đọc cache (y hệt khuôn
 // setVanHanhShelfSubTab() đã dùng cho Kiểm Soát Hàng Hóa).
 function setKiemKeSubTab(tab) {
+  // LỖI ĐÃ VÁ (11/2026, phát hiện qua phản hồi TRỰC TIẾP người dùng: "khi mà gom mã kiểm đếm và kiểm
+  // soát ấy, thì phải có tồn kho rồi... và phải kéo xuống trình duyệt người dùng, thì lúc đấy offline
+  // online mới hoạt động được"): ensureShelfSystemInventoryCacheLoaded() TRƯỚC ĐÂY chỉ được gọi lúc vào
+  // ĐÚNG Tab 2/3/4 (loadKkScanTab()) — KHÔNG hề chạy khi vào Tab 1 "Kỳ Kiểm Kê" (màn đầu tiên mở module)
+  // hay bất kỳ tab nào khác. Thiết bị CHƯA TỪNG vào Gom Mã/Kiểm Đếm/Kiểm Soát (hoặc "Ghi Nhận" bên Kiểm
+  // Soát Hàng Hóa, dùng CHUNG cache) lúc còn mạng rồi mất mạng vào thẳng 1 trong 3 tab đó lần đầu sẽ có
+  // cache rỗng hoàn toàn -> quét mã nào cũng không tra ra tên hàng. Nay tải trước (pre-warm) NGAY khi vào
+  // module Kiểm Kê ở BẤT KỲ tab nào (cùng khuôn ensureShelfOfflineReady() ngay dưới) — không chờ tới lúc
+  // vào đúng tab cần nó mới tải.
+  // KHÔNG gác thêm quyền client nào ở đây (GET /api/shelf-stock/system-inventory không đòi quyền riêng,
+  // chỉ cần đăng nhập) — gác bằng canCreateShelfRecordClient như "Ghi Nhận"/"Kiểm Tra Giá" bên Kiểm Soát
+  // Hàng Hóa sẽ CHẶN NHẦM đúng đối tượng cần sửa nhất: nhân viên Kiểm Kê THUẦN (chỉ có kiemKeGomMaDo/
+  // kiemKeKiemDemDo/kiemKeKiemSoatDo, không có shelfRecordCreate) sẽ không bao giờ pre-warm được — khớp
+  // ĐÚNG cách loadKkScanTab() đã gọi hàm này từ trước (không kèm điều kiện quyền nào khác).
+  ensureShelfSystemInventoryCacheLoaded();
   (async () => { await ensureShelfOfflineReady(); renderKkOfflineModeBar(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
   const tabs = [
     ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
+    ['INVENTORY', 'kkInventoryWrap', 'btnKkSubInventory', () => true],
     ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
     ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
     ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],
@@ -419,6 +435,7 @@ function setKiemKeSubTab(tab) {
   });
   if (!tab) return;
   if (tab === 'PERIOD') loadKkPeriodSessions();
+  else if (tab === 'INVENTORY') loadKkInventoryTab();
   else if (tab === 'USERACCESS') loadKkUserAccessTab();
   else if (tab === 'GOMMA') loadKkScanTab('GOMMA');
   else if (tab === 'KIEMDEM') loadKkScanTab('KIEMDEM');
@@ -2664,6 +2681,112 @@ async function loadKkPeriodSessions() {
   }
 }
 
+// ===== Tab "📦 Tồn Kho" (MỚI, 11/2026) — theo yêu cầu TRỰC TIẾP người dùng: "tôi không thấy chỗ nào
+// đồng bộ tồn kho mã hàng giống ở kiểm soát... cho tôi một tab tồn kho để tôi kiểm tra được từng siêu
+// thị hoặc nhiều siêu thị". Gọi GET /api/stocktake/system-inventory (routes/stocktake.js — tự suy phạm
+// vi siêu thị SERVER-SIDE qua resolveKiemKeInventoryDepts(), client KHÔNG tự gửi/đoán danh sách siêu
+// thị lên). Cache offline riêng key 'kkInventory' trong object store `systemInventory` (CÙNG store với
+// 'cache'/'recon'/'report' đã có — xem khai báo kkOfflineInventoryCache ở trên).
+async function loadKkInventoryTab() {
+  const statusEl = document.getElementById('kkInventoryStatusNote');
+  const offlineEl = document.getElementById('kkInventoryOfflineNote');
+  if (statusEl) statusEl.textContent = 'Đang tải...';
+  if (offlineEl) offlineEl.classList.add('hidden');
+  try {
+    const res = await fetch('/api/stocktake/system-inventory');
+    if (res.status === 401) return handleSessionExpired();
+    if (res.ok) {
+      const body = await res.json();
+      kkInventoryByDept = body.byDept || {};
+      await cacheKkInventoryOffline(kkInventoryByDept);
+      if (statusEl) statusEl.textContent = '';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      if (statusEl) statusEl.textContent = err.error || 'Không tải được tồn kho — thử lại.';
+      kkInventoryByDept = {};
+    }
+  } catch (err) {
+    // Mất mạng thật (TypeError của fetch) — dùng cache offline đã lưu lần đồng bộ gần nhất (nếu có).
+    const fallback = getKkInventoryOfflineFallback();
+    if (fallback) {
+      kkInventoryByDept = fallback.byDept || {};
+      if (offlineEl) {
+        offlineEl.classList.remove('hidden');
+        offlineEl.textContent = `🔌 Ngoại tuyến — dữ liệu tồn kho lúc ${fallback.cachedAt ? new Date(fallback.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
+      }
+      if (statusEl) statusEl.textContent = '';
+    } else {
+      kkInventoryByDept = {};
+      if (statusEl) statusEl.textContent = 'Mất kết nối và chưa có dữ liệu tồn kho đã lưu trước đó — kết nối mạng rồi vào lại tab này ít nhất 1 lần.';
+    }
+  }
+  renderKkInventoryStoreOptions();
+}
+async function cacheKkInventoryOffline(byDept) {
+  try {
+    const db = await openShelfOfflineDb();
+    const entry = { key: 'kkInventory', byDept, cachedAt: new Date().toISOString() };
+    await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.put(entry));
+    kkOfflineInventoryCache = entry;
+  } catch (err) { /* IndexedDB không khả dụng — bỏ qua, màn vẫn dùng được khi còn mạng */ }
+}
+function getKkInventoryOfflineFallback() { return kkOfflineInventoryCache; }
+// Ô chọn siêu thị (renderMultiSelectDropdown(), core.js) — giữ nguyên lựa chọn cũ nếu vẫn còn hợp lệ
+// sau khi tải lại dữ liệu, ngược lại mặc định chọn TẤT CẢ siêu thị đang xem được (để hiện ngay, không
+// bắt người dùng tự chọn lại từ rỗng mỗi lần vào tab).
+function renderKkInventoryStoreOptions() {
+  const depts = Object.keys(kkInventoryByDept).sort((a, b) => a.localeCompare(b, 'vi'));
+  const msEl = document.getElementById('kkInventoryStoreMultiSelect');
+  if (!msEl) return;
+  const prevSelected = getMultiSelectValues('kkInventoryStoreMultiSelect').filter(d => depts.includes(d));
+  const initialSelected = prevSelected.length ? prevSelected : depts;
+  renderMultiSelectDropdown('kkInventoryStoreMultiSelect', depts, initialSelected, {
+    placeholder: 'Tìm siêu thị...',
+    emptyText: 'Chưa chọn siêu thị nào — chọn ít nhất 1 để xem tồn kho.',
+    onChange: () => renderKkInventoryStoresBody()
+  });
+  renderKkInventoryStoresBody();
+}
+function renderKkInventoryStoresBody() {
+  const body = document.getElementById('kkInventoryStoresBody');
+  if (!body) return;
+  const selected = getMultiSelectValues('kkInventoryStoreMultiSelect');
+  if (!selected.length) {
+    body.innerHTML = '<p class="text-gray-400 text-sm">Chọn ít nhất 1 siêu thị ở trên để xem tồn kho.</p>';
+    return;
+  }
+  body.innerHTML = selected.map(dept => {
+    const entry = kkInventoryByDept[dept];
+    const rows = (entry && Array.isArray(entry.rows)) ? entry.rows : [];
+    const syncNote = entry && entry.fetchedAt
+      ? `<span class="text-emerald-700">✅ Đã đồng bộ lúc: ${escapeHtml(new Date(entry.fetchedAt).toLocaleString('vi-VN'))}</span>`
+      : `<span class="text-amber-700">⚠️ Chưa có dữ liệu đồng bộ cho siêu thị này — quét mã offline ở Gom Mã/Kiểm Đếm/Kiểm Soát có thể không tra ra tên hàng.</span>`;
+    const tableHtml = rows.length
+      ? `<div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
+          <table class="w-full text-[11px]">
+            <thead class="bg-gray-50 sticky top-0"><tr>
+              <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
+            </tr></thead>
+            <tbody>${rows.slice().sort((a, b) => String(a.maHang).localeCompare(String(b.maHang))).map(r => `
+              <tr class="border-t">
+                <td class="p-1.5">${escapeHtml(r.maHang)}</td>
+                <td class="p-1.5">${escapeHtml(r.tenHang || '')}</td>
+                <td class="p-1.5 text-right font-semibold">${(r.soLuongTon || 0).toLocaleString('vi-VN')}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>`
+      : '<p class="text-gray-400 text-sm">Chưa có dữ liệu tồn kho cho siêu thị này.</p>';
+    return `
+      <div class="bg-white border rounded p-3 space-y-2">
+        <div class="flex items-center justify-between flex-wrap gap-1">
+          <h4 class="font-bold text-sm text-gray-800">🏬 ${escapeHtml(dept)}</h4>
+          <span class="text-[11px]">${syncNote}</span>
+        </div>
+        ${tableHtml}
+      </div>`;
+  }).join('');
+}
+
 const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
 const KK_TRANG_THAI_BADGE = {
   NHAP: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">📝 Nháp</span>',
@@ -4886,6 +5009,11 @@ let shelfOfflineReportCache = null;
 // — maHang/tenHang/maVach/giaThuong/giaKhuyenMai/coKhuyenMai/capNhatLuc), do server tự "dựng bulk giả"
 // (jobs/priceSync.js) — KHÁC shelfOfflineSystemInventoryCache (không có field giá).
 let shelfOfflinePriceCatalogCache = null;
+// Cache offline cho tab "📦 Tồn Kho" (MỚI, 11/2026) — {byDept, cachedAt} hoặc null. byDept giữ ĐÚNG
+// hình dạng server trả về (GET /api/stocktake/system-inventory) — {[dept]: {rows, fetchedAt, capNhatLuc}}
+// — khác shelfOfflineSystemInventoryCache (chỉ scope 1 siêu thị hiện tại của người dùng).
+let kkOfflineInventoryCache = null;
+let kkInventoryByDept = {}; // dữ liệu đang hiển thị trên tab (từ server hoặc fallback offline)
 function openShelfOfflineDb() {
   if (!window.indexedDB) return Promise.reject(new Error('Trình duyệt không hỗ trợ IndexedDB'));
   if (shelfOfflineDbPromise) return shelfOfflineDbPromise;
@@ -4949,6 +5077,7 @@ async function ensureShelfOfflineReady() {
     shelfOfflineReconCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('recon')) || null;
     shelfOfflineReportCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('report')) || null;
     shelfOfflinePriceCatalogCache = await shelfOfflineTx(db, 'priceCatalog', 'readonly', s => s.get('cache')) || null;
+    kkOfflineInventoryCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('kkInventory')) || null;
     kkOfflineShelvesCache = {};
     (await shelfOfflineTx(db, 'kkShelves', 'readonly', s => s.getAll()) || []).forEach(r => { kkOfflineShelvesCache[r.mode] = r; });
     kkOfflineSessionInfoCache = {};

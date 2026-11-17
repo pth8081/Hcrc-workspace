@@ -1860,6 +1860,21 @@ function createDispatcher(state) {
         if (!state.__mockSystemInventoryByDept) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác' } };
         return { status: 200, body: { byDept: state.__mockSystemInventoryByDept } };
       }
+      // GET /api/stocktake/system-inventory (11/2026, tab "📦 Tồn Kho" bên Kiểm Kê) — test tự seed
+      // state.__mockKkInventoryByDept = { [dept]: { rows: [{maHang,tenHang,soLuongTon}], fetchedAt,
+      // capNhatLuc } } với dữ liệu ĐẦY ĐỦ mọi siêu thị; mock này TỰ áp dụng ĐÚNG phạm vi thật qua
+      // resolveKiemKeInventoryDepts() (CÙNG hàm routes/stocktake.js thật gọi) rồi mới lọc byDept trả
+      // về — khác hẳn mock report-all (chỉ trả nguyên seed, phạm vi kiểm riêng ở nơi khác) vì tab này
+      // CẦN demo đúng cảnh khác nhau giữa nhân viên thường/Giám Sát Vùng/Admin.
+      if (pathName === '/api/stocktake/system-inventory' && method === 'GET') {
+        if (!state.__mockKkInventoryByDept) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' } };
+        const { resolveKiemKeInventoryDepts } = require('../lib/stocktakeEngine');
+        const freshUser = state.users.find(u => u.username === username);
+        const allowedDepts = resolveKiemKeInventoryDepts(freshUser, state.stores || [], state.stocktakeUserAccess || []);
+        const byDept = {};
+        allowedDepts.forEach(dept => { if (state.__mockKkInventoryByDept[dept]) byDept[dept] = state.__mockKkInventoryByDept[dept]; });
+        return { status: 200, body: { byDept } };
+      }
       // POST /api/shelf-stock/price-check (11/2026, "💲 Kiểm Tra Giá") — mirror ĐƠN GIẢN HOÁ routes/
       // shelfStock.js thật: quyền canManageShelfRecords (CÙNG "Ghi Nhận") -> state.__mockPriceCheckConfigured
       // (giả lập resolveInventoryApiCreds() null/có cấu hình) -> storeExternalCodes[dept] -> maDiem (giống
