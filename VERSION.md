@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**30.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.74 (2026-11): Fix lỗi THẬT trên production — "✏️ Sửa Mã NV" báo "Đã có lỗi xảy ra"
+
+Người dùng báo lỗi thật ngay sau khi deploy v30.73: bấm "✏️ Sửa Mã NV" ở khối "🧹 Khoảng Trắng Dư Thừa"
+báo popup "Đã có lỗi xảy ra, vui lòng thử lại sau" — log server cho thấy
+`POST /api/admin/username-mapping/rename-employee-code lỗi: Invalid column name 'Code'.`
+
+**Nguyên nhân**: `lib/recordStore.js::renameFieldValueInCollection()` (primitive SQL dùng chung cho MỌI
+cascade đổi tên — dept/store/employeeCode...) viết cứng
+`SELECT Id, Payload, Code FROM ${table} WITH (UPDLOCK, HOLDLOCK)` — bất kể bảng đó có cột `Code` thật
+hay không. 6/7 collection employeeCode cascade sang (`leaveBalances`, `leaveRequests`, `shiftRoster`,
+`shiftSwapRequests`, `attendanceRecords`, `hrProcesses`) đều `hasCode:false` (không có cột `Code` trong
+SQL schema, xem `sql/schema.sql`) — SQL Server ném lỗi parse ngay lập tức. Đây là lỗi tồn tại SẴN trong
+hàm dùng chung (không riêng employeeCode) — chỉ chưa từng lộ ra vì trước "✏️ Sửa Mã NV" (v30.73) chưa
+cascade nào từng chạm đúng 1 bảng `hasCode:false` qua hàm này.
+
+**Đã vá**: đổi thành `SELECT Id, Payload, ${cfg.hasCode ? 'Code' : 'NULL AS Code'} FROM ...` — đúng khuôn
+ĐÃ CÓ SẴN ở `moveDedicatedRecordToTrash()`, chỉ là `renameFieldValueInCollection()` bị bỏ sót lúc viết.
+Hoàn toàn KHÔNG đổi hành vi với bảng `hasCode:true` (VD `laborContracts`, `payslips` — vẫn `SELECT ...,
+Code` y hệt trước).
+
+Thêm `tests/test-recordstore-renamefieldvalue-dedicated.js` — mock THẲNG module `../db` (mssql) để
+exercise đúng câu SQL thật sinh ra (khác các test cascade khác vốn stub hẳn hàm này nên không bắt được
+lỗi này) — đã xác nhận test FAIL đúng với code lỗi cũ và PASS sau khi vá. Chạy lại 39 test cascade/
+rename liên quan (dept/store/username/employeeCode) + `test-hr-lifecycle.js` — không có regression nào
+khác.
 
 ## v30.73 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — thêm "✏️ Sửa Mã NV" (đổi employeeCode + cascade đầy đủ)
 
