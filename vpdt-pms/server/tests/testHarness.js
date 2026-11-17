@@ -1945,6 +1945,42 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // GET /api/admin/username-mapping + POST .../bulk-create-accounts (11/2026, demo "🆔 Mã NV ↔ Tài
+      // Khoản") — mirror ĐÚNG routes/hrUsernameMapping.js thật: gác isCurrentlyAdmin() (ở đây là
+      // user.perms?.admin, state KHÔNG có DB thật để gọi isCurrentlyAdmin() đọc lại), dùng ĐÚNG hàm thuần
+      // lib/hrUsernameMapping.js (computeUsernameMappingReport/prepareBulkCreateAccounts/
+      // linkCreatedAccountsToProfiles — KHÔNG viết lại logic) — chỉ phần ghi "users" là mock đơn giản hoá
+      // (gắn mustChangePassword:true + tính perms qua recomputeEffectivePerms() thật, KHÔNG gọi
+      // prepareUsersForSave() thật vì hàm đó đọc/ghi DB trực tiếp, không phù hợp state thuần ở mock này).
+      if (pathName === '/api/admin/username-mapping' && method === 'GET') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser?.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới dùng được chức năng này' } };
+        const { computeUsernameMappingReport } = require('../lib/hrUsernameMapping');
+        const report = computeUsernameMappingReport({ users: state.users, employeeProfiles: state.employeeProfiles || [], hrProcesses: state.hrProcesses || [] });
+        return { status: 200, body: report };
+      }
+      if (pathName === '/api/admin/username-mapping/bulk-create-accounts' && method === 'POST') {
+        const freshUser = state.users.find(u => u.username === username);
+        if (!freshUser?.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới dùng được chức năng này' } };
+        const { prepareBulkCreateAccounts, linkCreatedAccountsToProfiles } = require('../lib/hrUsernameMapping');
+        const { recomputeEffectivePerms } = require('../lib/permGroupMerge');
+        const selections = Array.isArray(body?.selections) ? body.selections : [];
+        const groupIds = Array.isArray(body?.groupIds) ? body.groupIds.filter(g => typeof g === 'string' && g.trim()) : [];
+        const nextId = state.users.reduce((max, u) => Math.max(max, Number(u.id) || 0), 0) + 1;
+        const prepared = prepareBulkCreateAccounts(selections, { users: state.users, employeeProfiles: state.employeeProfiles || [], hrProcesses: state.hrProcesses || [] }, nextId, groupIds);
+        for (const u of prepared.toCreate) {
+          u.active = true;
+          u.mustChangePassword = true;
+          const effective = recomputeEffectivePerms(u, state.permGroups || []);
+          u.groupIds = effective.groupIds;
+          u.jobTitleGroupIds = effective.jobTitleGroupIds;
+          u.perms = effective.perms;
+          state.users.push(u);
+        }
+        const linkFailures = prepared.toCreate.length ? linkCreatedAccountsToProfiles(state.employeeProfiles || [], prepared.toLinkCodes, username) : [];
+        return { status: 200, body: { ok: true, created: prepared.toCreate.map(u => ({ employeeCode: u.username, name: u.name })), skipped: [...prepared.skipped, ...linkFailures.map(f => ({ employeeCode: f.employeeCode, name: f.employeeCode, reason: f.reason }))] } };
+      }
+
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
     } catch (err) {
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };

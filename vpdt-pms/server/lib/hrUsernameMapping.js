@@ -48,7 +48,13 @@ function computeUsernameMappingReport(appData) {
       hasName: !!name,
       dept: p.dept || null, jobTitle: p.jobTitle || null, posType: p.posType || null,
       status: mappingStatusFor(p),
-      currentUsername: p.username || null
+      currentUsername: p.username || null,
+      // contactPhone/workEmail/personalEmail (LỖI ĐÃ VÁ, phát hiện lúc build demo 11/2026): client
+      // (umapBuildBulkCreateFormHTML(), module-hethong-tabs.js) gợi ý sẵn SĐT/Email từ Hồ Sơ Nhân Sự lúc
+      // tạo tài khoản hàng loạt qua ĐÚNG 3 field này — thiếu ở report thì ô gợi ý luôn trống dù hồ sơ có
+      // sẵn dữ liệu, Admin phải tự gõ lại tay oan uổng. Chỉ tính cho profile MISSING (chỉ nhóm này mới
+      // tạo tài khoản mới) nhưng trả cho MỌI dòng cho đơn giản — không rủi ro gì (chỉ đọc hiển thị).
+      contactPhone: p.contactPhone || null, workEmail: p.workEmail || null, personalEmail: p.personalEmail || null
     };
   }).sort((a, b) => a.employeeCode.localeCompare(b.employeeCode));
   const stats = {
