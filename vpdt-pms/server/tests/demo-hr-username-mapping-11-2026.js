@@ -123,12 +123,9 @@ async function main() {
   await page.waitForTimeout(250);
   await shot(page, '3-modal-xac-nhan-tao-tai-khoan', '#genericConfirmModal');
 
-  // Chọn Nhóm Phân Quyền cho cả lượt.
-  await page.evaluate(() => {
-    const sel = document.getElementById('umapGroupSelect');
-    sel.value = 'grp_banhang';
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  // Chọn Nhóm Phân Quyền cho cả lượt — MỚI 11/2026, đổi từ <select> đơn sang widget tìm-kiếm-đa-chọn
+  // (renderMultiSelectDropdown()/gmsAdd()), cho phép gán NHIỀU nhóm cùng lúc.
+  await page.evaluate(() => gmsAdd('umapGroupMultiSelect', 'grp_banhang'));
   await shot(page, '4-modal-da-chon-nhom-phan-quyen', '#genericConfirmModal');
 
   // Xác nhận tạo.

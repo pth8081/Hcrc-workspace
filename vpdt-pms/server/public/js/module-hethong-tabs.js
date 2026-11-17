@@ -1475,10 +1475,16 @@ function umapOpenBulkCreateModal() {
     sddSetOptions(`umapDeptDatalist_${idx}`, r.posType === 'STORE' ? (DB.stores || []) : (DB.depts || []));
     sddSetOptions(`umapJobTitleDatalist_${idx}`, r.posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []));
   });
+  // Nhóm Phân Quyền (MỚI 11/2026, theo yêu cầu người dùng — "phân quyền cần theo kiểu dropdown +
+  // searchable + multi choice để add nhiều group một lúc") — đổi từ <select> đơn sang widget
+  // renderMultiSelectDropdown() dùng chung (đã dùng cho Phòng Ban con/Vị Trí Kiêm Nhiệm...), đọc lại qua
+  // getMultiSelectValues() ở umapSubmitBulkCreate() bên dưới. Để trống mặc định = không gán quyền nào,
+  // đúng hành vi cũ của option đầu "— Không gán quyền nào —".
+  renderMultiSelectDropdown('umapGroupMultiSelect', (DB.permGroups || []).map(g => ({ value: String(g.id), label: g.name })), [],
+    { placeholder: 'Tìm Nhóm Phân Quyền để thêm...', emptyText: 'Chưa chọn nhóm nào.' });
 }
 
 function umapBuildBulkCreateFormHTML(rows) {
-  const groupOptions = (DB.permGroups || []).map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
   const cardsHTML = rows.map((r, idx) => `
     <div class="border rounded p-2 bg-gray-50 mb-2">
       <div class="text-xs mb-1.5"><span class="font-mono text-gray-500">${escapeHtml(r.employeeCode)}</span> <b>${escapeHtml(r.name)}</b></div>
@@ -1516,10 +1522,8 @@ function umapBuildBulkCreateFormHTML(rows) {
       </div>
       <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền Áp Dụng Cho Tài Khoản Mới</label>
-        <select id="umapGroupSelect" class="w-full border p-1.5 rounded text-xs bg-white">
-          <option value="">— Không gán quyền nào (Admin tự cấu hình sau) —</option>
-          ${groupOptions}
-        </select>
+        <div id="umapGroupMultiSelect"></div>
+        <p class="text-[11px] text-gray-500 mt-1">Gõ để tìm, chọn được NHIỀU nhóm cùng lúc. Để trống = không gán quyền nào (Admin tự cấu hình sau).</p>
       </div>
       <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1">Thông Tin Tài Khoản — Từng Người (gợi ý sẵn từ Hồ Sơ Nhân Sự, sửa thoải mái)</label>
@@ -1537,8 +1541,7 @@ async function umapSubmitBulkCreate(rows) {
     phone: document.getElementById(`umapPhone_${idx}`)?.value.trim() || '',
     email: document.getElementById(`umapEmail_${idx}`)?.value.trim() || ''
   }));
-  const groupSelect = document.getElementById('umapGroupSelect');
-  const groupIds = groupSelect && groupSelect.value ? [groupSelect.value] : [];
+  const groupIds = getMultiSelectValues('umapGroupMultiSelect');
   try {
     const res = await fetch('/api/admin/username-mapping/bulk-create-accounts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

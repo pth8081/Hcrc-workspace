@@ -8191,8 +8191,12 @@ sang "Hiện tất cả hồ sơ" nếu cần xem luôn cả nhóm Đã khớp.
 
 **Tạo hàng loạt tài khoản (nhóm "Chưa có tài khoản")**: tick checkbox từng
 dòng cần tạo → bấm "🆕 Tạo Tài Khoản Cho Mục Đã Chọn" → màn xác nhận cho
-chọn 1 **Nhóm Phân Quyền** áp dụng chung cho mọi tài khoản tạo trong lượt
-này (để trống = không gán quyền nào, an toàn nhất), và mỗi nhân viên có 1
+chọn **Nhóm Phân Quyền** áp dụng chung cho mọi tài khoản tạo trong lượt này
+qua ô tìm-kiếm-đa-chọn (gõ để lọc, chọn được NHIỀU nhóm cùng lúc — MỚI
+11/2026, theo yêu cầu người dùng; trước đây chỉ chọn được 1 nhóm) — perms
+tài khoản mới là HỢP (OR) của tất cả nhóm đã chọn, cùng cơ chế mergeGroupsBasePerms()
+dùng ở form Người Dùng thường (để trống = không gán quyền nào, an toàn
+nhất), và mỗi nhân viên có 1
 khối riêng cho sửa **Phòng Ban/Chức Danh/Số Điện Thoại/Email** (gợi ý sẵn
 từ Hồ Sơ Nhân Sự, sửa tự do) — **4 trường này CHỈ ghi vào tài khoản mới,
 KHÔNG ghi ngược lại Hồ Sơ Nhân Sự**. Bấm "Tạo Tài Khoản":

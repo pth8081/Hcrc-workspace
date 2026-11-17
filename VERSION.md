@@ -1,8 +1,24 @@
 # Phiên bản hiện tại
 
-**30.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.83 (2026-11): "Mã NV ↔ Tài Khoản" — Nhóm Phân Quyền đổi sang dropdown tìm-kiếm-đa-chọn
+
+Theo yêu cầu TRỰC TIẾP người dùng ("phân quyền càn theo kiểu dropdown + searchable + multi choice để
+add nhiều group một lúc") — modal "🆕 Tạo Tài Khoản Cho N Hồ Sơ" (Hệ Thống → Quản Trị → 🆔 Mã NV ↔ Tài
+Khoản):
+
+- Ô "Nhóm Phân Quyền Áp Dụng Cho Tài Khoản Mới" đổi từ `<select>` đơn (chỉ chọn được 1 nhóm) sang widget
+  `renderMultiSelectDropdown()` dùng chung (đã dùng cho Phòng Ban con/Vị Trí Kiêm Nhiệm...) — gõ tìm,
+  chọn được NHIỀU nhóm cùng lúc, mỗi nhóm hiện 1 chip có thể bỏ (✕).
+- Backend (`routes/hrUsernameMapping.js`/`lib/hrUsernameMapping.js`) đã hỗ trợ sẵn `groupIds[]` dạng mảng
+  từ trước — chỉ cần sửa client để thực sự gửi được nhiều id; perms tài khoản mới tạo ra là HỢP (OR) của
+  TẤT CẢ nhóm đã chọn, đúng cơ chế `mergeGroupsBasePerms()` dùng ở form Người Dùng thường.
+- Thêm test mới (`tests/test-hr-username-mapping-bulk-create-multigroup.js`, 7 kịch bản) xác nhận: widget
+  mới hiển thị đúng (không còn `<select>` cũ), tìm kiếm lọc đúng, chọn được 2 nhóm cùng lúc, tạo tài
+  khoản thành công, gán đúng `groupIds` của cả 2 nhóm, và `perms` là hợp đúng của cả 2.
 
 ## v30.82 (2026-11): Dọn flaky test (test-admin-users-permgroups.js) — KHÔNG đổi hành vi sản phẩm
 
