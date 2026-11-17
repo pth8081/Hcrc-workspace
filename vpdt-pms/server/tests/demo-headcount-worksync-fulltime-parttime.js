@@ -164,7 +164,10 @@ async function main() {
   }, { version: VERSION, report: HEADCOUNT_REPORT });
 
   await page.evaluate(() => switchTab('orgChart'));
-  await page.waitForTimeout(300);
+  // module-orgchart.js tải LƯỜI (MODULE_LOAD_GROUPS['orgchart-v2'], core.js) — đợi hàm thật sự tồn tại
+  // thay vì waitForTimeout cố định (môi trường sandbox đôi lúc tải chậm hơn mốc timeout cũ, gây
+  // "ReferenceError: openOrgChartHeadcountModal is not defined" dù app không có lỗi gì thật).
+  await page.waitForFunction(() => typeof window.openOrgChartHeadcountModal === 'function', { timeout: 15000 });
 
   // ===== Ảnh 1: Báo Cáo Định Biên Nhân Sự — đủ 2 cột mới "Full Time"/"Part Time" + "Thai Sản/Nghỉ Ốm"
   // đếm ĐÚNG người chỉ điền "Tình trạng làm việc hiện tại (chi tiết)" (KHÔNG tự bấm chuyển trạng thái) =====
