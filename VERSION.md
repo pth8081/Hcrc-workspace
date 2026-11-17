@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**30.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.84 (2026-11): Onboarding — Phòng Ban/Siêu Thị/Chức Danh đổi sang ô tìm-kiếm-gõ-chọn + LỖI ĐÃ VÁ: "Ngày Vào Làm Việc" không tự điền từ Hồ Sơ Nhân Sự
+
+**1) Theo yêu cầu TRỰC TIẾP người dùng** ("Onboarding chỗ phòng, siêu thị cho phép chọn kiểu dropdown +
+searchable + single choice... tìm cho nhanh thay vì một chuỗi dài chọn kiểu select là bất hợp lý") — 3 ô
+Phòng Ban/Siêu Thị/Chức Danh ở form "Tạo Quy Trình Onboarding" đổi từ `<select>` sang ô tìm-kiếm-gõ-chọn
+"sdd*" (gõ để lọc nhanh thay vì cuộn danh sách dài):
+
+- Thêm cơ chế mới `data-sdd-strict="1"` (`core.js`, listener `focusout`) — khác "sdd*" thường (cho gõ tự
+  do), bản CHẶT này bắt buộc giá trị gõ vào phải khớp ĐÚNG 1 mục trong danh sách gợi ý khi rời ô, không
+  khớp thì tự xoá trắng — vẫn giữ đúng yêu cầu đã xác nhận trước đó (chỉ cho chọn đúng node thật trong
+  Cơ Cấu Tổ Chức, không cho gõ tự do), chỉ đổi cách chọn cho nhanh hơn, không nới lỏng kiểm tra.
+- `public/fragments/hrLifecycleSection.html`/`public/js/module-hrlifecycle.js`: 3 field
+  `hrpOnbDept`/`hrpOnbStore`/`hrpOnbJobTitle` đổi từ `<select>` sang `<input data-sdd-strict="1">` +
+  dropdown gợi ý riêng; cascade Chức Danh theo Phòng Ban/Siêu Thị đang chọn giữ nguyên hành vi cũ.
+
+**2) LỖI ĐÃ VÁ (báo cáo người dùng kèm ảnh chụp — "hồ sơ đã có ngày vào nhưng trên phân quyền không tự
+động lấy từ onboarding hoặc hồ sơ, bấm cũng không ra")**: nguồn 2 (Hồ Sơ Nhân Sự) của tính năng
+"Gợi ý Ngày Vào Làm Việc" thêm ở v30.81 **không hoạt động trong thực tế** — `findEmployeeProfileStartDateCandidates()`
+đọc thẳng `DB.employeeProfiles`, một mảng **KHÔNG BAO GIỜ được nạp phía client** (dữ liệu nhạy cảm, bị
+chặn hẳn khỏi `GET /api/data` chung — xem `CLAUDE.md`). Bài test tự viết cho tính năng đó lúc v30.81 đã
+"pass" sai vì tự seed tay mảng này trong harness, không phản ánh đúng thực tế production — lỗi chỉ lộ
+ra khi người dùng báo cáo đúng triệu chứng kèm ảnh chụp (hồ sơ "Ngày vào HCRC" = 2026-11-10 rõ ràng
+nhưng form báo "Không tìm thấy..."). Sửa: `routes/employeeProfile.js` (route `GET /employee-directory`
+đã có sẵn, dùng cho tra Mã Nhân Viên ở nhiều module khác) nay trả thêm field `joinDateAtHcrc` (không
+phải dữ liệu nhạy cảm, cùng mức dept/jobTitle đã có); `module-admin-submissiongroups.js` đổi
+`findEmployeeProfileStartDateCandidates()`/`findStartDateCandidates()`/`autoFillStartDateFromOnboarding()`/
+`suggestStartDateFromOnboarding()` sang `async function`, gọi đúng API thật này (cache 1 lần/trang) thay
+vì đọc mảng không tồn tại. Hành vi/mô tả nghiệp vụ cho người dùng cuối giữ nguyên như tài liệu đã mô tả
+ở v30.81 (rời ô Email/Họ Tên là tự động dò khớp ngay) — chỉ sửa đúng phần triển khai bị lỗi.
+
+Viết lại + bổ sung test (`tests/test-admin-users-permgroups.js`, scenario (u8)-(u12)) đăng ký đúng mock
+fetch cho `GET /api/hr-profile/employee-directory` thay vì seed tay `DB.employeeProfiles` — xác nhận
+qua `git stash` rằng code CŨ tái hiện đúng lỗi người dùng báo cáo, code MỚI sửa đúng lỗi đó. Đã chạy lại
+toàn bộ test liên quan (`test-admin-users-permgroups.js` 143/143, `test-hr-profile.js` 33/33,
+`test-audit-nhansu-hoso.js` 33/33, `test-people-multiselect-bulk-paste.js` 11/11,
+`test-form-reset-file-remove.js` — 15 lỗi "chip file" còn lại xác nhận CÓ SẴN TỪ TRƯỚC (giống hệt khi
+chạy trên commit gốc trước đợt này), không liên quan tới thay đổi này.
 
 ## v30.83 (2026-11): "Mã NV ↔ Tài Khoản" — Nhóm Phân Quyền đổi sang dropdown tìm-kiếm-đa-chọn
 

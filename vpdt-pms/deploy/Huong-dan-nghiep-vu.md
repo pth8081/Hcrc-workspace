@@ -4416,13 +4416,20 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   - **Phòng Ban/Chức Danh LẤY TỪ CƠ CẤU TỔ CHỨC, không còn lấy từ danh mục
     Phân Quyền** (11/2026, theo yêu cầu TRỰC TIẾP người dùng: "Chức danh
     phải lấy từ cơ cấu tổ chức và phòng ban cũng lấy từ cơ cấu tổ chức,
-    không lấy từ phân quyền — lấy phân quyền hiện tại đang sai") — 2 ô chọn
-    là **`<select>` chọn đúng** (không còn gõ tự do), nạp từ đúng bản
-    **APPLIED** của Cơ Cấu Tổ Chức (4.9): chọn Phòng Ban/Siêu Thị trước,
-    Chức Danh tự lọc lại theo ĐÚNG Phòng Ban/Siêu Thị đã chọn (chỉ liệt kê
-    những Chức Danh có 1 vị trí thật tại đó trong cây). Nếu Cơ Cấu Tổ Chức
-    chưa có bản APPLIED, hoặc chưa có vị trí nào, 2 ô này hiện trống kèm
-    nhắc liên hệ bộ phận Cơ Cấu Tổ Chức.
+    không lấy từ phân quyền — lấy phân quyền hiện tại đang sai") — nạp từ
+    đúng bản **APPLIED** của Cơ Cấu Tổ Chức (4.9): chọn Phòng Ban/Siêu Thị
+    trước, Chức Danh tự lọc lại theo ĐÚNG Phòng Ban/Siêu Thị đã chọn (chỉ
+    liệt kê những Chức Danh có 1 vị trí thật tại đó trong cây). Nếu Cơ Cấu
+    Tổ Chức chưa có bản APPLIED, hoặc chưa có vị trí nào, các ô này hiện
+    trống kèm nhắc liên hệ bộ phận Cơ Cấu Tổ Chức.
+  - **3 ô Phòng Ban/Siêu Thị/Chức Danh đổi sang ô tìm-kiếm-gõ-chọn "sdd*"
+    CHẶT (11/2026, theo yêu cầu người dùng: "dropdown + searchable + single
+    choice... tìm cho nhanh thay vì một chuỗi dài chọn kiểu select")** — gõ
+    để lọc nhanh thay vì cuộn 1 danh sách `<select>` dài, nhưng **vẫn chỉ
+    cho chọn đúng 1 node có thật trong Cơ Cấu Tổ Chức** (không cho gõ tự
+    do): rời khỏi ô mà nội dung gõ không khớp đúng 1 tên trong gợi ý thì ô
+    tự xoá trắng, giữ nguyên bảo đảm trước đó — không phải nới lỏng kiểm
+    tra, chỉ đổi cách chọn cho nhanh hơn.
   - **Chặn cứng (400) nếu cặp Phòng Ban/Chức Danh không khớp vị trí thật
     nào** trong Cơ Cấu Tổ Chức — áp dụng đồng thời ở CẢ 3 nơi: tạo tay
     đơn lẻ, **"✏️ Sửa Quy Trình"** (chỉ khi THỰC SỰ đổi Phòng Ban/Chức
@@ -8070,6 +8077,16 @@ này độc lập nhau, dễ lệch nếu không đối chiếu). Chỉ là **G�
 nếu ô đã có sẵn giá trị. Nhiều hồ sơ khớp cùng lúc (trùng tên) sẽ hiện danh
 sách rút gọn để chọn đúng người; không khớp hồ sơ nào ở CẢ 2 nguồn thì báo
 rõ, không điền bừa.
+
+**LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp)**: nguồn 2 (Hồ Sơ
+Nhân Sự) ở trên **không hoạt động trong thực tế** dù mô tả nghiệp vụ phía
+trên vẫn đúng ý định — bản vá trước đọc nhầm 1 mảng dữ liệu client KHÔNG BAO
+GIỜ được nạp (đúng quy tắc "Hồ Sơ Nhân Sự là dữ liệu nhạy cảm, chặn khỏi API
+chung" ở mục 4.5.3), nên hồ sơ CŨ tạo tay/import Excel (không qua Onboarding)
+luôn báo "Không tìm thấy" dù đã có sẵn "Ngày vào HCRC". Nay gọi đúng API thật
+đang dùng cho ô tìm Mã Nhân Viên khác trong hệ thống (chỉ trả thêm field ngày
+vào, không phải dữ liệu nhạy cảm) — hành vi/mô tả nghiệp vụ phía trên giữ
+nguyên, chỉ sửa đúng phần triển khai bị lỗi.
 
 Ở màn **Người Dùng**, ngoài tạo từng tài khoản 1, admin có thể điền xong 1
 form rồi bấm thêm vào 1 **danh sách tạm** (chưa gửi lên server), lặp lại cho
