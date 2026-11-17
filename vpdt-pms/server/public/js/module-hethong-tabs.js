@@ -1244,6 +1244,7 @@ async function loadUsernameMappingReport() {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Lỗi máy chủ (${res.status})`);
     _umapReport = await res.json();
     renderUsernameMappingStats(_umapReport.stats);
+    renderUsernameMappingWhitespaceBlock(_umapReport.whitespaceIssues);
     renderUsernameMappingTable();
   } catch (err) {
     alert(`⛔ Tải "Mã NV ↔ Tài Khoản" thất bại: ${err.message}`);
@@ -1266,6 +1267,35 @@ const UMAP_STATUS_BADGE = {
   MISSING: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">❌ Chưa có TK</span>'
 };
 
+// umapWhitespaceChip() — hiển thị giá trị TRỰC QUAN (thay khoảng trắng bằng dấu "·" dễ thấy, khoảng
+// trắng vô hình thường khiến Admin không hiểu tại sao 1 dòng bị "Lệch mã") kèm nhãn cảnh báo ngắn, dùng
+// chung cho cả bảng chính (cột Mã NV/Tài Khoản Hiện Tại) lẫn umapWhitespaceBlock bên dưới.
+function umapWhitespaceChip(value) {
+  const visible = escapeHtml(String(value).replace(/\s/g, '·'));
+  return `<span class="bg-rose-100 text-rose-800 px-1 rounded" title="Dính khoảng trắng dư thừa (hiển thị tạm thời bằng dấu ·) — dữ liệu cũ, hệ thống không tự sửa">${visible} <span class="text-[9px] font-bold">🧹</span></span>`;
+}
+
+// renderUsernameMappingWhitespaceBlock() (11/2026) — quét READ-ONLY, xem chú thích đầy đủ ở
+// lib/hrUsernameMapping.js::findWhitespaceIssues(). Ẩn hẳn khối này nếu không có phát hiện nào (dữ liệu
+// sạch — trường hợp phổ biến từ nay về sau khi bản vá Nhập Excel đã chặn phát sinh mới).
+function renderUsernameMappingWhitespaceBlock(issues) {
+  const block = document.getElementById('umapWhitespaceBlock');
+  if (!block) return;
+  const employeeCodes = issues?.employeeCodes || [];
+  const usernames = issues?.usernames || [];
+  const total = employeeCodes.length + usernames.length;
+  block.classList.toggle('hidden', total === 0);
+  if (total === 0) return;
+  document.getElementById('umapWhitespaceEmployeeCodes').innerHTML = employeeCodes.length
+    ? `<p class="font-semibold mb-1">📇 ${employeeCodes.length} Mã Nhân Viên (Hồ Sơ Nhân Sự):</p><ul class="space-y-0.5">${
+        employeeCodes.map(e => `<li>${umapWhitespaceChip(e.employeeCode)} — ${escapeHtml(e.name)} <span class="text-gray-500">(${escapeHtml(e.status || '')})</span></li>`).join('')
+      }</ul>` : '';
+  document.getElementById('umapWhitespaceUsernames').innerHTML = usernames.length
+    ? `<p class="font-semibold mb-1 mt-2">🆔 ${usernames.length} Tên Đăng Nhập (VPDT):</p><ul class="space-y-0.5">${
+        usernames.map(u => `<li>${umapWhitespaceChip(u.username)} — ${escapeHtml(u.name)}${u.active === false ? ' <span class="text-gray-500">(đã khoá)</span>' : ''}</li>`).join('')
+      }</ul>` : '';
+}
+
 function renderUsernameMappingTable() {
   const wrap = document.getElementById('umapTableWrap');
   if (!wrap) return;
@@ -1286,11 +1316,11 @@ function renderUsernameMappingTable() {
         ${rows.map(r => `
         <tr class="border-b ${r.status === 'MATCHED' ? 'opacity-60' : ''}">
           <td class="p-2">${r.status === 'MISSING' ? `<input type="checkbox" data-op-change="umapToggleSelect" data-arg0="${escapeHtml(r.employeeCode)}" data-arg-el="1" ${_umapSelected.has(r.employeeCode) ? 'checked' : ''}>` : ''}</td>
-          <td class="p-2 font-mono">${escapeHtml(r.employeeCode)}</td>
+          <td class="p-2 font-mono">${r.employeeCodeHasWhitespace ? umapWhitespaceChip(r.employeeCode) : escapeHtml(r.employeeCode)}</td>
           <td class="p-2 font-semibold">${escapeHtml(r.name)}</td>
           <td class="p-2 text-gray-600">${escapeHtml([r.dept, r.jobTitle].filter(Boolean).join(' — ') || '—')}</td>
           <td class="p-2">${UMAP_STATUS_BADGE[r.status] || ''}</td>
-          <td class="p-2 font-mono">${escapeHtml(r.currentUsername || '—')}</td>
+          <td class="p-2 font-mono">${r.currentUsernameHasWhitespace ? umapWhitespaceChip(r.currentUsername) : escapeHtml(r.currentUsername || '—')}</td>
           <td class="p-2">${r.status === 'MISMATCH' ? `<button type="button" data-op="umapGoToProfile" data-arg0="${escapeHtml(r.employeeCode)}" class="text-teal-700 font-bold hover:underline">Xem Hồ Sơ →</button>` : ''}</td>
         </tr>`).join('')}
       </tbody>

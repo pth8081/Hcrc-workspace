@@ -8,7 +8,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { isCurrentlyAdmin } = require('../lib/adminAuth');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getAllForCollection } = require('../lib/recordStore');
-const { computeUsernameMappingReport, prepareBulkCreateAccounts, linkCreatedAccountsToProfiles } = require('../lib/hrUsernameMapping');
+const { computeUsernameMappingReport, prepareBulkCreateAccounts, linkCreatedAccountsToProfiles, findWhitespaceIssues } = require('../lib/hrUsernameMapping');
 const { prepareUsersForSave } = require('./data');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -39,7 +39,12 @@ router.get('/', async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
     const appData = await buildAppDataWithHrProcesses();
     const report = computeUsernameMappingReport(appData);
-    res.json(report);
+    // whitespaceIssues (11/2026, quét read-only, xem chú thích đầy đủ ở findWhitespaceIssues() —
+    // lib/hrUsernameMapping.js): liệt kê dữ liệu CŨ đã lỡ dính khoảng trắng ở Mã Nhân Viên/Tên Đăng
+    // Nhập, KHÔNG giới hạn ELIGIBLE_STATUSES như report ở trên — dùng CHUNG appData đã đọc, không tốn
+    // thêm round-trip DB nào.
+    const whitespaceIssues = findWhitespaceIssues(appData);
+    res.json({ ...report, whitespaceIssues });
   } catch (err) { sendCatchError(res, err, 'GET /api/admin/username-mapping'); }
 });
 

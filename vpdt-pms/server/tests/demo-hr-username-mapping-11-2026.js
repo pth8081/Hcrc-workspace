@@ -5,6 +5,10 @@
 // nhưng Tài Khoản VPDT "Chưa liên kết") để xác nhận màn Mã NV ↔ Tài Khoản có tự đưa đúng 3 hồ sơ này vào
 // nhóm "❌ Chưa có tài khoản" hay không, và demo trọn luồng chọn + tạo hàng loạt.
 //
+// (11/2026, mở rộng) thêm 1 hồ sơ "BL 3900" (employeeCode dính khoảng trắng) + 1 tài khoản mồ côi
+// "BL 4000" (username dính khoảng trắng, không liên kết hồ sơ nào) để demo khối "🧹 Khoảng Trắng Dư
+// Thừa" — quét READ-ONLY dữ liệu CŨ đã lỡ dính khoảng trắng (bản vá Nhập Excel chỉ chặn phát sinh MỚI).
+//
 // Chạy: node server/tests/demo-hr-username-mapping-11-2026.js
 'use strict';
 const fs = require('fs');
@@ -19,6 +23,8 @@ const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng IT'
 const NV0010_USER = { username: 'NV0010', name: 'Phạm Văn An', dept: 'Phòng Kế Toán', perms: {}, active: true };
 // NV0099: user ĐÃ CÓ nhưng username KHÁC employeeCode (dữ liệu cũ) -> MISMATCH.
 const NV0099_USER = { username: 'nv99cu', name: 'Đỗ Thị Mai', dept: 'Phòng Kế Toán', perms: {}, active: true };
+// BL 4000: tài khoản MỒ CÔI (không liên kết hồ sơ nào) nhưng username dính khoảng trắng dư thừa.
+const ORPHAN_WHITESPACE_USER = { username: 'BL 4000', name: 'Tài Khoản Dính Khoảng Trắng', dept: 'Phòng Kế Toán', perms: {}, active: true };
 
 function hrProcess(id, employeeCode, fullName) {
   return { id, processType: 'ONBOARDING', employeeCode, fullName, status: 'IN_PROGRESS' };
@@ -38,14 +44,15 @@ const state = createMockState({
   stores: ['Siêu thị BRGMart Moonlight', 'Siêu thị Hải Dương', 'Siêu thị số 390 Nguyễn Văn Cử'],
   storeJobTitles: [{ label: 'Nhân viên Bán hàng' }, { label: 'Nhân viên An ninh' }],
   jobTitles: ['Nhân viên'],
-  users: [ADMIN, NV0010_USER, NV0099_USER],
+  users: [ADMIN, NV0010_USER, NV0099_USER, ORPHAN_WHITESPACE_USER],
   permGroups: [{ id: 'grp_banhang', name: 'Nhân Viên Bán Hàng Siêu Thị', perms: { operationOrderView: true } }],
   hrProcesses: [
     hrProcess(1, 'BL3884', 'Trần Thị Huyền'),
     hrProcess(2, 'BL3885', 'Bùi Hữu Phong'),
     hrProcess(3, 'BL3883', 'Lò Thị Chử'),
     hrProcess(4, 'NV0010', 'Phạm Văn An'),
-    hrProcess(5, 'NV0099', 'Đỗ Thị Mai')
+    hrProcess(5, 'NV0099', 'Đỗ Thị Mai'),
+    hrProcess(6, 'BL 3900', 'Vũ Thị Năm')
   ],
   employeeProfiles: [
     // Đúng 3 hồ sơ trong ảnh người dùng báo cáo — "Đang làm việc" (ACTIVE) nhưng CHƯA liên kết tài khoản.
@@ -54,7 +61,9 @@ const state = createMockState({
     profile({ employeeCode: 'BL3883', processId: 3, dept: 'Siêu thị số 390 Nguyễn Văn Cử', jobTitle: 'Nhân viên Bán hàng', contactPhone: '0911222883' }),
     // Đối chứng: 1 hồ sơ ĐÃ khớp, 1 hồ sơ lệch mã (dữ liệu cũ).
     profile({ employeeCode: 'NV0010', processId: 4, dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', posType: 'HO', username: 'NV0010' }),
-    profile({ employeeCode: 'NV0099', processId: 5, dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', posType: 'HO', username: 'nv99cu' })
+    profile({ employeeCode: 'NV0099', processId: 5, dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', posType: 'HO', username: 'nv99cu' }),
+    // Dữ liệu CŨ dính khoảng trắng (từ trước bản vá Nhập Excel) — "BL 3900" (đáng lẽ là "BL3900").
+    profile({ employeeCode: 'BL 3900', processId: 6, dept: 'Siêu thị Hải Dương', jobTitle: 'Nhân viên Bán hàng' })
   ]
 });
 
@@ -95,9 +104,13 @@ async function main() {
     ? '✅ XÁC NHẬN: cả 3 Mã NV trong ảnh người dùng báo cáo ĐỀU hiện đúng ở nhóm "❌ Chưa có tài khoản".'
     : '⛔ KHÔNG thấy đủ 3 Mã NV — cần điều tra thêm.');
 
-  // Tick cả 3 checkbox "Chưa có tài khoản".
+  // Tick ĐÚNG 3 checkbox trong ảnh người dùng báo cáo — CỐ Ý bỏ qua "BL 3900" (hồ sơ dính khoảng trắng
+  // cũ) để minh hoạ rằng Admin tự quyết định dòng nào tạo tài khoản ngay, dòng nào cần rà soát trước.
   await page.evaluate(() => {
-    document.querySelectorAll('#umapTableWrap input[type=checkbox]').forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); });
+    ['BL3883', 'BL3884', 'BL3885'].forEach(code => {
+      const cb = document.querySelector(`#umapTableWrap input[data-arg0="${code}"]`);
+      if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
   });
   await page.waitForTimeout(150);
   await shot(page, '2-da-chon-3-ho-so', '#adminSubUsernameMap');

@@ -1436,6 +1436,18 @@
         <div class="bg-amber-50 border border-amber-200 rounded p-2 text-center"><div id="umapStatMismatch" class="text-lg font-bold text-amber-700">0</div><div class="text-[10px] text-amber-600">⚠️ Lệch mã</div></div>
         <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><div id="umapStatMissing" class="text-lg font-bold text-red-700">0</div><div class="text-[10px] text-red-600">❌ Chưa có tài khoản</div></div>
       </div>
+      <!-- umapWhitespaceBlock (11/2026, theo yêu cầu người dùng: "những tài khoản nào đang có khoảng
+           trắng thì bạn cắt luôn... quét + liệt kê trước") — quét READ-ONLY dữ liệu CŨ đã lỡ dính khoảng
+           trắng ở Mã Nhân Viên/Tên Đăng Nhập (bản vá Nhập Excel chỉ chặn phát sinh MỚI, KHÔNG tự dọn dữ
+           liệu cũ — xem lib/hrUsernameMapping.js::findWhitespaceIssues()). Mặc định ẩn, chỉ hiện khi có
+           phát hiện (renderUsernameMappingWhitespaceBlock(), module-hethong-tabs.js) — KHÔNG phải panel
+           lọc tìm kiếm nên không cần nút thu gọn theo quy tắc chung. -->
+      <div id="umapWhitespaceBlock" class="hidden bg-rose-50 border border-rose-200 rounded p-3 space-y-2">
+        <h4 class="font-bold text-rose-800 text-xs flex items-center gap-1">🧹 Khoảng Trắng Dư Thừa (Dữ Liệu Cũ)</h4>
+        <p class="text-[11px] text-rose-700">Phát hiện Mã Nhân Viên/Tên Đăng Nhập ĐÃ CÓ SẴN trong hệ thống dính khoảng trắng dư thừa (dữ liệu nhập trước khi hệ thống tự cắt khoảng trắng lúc Nhập Excel) — hệ thống KHÔNG tự động sửa các bản ghi này (username/Mã NV được tham chiếu ở rất nhiều nơi khác, tự đổi hàng loạt rủi ro cao) — vào "👥 Người Dùng"/"Hồ Sơ Nhân Sự" tự sửa tay từng trường hợp dưới đây.</p>
+        <div id="umapWhitespaceEmployeeCodes"></div>
+        <div id="umapWhitespaceUsernames"></div>
+      </div>
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div class="flex items-center gap-2 text-xs text-gray-600">
           <span><b id="umapSelCount">0</b> mục "Chưa có tài khoản" đã chọn</span>

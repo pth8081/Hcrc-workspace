@@ -8094,6 +8094,22 @@ KHÔNG ghi ngược lại Hồ Sơ Nhân Sự**. Bấm "Tạo Tài Khoản":
   Viên trùng Tên Đăng Nhập 1 tài khoản khác đang hoạt động — các trường hợp
   này cần Admin xử lý tay, không tự động xử lý).
 
+**"🧹 Khoảng Trắng Dư Thừa (Dữ Liệu Cũ)" (11/2026)** — khối cảnh báo hiện
+ngay dưới 4 thẻ thống kê (CHỈ hiện khi có phát hiện), quét **TOÀN BỘ**
+Mã Nhân Viên/Tên Đăng Nhập hiện có trong hệ thống (không giới hạn Đang
+làm/Nghỉ phép như bảng chính — kể cả hồ sơ Nháp/Đã nghỉ việc, hoặc 1 tài
+khoản chưa từng liên kết hồ sơ nào) để tìm dữ liệu **CŨ** đã lỡ dính
+khoảng trắng dư thừa (từ trước khi mục 7.7 "Nhập Excel Hồ Sơ Nhân Sự" tự
+cắt khoảng trắng). Khoảng trắng hiển thị bằng dấu `·` ngay trên mã/tên
+đăng nhập (cả ở khối cảnh báo lẫn ngay tại dòng tương ứng trong bảng
+chính) để Admin thấy rõ vị trí dính lỗi. **Đây là CÔNG CỤ QUÉT + LIỆT KÊ
+THUẦN TUÝ, KHÔNG có nút tự sửa** — Mã Nhân Viên/Tên Đăng Nhập là định danh
+được tham chiếu ở rất nhiều nơi khác trong hệ thống (người quản lý, người
+được giao việc, người tạo, người duyệt, hợp đồng lao động...), nên Admin
+phải tự vào "👥 Người Dùng"/"Hồ Sơ Nhân Sự" sửa tay từng trường hợp (số
+lượng thường rất ít, vì từ nay các lượt "Nhập Excel" mới không còn phát
+sinh thêm nữa).
+
 ### 7.8. Cấu Hình Email
 
 **Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/

@@ -1,8 +1,20 @@
 # Phiên bản hiện tại
 
-**30.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.71 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — quét + liệt kê dữ liệu CŨ dính khoảng trắng (read-only)
+
+Theo yêu cầu người dùng, sau khi xác nhận bản vá Nhập Excel (v30.70) chỉ chặn khoảng trắng phát sinh
+MỚI, không tự dọn dữ liệu CŨ: thêm khối **"🧹 Khoảng Trắng Dư Thừa (Dữ Liệu Cũ)"** ở màn "🆔 Mã NV ↔ Tài
+Khoản" — quét TOÀN BỘ Mã Nhân Viên/Tên Đăng Nhập hiện có (không giới hạn Đang làm/Nghỉ phép như bảng
+chính) để liệt kê chính xác còn bao nhiêu bản ghi dính khoảng trắng dư thừa, hiển thị trực quan bằng dấu
+`·` thay cho khoảng trắng vô hình. **Chỉ quét + liệt kê, KHÔNG tự động sửa** (Mã Nhân Viên/Tên Đăng Nhập
+là định danh tham chiếu ở rất nhiều nơi khác — tự đổi hàng loạt rủi ro cao) — Admin tự vào "Người Dùng"/
+"Hồ Sơ Nhân Sự" sửa tay từng trường hợp.
+
+25 test liên quan (lib/hrUsernameMapping.js + HTTP) pass, CSP sạch.
 
 ## v30.70 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — vá gợi ý SĐT/Email + cắt khoảng trắng Mã NV/Tài Khoản lúc Nhập Excel Hồ Sơ Nhân Sự
 

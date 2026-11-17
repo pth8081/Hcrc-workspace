@@ -31,7 +31,7 @@ async function test(name, fn) {
 // ===================== Phần A: lib/hrUsernameMapping.js (thuần) =====================
 function partA() {
   console.log('== Phần A: lib/hrUsernameMapping.js (thuần) ==');
-  const { computeUsernameMappingReport, prepareBulkCreateAccounts } = require('../lib/hrUsernameMapping');
+  const { computeUsernameMappingReport, prepareBulkCreateAccounts, hasWhitespace, findWhitespaceIssues } = require('../lib/hrUsernameMapping');
 
   const USERS = [
     { id: 1, username: 'NV0001', name: 'Nguyễn Văn Kế Toán', perms: {}, active: true },
@@ -152,6 +152,57 @@ function partA() {
     const after = appData.employeeProfiles.find(p => p.employeeCode === 'NV0010');
     assertEqual(JSON.stringify(after), JSON.stringify(before), 'employeeProfiles KHÔNG được đổi gì dù admin sửa field khác lúc tạo tài khoản');
   });
+
+  // hasWhitespace()/findWhitespaceIssues() (11/2026, theo yêu cầu người dùng: "những tài khoản nào đang
+  // có khoảng trắng... up code bản này cắt luôn đúng không?" -> xác nhận quét read-only, KHÔNG tự sửa).
+  test('hasWhitespace(): nhận diện đúng khoảng trắng ở ĐẦU/CUỐI/GIỮA, không báo nhầm chuỗi liền mạch', () => {
+    assertEqual(hasWhitespace('BL 3883'), true, 'khoảng trắng ở giữa');
+    assertEqual(hasWhitespace(' BL3883'), true, 'khoảng trắng ở đầu');
+    assertEqual(hasWhitespace('BL3883 '), true, 'khoảng trắng ở cuối');
+    assertEqual(hasWhitespace('BL3883'), false, 'chuỗi liền mạch không có khoảng trắng');
+    assertEqual(hasWhitespace(null), false, 'null không throw, trả false');
+    assertEqual(hasWhitespace(undefined), false, 'undefined không throw, trả false');
+  });
+
+  test('findWhitespaceIssues(): liệt kê ĐÚNG hồ sơ có employeeCode dính khoảng trắng, KHÔNG giới hạn ELIGIBLE_STATUSES (kể cả DRAFT/INACTIVE)', () => {
+    const appData = freshAppData();
+    appData.employeeProfiles.push({ employeeCode: 'BL 9999', username: null, status: 'DRAFT' }); // Nháp vẫn phải liệt kê
+    appData.employeeProfiles.push({ employeeCode: 'BL8888', username: null, status: 'ACTIVE' }); // sạch, KHÔNG được liệt kê
+    const { employeeCodes } = findWhitespaceIssues(appData);
+    assertEqual(employeeCodes.length, 1, JSON.stringify(employeeCodes));
+    assertEqual(employeeCodes[0].employeeCode, 'BL 9999');
+    assertEqual(employeeCodes[0].status, 'DRAFT');
+  });
+
+  test('findWhitespaceIssues(): liệt kê ĐÚNG user có username dính khoảng trắng, KHÔNG phụ thuộc có liên kết employeeProfile hay không', () => {
+    const appData = freshAppData();
+    // KHÔNG push thẳng vào appData.users — đó là tham chiếu mảng USERS DÙNG CHUNG toàn bộ partA() (chỉ
+    // employeeProfiles được freshAppData() tạo mới mỗi lần gọi), push thẳng sẽ làm "rò rỉ" sang các test
+    // chạy SAU trong cùng file. Tự nhân bản mảng users ở đây để cô lập đúng phạm vi 1 test.
+    appData.users = [...appData.users, { id: 99, username: 'BL 9999', name: 'Tài Khoản Dính Khoảng Trắng', perms: {}, active: true }];
+    const { usernames } = findWhitespaceIssues(appData);
+    assertEqual(usernames.length, 1, JSON.stringify(usernames));
+    assertEqual(usernames[0].username, 'BL 9999');
+    assertEqual(usernames[0].name, 'Tài Khoản Dính Khoảng Trắng');
+  });
+
+  test('findWhitespaceIssues(): dữ liệu sạch hoàn toàn -> trả 2 mảng rỗng', () => {
+    const { employeeCodes, usernames } = findWhitespaceIssues(freshAppData());
+    assertEqual(employeeCodes.length, 0);
+    assertEqual(usernames.length, 0);
+  });
+
+  test('computeUsernameMappingReport(): mỗi dòng có cờ employeeCodeHasWhitespace/currentUsernameHasWhitespace đúng thực tế', () => {
+    const appData = freshAppData();
+    appData.employeeProfiles.push({ employeeCode: 'BL 7777', username: 'BL 7777', status: 'ACTIVE' });
+    const { rows } = computeUsernameMappingReport(appData);
+    const r = rows.find(x => x.employeeCode === 'BL 7777');
+    assertEqual(r.employeeCodeHasWhitespace, true);
+    assertEqual(r.currentUsernameHasWhitespace, true);
+    const clean = rows.find(x => x.employeeCode === 'NV0001');
+    assertEqual(clean.employeeCodeHasWhitespace, false);
+    assertEqual(clean.currentUsernameHasWhitespace, false);
+  });
 }
 
 // ===================== Phần B: HTTP thật — POST /api/admin/username-mapping =====================
@@ -259,6 +310,19 @@ async function partB() {
     assertEqual(r.json.stats.total, 3);
     assertEqual(r.json.stats.missing, 2);
     assertEqual(r.json.stats.matched, 1);
+  });
+
+  await test('GET /: trả kèm whitespaceIssues (quét read-only dữ liệu cũ dính khoảng trắng, không giới hạn ELIGIBLE_STATUSES)', async () => {
+    resetData();
+    APP_DATA.employeeProfiles.push({ employeeCode: 'BL 2222', username: null, status: 'INACTIVE' });
+    APP_DATA.users.push({ id: 10, username: 'BL 3333', name: 'Dính Khoảng Trắng', perms: {}, active: true, pass: 'hashed' });
+    const r = await call(ADMIN, 'GET', '/api/admin/username-mapping');
+    assertEqual(r.status, 200, JSON.stringify(r.json));
+    assert(r.json.whitespaceIssues, 'phải có field whitespaceIssues');
+    assertEqual(r.json.whitespaceIssues.employeeCodes.length, 1);
+    assertEqual(r.json.whitespaceIssues.employeeCodes[0].employeeCode, 'BL 2222');
+    assertEqual(r.json.whitespaceIssues.usernames.length, 1);
+    assertEqual(r.json.whitespaceIssues.usernames[0].username, 'BL 3333');
   });
 
   await test('POST /bulk-create-accounts: người không phải admin bị chặn 403', async () => {

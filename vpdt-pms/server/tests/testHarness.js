@@ -1955,9 +1955,11 @@ function createDispatcher(state) {
       if (pathName === '/api/admin/username-mapping' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser?.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới dùng được chức năng này' } };
-        const { computeUsernameMappingReport } = require('../lib/hrUsernameMapping');
-        const report = computeUsernameMappingReport({ users: state.users, employeeProfiles: state.employeeProfiles || [], hrProcesses: state.hrProcesses || [] });
-        return { status: 200, body: report };
+        const { computeUsernameMappingReport, findWhitespaceIssues } = require('../lib/hrUsernameMapping');
+        const mockAppData = { users: state.users, employeeProfiles: state.employeeProfiles || [], hrProcesses: state.hrProcesses || [] };
+        const report = computeUsernameMappingReport(mockAppData);
+        const whitespaceIssues = findWhitespaceIssues(mockAppData);
+        return { status: 200, body: { ...report, whitespaceIssues } };
       }
       if (pathName === '/api/admin/username-mapping/bulk-create-accounts' && method === 'POST') {
         const freshUser = state.users.find(u => u.username === username);

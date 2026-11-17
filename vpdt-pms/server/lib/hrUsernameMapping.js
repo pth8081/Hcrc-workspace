@@ -32,6 +32,43 @@ function mappingStatusFor(profile) {
   return profile.username === profile.employeeCode ? 'MATCHED' : 'MISMATCH';
 }
 
+// hasWhitespace()/findWhitespaceIssues() (11/2026, theo yêu cầu người dùng — "những tài khoản nào đang
+// có khoảng trắng thì cắt luôn... up code bản này cắt luôn đúng không?"): bản vá rowToPreviewItem()
+// (lib/employeeProfileImport.js) CHỈ chặn khoảng trắng dính MỚI từ lúc merge trở đi (lúc Nhập Excel) —
+// KHÔNG tự động dọn dữ liệu CŨ đã lỡ dính trước đó, vì username/employeeCode là định danh tham chiếu ở
+// rất nhiều collection khác (managerUsername, assignedToUsername, creator, approvers, hợp đồng lao
+// động...) — tự động đổi hàng loạt dễ gây "mồ côi" tham chiếu ngược y hệt lỗi đang vá. Thay vào đó, quét
+// READ-ONLY (không tự sửa gì) để liệt kê CHÍNH XÁC còn bao nhiêu bản ghi dính, Admin tự vào "Sửa Người
+// Dùng"/"Hồ Sơ Nhân Sự" sửa tay từng trường hợp (phương án đã người dùng xác nhận chọn: "Quét + liệt kê
+// trước"). \s của JS (chế độ Unicode mặc định) đã bao gồm cả NBSP ( ) — cùng định nghĩa "khoảng
+// trắng" với regex /\s+/ đã dùng ở rowToPreviewItem(), không lệch tiêu chí giữa 2 nơi.
+function hasWhitespace(s) {
+  return typeof s === 'string' && /\s/.test(s);
+}
+
+// findWhitespaceIssues(appData) — quét TOÀN BỘ employeeProfiles/users hiện có, KHÔNG giới hạn
+// ELIGIBLE_STATUSES như computeUsernameMappingReport() (dữ liệu cũ dính khoảng trắng có thể nằm ở hồ sơ
+// Nháp/Đã nghỉ việc, hoặc 1 tài khoản chưa từng liên kết hồ sơ nào — vẫn cần liệt kê đủ để Admin biết).
+// Trả 2 danh sách TÁCH RIÊNG (Mã Nhân Viên/Tên Đăng Nhập) — cố ý không gộp chung vì 1 hồ sơ dính khoảng
+// trắng ở employeeCode có thể hoàn toàn độc lập với 1 tài khoản khác dính khoảng trắng ở username.
+function findWhitespaceIssues(appData) {
+  const profiles = appData.employeeProfiles || [];
+  const users = appData.users || [];
+  const employeeCodes = profiles
+    .filter(p => p && hasWhitespace(p.employeeCode))
+    .map(p => ({
+      employeeCode: p.employeeCode,
+      name: resolveProfileDisplayName(p, appData.users, appData.hrProcesses) || p.employeeCode,
+      status: p.status || null
+    }))
+    .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode));
+  const usernames = users
+    .filter(u => u && hasWhitespace(u.username))
+    .map(u => ({ username: u.username, name: u.name || u.username, active: u.active !== false }))
+    .sort((a, b) => a.username.localeCompare(b.username));
+  return { employeeCodes, usernames };
+}
+
 // computeUsernameMappingReport(appData) — appData cần users/employeeProfiles (đủ qua getAllAppData(),
 // cả 2 đều là AppData blob, KHÔNG phải MIGRATED_COLLECTIONS) + hrProcesses (collection riêng, caller tự
 // getAllForCollection('hrProcesses') rồi gắn vào appData — dùng cho resolveProfileDisplayName() tra tên
@@ -49,6 +86,11 @@ function computeUsernameMappingReport(appData) {
       dept: p.dept || null, jobTitle: p.jobTitle || null, posType: p.posType || null,
       status: mappingStatusFor(p),
       currentUsername: p.username || null,
+      // Cờ hiển thị NGAY trên bảng chính (khác findWhitespaceIssues() bên dưới — mục đích liệt kê ĐẦY
+      // ĐỦ mọi bản ghi, kể cả ngoài phạm vi ELIGIBLE_STATUSES của bảng này) — giúp Admin hiểu NGAY tại
+      // dòng đó lý do "Lệch mã" có thể CHỈ do khoảng trắng dư, không phải lỗi gõ nội dung thật.
+      employeeCodeHasWhitespace: hasWhitespace(p.employeeCode),
+      currentUsernameHasWhitespace: hasWhitespace(p.username),
       // contactPhone/workEmail/personalEmail (LỖI ĐÃ VÁ, phát hiện lúc build demo 11/2026): client
       // (umapBuildBulkCreateFormHTML(), module-hethong-tabs.js) gợi ý sẵn SĐT/Email từ Hồ Sơ Nhân Sự lúc
       // tạo tài khoản hàng loạt qua ĐÚNG 3 field này — thiếu ở report thì ô gợi ý luôn trống dù hồ sơ có
@@ -150,5 +192,6 @@ function linkCreatedAccountsToProfiles(list, codes, actorUsername) {
 
 module.exports = {
   ELIGIBLE_STATUSES, DEFAULT_PASSWORD, MAX_BULK_CREATE,
-  computeUsernameMappingReport, prepareBulkCreateAccounts, linkCreatedAccountsToProfiles
+  computeUsernameMappingReport, prepareBulkCreateAccounts, linkCreatedAccountsToProfiles,
+  hasWhitespace, findWhitespaceIssues
 };
