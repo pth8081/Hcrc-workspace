@@ -8044,16 +8044,32 @@ buộc như cũ, không bị nới lỏng theo. **Riêng "Tạo hàng loạt b�
 dưới KHÔNG áp dụng thay đổi này** — cột `dept` trong file Excel vẫn bắt buộc
 khớp đúng danh mục như trước (phạm vi thay đổi chỉ ở form tạo tay từng người).
 
-**Gợi ý "Ngày Vào Làm Việc" từ Onboarding (10/2026)** — nút "📋 Lấy từ
-Onboarding" ngay dưới ô Ngày Vào Làm Việc, tìm trong các quy trình Onboarding
-đã có (Nhân Sự → Onboarding/Offboarding, mục 6) theo đúng Email/Họ Tên đã
-điền ở phần trên form, rồi tự điền sẵn ngày vào làm đã ghi nhận ở đó — tránh
-phải gõ lại tay 2 lần cùng 1 thông tin khi IT tạo tài khoản đăng nhập cho 1
-nhân viên đã có hồ sơ Onboarding từ trước (2 nơi lưu "Ngày Vào Làm Việc" này
-độc lập nhau, dễ lệch nếu không đối chiếu). Chỉ là **GỢI Ý** — điền vào ô để
-admin tự xác nhận/sửa lại, không tự khoá hay ép giá trị. Nhiều hồ sơ khớp
-cùng lúc (trùng tên) sẽ hiện danh sách rút gọn để chọn đúng người; không khớp
-hồ sơ nào thì báo rõ, không điền bừa.
+**Gợi ý "Ngày Vào Làm Việc" từ Onboarding/Hồ Sơ Nhân Sự (10/2026, tự động hoá
++ mở rộng nguồn 11/2026)** — rời khỏi ô Email/Họ Tên ở trên form là **tự
+động** dò khớp NGAY (không cần bấm nút, hoàn toàn im lặng nếu không tìm thấy
+hoặc tìm thấy nhiều kết quả cùng khớp); nút **"📋 Tìm Trong Onboarding/Hồ Sơ
+NS (nếu chưa tự điền)"** ngay dưới ô Ngày Vào Làm Việc là **phương án dự
+phòng** dùng khi bản tự động không tìm được, hoặc khi admin muốn tìm/ghi đè
+lại có chủ ý. Cả 2 đường tra theo thứ tự ưu tiên:
+
+1. **Quy trình Onboarding đã có** (Nhân Sự → Onboarding/Offboarding, mục 6)
+   khớp đúng Email/Họ Tên đã điền — ưu tiên trước (ghi nhận thật lúc tuyển
+   dụng).
+2. **CHỈ khi không có Onboarding nào khớp**, rơi về chính **Hồ Sơ Nhân Sự**
+   (field "Ngày vào HCRC") — phục vụ đúng các hồ sơ **CŨ tạo tay/import Excel
+   trực tiếp, KHÔNG qua quy trình Onboarding** (nên không có bản ghi nào ở
+   nguồn 1 để tra). Khớp theo: tài khoản đang Sửa đã liên kết đúng hồ sơ này
+   (dùng được ngay cả khi không gõ lại Email/Họ Tên), hoặc Email/Họ Tên của
+   tài khoản VPDT đã liên kết với hồ sơ, hoặc Email công việc/cá nhân lưu
+   ngay trên hồ sơ (cho hồ sơ chưa liên kết tài khoản nào).
+
+Tránh phải gõ lại tay 2 lần cùng 1 thông tin khi IT tạo/sửa tài khoản đăng
+nhập cho 1 nhân viên đã có hồ sơ từ trước (2-3 nơi lưu "Ngày Vào Làm Việc"
+này độc lập nhau, dễ lệch nếu không đối chiếu). Chỉ là **GỢI Ý** — điền vào ô
+để admin tự xác nhận/sửa lại, không tự khoá hay ép giá trị, không tự ghi đè
+nếu ô đã có sẵn giá trị. Nhiều hồ sơ khớp cùng lúc (trùng tên) sẽ hiện danh
+sách rút gọn để chọn đúng người; không khớp hồ sơ nào ở CẢ 2 nguồn thì báo
+rõ, không điền bừa.
 
 Ở màn **Người Dùng**, ngoài tạo từng tài khoản 1, admin có thể điền xong 1
 form rồi bấm thêm vào 1 **danh sách tạm** (chưa gửi lên server), lặp lại cho

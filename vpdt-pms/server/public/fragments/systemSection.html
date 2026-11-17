@@ -2259,8 +2259,11 @@
                  khớp NGAY (autoFillStartDateFromOnboarding(), xem data-op-change ở 2 ô đó), không cần
                  bấm nút. Nút này giờ chỉ còn là PHƯƠNG ÁN DỰ PHÒNG cho lúc tự động không tìm được (0 hoặc
                  nhiều hồ sơ cùng khớp Email/Họ Tên) — bấm để tìm lại/tự chọn giữa nhiều kết quả. Cả 2 đều
-                 CHỈ GỢI Ý (điền vào ô, admin vẫn tự xác nhận/sửa lại được), không tự khoá/ép giá trị. -->
-            <button type="button" data-op="suggestStartDateFromOnboarding" class="mt-1 text-[10.5px] text-blue-600 font-semibold hover:underline">📋 Tìm Trong Onboarding (nếu chưa tự điền)</button>
+                 CHỈ GỢI Ý (điền vào ô, admin vẫn tự xác nhận/sửa lại được), không tự khoá/ép giá trị.
+                 Mở rộng 11/2026 (báo cáo người dùng "các hồ sơ cũ up lên phần mềm không qua onboarding"):
+                 cả 2 đường (tự động lẫn nút bấm tay) giờ RƠI VỀ Hồ Sơ Nhân Sự (joinDateAtHcrc) nếu không
+                 tìm thấy Onboarding nào khớp — xem findStartDateCandidates() ở module-admin-submissiongroups.js. -->
+            <button type="button" data-op="suggestStartDateFromOnboarding" class="mt-1 text-[10.5px] text-blue-600 font-semibold hover:underline">📋 Tìm Trong Onboarding/Hồ Sơ NS (nếu chưa tự điền)</button>
           </div>
         </div>
 

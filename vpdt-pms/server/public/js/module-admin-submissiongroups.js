@@ -914,42 +914,79 @@ function findOnboardingStartDateCandidates(email, name) {
     ((email && (p.email || '').trim().toLowerCase() === email) || (name && (p.fullName || '').trim().toLowerCase() === name)));
 }
 
+// findEmployeeProfileStartDateCandidates(username, email, name) — NGUỒN 2 (MỚI 11/2026, theo báo cáo
+// người dùng "các hồ sơ cũ up lên phần mềm không qua onboarding") — CHỈ dùng khi nguồn 1 (Onboarding ở
+// trên) không tìm thấy gì: hồ sơ Nhân Sự tạo tay/import Excel trực tiếp (không qua quy trình Onboarding)
+// KHÔNG có bản ghi hrProcesses nào để tra, nhưng vẫn có sẵn field joinDateAtHcrc ("Ngày vào HCRC") lưu
+// ngay trên chính hồ sơ — xem lib/employeeProfile.js::defaultProfile(). Khớp theo thứ tự ưu tiên CHẮC
+// CHẮN nhất trước: (1) hồ sơ đã liên kết ĐÚNG username đang sửa — chắc chắn tuyệt đối, dùng được cả khi
+// Email/Họ Tên bỏ trống; (2) Email/Họ Tên của TÀI KHOẢN VPDT đã liên kết (DB.users, qua profile.username);
+// (3) workEmail/personalEmail lưu ngay trên hồ sơ (cho hồ sơ CHƯA liên kết tài khoản nào — case tạo tài
+// khoản MỚI cho người đã có hồ sơ từ trước).
+function findEmployeeProfileStartDateCandidates(username, email, name) {
+  return (DB.employeeProfiles || []).filter(p => {
+    if (!p.joinDateAtHcrc) return false;
+    if (username && p.username === username) return true;
+    if (!email && !name) return false;
+    const linkedUser = p.username ? (DB.users || []).find(u => u.username === p.username) : null;
+    const profileEmail = (linkedUser?.email || p.workEmail || p.personalEmail || '').trim().toLowerCase();
+    const profileName = (linkedUser?.name || '').trim().toLowerCase();
+    return (email && profileEmail === email) || (name && profileName === name);
+  }).map(p => {
+    const linkedUser = p.username ? (DB.users || []).find(u => u.username === p.username) : null;
+    return { employeeCode: p.employeeCode, fullName: linkedUser?.name || '(chưa liên kết tài khoản)', startDate: p.joinDateAtHcrc };
+  });
+}
+
+// findStartDateCandidates(username, email, name) — gộp CẢ 2 nguồn thành 1 điểm gọi dùng chung cho cả
+// bản tự động lẫn nút bấm tay bên dưới: ưu tiên Onboarding (nguồn 1, đáng tin hơn — ghi nhận thật lúc
+// tuyển dụng); CHỈ rơi về Hồ Sơ Nhân Sự (nguồn 2) khi nguồn 1 rỗng — đúng yêu cầu người dùng "lấy thêm từ
+// hồ sơ nhân sự NẾU onboarding không tìm thấy", không trộn lẫn 2 nguồn cùng lúc (tránh 1 người lên danh
+// sách 2 lần nếu trùng cả Email ở cả 2 nơi).
+function findStartDateCandidates(username, email, name) {
+  const fromOnboarding = findOnboardingStartDateCandidates(email, name);
+  if (fromOnboarding.length) return { candidates: fromOnboarding, source: 'Onboarding' };
+  return { candidates: findEmployeeProfileStartDateCandidates(username, email, name), source: 'Hồ Sơ Nhân Sự' };
+}
+
 // autoFillStartDateFromOnboarding() (MỚI 11/2026, theo yêu cầu TRỰC TIẾP người dùng — "tôi muốn tự động
 // link, không có mới bấm nút kéo") — gắn data-op-change trên CẢ #uEmail lẫn #uFullName: rời khỏi 1 trong
 // 2 ô này (sau khi gõ xong) tự dò khớp Onboarding NGAY, KHÔNG cần bấm nút. Im lặng hoàn toàn (không alert)
 // — chỉ tự điền khi khớp ĐÚNG 1 kết quả RÕ RÀNG, không đụng tới ô "Ngày Vào Làm Việc" nếu đã có sẵn giá
 // trị (tránh ghi đè ngày admin đã tự sửa tay, hoặc ngày đã có sẵn lúc Sửa 1 tài khoản cũ) và không tự
-// chọn khi có NHIỀU hồ sơ cùng khớp (mơ hồ, để admin tự bấm nút "📋 Lấy từ Onboarding" bên dưới chọn tay).
+// chọn khi có NHIỀU hồ sơ cùng khớp (mơ hồ, để admin tự bấm nút "📋 Tìm Trong Onboarding" bên dưới chọn tay).
 // Nút đó vẫn giữ nguyên hành vi CŨ (báo rõ kết quả/cho chọn khi nhiều kết quả) — chỉ còn cần dùng khi tự
 // động KHÔNG tìm thấy gì (0 hoặc nhiều kết quả), đúng như người dùng yêu cầu.
 function autoFillStartDateFromOnboarding() {
   const startDateInput = document.getElementById('uStartDate');
   if (!startDateInput || startDateInput.value) return; // đã có sẵn giá trị -> không tự ghi đè
+  const username = document.getElementById('uUsername').value.trim();
   const email = document.getElementById('uEmail').value.trim().toLowerCase();
   const name = document.getElementById('uFullName').value.trim().toLowerCase();
-  if (!email && !name) return;
-  const candidates = findOnboardingStartDateCandidates(email, name);
+  if (!username && !email && !name) return;
+  const { candidates } = findStartDateCandidates(username, email, name);
   if (candidates.length === 1) startDateInput.value = candidates[0].startDate;
 }
 
-// Gợi ý "Ngày Vào Làm Việc" từ Onboarding đã có (10/2026, theo phân tích đã xác nhận với người dùng) —
-// nút bấm tay, dùng khi autoFillStartDateFromOnboarding() ở trên không tự tìm được (0 hoặc nhiều hồ sơ
-// cùng khớp) hoặc khi admin muốn tìm/ghi đè lại CÓ CHỦ Ý (nút này KHÔNG tự chặn khi ô đã có giá trị, khác
-// bản tự động). Khớp theo Email/Họ Tên đã điền ở phần trên form (chưa có tài khoản nào để liên kết theo
-// username lúc này).
+// Gợi ý "Ngày Vào Làm Việc" từ Onboarding/Hồ Sơ Nhân Sự đã có (10/2026, theo phân tích đã xác nhận với
+// người dùng; mở rộng thêm nguồn Hồ Sơ Nhân Sự 11/2026) — nút bấm tay, dùng khi autoFillStartDateFromOnboarding()
+// ở trên không tự tìm được (0 hoặc nhiều hồ sơ cùng khớp) hoặc khi admin muốn tìm/ghi đè lại CÓ CHỦ Ý
+// (nút này KHÔNG tự chặn khi ô đã có giá trị, khác bản tự động). Khớp theo Tên đăng nhập (nếu đang Sửa 1
+// tài khoản đã có)/Email/Họ Tên đã điền ở phần trên form.
 function suggestStartDateFromOnboarding() {
+  const username = document.getElementById('uUsername').value.trim();
   const email = document.getElementById('uEmail').value.trim().toLowerCase();
   const name = document.getElementById('uFullName').value.trim().toLowerCase();
-  if (!email && !name) return alert('Vui lòng nhập Email hoặc Họ và Tên trước để tìm đúng hồ sơ Onboarding.');
-  const candidates = findOnboardingStartDateCandidates(email, name);
-  if (!candidates.length) return alert('Không tìm thấy quy trình Onboarding nào khớp Email/Họ Tên đã nhập.');
+  if (!username && !email && !name) return alert('Vui lòng nhập Email hoặc Họ và Tên trước để tìm đúng hồ sơ Onboarding/Nhân Sự.');
+  const { candidates, source } = findStartDateCandidates(username, email, name);
+  if (!candidates.length) return alert('Không tìm thấy quy trình Onboarding hoặc Hồ Sơ Nhân Sự nào khớp Tên đăng nhập/Email/Họ Tên đã nhập.');
   if (candidates.length === 1) {
     document.getElementById('uStartDate').value = candidates[0].startDate;
-    alert(`✅ Đã điền Ngày Vào Làm Việc = ${candidates[0].startDate} (lấy từ Onboarding [${candidates[0].employeeCode}]).`);
+    alert(`✅ Đã điền Ngày Vào Làm Việc = ${candidates[0].startDate} (lấy từ ${source} [${candidates[0].employeeCode}]).`);
     return;
   }
   const pickList = candidates.map((p, idx) => `${idx + 1}. ${p.fullName} (${p.employeeCode}) — ${p.startDate}`).join('\n');
-  const choice = parseInt(prompt(`Có ${candidates.length} hồ sơ Onboarding khớp — nhập số thứ tự cần lấy:\n${pickList}`) || '', 10);
+  const choice = parseInt(prompt(`Có ${candidates.length} hồ sơ ${source} khớp — nhập số thứ tự cần lấy:\n${pickList}`) || '', 10);
   const picked = candidates[choice - 1];
   if (picked) document.getElementById('uStartDate').value = picked.startDate;
 }

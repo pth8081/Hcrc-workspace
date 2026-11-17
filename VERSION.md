@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**30.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.81 (2026-11): "Ngày Vào Làm Việc" (form Người Dùng) rơi về Hồ Sơ Nhân Sự khi không có Onboarding
+
+Theo báo cáo người dùng ("các hồ sơ cũ up lên phần mềm không qua onboarding" — tự động/nút "Tìm Trong
+Onboarding" vẫn báo không tìm thấy vì những hồ sơ này chưa từng có bản ghi hrProcesses ONBOARDING nào):
+
+- Thêm nguồn tra thứ 2: `findEmployeeProfileStartDateCandidates()` đọc trực tiếp `joinDateAtHcrc`
+  ("Ngày vào HCRC") đã lưu sẵn trên chính Hồ Sơ Nhân Sự — khớp theo thứ tự ưu tiên: (1) hồ sơ đã liên
+  kết ĐÚNG Tên đăng nhập đang sửa (chắc chắn tuyệt đối, dùng được cả khi không gõ lại Email/Họ Tên — đúng
+  tình huống Sửa 1 tài khoản đã có sẵn); (2) Email/Họ Tên của tài khoản VPDT đã liên kết; (3) workEmail/
+  personalEmail lưu ngay trên hồ sơ (hồ sơ chưa liên kết tài khoản nào).
+- `findStartDateCandidates()` gộp 2 nguồn: LUÔN ưu tiên Onboarding (đáng tin hơn — ghi nhận thật lúc
+  tuyển dụng) trước, CHỈ rơi về Hồ Sơ Nhân Sự khi Onboarding không tìm thấy gì — không trộn lẫn 2 nguồn.
+  Áp dụng cho CẢ bản tự động (`autoFillStartDateFromOnboarding()`, rời ô Email/Họ Tên) lẫn nút bấm tay
+  (`suggestStartDateFromOnboarding()`, đổi nhãn "📋 Tìm Trong Onboarding/Hồ Sơ NS (nếu chưa tự điền)").
+- Thêm 4 test mới (u8)-(u11) xác nhận: rơi về đúng Hồ Sơ Nhân Sự khi không có Onboarding, tự điền được
+  chỉ bằng Tên đăng nhập lúc Sửa tài khoản đã có (không cần gõ lại Email/Họ Tên), ưu tiên đúng Onboarding
+  khi cả 2 nguồn cùng khớp, báo rõ cả 2 nguồn khi không tìm thấy gì.
 
 ## v30.80 (2026-11): Vá 6 test lỗi thời phát hiện lúc chạy regression cho v30.79 (KHÔNG đổi hành vi sản phẩm)
 

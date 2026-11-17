@@ -1870,6 +1870,82 @@ async function scenario(name, fn) {
       r.startDateValue === '' && r.alerts.length === 0, JSON.stringify(r));
   });
 
+  // (u8)-(u11): NGUỒN 2 — findEmployeeProfileStartDateCandidates()/findStartDateCandidates() (MỚI
+  // 11/2026, theo báo cáo người dùng "các hồ sơ cũ up lên phần mềm không qua onboarding") — hồ sơ Nhân
+  // Sự tạo tay/import Excel KHÔNG qua Onboarding vẫn có sẵn joinDateAtHcrc, CHỈ dùng khi Onboarding (nguồn
+  // 1) không tìm thấy gì.
+  await scenario('(u8) suggestStartDateFromOnboarding(): KHÔNG có Onboarding nào khớp, nhưng CÓ hồ sơ Nhân Sự (đã liên kết tài khoản) khớp Email của tài khoản liên kết -> rơi về Hồ Sơ Nhân Sự, báo rõ nguồn', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [];
+      DB.users = (DB.users || []).filter(u => u.username !== 'nvcu01');
+      DB.users.push({ username: 'nvcu01', name: 'Nguyễn Văn Cũ', email: 'nvcu01@hcrc.local', active: true, perms: {} });
+      DB.employeeProfiles = [
+        { employeeCode: 'BL9001', username: 'nvcu01', status: 'ACTIVE', joinDateAtHcrc: '2021-04-05' }
+      ];
+      resetUserForm();
+      document.getElementById('uEmail').value = 'nvcu01@hcrc.local';
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u8) Không có Onboarding, rơi về Hồ Sơ Nhân Sự -> điền đúng joinDateAtHcrc + báo rõ nguồn "Hồ Sơ Nhân Sự"',
+      r.startDateValue === '2021-04-05' && /Hồ Sơ Nhân Sự/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u9) autoFillStartDateFromOnboarding(): đang SỬA tài khoản đã có (Tên đăng nhập có sẵn), KHÔNG có Onboarding -> tự điền từ hồ sơ Nhân Sự đã liên kết ĐÚNG username đó (không cần gõ lại Email/Họ Tên)', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [];
+      DB.users = (DB.users || []).filter(u => u.username !== 'thuyphuong9118');
+      DB.users.push({ username: 'thuyphuong9118', name: 'Vũ Thúy Phương', email: 'thuyphuong9118@gmail.com', active: true, perms: {} });
+      DB.employeeProfiles = [
+        { employeeCode: 'BL1358', username: 'thuyphuong9118', status: 'ACTIVE', joinDateAtHcrc: '2021-04-05' }
+      ];
+      resetUserForm();
+      document.getElementById('editUserId').value = '1';
+      document.getElementById('uUsername').value = 'thuyphuong9118'; // mô phỏng đang Sửa 1 tài khoản ĐÃ CÓ
+      const input = document.getElementById('uEmail');
+      input.value = 'thuyphuong9118@gmail.com';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return { startDateValue: document.getElementById('uStartDate').value };
+    });
+    record('(u9) Sửa tài khoản đã liên kết hồ sơ CŨ (không qua Onboarding) -> tự điền đúng Ngày Vào HCRC từ Hồ Sơ Nhân Sự',
+      r.startDateValue === '2021-04-05', JSON.stringify(r));
+  });
+
+  await scenario('(u10) findStartDateCandidates(): Onboarding VÀ Hồ Sơ Nhân Sự CÙNG khớp -> ưu tiên Onboarding, KHÔNG trộn/lặp 2 nguồn', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [
+        { processType: 'ONBOARDING', employeeCode: 'BL9002', fullName: 'Trùng Nguồn', email: 'trungnguon@hcrc.local', startDate: '2026-09-01' }
+      ];
+      DB.users = (DB.users || []).filter(u => u.username !== 'trungnguon01');
+      DB.users.push({ username: 'trungnguon01', name: 'Trùng Nguồn', email: 'trungnguon@hcrc.local', active: true, perms: {} });
+      DB.employeeProfiles = [
+        { employeeCode: 'BL9003', username: 'trungnguon01', status: 'ACTIVE', joinDateAtHcrc: '2020-01-01' }
+      ];
+      resetUserForm();
+      document.getElementById('uEmail').value = 'trungnguon@hcrc.local';
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u10) Cả 2 nguồn cùng khớp Email -> LUÔN ưu tiên Onboarding (đáng tin hơn), không rơi về Hồ Sơ Nhân Sự',
+      r.startDateValue === '2026-09-01' && /lấy từ Onboarding \[BL9002\]/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u11) suggestStartDateFromOnboarding(): KHÔNG khớp cả Onboarding lẫn Hồ Sơ Nhân Sự -> báo rõ cả 2 nguồn, không điền bừa', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [];
+      DB.employeeProfiles = [];
+      resetUserForm();
+      document.getElementById('uEmail').value = 'khongkhoptenaocahet2@hcrc.local';
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u11) Không khớp cả 2 nguồn -> ô vẫn trống + báo rõ đã tìm cả Onboarding lẫn Hồ Sơ Nhân Sự',
+      r.startDateValue === '' && /Onboarding/.test(r.alerts[0] || '') && /Nhân Sự/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
   await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[]/workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] đang gán (không để lại "ma")', async () => {
     if (khoiKinhDoanhId == null) { record('(v) deleteDept() cascade vào deptGroups', false, 'skipped: no group id'); return; }
     const r = await page.evaluate((khoiId) => {
