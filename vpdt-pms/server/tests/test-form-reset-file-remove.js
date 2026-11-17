@@ -1577,12 +1577,25 @@ async function main() {
         await page.evaluate(() => switchTab('hrLifecycle'));
         await page.click('#btnHrpCreateOnboarding');
 
+        // hrpOnbDept/hrpOnbStore/hrpOnbJobTitle ĐỔI TIẾP (11/2026, "dropdown + searchable + single
+        // choice") từ <select> sang ô "sdd*" CHẶT (data-sdd-strict="1") — đọc danh sách qua
+        // `_sddItems` của datalist tương ứng (KHÔNG còn `.options`), "chọn" bằng cách gán thẳng
+        // `.value` (khớp đúng 1 nhãn thật trong danh sách, cùng cách click 1 dòng gợi ý sẽ làm) rồi bắn
+        // 'change' — KHÔNG dùng `page.selectOption()` (chỉ áp dụng cho <select>, sẽ throw trên <input>).
+        function sddItemValues(datalistId) {
+          return (document.getElementById(datalistId)?._sddItems || []).map(it => it.value);
+        }
+        function sddPick(inputId, value) {
+          const el = document.getElementById(inputId);
+          el.value = value;
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         const initialState = await page.evaluate(() => ({
           posType: document.getElementById('hrpOnbPosType').value,
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          deptOptions: Array.from(document.getElementById('hrpOnbDept').options).map(o => o.value).filter(Boolean),
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean)
+          deptOptions: (document.getElementById('hrpOnbDeptDatalist')?._sddItems || []).map(it => it.value),
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')?._sddItems || []).map(it => it.value)
         }));
         assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở form, thực tế "${initialState.posType}"`);
         assertTrue(initialState.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN khi đang ở HO (tiền đề bài test)');
@@ -1591,8 +1604,8 @@ async function main() {
         assertTrue(initialState.jobTitleOptions.length === 0, `Chức Danh phải RỖNG khi chưa chọn Phòng Ban (tiền đề bài test, chọn-đúng-node), thực tế ${JSON.stringify(initialState.jobTitleOptions)}`);
 
         // Chọn Phòng Ban -> Chức Danh cascade đúng theo dept đó.
-        await page.selectOption('#hrpOnbDept', 'Phòng Kế Toán');
-        const afterDeptOptions = await page.evaluate(() => Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean));
+        await page.evaluate((v) => { const el = document.getElementById('hrpOnbDept'); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, 'Phòng Kế Toán');
+        const afterDeptOptions = await page.evaluate(() => (document.getElementById('hrpOnbJobTitleDatalist')?._sddItems || []).map(it => it.value));
         assertTrue(afterDeptOptions.length === 1 && afterDeptOptions[0] === 'Nhân viên Kế Toán', `Chức Danh phải cascade ĐÚNG 1 vị trí của "Phòng Kế Toán", thực tế ${JSON.stringify(afterDeptOptions)}`);
 
         // Chuyển sang Siêu Thị -> cascading phải đổi đúng: ẩn Phòng Ban, hiện Siêu Thị, Chức Danh XOÁ
@@ -1601,8 +1614,8 @@ async function main() {
         const storeState = await page.evaluate(() => ({
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          storeOptions: Array.from(document.getElementById('hrpOnbStore').options).map(o => o.value).filter(Boolean),
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean),
+          storeOptions: (document.getElementById('hrpOnbStoreDatalist')?._sddItems || []).map(it => it.value),
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')?._sddItems || []).map(it => it.value),
           emailRequired: document.getElementById('hrpOnbEmail').required
         }));
         assertTrue(storeState.deptWrapHidden === true, 'Khối Phòng Ban phải ẨN khi đang ở Siêu Thị (tiền đề bài test)');
@@ -1611,13 +1624,13 @@ async function main() {
         assertTrue(storeState.jobTitleOptions.length === 0, `Đổi Vị Trí phải XOÁ Chức Danh (bắt chọn Siêu Thị trước), thực tế ${JSON.stringify(storeState.jobTitleOptions)}`);
         assertTrue(storeState.emailRequired === true, 'Email phải chuyển bắt buộc khi đang ở Siêu Thị (tiền đề bài test)');
 
-        await page.selectOption('#hrpOnbStore', 'Siêu Thị Quận 7');
-        const afterStoreOptions = await page.evaluate(() => Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean));
+        await page.evaluate((v) => { const el = document.getElementById('hrpOnbStore'); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, 'Siêu Thị Quận 7');
+        const afterStoreOptions = await page.evaluate(() => (document.getElementById('hrpOnbJobTitleDatalist')?._sddItems || []).map(it => it.value));
         assertTrue(afterStoreOptions.includes('Nhân viên bán hàng') && afterStoreOptions.includes('Quản lý ca'), `Chức Danh phải đổi sang 2 vị trí của "Siêu Thị Quận 7", thực tế ${JSON.stringify(afterStoreOptions)}`);
 
         await page.fill('#hrpOnbEmployeeCode', 'NV9999');
         await page.fill('#hrpOnbFullName', 'Nguyễn Văn Kiểm Thử');
-        await page.selectOption('#hrpOnbJobTitle', 'Nhân viên bán hàng');
+        await page.evaluate((v) => { const el = document.getElementById('hrpOnbJobTitle'); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, 'Nhân viên bán hàng');
         await page.fill('#hrpOnbEmail', 'test@company.com');
         await page.fill('#hrpOnbPhone', '0912345678');
         await page.fill('#hrpOnbStartDate', '2026-10-01');
@@ -1631,7 +1644,7 @@ async function main() {
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
           deptValue: document.getElementById('hrpOnbDept').value,
           storeValue: document.getElementById('hrpOnbStore').value,
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value).filter(Boolean),
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')?._sddItems || []).map(it => it.value),
           jobTitleValue: document.getElementById('hrpOnbJobTitle').value,
           emailRequired: document.getElementById('hrpOnbEmail').required,
           employeeCode: document.getElementById('hrpOnbEmployeeCode').value,

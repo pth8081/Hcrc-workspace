@@ -1779,7 +1779,7 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u) suggestStartDateFromOnboarding(): 1 kết quả khớp Email -> tự điền + báo thành công', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       // LỖI ĐÃ VÁ (11/2026): fixture TRƯỚC ĐÂY dùng `type: 'ONBOARDING'` — khớp ĐÚNG field SAI mà
       // suggestStartDateFromOnboarding() từng gõ nhầm (`p.type` thay vì `p.processType`), nên test này
       // tưởng PASS nhưng thực ra không hề phát hiện được lỗi thật (field đúng trên hrProcesses là
@@ -1788,10 +1788,15 @@ async function scenario(name, fn) {
       DB.hrProcesses = [
         { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
       ];
+      // suggestStartDateFromOnboarding() nay ASYNC (nguồn 2 gọi fetch thật, xem (u8)-(u12)) — đăng ký
+      // sẵn handler rỗng cho employee-directory (kịch bản này chỉ cần nguồn 1 Onboarding, không cần
+      // rơi về nguồn 2) để không rơi vào nhánh fetch thật (không có server thật ở bài test này).
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 200, body: { directory: [] } });
       resetUserForm();
       document.getElementById('uEmail').value = 'tanbinh@hcrc.local';
       window.__alerts.length = 0;
-      suggestStartDateFromOnboarding();
+      await suggestStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u) 1 kết quả khớp theo Email -> tự điền đúng Ngày Vào Làm Việc + báo rõ nguồn (Onboarding)',
@@ -1799,11 +1804,14 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u2) suggestStartDateFromOnboarding(): không khớp Email/Họ Tên nào -> báo rõ, KHÔNG điền bừa', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 200, body: { directory: [] } });
       resetUserForm();
       document.getElementById('uEmail').value = 'khongkhoptenaocahet@hcrc.local';
       window.__alerts.length = 0;
-      suggestStartDateFromOnboarding();
+      await suggestStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u2) Không tìm thấy hồ sơ Onboarding khớp -> ô Ngày Vào Làm Việc vẫn trống + báo rõ lý do',
@@ -1825,7 +1833,7 @@ async function scenario(name, fn) {
   // muốn tự động link, không có mới bấm nút kéo") — gắn data-op-change trên #uEmail/#uFullName, tự điền
   // NGAY không cần bấm nút, hoàn toàn im lặng (không alert).
   await scenario('(u4) autoFillStartDateFromOnboarding(): rời khỏi ô Email (data-op-change THẬT, không gọi hàm trực tiếp) -> tự điền NGAY, không cần bấm nút, không alert', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [
         { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
       ];
@@ -1834,6 +1842,9 @@ async function scenario(name, fn) {
       const input = document.getElementById('uEmail');
       input.value = 'tanbinh@hcrc.local';
       input.dispatchEvent(new Event('change', { bubbles: true })); // mô phỏng ĐÚNG hành vi rời khỏi ô (blur) ngoài đời thật
+      // autoFillStartDateFromOnboarding() nay ASYNC (xem (u9)) — kích hoạt qua CSP delegation nên không
+      // await trực tiếp được, chờ 1 nhịp để promise bên trong chạy xong trước khi đọc lại DOM.
+      await new Promise(resolve => setTimeout(resolve, 50));
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u4) Rời khỏi ô Email khớp đúng 1 hồ sơ -> tự điền Ngày Vào Làm Việc, KHÔNG hiện alert nào (tự động, im lặng)',
@@ -1841,25 +1852,28 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u5) autoFillStartDateFromOnboarding(): Ngày Vào Làm Việc ĐÃ CÓ giá trị sẵn -> KHÔNG tự ghi đè', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [
         { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
       ];
       resetUserForm();
       document.getElementById('uStartDate').value = '2026-01-15'; // admin đã tự gõ/đã có sẵn (VD đang Sửa 1 user cũ)
       document.getElementById('uEmail').value = 'tanbinh@hcrc.local';
-      autoFillStartDateFromOnboarding();
+      await autoFillStartDateFromOnboarding();
       return document.getElementById('uStartDate').value;
     });
     record('(u5) Ô đã có sẵn giá trị -> giữ nguyên, KHÔNG bị tự động ghi đè bởi kết quả Onboarding', r === '2026-01-15', r);
   });
 
   await scenario('(u6) autoFillStartDateFromOnboarding(): KHÔNG khớp hồ sơ nào -> im lặng, ô vẫn trống (dùng nút "📋 Tìm Trong Onboarding" để tra thủ công)', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 200, body: { directory: [] } });
       resetUserForm();
       window.__alerts.length = 0;
       document.getElementById('uEmail').value = 'khongkhoptenaocahet@hcrc.local';
-      autoFillStartDateFromOnboarding();
+      await autoFillStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u6) Không khớp -> ô vẫn trống, KHÔNG hiện alert nào (tự động không làm phiền, để nút bấm tay xử lý)',
@@ -1867,7 +1881,7 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u7) autoFillStartDateFromOnboarding(): CÓ NHIỀU hồ sơ cùng khớp -> im lặng bỏ qua (mơ hồ, để nút bấm tay cho tự chọn)', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [
         { processType: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Văn Trùng Tên', email: 'tentrung1@hcrc.local', startDate: '2026-09-01' },
         { processType: 'ONBOARDING', employeeCode: 'BL002', fullName: 'Nguyễn Văn Trùng Tên', email: 'tentrung2@hcrc.local', startDate: '2026-10-01' }
@@ -1875,7 +1889,7 @@ async function scenario(name, fn) {
       resetUserForm();
       window.__alerts.length = 0;
       document.getElementById('uFullName').value = 'Nguyễn Văn Trùng Tên';
-      autoFillStartDateFromOnboarding();
+      await autoFillStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u7) Nhiều hồ sơ cùng khớp Họ Tên -> KHÔNG tự chọn bừa 1 trong 2, ô vẫn trống, không alert',
@@ -1886,18 +1900,29 @@ async function scenario(name, fn) {
   // 11/2026, theo báo cáo người dùng "các hồ sơ cũ up lên phần mềm không qua onboarding") — hồ sơ Nhân
   // Sự tạo tay/import Excel KHÔNG qua Onboarding vẫn có sẵn joinDateAtHcrc, CHỈ dùng khi Onboarding (nguồn
   // 1) không tìm thấy gì.
+  //
+  // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — hồ sơ ĐÃ CÓ "Ngày vào HCRC" nhưng nút vẫn báo "không tìm
+  // thấy"): bản đầu các scenario (u8)-(u11) này TỰ seed thẳng `DB.employeeProfiles` rồi gọi hàm — PASS
+  // giả, vì `findEmployeeProfileStartDateCandidates()` thật SỬA LẠI để gọi GET /api/hr-profile/
+  // employee-directory (DB.employeeProfiles KHÔNG BAO GIỜ được nạp thật ở client, xem chú thích đầy đủ
+  // tại hàm đó) — test seed DB.employeeProfiles tưởng đúng nhưng không hề phản ánh đường đi THẬT, nên
+  // không bắt được bug thật người dùng gặp. Sửa lại: đăng ký `window.__fetchHandlers['GET /api/hr-profile/
+  // employee-directory']` (đúng khuôn mock fetch có sẵn của file này) + xoá cache `_hrpStartDateDirectoryCache`
+  // trước MỖI scenario (biến module-scope phía trang, cache 1 lần/trang — phải reset tay giữa các
+  // scenario vì mỗi scenario seed dữ liệu khác nhau).
   await scenario('(u8) suggestStartDateFromOnboarding(): KHÔNG có Onboarding nào khớp, nhưng CÓ hồ sơ Nhân Sự (đã liên kết tài khoản) khớp Email của tài khoản liên kết -> rơi về Hồ Sơ Nhân Sự, báo rõ nguồn', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [];
       DB.users = (DB.users || []).filter(u => u.username !== 'nvcu01');
       DB.users.push({ username: 'nvcu01', name: 'Nguyễn Văn Cũ', email: 'nvcu01@hcrc.local', active: true, perms: {} });
-      DB.employeeProfiles = [
-        { employeeCode: 'BL9001', username: 'nvcu01', status: 'ACTIVE', joinDateAtHcrc: '2021-04-05' }
-      ];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL9001', fullName: 'Nguyễn Văn Cũ', username: 'nvcu01', joinDateAtHcrc: '2021-04-05' }] }
+      });
       resetUserForm();
       document.getElementById('uEmail').value = 'nvcu01@hcrc.local';
       window.__alerts.length = 0;
-      suggestStartDateFromOnboarding();
+      await suggestStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u8) Không có Onboarding, rơi về Hồ Sơ Nhân Sự -> điền đúng joinDateAtHcrc + báo rõ nguồn "Hồ Sơ Nhân Sự"',
@@ -1905,19 +1930,23 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u9) autoFillStartDateFromOnboarding(): đang SỬA tài khoản đã có (Tên đăng nhập có sẵn), KHÔNG có Onboarding -> tự điền từ hồ sơ Nhân Sự đã liên kết ĐÚNG username đó (không cần gõ lại Email/Họ Tên)', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [];
       DB.users = (DB.users || []).filter(u => u.username !== 'thuyphuong9118');
       DB.users.push({ username: 'thuyphuong9118', name: 'Vũ Thúy Phương', email: 'thuyphuong9118@gmail.com', active: true, perms: {} });
-      DB.employeeProfiles = [
-        { employeeCode: 'BL1358', username: 'thuyphuong9118', status: 'ACTIVE', joinDateAtHcrc: '2021-04-05' }
-      ];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL1358', fullName: 'Vũ Thúy Phương', username: 'thuyphuong9118', joinDateAtHcrc: '2021-04-05' }] }
+      });
       resetUserForm();
       document.getElementById('editUserId').value = '1';
       document.getElementById('uUsername').value = 'thuyphuong9118'; // mô phỏng đang Sửa 1 tài khoản ĐÃ CÓ
       const input = document.getElementById('uEmail');
       input.value = 'thuyphuong9118@gmail.com';
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      // autoFillStartDateFromOnboarding() chạy qua CSP delegation (data-op-change, async, xem runCspOp()
+      // ở core.js) — đợi 1 nhịp để promise bên trong chạy xong trước khi đọc lại DOM.
+      await new Promise(resolve => setTimeout(resolve, 50));
       return { startDateValue: document.getElementById('uStartDate').value };
     });
     record('(u9) Sửa tài khoản đã liên kết hồ sơ CŨ (không qua Onboarding) -> tự điền đúng Ngày Vào HCRC từ Hồ Sơ Nhân Sự',
@@ -1925,19 +1954,20 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u10) findStartDateCandidates(): Onboarding VÀ Hồ Sơ Nhân Sự CÙNG khớp -> ưu tiên Onboarding, KHÔNG trộn/lặp 2 nguồn', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [
         { processType: 'ONBOARDING', employeeCode: 'BL9002', fullName: 'Trùng Nguồn', email: 'trungnguon@hcrc.local', startDate: '2026-09-01' }
       ];
       DB.users = (DB.users || []).filter(u => u.username !== 'trungnguon01');
       DB.users.push({ username: 'trungnguon01', name: 'Trùng Nguồn', email: 'trungnguon@hcrc.local', active: true, perms: {} });
-      DB.employeeProfiles = [
-        { employeeCode: 'BL9003', username: 'trungnguon01', status: 'ACTIVE', joinDateAtHcrc: '2020-01-01' }
-      ];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL9003', fullName: 'Trùng Nguồn', username: 'trungnguon01', joinDateAtHcrc: '2020-01-01' }] }
+      });
       resetUserForm();
       document.getElementById('uEmail').value = 'trungnguon@hcrc.local';
       window.__alerts.length = 0;
-      suggestStartDateFromOnboarding();
+      await suggestStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u10) Cả 2 nguồn cùng khớp Email -> LUÔN ưu tiên Onboarding (đáng tin hơn), không rơi về Hồ Sơ Nhân Sự',
@@ -1945,17 +1975,33 @@ async function scenario(name, fn) {
   });
 
   await scenario('(u11) suggestStartDateFromOnboarding(): KHÔNG khớp cả Onboarding lẫn Hồ Sơ Nhân Sự -> báo rõ cả 2 nguồn, không điền bừa', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       DB.hrProcesses = [];
-      DB.employeeProfiles = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 200, body: { directory: [] } });
       resetUserForm();
       document.getElementById('uEmail').value = 'khongkhoptenaocahet2@hcrc.local';
       window.__alerts.length = 0;
-      suggestStartDateFromOnboarding();
+      await suggestStartDateFromOnboarding();
       return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
     });
     record('(u11) Không khớp cả 2 nguồn -> ô vẫn trống + báo rõ đã tìm cả Onboarding lẫn Hồ Sơ Nhân Sự',
       r.startDateValue === '' && /Onboarding/.test(r.alerts[0] || '') && /Nhân Sự/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u12) findEmployeeProfileStartDateCandidates(): GET /api/hr-profile/employee-directory trả 403 (admin không có quyền xem Hồ Sơ Nhân Sự) -> coi như không tìm thấy, KHÔNG lỗi/crash', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 403, body: { error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' } });
+      resetUserForm();
+      document.getElementById('uEmail').value = 'bat.ky@hcrc.local';
+      window.__alerts.length = 0;
+      await suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u12) 403 (thiếu quyền xem Hồ Sơ Nhân Sự) -> không crash, coi như không tìm thấy (đúng tinh thần "chỉ là gợi ý")',
+      r.startDateValue === '' && /Không tìm thấy/.test(r.alerts[0] || ''), JSON.stringify(r));
   });
 
   await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[]/workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] đang gán (không để lại "ma")', async () => {

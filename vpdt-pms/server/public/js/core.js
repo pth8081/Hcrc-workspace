@@ -15186,6 +15186,31 @@ document.addEventListener('click', (ev) => {
   });
 });
 
+// sdd* CHẶT (data-sdd-strict="1", MỚI 11/2026 — theo yêu cầu người dùng "Onboarding chỗ phòng, siêu thị
+// cho phép chọn kiểu dropdown + searchable + single choice... thay vì chuỗi dài chọn kiểu select" —
+// NHƯNG vẫn phải giữ đúng yêu cầu TRƯỚC ĐÓ đã xác nhận qua AskUserQuestion: "chỉ cho chọn đúng node Cơ
+// Cấu Tổ Chức, không cho gõ tự do") — mọi ô sdd* KHÁC vẫn cho gõ tự do như cũ (hành vi gốc không đổi),
+// CHỈ ô có đánh dấu data-sdd-strict="1" này mới bị ép: rời khỏi ô (focusout, nổi bọt nên bắt ở document
+// được, khác hẳn 'blur' không nổi bọt) mà giá trị đang gõ KHÔNG khớp TUYỆT ĐỐI 1 nhãn nào trong
+// sddSetOptions() đã nạp cho ô đó thì tự xoá về rỗng (coi như "chưa chọn") — không giữ lại text tự do
+// nửa vời. Rỗng luôn hợp lệ (ô bắt buộc hay không xử lý ở lớp validate riêng của từng form, không phải
+// ở đây). Bắn lại 'change' khi THẬT SỰ xoá (có giá trị trước đó) để các cascade phụ thuộc (VD Chức Danh
+// theo Phòng Ban/Siêu Thị) tự reset đúng theo giá trị rỗng mới, giống hệt hành vi <select> cũ.
+document.addEventListener('focusout', (ev) => {
+  const input = ev.target;
+  if (!input.getAttribute || input.getAttribute('data-sdd-strict') !== '1') return;
+  const listId = input.getAttribute('data-sdd-list');
+  const dd = listId && document.getElementById(listId);
+  if (!dd || !dd._sddItems) return;
+  const val = input.value.trim();
+  if (!val) return;
+  if (!dd._sddItems.some(it => it.label === val)) {
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+});
+
 // ==========================================
 // Thông báo "bắt buộc nhập/định dạng sai" hiện TRÊN ô thay vì bong bóng mặc định của trình duyệt (11/2026,
 // theo yêu cầu người dùng — phản ánh bằng ảnh chụp màn hình "Please enter a valid value..." ở ô Thời Gian

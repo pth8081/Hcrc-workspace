@@ -366,7 +366,16 @@ router.get('/employee-directory', async (req, res) => {
       // màn Hợp Đồng Lao Động, không chỉ Mã NV): KHÔNG phải field nhạy cảm, lấy đúng giá trị đã resolve
       // từ Cơ Cấu Tổ Chức (applyPositionAssignment()), không phải snapshot tĩnh lúc tạo hợp đồng.
       dept: p.dept || null,
-      jobTitle: p.jobTitle || null
+      jobTitle: p.jobTitle || null,
+      // joinDateAtHcrc (MỚI 11/2026, LỖI ĐÃ VÁ — báo cáo người dùng: hồ sơ ĐÃ CÓ "Ngày vào HCRC" nhưng
+      // "Tìm Trong Onboarding/Hồ Sơ NS" ở form Người Dùng/Mã NV ↔ Tài Khoản vẫn báo "không tìm thấy") —
+      // findEmployeeProfileStartDateCandidates() (module-admin-submissiongroups.js) TRƯỚC ĐÂY đọc thẳng
+      // `DB.employeeProfiles` ở client, nhưng collection đó CHƯA TỪNG được nạp vào DB.* qua bất kỳ đường
+      // nào (employeeProfiles bị chặn hẳn khỏi GET /api/data chung — dữ liệu nhạy cảm, xem CLAUDE.md) —
+      // `DB.employeeProfiles` LUÔN rỗng trong thực tế dù chỉ test tự seed tay mới "thấy" hoạt động. Thêm
+      // field THẬT DUY NHẤT cần (ngày vào làm — KHÔNG phải thông tin nhạy cảm, cùng mức với dept/jobTitle
+      // ở trên) vào route đã có sẵn này để client gọi qua API thật thay vì đọc 1 mảng không tồn tại.
+      joinDateAtHcrc: p.joinDateAtHcrc || null
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }

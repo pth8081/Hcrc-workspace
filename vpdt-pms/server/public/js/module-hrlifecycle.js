@@ -212,31 +212,44 @@ function hrpBuildStrictSelectOptionsHTML(values, currentValue, placeholder) {
 
 // populateHrpOnboardingDeptDropdowns() — ĐỔI HẲN nguồn dữ liệu (11/2026): TRƯỚC ĐÂY lấy DB.depts/
 // DB.stores (danh mục Phân Quyền, có thể không khớp vị trí thật nào) qua ô tìm-kiếm-gõ-chọn tự do
-// (sdd*) — nay lấy ĐÚNG Cơ Cấu Tổ Chức qua hrpOnboardingPositionOptions + đổi hẳn sang <select> CHỌN
-// ĐÚNG, khớp đúng extraValidate() mới (lib/createValidation.js) chặn cứng dept/jobTitle không khớp 1 Vị
-// Trí có thật. hrpOnbDept (Phòng Ban, HO) và hrpOnbStore (Siêu Thị) CÙNG dùng 1 danh sách dept đầy đủ từ
-// Cơ Cấu Tổ Chức (node POSITION không tự phân biệt HO/Siêu Thị theo dept cha) — người dùng tự chọn đúng ô
-// đang hiện theo Vị Trí (posType) đã chọn ở trên.
+// (sdd*) — nay lấy ĐÚNG Cơ Cấu Tổ Chức qua hrpOnboardingPositionOptions, khớp đúng extraValidate() mới
+// (lib/createValidation.js) chặn cứng dept/jobTitle không khớp 1 Vị Trí có thật. hrpOnbDept (Phòng Ban,
+// HO) và hrpOnbStore (Siêu Thị) CÙNG dùng 1 danh sách dept đầy đủ từ Cơ Cấu Tổ Chức (node POSITION không
+// tự phân biệt HO/Siêu Thị theo dept cha) — người dùng tự chọn đúng ô đang hiện theo Vị Trí (posType) đã
+// chọn ở trên.
+// ĐỔI TIẾP (11/2026, "dropdown + searchable + single choice thay vì chuỗi dài select") — nạp danh mục
+// qua sddSetOptions() (ô "sdd*" CHẶT, data-sdd-strict="1" ở HTML) thay vì dựng <option> của
+// hrpBuildStrictSelectOptionsHTML() — hàm đó vẫn giữ lại, dùng cho form Sửa (hrpEditDept/Store/JobTitle,
+// chưa đổi theo yêu cầu này). KHÔNG xoá giá trị input.value đang gõ dở ở đây — nạp lại danh mục không tự
+// ý xoá lựa chọn hiện tại (khác lúc trước <select> luôn reset theo `selected`), giá trị không còn hợp lệ
+// sẽ tự bị dọn khi người dùng rời ô (focusout CHẶT, xem core.js).
 async function populateHrpOnboardingDeptDropdowns() {
   await loadHrpOnboardingPositionOptions();
   const depts = hrpDistinctOnboardingDepts();
-  const deptSel = document.getElementById('hrpOnbDept');
-  const storeSel = document.getElementById('hrpOnbStore');
-  if (deptSel) deptSel.innerHTML = hrpBuildStrictSelectOptionsHTML(depts, deptSel.value, depts.length ? '-- Chọn Phòng Ban --' : null);
-  if (storeSel) storeSel.innerHTML = hrpBuildStrictSelectOptionsHTML(depts, storeSel.value, depts.length ? '-- Chọn Siêu Thị --' : null);
+  sddSetOptions('hrpOnbDeptDatalist', depts);
+  sddSetOptions('hrpOnbStoreDatalist', depts);
+  const deptInput = document.getElementById('hrpOnbDept');
+  const storeInput = document.getElementById('hrpOnbStore');
+  if (deptInput) deptInput.placeholder = depts.length ? '-- Chọn Phòng Ban --' : '(Chưa có dữ liệu trong Cơ Cấu Tổ Chức)';
+  if (storeInput) storeInput.placeholder = depts.length ? '-- Chọn Siêu Thị --' : '(Chưa có dữ liệu trong Cơ Cấu Tổ Chức)';
   populateHrpOnboardingJobTitleOptions();
 }
 // populateHrpOnboardingJobTitleOptions() — Chức Danh CASCADE theo đúng Phòng Ban/Siêu Thị đang chọn
 // (không còn tách riêng theo posType như trước — TRƯỚC ĐÂY lấy DB.jobTitles/DB.storeJobTitles theo
 // posType, nay lọc ĐÚNG hrpOnboardingPositionOptions theo dept đang chọn, khớp 1-1 với cách server khớp
 // findPositionNodeForUser(), tránh cho chọn 1 cặp dept/jobTitle không tồn tại vị trí thật nào).
+// ĐỔI TIẾP (11/2026, cùng đợt sdd* CHẶT ở trên) — LUÔN xoá giá trị Chức Danh đang chọn khi hàm này chạy
+// (giữ ĐÚNG hành vi cũ của <select> — đổi Phòng Ban/Siêu Thị luôn reset Chức Danh về rỗng, tránh giữ lại
+// 1 Chức Danh không còn thuộc Phòng Ban/Siêu Thị mới chọn).
 function populateHrpOnboardingJobTitleOptions() {
-  const select = document.getElementById('hrpOnbJobTitle');
-  if (!select) return;
+  const input = document.getElementById('hrpOnbJobTitle');
+  if (!input) return;
   const posType = document.getElementById('hrpOnbPosType')?.value;
   const dept = posType === 'STORE' ? document.getElementById('hrpOnbStore')?.value : document.getElementById('hrpOnbDept')?.value;
   const options = hrpJobTitlesForOnboardingDept(dept);
-  select.innerHTML = hrpBuildStrictSelectOptionsHTML(options, '', dept ? (options.length ? '-- Chọn Chức Danh --' : '(Không có Chức Danh nào thuộc Phòng Ban/Siêu Thị này)') : '-- Chọn Phòng Ban/Siêu Thị trước --');
+  sddSetOptions('hrpOnbJobTitleDatalist', options);
+  input.value = '';
+  input.placeholder = dept ? (options.length ? '-- Chọn Chức Danh --' : '(Không có Chức Danh nào thuộc Phòng Ban/Siêu Thị này)') : '-- Chọn Phòng Ban/Siêu Thị trước --';
 }
 function onHrpOnboardingPosTypeChange() {
   const posType = document.getElementById('hrpOnbPosType').value;

@@ -143,23 +143,32 @@
                  ngay") — ĐỔI HẲN từ ô tìm-kiếm-gõ-chọn tự do "sdd*" (DB.depts/DB.stores/DB.jobTitles/
                  DB.storeJobTitles, danh mục Phân Quyền) sang <select> CHỌN ĐÚNG node Cơ Cấu Tổ Chức (xác
                  nhận trực tiếp qua AskUserQuestion: "Chỉ cho chọn đúng node Cơ Cấu Tổ Chức", KHÔNG cho gõ
-                 tự do nữa) — <option> nạp ĐỘNG từ GET /api/hr-processes/onboarding-position-options (đọc
-                 đúng bản APPLIED hiện tại) qua populateHrpOnboardingDeptDropdowns()/
-                 populateHrpOnboardingJobTitleOptions() ở module-hrlifecycle.js, Chức Danh CASCADE theo
-                 đúng Phòng Ban/Siêu Thị đang chọn. Server khớp ĐÚNG 1 Vị Trí có thật (orgChart.
-                 findPositionNodeForUser(), lib/createValidation.js) — không có vị trí nào khớp sẽ CHẶN
-                 CỨNG (400), không chỉ cảnh báo. -->
+                 tự do nữa).
+                 ĐỔI TIẾP (11/2026, theo yêu cầu người dùng kế tiếp: "cho phép chọn kiểu dropdown +
+                 searchable + single choice. Tìm cho nhanh thay vì một chuỗi dài chọn kiểu select") — từ
+                 <select> dài sang lại ô "sdd*" tìm-kiếm-gõ-chọn, NHƯNG thêm data-sdd-strict="1" (MỚI, xem
+                 chú thích đầy đủ tại khối focusout trong core.js) để VẪN giữ đúng yêu cầu TRƯỚC ĐÓ — gõ
+                 không khớp đúng 1 gợi ý nào thì tự xoá về rỗng khi rời ô, không cho giữ lại text tự do.
+                 <option> nạp ĐỘNG từ GET /api/hr-processes/onboarding-position-options (đọc đúng bản
+                 APPLIED hiện tại) qua populateHrpOnboardingDeptDropdowns()/
+                 populateHrpOnboardingJobTitleOptions() ở module-hrlifecycle.js (nay gọi sddSetOptions()
+                 thay vì dựng <option>), Chức Danh CASCADE theo đúng Phòng Ban/Siêu Thị đang chọn. Server
+                 vẫn khớp ĐÚNG 1 Vị Trí có thật (orgChart.findPositionNodeForUser(), lib/createValidation.js)
+                 — không có vị trí nào khớp sẽ CHẶN CỨNG (400), không chỉ cảnh báo, bất kể client gửi gì. -->
             <div id="hrpOnbDeptWrap">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <select id="hrpOnbDept" data-op-change="populateHrpOnboardingJobTitleOptions" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbDept" data-sdd-list="hrpOnbDeptDatalist" data-sdd-strict="1" data-op-change="populateHrpOnboardingJobTitleOptions" autocomplete="off" placeholder="-- Chọn Phòng Ban --" class="w-full border p-1.5 rounded text-xs">
+              <div id="hrpOnbDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div id="hrpOnbStoreWrap" class="hidden">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
-              <select id="hrpOnbStore" data-op-change="populateHrpOnboardingJobTitleOptions" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbStore" data-sdd-list="hrpOnbStoreDatalist" data-sdd-strict="1" data-op-change="populateHrpOnboardingJobTitleOptions" autocomplete="off" placeholder="-- Chọn Siêu Thị --" class="w-full border p-1.5 rounded text-xs">
+              <div id="hrpOnbStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
-              <select id="hrpOnbJobTitle" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbJobTitle" data-sdd-list="hrpOnbJobTitleDatalist" data-sdd-strict="1" autocomplete="off" placeholder="-- Chọn Phòng Ban/Siêu Thị trước --" class="w-full border p-1.5 rounded text-xs">
+              <div id="hrpOnbJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <!-- Số Điện Thoại đứng NGAY SAU Chức Danh (LỖI ĐÃ VÁ 11/2026 trước đó: "Tab sau Chức Danh
                  nhảy sang Email, đáng lẽ phải sang SĐT" — nay Email đã dời hẳn lên đầu nên thứ tự này tự
