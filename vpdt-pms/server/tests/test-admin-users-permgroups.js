@@ -187,6 +187,18 @@ async function scenario(name, fn) {
 
     const adminLoginUser = DB.users[0];
     finishLogin(adminLoginUser);
+    // LỖI ĐÃ VÁ (flaky test ngẫu nhiên, mức Thấp — không liên quan logic nghiệp vụ): finishLogin() tự
+    // khởi động startApprovalPolling() (setInterval 3s, xem APPROVAL_POLL_INTERVAL_MS ở core.js) —
+    // window.fetch giả ở trên trả MẶC ĐỊNH { status: 200, body: {} } cho MỌI request CHƯA đăng ký
+    // handler, nên GET /api/approvals/pending-signature "thành công" với body rỗng, kích hoạt nhánh (c)
+    // của runApprovalPollTick() gọi initDatabase({silent:true}) — initDatabase() đọc GET /api/data,
+    // CŨNG rơi vào đúng fetch giả mặc định đó (trả {}), NẠP ĐÈ TOÀN BỘ DB.* (kể cả DB.deptGroups) bằng
+    // dữ liệu rỗng NGẪU NHIÊN giữa chừng bất kỳ scenario nào (tuỳ đúng lúc nhịp 3 giây rơi vào quãng nào
+    // trong tổng thời gian chạy — khớp đúng lỗi "Cannot read properties of undefined (reading 'depts')"
+    // ở scenario (v) xuất hiện ngẫu nhiên không phải mọi lần chạy). Bài test này không cần mô phỏng
+    // polling thật — dừng NGAY sau đăng nhập, không ảnh hưởng gì tới các scenario đang kiểm chứng.
+    stopApprovalPolling();
+    stopNotifBadgePolling();
 
     return {
       loginOk: !document.getElementById('loginSection') || document.getElementById('loginSection').classList.contains('hidden'),

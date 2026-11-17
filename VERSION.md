@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**30.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.82 (2026-11): Dọn flaky test (test-admin-users-permgroups.js) — KHÔNG đổi hành vi sản phẩm
+
+Tìm ra gốc rễ thật của lỗi test ngẫu nhiên đã nêu ở v30.81: `finishLogin()` tự khởi động
+`startApprovalPolling()` (nhịp 3 giây) — fetch giả mặc định của bài test trả `{status:200, body:{}}`
+cho MỌI request chưa đăng ký handler, khiến `GET /api/approvals/pending-signature` "thành công" với
+body rỗng, kích hoạt `initDatabase({silent:true})` (cũng rơi vào fetch giả mặc định, trả `{}`) nạp đè
+TOÀN BỘ `DB.*` (kể cả `DB.deptGroups`) bằng dữ liệu rỗng — đúng lúc nhịp 3 giây rơi vào quãng nào trong
+tổng thời gian chạy test là NGẪU NHIÊN, khớp đúng triệu chứng "thỉnh thoảng mới đỏ". Thêm
+`stopApprovalPolling()`/`stopNotifBadgePolling()` ngay sau đăng nhập trong bài test — không cần mô
+phỏng polling thật ở đây. Xác nhận ổn định qua 4 lần chạy liên tiếp (142/142 cả 4 lần).
 
 ## v30.81 (2026-11): "Ngày Vào Làm Việc" (form Người Dùng) rơi về Hồ Sơ Nhân Sự khi không có Onboarding
 
