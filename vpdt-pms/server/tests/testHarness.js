@@ -1983,6 +1983,27 @@ function createDispatcher(state) {
         return { status: 200, body: { ok: true, created: prepared.toCreate.map(u => ({ employeeCode: u.username, name: u.name })), skipped: [...prepared.skipped, ...linkFailures.map(f => ({ employeeCode: f.employeeCode, name: f.employeeCode, reason: f.reason }))] } };
       }
 
+      // POST /api/data/users (__patchUser, MỚI 11/2026 — demo "✏️ Sửa Mapping", xem umapSubmitFixMapping()
+      // module-hethong-tabs.js, dùng lại ĐÚNG syncUserPatch() thật) — mock ĐƠN GIẢN HOÁ (KHÔNG mirror đủ
+      // ~15 cascade thật của routes/data.js isUsersPatchMode, quá nhiều cho mock thuần state) — chỉ cần
+      // đủ cascade employeeProfiles.username để demo thấy report tự cập nhật đúng sau khi đổi tên đăng
+      // nhập (mirror cascadeUsernameChangesToProfiles() ở mức tối thiểu). Mảng cũ (Nhập Excel hàng
+      // loạt...) KHÔNG cần cho demo này, trả lỗi rõ thay vì 404 mù mờ nếu lỡ gọi nhầm.
+      if (pathName === '/api/data/users' && method === 'POST') {
+        const patchUser = body?.__patchUser;
+        if (!patchUser) return { status: 400, body: { error: 'Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này' } };
+        const idx = state.users.findIndex(u => u.id === patchUser.id);
+        const oldUser = idx !== -1 ? state.users[idx] : null;
+        if (oldUser && oldUser.username !== patchUser.username) {
+          if (state.users.some(u => u.id !== patchUser.id && u.username === patchUser.username)) {
+            return { status: 400, body: { error: `Tên đăng nhập "${patchUser.username}" đã có người dùng khác` } };
+          }
+          (state.employeeProfiles || []).forEach(p => { if (p.username === oldUser.username) p.username = patchUser.username; });
+        }
+        if (idx === -1) state.users.push(patchUser); else state.users[idx] = patchUser;
+        return { status: 200, body: { item: patchUser, usersVersion: `v-${Date.now()}` } };
+      }
+
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
     } catch (err) {
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };

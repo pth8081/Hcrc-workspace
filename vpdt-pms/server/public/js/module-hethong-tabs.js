@@ -1321,7 +1321,7 @@ function renderUsernameMappingTable() {
           <td class="p-2 text-gray-600">${escapeHtml([r.dept, r.jobTitle].filter(Boolean).join(' — ') || '—')}</td>
           <td class="p-2">${UMAP_STATUS_BADGE[r.status] || ''}</td>
           <td class="p-2 font-mono">${r.currentUsernameHasWhitespace ? umapWhitespaceChip(r.currentUsername) : escapeHtml(r.currentUsername || '—')}</td>
-          <td class="p-2">${r.status === 'MISMATCH' ? `<button type="button" data-op="umapGoToProfile" data-arg0="${escapeHtml(r.employeeCode)}" class="text-teal-700 font-bold hover:underline">Xem Hồ Sơ →</button>` : ''}</td>
+          <td class="p-2 space-x-2 whitespace-nowrap">${r.status === 'MISMATCH' ? `<button type="button" data-op="umapGoToProfile" data-arg0="${escapeHtml(r.employeeCode)}" class="text-teal-700 font-bold hover:underline">Xem Hồ Sơ →</button><button type="button" data-op="umapOpenFixMappingModal" data-arg0="${escapeHtml(r.employeeCode)}" class="text-indigo-700 font-bold hover:underline">✏️ Sửa Mapping</button>` : ''}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
@@ -1349,6 +1349,64 @@ async function umapGoToProfile(employeeCode) {
   await switchTab('hrProfile');
   setHrProfileView('MANAGE');
   await openHrpfDetailModal(employeeCode, true);
+}
+
+// "✏️ Sửa Mapping" (MỚI, theo yêu cầu người dùng: "sửa mapping giữa mã nhân viên và tên đăng nhập ngay
+// trong tab mã nv -- tài khoản. Chỉ mapping ko sửa mã nhân viên bên nhân sự") — CHỈ cho nhóm ⚠️ Lệch mã.
+// Đổi ĐÚNG field "username" của tài khoản VPDT đã liên kết, dùng lại NGUYÊN VẸN syncUserPatch()
+// (module-admin-submissiongroups.js, group "admin-permgroups" — "hethong-tabs" đã khai deps tới nhóm
+// này ở MODULE_LOAD_GROUPS/core.js nên gọi thẳng an toàn, không cần ensureFnReady()) — route thật
+// (POST /api/data/users, isUsersPatchMode) tự chạy ĐÚNG pipeline đổi tên đăng nhập có sẵn của hệ thống
+// (kiểm tra trùng tên, cascade sang mọi collection tham chiếu username: người quản lý, người duyệt,
+// người được giao việc, hồ sơ nhân sự liên kết...) — KHÔNG viết lại logic đổi tên đăng nhập ở đây.
+// Mã Nhân Viên (employeeProfiles.employeeCode) hoàn toàn KHÔNG bị đụng tới — route users không ghi gì
+// vào employeeProfiles ngoài cascade username tự động (chỉ đồng bộ lại employeeProfiles.username, đúng
+// liên kết, không đổi employeeCode).
+function umapOpenFixMappingModal(employeeCode) {
+  const row = (_umapReport.rows || []).find(r => r.employeeCode === employeeCode);
+  if (!row || row.status !== 'MISMATCH') return;
+  const user = (DB.users || []).find(u => u.username === row.currentUsername);
+  if (!user) { alert(`⛔ Không tìm thấy tài khoản "${row.currentUsername}" trong danh sách Người Dùng đã tải — tải lại trang rồi thử lại.`); return; }
+  if (user.username === 'admin') { alert('⛔ Không thể đổi tên đăng nhập của tài khoản "admin" gốc.'); return; }
+  const bodyHTML = `
+    <div class="space-y-3 text-left text-xs">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên (Hồ Sơ Nhân Sự — KHÔNG đổi)</label>
+        <div class="border rounded p-2 bg-gray-100 font-mono">${escapeHtml(row.employeeCode)}</div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tên Đăng Nhập hiện tại</label>
+        <div class="border rounded p-2 bg-gray-100 font-mono">${escapeHtml(row.currentUsername)}</div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tên Đăng Nhập mới</label>
+        <input id="umapFixUsernameInput" value="${escapeHtml(row.employeeCode)}" autocomplete="off" class="w-full border p-1.5 rounded font-mono">
+        <p class="text-[11px] text-gray-500 mt-1">Gợi ý sẵn đúng bằng Mã Nhân Viên (quy tắc hệ thống) — sửa lại nếu cần giá trị khác.</p>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">⚠️ Đổi Tên Đăng Nhập sẽ ảnh hưởng LẦN ĐĂNG NHẬP TIẾP THEO của người dùng này (tên cũ không còn dùng được) và tự động cập nhật mọi nơi đang tham chiếu tên đăng nhập này (người quản lý, người duyệt, người được giao việc...) — dùng ĐÚNG cơ chế đổi tên đăng nhập có sẵn của hệ thống. <b>Mã Nhân Viên ở Hồ Sơ Nhân Sự GIỮ NGUYÊN, không bị đổi.</b></p>
+    </div>`;
+  showConfirmModal({
+    title: `✏️ Sửa Mapping — ${employeeCode}`,
+    bodyHTML,
+    confirmLabel: '✅ Xác Nhận Đổi Tên Đăng Nhập',
+    onConfirm: () => umapSubmitFixMapping(user)
+  });
+}
+
+async function umapSubmitFixMapping(user) {
+  const newUsername = document.getElementById('umapFixUsernameInput')?.value.trim();
+  if (!newUsername) return alert('Vui lòng nhập Tên Đăng Nhập mới.');
+  if (newUsername === user.username) return alert('Tên đăng nhập chưa thay đổi gì.');
+  const patchUser = { ...user, username: newUsername };
+  const result = await syncUserPatch(patchUser);
+  if (!result) return; // syncUserPatch() đã tự alert lỗi (trùng tên đăng nhập, mất kết nối...)
+  if (result.item) {
+    const idx = DB.users.findIndex(u => u.id === user.id);
+    if (idx !== -1) DB.users[idx] = result.item;
+  }
+  if (result.usersVersion) DB._versions.users = result.usersVersion;
+  alert(`✅ Đã đổi Tên Đăng Nhập "${user.username}" → "${newUsername}".`);
+  await loadUsernameMappingReport();
 }
 
 // "🆕 Tạo Tài Khoản Cho Mục Đã Chọn" — showConfirmModal() dựng form ĐỘNG (cùng khuôn hrpEditProcess(),

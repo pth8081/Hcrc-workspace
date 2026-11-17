@@ -18,13 +18,16 @@ const { startStaticServer, createMockState, launchPage } = require('./testHarnes
 const PORT = 8997;
 const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'hr-username-mapping-11-2026');
 
-const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng IT', perms: { admin: true }, active: true, totpEnabled: true };
+// id RIÊNG, DUY NHẤT cho từng user (bắt buộc — mock /api/data/users __patchUser tìm đúng bản ghi qua
+// "id", thiếu id/trùng id sẽ khớp nhầm sang user KHÁC khi "Sửa Mapping" ghi đè, cùng lỗi thật DB sẽ
+// không bao giờ gặp vì id luôn tự tăng duy nhất).
+const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng IT', perms: { admin: true }, active: true, totpEnabled: true };
 // NV0010: user ĐÃ CÓ sẵn, username === employeeCode -> MATCHED (đối chứng nhóm đã khớp).
-const NV0010_USER = { username: 'NV0010', name: 'Phạm Văn An', dept: 'Phòng Kế Toán', perms: {}, active: true };
+const NV0010_USER = { id: 2, username: 'NV0010', name: 'Phạm Văn An', dept: 'Phòng Kế Toán', perms: {}, active: true };
 // NV0099: user ĐÃ CÓ nhưng username KHÁC employeeCode (dữ liệu cũ) -> MISMATCH.
-const NV0099_USER = { username: 'nv99cu', name: 'Đỗ Thị Mai', dept: 'Phòng Kế Toán', perms: {}, active: true };
+const NV0099_USER = { id: 3, username: 'nv99cu', name: 'Đỗ Thị Mai', dept: 'Phòng Kế Toán', perms: {}, active: true };
 // BL 4000: tài khoản MỒ CÔI (không liên kết hồ sơ nào) nhưng username dính khoảng trắng dư thừa.
-const ORPHAN_WHITESPACE_USER = { username: 'BL 4000', name: 'Tài Khoản Dính Khoảng Trắng', dept: 'Phòng Kế Toán', perms: {}, active: true };
+const ORPHAN_WHITESPACE_USER = { id: 4, username: 'BL 4000', name: 'Tài Khoản Dính Khoảng Trắng', dept: 'Phòng Kế Toán', perms: {}, active: true };
 
 function hrProcess(id, employeeCode, fullName) {
   return { id, processType: 'ONBOARDING', employeeCode, fullName, status: 'IN_PROGRESS' };
@@ -140,6 +143,26 @@ async function main() {
     missing: document.getElementById('umapStatMissing').innerText
   }));
   console.log('📊 Thống kê sau khi tạo:', afterStats);
+
+  // ===== DEMO MỚI: "✏️ Sửa Mapping" cho dòng ⚠️ Lệch mã (NV0099, username "nv99cu" ĐÃ liên kết) =====
+  await page.evaluate(() => document.querySelector('#umapTableWrap button[data-op="umapOpenFixMappingModal"][data-arg0="NV0099"]').click());
+  await page.waitForTimeout(200);
+  await shot(page, '6-modal-sua-mapping', '#genericConfirmModal');
+
+  await page.evaluate(() => window.__confirmPending());
+  await page.waitForTimeout(300);
+  const fixAlertMsg = await page.evaluate(() => window.__alerts[window.__alerts.length - 1]);
+  console.log('💬 Thông báo "Sửa Mapping":', fixAlertMsg);
+  await shot(page, '7-ket-qua-sau-khi-sua-mapping', '#adminSubUsernameMap');
+
+  const finalStats = await page.evaluate(() => ({
+    matched: document.getElementById('umapStatMatched').innerText,
+    mismatch: document.getElementById('umapStatMismatch').innerText
+  }));
+  console.log('📊 Thống kê sau "Sửa Mapping":', finalStats);
+  console.log(finalStats.mismatch === '0' && finalStats.matched === '5'
+    ? '✅ XÁC NHẬN: NV0099 đã chuyển từ "⚠️ Lệch mã" sang "✅ Đã khớp" sau khi Sửa Mapping.'
+    : '⛔ Thống kê không đúng kỳ vọng — cần điều tra thêm.');
 
   await browser.close();
   server.close();
