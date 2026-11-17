@@ -1,8 +1,20 @@
 # Phiên bản hiện tại
 
-**30.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.72 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — thêm "✏️ Sửa Mapping" cho dòng Lệch mã
+
+Theo yêu cầu người dùng ("thêm chức năng sửa mapping giữa mã nhân viên và tên đăng nhập ngay trong tab
+mã nv -- tài khoản. Chỉ mapping ko sửa mã nhân viên bên nhân sự"): nhóm "⚠️ Lệch mã" giờ có nút **"✏️ Sửa
+Mapping"** ngay tại dòng cần xử lý — mở hộp thoại đổi Tên Đăng Nhập cho khớp Mã Nhân Viên (Mã Nhân Viên
+hiển thị chỉ đọc, không sửa được ở đây). Dùng lại **ĐÚNG** cơ chế đổi tên đăng nhập có sẵn của hệ thống
+(`syncUserPatch()`, cùng route/cascade với màn "Sửa Người Dùng") — không viết lại logic, tự chặn trùng
+tên + tự cập nhật mọi nơi tham chiếu tên đăng nhập cũ. Sửa TỪNG DÒNG MỘT (không có thao tác hàng loạt
+cho nhóm này), chặn cứng với tài khoản "admin" gốc.
+
+7 kịch bản test UI (Playwright) pass, CSP sạch.
 
 ## v30.71 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — quét + liệt kê dữ liệu CŨ dính khoảng trắng (read-only)
 

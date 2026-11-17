@@ -8060,12 +8060,13 @@ Màn tự quét ngay khi mở (hoặc bấm "🔄 Làm Mới" để quét lại)
 - **✅ Đã khớp** — Tên Đăng Nhập = Mã Nhân Viên, đúng quy tắc, không cần làm
   gì.
 - **⚠️ Lệch mã** — đã có tài khoản nhưng Tên Đăng Nhập KHÁC Mã Nhân Viên
-  (thường là dữ liệu cũ, tạo trước khi có quy tắc này). Nhóm này **CHỈ hiển
-  thị để Admin tự rà/sửa tay** (bấm tên nhân viên để mở thẳng hồ sơ ở "Hồ Sơ
-  Nhân Sự" rồi dùng "Liên Kết Tài Khoản" sẵn có) — **KHÔNG có thao tác hàng
-  loạt** cho nhóm này, vì đổi Tên Đăng Nhập của 1 tài khoản đang hoạt động
-  thật rủi ro cao (Tên Đăng Nhập là định danh được tham chiếu ở rất nhiều
-  nơi khác trong hệ thống: người quản lý, người được giao việc, người tạo,
+  (thường là dữ liệu cũ, tạo trước khi có quy tắc này). Bấm tên nhân viên để
+  mở thẳng hồ sơ ở "Hồ Sơ Nhân Sự" (xem/đối chiếu), hoặc bấm **"✏️ Sửa
+  Mapping"** (11/2026) ngay tại dòng đó để đổi NGAY Tên Đăng Nhập cho khớp
+  Mã Nhân Viên — xem chi tiết ngay dưới. **KHÔNG có thao tác HÀNG LOẠT** cho
+  nhóm này (chỉ sửa được từng dòng một mỗi lượt bấm), vì đổi Tên Đăng Nhập
+  của 1 tài khoản đang hoạt động là định danh được tham chiếu ở rất nhiều
+  nơi khác trong hệ thống (người quản lý, người được giao việc, người tạo,
   người duyệt...).
 - **❌ Chưa có tài khoản** — hồ sơ Hồ Sơ Nhân Sự chưa liên kết tài khoản nào.
   Đây là nhóm **DUY NHẤT** cho phép Admin chọn + **"🆕 Tạo Tài Khoản Cho Mục
@@ -8093,6 +8094,27 @@ KHÔNG ghi ngược lại Hồ Sơ Nhân Sự**. Bấm "Tạo Tài Khoản":
   kèm lý do (VD hồ sơ vừa được liên kết bởi thao tác khác, hoặc Mã Nhân
   Viên trùng Tên Đăng Nhập 1 tài khoản khác đang hoạt động — các trường hợp
   này cần Admin xử lý tay, không tự động xử lý).
+
+**"✏️ Sửa Mapping" (nhóm "Lệch mã", 11/2026)** — bấm nút này ngay tại dòng
+⚠️ Lệch mã cần xử lý, mở hộp thoại:
+
+- **Mã Nhân Viên** (Hồ Sơ Nhân Sự) — hiển thị CHỈ ĐỌC, KHÔNG sửa được ở
+  đây (theo đúng yêu cầu: màn này chỉ sửa MAPPING, không đụng tới Mã Nhân
+  Viên).
+- **Tên Đăng Nhập hiện tại** — hiển thị để đối chiếu.
+- **Tên Đăng Nhập mới** — ô nhập, **gợi ý sẵn đúng bằng Mã Nhân Viên**
+  (đúng quy tắc hệ thống), sửa lại được nếu thật sự cần một giá trị khác.
+
+Bấm "✅ Xác Nhận Đổi Tên Đăng Nhập": hệ thống dùng **ĐÚNG cơ chế đổi tên
+đăng nhập có sẵn** của hệ thống (y hệt khi sửa ở màn "👥 Người Dùng") — tự
+chặn nếu tên mới đã có người khác đang dùng (báo lỗi rõ, không đổi gì),
+và tự động cập nhật MỌI nơi đang tham chiếu tên đăng nhập cũ (người quản
+lý, người duyệt, người được giao việc, hồ sơ nhân sự liên kết...). Dòng
+tự chuyển sang "✅ Đã khớp" ngay sau khi xong. **Không áp dụng được cho
+tài khoản "admin" gốc** (bị chặn cứng, dù lỡ có hồ sơ nào liên kết nhầm
+với tài khoản này). Đây là thao tác sửa **TỪNG DÒNG MỘT** — không có nút
+"sửa hàng loạt" cho nhóm Lệch mã, vì đổi tên đăng nhập cần xem kỹ từng
+trường hợp.
 
 **"🧹 Khoảng Trắng Dư Thừa (Dữ Liệu Cũ)" (11/2026)** — khối cảnh báo hiện
 ngay dưới 4 thẻ thống kê (CHỈ hiện khi có phát hiện), quét **TOÀN BỘ**
