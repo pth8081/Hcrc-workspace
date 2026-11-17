@@ -4682,6 +4682,16 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo
   gần như cùng lúc (đặt chỗ mã ngay trong cùng 1 giao dịch khoá).
+  - **Tự động cắt khoảng trắng ở Mã Nhân Viên/Tài Khoản VPDT lúc "📤 Nhập
+    Excel" (11/2026, theo yêu cầu người dùng — "cắt luôn dấu trắng đi để nó
+    luôn liền mã và số, đảm bảo không bao giờ sai")**: 2 cột này cắt SẠCH mọi
+    khoảng trắng (đầu/cuối VÀ ở giữa, VD dán nhầm "BL 3883" từ Excel/hệ thống
+    khác) thành liền 1 chuỗi (VD "BL3883") trước khi so khớp/lưu — tránh dữ
+    liệu dính khoảng trắng ẩn làm hồ sơ không khớp được với bất kỳ đối chiếu
+    Mã Nhân Viên/Tài Khoản VPDT nào khác trong hệ thống (Liên Kết Tài Khoản,
+    "🆔 Mã NV ↔ Tài Khoản", Gán Chức Vụ...). Chỉ áp dụng cho 2 cột ĐỊNH DANH
+    này — các cột khác (Họ Tên, Địa Chỉ...) vẫn chỉ cắt khoảng trắng 2 đầu
+    như trước, không đụng khoảng trắng ở giữa.
 - **"🔍 Kiểm Tra Nhân Sự Cũ" (Tái Tuyển)**: nút ở cả màn "➕ Tạo Hồ Sơ Mới" lẫn
   màn "Tạo Onboarding mới" — tra theo CCCD/CMND + Ngày sinh, tìm đúng hồ sơ
   ĐÃ NGHỈ VIỆC. Chọn đúng người → **giữ NGUYÊN Mã Nhân Viên cũ** (không cấp mã

@@ -296,10 +296,19 @@ function parseDateCell(raw) {
 // LẦN NỮA bên trong transaction thật, tránh race condition giữa lúc xem trước và lúc xác nhận).
 function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCodes, seenUsernames) {
   const get = (field) => (cols[field] !== undefined ? cells[cols[field]] : '');
-  const employeeCode = String(get('employeeCode') || '').trim();
+  // Cắt TOÀN BỘ khoảng trắng (đầu/cuối/giữa, KHÔNG chỉ trim() 2 đầu — theo yêu cầu người dùng 11/2026:
+  // "cắt luôn dấu trắng đi để nó luôn liền mã và số... đảm bảo không bao giờ sai") — Mã Nhân Viên/Tài
+  // Khoản VPDT dán từ Excel/hệ thống khác rất dễ dính khoảng trắng ẩn ở GIỮA (VD "BL 3883" thay vì
+  // "BL3883", do copy từ ô đã merge hoặc gõ nhầm phím cách), trim() 2 đầu không bắt được lỗi này — để lọt
+  // qua sẽ KHÔNG khớp được với employeeCode/username thật ở bất kỳ đối chiếu nào khác trong hệ thống (Mã
+  // NV ↔ Tài Khoản, Liên Kết Tài Khoản, Gán Chức Vụ...), âm thầm tạo ra 1 hồ sơ "mồ côi" y hệt lỗi người
+  // dùng vừa báo cáo. Chỉ áp dụng cho 2 field dùng làm ĐỊNH DANH so khớp (employeeCode/username) — các
+  // field tự do khác (Họ Tên, Ghi Chú...) vẫn trim() 2 đầu như cũ, không đụng khoảng trắng ở giữa (tên
+  // người/địa chỉ thật sự cần giữ dấu cách).
+  const employeeCode = String(get('employeeCode') || '').replace(/\s+/g, '');
   if (!employeeCode) return null;
 
-  let username = String(get('username') || '').trim() || null;
+  let username = String(get('username') || '').replace(/\s+/g, '') || null;
   let autoLinkedUsername = false;
   // Tự động liên kết tài khoản VPDT (10/2026, theo yêu cầu người dùng — di trú dữ liệu cũ: "mã NV và mã
   // HS như nhau, cái nào không trùng thì chọn tay") — CHỈ áp dụng khi cột "Tài Khoản VPDT" bỏ TRỐNG

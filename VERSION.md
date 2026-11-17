@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**30.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.70 (2026-11): "🆔 Mã NV ↔ Tài Khoản" — vá gợi ý SĐT/Email + cắt khoảng trắng Mã NV/Tài Khoản lúc Nhập Excel Hồ Sơ Nhân Sự
+
+2 việc nhỏ theo phản hồi người dùng sau khi xem demo v30.69:
+
+- **Vá gợi ý SĐT/Email trống**: `computeUsernameMappingReport()` thiếu trả `contactPhone`/`workEmail`/
+  `personalEmail`, khiến ô gợi ý SĐT/Email ở màn xác nhận tạo tài khoản hàng loạt luôn trống dù Hồ Sơ
+  Nhân Sự đã có sẵn dữ liệu. Bổ sung đủ 3 field.
+- **Cắt khoảng trắng Mã Nhân Viên/Tài Khoản VPDT lúc "📤 Nhập Excel" Hồ Sơ Nhân Sự** (theo yêu cầu người
+  dùng: "cắt luôn dấu trắng đi để nó luôn liền mã và số, đảm bảo không bao giờ sai"): 2 cột định danh này
+  nay cắt SẠCH mọi khoảng trắng (đầu/cuối/giữa, VD "BL 3883" → "BL3883") trước khi so khớp/lưu, tránh dữ
+  liệu dính khoảng trắng ẩn làm hồ sơ "mồ côi" ở mọi đối chiếu Mã NV/Tài Khoản khác (Liên Kết Tài Khoản,
+  "🆔 Mã NV ↔ Tài Khoản", Gán Chức Vụ...). Các cột tự do khác (Họ Tên, Địa Chỉ...) không đổi, vẫn chỉ cắt
+  2 đầu như trước.
 
 ## v30.69 (2026-11): Nhân Sự — "🆔 Mã NV ↔ Tài Khoản" (admin-only, đối chiếu + tạo hàng loạt)
 
