@@ -451,6 +451,7 @@ const PERM_KEY_VN_LABELS = {
   "kiemKeConfirmDo.all": "Kiểm Kê — ✅ Tab 6: Xác Nhận Toàn Bộ Đợt (Tất Cả Siêu Thị)",
   "kiemKeReportView": "Kiểm Kê — 📊 Tab 7: Báo Cáo",
   "kiemKeUserAccessManage": "Kiểm Kê — 🔑 Tab 8: Cấu Hình Người Dùng",
+  "kiemKeInventoryView": "Kiểm Kê — 📦 Tab Tồn Kho: Xem Tồn Kho Hệ Thống Theo Siêu Thị",
   "contractAllowSelfApprove": "Hợp Đồng & Giấy Phép — ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Hợp Đồng (kể cả Tài Liệu Ký) Do Chính Mình Tạo/Trình",
   "contractCreate": "Hợp Đồng & Giấy Phép — Tạo mới (tự khoá đúng phòng ban)",
   "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",

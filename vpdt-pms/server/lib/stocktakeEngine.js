@@ -41,6 +41,17 @@ function canConfirmStocktakeForDept(user, dept) {
 }
 function canViewStocktakeReport(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeReportView); }
 function canManageStocktakeUserAccess(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
+// canViewKkInventory (MỚI, 11/2026, quyền thứ 10 — gác tab "📦 Tồn Kho", theo yêu cầu TRỰC TIẾP người
+// dùng SAU KHI đã xem demo bản đầu (mở cho MỌI người vào được module): "cái tab tồn kho ấy thì chỉ có
+// admin mới xem mà thôi... có riêng cái tab tồn kho chỉ có người có quyền, được phân quyền, thì có
+// người được phân quyền mới vào được với cả admin, thì bạn phải thêm một cái quyền phẳng nữa". CHỈ gác
+// việc VÀO ĐƯỢC tab/route này — phạm vi siêu thị xem được BÊN TRONG (sau khi đã qua cửa này) vẫn do
+// resolveKiemKeInventoryDepts() quyết định như cũ (không đổi). Nhân viên THƯỜNG (không có quyền này)
+// vẫn được tự động tải trước (pre-warm) Tồn Kho Hệ Thống của đúng siêu thị mình (xem
+// ensureShelfSystemInventoryCacheLoaded() ở setKiemKeSubTab(), module-vanhanh.js — gọi UNCONDITIONAL,
+// KHÔNG gác theo quyền này) để Gom Mã/Kiểm Đếm/Kiểm Soát offline vẫn hoạt động bình thường, chỉ không
+// thấy tab riêng để tự kiểm tra tình trạng đồng bộ.
+function canViewKkInventory(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeInventoryView); }
 // canManageStocktakeShelfLock (MỚI, 12/2026 — quyền thứ 9, KHÔNG gắn 1 tab mới mà sống trong Tab 5 "🗄️
 // Cấu Hình Quầy Kệ") — theo yêu cầu người dùng: "IT có thể chọn nhiều, select nhiều và khóa lại kệ đấy,
 // khóa chứ không phải xác nhận... đảm bảo người dùng chỉ có cái kệ đang mở mới được xử lý". Khác HẲN
@@ -680,7 +691,7 @@ module.exports = {
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
   activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
-  resolveKiemKeInventoryDepts,
+  resolveKiemKeInventoryDepts, canViewKkInventory,
   upsertUserAccessRows, removeUserAccessRow,
   findCountRow, validateScanInput, upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   findShelfConfirmation, isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds,

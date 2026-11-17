@@ -1862,14 +1862,17 @@ function createDispatcher(state) {
       }
       // GET /api/stocktake/system-inventory (11/2026, tab "📦 Tồn Kho" bên Kiểm Kê) — test tự seed
       // state.__mockKkInventoryByDept = { [dept]: { rows: [{maHang,tenHang,soLuongTon}], fetchedAt,
-      // capNhatLuc } } với dữ liệu ĐẦY ĐỦ mọi siêu thị; mock này TỰ áp dụng ĐÚNG phạm vi thật qua
-      // resolveKiemKeInventoryDepts() (CÙNG hàm routes/stocktake.js thật gọi) rồi mới lọc byDept trả
-      // về — khác hẳn mock report-all (chỉ trả nguyên seed, phạm vi kiểm riêng ở nơi khác) vì tab này
-      // CẦN demo đúng cảnh khác nhau giữa nhân viên thường/Giám Sát Vùng/Admin.
+      // capNhatLuc } } với dữ liệu ĐẦY ĐỦ mọi siêu thị; mock này TỰ áp dụng ĐÚNG cửa quyền
+      // canViewKkInventory() (403 nếu không admin/kiemKeInventoryView — SIẾT LẠI theo yêu cầu người dùng
+      // SAU KHI xem demo bản đầu) RỒI MỚI áp dụng phạm vi resolveKiemKeInventoryDepts() (CÙNG 2 hàm
+      // routes/stocktake.js thật gọi) để lọc byDept trả về — khác hẳn mock report-all (chỉ trả nguyên
+      // seed, phạm vi kiểm riêng ở nơi khác) vì tab này CẦN demo đúng cảnh khác nhau giữa nhân viên
+      // thường/người được gán quyền/Admin.
       if (pathName === '/api/stocktake/system-inventory' && method === 'GET') {
         if (!state.__mockKkInventoryByDept) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' } };
-        const { resolveKiemKeInventoryDepts } = require('../lib/stocktakeEngine');
+        const { resolveKiemKeInventoryDepts, canViewKkInventory } = require('../lib/stocktakeEngine');
         const freshUser = state.users.find(u => u.username === username);
+        if (!canViewKkInventory(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền xem Tồn Kho Hệ Thống ở Kiểm Kê' } };
         const allowedDepts = resolveKiemKeInventoryDepts(freshUser, state.stores || [], state.stocktakeUserAccess || []);
         const byDept = {};
         allowedDepts.forEach(dept => { if (state.__mockKkInventoryByDept[dept]) byDept[dept] = state.__mockKkInventoryByDept[dept]; });

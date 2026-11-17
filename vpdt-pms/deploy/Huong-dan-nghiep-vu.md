@@ -3789,14 +3789,25 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
     đồng bộ gần nhất) hoặc "⚠️ Chưa có dữ liệu đồng bộ" (cảnh báo rõ quét
     offline có thể không tra ra tên hàng), cùng bảng Mã Hàng/Tên Hàng/Tồn
     Kho của siêu thị đó.
-  - **Phạm vi siêu thị xem được**: Admin và người có quyền "📊 Tab 7: Xem
-    Báo Cáo" (kiemKeReportView) xem được TẤT CẢ siêu thị; người khác chỉ
-    xem đúng siêu thị hồ sơ (dept) của mình + bất kỳ siêu thị nào mình có
-    dòng allowlist ở Tab 8 "🔑 Cấu Hình Người Dùng" (Gom Mã/Kiểm Đếm/Kiểm
-    Soát bất kỳ hành động nào, kiểu Giám Sát Vùng). Không cần cấp quyền
-    riêng để XEM tab này (chỉ xem, không sửa gì) — mở cho mọi người vào
-    được module Kiểm Kê, cùng triết lý tab "📊 Đối Chiếu" bên Kiểm Soát
-    Hàng Hóa.
+  - **Ai thấy được tab này** (SIẾT LẠI theo phản hồi TRỰC TIẾP người dùng
+    SAU KHI xem demo bản đầu — bản đầu mở cho mọi người vào được module):
+    CHỈ Admin hoặc người được gán RIÊNG quyền "📦 Tab Tồn Kho — Xem Tồn Kho
+    Hệ Thống Theo Siêu Thị" (`kiemKeInventoryView`, Phân Quyền → khối "27.
+    Kiểm Kê") mới thấy nút tab này và vào được — nhân viên khác KHÔNG thấy
+    tab, bấm thẳng URL route cũng bị chặn 403 ở server, không chỉ ẩn nút.
+    Quyền này ĐỘC LẬP với "📊 Tab 7: Xem Báo Cáo" (kiemKeReportView) — có
+    1 trong 2 không tự có quyền kia.
+    **Quan trọng**: nhân viên siêu thị KHÔNG có quyền này vẫn thao tác Gom
+    Mã/Kiểm Đếm/Kiểm Soát offline bình thường — hệ thống tự động tải trước
+    (pre-warm) Tồn Kho Hệ Thống của ĐÚNG siêu thị họ ngay khi vào module
+    Kiểm Kê (không qua tab "📦 Tồn Kho"), họ chỉ không có màn riêng để tự
+    kiểm tra tình trạng đồng bộ.
+  - **Phạm vi siêu thị xem được** (sau khi đã có quyền ở trên): Admin và
+    người có quyền "📊 Tab 7: Xem Báo Cáo" (kiemKeReportView) xem được TẤT
+    CẢ siêu thị; người khác chỉ xem đúng siêu thị hồ sơ (dept) của mình +
+    bất kỳ siêu thị nào mình có dòng allowlist ở Tab 8 "🔑 Cấu Hình Người
+    Dùng" (Gom Mã/Kiểm Đếm/Kiểm Soát bất kỳ hành động nào, kiểu Giám Sát
+    Vùng).
   - **Offline**: tab tự lưu lại kết quả lần xem gần nhất vào máy — mất
     mạng vẫn xem được số liệu cũ (có ghi rõ "🔌 Ngoại tuyến — dữ liệu lúc
     ..." để biết là số liệu có thể chưa phải mới nhất).

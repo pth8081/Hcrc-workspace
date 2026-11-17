@@ -3570,6 +3570,19 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pKiemKeUserAccessManage"> 🔑 Tab 8 — Cấu Hình Người Dùng
             </label>
+            <!-- kiemKeInventoryView (MỚI, 11/2026, quyền thứ 10 — KHÔNG gắn 1-tab-trong-8-tab gốc mà gác
+                 riêng tab "📦 Tồn Kho" thêm sau, theo yêu cầu TRỰC TIẾP người dùng: "cái tab tồn kho ấy thì
+                 chỉ có admin mới xem mà thôi... có riêng cái tab tồn kho chỉ có người có quyền, được phân
+                 quyền, thì có người được phân quyền mới vào được với cả admin, thì bạn phải thêm một cái
+                 quyền phẳng nữa". CHỈ gác việc XEM tab này (phạm vi siêu thị xem được bên trong tab vẫn
+                 theo đúng resolveKiemKeInventoryDepts() — dept hồ sơ + allowlist Tab 8, trừ khi cũng có
+                 kiemKeReportView/admin thì xem hết) — nhân viên THƯỜNG (không có quyền này) vẫn được tự
+                 động tải trước (pre-warm) Tồn Kho Hệ Thống của ĐÚNG siêu thị mình để Gom Mã/Kiểm Đếm/Kiểm
+                 Soát offline vẫn hoạt động bình thường, chỉ KHÔNG thấy tab riêng này để tự kiểm tra. Xem
+                 canViewKkInventory(), lib/stocktakeEngine.js. -->
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKiemKeInventoryView"> 📦 Tab Tồn Kho — Xem Tồn Kho Hệ Thống Theo Siêu Thị
+            </label>
           </div>
         </details>
         </div>

@@ -12879,6 +12879,14 @@ function canConfirmStocktakeForDeptClient(user, dept) {
 // theo đúng quyền riêng của nó.
 function canSeeStocktakeConfirmTabClient(user) { return canConfirmStocktakeClient(user) || canDoStocktakeKiemDemClient(user); }
 function canManageStocktakeUserAccessClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeUserAccessManage); }
+// canViewKkInventoryClient — mirror ĐÚNG canViewKkInventory() server (lib/stocktakeEngine.js) — gác tab
+// "📦 Tồn Kho" (quyền thứ 10, 11/2026, theo yêu cầu TRỰC TIẾP người dùng SAU KHI xem demo bản đầu mở
+// tràn cho mọi người vào module: "chỉ có admin mới xem... thêm một cái quyền phẳng nữa"). Nhân viên
+// THƯỜNG không thấy nút tab này (ẩn hẳn, không phải "hiện nhưng bấm 403") nhưng VẪN được tự động
+// pre-warm cache Tồn Kho Hệ Thống của đúng siêu thị mình (ensureShelfSystemInventoryCacheLoaded() gọi
+// UNCONDITIONAL ở setKiemKeSubTab(), module-vanhanh.js — KHÔNG gác theo quyền này) nên Gom Mã/Kiểm Đếm/
+// Kiểm Soát offline vẫn hoạt động bình thường.
+function canViewKkInventoryClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKeInventoryView); }
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
   if (user.perms?.admin) return true;

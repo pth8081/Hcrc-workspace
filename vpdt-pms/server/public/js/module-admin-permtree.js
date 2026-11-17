@@ -365,6 +365,7 @@ function collectPermsFromForm() {
     kiemKeConfirmDo: scopeFromMultiSelectDropdown('pKiemKeConfirmDoAll', 'pKiemKeConfirmDoDeptContainer'),
     kiemKeReportView: document.getElementById('pKiemKeReportView').checked,
     kiemKeUserAccessManage: document.getElementById('pKiemKeUserAccessManage').checked,
+    kiemKeInventoryView: document.getElementById('pKiemKeInventoryView').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
@@ -535,6 +536,7 @@ function populatePermsForm(permsInput, targetDept) {
   setKiemKeConfirmDoScopeCheckboxes(kiemKeConfirmDoScope.depts);
   document.getElementById('pKiemKeReportView').checked = !!perms.kiemKeReportView;
   document.getElementById('pKiemKeUserAccessManage').checked = !!perms.kiemKeUserAccessManage;
+  document.getElementById('pKiemKeInventoryView').checked = !!perms.kiemKeInventoryView;
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;

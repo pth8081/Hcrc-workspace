@@ -2,7 +2,9 @@
 // 11/2026, theo yêu cầu TRỰC TIẾP người dùng — xem lib/stocktakeEngine.js::resolveKiemKeInventoryDepts()
 // + routes/stocktake.js GET /system-inventory + loadKkInventoryTab() ở module-vanhanh.js). Phần quyền/
 // phạm vi server-side đã kiểm đủ ở tests/test-stocktake-system-inventory-tab.js (HTTP thuần) — test này
-// CHỈ kiểm hành vi UI: ô tìm-kiếm-đa-chọn hiện đúng danh sách siêu thị trả về, mặc định chọn TẤT CẢ, lọc
+// kiểm CẢ hành vi ẨN/HIỆN nút tab theo quyền kiemKeInventoryView (SIẾT LẠI 11/2026, theo phản hồi TRỰC
+// TIẾP người dùng sau khi xem demo bản đầu: "chỉ có admin mới xem... thêm một cái quyền phẳng nữa") LẪN
+// hành vi UI bên trong: ô tìm-kiếm-đa-chọn hiện đúng danh sách siêu thị trả về, mặc định chọn TẤT CẢ, lọc
 // đúng khi bỏ bớt, cảnh báo rõ siêu thị CHƯA đồng bộ, và fallback offline dùng cache lần xem gần nhất.
 // Chạy: node tests/test-stocktake-inventory-tab-ui.js
 'use strict';
@@ -13,18 +15,26 @@ async function main() {
   const PORT = 8996;
   const DEPT1 = 'Siêu thị Quận 1';
   const DEPT2 = 'Siêu thị Quận 2';
-  // nv1 CỐ Ý được gán thêm allowlist Kiểm Đếm ở DEPT2 (kiểu Giám Sát Vùng) — để test được CẢ 2 siêu thị
-  // cùng lúc trong 1 phiên UI (phạm vi THUẦN theo đúng dept hồ sơ, không allowlist, đã kiểm riêng ở
-  // tests/test-stocktake-system-inventory-tab.js, không lặp lại ở đây).
+  // NV1 (nhân viên THƯỜNG — có quyền quét kiemKeKiemDemDo nhưng KHÔNG có kiemKeInventoryView): phải
+  // KHÔNG thấy nút tab "📦 Tồn Kho" chút nào (ẩn hẳn, không phải "hiện nhưng bấm 403").
+  // INV_VIEWER (CÓ kiemKeInventoryView + allowlist Kiểm Đếm thêm ở DEPT2, kiểu Giám Sát Vùng được GIAO
+  // THÊM quyền xem tab này) — dùng để test hành vi UI bên trong tab với 2 siêu thị cùng lúc.
   const NV1 = { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true, totpEnabled: true };
+  const INV_VIEWER = { username: 'invV', name: 'Người Được Gán Xem Tồn Kho', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeInventoryView: true }, active: true, totpEnabled: true };
   const state = createMockState({
-    depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [NV1],
-    stocktakeUserAccess: [{ id: 1, username: 'nv1', dept: DEPT2, shelfLocationId: 1, canGomMa: false, canKiemDem: true, canKiemSoat: false }]
+    depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [NV1, INV_VIEWER],
+    stocktakeUserAccess: [{ id: 1, username: 'invV', dept: DEPT2, shelfLocationId: 1, canGomMa: false, canKiemDem: true, canKiemSoat: false }]
   });
   state.__mockKkInventoryByDept = {
     [DEPT1]: { rows: [{ maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 120 }], fetchedAt: new Date().toISOString() },
     [DEPT2]: { rows: [], fetchedAt: null }
   };
+  // Pre-warm (ensureShelfSystemInventoryCacheLoaded(), CHẠY UNCONDITIONAL cho MỌI người vào module —
+  // KHÔNG gác theo kiemKeInventoryView) gọi route KHÁC hẳn (GET /api/shelf-stock/system-inventory, scope
+  // đúng dept của currentUser) — seed riêng để test được cả nhân viên THƯỜNG vẫn pre-warm thành công dù
+  // không có quyền xem tab "📦 Tồn Kho".
+  state.storeExternalCodes = { [DEPT1]: '001', [DEPT2]: '002' };
+  state.__mockSystemInventoryRows = [{ maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 120 }];
 
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
@@ -39,7 +49,29 @@ async function main() {
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, NV1);
     await page.evaluate(() => switchTab('kiemKe'));
+    await page.waitForTimeout(150);
+
+    await run.run('Nhân viên THƯỜNG (không có kiemKeInventoryView): nút tab "📦 Tồn Kho" PHẢI ẩn hẳn (SIẾT LẠI theo yêu cầu người dùng)', async () => {
+      const hidden = await page.evaluate(() => document.getElementById('btnKkSubInventory')?.classList.contains('hidden'));
+      assert(hidden === true, 'Nút #btnKkSubInventory phải có class "hidden" khi không có quyền kiemKeInventoryView');
+    });
+
+    await run.run('Nhân viên THƯỜNG vẫn được tự động pre-warm Tồn Kho Hệ Thống (ensureShelfSystemInventoryCacheLoaded không gác theo quyền này)', async () => {
+      await page.waitForTimeout(200);
+      const cacheLen = await page.evaluate(() => (typeof shelfSystemInventoryCache !== 'undefined' && Array.isArray(shelfSystemInventoryCache)) ? shelfSystemInventoryCache.length : -1);
+      assert(cacheLen > 0, `Cache tồn kho hệ thống phải được tải trước dù không có quyền xem tab, thực tế length=${cacheLen}`);
+    });
+
+    await page.evaluate(() => { if (typeof gmsClear === 'function') gmsClear('kkInventoryStoreMultiSelect'); });
+    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, INV_VIEWER);
+    await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(100);
+
+    await run.run('Có kiemKeInventoryView: nút tab "📦 Tồn Kho" PHẢI hiện', async () => {
+      const hidden = await page.evaluate(() => document.getElementById('btnKkSubInventory')?.classList.contains('hidden'));
+      assert(hidden === false, 'Nút #btnKkSubInventory phải hiện khi có quyền kiemKeInventoryView');
+    });
+
     await page.click('#btnKkSubInventory');
     await page.waitForTimeout(300);
 

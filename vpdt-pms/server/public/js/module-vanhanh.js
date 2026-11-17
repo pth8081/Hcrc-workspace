@@ -406,7 +406,7 @@ function setKiemKeSubTab(tab) {
   (async () => { await ensureShelfOfflineReady(); renderKkOfflineModeBar(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
   const tabs = [
     ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
-    ['INVENTORY', 'kkInventoryWrap', 'btnKkSubInventory', () => true],
+    ['INVENTORY', 'kkInventoryWrap', 'btnKkSubInventory', canViewKkInventoryClient],
     ['GOMMA', 'kkGomMaWrap', 'btnKkSubGomMa', canDoStocktakeGomMaClient],
     ['KIEMDEM', 'kkKiemDemWrap', 'btnKkSubKiemDem', canDoStocktakeKiemDemClient],
     ['KIEMSOAT', 'kkKiemSoatWrap', 'btnKkSubKiemSoat', canDoStocktakeKiemSoatClient],

@@ -1,8 +1,13 @@
 // tests/demo-stocktake-inventory-tab.js — DEMO ảnh thật tab MỚI "📦 Tồn Kho" (11/2026, Kiểm Kê — theo
 // yêu cầu TRỰC TIẾP người dùng: "cho tôi một tab tồn kho để tôi kiểm tra được từng siêu thị hoặc nhiều
-// siêu thị"). Luồng: nhân viên thường (chỉ xem đúng siêu thị hồ sơ) -> Giám Sát Vùng (xem thêm siêu thị
-// allowlist) -> Admin (xem TẤT CẢ, chọn nhiều siêu thị cùng lúc) -> MẤT MẠNG (vẫn hiện cache lần xem gần
-// nhất, có banner 🔌 Ngoại tuyến).
+// siêu thị"). SIẾT LẠI (sau khi xem demo bản đầu, người dùng phản hồi TRỰC TIẾP: "cái tab tồn kho ấy thì
+// chỉ có admin mới xem mà thôi... có người được phân quyền mới vào được với cả admin, thì bạn phải thêm
+// một cái quyền phẳng nữa"): nay CHỈ admin + người được gán quyền MỚI "kiemKeInventoryView" mới thấy/vào
+// được tab này — nhân viên thường KHÔNG thấy tab, nhưng VẪN được tự động pre-warm cache tồn kho đúng
+// siêu thị mình (không qua tab này) nên Gom Mã/Kiểm Đếm/Kiểm Soát offline vẫn hoạt động bình thường.
+// Luồng: nhân viên THƯỜNG (không thấy tab "📦 Tồn Kho" chút nào) -> người ĐƯỢC GÁN quyền xem (thấy đúng
+// siêu thị hồ sơ + siêu thị allowlist) -> Admin (xem TẤT CẢ, chọn nhiều siêu thị cùng lúc) -> MẤT MẠNG
+// (vẫn hiện cache lần xem gần nhất, có banner 🔌 Ngoại tuyến).
 // Chạy: node tests/demo-stocktake-inventory-tab.js
 'use strict';
 const fs = require('fs');
@@ -19,18 +24,24 @@ const DEPT3 = 'Siêu thị Quận 3';
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   const NV1 = { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true, totpEnabled: true };
-  const QS_VUNG = { username: 'qsA', name: 'Giám Sát Vùng A', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true, totpEnabled: true };
+  // INV_VIEWER: được GÁN RIÊNG quyền "📦 Tab Tồn Kho" (kiemKeInventoryView) + allowlist Kiểm Đếm thêm ở
+  // DEPT2 (kiểu Giám Sát Vùng) — KHÔNG phải admin, KHÔNG có kiemKeReportView.
+  const INV_VIEWER = { username: 'qsA', name: 'Giám Sát Vùng A (được gán xem Tồn Kho)', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeInventoryView: true }, active: true, totpEnabled: true };
   const ADMIN = { username: 'admin', name: 'Admin', dept: DEPT1, perms: { admin: true }, active: true, totpEnabled: true };
 
   const state = createMockState({
-    depts: [DEPT1, DEPT2, DEPT3], stores: [DEPT1, DEPT2, DEPT3], users: [NV1, QS_VUNG, ADMIN],
+    depts: [DEPT1, DEPT2, DEPT3], stores: [DEPT1, DEPT2, DEPT3], users: [NV1, INV_VIEWER, ADMIN],
     shelfLocations: [{ id: 60, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true }],
     stocktakeUserAccess: [
-      // Giám Sát Vùng: ngoài siêu thị hồ sơ (DEPT1), còn được gán allowlist Kiểm Đếm ở DEPT2 -> xem được cả 2.
+      // qsA: ngoài siêu thị hồ sơ (DEPT1), còn được gán allowlist Kiểm Đếm ở DEPT2 -> xem được cả 2.
       { id: 1, username: 'qsA', dept: DEPT2, shelfLocationId: 60, canGomMa: false, canKiemDem: true, canKiemSoat: false }
     ]
   });
   state.storeExternalCodes = { [DEPT1]: '001', [DEPT2]: '002' }; // DEPT3 CHƯA cấu hình Mã Điểm
+  // Pre-warm (ensureShelfSystemInventoryCacheLoaded(), chạy UNCONDITIONAL cho MỌI người vào module) gọi
+  // route KHÁC (GET /api/shelf-stock/system-inventory) — seed riêng để chứng minh nv1 (không có quyền
+  // xem tab) vẫn pre-warm được bình thường.
+  state.__mockSystemInventoryRows = [{ maHang: 'SP001', maVach: '8934000000001', tenHang: 'G7 Cà Phê 3in1', soLuongTon: 120 }];
   state.__mockKkInventoryByDept = {
     [DEPT1]: {
       rows: [
@@ -62,29 +73,25 @@ const DEPT3 = 'Siêu thị Quận 3';
   };
 
   try {
-    // ===== Nhân viên thường: chỉ xem đúng siêu thị hồ sơ (DEPT1) =====
+    // ===== Nhân viên THƯỜNG (không có kiemKeInventoryView): KHÔNG thấy tab "📦 Tồn Kho" chút nào =====
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, NV1);
     await page.evaluate(() => switchTab('kiemKe'));
-    await page.waitForTimeout(150);
-    await page.click('#btnKkSubInventory');
     await page.waitForTimeout(300);
-    await shot('nv1-chi-xem-sieu-thi-ho-so');
+    await shot('nv1-khong-thay-tab-ton-kho');
 
-    // ===== Giám Sát Vùng: xem thêm siêu thị allowlist (DEPT2, CHƯA đồng bộ) =====
-    // Xoá lựa chọn cũ của nv1 trên CÙNG ô chọn (12/2026 — test giả lập đổi người dùng KHÔNG tải lại
-    // trang như demo khác, nhưng tab "📦 Tồn Kho" CỐ Ý nhớ lựa chọn cũ nếu vẫn hợp lệ — ô chọn còn sót
-    // lựa chọn của nv1 sẽ KHÔNG tự thêm DEPT2 mới xuất hiện; 1 phiên trình duyệt thật đổi người dùng
-    // luôn tải lại trang nên không gặp tình huống này, ở đây chỉ cần dọn tay để demo đúng mặc định
-    // "chưa chọn gì -> hiện TẤT CẢ siêu thị xem được" của người dùng MỚI).
-    await page.evaluate(() => { if (typeof gmsClear === 'function') gmsClear('kkInventoryStoreMultiSelect'); });
-    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, QS_VUNG);
+    // ===== Người ĐƯỢC GÁN quyền xem Tồn Kho (kiemKeInventoryView, không phải admin): thấy đúng siêu thị
+    //       hồ sơ (DEPT1) + siêu thị allowlist (DEPT2, CHƯA đồng bộ) =====
+    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, INV_VIEWER);
     await page.evaluate(() => switchTab('kiemKe'));
     await page.waitForTimeout(150);
     await page.click('#btnKkSubInventory');
     await page.waitForTimeout(300);
-    await shot('qsvung-xem-ca-2-sieu-thi-canh-bao-chua-dong-bo');
+    await shot('duoc-gan-quyen-xem-2-sieu-thi-canh-bao-chua-dong-bo');
 
     // ===== Admin: xem TẤT CẢ (DEPT3 không cấu hình Mã Điểm -> tự loại, không báo lỗi) =====
+    // Xoá lựa chọn cũ trên CÙNG ô chọn (demo giả lập đổi người dùng KHÔNG tải lại trang, khác 1 phiên
+    // trình duyệt thật luôn tải lại trang khi đổi tài khoản — chỉ cần dọn tay để đúng mặc định "chưa
+    // chọn gì -> hiện TẤT CẢ siêu thị xem được" của người dùng MỚI).
     await page.evaluate(() => { if (typeof gmsClear === 'function') gmsClear('kkInventoryStoreMultiSelect'); });
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, ADMIN);
     await page.evaluate(() => switchTab('kiemKe'));

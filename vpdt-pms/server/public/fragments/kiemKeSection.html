@@ -16,8 +16,12 @@
            Mã/Kiểm Đếm/Kiểm Soát cần Tồn Kho Hệ Thống cache sẵn ở trình duyệt MỚI tra được tên hàng khi
            quét offline — trước đây KHÔNG có màn nào để tự xác nhận "đã đồng bộ về chưa", xem
            loadKkInventoryTab()/setKiemKeSubTab() module-vanhanh.js) — đặt NGAY SAU "Kỳ Kiểm Kê" (xem
-           tồn kho trước khi quyết định thao tác gì), mở cho MỌI người vào được module (chỉ XEM, không
-           sửa — không cần quyền riêng, cùng triết lý "📊 Đối Chiếu" bên Kiểm Soát Hàng Hóa). -->
+           tồn kho trước khi quyết định thao tác gì). LỖI THIẾT KẾ ĐÃ VÁ (bản đầu mở cho MỌI người vào
+           module — người dùng phản hồi TRỰC TIẾP sau khi xem demo: "chỉ có admin mới xem... thêm một
+           cái quyền phẳng nữa"): nay CHỈ admin hoặc người có quyền riêng "📦 Tab Tồn Kho"
+           (kiemKeInventoryView) mới thấy nút này — xem canViewKkInventoryClient() (core.js) trong mảng
+           `tabs` của setKiemKeSubTab(); nhân viên KHÔNG có quyền vẫn được tự động pre-warm cache tồn kho
+           siêu thị mình (không qua tab này) nên Gom Mã/Kiểm Đếm/Kiểm Soát offline vẫn hoạt động được. -->
       <button data-op="setKiemKeSubTab" data-tab="INVENTORY" id="btnKkSubInventory" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 Tồn Kho</button>
       <button data-op="setKiemKeSubTab" data-tab="GOMMA" id="btnKkSubGomMa" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📷 Gom Mã</button>
       <button data-op="setKiemKeSubTab" data-tab="KIEMDEM" id="btnKkSubKiemDem" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔢 Kiểm Đếm</button>

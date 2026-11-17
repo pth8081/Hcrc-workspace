@@ -22,7 +22,7 @@ const {
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
-  resolveKiemKeInventoryDepts,
+  resolveKiemKeInventoryDepts, canViewKkInventory,
   upsertUserAccessRows, removeUserAccessRow,
   upsertScanCount, editCountValue, deleteCountRow, finalCountQty,
   isShelfConfirmed, confirmShelf, unconfirmShelf, listUnconfirmedCountedShelfIds, listUnconfirmedSoatedShelfIds,
@@ -1370,15 +1370,28 @@ router.get('/report', async (req, res) => {
 // thấy chỗ nào đồng bộ tồn kho mã hàng giống ở kiểm soát... cho tôi một tab tồn kho để tôi kiểm tra được
 // từng siêu thị hoặc nhiều siêu thị" — kèm phát hiện ĐÚNG gốc rễ: Gom Mã/Kiểm Đếm/Kiểm Soát cần Tồn Kho
 // Hệ Thống đã cache sẵn ở trình duyệt MỚI tra được tên hàng khi quét offline, nên cần 1 màn để TỰ XÁC
-// NHẬN đã đồng bộ về chưa, không chỉ "tin suông"). Mở cho MỌI người có quyền vào module Kiểm Kê (chỉ
-// XEM, không sửa gì — không cần quyền riêng, cùng triết lý "📊 Đối Chiếu" bên Kiểm Soát Hàng Hóa). Phạm
-// vi siêu thị xem được tự suy ra SERVER-SIDE qua resolveKiemKeInventoryDepts() (xác nhận qua
-// AskUserQuestion: admin/kiemKeReportView xem TẤT CẢ, còn lại chỉ xem đúng siêu thị hồ sơ + siêu thị có
-// allowlist stocktakeUserAccess) — KHÔNG tin bất kỳ danh sách siêu thị nào client gửi lên, mirror ĐÚNG
-// triết lý GET /api/shelf-stock/system-inventory/report-all (routes/shelfStock.js) đã có cho Kiểm Soát
-// Hàng Hóa, kể cả gộp nhiều Mã Điểm/siêu thị vào ĐÚNG 1 câu SQL WHERE IN qua getSnapshotMapForMaDiems().
+// NHẬN đã đồng bộ về chưa, không chỉ "tin suông"). Phạm vi siêu thị xem được (sau khi đã qua cửa quyền
+// ngay dưới) tự suy ra SERVER-SIDE qua resolveKiemKeInventoryDepts() (admin/kiemKeReportView xem TẤT
+// CẢ, còn lại chỉ xem đúng siêu thị hồ sơ + siêu thị có allowlist stocktakeUserAccess) — KHÔNG tin bất
+// kỳ danh sách siêu thị nào client gửi lên, mirror ĐÚNG triết lý GET /api/shelf-stock/system-inventory/
+// report-all (routes/shelfStock.js) đã có cho Kiểm Soát Hàng Hóa, kể cả gộp nhiều Mã Điểm/siêu thị vào
+// ĐÚNG 1 câu SQL WHERE IN qua getSnapshotMapForMaDiems().
+//
+// LỖI THIẾT KẾ ĐÃ VÁ (11/2026, bản ĐẦU TIÊN gửi demo): route này ban đầu chỉ gác module-access (mở cho
+// MỌI người có quyền vào module Kiểm Kê, cùng triết lý "📊 Đối Chiếu" bên Kiểm Soát Hàng Hóa) — xem demo
+// xong, người dùng PHẢN HỒI TRỰC TIẾP yêu cầu SIẾT LẠI: "cái tab tồn kho ấy thì chỉ có admin mới xem mà
+// thôi... có riêng cái tab tồn kho chỉ có người có quyền, được phân quyền, thì có người được phân quyền
+// mới vào được với cả admin, thì bạn phải thêm một cái quyền phẳng nữa". Nay BẮT BUỘC thêm
+// canViewKkInventory(user) (admin HOẶC kiemKeInventoryView) — nhân viên KHÔNG có quyền này bị chặn 403
+// ở CHÍNH route này (không chỉ ẩn nút/tab phía client), nhưng vẫn được tự động pre-warm cache tồn kho
+// của đúng siêu thị mình (ensureShelfSystemInventoryCacheLoaded(), module-vanhanh.js — KHÔNG gọi route
+// này, gọi route KHÔNG gác quyền riêng /api/shelf-stock/system-inventory) nên Gom Mã/Kiểm Đếm/Kiểm Soát
+// offline vẫn hoạt động bình thường dù không có quyền xem tab này.
 router.get('/system-inventory', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canViewKkInventory(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền xem Tồn Kho Hệ Thống ở Kiểm Kê' });
+  }
   try {
     if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });

@@ -6,15 +6,26 @@
 // memory + jobs/inventorySync.js + lib/inventorySnapshotStore.js, mount routes/stocktake.js thật, gửi
 // HTTP request thật — không mock dispatch, không gọi hàm nội bộ).
 //
+// LỖI THIẾT KẾ ĐÃ VÁ (11/2026, bản ĐẦU TIÊN gửi demo mở cho MỌI người vào được module): người dùng phản
+// hồi TRỰC TIẾP sau khi xem demo, yêu cầu SIẾT LẠI: "chỉ có admin mới xem mà thôi... có riêng cái tab
+// tồn kho chỉ có người có quyền, được phân quyền, thì có người được phân quyền mới vào được với cả
+// admin, thì bạn phải thêm một cái quyền phẳng nữa" — quyền MỚI `kiemKeInventoryView` (canViewKkInventory(),
+// lib/stocktakeEngine.js) nay GÁC HẲN việc vào được route/tab này (403 nếu không có), TÁCH RIÊNG khỏi
+// resolveKiemKeInventoryDepts() (chỉ quyết định PHẠM VI siêu thị xem được SAU KHI đã qua cửa quyền này).
+//
 // Phạm vi:
 //   1. resolveKiemKeInventoryDepts() (lib/stocktakeEngine.js, hàm thuần) — admin/kiemKeReportView xem
 //      TẤT CẢ siêu thị; người thường chỉ xem đúng siêu thị hồ sơ + siêu thị có allowlist
-//      stocktakeUserAccess (Giám Sát Vùng), KHÔNG tính dòng allowlist cả 3 cờ đều false.
-//   2. GET /api/stocktake/system-inventory (route thật qua HTTP) — 503 khi chưa cấu hình API đối tác;
-//      403 nếu không có quyền module Kiểm Kê; admin thấy byDept đủ MỌI siêu thị có cấu hình Mã Điểm;
-//      người thường chỉ thấy đúng phạm vi được phép (KHÔNG rò rỉ siêu thị khác dù server CÓ dữ liệu);
-//      gộp đúng nhiều dòng CÙNG mã hàng (aggregateSystemInventoryRowsByMaHang) + giữ đúng fetchedAt/
-//      capNhatLuc mới nhất của từng siêu thị.
+//      stocktakeUserAccess (Giám Sát Vùng), KHÔNG tính dòng allowlist cả 3 cờ đều false. KHÔNG đổi bởi
+//      đợt vá này (scope thuần, độc lập với cửa quyền kiemKeInventoryView).
+//   2. canViewKkInventory() (hàm thuần) — CHỈ admin hoặc có kiemKeInventoryView; kiemKeReportView/
+//      kiemKeGomMaDo/kiemKeKiemDemDo/kiemKeKiemSoatDo/allowlist KHÔNG tự động qua được cửa này.
+//   3. GET /api/stocktake/system-inventory (route thật qua HTTP) — 503 khi chưa cấu hình API đối tác;
+//      403 nếu module Kiểm Kê bị ẩn HOẶC không có kiemKeInventoryView/admin; admin thấy byDept đủ MỌI
+//      siêu thị có cấu hình Mã Điểm; người có ĐÚNG kiemKeInventoryView (không admin/kiemKeReportView)
+//      chỉ thấy phạm vi hẹp (dept hồ sơ + allowlist); người có CẢ kiemKeInventoryView lẫn kiemKeReportView
+//      thấy TẤT CẢ (scope bypass); gộp đúng nhiều dòng CÙNG mã hàng (aggregateSystemInventoryRowsByMaHang)
+//      + giữ đúng fetchedAt/capNhatLuc mới nhất của từng siêu thị.
 //
 // Chạy: node tests/test-stocktake-system-inventory-tab.js
 'use strict';
@@ -45,18 +56,25 @@ let appDataStore = {
   storeExternalCodes: { [DEPT1]: '101', [DEPT2]: '102' }, // DEPT3 CỐ Ý không có Mã Điểm.
   stores: [DEPT1, DEPT2, DEPT3],
   users: [
+    // nv1/qsA/nv3/qlB: KHÔNG có kiemKeInventoryView -> PHẢI 403 dù có quyền kiemKe* khác (kể cả
+    // kiemKeReportView riêng lẻ — cửa quyền MỚI này ĐỘC LẬP, không tự suy ra từ các quyền kiemKe* khác).
     { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true },
     { username: 'qsA', name: 'Giám Sát Vùng A', dept: DEPT1, perms: { kiemKeGomMaDo: true }, active: true },
     { username: 'nv3', name: 'Nhân Viên 3', dept: DEPT1, perms: { kiemKeKiemDemDo: true }, active: true },
     { username: 'qlB', name: 'Quản Lý B', dept: DEPT2, perms: { kiemKeReportView: true }, active: true },
     { username: 'admin', name: 'Admin', dept: DEPT1, perms: { admin: true }, active: true },
-    // plain: KHÔNG có perm kiemKeXxx nào, nhưng hasModuleAccessServer() mặc định TRẢ VỀ TRUE (chỉ chặn
-    // khi admin tự ẩn module qua moduleAccess.kiemKe=false, xem lib/recordViewScope.js) — tab "📦 Tồn
-    // Kho" CỐ Ý mở cho MỌI người vào được module (chỉ XEM, không sửa), cùng triết lý "📊 Đối Chiếu" bên
-    // Kiểm Soát Hàng Hóa — nên user này vẫn phải 200 (xem đúng dept hồ sơ), KHÔNG phải 403.
+    // invView: CÓ kiemKeInventoryView (không admin, không kiemKeReportView) -> 200, nhưng CHỈ thấy đúng
+    // siêu thị hồ sơ (scope KHÔNG tự mở rộng chỉ vì có quyền gác tab này).
+    { username: 'invView', name: 'Người Được Gán Xem Tồn Kho', dept: DEPT1, perms: { kiemKeInventoryView: true }, active: true },
+    // invViewReport: CÓ CẢ kiemKeInventoryView LẪN kiemKeReportView -> 200 VÀ thấy TẤT CẢ (scope bypass
+    // tới từ kiemKeReportView, tách biệt với cửa quyền kiemKeInventoryView).
+    { username: 'invViewReport', name: 'Người Xem Tồn Kho + Báo Cáo', dept: DEPT2, perms: { kiemKeInventoryView: true, kiemKeReportView: true }, active: true },
+    // plain: KHÔNG có perm kiemKeXxx nào -> PHẢI 403 (bản vá SIẾT LẠI — trước đây mở cho MỌI người vào
+    // được module, nay phải có đúng kiemKeInventoryView/admin).
     { username: 'plain', name: 'Không Quyền Kiểm Kê Riêng', dept: DEPT1, perms: {}, active: true },
-    // hidden: admin đã tự ẩn hẳn module Kiểm Kê khỏi sidebar -> ĐÂY mới là trường hợp 403 thật.
-    { username: 'hidden', name: 'Module Bị Ẩn', dept: DEPT1, perms: { moduleAccess: { kiemKe: false } }, active: true }
+    // hidden: admin đã tự ẩn hẳn module Kiểm Kê khỏi sidebar -> 403 vì module bị ẩn (kiểm TRƯỚC cả quyền
+    // kiemKeInventoryView — dù có gán quyền này vẫn không vào được module).
+    { username: 'hidden', name: 'Module Bị Ẩn', dept: DEPT1, perms: { moduleAccess: { kiemKe: false }, kiemKeInventoryView: true }, active: true }
   ]
 };
 stubModule('lib/appData.js', {
@@ -123,7 +141,7 @@ stubModule('jobs/priceSync.js', { syncStorePriceCatalog: async () => ({ skipped:
 
 const express = require('express');
 const stocktakeRoutes = require('../routes/stocktake');
-const { resolveKiemKeInventoryDepts } = require('../lib/stocktakeEngine');
+const { resolveKiemKeInventoryDepts, canViewKkInventory } = require('../lib/stocktakeEngine');
 
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
@@ -171,7 +189,16 @@ function request(port, method, urlPath, username) {
   check('Dòng allowlist CẢ 3 cờ đều false -> KHÔNG tính, chỉ xem đúng dept hồ sơ',
     JSON.stringify(falseFlagsDepts) === JSON.stringify([DEPT1]), falseFlagsDepts);
 
-  // ===== 2. GET /api/stocktake/system-inventory — route thật qua HTTP =====
+  // ===== 2. canViewKkInventory() — hàm thuần, cửa quyền MỚI gác tab "📦 Tồn Kho" =====
+  check('admin -> luôn qua được cửa quyền', canViewKkInventory({ perms: { admin: true } }) === true);
+  check('Có kiemKeInventoryView -> qua được cửa quyền', canViewKkInventory({ perms: { kiemKeInventoryView: true } }) === true);
+  check('CHỈ có kiemKeReportView (không kiemKeInventoryView) -> KHÔNG qua được cửa quyền',
+    canViewKkInventory({ perms: { kiemKeReportView: true } }) === false);
+  check('CHỈ có kiemKeGomMaDo/kiemKeKiemDemDo (quyền quét) -> KHÔNG qua được cửa quyền',
+    canViewKkInventory({ perms: { kiemKeGomMaDo: true, kiemKeKiemDemDo: true } }) === false);
+  check('Không có perm gì -> KHÔNG qua được cửa quyền', canViewKkInventory({ perms: {} }) === false);
+
+  // ===== 3. GET /api/stocktake/system-inventory — route thật qua HTTP =====
   const app = express();
   app.use(express.json());
   app.use('/api/stocktake', stocktakeRoutes);
@@ -183,11 +210,20 @@ function request(port, method, urlPath, username) {
     check('Chưa đăng nhập -> 401', noAuth.status === 401, noAuth);
 
     const hiddenModuleRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'hidden');
-    check('Admin đã ẩn hẳn module Kiểm Kê (moduleAccess.kiemKe=false) -> 403', hiddenModuleRes.status === 403, hiddenModuleRes);
+    check('Admin đã ẩn hẳn module Kiểm Kê (moduleAccess.kiemKe=false) -> 403 (dù CÓ kiemKeInventoryView)', hiddenModuleRes.status === 403, hiddenModuleRes);
 
     const plainRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'plain');
-    check('Không có perm kiemKeXxx riêng nào (nhưng module KHÔNG bị ẩn) -> vẫn 200, chỉ xem tab để tham khảo',
-      plainRes.status === 200 && JSON.stringify(Object.keys(plainRes.body.byDept || {})) === JSON.stringify([DEPT1]), plainRes);
+    check('Không có perm kiemKeXxx riêng nào -> 403 (SIẾT LẠI theo yêu cầu người dùng, không còn mở cho mọi người)',
+      plainRes.status === 403, plainRes);
+
+    const nv1Res = await request(port, 'GET', '/api/stocktake/system-inventory', 'nv1');
+    check('Có quyền quét (kiemKeKiemDemDo) nhưng KHÔNG có kiemKeInventoryView -> 403', nv1Res.status === 403, nv1Res);
+
+    const qsARes = await request(port, 'GET', '/api/stocktake/system-inventory', 'qsA');
+    check('Giám Sát Vùng (có allowlist quét DEPT2) nhưng KHÔNG có kiemKeInventoryView -> 403', qsARes.status === 403, qsARes);
+
+    const qlBRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'qlB');
+    check('CHỈ có kiemKeReportView (không kiemKeInventoryView) -> 403 (2 quyền ĐỘC LẬP, không suy ra lẫn nhau)', qlBRes.status === 403, qlBRes);
 
     inventoryApiConfigured = false;
     const notConfigured = await request(port, 'GET', '/api/stocktake/system-inventory', 'admin');
@@ -207,15 +243,15 @@ function request(port, method, urlPath, username) {
     check('Admin: giữ đúng fetchedAt/capNhatLuc của DEPT1',
       adminRes.body.byDept[DEPT1].fetchedAt === '2026-12-01T03:00:00.000Z' && adminRes.body.byDept[DEPT1].capNhatLuc === '10:00 01/12/2026');
 
-    const plainScopeRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'nv1');
-    const plainScopeDepts = Object.keys(plainScopeRes.body.byDept || {});
-    check('Người thường (nv1, dept=DEPT1, không allowlist): CHỈ thấy ĐÚNG siêu thị hồ sơ, KHÔNG rò rỉ DEPT2 dù server có dữ liệu',
-      plainScopeRes.status === 200 && JSON.stringify(plainScopeDepts) === JSON.stringify([DEPT1]), plainScopeDepts);
+    const invViewRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'invView');
+    const invViewDepts = Object.keys(invViewRes.body.byDept || {});
+    check('Có ĐÚNG kiemKeInventoryView (không admin/kiemKeReportView): qua được cửa quyền NHƯNG chỉ thấy đúng siêu thị hồ sơ (DEPT1), KHÔNG rò rỉ DEPT2',
+      invViewRes.status === 200 && JSON.stringify(invViewDepts) === JSON.stringify([DEPT1]), invViewDepts);
 
-    const regionScopeRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'qsA');
-    const regionScopeDepts = Object.keys(regionScopeRes.body.byDept || {}).sort();
-    check('Giám Sát Vùng (qsA): thấy CẢ DEPT1 lẫn DEPT2 (allowlist)',
-      regionScopeRes.status === 200 && JSON.stringify(regionScopeDepts) === JSON.stringify([DEPT1, DEPT2].sort()), regionScopeDepts);
+    const invViewReportRes = await request(port, 'GET', '/api/stocktake/system-inventory', 'invViewReport');
+    const invViewReportDepts = Object.keys(invViewReportRes.body.byDept || {}).sort();
+    check('Có CẢ kiemKeInventoryView LẪN kiemKeReportView: qua cửa quyền VÀ scope bypass thấy TẤT CẢ siêu thị',
+      invViewReportRes.status === 200 && JSON.stringify(invViewReportDepts) === JSON.stringify([DEPT1, DEPT2].sort()), invViewReportDepts);
   } finally {
     server.close();
   }
