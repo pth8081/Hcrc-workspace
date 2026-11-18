@@ -2194,6 +2194,13 @@
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
             <input id="uPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
+            <!-- Đồng bộ Email/SĐT từ Hồ Sơ Nhân Sự (MỚI 12/2026, theo yêu cầu người dùng "cho phép đồng
+                 bộ phần email và phần số điện thoại từ nhân sự sang phân quyền") — rời khỏi ô Họ và
+                 Tên/Email tự dò khớp NGAY (autoFillContactFromHrProfile(), gộp chung data-op-change có
+                 sẵn ở 2 ô đó), chỉ điền khi khớp ĐÚNG 1 hồ sơ. Nút này là PHƯƠNG ÁN DỰ PHÒNG cho lúc tự
+                 động không tìm được (0 hoặc nhiều hồ sơ cùng khớp Họ Tên) — cùng khuôn nút "📋 Tìm Trong
+                 Onboarding/Hồ Sơ NS" của Ngày Vào Làm Việc bên cạnh. -->
+            <button type="button" data-op="suggestContactFromHrProfile" class="mt-1 text-[10.5px] text-blue-600 font-semibold hover:underline">📋 Tìm Trong Hồ Sơ NS (nếu chưa tự điền)</button>
           </div>
           <!-- Khối/Ban (10/2026, yêu cầu người dùng) — nhóm CHA của Phòng Ban, ĐẶT TRƯỚC ô Phòng Ban.
                Chọn 1 Khối/Ban sẽ lọc ô Phòng Ban ngay cạnh chỉ còn đúng Phòng Ban con đã gán ở Quản Lý

@@ -375,7 +375,15 @@ router.get('/employee-directory', async (req, res) => {
       // `DB.employeeProfiles` LUÔN rỗng trong thực tế dù chỉ test tự seed tay mới "thấy" hoạt động. Thêm
       // field THẬT DUY NHẤT cần (ngày vào làm — KHÔNG phải thông tin nhạy cảm, cùng mức với dept/jobTitle
       // ở trên) vào route đã có sẵn này để client gọi qua API thật thay vì đọc 1 mảng không tồn tại.
-      joinDateAtHcrc: p.joinDateAtHcrc || null
+      joinDateAtHcrc: p.joinDateAtHcrc || null,
+      // workEmail/contactPhone (MỚI 12/2026, theo yêu cầu người dùng "cho phép đồng bộ phần email và số
+      // điện thoại từ nhân sự sang phân quyền") — CÙNG MỨC KHÔNG NHẠY CẢM với dept/jobTitle/joinDateAtHcrc
+      // ở trên (KHÔNG nằm trong SENSITIVE_FIELDS, lib/employeeProfile.js — khác hẳn personalEmail/
+      // emergencyContactPhone có trong danh sách đó). Dùng cho autoFillContactFromHrProfile() ở màn
+      // Người Dùng & Phân Quyền (module-admin-submissiongroups.js), KHÔNG phải personalEmail (email cá
+      // nhân) — workEmail là "Email công ty" đúng nghĩa tài khoản đăng nhập/nhận thông báo hệ thống.
+      workEmail: p.workEmail || null,
+      contactPhone: p.contactPhone || null
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }

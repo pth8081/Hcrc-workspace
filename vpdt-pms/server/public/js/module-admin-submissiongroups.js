@@ -981,16 +981,83 @@ async function findStartDateCandidates(username, email, name) {
 // Nút đó vẫn giữ nguyên hành vi CŨ (báo rõ kết quả/cho chọn khi nhiều kết quả) — chỉ còn cần dùng khi tự
 // động KHÔNG tìm thấy gì (0 hoặc nhiều kết quả), đúng như người dùng yêu cầu.
 async function autoFillStartDateFromOnboarding() {
-  const startDateInput = document.getElementById('uStartDate');
-  if (!startDateInput || startDateInput.value) return; // đã có sẵn giá trị -> không tự ghi đè
   const username = document.getElementById('uUsername').value.trim();
   const email = document.getElementById('uEmail').value.trim().toLowerCase();
   const name = document.getElementById('uFullName').value.trim().toLowerCase();
   if (!username && !email && !name) return;
-  const { candidates } = await findStartDateCandidates(username, email, name);
-  // Giữa lúc chờ fetch, admin có thể đã tự gõ tay ô này (hoặc rời khỏi form) — kiểm tra lại .value
-  // trước khi gán, đúng tinh thần "không tự ghi đè" đã có, tránh ghi đè giá trị vừa gõ xong trong lúc chờ.
-  if (candidates.length === 1 && !startDateInput.value) startDateInput.value = candidates[0].startDate;
+  const startDateInput = document.getElementById('uStartDate');
+  if (startDateInput && !startDateInput.value) { // đã có sẵn giá trị -> không tự ghi đè
+    const { candidates } = await findStartDateCandidates(username, email, name);
+    // Giữa lúc chờ fetch, admin có thể đã tự gõ tay ô này (hoặc rời khỏi form) — kiểm tra lại .value
+    // trước khi gán, đúng tinh thần "không tự ghi đè" đã có, tránh ghi đè giá trị vừa gõ xong trong lúc
+    // chờ.
+    if (candidates.length === 1 && !startDateInput.value) startDateInput.value = candidates[0].startDate;
+  }
+  // Email/Số điện thoại (MỚI 12/2026, theo yêu cầu người dùng "cho phép đồng bộ phần email và phần số
+  // điện thoại từ nhân sự sang phân quyền") — CÙNG 1 lượt rời ô Họ Tên/Email, tự điền thêm 2 field này
+  // nếu khớp đúng 1 Hồ Sơ Nhân Sự RÕ RÀNG, xem autoFillContactFromHrProfile() ngay dưới.
+  await autoFillContactFromHrProfile(username, name);
+}
+
+// findEmployeeContactCandidates(username, name) — MỚI 12/2026, theo yêu cầu người dùng "cho phép đồng
+// bộ phần email và phần số điện thoại từ nhân sự sang phân quyền". Dùng CHUNG cache thư mục nhân viên
+// với findEmployeeProfileStartDateCandidates() ở trên (loadStartDateDirectoryCache(), đã có sẵn
+// workEmail/contactPhone từ GET /api/hr-profile/employee-directory) nhưng khớp ĐỘC LẬP — KHÔNG đòi
+// joinDateAtHcrc (hồ sơ có thể có Email/SĐT mà chưa có Ngày Vào Làm, không liên quan nhau), và KHÔNG
+// khớp theo Email đã gõ (khác findEmployeeProfileStartDateCandidates() — Email chính là field ĐANG
+// ĐƯỢC điền ở đây, dùng nó để tự tra ngược lại chính nó không có ý nghĩa cho người dùng MỚI chưa có tài
+// khoản nào liên kết). Khớp theo username (đang Sửa 1 tài khoản đã có) HOẶC Họ Tên (đang tạo tài khoản
+// MỚI cho người đã có sẵn Hồ Sơ Nhân Sự — nhập tay/import Excel trước, tạo tài khoản sau).
+async function findEmployeeContactCandidates(username, name) {
+  const directory = await loadStartDateDirectoryCache();
+  return directory.filter(d => {
+    if (!d.workEmail && !d.contactPhone) return false;
+    if (username && d.username === username) return true;
+    if (!name) return false;
+    const linkedUser = d.username ? (DB.users || []).find(u => u.username === d.username) : null;
+    const dName = (linkedUser?.name || d.fullName || '').trim().toLowerCase();
+    return dName === name;
+  }).map(d => ({ employeeCode: d.employeeCode, fullName: d.fullName, workEmail: d.workEmail, contactPhone: d.contactPhone }));
+}
+
+// autoFillContactFromHrProfile(username, name) — im lặng hoàn toàn (không alert), CHỈ điền khi khớp
+// ĐÚNG 1 Hồ Sơ Nhân Sự RÕ RÀNG, và CHỈ điền từng ô CÒN TRỐNG (Email/SĐT ĐỘC LẬP nhau — có thể đã biết
+// Email nhưng chưa biết SĐT hoặc ngược lại) — không bao giờ ghi đè giá trị admin đã tự gõ/đã có sẵn lúc
+// Sửa 1 tài khoản cũ.
+async function autoFillContactFromHrProfile(username, name) {
+  const emailInput = document.getElementById('uEmail');
+  const phoneInput = document.getElementById('uPhone');
+  if ((!emailInput || emailInput.value) && (!phoneInput || phoneInput.value)) return; // cả 2 đã có sẵn
+  if (!username && !name) return;
+  const candidates = await findEmployeeContactCandidates(username, name);
+  if (candidates.length !== 1) return;
+  const picked = candidates[0];
+  if (emailInput && !emailInput.value && picked.workEmail) emailInput.value = picked.workEmail;
+  if (phoneInput && !phoneInput.value && picked.contactPhone) phoneInput.value = picked.contactPhone;
+}
+
+// suggestContactFromHrProfile() — nút bấm tay "📋 Tìm Trong Hồ Sơ NS (nếu chưa tự điền)", dùng khi
+// autoFillContactFromHrProfile() ở trên không tự tìm được (0 hoặc nhiều hồ sơ cùng khớp Họ Tên) hoặc khi
+// admin muốn tìm/ghi đè lại CÓ CHỦ Ý (nút này KHÔNG tự chặn khi ô đã có giá trị, khác bản tự động).
+async function suggestContactFromHrProfile() {
+  const username = document.getElementById('uUsername').value.trim();
+  const name = document.getElementById('uFullName').value.trim().toLowerCase();
+  if (!username && !name) return alert('Vui lòng nhập Tên đăng nhập hoặc Họ và Tên trước để tìm đúng Hồ Sơ Nhân Sự.');
+  const candidates = await findEmployeeContactCandidates(username, name);
+  if (!candidates.length) return alert('Không tìm thấy Hồ Sơ Nhân Sự nào khớp Tên đăng nhập/Họ Tên đã nhập có sẵn Email hoặc Số điện thoại.');
+  const apply = (picked) => {
+    if (picked.workEmail) document.getElementById('uEmail').value = picked.workEmail;
+    if (picked.contactPhone) document.getElementById('uPhone').value = picked.contactPhone;
+  };
+  if (candidates.length === 1) {
+    apply(candidates[0]);
+    alert(`✅ Đã điền Email/Số điện thoại từ Hồ Sơ Nhân Sự [${candidates[0].employeeCode}].`);
+    return;
+  }
+  const pickList = candidates.map((p, idx) => `${idx + 1}. ${p.fullName} (${p.employeeCode}) — ${p.workEmail || '(chưa có email)'} / ${p.contactPhone || '(chưa có SĐT)'}`).join('\n');
+  const choice = parseInt(prompt(`Có ${candidates.length} hồ sơ khớp — nhập số thứ tự cần lấy:\n${pickList}`) || '', 10);
+  const picked = candidates[choice - 1];
+  if (picked) apply(picked);
 }
 
 // Gợi ý "Ngày Vào Làm Việc" từ Onboarding/Hồ Sơ Nhân Sự đã có (10/2026, theo phân tích đã xác nhận với

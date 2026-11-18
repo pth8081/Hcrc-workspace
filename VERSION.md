@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**30.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.90 (2026-12): Người Dùng & Phân Quyền — tự động đồng bộ Email/Số điện thoại từ Hồ Sơ Nhân Sự
+
+Người dùng yêu cầu TRỰC TIẾP: "cho phép đồng bộ phần email và phần số điện thoại từ nhân sự sang phân
+quyền".
+
+- `GET /api/hr-profile/employee-directory` trả thêm 2 field không nhạy cảm `workEmail`/`contactPhone`
+  (cùng mức với `dept`/`jobTitle`/`joinDateAtHcrc` đã có — khác `personalEmail` nằm trong
+  `SENSITIVE_FIELDS`, `lib/employeeProfile.js`).
+- Màn "Người Dùng & Phân Quyền" (Hệ Thống → Phân Quyền): rời khỏi ô Họ và Tên tự dò khớp Hồ Sơ Nhân Sự
+  (theo Tên đăng nhập hoặc Họ Tên — KHÔNG theo Email, vì Email chính là field đang được điền), điền
+  Email/SĐT nếu khớp ĐÚNG 1 hồ sơ — 2 ô độc lập, không ghi đè ô đã có sẵn giá trị. Thêm nút dự phòng
+  "📋 Tìm Trong Hồ Sơ NS (nếu chưa tự điền)" cho lúc tự động không tìm được/nhiều kết quả cùng khớp —
+  cùng khuôn với "Tìm Trong Onboarding/Hồ Sơ NS" của Ngày Vào Làm Việc đã có.
+- Thêm 6 kịch bản test mới (`test-admin-users-permgroups.js`, (u13)-(u18)) — tổng 149/149 pass.
 
 ## v30.89 (2026-12): Kiểm Kê — mọi ô chọn thành dropdown tìm-kiếm-gõ-chọn + So Sánh Kỳ mở rộng N-way + cột "Trùng Mã"
 

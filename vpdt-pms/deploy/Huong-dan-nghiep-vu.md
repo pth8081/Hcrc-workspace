@@ -8171,6 +8171,25 @@ luôn báo "Không tìm thấy" dù đã có sẵn "Ngày vào HCRC". Nay gọi 
 vào, không phải dữ liệu nhạy cảm) — hành vi/mô tả nghiệp vụ phía trên giữ
 nguyên, chỉ sửa đúng phần triển khai bị lỗi.
 
+**Đồng bộ Email/Số điện thoại từ Hồ Sơ Nhân Sự (MỚI 12/2026, theo yêu cầu
+người dùng)** — CÙNG khuôn tự động + nút bấm dự phòng với "Ngày Vào Làm
+Việc" ở trên: rời khỏi ô **Họ và Tên** (hoặc đang Sửa 1 tài khoản đã có Tên
+đăng nhập) là tự động dò khớp **Hồ Sơ Nhân Sự** NGAY, điền **Email công ty**
+và **Số điện thoại liên hệ** đã lưu sẵn trên hồ sơ — hoàn toàn im lặng, chỉ
+điền khi khớp ĐÚNG 1 hồ sơ, và **2 ô độc lập nhau** (đã có sẵn Email nhưng
+chưa có SĐT thì chỉ điền SĐT, không đụng tới Email đã có). Nút **"📋 Tìm
+Trong Hồ Sơ NS (nếu chưa tự điền)"** ngay dưới ô Số điện thoại là phương án
+dự phòng khi tự động không tìm được (0 hoặc nhiều hồ sơ cùng khớp Họ Tên)
+hoặc khi admin muốn ghi đè lại có chủ ý. Khớp theo Tên đăng nhập (ưu tiên,
+chắc chắn nhất khi đang Sửa tài khoản đã liên kết) hoặc Họ Tên (khi tạo tài
+khoản MỚI cho người đã có sẵn Hồ Sơ Nhân Sự) — KHÔNG khớp theo Email đã gõ
+(khác cơ chế Ngày Vào Làm Việc — ở đây Email chính là field đang được điền
+nên không dùng để tự tra ngược chính nó). Nguồn dữ liệu là **Email công ty**
+(`workEmail`, do Nhân Sự quản lý) và **Điện thoại liên hệ** (`contactPhone`)
+trên Hồ Sơ Nhân Sự — KHÔNG phải Email cá nhân (`personalEmail`, tự phục vụ,
+không liên quan tài khoản đăng nhập hệ thống). Chỉ là **GỢI Ý**, không tự
+khoá/ép giá trị, không tự ghi đè nếu ô đã có sẵn.
+
 Ở màn **Người Dùng**, ngoài tạo từng tài khoản 1, admin có thể điền xong 1
 form rồi bấm thêm vào 1 **danh sách tạm** (chưa gửi lên server), lặp lại cho
 nhiều người, rồi bấm **"Lưu Tất Cả Danh Sách"** để tạo TẤT CẢ cùng 1 lúc —

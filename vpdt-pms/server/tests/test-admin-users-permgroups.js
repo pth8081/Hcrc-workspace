@@ -2004,6 +2004,112 @@ async function scenario(name, fn) {
       r.startDateValue === '' && /Không tìm thấy/.test(r.alerts[0] || ''), JSON.stringify(r));
   });
 
+  // (u13)-(u18): autoFillContactFromHrProfile()/suggestContactFromHrProfile() (MỚI 12/2026, theo yêu
+  // cầu TRỰC TIẾP người dùng — "cho phép đồng bộ phần email và phần số điện thoại từ nhân sự sang phân
+  // quyền") — CÙNG khuôn tự động/dự phòng với Ngày Vào Làm Việc ở trên, nhưng khớp theo Tên đăng
+  // nhập/Họ Tên (KHÔNG theo Email — Email chính là field đang được điền), và field workEmail/contactPhone
+  // mới trên GET /api/hr-profile/employee-directory.
+  await scenario('(u13) autoFillContactFromHrProfile(): rời khỏi ô Họ Tên khớp đúng 1 hồ sơ -> tự điền CẢ Email LẪN SĐT, im lặng', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL2001', fullName: 'Lê Thị Liên Hệ', username: null, joinDateAtHcrc: null, workEmail: 'lienhe@hcrc.local', contactPhone: '0909111222' }] }
+      });
+      resetUserForm();
+      window.__alerts.length = 0;
+      const input = document.getElementById('uFullName');
+      input.value = 'Lê Thị Liên Hệ';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return { email: document.getElementById('uEmail').value, phone: document.getElementById('uPhone').value, alerts: window.__alerts.slice() };
+    });
+    record('(u13) Rời khỏi ô Họ Tên khớp đúng 1 hồ sơ -> tự điền CẢ Email LẪN SĐT, KHÔNG hiện alert nào',
+      r.email === 'lienhe@hcrc.local' && r.phone === '0909111222' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(u14) autoFillContactFromHrProfile(): Email ĐÃ CÓ sẵn, SĐT trống -> CHỈ điền SĐT, GIỮ NGUYÊN Email đã có (2 ô độc lập nhau)', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL2002', fullName: 'Trần Văn Đã Có Email', username: null, joinDateAtHcrc: null, workEmail: 'tuhosonhansu@hcrc.local', contactPhone: '0909333444' }] }
+      });
+      resetUserForm();
+      document.getElementById('uEmail').value = 'adminTuGoTay@hcrc.local';
+      const input = document.getElementById('uFullName');
+      input.value = 'Trần Văn Đã Có Email';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return { email: document.getElementById('uEmail').value, phone: document.getElementById('uPhone').value };
+    });
+    record('(u14) Email đã có sẵn -> GIỮ NGUYÊN (không ghi đè), SĐT còn trống -> tự điền từ Hồ Sơ Nhân Sự',
+      r.email === 'adminTuGoTay@hcrc.local' && r.phone === '0909333444', JSON.stringify(r));
+  });
+
+  await scenario('(u15) autoFillContactFromHrProfile(): KHÔNG khớp hồ sơ nào -> im lặng, 2 ô vẫn trống', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({ status: 200, body: { directory: [] } });
+      resetUserForm();
+      window.__alerts.length = 0;
+      document.getElementById('uFullName').value = 'Không Khớp Ai Cả';
+      await autoFillStartDateFromOnboarding();
+      return { email: document.getElementById('uEmail').value, phone: document.getElementById('uPhone').value, alerts: window.__alerts.slice() };
+    });
+    record('(u15) Không khớp hồ sơ nào -> Email/SĐT vẫn trống, KHÔNG alert',
+      r.email === '' && r.phone === '' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(u16) autoFillContactFromHrProfile(): NHIỀU hồ sơ cùng khớp Họ Tên -> im lặng bỏ qua (mơ hồ, để nút bấm tay chọn)', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [
+          { employeeCode: 'BL2003', fullName: 'Phạm Trùng Tên Liên Hệ', username: null, joinDateAtHcrc: null, workEmail: 'ph1@hcrc.local', contactPhone: '0901111111' },
+          { employeeCode: 'BL2004', fullName: 'Phạm Trùng Tên Liên Hệ', username: null, joinDateAtHcrc: null, workEmail: 'ph2@hcrc.local', contactPhone: '0902222222' }
+        ] }
+      });
+      resetUserForm();
+      window.__alerts.length = 0;
+      document.getElementById('uFullName').value = 'Phạm Trùng Tên Liên Hệ';
+      await autoFillStartDateFromOnboarding();
+      return { email: document.getElementById('uEmail').value, phone: document.getElementById('uPhone').value, alerts: window.__alerts.slice() };
+    });
+    record('(u16) Nhiều hồ sơ cùng khớp Họ Tên -> KHÔNG tự chọn bừa, Email/SĐT vẫn trống, không alert',
+      r.email === '' && r.phone === '' && r.alerts.length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(u17) suggestContactFromHrProfile(): nút bấm tay, 1 kết quả khớp Tên đăng nhập (đang Sửa tài khoản đã có) -> tự điền + báo thành công', async () => {
+    const r = await page.evaluate(async () => {
+      DB.hrProcesses = [];
+      _hrpStartDateDirectoryCache = null;
+      window.__fetchHandlers['GET /api/hr-profile/employee-directory'] = () => ({
+        status: 200, body: { directory: [{ employeeCode: 'BL2005', fullName: 'Ngô Thị Sửa Tài Khoản', username: 'ngosuata01', joinDateAtHcrc: null, workEmail: 'ngosuata01@hcrc.local', contactPhone: '0909555666' }] }
+      });
+      resetUserForm();
+      document.getElementById('uUsername').value = 'ngosuata01';
+      window.__alerts.length = 0;
+      await suggestContactFromHrProfile();
+      return { email: document.getElementById('uEmail').value, phone: document.getElementById('uPhone').value, alerts: window.__alerts.slice() };
+    });
+    record('(u17) Bấm nút tay khớp đúng 1 hồ sơ theo Tên đăng nhập -> điền Email/SĐT + báo rõ mã nhân viên',
+      r.email === 'ngosuata01@hcrc.local' && r.phone === '0909555666' && /BL2005/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u18) suggestContactFromHrProfile(): chưa nhập Tên đăng nhập/Họ Tên -> báo yêu cầu nhập trước khi tìm', async () => {
+    const r = await page.evaluate(async () => {
+      resetUserForm();
+      window.__alerts.length = 0;
+      suggestContactFromHrProfile();
+      return { alerts: window.__alerts.slice() };
+    });
+    record('(u18) Chưa nhập Tên đăng nhập/Họ Tên nào -> báo yêu cầu nhập trước (không throw)',
+      /Vui lòng nhập Tên đăng nhập hoặc Họ và Tên/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
   await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[]/workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] đang gán (không để lại "ma")', async () => {
     if (khoiKinhDoanhId == null) { record('(v) deleteDept() cascade vào deptGroups', false, 'skipped: no group id'); return; }
     const r = await page.evaluate((khoiId) => {
