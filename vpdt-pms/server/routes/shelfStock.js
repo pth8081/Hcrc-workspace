@@ -25,7 +25,8 @@ const {
   applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit,
   getShelfEffectiveUserFromReq
 } = require('../lib/shelfStockEdit');
-const { normalizeShelfRecordPayload, findMatchingActiveShelfRecord, formatCreatedAt } = require('../lib/shelfRecordUpsert');
+const { normalizeShelfRecordPayload } = require('../lib/shelfRecordUpsert');
+const { upsertShelfRecordRow } = require('../lib/shelfRecordsStore');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
@@ -52,17 +53,19 @@ router.patch('/locations/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const effectiveUser = await getShelfEffectiveUserFromReq(req);
-    // Tự khoá TRỰC TIẾP qua withLockedAppDataValue (thay vì withLockedRecordForCollection(), vốn chỉ
-    // truyền ĐÚNG 1 bản ghi cho mutatorFn) để applyShelfLocationEdit() có NGUYÊN mảng đang khoá, tự kiểm
-    // trùng Mã Quầy Kệ (nếu đổi) trong CÙNG giao dịch khoá — xem chú thích đầy đủ tại hàm đó.
-    let updated;
-    await withLockedAppDataValue('shelfLocations', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      const idx = arr.findIndex(it => it.id === id);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-      updated = applyShelfLocationEdit(arr[idx], req.body, effectiveUser, arr);
-      arr[idx] = updated;
-      return arr;
+    // BƯỚC 8 (12/2026): shelfLocations đã "tốt nghiệp" bảng riêng dbo.ShelfLocations (xem
+    // lib/recordStore.js DEDICATED_TABLES.shelfLocations) — LỖI ĐÃ VÁ (audit chéo trước merge phát hiện):
+    // route này SÓT LẠI, vẫn gọi withLockedAppDataValue('shelfLocations', ...) cũ, khiến bản sửa chỉ ghi
+    // vào dòng AppData đã mồ côi (không còn ai đọc) — quầy kệ tạo SAU khi migrate thì PATCH báo 404 ngay
+    // (không có trong mảng AppData cũ), quầy kệ tạo TRƯỚC khi migrate thì PATCH "thành công" nhưng mất
+    // tích (list/dup-check/delete đều đã đọc từ bảng mới). Khoá ĐÚNG 1 dòng theo id qua
+    // withLockedRecordForCollection() (CÙNG khuôn lib/kiemKeShelfLocationsStore.js::editShelfLocationRow()
+    // cho collection song sinh bên Kiểm Kê) — applyShelfLocationEdit() vẫn cần NGUYÊN danh sách để tự kiểm
+    // trùng Mã Quầy Kệ, tải qua getAllForCollection() (CÙNG mảng đầy đủ như withLockedAppDataValue cũ
+    // từng truyền, không thu hẹp theo dept — giữ ĐÚNG hành vi cũ).
+    const updated = await withLockedRecordForCollection('shelfLocations', id, async (item) => {
+      const allLocations = await getAllForCollection('shelfLocations');
+      return applyShelfLocationEdit(item, req.body, effectiveUser, allLocations);
     });
     res.json({ item: updated });
   } catch (err) {
@@ -117,9 +120,11 @@ router.patch('/thresholds/:id', async (req, res) => {
 // đợi đồng bộ offline dựa trên clientRecordId dedupe, xem chú thích đầu lib/shelfRecordUpsert.js): route
 // này CHỈ dùng cho lượt Ghi Nhận THẬT SỰ ONLINE — cùng Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng NGUYÊN VĂN
 // với 1 dòng ĐANG theo dõi (quantity>0) thì GHI ĐÈ số lượng dòng đó (không cộng dồn); khác Hạn Sử Dụng =
-// lô mới, tạo dòng mới. withLockedAppDataValue('shelfRecords', ...) khoá + đọc + quyết định CHÈN hay SỬA
-// trong CÙNG 1 lượt ghi — không có khoảng hở giữa lúc kiểm tra trùng và lúc ghi (race 2 lượt scan gần như
-// đồng thời vẫn chỉ 1 lượt thắng ghi đè, lượt kia tự xếp SAU nó trong cùng transaction).
+// lô mới, tạo dòng mới. upsertShelfRecordRow() (lib/shelfRecordsStore.js, BƯỚC 8 12/2026 — tách khỏi
+// AppData sang dbo.ShelfRecords) khoá theo (dept, shelfLocationId) qua withAppLock() rồi đọc + quyết
+// định CHÈN hay SỬA trong CÙNG 1 giao dịch — không còn khoá nguyên cả collection như trước, vẫn không có
+// khoảng hở giữa lúc kiểm tra trùng và lúc ghi (race 2 lượt scan gần như đồng thời vẫn chỉ 1 lượt thắng
+// ghi đè, lượt kia tự xếp SAU nó).
 router.post('/records/upsert', async (req, res) => {
   // Khối 0 (hasModuleAccessServer 'vanHanh') — POST /api/create/shelfRecords (route generic) ĐÃ gác chặn
   // này (xem MODULE_ACCESS_GATED_COLLECTIONS.vanHanh, lib/recordViewScope.js); route MỚI này trước đây
@@ -136,44 +141,7 @@ router.post('/records/upsert', async (req, res) => {
     const shelfLocations = await getAllForCollection('shelfLocations');
     const normalized = normalizeShelfRecordPayload(req.body, effectiveUser, { shelfLocations });
     const clientRecordId = req.body?.clientRecordId ? String(req.body.clientRecordId).trim().slice(0, 100) : '';
-    let resultItem = null;
-    let wasUpdate = false;
-    await withLockedAppDataValue('shelfRecords', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      const existing = findMatchingActiveShelfRecord(arr, {
-        dept: effectiveUser.dept, shelfLocationId: normalized.shelfLocationId,
-        maHang: normalized.maHang, maVach: normalized.maVach, expiryDate: normalized.expiryDate
-      });
-      // lastScannedAt (KHÁC createdAt — createdAt giữ NGUYÊN thời điểm tạo lô lần đầu, phục vụ lịch sử)
-      // — bump MỖI LẦN quét/cập nhật tại chỗ, kể cả lô đã tạo từ hôm trước. Ngưỡng Tồn
-      // (jobs/shelfStockThresholdAlert.js) và Đối Chiếu "Trên Kệ Hôm Nay" phải đổi sang đọc trường NÀY
-      // thay vì createdAt — nếu không, 1 lô quét lại hôm nay (chỉ update quantity, createdAt vẫn hôm qua)
-      // sẽ ÂM THẦM biến mất khỏi "tổng hôm nay", gây cảnh báo dưới ngưỡng/Lệch giả dù vừa mới kiểm xong —
-      // đúng lỗi thật đã xảy ra (vi phạm yêu cầu giữ Ngưỡng Tồn TÁCH BẠCH, không bị ảnh hưởng gián tiếp
-      // bởi thiết kế lại Ghi Nhận theo lô).
-      const lastScannedAt = formatCreatedAt(new Date());
-      if (existing) {
-        existing.quantity = normalized.quantity;
-        existing.productName = normalized.productName;
-        existing.note = normalized.note;
-        if (normalized.customData !== undefined) existing.customData = normalized.customData;
-        existing.lastScannedAt = lastScannedAt;
-        if (clientRecordId) existing.clientRecordId = clientRecordId;
-        resultItem = existing;
-        wasUpdate = true;
-      } else {
-        const rec = {
-          ...normalized, dept: effectiveUser.dept, id: Date.now(),
-          createdAt: formatCreatedAt(new Date()), lastScannedAt,
-          creator: req.freshUser.username, creatorName: req.freshUser.name,
-          clientRecordId
-        };
-        arr.unshift(rec);
-        resultItem = rec;
-        wasUpdate = false;
-      }
-      return arr;
-    });
+    const { item: resultItem, wasUpdate } = await upsertShelfRecordRow(normalized, effectiveUser.dept, req.freshUser, clientRecordId);
     res.json({ item: resultItem, wasUpdate });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/shelf-stock/records/upsert');
@@ -204,9 +172,10 @@ router.patch('/records/:id', async (req, res) => {
 });
 
 // ===================== GHI NHẬN TRÊN KỆ: xóa =====================
-// shelfRecords là collection AppData thuần (chưa "tốt nghiệp" bảng riêng, xem lib/recordStore.js) — xoá ở
-// đây là XOÁ VĨNH VIỄN theo đúng quy ước đã có cho mọi collection AppData khác (KHÔNG qua Thùng Rác, xem
-// deleteRecordForCollection() nhánh else) — vẫn tự ghi Nhật Ký Hệ Thống qua logRecordDelete() bên trong.
+// shelfRecords đã "tốt nghiệp" bảng riêng dbo.ShelfRecords (BƯỚC 8, 12/2026 — xem lib/recordStore.js
+// DEDICATED_TABLES.shelfRecords) — xoá ở đây tự đi qua Thùng Rác (moveDedicatedRecordToTrash, khôi phục
+// được, KHÁC hành vi CŨ "xoá vĩnh viễn" hồi còn ở AppData — cải thiện, không phải lỗi) — vẫn tự ghi Nhật
+// Ký Hệ Thống qua logRecordDelete() bên trong.
 // canManageShelfRecordEdits() (admin/shelfLocationManage/shelfRecordCreate, 11/2026 ĐỔI QUYẾT ĐỊNH theo
 // yêu cầu người dùng — xem chú thích đầy đủ tại định nghĩa hàm, lib/shelfStockEdit.js) — người chỉ có
 // shelfRecordCreate giờ CŨNG xoá được, vẫn luôn giới hạn ĐÚNG siêu thị của họ (kiểm tra dept ngay dưới).

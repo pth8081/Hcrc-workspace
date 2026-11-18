@@ -76,6 +76,38 @@ async function main() {
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
 
+    // 12/2026 (LỖI THẬT đã vá, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "trong phần báo cáo này,
+    // nó lại lấy cái siêu thị chọn ở chỗ kỳ kiểm kê là không đúng... cho phép tôi chọn tất cả siêu thị,
+    // hoặc chọn nhiều siêu thị"): ô "📍 Siêu thị" ở Tab 7 giờ ĐỘC LẬP với Tab 1/5 — qlA có kiemKeReportView
+    // (dù KHÔNG phải Admin) nên resolveKiemKeInventoryDepts() bypass cho MỌI siêu thị (CÙNG ngữ nghĩa đã
+    // dùng ở Tab "📦 Tồn Kho"), phải thấy ô multi-select với CẢ DEPT1 lẫn DEPT2, mặc định chọn TẤT CẢ.
+    await run.run('qlA (có kiemKeReportView, KHÔNG Admin): ô "Siêu thị" Tab 7 là multi-select ĐỘC LẬP, mặc định chọn CẢ 2 siêu thị', async () => {
+      const msEl = await page.$('#kkReportDeptMultiSelect');
+      assert(msEl, 'LỖI: phải có ô multi-select #kkReportDeptMultiSelect (qlA có kiemKeReportView = xem được mọi siêu thị)');
+      const selected = await page.evaluate(() => getMultiSelectValues('kkReportDeptMultiSelect'));
+      assert(selected.includes('Siêu thị Quận 1') && selected.includes('Siêu thị Quận 2'),
+        `LỖI: mặc định phải chọn CẢ 2 siêu thị -- got: ${JSON.stringify(selected)}`);
+      // Kỳ của DEPT2 (THONGKE_DEPT2_SESSION) phải có mặt trong gợi ý "Kỳ" ngay cả khi qlA.dept === DEPT1
+      // — gợi ý sdd* nằm ở dd._sddItems (chỉ render ra .innerHTML lúc focus/gõ, xem sddSetOptions()/core.js).
+      const sessionLabels = await page.evaluate(() => (document.getElementById('kkReportSessionDropdown')._sddItems || []).map(it => it.label));
+      assert(sessionLabels.some(l => l.includes('Q2 — Q4/2026')), `LỖI: dropdown "Kỳ" phải liệt kê CẢ kỳ của DEPT2 khi cả 2 siêu thị đang được chọn -- got: ${JSON.stringify(sessionLabels)}`);
+    });
+
+    await run.run('qlA: bỏ chọn DEPT2 ở ô Siêu thị -> dropdown "Kỳ" chỉ còn kỳ của DEPT1', async () => {
+      await page.evaluate(() => {
+        renderMultiSelectDropdown('kkReportDeptMultiSelect', ['Siêu thị Quận 1', 'Siêu thị Quận 2'], ['Siêu thị Quận 1'], {
+          placeholder: '🔍 Tìm siêu thị (chọn được nhiều)...', emptyText: 'Chưa chọn siêu thị nào.',
+          onChange: () => { kkReportDeptsSelected = getMultiSelectValues('kkReportDeptMultiSelect'); renderKkReportSessionDropdown(); }
+        });
+        kkReportDeptsSelected = ['Siêu thị Quận 1'];
+        renderKkReportSessionDropdown();
+      });
+      await page.waitForTimeout(150);
+      const sessionLabels = await page.evaluate(() => (document.getElementById('kkReportSessionDropdown')._sddItems || []).map(it => it.label));
+      assert(!sessionLabels.some(l => l.includes('Q2 — Q4/2026')), `LỖI: sau khi bỏ chọn DEPT2, dropdown "Kỳ" KHÔNG được còn kỳ của DEPT2 -- got: ${JSON.stringify(sessionLabels)}`);
+      assert(sessionLabels.some(l => l.includes('Thống Kê Q4/2026')), `LỖI: kỳ của DEPT1 vẫn phải còn trong dropdown "Kỳ" -- got: ${JSON.stringify(sessionLabels)}`);
+    });
+
     await run.run('qlA: chọn kỳ Thống Kê Q4/2026 -> hiện đúng stat cards + bảng chi tiết', async () => {
       await page.fill('#kkReportSessionInput', THONGKE_LABEL);
       await page.waitForTimeout(250);

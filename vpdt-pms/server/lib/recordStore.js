@@ -234,6 +234,109 @@ const DEDICATED_TABLES = {
       Status:       { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
     }
   },
+  // stocktakeCounts/stocktakeShelfConfirmations/stocktakeShelfGomMaConfirmations/
+  // stocktakeShelfKiemSoatConfirmations (BƯỚC 8, 12/2026 — tách khỏi AppData, xem chú thích đầy đủ ở
+  // sql/schema.sql ngay trên CREATE TABLE dbo.StocktakeCounts) — stocktakeCounts có MaHang (khoá tổng hợp
+  // 3 phần, ghi qua lib/stocktakeCountsStore.js::upsertScanCountRow(), KHÔNG qua createForCollection()
+  // thường vì đây là "tìm-hoặc-tạo rồi CỘNG DỒN", không phải tạo mới độc lập); 3 bảng Xác Nhận chỉ khoá 2
+  // phần (SessionId, ShelfLocationId), không có MaHang.
+  stocktakeCounts: {
+    table: 'StocktakeCounts', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      MaHang:          { sqlType: () => sql.NVarChar(100), extract: r => r.maHang || null }
+    }
+  },
+  stocktakeShelfConfirmations: {
+    table: 'StocktakeShelfConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  stocktakeShelfGomMaConfirmations: {
+    table: 'StocktakeGomMaConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  stocktakeShelfKiemSoatConfirmations: {
+    table: 'StocktakeKiemSoatConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  // shelfRecords (Kiểm Soát Hàng Hóa > "Ghi Nhận Trên Kệ", BƯỚC 8, 12/2026 — tách khỏi AppData). KHÁC
+  // stocktakeCounts (khoá tổng hợp 1 khoá CHÍNH XÁC): "CÙNG LÔ" ở đây khớp maHang HOẶC maVach (OR, không
+  // AND được cả 2) + CÒN quantity>0 (xem lib/shelfRecordUpsert.js::findMatchingActiveShelfRecord(), hàm
+  // THUẦN giữ nguyên) — không diễn đạt được bằng UNIQUE INDEX/WHERE đơn giản như stocktakeCounts, nên
+  // KHÔNG có unique index ở đây (xem sql/schema.sql ngay trên CREATE TABLE dbo.ShelfRecords). Route
+  // POST /api/shelf-stock/records/upsert (lib/shelfRecordsStore.js::upsertShelfRecordRow()) tự
+  // queryDedicatedRecords() lọc Dept+ShelfLocationId trước (thu hẹp về đúng 1 quầy kệ, không tải cả
+  // bảng) rồi mới chạy findMatchingActiveShelfRecord() trong JS trên tập đã thu hẹp đó, bọc
+  // withAppLock(`shelf_record_upsert:${dept}:${shelfLocationId}`) — khoá THEO QUẦY KỆ (không khoá được
+  // chính xác hơn vì điều kiện khớp phức tạp hơn 1 khoá đơn), vẫn hẹp hơn HẲN khoá nguyên cả AppData cũ.
+  // CRUD còn lại (tạo qua POST /api/create/shelfRecords, sửa PATCH /records/:id, xoá DELETE /records/:id)
+  // đi qua ĐÚNG các hàm generic recordStore.js (createForCollection/withLockedRecordForCollection/
+  // deleteRecordForCollection) — tự động chuyển sang bảng riêng này, KHÔNG cần sửa gì ở routes/shelfStock.js
+  // cho 3 route đó. LƯU Ý: xoá giờ tự đi qua Thùng Rác (moveDedicatedRecordToTrash, khôi phục được) —
+  // KHÁC hành vi CŨ "xoá vĩnh viễn" của AppData thuần (cải thiện, không phải lỗi).
+  shelfRecords: {
+    table: 'ShelfRecords', hasCode: false,
+    columns: {
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      MaHang:          { sqlType: () => sql.NVarChar(20),  extract: r => r.maHang || null },
+      MaVach:          { sqlType: () => sql.NVarChar(20),  extract: r => r.maVach || null }
+    }
+  },
+  // stocktakeSessions/stocktakeUserAccess/kiemKeShelfLocations/shelfLocations (BƯỚC 8, 12/2026 — tiếp
+  // tục tách khỏi AppData, xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE TABLE
+  // dbo.StocktakeSessions). KHÁC stocktakeCounts/shelfRecords (ghi RẤT nhiều, mỗi lượt quét/ghi nhận) —
+  // 4 collection này đều là dữ liệu CẤU HÌNH/QUẢN LÝ, ghi RẤT hiếm (tạo/kích hoạt/đóng/mở lại Kỳ, gán/gỡ
+  // allowlist, tạo/sửa/khoá quầy kệ — vài lần/ngày, không phải đường quét nóng của hàng trăm người cùng
+  // lúc), nên dùng khoá tương đối THÔ (1 khoá chung/collection hoặc theo dept, xem
+  // lib/stocktakeSessionsStore.js/lib/stocktakeUserAccessStore.js/lib/kiemKeShelfLocationsStore.js) là
+  // ĐỦ — mục tiêu chính là TÁCH HẲN khỏi khoá AppData blob dùng CHUNG với các collection NÓNG khác, không
+  // phải tối ưu độ song song riêng của 4 collection cấu hình này.
+  stocktakeSessions: {
+    table: 'StocktakeSessions', hasCode: false,
+    columns: {
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      LoaiKy:    { sqlType: () => sql.NVarChar(20),  extract: r => r.loaiKy || null },
+      TrangThai: { sqlType: () => sql.NVarChar(20),  extract: r => r.trangThai || null },
+      BatchId:   { sqlType: () => sql.NVarChar(80),  extract: r => r.batchId || null }
+    }
+  },
+  stocktakeUserAccess: {
+    table: 'StocktakeUserAccess', hasCode: false,
+    columns: {
+      Username:        { sqlType: () => sql.NVarChar(100), extract: r => r.username || null },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) }
+    }
+  },
+  kiemKeShelfLocations: {
+    table: 'KiemKeShelfLocations', hasCode: false,
+    columns: {
+      Dept: { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Code: { sqlType: () => sql.NVarChar(100), extract: r => r.code || null }
+    }
+  },
+  shelfLocations: {
+    table: 'ShelfLocations', hasCode: false,
+    columns: {
+      Dept: { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Code: { sqlType: () => sql.NVarChar(100), extract: r => r.code || null }
+    }
+  },
   checklistSubmissions: {
     table: 'ChecklistSubmissions', hasCode: false,
     columns: {
@@ -1716,6 +1819,49 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
   logRecordDelete(collection, id, deletedItem, actor, false);
 }
 
+// migrateLegacyAppDataCollection(collection, labelVi) — helper DÙNG CHUNG cho mọi lần "tốt nghiệp" 1
+// collection AppData sang bảng riêng (BƯỚC 8+, 12/2026) — đọc key AppData cũ, insert từng dòng vào bảng
+// DEDICATED_TABLES tương ứng, idempotent (bảng đích ĐÃ có dữ liệu thì bỏ qua ngay), KHÔNG xoá key
+// AppData cũ sau khi di trú xong (giữ lại làm bản sao lưu — dữ liệu nghiệp vụ người dùng nhập tay,
+// không phải cache có thể đồng bộ lại nếu mất). Gọi 1 LẦN lúc server khởi động (seedDefaults.js). Rút
+// ra từ 2 phiên bản gần như y hệt từng viết tay cho stocktakeCounts/shelfRecords (BƯỚC 8 đợt đầu) — các
+// collection migrate SAU dùng chung hàm này, tránh lặp lại đúng khối code này thêm lần nữa mỗi collection.
+async function migrateLegacyAppDataCollection(collection, labelVi) {
+  const cfg = DEDICATED_TABLES[collection];
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const countResult = await pool.request().query(`SELECT COUNT(*) AS c FROM ${table}`);
+  if (countResult.recordset[0].c > 0) return; // đã có dữ liệu -> bỏ qua
+
+  let legacy;
+  try {
+    legacy = await getAppDataValue(collection);
+  } catch (err) {
+    return; // Key chưa từng được seedDefaults() tạo -> không có gì để di trú.
+  }
+  if (!Array.isArray(legacy) || !legacy.length) return;
+
+  let migrated = 0, failed = 0;
+  for (const record of legacy) {
+    try {
+      const req = pool.request();
+      req.input('id', sql.BigInt, record.id);
+      req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+      const colNames = ['Id', 'Payload'];
+      const colParams = ['@id', '@payload'];
+      for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+        colNames.push(col); colParams.push('@' + param);
+      }
+      await req.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+      migrated++;
+    } catch (err) {
+      failed++;
+      console.error(`   ⛔ Lỗi di trú ${collection} Id=${record.id}: ${err.message}`);
+    }
+  }
+  console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng ${labelVi || collection} sang bảng ${table} riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
+}
+
 module.exports = {
   MIGRATED_COLLECTIONS,
   CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix, isUniqueConstraintViolation,
@@ -1724,5 +1870,6 @@ module.exports = {
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getTrashItemCollection, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads, sweepOrphanedUploads,
-  DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords
+  DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords,
+  migrateLegacyAppDataCollection
 };

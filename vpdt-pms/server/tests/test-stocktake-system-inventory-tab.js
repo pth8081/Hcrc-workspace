@@ -86,6 +86,22 @@ stubModule('lib/appData.js', {
     return appDataStore[key];
   }
 });
+// BƯỚC 8 (12/2026): stocktakeUserAccess giờ đi qua lib/stocktakeUserAccessStore.js (bảng riêng, không
+// còn qua lib/appData.js) — stub bằng bản in-memory mutate trực tiếp đúng mảng appDataStore.stocktakeUserAccess.
+// GET /api/stocktake/system-inventory (route duy nhất test này gọi) chỉ cần getAllUserAccess() — các hàm
+// khác của store này chỉ để đủ interface, không được gọi trong test này.
+stubModule('lib/stocktakeUserAccessStore.js', {
+  getAllUserAccess: async () => appDataStore.stocktakeUserAccess,
+  upsertUserAccessRowsStore: async (builderFn) => {
+    const { access } = builderFn(appDataStore.stocktakeUserAccess);
+    appDataStore.stocktakeUserAccess = access;
+    return access;
+  },
+  removeUserAccessRowStore: async (id) => {
+    const idx = appDataStore.stocktakeUserAccess.findIndex(a => a.id === id);
+    if (idx !== -1) appDataStore.stocktakeUserAccess.splice(idx, 1);
+  }
+});
 stubModule('lib/auth.js', {
   requireAuth: (req, res, next) => {
     const username = req.get('x-test-username');

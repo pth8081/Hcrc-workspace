@@ -1106,21 +1106,31 @@ function createDispatcher(state) {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
-        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canConfirmStocktake, canConfirmStocktakeForDept } = require('../lib/stocktakeEngine');
+        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canConfirmStocktake, canConfirmStocktakeForDept, resolveKiemKeInventoryDepts } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
-        const qsDept = new URL(url, 'http://x').searchParams.get('dept');
+        const qs = new URL(url, 'http://x').searchParams;
+        let allowedDepts = null;
         let dept = freshUser.dept;
-        if (qsDept && qsDept !== freshUser.dept) {
-          const allowed = freshUser.perms?.admin || canCloseStocktakePeriodForDept(freshUser, qsDept) || canReopenStocktakePeriodForDept(freshUser, qsDept)
-            || (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, qsDept));
-          if (allowed) dept = qsDept;
+        // scope=report (12/2026, mirror ĐÚNG routes/stocktake.js — Tab 7 "📊 Báo Cáo" multi-store picker
+        // ĐỘC LẬP với Tab 1/5, xem chú thích đầy đủ ở route thật) — trả thêm allowedDepts.
+        if (qs.get('scope') === 'report') {
+          allowedDepts = resolveKiemKeInventoryDepts(freshUser, state.stores || [], state.stocktakeUserAccess || []);
+        } else {
+          const qsDept = qs.get('dept');
+          if (qsDept && qsDept !== freshUser.dept) {
+            const allowed = freshUser.perms?.admin || canCloseStocktakePeriodForDept(freshUser, qsDept) || canReopenStocktakePeriodForDept(freshUser, qsDept)
+              || (canConfirmStocktake(freshUser) && canConfirmStocktakeForDept(freshUser, qsDept));
+            if (allowed) dept = qsDept;
+          }
         }
-        const filtered = (state.stocktakeSessions || []).filter(s => s.dept === dept);
+        const filtered = allowedDepts
+          ? (state.stocktakeSessions || []).filter(s => allowedDepts.includes(s.dept))
+          : (state.stocktakeSessions || []).filter(s => s.dept === dept);
         // hasData — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó) để test Playwright xác nhận
         // được đúng nút "🗑️ Xoá" hiện/ẩn theo dữ liệu thật, không chỉ theo trạng thái.
         const sessionIdsWithData = new Set((state.stocktakeCounts || []).map(c => c.sessionId));
         const items = filtered.map(s => s.trangThai === 'DANG_HOAT_DONG' ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
-        return { status: 200, body: { items } };
+        return { status: 200, body: allowedDepts ? { items, allowedDepts } : { items } };
       }
       if (pathName === '/api/stocktake/sessions/open-depts' && method === 'GET') {
         const freshUser = state.users.find(u => u.username === username);

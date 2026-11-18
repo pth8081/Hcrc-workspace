@@ -403,6 +403,7 @@ function setKiemKeSubTab(tab) {
   // kiemKeKiemDemDo/kiemKeKiemSoatDo, không có shelfRecordCreate) sẽ không bao giờ pre-warm được — khớp
   // ĐÚNG cách loadKkScanTab() đã gọi hàm này từ trước (không kèm điều kiện quyền nào khác).
   ensureShelfSystemInventoryCacheLoaded();
+  renderKkCurrentDeptBadge();
   (async () => { await ensureShelfOfflineReady(); renderKkOfflineModeBar(); trySyncPendingKkScans(); trySyncPendingKkConfirms(); })();
   const tabs = [
     ['PERIOD', 'kkPeriodWrap', 'btnKkSubPeriod', () => true],
@@ -1276,6 +1277,12 @@ function renderKkShelfConfigDeptRow() {
     kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(kkPeriodDeptSelected)}</span>`;
   }
+  // LỖI ĐÃ VÁ (12/2026, phát hiện qua ảnh demo: badge "📍 Bạn đang ở Siêu Thị" hiện SAI "Quản trị" (dept
+  // hồ sơ admin) dù ô chọn ngay dưới đã hiện đúng "Siêu thị Quận 1") — renderKkCurrentDeptBadge() gọi ở
+  // ĐẦU setKiemKeSubTab() chạy TRƯỚC khi hàm này kịp gán giá trị MẶC ĐỊNH đầu tiên cho kkPeriodDeptSelected
+  // (ban đầu rỗng ''), nên badge bị lố 1 nhịp. Gọi lại NGAY TẠI ĐÂY (nơi DUY NHẤT gán giá trị mặc định cho
+  // kkPeriodDeptSelected của Tab 5) để LUÔN khớp đúng, không chỉ khi người dùng chủ động đổi.
+  renderKkCurrentDeptBadge();
 }
 // onKkShelfConfigDeptInputChanged() — CHỈ đổi siêu thị khi giá trị gõ KHỚP CHÍNH XÁC 1 siêu thị người này
 // ĐƯỢC PHÉP chọn (kkSelectableDepts(), KHÔNG phải DB.stores suông — tránh gõ đúng tên 1 siêu thị có thật
@@ -1287,6 +1294,7 @@ function onKkShelfConfigDeptInputChanged() {
   const stores = kkSelectableDepts(currentUser);
   if (!stores.includes(raw) || raw === kkPeriodDeptSelected) return;
   kkPeriodDeptSelected = raw;
+  renderKkCurrentDeptBadge();
   kkShelfLockSelected = new Set();
   clearKkShelfConfigFilters();
 }
@@ -2315,50 +2323,98 @@ const KK_REPORT_COLOR_SYSTEM = '#2563eb', KK_REPORT_COLOR_KIEMDEM = '#ea580c', K
 const KK_REPORT_COLOR_COMPARE_PALETTE = ['#7c3aed', '#b45309', '#db2777', '#0891b2', '#65a30d', '#475569', '#dc2626'];
 let kkReportSessionId = null;
 let kkReportCompareSessionIds = null; // MỚI, 12/2026 — mảng id (N-way), thay cho 1 id đơn trước đây
-let kkReportSessionsCache = []; // MỚI, 12/2026 — giữ danh sách kỳ vừa tải ở enterKkReportTab() để dò
-// ngược label gõ/chọn ở #kkReportSessionInput (widget sdd* chỉ ghi label, không có "value" riêng).
+let kkReportSessionsCache = []; // Danh sách kỳ ĐANG HIỆN trong dropdown "Kỳ" (đã lọc theo siêu thị đang
+// chọn ở kkReportDeptsSelected) — dò ngược label gõ/chọn ở #kkReportSessionInput (widget sdd* chỉ ghi
+// label, không có "value" riêng).
+let kkReportAllSessionsCache = []; // MỚI, 12/2026 — TOÀN BỘ kỳ của MỌI siêu thị người này được phép xem
+// Báo Cáo (chưa lọc theo siêu thị đang chọn) — tải 1 LẦN khi vào tab, lọc lại ở client mỗi khi đổi chọn
+// siêu thị (không cần gọi lại server).
+let kkReportDeptsSelected = null; // MỚI, 12/2026 — mảng siêu thị đang chọn ở ô multi-select riêng của Tab 7.
 let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/biểu đồ/Xuất Excel
 
 function kkReportSessionOptionLabel(s) {
   return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
 }
+// enterKkReportTab() — LỖI THẬT đã vá (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "trong phần
+// báo cáo này, nó lại lấy cái siêu thị chọn ở chỗ kỳ kiểm kê là không đúng luôn... cho phép tôi chọn tất
+// cả siêu thị, hoặc chọn nhiều siêu thị"): TRƯỚC ĐÂY dùng CHUNG kkEffectiveDept() (= siêu thị đang chọn ở
+// Tab 1/5), khiến admin phải tự qua Tab 1 đổi mới xem được đúng siêu thị cần, và KHÔNG xem được nhiều siêu
+// thị cùng lúc. Nay gọi riêng GET /sessions?scope=report — route tự tính `allowedDepts` (TOÀN BỘ siêu thị
+// người này được phép xem Báo Cáo, admin/kiemKeReportView = MỌI siêu thị, người khác = đúng siêu thị hồ sơ
+// + allowlist Tab 8 — xem routes/stocktake.js) và trả `items` gồm sessions của TẤT CẢ các siêu thị đó —
+// client tự dựng ô multi-select ĐỘC LẬP với Tab 1/5 (renderKkReportDeptPicker() ngay dưới).
 async function enterKkReportTab() {
   kkReportSessionId = null;
   kkReportCompareSessionIds = null;
   kkReportData = null;
   const row = document.getElementById('kkReportDeptRow');
-  const dept = kkEffectiveDept();
-  if (row) {
-    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
-      (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
-  }
+  if (row) row.innerHTML = '<label class="font-semibold">📍 Siêu thị:</label> <span class="text-gray-400">Đang tải...</span>';
   const inputEl = document.getElementById('kkReportSessionInput');
   try {
-    const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
-    const res = await fetch(url);
+    const res = await fetch('/api/stocktake/sessions?scope=report');
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
-    const sessions = res.ok ? (body.items || []) : [];
+    if (!res.ok) throw new Error(body.error || 'Không tải được danh sách kỳ');
+    const sessions = Array.isArray(body.items) ? body.items.slice() : [];
     sessions.sort((a, b) => b.id - a.id);
-    kkReportSessionsCache = sessions;
-    if (inputEl) {
-      sddSetOptions('kkReportSessionDropdown', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })));
-      const activeThongKe = sessions.find(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
-      if (activeThongKe) { kkReportSessionId = activeThongKe.id; inputEl.value = kkReportSessionOptionLabel(activeThongKe); }
-      else inputEl.value = '';
-    }
-    // "So Sánh Với Kỳ Khác" (tuỳ chọn, CHỌN NHIỀU — 12/2026 mở rộng N-way) — liệt kê MỌI kỳ (kể cả khác
-    // loại), KHÔNG tự chọn mặc định (so sánh là hành động người dùng CHỦ ĐỘNG bật, không phải trạng thái
-    // ngầm định).
-    renderMultiSelectDropdown('kkReportCompareMultiSelect', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })), [], {
-      placeholder: '🔍 Tìm kỳ để thêm vào so sánh...',
-      emptyText: 'Không so sánh (mặc định).',
-      onChange: () => loadKkReportTab()
-    });
+    kkReportAllSessionsCache = sessions;
+    renderKkReportDeptPicker(Array.isArray(body.allowedDepts) ? body.allowedDepts : []);
+    return;
   } catch (err) {
+    if (row) row.innerHTML = '<label class="font-semibold">📍 Siêu thị:</label> <span class="text-red-500">Lỗi tải danh sách siêu thị — thử lại.</span>';
     if (inputEl) inputEl.placeholder = '-- Lỗi tải danh sách kỳ --';
   }
   await loadKkReportTab();
+}
+// renderKkReportDeptPicker(allowedDepts) — MỚI, 12/2026: nhiều siêu thị (thường là admin/kiemKeReportView,
+// resolveKiemKeInventoryDepts() trả MỌI siêu thị) -> ô multi-select riêng (CÙNG khuôn
+// renderKkInventoryStoreOptions() ở Tab "📦 Tồn Kho"), mặc định chọn TẤT CẢ (giữ lại lựa chọn cũ nếu vẫn
+// còn hợp lệ sau khi tải lại); đúng 1 siêu thị (IT/người được phân quyền 1 siêu thị) -> hiện tên cố định,
+// KHÔNG có ô chọn (đúng yêu cầu "đứng đúng siêu thị đấy", không tự ý cho đổi sang siêu thị khác).
+function renderKkReportDeptPicker(allowedDepts) {
+  const row = document.getElementById('kkReportDeptRow');
+  if (!row) return;
+  if (allowedDepts.length > 1) {
+    const prevSelected = (kkReportDeptsSelected || []).filter(d => allowedDepts.includes(d));
+    const initialSelected = prevSelected.length ? prevSelected : allowedDepts;
+    row.innerHTML = '<label class="font-semibold">📍 Siêu thị:</label> <div id="kkReportDeptMultiSelect" class="inline-block align-middle"></div>';
+    kkReportDeptsSelected = initialSelected;
+    renderMultiSelectDropdown('kkReportDeptMultiSelect', allowedDepts, initialSelected, {
+      placeholder: '🔍 Tìm siêu thị (chọn được nhiều)...',
+      emptyText: 'Chưa chọn siêu thị nào — chọn ít nhất 1 để xem báo cáo.',
+      onChange: () => { kkReportDeptsSelected = getMultiSelectValues('kkReportDeptMultiSelect'); renderKkReportSessionDropdown(); }
+    });
+  } else {
+    kkReportDeptsSelected = allowedDepts.slice();
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(allowedDepts[0] || '(chưa được phân quyền siêu thị nào)')}</span>`;
+  }
+  renderKkReportSessionDropdown();
+}
+// renderKkReportSessionDropdown() — lọc kkReportAllSessionsCache theo ĐÚNG tập siêu thị đang chọn
+// (kkReportDeptsSelected, hoàn toàn ở client, không gọi lại server), dựng lại dropdown "Kỳ" + ô "So Sánh
+// Với Kỳ Khác" từ tập đã lọc, rồi tải lại báo cáo. Giữ nguyên kỳ đang chọn nếu vẫn còn trong tập mới.
+function renderKkReportSessionDropdown() {
+  const inputEl = document.getElementById('kkReportSessionInput');
+  const depts = kkReportDeptsSelected || [];
+  const sessions = kkReportAllSessionsCache.filter(s => depts.includes(s.dept));
+  kkReportSessionsCache = sessions;
+  if (inputEl) {
+    sddSetOptions('kkReportSessionDropdown', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })));
+    const stillValid = kkReportSessionId && sessions.some(s => s.id === kkReportSessionId);
+    if (!stillValid) {
+      const activeThongKe = sessions.find(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
+      if (activeThongKe) { kkReportSessionId = activeThongKe.id; inputEl.value = kkReportSessionOptionLabel(activeThongKe); }
+      else { kkReportSessionId = null; inputEl.value = ''; }
+    }
+  }
+  // "So Sánh Với Kỳ Khác" (tuỳ chọn, CHỌN NHIỀU — mở rộng N-way) — liệt kê MỌI kỳ của ĐÚNG tập siêu thị
+  // đang chọn (kể cả khác loại), KHÔNG tự chọn mặc định (so sánh là hành động người dùng CHỦ ĐỘNG bật).
+  renderMultiSelectDropdown('kkReportCompareMultiSelect', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })), [], {
+    placeholder: '🔍 Tìm kỳ để thêm vào so sánh...',
+    emptyText: 'Không so sánh (mặc định).',
+    onChange: () => loadKkReportTab()
+  });
+  loadKkReportTab();
 }
 const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' };
 
@@ -2817,6 +2873,10 @@ function renderKkPeriodDeptRow() {
     kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(kkPeriodDeptSelected)}</span>`;
   }
+  // LỖI ĐÃ VÁ (12/2026, phát hiện qua ảnh demo — xem chú thích đầy đủ ở renderKkShelfConfigDeptRow()):
+  // gọi lại NGAY TẠI ĐÂY để badge "📍 Bạn đang ở Siêu Thị" luôn khớp đúng giá trị MẶC ĐỊNH đầu tiên của
+  // kkPeriodDeptSelected, không chỉ khi người dùng chủ động đổi qua onKkPeriodDeptInputChanged().
+  renderKkCurrentDeptBadge();
 }
 function onKkPeriodDeptInputChanged() {
   const input = document.getElementById('kkPeriodDeptInput');
@@ -2824,6 +2884,7 @@ function onKkPeriodDeptInputChanged() {
   const stores = kkSelectableDepts(currentUser);
   if (!stores.includes(raw) || raw === kkPeriodDeptSelected) return;
   kkPeriodDeptSelected = raw;
+  renderKkCurrentDeptBadge();
   loadKkPeriodSessions();
 }
 
@@ -2865,11 +2926,28 @@ async function loadKkPeriodSessions() {
 // vi siêu thị SERVER-SIDE qua resolveKiemKeInventoryDepts(), client KHÔNG tự gửi/đoán danh sách siêu
 // thị lên). Cache offline riêng key 'kkInventory' trong object store `systemInventory` (CÙNG store với
 // 'cache'/'recon'/'report' đã có — xem khai báo kkOfflineInventoryCache ở trên).
+// loadKkInventoryTab() — CACHE-FIRST (MỚI, 12/2026, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp tab
+// đứng "Đang tải..." rất lâu: "tôi phải lấy được dữ liệu từ cơ sở dữ liệu của ứng dụng đã chứ. Còn nếu mà
+// nó đồng bộ thì nó đồng bộ ở cái phần API chứ nhỉ... đồng bộ thì nó tự đồng bộ ngầm vào các tab khác rồi
+// chứ, giống phần Kiểm Soát đi"): hiện NGAY bản cache gần nhất đã lưu trên máy (nếu có, xem
+// kkOfflineInventoryCache/cacheKkInventoryOffline() ngay dưới) TRƯỚC khi gọi mạng, rồi mới âm thầm làm mới
+// ngầm phía sau — CÙNG khuôn loadShelfReconciliation()/loadShelfReportTab() (Kiểm Soát Hàng Hóa) đã làm từ
+// trước, không phải cơ chế mới. Server (GET /api/stocktake/system-inventory) VỐN đã đọc thẳng snapshot
+// trong CSDL — KHÔNG gọi API đối tác trực tiếp theo từng request (đã đổi fire-and-forget ở đợt vá trước,
+// xem routes/stocktake.js) — cache-first ở đây là 1 lớp AN TOÀN THÊM cho mạng chậm/chập chờn phía người
+// dùng, không phải vá lại lỗi "đồng bộ" nào ở route.
 async function loadKkInventoryTab() {
   const statusEl = document.getElementById('kkInventoryStatusNote');
   const offlineEl = document.getElementById('kkInventoryOfflineNote');
-  if (statusEl) statusEl.textContent = 'Đang tải...';
   if (offlineEl) offlineEl.classList.add('hidden');
+  const cachedFirst = getKkInventoryOfflineFallback();
+  if (cachedFirst) {
+    kkInventoryByDept = cachedFirst.byDept || {};
+    if (statusEl) statusEl.textContent = '';
+    renderKkInventoryStoreOptions();
+  } else if (statusEl) {
+    statusEl.textContent = 'Đang tải...';
+  }
   try {
     const res = await fetch('/api/stocktake/system-inventory');
     if (res.status === 401) return handleSessionExpired();
@@ -2878,24 +2956,22 @@ async function loadKkInventoryTab() {
       kkInventoryByDept = body.byDept || {};
       await cacheKkInventoryOffline(kkInventoryByDept);
       if (statusEl) statusEl.textContent = '';
-    } else {
+    } else if (!cachedFirst) {
+      // ĐÃ hiện bản cache ở trên thì GIỮ NGUYÊN, không ghi đè bằng lỗi nghiệp vụ của lần làm mới ngầm này
+      // (người dùng vẫn đang xem đúng dữ liệu hợp lệ gần nhất, chỉ là chưa chắc mới nhất).
       const err = await res.json().catch(() => ({}));
       if (statusEl) statusEl.textContent = err.error || 'Không tải được tồn kho — thử lại.';
       kkInventoryByDept = {};
     }
   } catch (err) {
-    // Mất mạng thật (TypeError của fetch) — dùng cache offline đã lưu lần đồng bộ gần nhất (nếu có).
-    const fallback = getKkInventoryOfflineFallback();
-    if (fallback) {
-      kkInventoryByDept = fallback.byDept || {};
-      if (offlineEl) {
-        offlineEl.classList.remove('hidden');
-        offlineEl.textContent = `🔌 Ngoại tuyến — dữ liệu tồn kho lúc ${fallback.cachedAt ? new Date(fallback.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
-      }
-      if (statusEl) statusEl.textContent = '';
-    } else {
+    // Mất mạng thật (TypeError của fetch) — ĐÃ hiện cache ở trên (nếu có) thì không cần làm gì thêm, chỉ
+    // báo "ngoại tuyến" nhẹ; CHỈ báo lỗi to khi đây là LẦN ĐẦU chưa từng cache gì trên máy này.
+    if (!cachedFirst) {
       kkInventoryByDept = {};
       if (statusEl) statusEl.textContent = 'Mất kết nối và chưa có dữ liệu tồn kho đã lưu trước đó — kết nối mạng rồi vào lại tab này ít nhất 1 lần.';
+    } else if (offlineEl) {
+      offlineEl.classList.remove('hidden');
+      offlineEl.textContent = `🔌 Ngoại tuyến — dữ liệu tồn kho lúc ${cachedFirst.cachedAt ? new Date(cachedFirst.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
     }
   }
   renderKkInventoryStoreOptions();
@@ -5773,6 +5849,18 @@ function renderKkOfflineModeBar() {
     countEl.classList.toggle('hidden', pendingTotal === 0);
     countEl.textContent = pendingTotal ? `⏳ ${pendingTotal} lượt đang chờ đồng bộ` : '';
   }
+}
+// renderKkCurrentDeptBadge() (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "khi vào màn hình kiểm kê
+// ấy, người dùng được phân quyền vào siêu thị nào ấy, thì nó phải có một cái nút là bạn đang ở siêu thị
+// nào, để sau này tôi sẽ xác nhận mọi người vào đúng siêu thị của mọi người chưa") — hiện LUÔN, bất kể
+// đang ở sub-tab nào của Kiểm Kê (CÙNG khuôn kkOfflineModeBar), đọc ĐÚNG kkEffectiveDept() (siêu thị đang
+// chọn ở Tab 1/5, hoặc siêu thị hồ sơ của chính người đó nếu chưa từng đổi) — gọi ở đầu setKiemKeSubTab()
+// (mỗi lần chuyển tab) + ngay sau khi kkPeriodDeptSelected đổi (onKkPeriodDeptInputChanged()/
+// onKkShelfConfigDeptInputChanged()) để LUÔN khớp đúng thực tế, không bị trễ 1 nhịp.
+function renderKkCurrentDeptBadge() {
+  const el = document.getElementById('kkCurrentDeptBadge');
+  if (!el) return;
+  el.textContent = `📍 Bạn đang ở Siêu Thị: ${kkEffectiveDept() || '(chưa rõ)'}`;
 }
 
 // ===== Phần D — Quét mã vạch bằng camera ở "📷 Ghi Nhận" (11/2026) =====

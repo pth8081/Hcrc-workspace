@@ -49,6 +49,98 @@ stubModule('lib/appData.js', {
     return appDataStore[key];
   }
 });
+// BƯỚC 8 (12/2026): stocktakeCounts/confirmations giờ đi qua lib/stocktakeCountsStore.js +
+// lib/stocktakeConfirmationsStore.js (bảng riêng, không còn qua lib/appData.js) — stub 2 file này bằng
+// bản in-memory TÁI DÙNG NGUYÊN các hàm thuần lib/stocktakeEngine.js (mutate đúng mảng appDataStore),
+// giữ 100% hành vi/logic nghiệp vụ như store thật, chỉ khác tầng lưu trữ (mảng JS thay vì SQL).
+const stocktakeEngine = require('../lib/stocktakeEngine');
+function ensureStoreArr(collection) {
+  if (!Array.isArray(appDataStore[collection])) appDataStore[collection] = [];
+  return appDataStore[collection];
+}
+stubModule('lib/stocktakeCountsStore.js', {
+  getCountsForSession: async (sessionId) => ensureStoreArr('stocktakeCounts').filter(r => r.sessionId === sessionId),
+  getCountsForShelf: async (sessionId, shelfLocationId) => ensureStoreArr('stocktakeCounts').filter(r => r.sessionId === sessionId && r.shelfLocationId === shelfLocationId),
+  getCountsForSessions: async (sessionIds) => { const ids = new Set(sessionIds || []); return ensureStoreArr('stocktakeCounts').filter(r => ids.has(r.sessionId)); },
+  getCountById: async (id) => ensureStoreArr('stocktakeCounts').find(r => r.id === id) || null,
+  getSessionIdsWithCounts: async (sessionIds) => { const ids = new Set(sessionIds || []); return new Set(ensureStoreArr('stocktakeCounts').filter(r => ids.has(r.sessionId)).map(r => r.sessionId)); },
+  upsertScanCountRow: async (input, extra, user, clientScanId) => stocktakeEngine.upsertScanCount(ensureStoreArr('stocktakeCounts'), input, extra, user, clientScanId),
+  editCountValueRow: async (id, mode, newQty, user) => stocktakeEngine.editCountValue(ensureStoreArr('stocktakeCounts'), id, mode, newQty, user),
+  deleteCountRowById: async (id) => { stocktakeEngine.deleteCountRow(ensureStoreArr('stocktakeCounts'), id); }
+});
+stubModule('lib/stocktakeConfirmationsStore.js', {
+  getConfirmationsForSession: async (collection, sessionId) => ensureStoreArr(collection).filter(r => r.sessionId === sessionId),
+  getConfirmationById: async (collection, id) => ensureStoreArr(collection).find(r => r.id === id) || null,
+  confirmShelfRow: async (collection, input, user) => stocktakeEngine.confirmShelf(ensureStoreArr(collection), input, user),
+  unconfirmShelfRow: async (collection, id) => { stocktakeEngine.unconfirmShelf(ensureStoreArr(collection), id); }
+});
+// BƯỚC 8 (12/2026, tiếp tục): stocktakeSessions/stocktakeUserAccess/kiemKeShelfLocations giờ cũng đi
+// qua 3 store riêng — stub TƯƠNG TỰ, mutate trực tiếp đúng mảng appDataStore (TÁI DÙNG NGUYÊN các hàm
+// thuần lib/stocktakeEngine.js ở nơi gọi — chính route thật, không phải ở đây), không cần persist riêng
+// vì mutatorFn/builderFn đã tự mutate ĐÚNG mảng sống (ensureStoreArr trả về cùng reference mỗi lần).
+const { HttpError: HttpErrorStub } = require('../lib/httpErrors');
+stubModule('lib/stocktakeSessionsStore.js', {
+  getAllSessions: async () => ensureStoreArr('stocktakeSessions'),
+  createSessionRow: async (builderFn) => {
+    const record = builderFn(ensureStoreArr('stocktakeSessions'));
+    ensureStoreArr('stocktakeSessions').unshift(record);
+    return record;
+  },
+  transitionSessionRow: async (mutatorFn) => {
+    const outcome = mutatorFn(ensureStoreArr('stocktakeSessions'));
+    return outcome.result;
+  }
+});
+stubModule('lib/stocktakeUserAccessStore.js', {
+  getAllUserAccess: async () => ensureStoreArr('stocktakeUserAccess'),
+  upsertUserAccessRowsStore: async (builderFn) => {
+    const { access } = builderFn(ensureStoreArr('stocktakeUserAccess'));
+    appDataStore.stocktakeUserAccess = access;
+    return access;
+  },
+  removeUserAccessRowStore: async (id) => {
+    const arr = ensureStoreArr('stocktakeUserAccess');
+    const idx = arr.findIndex(a => a.id === id);
+    if (idx === -1) throw new HttpErrorStub(404, 'Không tìm thấy hồ sơ');
+    arr.splice(idx, 1);
+  }
+});
+stubModule('lib/kiemKeShelfLocationsStore.js', {
+  getAllShelfLocations: async () => ensureStoreArr('kiemKeShelfLocations'),
+  findSiblingsInDept: async (dept) => ensureStoreArr('kiemKeShelfLocations').filter(l => l.dept === dept),
+  deleteShelfLocationRow: async (id, checkFn) => {
+    const arr = ensureStoreArr('kiemKeShelfLocations');
+    const idx = arr.findIndex(l => l.id === id);
+    if (idx === -1) throw new HttpErrorStub(404, 'Không tìm thấy hồ sơ');
+    if (checkFn) checkFn(arr[idx]);
+    arr.splice(idx, 1);
+  },
+  createShelfLocationRow: async (dept, builderFn) => {
+    const deptScoped = ensureStoreArr('kiemKeShelfLocations').filter(l => l.dept === dept);
+    const record = builderFn(deptScoped);
+    ensureStoreArr('kiemKeShelfLocations').push(record);
+    return record;
+  },
+  editShelfLocationRow: async (id, mutatorFn) => {
+    const loc = ensureStoreArr('kiemKeShelfLocations').find(l => l.id === id);
+    if (!loc) throw new HttpErrorStub(404, 'Không tìm thấy hồ sơ');
+    return await mutatorFn(loc);
+  },
+  bulkSetShelfLocationLocked: async (idSet, locked, user, canManageFn) => {
+    const changed = [];
+    ensureStoreArr('kiemKeShelfLocations').forEach((loc) => {
+      if (!idSet.has(loc.id)) return;
+      if (!canManageFn(user, loc.dept)) {
+        throw new HttpErrorStub(403, `Quầy kệ "${loc.code}" không thuộc phạm vi siêu thị bạn được phép Khoá/Mở Khoá`);
+      }
+      loc.kiemKeLocked = locked;
+      if (locked) { loc.kiemKeLockedBy = user.username; loc.kiemKeLockedByName = user.name || user.username; loc.kiemKeLockedAt = new Date().toISOString(); }
+      else { delete loc.kiemKeLockedBy; delete loc.kiemKeLockedByName; delete loc.kiemKeLockedAt; }
+      changed.push(loc);
+    });
+    return changed;
+  }
+});
 stubModule('lib/auth.js', {
   requireAuth: (req, res, next) => {
     const username = req.get('x-test-username');
