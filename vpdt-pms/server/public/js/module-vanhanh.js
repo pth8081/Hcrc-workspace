@@ -2332,8 +2332,13 @@ let kkReportAllSessionsCache = []; // MỚI, 12/2026 — TOÀN BỘ kỳ của M
 let kkReportDeptsSelected = null; // MỚI, 12/2026 — mảng siêu thị đang chọn ở ô multi-select riêng của Tab 7.
 let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/biểu đồ/Xuất Excel
 
+// LỖI THẬT phát hiện 12/2026 (phản hồi TRỰC TIẾP người dùng, kèm ảnh chụp ô "Kỳ" hiện hàng chục dòng
+// trùng nhãn: "nay nó hiện ra nhiều, có vẻ là rác?"): KHÔNG phải dữ liệu rác/trùng — đây là các kỳ THẬT,
+// MỖI SIÊU THỊ 1 session riêng (do "chọn nhiều/tất cả siêu thị lúc Tạo Kỳ Mới" tạo), nhưng nhãn trước đây
+// KHÔNG có tên siêu thị nên nhiều session (khác dept) cùng tenKy/trạng thái nhìn giống hệt nhau. Thêm
+// s.dept vào nhãn để phân biệt được khi đang xem nhiều siêu thị cùng lúc ở Tab 7.
 function kkReportSessionOptionLabel(s) {
-  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
+  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.dept} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
 }
 // enterKkReportTab() — LỖI THẬT đã vá (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "trong phần
 // báo cáo này, nó lại lấy cái siêu thị chọn ở chỗ kỳ kiểm kê là không đúng luôn... cho phép tôi chọn tất
@@ -2704,7 +2709,7 @@ function kkReportMergeAllCompareRows() {
 }
 
 function kkReportSessionLabel(s) {
-  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy}`;
+  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.dept} — ${s.tenKy}`;
 }
 
 // So Sánh Với Kỳ Khác (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với nhau ấy, thì

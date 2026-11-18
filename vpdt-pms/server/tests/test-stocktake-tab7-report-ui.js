@@ -21,7 +21,7 @@ async function main() {
   // Nhãn hiển thị trong ô tìm-kiếm-gõ-chọn (sdd*) / multi-select — ĐÚNG khuôn kkReportSessionOptionLabel()
   // ở module-vanhanh.js: `${loaiKy==='GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${tenKy} (${trangThaiLabel})`.
   const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' };
-  const kkReportLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
+  const kkReportLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.dept} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
   const GOMMA_LABEL = kkReportLabel(GOMMA_SESSION);
   const THONGKE_LABEL = kkReportLabel(THONGKE_SESSION);
 
