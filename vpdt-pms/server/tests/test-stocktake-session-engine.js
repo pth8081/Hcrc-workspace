@@ -128,5 +128,28 @@ function buildNewSessionUniqueId(input, user, existingSessions) {
   assert.throws(() => reopenSession([draft2], draft2.id, USER_ADMIN), /Đã chốt/);
   console.log('PASS: chặn mở lại kỳ không ở trạng thái Đã chốt');
 
-  console.log('\n==== 13/13 scenario(s) passed ====');
+  // 10) sameDept() — LỖI THẬT phát hiện 12/2026 (phản hồi TRỰC TIẾP người dùng: đã Xoá hết kỳ của 1 loạt
+  // siêu thị nhưng ô "Chọn Siêu Thị" lúc Tạo Kỳ Mới VẪN báo "đã có kỳ chưa đóng", trong khi Tab 1 lọc
+  // đúng siêu thị đó lại TRỐNG TRƠN — dữ liệu cũ lưu tên siêu thị lệch khoảng trắng/cách biểu diễn Unicode
+  // dấu tiếng Việt so với tên hiện tại, "vô hình" trước so khớp `===` thô ở findOpenSession()/
+  // findActiveSession() lẫn GET /sessions, nhưng lọt qua được chỗ không so khớp dept (open-depts)).
+  const deptNfd = 'Siêu thị Quận 9'.normalize('NFD'); // tổ hợp dấu rời (byte khác NFC dù hiện y hệt)
+  const deptNfcExtraSpace = '  Siêu thị  Quận 9 '; // khoảng trắng thừa đầu/cuối/giữa
+  assert.notStrictEqual(deptNfd, 'Siêu thị Quận 9', 'Giả định test: NFD phải khác byte so với NFC gốc (nếu môi trường chạy test đã chuẩn hoá sẵn thì test này không còn ý nghĩa)');
+  const draftQuan9 = buildNewSessionUniqueId({ dept: deptNfd, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q9 (lưu dạng NFD)' }, USER_MANAGER, []);
+  assert.throws(
+    () => buildNewSessionUniqueId({ dept: 'Siêu thị Quận 9', loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q9 mới' }, USER_MANAGER, [draftQuan9]),
+    /chưa đóng/,
+    'LỖI: findOpenSession() phải nhận ra kỳ cũ lưu dạng NFD trùng với tên NFC hiện tại, không cho tạo chồng'
+  );
+  const activatedQuan9 = buildNewSessionUniqueId({ dept: deptNfcExtraSpace, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q9 (khoảng trắng thừa)' }, USER_MANAGER, []);
+  activateSession([activatedQuan9], activatedQuan9.id, USER_MANAGER);
+  assert.throws(
+    () => buildNewSessionUniqueId({ dept: 'Siêu thị Quận 9', loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q9 mới' }, USER_MANAGER, [activatedQuan9]),
+    /[Đđ]ang hoạt động/,
+    'LỖI: findActiveSession() phải nhận ra kỳ cũ lưu dư khoảng trắng trùng với tên hiện tại, không cho tạo chồng'
+  );
+  console.log('PASS: sameDept() — kỳ cũ lưu tên siêu thị lệch Unicode/khoảng trắng vẫn được nhận diện ĐÚNG là trùng siêu thị (không còn "vô hình" khiến Tạo Kỳ Mới/Tab 1 mâu thuẫn nhau)');
+
+  console.log('\n==== 14/14 scenario(s) passed ====');
 })();

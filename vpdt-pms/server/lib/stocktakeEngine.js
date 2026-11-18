@@ -121,12 +121,31 @@ function isValidLoaiKy(v) { return v === LOAI_KY.GOM_MA || v === LOAI_KY.THONG_K
 const LOAI_KY_LABEL = Object.freeze({ GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' });
 const TRANG_THAI_LABEL = Object.freeze({ NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' });
 
+// sameDept() — LỖI THẬT phát hiện 12/2026 (phản hồi TRỰC TIẾP người dùng: đã Xoá hết kỳ của 1 loạt siêu
+// thị nhưng ô "Chọn Siêu Thị" lúc Tạo Kỳ Mới VẪN báo các siêu thị đó "đã có kỳ chưa đóng", trong khi Tab 1
+// lọc đúng siêu thị đó lại hiện TRỐNG TRƠN — 2 nơi cùng đọc `stocktakeSessions` nhưng so sánh `s.dept`
+// bằng `===` (so khớp byte-cho-byte) lại ra 2 kết quả khác nhau): dữ liệu cũ của vài siêu thị lưu tên
+// LỆCH 1 chút so với tên hiện tại trong danh mục Siêu Thị (khoảng trắng thừa/cách Unicode biểu diễn dấu
+// tiếng Việt khác — 2 cách đều HIỆN RA MÀN HÌNH giống hệt nhau, mắt thường không phân biệt được, nhưng
+// `===` coi là 2 chuỗi khác nhau) — bản ghi kỳ cũ vẫn tồn tại (chưa xoá được) nhưng "vô hình" ở MỌI nơi so
+// khớp CHÍNH XÁC theo đúng tên hiện tại (Tab 1 lọc theo 1 siêu thị, `findOpenSession()` lúc tạo kỳ mới),
+// trong khi vẫn lọt qua được chỗ CHỈ liệt kê thô theo `loaiKy`/`trangThai` không so khớp dept
+// (listOpenSessionsByLoaiKy() dưới, dùng cho ô loại trừ lúc Tạo Kỳ Mới) — gây đúng nghịch lý người dùng
+// báo cáo. Chuẩn hoá (Unicode NFC + gộp khoảng trắng + trim) TRƯỚC khi so sánh ở MỌI chỗ so khớp dept
+// trong file này — không đổi gì nếu 2 chuỗi vốn đã khớp y hệt, chỉ "cứu" đúng trường hợp lệch vô hình này,
+// không rủi ro gộp nhầm 2 siêu thị tên THẬT SỰ khác nhau (chỉ chuẩn hoá dạng biểu diễn Unicode, không đổi
+// chữ/dấu/hoa-thường).
+function sameDept(a, b) {
+  const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  return norm(a) === norm(b);
+}
+
 // Mỗi (siêu thị, loại kỳ) chỉ được 1 kỳ "Đang hoạt động" tại 1 thời điểm (xác nhận trong tài liệu đề
 // xuất, Câu hỏi #5 cũ) — 2 loại kỳ độc lập nên 1 siêu thị có thể có tối đa 1 Kỳ Gom Mã + 1 Kỳ Kiểm Kê
 // cùng hoạt động, nhưng không được 2 kỳ CÙNG loại cùng hoạt động.
 function findActiveSession(sessions, dept, loaiKy) {
   return (Array.isArray(sessions) ? sessions : []).find(
-    s => s.dept === dept && s.loaiKy === loaiKy && s.trangThai === TRANG_THAI.DANG_HOAT_DONG
+    s => sameDept(s.dept, dept) && s.loaiKy === loaiKy && s.trangThai === TRANG_THAI.DANG_HOAT_DONG
   ) || null;
 }
 
@@ -140,7 +159,7 @@ function findActiveSession(sessions, dept, loaiKy) {
 // không phải tạo kỳ mới.
 function findOpenSession(sessions, dept, loaiKy) {
   return (Array.isArray(sessions) ? sessions : []).find(
-    s => s.dept === dept && s.loaiKy === loaiKy && (s.trangThai === TRANG_THAI.NHAP || s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
+    s => sameDept(s.dept, dept) && s.loaiKy === loaiKy && (s.trangThai === TRANG_THAI.NHAP || s.trangThai === TRANG_THAI.DANG_HOAT_DONG)
   ) || null;
 }
 
@@ -745,7 +764,7 @@ module.exports = {
   canManageStocktakeShelfLock, canManageStocktakeShelfLockForDept,
   canReopenStocktakeSession,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
-  isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
+  isValidLoaiKy, sameDept, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
   activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   resolveKiemKeInventoryDepts, canViewKkInventory,

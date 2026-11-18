@@ -80,12 +80,28 @@ async function main() {
       assert(btnActive, 'Nút Gom Mã bên trong module (thanh tab con) cũng phải được đánh dấu đang chọn');
     });
 
-    // "📍 Bạn đang ở Siêu Thị" (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "phải có một cái nút là
-    // bạn đang ở siêu thị nào, để sau này xác nhận mọi người vào đúng siêu thị của mọi người chưa, giống
-    // như kiểm soát đấy") — LUÔN hiện, bất kỳ sub-tab nào, đọc đúng kkEffectiveDept().
-    await run.run('Admin: luôn thấy badge "📍 Bạn đang ở Siêu Thị" đúng siêu thị hồ sơ của mình', async () => {
+    // "📍 Bạn đang ở Siêu Thị" (12/2026, theo yêu cầu TRỰC TIẾP người dùng: "phải có một cái nút là bạn
+    // đang ở siêu thị nào, để sau này xác nhận mọi người vào đúng siêu thị của mọi người chưa, giống như
+    // kiểm soát đấy") — hiện cho người CỐ ĐỊNH 1 siêu thị (hệ thống chỉ có đúng 1 siêu thị trong test này,
+    // nên admin cũng chỉ "chọn được" 1 siêu thị, khớp đúng nhánh hiện badge). Trường hợp NHIỀU siêu thị
+    // (admin thật/người chọn được nhiều siêu thị) badge tự ẩn — xem kịch bản riêng ngay dưới (LỖI ĐÃ VÁ,
+    // phản hồi TRỰC TIẾP người dùng: "tôi là admin và tôi đang chưa chọn siêu thị nào mà lại ghi ở siêu
+    // thị IT?").
+    await run.run('Admin (hệ thống chỉ 1 siêu thị): thấy badge "📍 Bạn đang ở Siêu Thị" đúng siêu thị hồ sơ của mình', async () => {
       const text = await page.evaluate(() => document.getElementById('kkCurrentDeptBadge')?.textContent || '');
       assert(text.includes('Bạn đang ở Siêu Thị') && text.includes(DEPT), `LỖI: badge phải hiện đúng siêu thị -- got: "${text}"`);
+    });
+
+    // LỖI ĐÃ VÁ (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp): hệ thống THẬT có NHIỀU siêu thị —
+    // admin/người chọn được nhiều siêu thị KHÔNG được thấy badge tuyên bố "Bạn đang ở Siêu Thị: <dept hồ
+    // sơ cá nhân, VD 'IT Siêu thị'>" khi CHƯA hề bấm chọn gì (dễ hiểu nhầm hệ thống tự gán sai) — ô
+    // "📍 Siêu thị:" (kkPeriodDeptRow) là nguồn-sự-thật duy nhất cho nhóm này, CÙNG khuôn Kiểm Soát Hàng
+    // Hóa (renderVanHanhShelfStoreHeader() ẩn khối "📍 Siêu Thị: ..." tĩnh cho admin/shelfAnyStoreAccess).
+    await run.run('Admin (hệ thống NHIỀU siêu thị): badge "Bạn đang ở Siêu Thị" tự ẨN, không tuyên bố nhầm theo dept hồ sơ cá nhân', async () => {
+      await page.evaluate(() => { DB.stores.push('Siêu thị Quận 2'); renderKkCurrentDeptBadge(); });
+      const hidden = await page.evaluate(() => document.getElementById('kkCurrentDeptBadge')?.classList.contains('hidden'));
+      assert(hidden, 'LỖI: badge phải tự ẩn khi admin chọn được nhiều hơn 1 siêu thị, tránh tuyên bố nhầm siêu thị chưa hề chọn');
+      await page.evaluate(() => { DB.stores.pop(); renderKkCurrentDeptBadge(); }); // dọn lại cho các kịch bản sau
     });
 
     await run.run('Admin: bấm mục con "🗄️ Cấu Hình Quầy Kệ" từ sidebar khi ĐANG ở sub-tab khác -> chuyển đúng sang SHELFCONFIG', async () => {

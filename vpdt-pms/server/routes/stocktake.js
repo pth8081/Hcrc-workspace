@@ -43,7 +43,7 @@ const {
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake, canConfirmStocktakeForDept,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
   buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
-  findActiveSession, listOpenSessionsByLoaiKy,
+  findActiveSession, listOpenSessionsByLoaiKy, sameDept,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
@@ -141,7 +141,11 @@ router.get('/sessions', async (req, res) => {
       }
     }
     const all = await getAllSessions();
-    const filtered = allowedDepts ? all.filter(s => allowedDepts.includes(s.dept)) : all.filter(s => s.dept === dept);
+    // sameDept() (MỚI, 12/2026 — xem chú thích đầy đủ tại định nghĩa ở lib/stocktakeEngine.js): so khớp
+    // CHUẨN HOÁ thay vì `===` thô, phòng dữ liệu cũ lệch khoảng trắng/cách biểu diễn Unicode dấu tiếng
+    // Việt so với tên hiện tại trong danh mục Siêu Thị — tránh kỳ cũ bị "vô hình" ở đúng view lọc 1 siêu
+    // thị này dù vẫn còn tồn tại thật (gây nghịch lý với ô loại trừ lúc Tạo Kỳ Mới, vốn không so khớp dept).
+    const filtered = allowedDepts ? all.filter(s => allowedDepts.some(d => sameDept(d, s.dept))) : all.filter(s => sameDept(s.dept, dept));
     // batchSiblingCount (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "chỗ này hơi sai logic
     // khi tôi tạo kỳ kiểm kê tôi chỉ cần chọn nhiều st... mặc định các siêu thị đó ở trong 1 kỳ, không phải
     // chọn 1 siêu thị lại ra kỳ như bên dưới") — CHỈ sửa phần HIỂN THỊ theo đúng xác nhận của người dùng,

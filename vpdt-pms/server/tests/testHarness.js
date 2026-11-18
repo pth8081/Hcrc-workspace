@@ -1106,7 +1106,7 @@ function createDispatcher(state) {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
-        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canConfirmStocktake, canConfirmStocktakeForDept, resolveKiemKeInventoryDepts } = require('../lib/stocktakeEngine');
+        const { canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canConfirmStocktake, canConfirmStocktakeForDept, resolveKiemKeInventoryDepts, sameDept } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         const qs = new URL(url, 'http://x').searchParams;
         let allowedDepts = null;
@@ -1124,8 +1124,8 @@ function createDispatcher(state) {
           }
         }
         const filtered = allowedDepts
-          ? (state.stocktakeSessions || []).filter(s => allowedDepts.includes(s.dept))
-          : (state.stocktakeSessions || []).filter(s => s.dept === dept);
+          ? (state.stocktakeSessions || []).filter(s => allowedDepts.some(d => sameDept(d, s.dept)))
+          : (state.stocktakeSessions || []).filter(s => sameDept(s.dept, dept));
         // batchSiblingCount — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó, 12/2026).
         const batchCounts = new Map();
         for (const s of (state.stocktakeSessions || [])) {
