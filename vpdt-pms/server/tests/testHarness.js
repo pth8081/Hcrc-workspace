@@ -599,6 +599,33 @@ function createDispatcher(state) {
         const queue = (state.employeeProfiles || []).filter(p => ['PENDING', 'CANCELLED', 'CONFIRMED'].includes(p.onboardingQueueStatus));
         return { status: 200, body: { profiles: queue } };
       }
+      // GET /api/hr-profile/employee-directory — mirror ĐÚNG route thật (routes/employeeProfile.js):
+      // danh sách CỰC NHẸ, chỉ field KHÔNG nhạy cảm (employeeCode/fullName/username/dept/jobTitle/
+      // joinDateAtHcrc/workEmail/contactPhone — KHÔNG personalEmail). Dùng cho
+      // autoFillStartDateFromOnboarding()/autoFillContactFromHrProfile() (module-admin-submissiongroups.js).
+      if (method === 'GET' && pathName === '/api/hr-profile/employee-directory') {
+        // KHÔNG có vế admin bypass — mirror ĐÚNG canFullViewProfiles()/canManageContracts() thật
+        // (lib/employeeProfile.js/lib/laborContract.js): CHỈ 3 quyền hrProfile*/hrContractManage cụ thể,
+        // admin KHÔNG tự động qua được route này nếu chưa tick quyền tương ứng (chủ đích, dữ liệu Nhân
+        // Sự nhạy cảm).
+        const canFullView = !!(freshUser.perms?.hrProfileManage || freshUser.perms?.hrProfileFullView || freshUser.perms?.hrProfileEdit);
+        const canManageContracts = !!freshUser.perms?.hrContractManage;
+        if (!canFullView && !canManageContracts) return { status: 403, body: { error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' } };
+        const directory = (state.employeeProfiles || []).filter(p => p.status !== 'INACTIVE').map(p => {
+          const linkedUser = p.username ? (state.users || []).find(u => u.username === p.username) : null;
+          return {
+            employeeCode: p.employeeCode,
+            fullName: linkedUser?.name || p.fullName || p.employeeCode,
+            username: p.username || null,
+            dept: p.dept || null,
+            jobTitle: p.jobTitle || null,
+            joinDateAtHcrc: p.joinDateAtHcrc || null,
+            workEmail: p.workEmail || null,
+            contactPhone: p.contactPhone || null
+          };
+        });
+        return { status: 200, body: { directory } };
+      }
       function canManageSecondaryPositionsOnlyMock(user) {
         return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit || user?.perms?.hrSecondaryPositionManage);
       }
