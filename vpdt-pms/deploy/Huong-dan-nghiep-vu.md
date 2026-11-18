@@ -3727,7 +3727,29 @@ diện — người dùng không cần biết/làm gì khác.
   chưa có dữ liệu gì phải xoá nữa chứ") — Kích Hoạt nhầm nhưng chưa ai quét gì
   vẫn Xoá được bình thường, không cần Đóng Kỳ rồi bỏ không. Kỳ ĐÃ có dữ liệu
   (dù đang hoạt động) hoặc Đã chốt thì KHÔNG Xoá được nữa — dùng "🔒 Đóng Kỳ"
-  để kết thúc thay vì Xoá.
+  để kết thúc thay vì Xoá. **CẬP NHẬT 12/2026** (theo yêu cầu người dùng "Sửa,
+  xóa, kích hoạt cho kỳ và ảnh hưởng all st thuộc kỳ đó"): Sửa/Xoá ở BẤT KỲ
+  siêu thị nào trong 1 kỳ tạo "cùng đợt nhiều siêu thị" (cùng khái niệm batch
+  đã dùng cho Kích Hoạt/Đóng Kỳ/Mở Lại ngay dưới) đều tự áp dụng LUÔN cho mọi
+  siêu thị "anh em" còn lại — không còn phải sửa/xoá riêng từng siêu thị
+  trong CÙNG 1 batch nữa.
+- **"Chọn Tất Cả Đang Hiện" + "🗑️ Xoá Các Kỳ Đã Chọn" (MỚI, 12/2026, theo
+  phản hồi người dùng kèm ảnh chụp nhiều kỳ Nháp rác tạo RIÊNG LẺ trước đây
+  — khác loại kỳ hoặc khác đợt tạo nên cascade theo batch ở trên KHÔNG gộp
+  được: "Sao tôi vẫn phải xóa thủ công từng kỳ... làm cách nào tôi xóa
+  hết")**: mỗi dòng Nháp (được phép xoá) trong danh sách ĐANG HIỆN có 1
+  checkbox riêng (không phụ thuộc có cùng batch hay không) — tick vài dòng
+  hoặc bấm "Chọn tất cả đang hiện" rồi bấm "🗑️ Xoá Các Kỳ Đã Chọn" để xoá 1
+  lần toàn bộ các dòng đã tick. **Lưu ý quan trọng**: danh sách Tab 1 LUÔN
+  chỉ hiện đúng 1 siêu thị tại 1 thời điểm (ô "📍 Siêu thị:" ở trên, xem mục
+  ngay trên) — "Chọn tất cả đang hiện" chỉ chọn các dòng của siêu thị ĐANG
+  XEM, KHÔNG phải mọi siêu thị trong toàn hệ thống; muốn dọn nhiều siêu thị
+  thì vẫn phải đổi ô "📍 Siêu thị:" lần lượt, nhưng mỗi lần đổi xoá được HẾT
+  các kỳ rác của siêu thị đó trong 1 lượt thay vì bấm Xoá từng dòng. Nếu 1
+  dòng được tick thuộc 1 batch nhiều siêu thị, xoá nó sẽ kéo theo CẢ các
+  siêu thị "anh em" khác trong batch đó dù không hề xuất hiện/được tick ở
+  danh sách đang xem (vì chúng thuộc siêu thị khác) — hộp thoại xác nhận và
+  thông báo kết quả đều nêu rõ việc này.
 - **Ô "📍 Siêu thị:" ở Tab 1 CHỈ để LỌC XEM, không phải để "chọn siêu thị sẽ
   Kích Hoạt" (làm rõ theo phản hồi người dùng)**: đổi ô này chỉ đổi danh
   sách kỳ đang xem, KHÔNG ảnh hưởng gì tới việc bấm "▶ Kích Hoạt" — nút Kích
@@ -3806,6 +3828,13 @@ diện — người dùng không cần biết/làm gì khác.
   (12/2026, đã tách khỏi nhóm "Vận Hành" thành mục riêng cùng đợt promote
   sidebar — gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền
   module phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
+  Tab 7 "📊 Báo Cáo" (bên trong module Kiểm Kê — khác mục Báo Cáo quản trị
+  này) **CẬP NHẬT 12/2026** (theo yêu cầu người dùng "tôi cần cái này để có
+  báo cáo nhanh"): đổi sang cache-first — chọn Kỳ/tổ hợp "So Sánh" đã xem
+  lần gần nhất thì mở lại hiện NGAY số liệu cũ (không phải chờ tính toán
+  lại), rồi mới âm thầm làm mới ngầm phía sau; mất mạng vẫn xem được số liệu
+  đã lưu (có ghi "🔌 Ngoại tuyến"). Đổi sang Kỳ/tổ hợp So Sánh CHƯA từng xem
+  thì vẫn phải chờ tải mới bình thường (không có gì để hiện ngay).
 - **Tab "📦 Tồn Kho" (MỚI, 11/2026, theo yêu cầu TRỰC TIẾP người dùng, đặt
   ngay sau "📅 Kỳ Kiểm Kê")** — trả lời câu hỏi "tồn kho mã hàng đã đồng bộ
   về thiết bị chưa?" trước khi đi kiểm kê ở nơi hay mất mạng:
@@ -3823,7 +3852,15 @@ diện — người dùng không cần biết/làm gì khác.
     siêu thị chọn hiện 1 khung riêng: "✅ Đã đồng bộ lúc: ..." (kèm giờ
     đồng bộ gần nhất) hoặc "⚠️ Chưa có dữ liệu đồng bộ" (cảnh báo rõ quét
     offline có thể không tra ra tên hàng), cùng bảng Mã Hàng/Tên Hàng/Tồn
-    Kho của siêu thị đó.
+    Kho của siêu thị đó. **CẬP NHẬT 12/2026** (theo yêu cầu người dùng "cho
+    phép tôi chọn ấn nút đồng bộ... cho chủ động nhé"): tab này KHÔNG còn tự
+    gọi lại dữ liệu mỗi lần mở — chỉ hiện NGAY bản đã lưu lần gần nhất trên
+    máy (nếu có), bấm nút "🔄 Đồng Bộ" ở góc trên khi muốn chủ động lấy số
+    mới nhất. Lưu ý: dữ liệu Tồn Kho hiển thị ở đây LUÔN đọc thẳng từ cơ sở
+    dữ liệu HWS (snapshot đã đồng bộ sẵn) — API đối tác CHỈ dùng để đồng bộ/
+    import định kỳ vào CSDL (job nền), không bị gọi trực tiếp mỗi lần mở tab
+    hay bấm Đồng Bộ (khác hẳn "💲 Kiểm Tra Giá" của Kiểm Soát Hàng Hóa — tra
+    1 mã ở đó MỚI gọi API đối tác thật-sự-realtime mỗi lần tra).
   - **Ai thấy được tab này** (SIẾT LẠI theo phản hồi TRỰC TIẾP người dùng
     SAU KHI xem demo bản đầu — bản đầu mở cho mọi người vào được module):
     CHỈ Admin hoặc người được gán RIÊNG quyền "📦 Tab Tồn Kho — Xem Tồn Kho

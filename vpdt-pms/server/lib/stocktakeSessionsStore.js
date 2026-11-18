@@ -34,10 +34,14 @@ async function createSessionRow(builderFn) {
 }
 
 // transitionSessionRow(mutatorFn) — mutatorFn(allSessions) chạy ĐÚNG NGUYÊN 1 hàm thuần (mutate theo
-// reference ngay trong allSessions), rồi trả về { changedIds: [...], removedId: id|null, result }.
-// changedIds có thể nhiều hơn 1 (activateSessionBatch — kích hoạt cả các kỳ "anh em" cùng batchId) — mỗi
-// id khoá/ghi RIÊNG qua withLockedRecordForCollection (AN TOÀN vì đã giữ SESSIONS_LOCK_KEY suốt từ lúc
-// đọc tới lúc ghi xong, không request nào khác chen vào giữa được).
+// reference ngay trong allSessions), rồi trả về { changedIds: [...], removedId: id|null, removedIds?: [...],
+// result }. changedIds/removedIds có thể nhiều hơn 1 (activateSessionBatch/closeSessionBatch/
+// reopenSessionBatch/editSessionMetaBatch/deleteDraftSessionBatch — áp dụng LUÔN cho cả các kỳ "anh em"
+// cùng batchId, xem lib/stocktakeEngine.js) — mỗi id khoá/ghi hoặc xoá RIÊNG qua
+// withLockedRecordForCollection/deleteRecordForCollection (AN TOÀN vì đã giữ SESSIONS_LOCK_KEY suốt từ
+// lúc đọc tới lúc ghi xong, không request nào khác chen vào giữa được). `removedId` (số đơn, cũ) vẫn được
+// hỗ trợ song song `removedIds` (mảng, MỚI — deleteDraftSessionBatch xoá nhiều dòng cùng lúc) để không
+// phá vỡ caller cũ (confirm-all) chỉ truyền removedId: null.
 async function transitionSessionRow(mutatorFn) {
   return withAppLock(SESSIONS_LOCK_KEY, async () => {
     const all = await getAllForCollection('stocktakeSessions');
@@ -46,8 +50,9 @@ async function transitionSessionRow(mutatorFn) {
       const item = all.find(s => s.id === changedId);
       if (item) await withLockedRecordForCollection('stocktakeSessions', changedId, () => item);
     }
-    if (outcome.removedId != null) {
-      await deleteRecordForCollection('stocktakeSessions', outcome.removedId, () => {});
+    const removedIds = outcome.removedIds || (outcome.removedId != null ? [outcome.removedId] : []);
+    for (const removedId of removedIds) {
+      await deleteRecordForCollection('stocktakeSessions', removedId, () => {});
     }
     return outcome.result;
   });

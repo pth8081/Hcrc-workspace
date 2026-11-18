@@ -105,6 +105,16 @@
       </div>
       <button type="button" id="btnKkPeriodOpenCreate" data-op="toggleKkPeriodCreateBox" class="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold">+ Tạo Kỳ Mới</button>
 
+      <!-- Xoá hàng loạt (MỚI, 12/2026, theo yêu cầu người dùng "làm cách nào tôi xóa hết" — nhiều kỳ Nháp
+           tạo riêng lẻ TRƯỚC ĐÂY (không chung batchId) nên cascade theo đợt không gộp được): chọn BẤT KỲ
+           tổ hợp dòng nào đang hiện (không phụ thuộc cùng batch hay không) rồi xoá 1 lần — xem
+           toggleKkPeriodBulkSelect()/deleteSelectedKkPeriods() (module-vanhanh.js). -->
+      <div id="kkPeriodBulkBar" class="hidden flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs">
+        <label class="flex items-center gap-1 font-semibold text-gray-700"><input type="checkbox" data-op-change="toggleKkPeriodBulkSelectAll" data-arg-el="0">Chọn tất cả đang hiện</label>
+        <span data-role="count" class="font-semibold text-amber-700"></span>
+        <button type="button" data-bulk-btn data-op="deleteSelectedKkPeriods" class="px-2 py-1 rounded bg-red-600 text-white font-bold disabled:opacity-40">🗑️ Xoá Các Kỳ Đã Chọn</button>
+      </div>
+
       <div id="kkPeriodListBody" class="space-y-2">
         <p class="text-gray-400 text-sm">Đang tải...</p>
       </div>
@@ -117,8 +127,11 @@
          KHÔNG tự đoán/gửi danh sách lên). -->
     <div id="kkInventoryWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
-        <h3 class="font-bold text-sm text-gray-800">📦 Tồn Kho Hệ Thống</h3>
-        <p class="text-[11px] text-gray-500">Xem đúng bảng Tồn Kho Hệ Thống (API đối tác, CÙNG dữ liệu dùng để tra mã khi quét ở Gom Mã/Kiểm Đếm/Kiểm Soát) — kiểm tra xem đã đồng bộ về chưa trước khi thao tác, đặc biệt lúc chuẩn bị đi kiểm kê ở nơi hay mất mạng.</p>
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-bold text-sm text-gray-800">📦 Tồn Kho Hệ Thống</h3>
+          <button type="button" id="btnKkInventorySync" data-op="syncKkInventoryTab" class="px-2 py-1 rounded bg-cyan-700 text-white text-xs font-bold shrink-0">🔄 Đồng Bộ</button>
+        </div>
+        <p class="text-[11px] text-gray-500">Xem đúng bảng Tồn Kho Hệ Thống (đọc từ cơ sở dữ liệu HWS, CÙNG dữ liệu dùng để tra mã khi quét ở Gom Mã/Kiểm Đếm/Kiểm Soát) — chỉ hiện bản đã lưu lúc trước, bấm "🔄 Đồng Bộ" để chủ động lấy số mới nhất.</p>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn siêu thị (gõ để tìm, chọn được nhiều)</label>
           <div id="kkInventoryStoreMultiSelect"></div>
@@ -377,6 +390,7 @@
         <div id="kkReportSessionDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
       </div>
       <div id="kkReportEmptyNote" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm"></div>
+      <div id="kkReportOfflineNote" class="hidden text-amber-700 text-xs font-semibold"></div>
       <div id="kkReportBody" class="hidden space-y-3">
         <div id="kkReportStatCards" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
         <div class="bg-white border rounded p-3">

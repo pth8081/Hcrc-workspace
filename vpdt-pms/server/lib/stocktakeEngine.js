@@ -402,6 +402,67 @@ function editSessionMeta(sessions, id, patch) {
 // không truyền vào thì giữ NGUYÊN hành vi cũ "chỉ xoá được Nháp", tránh phá vỡ caller/test cũ chưa cập
 // nhật). Kỳ Đã chốt (DA_CHOT) KHÔNG BAO GIỜ xoá được, bất kể có dữ liệu hay không — đã là hồ sơ lịch sử
 // chính thức, muốn làm lại thì Mở Lại rồi Đóng Kỳ lại, không xoá thẳng.
+// editSessionMetaBatch()/deleteDraftSessionBatch() (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng: "Sửa,
+// xóa, kích hoạt cho kỳ và ảnh hưởng all st thuộc kỳ đó" — tiếp nối ĐÚNG khuôn activateSessionBatch/
+// closeSessionBatch/reopenSessionBatch ở trên): Sửa/Xoá bấm ở BẤT KỲ siêu thị nào trong 1 kỳ (cùng
+// batchId, tạo chung 1 đợt nhiều siêu thị) đều tự áp dụng LUÔN cho mọi kỳ "anh em" còn lại trong batch đó
+// — không còn phải sửa/xoá riêng từng siêu thị. Mỗi anh em vẫn được kiểm quyền ĐỘC LẬP qua ĐÚNG check
+// "admin hoặc đúng dept người bấm" (CÙNG check inline activateSessionBatch() đã dùng — Sửa/Xoá giữ
+// NGUYÊN gate canManageStocktakePeriod + đúng dept mình, KHÔNG có hàm quyền riêng theo dept như Đóng/Mở
+// Lại) — lỗi của 1 anh em KHÔNG làm hỏng kỳ chính đã sửa/xoá, chỉ báo vào siblings[].error để client hiện
+// rõ "đã sửa/xoá X/Y siêu thị".
+function editSessionMetaBatch(sessions, id, user, patch) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const item = editSessionMeta(arr, id, patch);
+  const siblings = [];
+  if (item.batchId) {
+    const toEdit = arr.filter(s => s.batchId === item.batchId && s.id !== item.id);
+    for (const sib of toEdit) {
+      if (!(user?.perms?.admin || sib.dept === user?.dept)) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền sửa kỳ của siêu thị này' });
+        continue;
+      }
+      try {
+        editSessionMeta(arr, sib.id, patch);
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: item.tenKy, ok: true });
+      } catch (err) {
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+      }
+    }
+  }
+  return { item, siblings };
+}
+
+// deleteDraftSessionBatch() — khác 3 hàm Batch ở trên ở chỗ dòng bị XOÁ HẲN khỏi mảng (không còn object
+// để đọc lại .dept/.tenKy SAU khi xoá) — phải chụp lại dept/tenKy + danh sách anh em TRƯỚC khi gọi
+// deleteDraftSession() cho dòng chính (deleteDraftSession() splice ngay trong `arr`, xoá xong rồi mới lặp
+// qua anh em tránh lệch index/tham chiếu giữa chừng). `counts` (mảng {sessionId}) PHẢI đã bao gồm ĐỦ mọi
+// id trong batch (không chỉ đúng `id` được bấm) — caller (routes/stocktake.js) tự tra trước khi vào
+// transaction, xem chú thích ở route DELETE /sessions/:id.
+function deleteDraftSessionBatch(sessions, id, user, counts) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const mainBefore = arr.find(s => s.id === id);
+  const batchId = mainBefore ? mainBefore.batchId : null;
+  const mainDept = mainBefore ? mainBefore.dept : null;
+  const mainTenKy = mainBefore ? mainBefore.tenKy : null;
+  const batchSiblingsBefore = batchId ? arr.filter(s => s.batchId === batchId && s.id !== id) : [];
+  deleteDraftSession(arr, id, counts);
+  const siblings = [];
+  for (const sib of batchSiblingsBefore) {
+    if (!(user?.perms?.admin || sib.dept === user?.dept)) {
+      siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền xoá kỳ của siêu thị này' });
+      continue;
+    }
+    try {
+      deleteDraftSession(arr, sib.id, counts);
+      siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: true });
+    } catch (err) {
+      siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+    }
+  }
+  return { item: { id, dept: mainDept, tenKy: mainTenKy }, siblings };
+}
+
 function deleteDraftSession(sessions, id, counts) {
   const arr = Array.isArray(sessions) ? sessions : [];
   const idx = arr.findIndex(s => s.id === id);
@@ -765,7 +826,8 @@ module.exports = {
   canReopenStocktakeSession,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
   isValidLoaiKy, sameDept, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
-  activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
+  activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch,
+  editSessionMeta, deleteDraftSession, editSessionMetaBatch, deleteDraftSessionBatch,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   resolveKiemKeInventoryDepts, canViewKkInventory,
   upsertUserAccessRows, removeUserAccessRow,

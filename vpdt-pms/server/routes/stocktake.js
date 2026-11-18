@@ -248,19 +248,25 @@ async function handleSessionTransition(req, res, routeLabel, checkPerm, transiti
       } else {
         updatedItem = result;
       }
-      const changedIds = [id];
+      // Mỗi id (dòng chính `id` + từng sibling thành công trong extraResult.siblings) có thể hoặc còn
+      // TRONG arr (Kích Hoạt/Đóng/Mở Lại/Sửa — luôn GIỮ nguyên dòng, chỉ đổi field -> changedIds) hoặc đã
+      // bị XOÁ HẲN khỏi arr (deleteDraftSessionBatch() splice từng dòng -> removedIds) — kiểm tra THẬT
+      // bằng cách tra lại arr sau khi transitionFn chạy xong, không đoán theo tên hàm/hình dạng kết quả,
+      // để 1 hàm Batch DUY NHẤT dùng chung được cho cả 2 kiểu hiệu ứng (đổi field lẫn xoá hẳn).
+      const idsStillInArr = new Set(arr.map(s => s.id));
+      const changedIds = [];
+      const removedIds = [];
+      (idsStillInArr.has(id) ? changedIds : removedIds).push(id);
       if (Array.isArray(extraResult?.siblings)) {
         for (const sib of extraResult.siblings) {
-          if (sib.ok && sib.id != null) changedIds.push(sib.id);
+          if (sib.ok && sib.id != null) {
+            (idsStillInArr.has(sib.id) ? changedIds : removedIds).push(sib.id);
+          }
         }
       }
-      // deleteDraftSession() xoá hẳn dòng id khỏi arr (splice) — KHÁC Đóng/Mở Lại/Sửa/Kích Hoạt (luôn GIỮ
-      // nguyên dòng, chỉ đổi field) — kiểm tra arr CÒN dòng này sau transitionFn hay không để biết đường
-      // ghi lại (update) hay gỡ (remove), không đoán theo tên hàm/hình dạng kết quả.
-      const stillExists = arr.some(s => s.id === id);
       return {
-        changedIds: stillExists ? changedIds : [],
-        removedId: stillExists ? null : id,
+        changedIds,
+        removedIds,
         result: { updated: updatedItem, extra: extraResult }
       };
     });
@@ -288,29 +294,47 @@ router.post('/sessions/:id/reopen', (req, res) =>
   handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakePeriodAtAll, reopenSessionBatch,
     (user, item) => canReopenStocktakePeriodForDept(user, item.dept)));
 
-// PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — chỉ đổi
-// Tên Kỳ/Thời Gian, giữ NGUYÊN gate/phạm vi y hệt Kích Hoạt (canManageStocktakePeriod + đúng dept của
-// mình, admin bypass) — không mở rộng phạm vi theo kiemKePeriodCloseManage/kiemKePeriodReopenManage (quyền đó CHỈ áp dụng
-// cho Đóng Kỳ/Mở Lại như người dùng nêu rõ, không phải Sửa).
+// PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê"; mở rộng
+// SAU ĐÓ theo phản hồi thật "Sửa, xóa, kích hoạt cho kỳ và ảnh hưởng all st thuộc kỳ đó" — dùng
+// editSessionMetaBatch() thay editSessionMeta() đơn lẻ, CÙNG khuôn Kích Hoạt/Đóng Kỳ/Mở Lại: sửa Tên
+// Kỳ/Thời Gian ở BẤT KỲ siêu thị nào trong 1 kỳ (cùng batchId) tự áp dụng luôn cho mọi siêu thị "anh em")
+// — giữ NGUYÊN gate/phạm vi y hệt Kích Hoạt cho DÒNG VỪA BẤM (canManageStocktakePeriod + đúng dept của
+// mình, admin bypass, qua itemAccessCheck mặc định của handleSessionTransition) — không mở rộng phạm vi
+// theo kiemKePeriodCloseManage/kiemKePeriodReopenManage (quyền đó CHỈ áp dụng cho Đóng Kỳ/Mở Lại như
+// người dùng nêu rõ, không phải Sửa/Xoá) — quyền cho TỪNG sibling nằm BÊN TRONG editSessionMetaBatch()
+// (admin-hoặc-đúng-dept, xem lib/stocktakeEngine.js).
 router.patch('/sessions/:id', (req, res) =>
   handleSessionTransition(req, res, 'PATCH /api/stocktake/sessions/:id', canManageStocktakePeriod,
-    (arr, id) => editSessionMeta(arr, id, req.body)));
+    (arr, id, user) => editSessionMetaBatch(arr, id, user, req.body)));
 
-// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê"; mở rộng
-// SAU ĐÓ theo phản hồi thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải xoá nữa chứ" — xem
-// chú thích đầy đủ ở deleteDraftSession()) — xoá được kỳ Nháp HOẶC kỳ Đang hoạt động nhưng CHƯA có dữ
-// liệu quét nào, cùng gate/phạm vi như Sửa/Kích Hoạt. Phải đọc trước `stocktakeCounts` (NGOÀI transaction
-// khoá `stocktakeSessions` của handleSessionTransition() — route dùng chung này chỉ khoá đúng 1
-// collection) rồi truyền vào qua closure (CÙNG khuôn PATCH ngay trên truyền req.body).
+// DELETE /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút xóa kỳ kiểm kê"; mở rộng 2
+// lần SAU ĐÓ: (1) theo phản hồi thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải xoá nữa chứ"
+// — xem chú thích đầy đủ ở deleteDraftSession(); (2) theo yêu cầu "Sửa, xóa, kích hoạt cho kỳ và ảnh
+// hưởng all st thuộc kỳ đó" — dùng deleteDraftSessionBatch() thay deleteDraftSession() đơn lẻ, CÙNG khuôn
+// Sửa/Đóng Kỳ/Mở Lại ở trên) — xoá được kỳ Nháp HOẶC kỳ Đang hoạt động nhưng CHƯA có dữ liệu quét nào,
+// cùng gate/phạm vi như Sửa/Kích Hoạt cho DÒNG VỪA BẤM. Phải đọc trước `stocktakeCounts` NGOÀI transaction
+// khoá `stocktakeSessions` (route dùng chung chỉ khoá đúng 1 collection) — khác PATCH ở chỗ phải tra
+// trước CẢ BATCH (không chỉ đúng id được bấm): đọc nhanh `getAllSessions()` (đã có cache trong
+// recordStore, không tốn thêm round-trip DB đáng kể so với đọc lại ngay sau trong transaction) để biết
+// batchId + toàn bộ id "anh em", rồi gọi getSessionIdsWithCounts() 1 LẦN cho CẢ batch — thiếu bước này thì
+// deleteDraftSessionBatch() không biết sibling nào đã có dữ liệu quét để từ chối xoá đúng.
 router.delete('/sessions/:id', async (req, res) => {
   const sessionId = Number(req.params.id);
+  let batchSessionIds = Number.isFinite(sessionId) ? [sessionId] : [];
+  if (Number.isFinite(sessionId)) {
+    const all = await getAllSessions();
+    const target = all.find(s => s.id === sessionId);
+    if (target?.batchId) {
+      batchSessionIds = all.filter(s => s.batchId === target.batchId).map(s => s.id);
+    }
+  }
   // deleteDraftSession() (pure, lib/stocktakeEngine.js) chỉ cần BIẾT "kỳ này có dữ liệu hay không" (counts
-  // .some(c => c.sessionId === id)) — truyền 1 mảng rút gọn khớp đúng điều kiện đó thay vì tải nguyên
-  // stocktakeCounts (BƯỚC 8, giờ chỉ cần 1 lượt tra cứu nhỏ theo đúng sessionId này).
-  const sessionIdsWithData = Number.isFinite(sessionId) ? await getSessionIdsWithCounts([sessionId]) : new Set();
-  const counts = sessionIdsWithData.has(sessionId) ? [{ sessionId }] : [];
+  // .some(c => c.sessionId === id)) — truyền 1 mảng rút gọn khớp đúng điều kiện đó (phủ ĐỦ mọi id trong
+  // batch) thay vì tải nguyên stocktakeCounts (BƯỚC 8, chỉ cần tra cứu nhỏ theo đúng các sessionId này).
+  const sessionIdsWithData = batchSessionIds.length ? await getSessionIdsWithCounts(batchSessionIds) : new Set();
+  const counts = Array.from(sessionIdsWithData).map(sid => ({ sessionId: sid }));
   return handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod,
-    (arr, id) => deleteDraftSession(arr, id, counts));
+    (arr, id, user) => deleteDraftSessionBatch(arr, id, user, counts));
 });
 
 // ===================== TAB 8 "Cấu Hình Người Dùng" — allowlist theo (user × siêu thị × quầy kệ) =====

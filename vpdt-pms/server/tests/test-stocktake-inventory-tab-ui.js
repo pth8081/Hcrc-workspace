@@ -73,9 +73,20 @@ async function main() {
     });
 
     await page.click('#btnKkSubInventory');
+    await page.waitForTimeout(150);
+
+    // ĐỔI sang nút "🔄 Đồng Bộ" thủ công (MỚI, 12/2026, theo yêu cầu người dùng "cho phép tôi chọn ấn nút
+    // đồng bộ... cho chủ động nhé") — loadKkInventoryTab() giờ CHỈ hiện cache (rỗng ở lượt vào tab ĐẦU
+    // TIÊN), không tự fetch — phải bấm nút Đồng Bộ mới gọi mạng, xem syncKkInventoryTab().
+    await run.run('Lần đầu vào tab (chưa có cache) -> hiện ghi chú "Chưa có dữ liệu", KHÔNG tự gọi mạng', async () => {
+      const text = await page.evaluate(() => document.getElementById('kkInventoryStatusNote')?.textContent || '');
+      assert(text.includes('Chưa có dữ liệu'), `Phải báo chưa có dữ liệu, chờ bấm Đồng Bộ, thực tế: ${text}`);
+    });
+
+    await page.click('#btnKkInventorySync');
     await page.waitForTimeout(300);
 
-    await run.run('Mặc định (chưa chọn gì) -> tự chọn TẤT CẢ siêu thị trả về (DEPT1 + DEPT2)', async () => {
+    await run.run('Sau khi bấm "🔄 Đồng Bộ" -> mặc định (chưa chọn gì) tự chọn TẤT CẢ siêu thị trả về (DEPT1 + DEPT2)', async () => {
       const selected = await page.evaluate(() => getMultiSelectValues('kkInventoryStoreMultiSelect'));
       assertEqual(selected.length, 2, `Phải mặc định chọn đủ 2 siêu thị, thực tế: ${JSON.stringify(selected)}`);
     });
@@ -99,44 +110,36 @@ async function main() {
       assert(text.includes('Quận 1'), 'Vẫn phải còn hiện DEPT1');
     });
 
-    // Cache-first (MỚI, 12/2026, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp tab đứng "Đang tải..."
-    // rất lâu: "tôi phải lấy được dữ liệu từ cơ sở dữ liệu của ứng dụng đã chứ... giống phần Kiểm Soát
-    // đi"): vào lại tab lần 2 (đã có cache từ lượt vào đầu ở trên) dù mạng CHẬM -> phải hiện NGAY dữ liệu
-    // cache cũ, KHÔNG kẹt ở "Đang tải..." chờ mạng — xem loadKkInventoryTab() (module-vanhanh.js).
-    await run.run('Cache-first: vào lại tab lần 2 dù mạng CHẬM (giả lập trễ 3s) -> hiện NGAY dữ liệu cache, KHÔNG kẹt "Đang tải..."', async () => {
+    // Cache-first, KHÔNG tự gọi mạng (MỚI, 12/2026, 2 đợt — ban đầu "tôi phải lấy được dữ liệu từ cơ sở dữ
+    // liệu của ứng dụng đã chứ... giống phần Kiểm Soát đi", SAU ĐÓ "cho phép tôi chọn ấn nút đồng bộ...
+    // cho chủ động nhé"): vào lại tab lần 2 (đã có cache từ lượt Đồng Bộ ở trên) -> phải hiện NGAY dữ liệu
+    // cache cũ, KHÔNG tự gọi mạng (loadKkInventoryTab() giờ đồng bộ, không await fetch nào) — xem
+    // module-vanhanh.js.
+    await run.run('Cache-first: vào lại tab lần 2 (đã có cache) -> hiện NGAY dữ liệu cache, KHÔNG tự gọi mạng', async () => {
+      let systemInventoryFetchCount = 0;
       await page.evaluate(() => {
-        window.__origFetchSlow = window.fetch;
+        window.__origFetchNoAuto = window.fetch;
         window.fetch = (url, opts) => {
-          if (String(url).includes('/api/stocktake/system-inventory')) {
-            return new Promise((resolve) => setTimeout(() => resolve(window.__origFetchSlow(url, opts)), 3000));
-          }
-          return window.__origFetchSlow(url, opts);
+          if (String(url).includes('/api/stocktake/system-inventory')) window.__kkInvFetchCount = (window.__kkInvFetchCount || 0) + 1;
+          return window.__origFetchNoAuto(url, opts);
         };
       });
       await page.evaluate(() => switchTab('kiemKe'));
       await page.click('#btnKkSubInventory');
-      // CHỈ chờ 150ms (KHÔNG đủ để lượt fetch 3s trả lời) rồi kiểm tra NGAY — cache-first phải đã hiện
-      // dữ liệu trước khi mạng chậm kịp trả lời.
       await page.waitForTimeout(150);
-      const statusText = await page.evaluate(() => document.getElementById('kkInventoryStatusNote')?.textContent || '');
-      assert(statusText !== 'Đang tải...', `Lần vào lại tab (đã có cache) KHÔNG được kẹt ở "Đang tải..." dù mạng chậm -- got: "${statusText}"`);
       const bodyText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
-      assert(bodyText.includes('SP001'), `Phải hiện NGAY dữ liệu cache (SP001) trước khi mạng chậm trả lời -- got: ${bodyText}`);
-      // Khôi phục fetch() thường NGAY cho các lượt gọi SAU, nhưng GIỮ LẠI __origFetchSlow cho tới khi
-      // lượt fetch 3s còn treo ở trên kịp tự resolve (setTimeout bên trong closure vẫn cần tham chiếu này)
-      // — xoá sớm sẽ làm callback đó ném TypeError lúc tới hạn.
-      await page.evaluate(() => { window.fetch = window.__origFetchSlow; });
-      await page.waitForTimeout(3200); // để lượt fetch chậm ở trên kịp resolve xong, tránh promise treo sang bước goOffline() kế tiếp.
-      await page.evaluate(() => { delete window.__origFetchSlow; });
+      assert(bodyText.includes('SP001'), `Phải hiện NGAY dữ liệu cache (SP001) mà không cần bấm Đồng Bộ -- got: ${bodyText}`);
+      systemInventoryFetchCount = await page.evaluate(() => window.__kkInvFetchCount || 0);
+      assertEqual(systemInventoryFetchCount, 0, 'Vào lại tab (không bấm Đồng Bộ) KHÔNG được tự gọi lại /system-inventory');
+      await page.evaluate(() => { window.fetch = window.__origFetchNoAuto; delete window.__origFetchNoAuto; delete window.__kkInvFetchCount; });
     });
 
     await goOffline();
-    await page.evaluate(() => switchTab('kiemKe'));
-    await page.click('#btnKkSubInventory');
+    await page.click('#btnKkInventorySync');
     await page.waitForTimeout(300);
-    await run.run('Mất mạng (TypeError) -> fallback đúng cache lần xem gần nhất, hiện banner 🔌 Ngoại tuyến', async () => {
-      const offlineNote = await page.evaluate(() => document.getElementById('kkInventoryOfflineNote')?.textContent || '');
-      assert(offlineNote.includes('Ngoại tuyến'), `Phải hiện banner ngoại tuyến, thực tế: ${offlineNote}`);
+    await run.run('Bấm "🔄 Đồng Bộ" lúc mất mạng (TypeError) -> fallback đúng cache lần xem gần nhất, hiện banner mất kết nối', async () => {
+      const offlineNote = await page.evaluate(() => document.getElementById('kkInventoryStatusNote')?.textContent || '');
+      assert(offlineNote.includes('Mất kết nối'), `Phải báo mất kết nối, thực tế: ${offlineNote}`);
       const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
       assert(text.includes('SP001'), `Offline vẫn phải hiện dữ liệu cache cũ (SP001), thực tế: ${text}`);
     });

@@ -1210,14 +1210,16 @@ function createDispatcher(state) {
           return { status: err.status || 500, body: { error: err.message } };
         }
       }
-      // PATCH/DELETE /sessions/:id (MỚI, 12/2026 — Sửa/Xoá kỳ) — cùng gate canManageStocktakePeriod +
-      // own-dept như Kích Hoạt (xem routes/stocktake.js).
+      // PATCH/DELETE /sessions/:id (MỚI, 12/2026 — Sửa/Xoá kỳ; MỞ RỘNG sau đó theo "Sửa, xóa, kích hoạt
+      // cho kỳ và ảnh hưởng all st thuộc kỳ đó" — dùng editSessionMetaBatch()/deleteDraftSessionBatch()
+      // CÙNG khuôn Kích Hoạt/Đóng/Mở Lại ở trên) — cùng gate canManageStocktakePeriod + own-dept cho DÒNG
+      // VỪA BẤM như Kích Hoạt (xem routes/stocktake.js); quyền cho từng sibling nằm BÊN TRONG 2 hàm Batch.
       const kkSessionIdMatch = pathName.match(/^\/api\/stocktake\/sessions\/(\d+)$/);
       if (kkSessionIdMatch && (method === 'PATCH' || method === 'DELETE')) {
         const freshUser = state.users.find(u => u.username === username);
         if (!freshUser) return { status: 401, body: { error: 'Hết phiên làm việc' } };
         const { hasModuleAccessServer } = require('../lib/recordViewScope');
-        const { canManageStocktakePeriod, editSessionMeta, deleteDraftSession } = require('../lib/stocktakeEngine');
+        const { canManageStocktakePeriod, editSessionMetaBatch, deleteDraftSessionBatch } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         if (!canManageStocktakePeriod(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền thực hiện thao tác này trên Kỳ Kiểm Kê' } };
         const id = Number(kkSessionIdMatch[1]);
@@ -1227,11 +1229,15 @@ function createDispatcher(state) {
           if (!item) return { status: 404, body: { error: 'Không tìm thấy kỳ kiểm kê' } };
           if (!(freshUser.perms?.admin || item.dept === freshUser.dept)) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác' } };
           if (method === 'PATCH') {
-            const updated = editSessionMeta(arr, id, body);
-            return { status: 200, body: { item: updated } };
+            const result = editSessionMetaBatch(arr, id, freshUser, body);
+            return { status: 200, body: { item: result.item, siblings: result.siblings } };
           }
-          const result = deleteDraftSession(arr, id, state.stocktakeCounts || []);
-          return { status: 200, body: { item: result } };
+          // DELETE — mirror route thật: tra TOÀN BỘ batch (không chỉ id được bấm) để biết sibling nào đã
+          // có dữ liệu quét trước khi gọi deleteDraftSessionBatch() (xem chú thích đầy đủ ở route thật).
+          const batchSessionIds = item.batchId ? arr.filter(s => s.batchId === item.batchId).map(s => s.id) : [id];
+          const counts = (state.stocktakeCounts || []).filter(c => batchSessionIds.includes(c.sessionId));
+          const result = deleteDraftSessionBatch(arr, id, freshUser, counts);
+          return { status: 200, body: { item: result.item, siblings: result.siblings } };
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
         }
