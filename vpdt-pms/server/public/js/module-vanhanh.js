@@ -324,6 +324,11 @@ function canCreateShelfRecordClient(user) {
 let activeKiemKeSubTab = 'PERIOD';
 let kkPeriodLoaiFilter = ''; // '' = tất cả, 'GOM_MA' | 'THONG_KE'
 let kkPeriodSessionsCache = [];
+// kkPeriodBulkSelected (MỚI, 12/2026, theo yêu cầu người dùng "làm cách nào tôi xóa hết" — nhiều kỳ Nháp
+// tạo RIÊNG LẺ trước đây, không chung batchId, nên cascade theo đợt (kkPeriodActionWithSiblings) không
+// gộp xoá được) — tập id đang được tick chọn ở Tab 1, KHÔNG phụ thuộc cùng batch hay không, xem
+// toggleKkPeriodBulkSelect()/deleteSelectedKkPeriods() ngay dưới renderKkPeriodList().
+let kkPeriodBulkSelected = new Set();
 // kkPeriodDeptSelected — CHỈ dùng khi admin (người không cố định 1 siêu thị) chọn siêu thị để quản lý
 // kỳ; người thường luôn dùng đúng currentUser.dept, KHÔNG có cờ "chọn siêu thị bất kỳ" nào ở đây (đúng
 // yêu cầu "allowlist tuyệt đối, không có cờ bất kỳ" — khác hẳn shelfAnyStoreAccess ở Kiểm Soát Hàng Hóa).
@@ -2436,36 +2441,12 @@ function onKkReportSessionInputChanged() {
   loadKkReportTab();
 }
 
-async function loadKkReportTab() {
-  const sessionId = kkReportSessionId || 0;
-  // "So Sánh Với Kỳ Khác" giờ CHỌN NHIỀU (renderMultiSelectDropdown()) — đọc lại qua
-  // getMultiSelectValues(), KHÔNG còn 1 <select> đơn.
-  const compareSessionIds = getMultiSelectValues('kkReportCompareMultiSelect').map(Number).filter(Number.isFinite);
+// renderKkReportBody() — tách khỏi loadKkReportTab() (MỚI, 12/2026, xem chú thích đầy đủ ở
+// kkOfflineReportCache) để dùng LẠI được cho CẢ nhánh hiện cache-first LẪN nhánh sau khi tải mới thành
+// công — tránh viết lặp lại đúng 1 khối render* giống hệt nhau ở 2 nơi.
+function renderKkReportBody() {
   const emptyNote = document.getElementById('kkReportEmptyNote');
   const bodyWrap = document.getElementById('kkReportBody');
-  kkReportCompareSessionIds = compareSessionIds.length ? compareSessionIds : null;
-  kkReportData = null;
-  if (!sessionId) {
-    if (bodyWrap) bodyWrap.classList.add('hidden');
-    if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = 'Chưa có kỳ nào để xem báo cáo — tạo kỳ ở tab "📅 Kỳ Kiểm Kê" trước.'; }
-    return;
-  }
-  try {
-    const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionIds.length ? `&compareSessionId=${compareSessionIds.join(',')}` : '');
-    const res = await fetch(url);
-    if (res.status === 401) return handleSessionExpired();
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      if (bodyWrap) bodyWrap.classList.add('hidden');
-      if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ ' + (body.error || 'Không tải được báo cáo.'); }
-      return;
-    }
-    kkReportData = body;
-  } catch (err) {
-    if (bodyWrap) bodyWrap.classList.add('hidden');
-    if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ Không thể kết nối tới máy chủ.'; }
-    return;
-  }
   if (emptyNote) emptyNote.classList.add('hidden');
   if (bodyWrap) bodyWrap.classList.remove('hidden');
   resetListPage('kkReport');
@@ -2478,6 +2459,61 @@ async function loadKkReportTab() {
   renderKkReportValueByStoreTable();
   renderKkReportCompareChart();
   renderKkReportTable('');
+}
+// loadKkReportTab() — CACHE-FIRST (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng "tôi cần cái này để
+// có báo cáo nhanh") — CÙNG khuôn loadKkInventoryTab()/loadShelfReconciliation(): hiện NGAY bản cache gần
+// nhất ĐÚNG kỳ + đúng tổ hợp "So Sánh" đang chọn (nếu có, xem getKkReportOfflineFallback()) trước khi gọi
+// mạng, rồi mới âm thầm làm mới ngầm phía sau — vào tab/đổi kỳ thấy số liệu ngay, không phải chờ cả lượt
+// round-trip tính toán báo cáo (sessionId + nhiều kỳ So Sánh có thể hơi lâu).
+async function loadKkReportTab() {
+  const sessionId = kkReportSessionId || 0;
+  // "So Sánh Với Kỳ Khác" giờ CHỌN NHIỀU (renderMultiSelectDropdown()) — đọc lại qua
+  // getMultiSelectValues(), KHÔNG còn 1 <select> đơn.
+  const compareSessionIds = getMultiSelectValues('kkReportCompareMultiSelect').map(Number).filter(Number.isFinite);
+  const emptyNote = document.getElementById('kkReportEmptyNote');
+  const bodyWrap = document.getElementById('kkReportBody');
+  const offlineEl = document.getElementById('kkReportOfflineNote');
+  if (offlineEl) offlineEl.classList.add('hidden');
+  kkReportCompareSessionIds = compareSessionIds.length ? compareSessionIds : null;
+  kkReportData = null;
+  if (!sessionId) {
+    if (bodyWrap) bodyWrap.classList.add('hidden');
+    if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = 'Chưa có kỳ nào để xem báo cáo — tạo kỳ ở tab "📅 Kỳ Kiểm Kê" trước.'; }
+    return;
+  }
+  const cachedFirst = getKkReportOfflineFallback(sessionId, compareSessionIds);
+  if (cachedFirst) {
+    kkReportData = cachedFirst.data;
+    renderKkReportBody();
+  }
+  try {
+    const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionIds.length ? `&compareSessionId=${compareSessionIds.join(',')}` : '');
+    const res = await fetch(url);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (!cachedFirst) {
+        if (bodyWrap) bodyWrap.classList.add('hidden');
+        if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ ' + (body.error || 'Không tải được báo cáo.'); }
+      }
+      return;
+    }
+    kkReportData = body;
+    await cacheKkReportOffline(sessionId, compareSessionIds, body);
+  } catch (err) {
+    // Mất mạng thật (TypeError của fetch) — ĐÃ hiện cache ở trên (nếu có) thì giữ nguyên, chỉ báo nhẹ.
+    if (!cachedFirst) {
+      if (bodyWrap) bodyWrap.classList.add('hidden');
+      if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ Không thể kết nối tới máy chủ.'; }
+      return;
+    }
+    if (offlineEl) {
+      offlineEl.classList.remove('hidden');
+      offlineEl.textContent = `🔌 Ngoại tuyến — báo cáo lúc ${cachedFirst.cachedAt ? new Date(cachedFirst.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
+    }
+    return;
+  }
+  renderKkReportBody();
 }
 
 function kkReportIsGomMaKy() {
@@ -2909,6 +2945,7 @@ async function loadKkPeriodSessions() {
   }
   const body = document.getElementById('kkPeriodListBody');
   if (body) body.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
+  kkPeriodBulkSelected.clear(); // tải lại danh sách mới — id cũ đã chọn có thể không còn tồn tại nữa
   try {
     // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán bất kỳ quyền
     // nào trong 4 quyền theo siêu thị, xem kkSelectableDepts()) — KHÔNG chỉ riêng admin như trước (server
@@ -2932,17 +2969,16 @@ async function loadKkPeriodSessions() {
 // vi siêu thị SERVER-SIDE qua resolveKiemKeInventoryDepts(), client KHÔNG tự gửi/đoán danh sách siêu
 // thị lên). Cache offline riêng key 'kkInventory' trong object store `systemInventory` (CÙNG store với
 // 'cache'/'recon'/'report' đã có — xem khai báo kkOfflineInventoryCache ở trên).
-// loadKkInventoryTab() — CACHE-FIRST (MỚI, 12/2026, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp tab
-// đứng "Đang tải..." rất lâu: "tôi phải lấy được dữ liệu từ cơ sở dữ liệu của ứng dụng đã chứ. Còn nếu mà
-// nó đồng bộ thì nó đồng bộ ở cái phần API chứ nhỉ... đồng bộ thì nó tự đồng bộ ngầm vào các tab khác rồi
-// chứ, giống phần Kiểm Soát đi"): hiện NGAY bản cache gần nhất đã lưu trên máy (nếu có, xem
-// kkOfflineInventoryCache/cacheKkInventoryOffline() ngay dưới) TRƯỚC khi gọi mạng, rồi mới âm thầm làm mới
-// ngầm phía sau — CÙNG khuôn loadShelfReconciliation()/loadShelfReportTab() (Kiểm Soát Hàng Hóa) đã làm từ
-// trước, không phải cơ chế mới. Server (GET /api/stocktake/system-inventory) VỐN đã đọc thẳng snapshot
-// trong CSDL — KHÔNG gọi API đối tác trực tiếp theo từng request (đã đổi fire-and-forget ở đợt vá trước,
-// xem routes/stocktake.js) — cache-first ở đây là 1 lớp AN TOÀN THÊM cho mạng chậm/chập chờn phía người
-// dùng, không phải vá lại lỗi "đồng bộ" nào ở route.
-async function loadKkInventoryTab() {
+// loadKkInventoryTab() — CACHE-FIRST, KHÔNG tự làm mới ngầm (MỚI, 12/2026, 2 đợt theo phản hồi TRỰC TIẾP
+// người dùng: (1) kèm ảnh chụp tab đứng "Đang tải..." rất lâu — "tôi phải lấy được dữ liệu từ cơ sở dữ
+// liệu của ứng dụng đã chứ... đồng bộ thì nó tự đồng bộ ngầm vào các tab khác rồi chứ"; (2) SAU ĐÓ —
+// "cho phép tôi chọn ấn nút đồng bộ vì không phải ai cũng có quyền xem ở đây, nên bạn cho chủ động nhé":
+// đổi từ tự động gọi API MỖI LẦN vào tab (dù chỉ đọc snapshot CSDL, không gọi thẳng API đối tác — xem
+// chú thích tại GET /api/stocktake/system-inventory, routes/stocktake.js) sang CHỦ ĐỘNG — chỉ hiện bản
+// cache gần nhất đã lưu trên máy, người xem tự bấm "🔄 Đồng Bộ" (syncKkInventoryTab(), ngay dưới) khi
+// muốn làm mới. Quyền xem tab này đã gác riêng (canViewKkInventory, không phải ai cũng vào được) nên để
+// người xem tự quyết định thời điểm gọi, không cần tự động mỗi lần mở tab.
+function loadKkInventoryTab() {
   const statusEl = document.getElementById('kkInventoryStatusNote');
   const offlineEl = document.getElementById('kkInventoryOfflineNote');
   if (offlineEl) offlineEl.classList.add('hidden');
@@ -2950,10 +2986,27 @@ async function loadKkInventoryTab() {
   if (cachedFirst) {
     kkInventoryByDept = cachedFirst.byDept || {};
     if (statusEl) statusEl.textContent = '';
-    renderKkInventoryStoreOptions();
-  } else if (statusEl) {
-    statusEl.textContent = 'Đang tải...';
+    if (offlineEl) {
+      offlineEl.classList.remove('hidden');
+      offlineEl.textContent = `Dữ liệu đã lưu lúc ${cachedFirst.cachedAt ? new Date(cachedFirst.cachedAt).toLocaleString('vi-VN') : '(không rõ)'} — bấm "🔄 Đồng Bộ" để lấy số mới nhất.`;
+    }
+  } else {
+    kkInventoryByDept = {};
+    if (statusEl) statusEl.textContent = 'Chưa có dữ liệu — bấm "🔄 Đồng Bộ" để tải.';
   }
+  renderKkInventoryStoreOptions();
+}
+// syncKkInventoryTab() — gọi THẬT lên server khi người dùng bấm "🔄 Đồng Bộ" (tách khỏi loadKkInventoryTab()
+// ở trên, xem chú thích đầy đủ tại đó) — CÙNG logic gọi mạng/xử lý lỗi/cache lại đã có trước đây, chỉ khác
+// thời điểm gọi (chủ động, không tự động mỗi lần vào tab).
+async function syncKkInventoryTab() {
+  const statusEl = document.getElementById('kkInventoryStatusNote');
+  const offlineEl = document.getElementById('kkInventoryOfflineNote');
+  const btn = document.getElementById('btnKkInventorySync');
+  if (offlineEl) offlineEl.classList.add('hidden');
+  if (statusEl) statusEl.textContent = 'Đang đồng bộ...';
+  if (btn) btn.disabled = true;
+  const cachedFirst = getKkInventoryOfflineFallback();
   try {
     const res = await fetch('/api/stocktake/system-inventory');
     if (res.status === 401) return handleSessionExpired();
@@ -2961,24 +3014,18 @@ async function loadKkInventoryTab() {
       const body = await res.json();
       kkInventoryByDept = body.byDept || {};
       await cacheKkInventoryOffline(kkInventoryByDept);
-      if (statusEl) statusEl.textContent = '';
-    } else if (!cachedFirst) {
-      // ĐÃ hiện bản cache ở trên thì GIỮ NGUYÊN, không ghi đè bằng lỗi nghiệp vụ của lần làm mới ngầm này
-      // (người dùng vẫn đang xem đúng dữ liệu hợp lệ gần nhất, chỉ là chưa chắc mới nhất).
+      if (statusEl) statusEl.textContent = `Đã đồng bộ lúc ${new Date().toLocaleString('vi-VN')}.`;
+    } else {
       const err = await res.json().catch(() => ({}));
-      if (statusEl) statusEl.textContent = err.error || 'Không tải được tồn kho — thử lại.';
-      kkInventoryByDept = {};
+      if (statusEl) statusEl.textContent = err.error || 'Không đồng bộ được — thử lại.';
+      if (!cachedFirst) kkInventoryByDept = {};
     }
   } catch (err) {
-    // Mất mạng thật (TypeError của fetch) — ĐÃ hiện cache ở trên (nếu có) thì không cần làm gì thêm, chỉ
-    // báo "ngoại tuyến" nhẹ; CHỈ báo lỗi to khi đây là LẦN ĐẦU chưa từng cache gì trên máy này.
-    if (!cachedFirst) {
-      kkInventoryByDept = {};
-      if (statusEl) statusEl.textContent = 'Mất kết nối và chưa có dữ liệu tồn kho đã lưu trước đó — kết nối mạng rồi vào lại tab này ít nhất 1 lần.';
-    } else if (offlineEl) {
-      offlineEl.classList.remove('hidden');
-      offlineEl.textContent = `🔌 Ngoại tuyến — dữ liệu tồn kho lúc ${cachedFirst.cachedAt ? new Date(cachedFirst.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
-    }
+    // Mất mạng thật (TypeError của fetch) — ĐÃ hiện cache ở trên (nếu có) thì giữ nguyên, chỉ báo lỗi.
+    if (statusEl) statusEl.textContent = cachedFirst ? 'Mất kết nối — vẫn đang hiện bản cache cũ.' : 'Mất kết nối và chưa có dữ liệu đã lưu trước đó.';
+    if (!cachedFirst) kkInventoryByDept = {};
+  } finally {
+    if (btn) btn.disabled = false;
   }
   renderKkInventoryStoreOptions();
 }
@@ -2991,6 +3038,26 @@ async function cacheKkInventoryOffline(byDept) {
   } catch (err) { /* IndexedDB không khả dụng — bỏ qua, màn vẫn dùng được khi còn mạng */ }
 }
 function getKkInventoryOfflineFallback() { return kkOfflineInventoryCache; }
+// kkReportCacheKey()/cacheKkReportOffline()/getKkReportOfflineFallback() (MỚI, 12/2026, theo yêu cầu
+// người dùng "tôi cần cái này để có báo cáo nhanh") — CÙNG khuôn cacheKkInventoryOffline() ngay trên,
+// khác ở chỗ có thêm `compareSessionIds` làm 1 phần khoá khớp (báo cáo đổi hẳn số liệu theo tổ hợp
+// "So Sánh Với Kỳ Khác" đang chọn, không chỉ theo sessionId) — xem khai báo kkOfflineReportCache.
+function kkReportCacheKey(compareSessionIds) {
+  return (Array.isArray(compareSessionIds) ? compareSessionIds : []).slice().sort((a, b) => a - b).join(',');
+}
+async function cacheKkReportOffline(sessionId, compareSessionIds, data) {
+  try {
+    const db = await openShelfOfflineDb();
+    const entry = { key: 'kkReport', sessionId, compareKey: kkReportCacheKey(compareSessionIds), data, cachedAt: new Date().toISOString() };
+    await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.put(entry));
+    kkOfflineReportCache = entry;
+  } catch (err) { /* IndexedDB không khả dụng — bỏ qua, màn vẫn dùng được khi còn mạng */ }
+}
+function getKkReportOfflineFallback(sessionId, compareSessionIds) {
+  const c = kkOfflineReportCache;
+  if (!c || c.sessionId !== sessionId || c.compareKey !== kkReportCacheKey(compareSessionIds)) return null;
+  return c;
+}
 // Ô chọn siêu thị (renderMultiSelectDropdown(), core.js) — giữ nguyên lựa chọn cũ nếu vẫn còn hợp lệ
 // sau khi tải lại dữ liệu, ngược lại mặc định chọn TẤT CẢ siêu thị đang xem được (để hiện ngay, không
 // bắt người dùng tự chọn lại từ rỗng mỗi lần vào tab).
@@ -3107,6 +3174,7 @@ function renderKkPeriodList() {
     .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   if (!items.length) {
     body.innerHTML = '<p class="text-gray-400 text-sm">Chưa có kỳ kiểm kê nào — bấm "+ Tạo Kỳ Mới" ở trên để bắt đầu.</p>';
+    updateKkPeriodBulkBarState();
     return;
   }
   body.innerHTML = items.map(s => {
@@ -3129,18 +3197,27 @@ function renderKkPeriodList() {
     // xem deleteDraftSession() ở lib/stocktakeEngine.js) — MỚI 12/2026, theo yêu cầu người dùng "cho tôi
     // có nút sửa, có nút xóa kỳ kiểm kê". `s.hasData` do server tính sẵn (GET /sessions), CHỈ có mặt trên
     // session Đang hoạt động — session Nháp/Đã chốt không có field này (`undefined`, coi như falsy).
+    const deletable = canManage && (s.trangThai === 'NHAP' || (s.trangThai === 'DANG_HOAT_DONG' && !s.hasData));
     if (canManage) {
       actions.push(`<button type="button" data-op="editKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-gray-300 text-gray-700 text-xs font-bold">✏️ Sửa</button>`);
-      if (s.trangThai === 'NHAP' || (s.trangThai === 'DANG_HOAT_DONG' && !s.hasData)) {
+      if (deletable) {
         actions.push(`<button type="button" data-op="deleteKkPeriodClick" data-arg0="${s.id}" class="px-2 py-1 rounded border border-red-300 text-red-600 text-xs font-bold">🗑️ Xoá</button>`);
       }
     }
     const thoiGian = [s.thoiGianBatDau, s.thoiGianKetThuc].filter(Boolean).join(' – ');
-    return `<div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
-      <div class="min-w-0">
-        <div class="font-bold text-sm">${escapeHtml(s.tenKy || '')}</div>
-        <div class="text-xs text-gray-500">Loại: ${KK_LOAI_KY_LABEL[s.loaiKy] || escapeHtml(s.loaiKy || '')}${thoiGian ? ' · ' + escapeHtml(thoiGian) : ''}</div>
-        ${s.batchSiblingCount ? `<div class="text-[11px] text-sky-700 font-semibold mt-0.5">📦 Tạo cùng đợt với ${s.batchSiblingCount - 1} siêu thị khác — bấm "${s.trangThai === 'NHAP' ? '▶ Kích Hoạt' : s.trangThai === 'DANG_HOAT_DONG' ? '🔒 Đóng Kỳ' : '↩️ Mở Lại'}" ở ĐÂY áp dụng luôn cho CẢ NHÓM, không còn tách riêng từng siêu thị.</div>` : ''}
+    // Checkbox Xoá Hàng Loạt (MỚI, 12/2026, xem kkPeriodBulkSelected ở trên) — CHỈ hiện ở dòng được phép
+    // xoá (cùng điều kiện nút "🗑️ Xoá" đơn lẻ), KHÔNG phụ thuộc cùng batchId hay không.
+    const bulkCb = deletable
+      ? `<input type="checkbox" data-kk-period-id="${s.id}" data-op-change="toggleKkPeriodBulkSelect" data-arg0="${s.id}" class="shrink-0 mt-1" ${kkPeriodBulkSelected.has(s.id) ? 'checked' : ''}>`
+      : '';
+    return `<div class="bg-white border rounded p-3 flex items-start justify-between gap-2 flex-wrap">
+      <div class="min-w-0 flex items-start gap-2">
+        ${bulkCb}
+        <div class="min-w-0">
+          <div class="font-bold text-sm">${escapeHtml(s.tenKy || '')}</div>
+          <div class="text-xs text-gray-500">Loại: ${KK_LOAI_KY_LABEL[s.loaiKy] || escapeHtml(s.loaiKy || '')}${thoiGian ? ' · ' + escapeHtml(thoiGian) : ''}</div>
+          ${s.batchSiblingCount ? `<div class="text-[11px] text-sky-700 font-semibold mt-0.5">📦 Tạo cùng đợt với ${s.batchSiblingCount - 1} siêu thị khác — bấm "${s.trangThai === 'NHAP' ? '▶ Kích Hoạt' : s.trangThai === 'DANG_HOAT_DONG' ? '🔒 Đóng Kỳ' : '↩️ Mở Lại'}" ở ĐÂY áp dụng luôn cho CẢ NHÓM, không còn tách riêng từng siêu thị.</div>` : ''}
+        </div>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         ${KK_TRANG_THAI_BADGE[s.trangThai] || ''}
@@ -3148,6 +3225,83 @@ function renderKkPeriodList() {
       </div>
     </div>`;
   }).join('');
+  updateKkPeriodBulkBarState();
+}
+// toggleKkPeriodBulkSelect()/toggleKkPeriodBulkSelectAll()/updateKkPeriodBulkBarState()/
+// deleteSelectedKkPeriods() (MỚI, 12/2026) — xem chú thích đầy đủ ở khai báo kkPeriodBulkSelected (trên
+// cùng file) + nút "🗑️ Xoá Các Kỳ Đã Chọn" (kiemKeSection.html, #kkPeriodBulkBar). CÙNG khuôn
+// toggleKkShelfLockSelect()/updateKkShelfLockBulkBarState() (Tab 5) đã có — chỉ khác hành động cuối
+// (xoá thay vì khoá/mở khoá) và KHÔNG có route bulk riêng (gọi lại ĐÚNG DELETE /sessions/:id hiện có,
+// lần lượt từng id — tần suất dùng thấp, admin dọn dẹp 1 lần, không cần route bulk mới).
+function toggleKkPeriodBulkSelect(idStr) {
+  const id = Number(idStr);
+  if (kkPeriodBulkSelected.has(id)) kkPeriodBulkSelected.delete(id); else kkPeriodBulkSelected.add(id);
+  updateKkPeriodBulkBarState();
+}
+function toggleKkPeriodBulkSelectAll(el) {
+  const listBody = document.getElementById('kkPeriodListBody');
+  const checked = !!(el && el.checked);
+  if (listBody) {
+    listBody.querySelectorAll('input[type="checkbox"][data-kk-period-id]').forEach((cbEl) => {
+      cbEl.checked = checked;
+      const id = Number(cbEl.dataset.kkPeriodId);
+      if (checked) kkPeriodBulkSelected.add(id); else kkPeriodBulkSelected.delete(id);
+    });
+  }
+  updateKkPeriodBulkBarState();
+}
+function updateKkPeriodBulkBarState() {
+  const bar = document.getElementById('kkPeriodBulkBar');
+  if (!bar) return;
+  const listBody = document.getElementById('kkPeriodListBody');
+  const deletableCount = listBody ? listBody.querySelectorAll('input[type="checkbox"][data-kk-period-id]').length : 0;
+  bar.classList.toggle('hidden', deletableCount === 0);
+  const n = kkPeriodBulkSelected.size;
+  const countEl = bar.querySelector('[data-role="count"]');
+  if (countEl) countEl.textContent = n > 0 ? `Đã chọn ${n} kỳ` : '';
+  bar.querySelectorAll('button[data-bulk-btn]').forEach((btn) => {
+    btn.disabled = n === 0;
+    btn.classList.toggle('opacity-40', n === 0);
+    btn.classList.toggle('cursor-not-allowed', n === 0);
+  });
+  const selectAllCb = bar.querySelector('input[type="checkbox"][data-op-change="toggleKkPeriodBulkSelectAll"]');
+  if (selectAllCb) {
+    selectAllCb.checked = deletableCount > 0 && n >= deletableCount;
+    selectAllCb.indeterminate = n > 0 && n < deletableCount;
+  }
+}
+async function deleteSelectedKkPeriods() {
+  const ids = Array.from(kkPeriodBulkSelected);
+  if (!ids.length) return;
+  if (!confirm(`Xoá hẳn ${ids.length} kỳ đã chọn? Không thể hoàn tác. (Kỳ nào cùng đợt tạo với kỳ khác trong lúc chọn thì vẫn bị xoá theo cả nhóm luôn, kể cả khi chưa tick riêng kỳ đó.)`)) return;
+  let okCount = 0;
+  let siblingCascadeCount = 0;
+  const failures = [];
+  for (const id of ids) {
+    const item = kkPeriodSessionsCache.find(s => s.id === id);
+    try {
+      const res = await fetch(`/api/stocktake/sessions/${id}`, { method: 'DELETE' });
+      if (res.status === 401) return handleSessionExpired();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        okCount++;
+        if (Array.isArray(data.siblings)) siblingCascadeCount += data.siblings.filter(sib => sib.ok).length;
+      } else if (res.status === 404) {
+        // Đã bị xoá THEO (cascade từ 1 id khác CÙNG batch, cũng nằm trong lượt chọn này, xử lý trước đó)
+        // — không phải lỗi thật, không báo vào failures.
+        okCount++;
+      } else {
+        failures.push(`${item ? item.tenKy : `#${id}`}: ${data.error || 'lỗi không rõ'}`);
+      }
+    } catch (err) {
+      failures.push(`${item ? item.tenKy : `#${id}`}: lỗi kết nối`);
+    }
+  }
+  kkPeriodBulkSelected.clear();
+  await loadKkPeriodSessions();
+  let msg = `Đã xoá ${okCount}/${ids.length} kỳ đã chọn` + (siblingCascadeCount ? ` (kèm ${siblingCascadeCount} kỳ "anh em" cùng đợt bị xoá theo, không tính riêng ở trên)` : '') + '.';
+  if (failures.length) msg += `\n\nKhông xoá được:\n${failures.join('\n')}`;
+  alert(msg);
 }
 
 function setKkPeriodLoaiFilter(loai) {
@@ -3217,17 +3371,24 @@ function editKkPeriodClick(idStr) {
   if (ketThuc) ketThuc.value = item.thoiGianKetThuc || '';
   tenKy?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+// deleteKkPeriodClick() — xoá "cả nhóm" (MỚI, 12/2026, theo yêu cầu người dùng "Sửa, xóa, kích hoạt cho
+// kỳ và ảnh hưởng all st thuộc kỳ đó"): server (deleteDraftSessionBatch(), lib/stocktakeEngine.js) tự xoá
+// LUÔN mọi kỳ "anh em" cùng batchId (nếu có) — hiện rõ kết quả qua showKkPeriodSiblingsResult() CÙNG khuôn
+// Kích Hoạt/Đóng Kỳ/Mở Lại ngay trên. Hộp xác nhận cảnh báo trước nếu kỳ này thuộc 1 batch (kiểm qua
+// item.batchId — đã có sẵn trên dòng client cache, KHÔNG cần hỏi server trước).
 async function deleteKkPeriodClick(idStr) {
   const id = Number(idStr);
   const item = kkPeriodSessionsCache.find(s => s.id === id);
   if (!item) return;
-  if (!confirm(`Xoá hẳn kỳ "${item.tenKy}"? Không thể hoàn tác.`)) return;
+  const warnBatch = item.batchId ? ' CẢ NHÓM siêu thị cùng kỳ (nếu tạo chung đợt) sẽ bị xoá theo luôn.' : '';
+  if (!confirm(`Xoá hẳn kỳ "${item.tenKy}"? Không thể hoàn tác.${warnBatch}`)) return;
   try {
     const res = await fetch(`/api/stocktake/sessions/${id}`, { method: 'DELETE' });
     if (res.status === 401) return handleSessionExpired();
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { alert(data.error || 'Không xoá được kỳ kiểm kê'); return; }
     await loadKkPeriodSessions();
+    showKkPeriodSiblingsResult(data, 'xoá', 'Không xoá được');
   } catch (err) {
     alert('Lỗi kết nối — thử lại.');
   }
@@ -3287,7 +3448,9 @@ async function submitCreateKkPeriod() {
   const thoiGianKetThuc = document.getElementById('kkNewKetThuc')?.value || '';
   if (!tenKy) { alert('Vui lòng nhập tên kỳ'); return; }
   // Chế độ Sửa (editingKkPeriodId != null, MỚI 12/2026) — CHỈ gọi PATCH đổi Tên Kỳ/Thời Gian, không đụng
-  // tới dept/loaiKy/ô chọn siêu thị (đã ẩn ở setKkPeriodFormEditMode(true)).
+  // tới dept/loaiKy/ô chọn siêu thị (đã ẩn ở setKkPeriodFormEditMode(true)). Server
+  // (editSessionMetaBatch(), lib/stocktakeEngine.js) tự áp dụng LUÔN cho mọi kỳ "anh em" cùng batchId —
+  // hiện rõ kết quả qua showKkPeriodSiblingsResult() CÙNG khuôn Kích Hoạt/Đóng Kỳ/Mở Lại/Xoá.
   if (editingKkPeriodId != null) {
     try {
       const res = await fetch(`/api/stocktake/sessions/${editingKkPeriodId}`, {
@@ -3300,6 +3463,7 @@ async function submitCreateKkPeriod() {
       editingKkPeriodId = null;
       toggleKkPeriodCreateBox();
       await loadKkPeriodSessions();
+      showKkPeriodSiblingsResult(data, 'sửa', 'Không sửa được');
     } catch (err) {
       alert('Lỗi kết nối — thử lại.');
     }
@@ -3375,8 +3539,12 @@ async function postKkPeriodAction(id, action) {
 // — bấm ở BẤT KỲ siêu thị nào trong 1 kỳ (tenKy/batchId) đều áp dụng cho CẢ NHÓM siêu thị đó, không còn
 // khái niệm chọn riêng từng siêu thị. `data.siblings` liệt kê kết quả từng siêu thị anh em để báo cho
 // người dùng biết đã áp dụng cả nhóm, không chỉ đúng 1 dòng vừa bấm.
-async function kkPeriodActionWithSiblings(id, action, verbDaLam, verbKhongLamDuoc) {
-  const data = await postKkPeriodAction(id, action);
+// showKkPeriodSiblingsResult() — tách riêng khỏi kkPeriodActionWithSiblings() (MỚI, 12/2026, theo yêu cầu
+// người dùng tiếp theo "Sửa, xóa, kích hoạt cho kỳ và ảnh hưởng all st thuộc kỳ đó") để dùng LẠI được cho
+// Sửa (PATCH)/Xoá (DELETE) — 2 thao tác đó không gọi qua postKkPeriodAction() (fetch/method khác), nhưng
+// response trả về CÙNG hình dạng `{item, siblings}` (editSessionMetaBatch/deleteDraftSessionBatch, xem
+// lib/stocktakeEngine.js) nên hiện kết quả cùng 1 khuôn với Kích Hoạt/Đóng Kỳ/Mở Lại.
+function showKkPeriodSiblingsResult(data, verbDaLam, verbKhongLamDuoc) {
   if (data && Array.isArray(data.siblings) && data.siblings.length) {
     const ok = data.siblings.filter(s => s.ok);
     const failed = data.siblings.filter(s => !s.ok);
@@ -3384,6 +3552,10 @@ async function kkPeriodActionWithSiblings(id, action, verbDaLam, verbKhongLamDuo
     if (failed.length) msg += `\n\n${verbKhongLamDuoc}:\n${failed.map(s => `${s.dept}: ${s.error}`).join('\n')}`;
     alert(msg);
   }
+}
+async function kkPeriodActionWithSiblings(id, action, verbDaLam, verbKhongLamDuoc) {
+  const data = await postKkPeriodAction(id, action);
+  showKkPeriodSiblingsResult(data, verbDaLam, verbKhongLamDuoc);
 }
 function activateKkPeriod(id) {
   return kkPeriodActionWithSiblings(id, 'activate', 'kích hoạt', 'Không kích hoạt được');
@@ -5335,6 +5507,13 @@ let shelfOfflinePriceCatalogCache = null;
 // — khác shelfOfflineSystemInventoryCache (chỉ scope 1 siêu thị hiện tại của người dùng).
 let kkOfflineInventoryCache = null;
 let kkInventoryByDept = {}; // dữ liệu đang hiển thị trên tab (từ server hoặc fallback offline)
+// Cache offline cho Tab 7 "📊 Báo Cáo" CỦA KIỂM KÊ (MỚI, 12/2026, theo yêu cầu người dùng "tôi cần cái
+// này để có báo cáo nhanh" — KHÁC HẲN shelfOfflineReportCache ở trên, đó là Báo Cáo của Kiểm Soát Hàng
+// Hóa, 2 module độc lập) — {sessionId, compareKey, data, cachedAt} hoặc null. CHỈ 1 "ô nhớ" (y hệt
+// kkOfflineInventoryCache) — cache-first chỉ áp dụng khi ĐANG xem ĐÚNG kỳ + đúng tổ hợp "So Sánh" đã cache
+// lần gần nhất (so khớp sessionId + compareKey, xem getKkReportOfflineFallback()) — đổi sang kỳ khác thì
+// coi như chưa có cache, không hiện nhầm số của kỳ trước.
+let kkOfflineReportCache = null;
 function openShelfOfflineDb() {
   if (!window.indexedDB) return Promise.reject(new Error('Trình duyệt không hỗ trợ IndexedDB'));
   if (shelfOfflineDbPromise) return shelfOfflineDbPromise;
@@ -5399,6 +5578,7 @@ async function ensureShelfOfflineReady() {
     shelfOfflineReportCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('report')) || null;
     shelfOfflinePriceCatalogCache = await shelfOfflineTx(db, 'priceCatalog', 'readonly', s => s.get('cache')) || null;
     kkOfflineInventoryCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('kkInventory')) || null;
+    kkOfflineReportCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('kkReport')) || null;
     kkOfflineShelvesCache = {};
     (await shelfOfflineTx(db, 'kkShelves', 'readonly', s => s.getAll()) || []).forEach(r => { kkOfflineShelvesCache[r.mode] = r; });
     kkOfflineSessionInfoCache = {};

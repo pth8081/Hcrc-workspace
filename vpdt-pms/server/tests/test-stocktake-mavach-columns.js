@@ -48,6 +48,10 @@ async function main() {
     await page.waitForTimeout(150);
 
     await page.click('#btnKkSubInventory');
+    await page.waitForTimeout(150);
+    // Nút "🔄 Đồng Bộ" thủ công (MỚI, 12/2026) — loadKkInventoryTab() giờ CHỈ hiện cache, không tự gọi
+    // mạng; phải bấm Đồng Bộ mới tải dữ liệu thật để kiểm cột Mã Vạch.
+    await page.click('#btnKkInventorySync');
     await page.waitForTimeout(300);
     await run.run('Tab "📦 Tồn Kho": có cột "Mã Vạch" + hiện đúng giá trị mã vạch', async () => {
       const headText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
