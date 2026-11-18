@@ -6703,6 +6703,17 @@ làm được nay bị chặn:
     hợp đồng CŨ NHẤT theo Ngày hiệu lực) và "Điều Chỉnh Thu Nhập Lần 1/2/3"
     (Ngày áp dụng + nội dung của tối đa 3 phụ lục CŨ NHẤT theo Ngày áp dụng,
     lấy từ hợp đồng ĐANG HIỆU LỰC).
+  - **Hình Thức Làm Việc + Thời Gian Làm Việc (12/2026, theo yêu cầu người
+    dùng: "rất nhiều hồ sơ nhân sự Hình Thức Làm Việc đang chưa được cập
+    nhật, muốn cập nhật hàng loạt")** — 2 field này ĐÃ CÓ SẴN trên Chi tiết
+    hồ sơ/form Onboarding từ trước (xem mục "Mã Số Thuế TNCN"/"Đối chiếu file
+    Excel 'Trường Thông Tin Tạo Mã'" ở trên) nhưng CHƯA có trong mẫu Tải Về/
+    Nhập/Xuất Excel Hồ Sơ Nhân Sự — nay bổ sung đủ 2 cột droplist (đối chiếu
+    đúng danh mục admin cấu hình ở Quản Lý Danh Mục, cùng khuôn Đơn Vị Pháp
+    Nhân/Lao Động Đặc Biệt), ĐỌC/GHI được bình thường qua cả 2 chiều — chọn
+    "Ghi đè thông tin" khi Nhập Excel sẽ cập nhật đúng 2 field này cho hồ sơ
+    đã có, dùng để cập nhật hàng loạt cho nhiều hồ sơ cùng lúc thay vì sửa
+    tay từng hồ sơ một.
 - **Đổi các trường nhập tay sang dropdown chọn danh mục (11/2026, theo yêu cầu
   người dùng rà soát "trường có nút select nhưng đang để nhập tay")**:
   - **"Nơi cấp CCCD/CMND" ở modal "➕ Tạo Hồ Sơ Mới"** — LỖI ĐÃ VÁ: trước đây

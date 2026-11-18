@@ -86,6 +86,14 @@ const COLUMNS = [
   { header: 'Đơn Vị (Pháp Nhân)', key: 'legalEntity', width: 20 },
   { header: 'Email Liên Hệ Công Việc', key: 'workEmail', width: 22 },
   { header: 'Đối Tượng Lao Động Đặc Biệt', key: 'specialLaborStatus', width: 22 },
+  // employmentType/workSchedule (12/2026, theo yêu cầu người dùng: "rất nhiều hồ sơ nhân sự Hình Thức Làm
+  // Việc đang chưa được cập nhật, muốn cập nhật hàng loạt qua file") — 2 field ĐÃ CÓ SẴN trên hồ sơ
+  // (lib/employeeProfile.js::applyProfileEdit() case 'employmentType'/'workSchedule', đối chiếu đúng danh
+  // mục appData.employmentTypes/workSchedules) và route bulk-import ĐÃ truyền sẵn 2 danh mục này qua
+  // options (xem routes/employeeProfile.js POST /bulk-import) — chỉ thiếu đúng 2 cột ở mẫu Excel/bước đọc
+  // file, không cần sửa gì ở lớp ghi dữ liệu.
+  { header: 'Hình Thức Làm Việc', key: 'employmentType', width: 18 },
+  { header: 'Thời Gian Làm Việc', key: 'workSchedule', width: 18 },
   { header: 'Tình Trạng Làm Việc Hiện Tại (chi tiết)', key: 'currentWorkStatusDetail', width: 26 },
   { header: 'Từ Ngày (Tình Trạng Làm Việc) (YYYY-MM-DD)', key: 'currentWorkStatusFrom', width: 22 },
   { header: 'Đến Ngày (Tình Trạng Làm Việc) (YYYY-MM-DD)', key: 'currentWorkStatusTo', width: 22 },
@@ -181,7 +189,8 @@ async function buildImportTemplateWorkbook() {
     nationalIdIssuePlace: 'Cục Cảnh sát QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12',
     retirementDate: '', socialInsuranceAtThisUnit: 'Có',
     emergencyContactAddress: '123 Đường ABC, Q.1, TP.HCM', legalEntity: 'Công ty TNHH HCRC',
-    workEmail: 'nguyenvana@hcrc.vn', specialLaborStatus: '', currentWorkStatusDetail: '',
+    workEmail: 'nguyenvana@hcrc.vn', specialLaborStatus: '',
+    employmentType: 'Chính thức', workSchedule: 'Giờ hành chính', currentWorkStatusDetail: '',
     currentWorkStatusFrom: '', currentWorkStatusTo: '', lastInternalTransferUnit: '', lastInternalTransferReason: '',
     joinDateAtPredecessorUnit: '', joinDateAtHcrc: '2020-01-10', concurrentJobTitle: '',
     resignationNoticeDate: '', resignationExpectedDate: '', tenureBaseDate: '',
@@ -193,17 +202,22 @@ async function buildImportTemplateWorkbook() {
   // lấy từ danh mục và làm drop list để khi làm file không bị nhầm") — chỉ áp cho field có danh mục
   // THẬT trong hệ thống (Quản Lý Danh Mục) hoặc enum cố định, dùng chung applyDropdownValidation()
   // (lib/adminExport.js). helperColIdx mỗi cột lệch nhau để không đụng cột ẩn của nhau.
-  const [legalEntities, specialLaborStatuses, currentWorkStatusDetails, maritalStatuses] = await Promise.all([
+  const [legalEntities, specialLaborStatuses, currentWorkStatusDetails, maritalStatuses, employmentTypes, workSchedules] = await Promise.all([
     getAppDataValue('legalEntities'), getAppDataValue('specialLaborStatuses'), getAppDataValue('currentWorkStatusDetails'),
     // maritalStatuses (11/2026, "đưa vào danh mục") — chuyển từ Set cố định sang đọc đúng khuôn
     // legalEntities/specialLaborStatuses/currentWorkStatusDetails ngay trên.
-    getAppDataValue('maritalStatuses')
+    getAppDataValue('maritalStatuses'),
+    // employmentType/workSchedule (12/2026) — cùng khuôn danh mục THẬT appData.employmentTypes/
+    // workSchedules (admin tự sửa qua màn Biểu Mẫu), xem chú thích đầy đủ tại COLUMNS ở trên.
+    getAppDataValue('employmentTypes'), getAppDataValue('workSchedules')
   ]);
   const dropdownTargets = [
     { key: 'gender', options: [...GENDERS] },
     { key: 'maritalStatus', options: maritalStatuses || [] },
     { key: 'legalEntity', options: legalEntities || [] },
     { key: 'specialLaborStatus', options: specialLaborStatuses || [] },
+    { key: 'employmentType', options: employmentTypes || [] },
+    { key: 'workSchedule', options: workSchedules || [] },
     { key: 'currentWorkStatusDetail', options: currentWorkStatusDetails || [] }
   ];
   dropdownTargets.forEach((t, idx) => applyDropdownValidation(sheet, t.key, t.options, { endRow: MAX_ROWS_PER_IMPORT, helperColIdx: COLUMNS.length + 50 + idx }));
@@ -255,6 +269,8 @@ const HEADER_HINTS = {
   legalEntity: ['don vi (phap nhan)', 'don vi phap nhan'],
   workEmail: ['email lien he cong viec'],
   specialLaborStatus: ['doi tuong lao dong dac biet'],
+  employmentType: ['hinh thuc lam viec'],
+  workSchedule: ['thoi gian lam viec'],
   currentWorkStatusDetail: ['tinh trang lam viec hien tai (chi tiet)', 'tinh trang lam viec hien tai'],
   currentWorkStatusFrom: ['tu ngay (tinh trang lam viec) (yyyy-mm-dd)', 'tu ngay (tinh trang lam viec)'],
   currentWorkStatusTo: ['den ngay (tinh trang lam viec) (yyyy-mm-dd)', 'den ngay (tinh trang lam viec)'],
@@ -407,6 +423,11 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     legalEntity: String(get('legalEntity') || '').trim() || null,
     workEmail: String(get('workEmail') || '').trim() || null,
     specialLaborStatus: String(get('specialLaborStatus') || '').trim() || null,
+    // employmentType/workSchedule (12/2026) — cùng nhóm enum với specialLaborStatus/currentWorkStatusDetail
+    // ngay trên (không validate chặt ở bước xem trước, applyProfileEdit() đối chiếu đúng danh mục thật lúc
+    // nhập thật — xem chú thích đầy đủ tại COLUMNS).
+    employmentType: String(get('employmentType') || '').trim() || null,
+    workSchedule: String(get('workSchedule') || '').trim() || null,
     currentWorkStatusDetail: String(get('currentWorkStatusDetail') || '').trim() || null,
     lastInternalTransferUnit: String(get('lastInternalTransferUnit') || '').trim() || null,
     lastInternalTransferReason: String(get('lastInternalTransferReason') || '').trim() || null,
@@ -562,6 +583,10 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
     { header: 'Đơn Vị (Pháp Nhân)', key: 'legalEntity', width: 20 },
     { header: 'Email Liên Hệ Công Việc', key: 'workEmail', width: 22 },
     { header: 'Đối Tượng Lao Động Đặc Biệt', key: 'specialLaborStatus', width: 22 },
+    // employmentType/workSchedule (12/2026) — cùng field key với COLUMNS (mẫu nhập) ở trên, xem chú thích
+    // đầy đủ tại khai báo COLUMNS.
+    { header: 'Hình Thức Làm Việc', key: 'employmentType', width: 18 },
+    { header: 'Thời Gian Làm Việc', key: 'workSchedule', width: 18 },
     { header: 'Tình Trạng Làm Việc Hiện Tại (chi tiết)', key: 'currentWorkStatusDetail', width: 26 },
     { header: 'Từ Ngày (Tình Trạng Làm Việc)', key: 'currentWorkStatusFrom', width: 20 },
     { header: 'Đến Ngày (Tình Trạng Làm Việc)', key: 'currentWorkStatusTo', width: 20 },
@@ -621,6 +646,7 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
       socialInsuranceAtThisUnitLabel: p.socialInsuranceAtThisUnit == null ? '' : (p.socialInsuranceAtThisUnit ? 'Có' : 'Không'),
       emergencyContactAddress: p.emergencyContactAddress || '', legalEntity: p.legalEntity || '',
       workEmail: p.workEmail || '', specialLaborStatus: p.specialLaborStatus || '',
+      employmentType: p.employmentType || '', workSchedule: p.workSchedule || '',
       currentWorkStatusDetail: p.currentWorkStatusDetail || '', currentWorkStatusFrom: toDisplayDateVN(p.currentWorkStatusFrom),
       currentWorkStatusTo: toDisplayDateVN(p.currentWorkStatusTo), lastInternalTransferUnit: p.lastInternalTransferUnit || '',
       lastInternalTransferReason: p.lastInternalTransferReason || '', joinDateAtPredecessorUnit: toDisplayDateVN(p.joinDateAtPredecessorUnit),
