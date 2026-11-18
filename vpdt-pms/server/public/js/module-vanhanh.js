@@ -3006,7 +3006,55 @@ function renderKkInventoryStoreOptions() {
   });
   renderKkInventoryStoresBody();
 }
-function renderKkInventoryStoresBody() {
+// LỖI THẬT phát hiện 12/2026 (phản hồi TRỰC TIẾP người dùng: "ấn tồn kho cũng treo"/"treo ứng dụng
+// luôn", kèm ảnh màn hình trắng xoá trên mobile — desktop mạnh hơn thì tự qua được, mobile yếu hơn thì
+// đứng hẳn): hàm này TRƯỚC ĐÂY dựng HTML cho TẤT CẢ siêu thị đang chọn (mặc định CHỌN SẴN TẤT CẢ — xem
+// renderKkInventoryStoreOptions() ở trên, "chưa tự tay chọn gì" KHÔNG có nghĩa là 0 siêu thị, mà là toàn
+// bộ siêu thị xem được) trong ĐÚNG 1 lần gán innerHTML — người được xem nhiều chục siêu thị (admin/
+// kiemKeInventoryView rộng), mỗi siêu thị có thể hàng trăm-nghìn dòng tồn kho, dựng + sort + nối chuỗi +
+// parse HTML TẤT CẢ cùng lúc chặn hẳn luồng chính đủ lâu để trình duyệt coi là "không phản hồi" — rõ nhất
+// trên thiết bị yếu (điện thoại) dù vẫn CÙNG 1 nguyên nhân trên desktop (chỉ đỡ hơn vì máy khoẻ hơn).
+// Vá: dựng + chèn TỪNG siêu thị 1, nhường lại luồng chính cho trình duyệt vẽ/phản hồi thao tác giữa mỗi
+// lượt (requestAnimationFrame) — vẫn hiện ĐỦ dữ liệu y hệt như cũ, chỉ khác ở chỗ hiện DẦN thay vì
+// dựng xong mới hiện hết 1 lúc. kkInventoryRenderToken huỷ lượt render CŨ nếu người dùng đổi lựa chọn
+// siêu thị trước khi lượt trước kịp vẽ xong (tránh 2 lượt chèn chồng nhau).
+let kkInventoryRenderToken = 0;
+function renderKkInventoryStoreCard(dept) {
+  const entry = kkInventoryByDept[dept];
+  const rows = (entry && Array.isArray(entry.rows)) ? entry.rows : [];
+  const syncNote = entry && entry.fetchedAt
+    ? `<span class="text-emerald-700">✅ Đã đồng bộ lúc: ${escapeHtml(new Date(entry.fetchedAt).toLocaleString('vi-VN'))}</span>`
+    : `<span class="text-amber-700">⚠️ Chưa có dữ liệu đồng bộ cho siêu thị này — quét mã offline ở Gom Mã/Kiểm Đếm/Kiểm Soát có thể không tra ra tên hàng.</span>`;
+  // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
+  // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — rows đã qua
+  // aggregateSystemInventoryRowsByMaHang() ở server (GET /api/stocktake/system-inventory) nên đã sẵn
+  // field `maVach` (mã vạch MẶC ĐỊNH của mã hàng, API đối tác), không cần tính toán gì thêm ở client.
+  const tableHtml = rows.length
+    ? `<div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
+        <table class="w-full text-[11px]">
+          <thead class="bg-gray-50 sticky top-0"><tr>
+            <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Mã Vạch</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
+          </tr></thead>
+          <tbody>${rows.slice().sort((a, b) => String(a.maHang).localeCompare(String(b.maHang))).map(r => `
+            <tr class="border-t">
+              <td class="p-1.5">${escapeHtml(r.maHang)}</td>
+              <td class="p-1.5 font-mono">${escapeHtml(r.maVach || '—')}</td>
+              <td class="p-1.5">${escapeHtml(r.tenHang || '')}</td>
+              <td class="p-1.5 text-right font-semibold">${(r.soLuongTon || 0).toLocaleString('vi-VN')}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>`
+    : '<p class="text-gray-400 text-sm">Chưa có dữ liệu tồn kho cho siêu thị này.</p>';
+  return `
+    <div class="bg-white border rounded p-3 space-y-2">
+      <div class="flex items-center justify-between flex-wrap gap-1">
+        <h4 class="font-bold text-sm text-gray-800">🏬 ${escapeHtml(dept)}</h4>
+        <span class="text-[11px]">${syncNote}</span>
+      </div>
+      ${tableHtml}
+    </div>`;
+}
+async function renderKkInventoryStoresBody() {
   const body = document.getElementById('kkInventoryStoresBody');
   if (!body) return;
   const selected = getMultiSelectValues('kkInventoryStoreMultiSelect');
@@ -3014,41 +3062,15 @@ function renderKkInventoryStoresBody() {
     body.innerHTML = '<p class="text-gray-400 text-sm">Chọn ít nhất 1 siêu thị ở trên để xem tồn kho.</p>';
     return;
   }
-  body.innerHTML = selected.map(dept => {
-    const entry = kkInventoryByDept[dept];
-    const rows = (entry && Array.isArray(entry.rows)) ? entry.rows : [];
-    const syncNote = entry && entry.fetchedAt
-      ? `<span class="text-emerald-700">✅ Đã đồng bộ lúc: ${escapeHtml(new Date(entry.fetchedAt).toLocaleString('vi-VN'))}</span>`
-      : `<span class="text-amber-700">⚠️ Chưa có dữ liệu đồng bộ cho siêu thị này — quét mã offline ở Gom Mã/Kiểm Đếm/Kiểm Soát có thể không tra ra tên hàng.</span>`;
-    // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
-    // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — rows đã qua
-    // aggregateSystemInventoryRowsByMaHang() ở server (GET /api/stocktake/system-inventory) nên đã sẵn
-    // field `maVach` (mã vạch MẶC ĐỊNH của mã hàng, API đối tác), không cần tính toán gì thêm ở client.
-    const tableHtml = rows.length
-      ? `<div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
-          <table class="w-full text-[11px]">
-            <thead class="bg-gray-50 sticky top-0"><tr>
-              <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Mã Vạch</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
-            </tr></thead>
-            <tbody>${rows.slice().sort((a, b) => String(a.maHang).localeCompare(String(b.maHang))).map(r => `
-              <tr class="border-t">
-                <td class="p-1.5">${escapeHtml(r.maHang)}</td>
-                <td class="p-1.5 font-mono">${escapeHtml(r.maVach || '—')}</td>
-                <td class="p-1.5">${escapeHtml(r.tenHang || '')}</td>
-                <td class="p-1.5 text-right font-semibold">${(r.soLuongTon || 0).toLocaleString('vi-VN')}</td>
-              </tr>`).join('')}</tbody>
-          </table>
-        </div>`
-      : '<p class="text-gray-400 text-sm">Chưa có dữ liệu tồn kho cho siêu thị này.</p>';
-    return `
-      <div class="bg-white border rounded p-3 space-y-2">
-        <div class="flex items-center justify-between flex-wrap gap-1">
-          <h4 class="font-bold text-sm text-gray-800">🏬 ${escapeHtml(dept)}</h4>
-          <span class="text-[11px]">${syncNote}</span>
-        </div>
-        ${tableHtml}
-      </div>`;
-  }).join('');
+  const myToken = ++kkInventoryRenderToken;
+  body.innerHTML = '';
+  for (const dept of selected) {
+    if (myToken !== kkInventoryRenderToken) return; // đã có lượt chọn mới hơn đè lên, dừng lượt cũ ngay
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderKkInventoryStoreCard(dept);
+    body.appendChild(wrap.firstElementChild);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  }
 }
 
 const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
