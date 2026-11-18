@@ -4554,6 +4554,11 @@ const CREATE_MODULE_CONFIGS = {
       // requireTaskAssignment=true trên bản ghi để completeHrTask() (lib/recordActions.js) gate tiếp lúc
       // "✓ Hoàn thành" sau này. Quy trình CŨ (tạo trước khi có field này) không có cờ -> không bị hồi tố.
       const hasTaskAssignments = payload.taskAssignments && typeof payload.taskAssignments === 'object' && !Array.isArray(payload.taskAssignments);
+      // OFFBOARDING (12/2026, theo yêu cầu người dùng: "có những nhân sự có thể phải ra về ngay trong
+      // ngày... bỏ hết dấu sao để nhập bất cứ công việc gì cũng có thể exit được") — KHÔNG còn chặn cứng
+      // thiếu người phụ trách như ONBOARDING (nhánh ONBOARDING GIỮ NGUYÊN 100%, không đổi gì). Vẫn validate
+      // username NẾU CÓ gõ (chặn gán nhầm tài khoản không tồn tại/đã khoá) — chỉ bỏ yêu cầu "phải gán ĐỦ"
+      // trước khi tạo được quy trình.
       if (hasTaskAssignments) {
         const missingRequired = [];
         for (const t of templates) {
@@ -4563,11 +4568,14 @@ const CREATE_MODULE_CONFIGS = {
           const assignee = (appData?.users || []).find(u => u.username === username && u.active !== false);
           if (!assignee) throw new CreateError(400, `Người phụ trách đã chọn cho việc "${t.taskName}" không hợp lệ (tài khoản không tồn tại hoặc đã bị khoá)`);
         }
-        if (missingRequired.length) {
+        if (missingRequired.length && processType !== 'OFFBOARDING') {
           throw new CreateError(400, `Vui lòng gán Phụ Trách cho các việc bắt buộc: ${missingRequired.join(', ')}`);
         }
       }
-      payload.requireTaskAssignment = hasTaskAssignments;
+      // requireTaskAssignment=false cho OFFBOARDING — không bật gate "✓ Hoàn thành" chặn thiếu người phụ
+      // trách sau này ở completeHrTask() (lib/recordActions.js), nhất quán với việc không còn bắt buộc
+      // gán đủ lúc tạo (nếu vẫn bật gate đó mà lúc tạo không ép đủ, task sẽ kẹt mãi không hoàn thành được).
+      payload.requireTaskAssignment = hasTaskAssignments && processType !== 'OFFBOARDING';
       const anchorTime = new Date(anchorDate).getTime();
       payload.tasks = templates.map((t, idx) => {
         const assignedUsername = hasTaskAssignments ? String(payload.taskAssignments[t.id] || '').trim() : '';
