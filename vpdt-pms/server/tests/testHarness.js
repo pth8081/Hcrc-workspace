@@ -1126,10 +1126,20 @@ function createDispatcher(state) {
         const filtered = allowedDepts
           ? (state.stocktakeSessions || []).filter(s => allowedDepts.includes(s.dept))
           : (state.stocktakeSessions || []).filter(s => s.dept === dept);
+        // batchSiblingCount — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó, 12/2026).
+        const batchCounts = new Map();
+        for (const s of (state.stocktakeSessions || [])) {
+          if (s.batchId) batchCounts.set(s.batchId, (batchCounts.get(s.batchId) || 0) + 1);
+        }
         // hasData — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó) để test Playwright xác nhận
         // được đúng nút "🗑️ Xoá" hiện/ẩn theo dữ liệu thật, không chỉ theo trạng thái.
         const sessionIdsWithData = new Set((state.stocktakeCounts || []).map(c => c.sessionId));
-        const items = filtered.map(s => s.trangThai === 'DANG_HOAT_DONG' ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
+        const items = filtered.map(s => {
+          let out = s;
+          if (s.batchId && batchCounts.get(s.batchId) > 1) out = { ...out, batchSiblingCount: batchCounts.get(s.batchId) };
+          if (s.trangThai === 'DANG_HOAT_DONG') out = { ...out, hasData: sessionIdsWithData.has(s.id) };
+          return out;
+        });
         return { status: 200, body: allowedDepts ? { items, allowedDepts } : { items } };
       }
       if (pathName === '/api/stocktake/sessions/open-depts' && method === 'GET') {
@@ -1174,7 +1184,7 @@ function createDispatcher(state) {
         const {
           canManageStocktakePeriod, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
           canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept,
-          activateSessionBatch, closeSession, reopenSession
+          activateSessionBatch, closeSessionBatch, reopenSessionBatch
         } = require('../lib/stocktakeEngine');
         if (!hasModuleAccessServer(freshUser, 'kiemKe')) return { status: 403, body: { error: 'Bạn không có quyền truy cập module Kiểm Kê' } };
         const id = Number(kkTransitionMatch[1]);
@@ -1191,13 +1201,11 @@ function createDispatcher(state) {
             reopen: () => canReopenStocktakePeriodForDept(freshUser, item.dept)
           };
           if (!itemAccessFnMap[action]()) return { status: 403, body: { error: 'Kỳ kiểm kê không thuộc phạm vi siêu thị bạn được phép thao tác' } };
-          if (action === 'activate') {
-            const result = activateSessionBatch(arr, id, freshUser);
-            return { status: 200, body: { item: result.item, siblings: result.siblings } };
-          }
-          const fnMap = { close: closeSession, reopen: reopenSession };
-          const updated = fnMap[action](arr, id, freshUser);
-          return { status: 200, body: { item: updated } };
+          // closeSessionBatch/reopenSessionBatch — mirror ĐÚNG routes/stocktake.js (12/2026, "tôi chốt
+          // không đóng kỳ riêng lẻ siêu thị mà đóng cả kỳ là đóng hết các st trong kỳ đó").
+          const batchFnMap = { activate: activateSessionBatch, close: closeSessionBatch, reopen: reopenSessionBatch };
+          const result = batchFnMap[action](arr, id, freshUser);
+          return { status: 200, body: { item: result.item, siblings: result.siblings } };
         } catch (err) {
           return { status: err.status || 500, body: { error: err.message } };
         }

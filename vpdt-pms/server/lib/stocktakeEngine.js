@@ -290,6 +290,63 @@ function reopenSession(sessions, id, user) {
   return item;
 }
 
+// closeSessionBatch()/reopenSessionBatch() (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng: "tôi chốt không
+// đóng kỳ riêng lẻ siêu thị mà đóng cả kỳ là đóng hết các st trong kỳ đó, ko có khái niệm đóng và mở từng
+// siêu thị trong kỳ đó") — CÙNG khuôn activateSessionBatch() ngay trên: bấm Đóng/Mở Lại ở BẤT KỲ siêu thị
+// nào trong 1 kỳ (cùng batchId, tạo chung 1 đợt nhiều siêu thị) đều tự áp dụng LUÔN cho mọi kỳ "anh em"
+// còn ở ĐÚNG trạng thái nguồn (Đang hoạt động/Đã chốt) — không còn khái niệm đóng/mở lẻ từng siêu thị.
+// Gọi THẲNG canCloseStocktakePeriodForDept()/canReopenStocktakePeriodForDept() (định nghĩa NGAY TRONG
+// file này, phía trên) cho TỪNG sibling riêng — không nhận qua tham số/closure, vì handleSessionTransition
+// (routes/stocktake.js) gọi transitionFn(arr, id, user, body) với ĐÚNG 4 tham số cố định này cho MỌI
+// transition (PATCH/DELETE cũng đi qua), không có chỗ truyền thêm hàm check riêng — phòng trường hợp
+// người có quyền hẹp (chỉ vài siêu thị, không phải {all:true}) không được phép đóng/mở MỌI siêu thị trong
+// cùng batch. CHỦ Ý KHÔNG dùng cho confirm-all (Xác Nhận Toàn Bộ Đợt, Tab 6) — đóng kỳ ở đó gắn CHẶT với
+// tiến độ Kiểm Đếm/Kiểm Soát/Xác Nhận ĐÚNG của riêng từng siêu thị (mỗi siêu thị hoàn thành ở thời điểm
+// khác nhau), ép đóng theo cả nhóm ở đó sẽ đóng nhầm siêu thị CHƯA xong việc — giữ NGUYÊN closeSession()
+// đơn lẻ cho route đó, chỉ 2 nút thủ công "🔒 Đóng Kỳ"/"↩️ Mở Lại" ở Tab 1 mới cascade theo batch.
+function closeSessionBatch(sessions, id, user) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const item = closeSession(arr, id, user);
+  const siblings = [];
+  if (item.batchId) {
+    const toClose = arr.filter(s => s.batchId === item.batchId && s.id !== item.id && s.trangThai === TRANG_THAI.DANG_HOAT_DONG);
+    for (const sib of toClose) {
+      if (!canCloseStocktakePeriodForDept(user, sib.dept)) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền đóng kỳ của siêu thị này' });
+        continue;
+      }
+      try {
+        closeSession(arr, sib.id, user);
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: true });
+      } catch (err) {
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+      }
+    }
+  }
+  return { item, siblings };
+}
+function reopenSessionBatch(sessions, id, user) {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const item = reopenSession(arr, id, user);
+  const siblings = [];
+  if (item.batchId) {
+    const toReopen = arr.filter(s => s.batchId === item.batchId && s.id !== item.id && s.trangThai === TRANG_THAI.DA_CHOT);
+    for (const sib of toReopen) {
+      if (!canReopenStocktakePeriodForDept(user, sib.dept)) {
+        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: 'Bạn không có quyền mở lại kỳ của siêu thị này' });
+        continue;
+      }
+      try {
+        reopenSession(arr, sib.id, user);
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: true });
+      } catch (err) {
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+      }
+    }
+  }
+  return { item, siblings };
+}
+
 // editSessionMeta() (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — CHỈ đổi
 // metadata thuần (Tên Kỳ/Thời Gian), KHÔNG đổi dept/loaiKy/trangThai (đổi siêu thị/loại kỳ sau khi tạo dễ
 // gây lẫn dữ liệu đã gắn vào kỳ — muốn đổi thì tạo kỳ mới) — cho sửa ở MỌI trạng thái (Nháp/Đang hoạt
@@ -689,7 +746,7 @@ module.exports = {
   canReopenStocktakeSession,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
   isValidLoaiKy, findActiveSession, findOpenSession, listOpenSessionsByLoaiKy, validateCreateSessionInput, buildNewSession,
-  activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
+  activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
   MODE_ACCESS_FIELD, canUserDoStocktakeOnShelf, listAllowedShelfLocationIds, userHasAnyStocktakeAccessToDept,
   resolveKiemKeInventoryDepts, canViewKkInventory,
   upsertUserAccessRows, removeUserAccessRow,

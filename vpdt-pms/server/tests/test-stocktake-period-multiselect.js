@@ -94,15 +94,21 @@ async function selectSdd(page, inputId, dropdownId, label) {
     await page.waitForTimeout(200);
     let rowTextA = await page.textContent('#kkPeriodListBody');
     assert.ok(rowTextA.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị A phải có kỳ vừa tạo');
+    // batchSiblingCount (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "chỗ này hơi sai logic...
+    // không phải chọn 1 siêu thị lại ra kỳ như bên dưới") — xem đúng siêu thị A PHẢI thấy ghi chú báo rõ
+    // kỳ này tạo CÙNG đợt với 1 siêu thị khác (C), không để trông như 1 kỳ tách biệt hoàn toàn.
+    assert.ok(rowTextA.includes('Tạo cùng đợt với 1 siêu thị khác'), 'LỖI: Siêu thị A phải thấy ghi chú "Tạo cùng đợt với 1 siêu thị khác"');
     await page.fill('#kkPeriodDeptInput', 'Siêu thị C');
     await page.waitForTimeout(200);
     let rowTextC = await page.textContent('#kkPeriodListBody');
     assert.ok(rowTextC.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị C phải có kỳ vừa tạo');
+    assert.ok(rowTextC.includes('Tạo cùng đợt với 1 siêu thị khác'), 'LỖI: Siêu thị C phải thấy ghi chú "Tạo cùng đợt với 1 siêu thị khác"');
     await page.fill('#kkPeriodDeptInput', 'Siêu thị B');
     await page.waitForTimeout(200);
     let rowTextB = await page.textContent('#kkPeriodListBody');
     assert.ok(!rowTextB.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị B KHÔNG được có kỳ này (không được chọn lúc tạo)');
-    console.log('PASS: Tạo 1 lượt cho NHIỀU siêu thị đã chọn -> đúng N kỳ riêng biệt (1 kỳ/1 siêu thị), không gộp chung, không lan sang siêu thị không chọn');
+    assert.ok(!rowTextB.includes('Tạo cùng đợt'), 'LỖI: kỳ Gom Mã CŨ của Siêu thị B (tạo riêng lẻ, không batch) KHÔNG được hiện ghi chú "Tạo cùng đợt"');
+    console.log('PASS: Tạo 1 lượt cho NHIỀU siêu thị đã chọn -> đúng N kỳ riêng biệt (1 kỳ/1 siêu thị), không gộp chung, không lan sang siêu thị không chọn, có ghi chú "cùng đợt" để không nhìn như kỳ tách biệt');
 
     // ===== 6) Mở lại hộp tạo — giờ cả A và C đều đã có kỳ Kiểm Kê Nháp -> bị loại khỏi ô chọn. =====
     await page.click('#btnKkPeriodOpenCreate');

@@ -3734,12 +3734,21 @@ diện — người dùng không cần biết/làm gì khác.
   Hoạt luôn áp dụng cho ĐÚNG kỳ đang bấm (và mọi kỳ cùng lượt tạo nếu dùng
   "Chọn nhiều/tất cả siêu thị" ở trên, xem mục batch ngay dưới), không phụ
   thuộc ô lọc này đang đứng ở siêu thị nào.
-- **Kích Hoạt đồng thời nhiều siêu thị đã tạo cùng 1 lượt (MỚI)**: nếu kỳ
-  được tạo bằng "Chọn nhiều/tất cả siêu thị" (xem mục Tạo Kỳ Mới ở trên), chỉ
-  cần bấm "▶ Kích Hoạt" ở ĐÚNG 1 siêu thị trong lượt đó — hệ thống TỰ kích
-  hoạt luôn mọi siêu thị còn lại cùng lượt tạo (vẫn đang ở Nháp), không cần
-  bấm từng siêu thị một. Kỳ tạo riêng lẻ (không qua chọn nhiều) thì Kích Hoạt
-  như cũ, chỉ đúng 1 siêu thị.
+- **Kích Hoạt/Đóng Kỳ/Mở Lại đồng thời nhiều siêu thị đã tạo cùng 1 lượt
+  (CẬP NHẬT 12/2026, theo phản hồi người dùng: "tôi chốt không đóng kỳ riêng
+  lẻ siêu thị mà đóng cả kỳ là đóng hết các st trong kỳ đó, ko có khái niệm
+  đóng và mở từng siêu thị trong kỳ đó")**: nếu kỳ được tạo bằng "Chọn nhiều/
+  tất cả siêu thị" (xem mục Tạo Kỳ Mới ở trên), chỉ cần bấm "▶ Kích Hoạt" /
+  "🔒 Đóng Kỳ" / "↩️ Mở Lại" ở ĐÚNG 1 siêu thị trong lượt đó — hệ thống TỰ áp
+  dụng LUÔN cho mọi siêu thị còn lại cùng lượt tạo (còn đang ở đúng trạng
+  thái nguồn tương ứng: Nháp để Kích Hoạt, Đang hoạt động để Đóng, Đã chốt để
+  Mở Lại), không cần/không còn cách thao tác riêng lẻ từng siêu thị trong 1
+  kỳ nữa. Mỗi kỳ trong danh sách Tab 1 có ghi chú "📦 Tạo cùng đợt với N siêu
+  thị khác" khi thuộc 1 lượt tạo nhiều siêu thị, giúp phân biệt với kỳ tạo
+  riêng lẻ (Kích Hoạt/Đóng/Mở Lại chỉ đúng 1 siêu thị như cũ). Riêng "Xác
+  Nhận Toàn Bộ Đợt" (Tab 6, tự đóng kỳ khi xác nhận xong) vẫn CHỈ đóng đúng
+  siêu thị đó — không cascade theo nhóm, vì mỗi siêu thị hoàn thành Kiểm Đếm/
+  Kiểm Soát/Xác Nhận ở thời điểm khác nhau.
 - **Tách "Đóng Kỳ" và "Mở Lại Kỳ" thành 2 quyền ĐỘC LẬP (MỚI, theo yêu cầu
   người dùng — Mở Lại là hành động "nhạy cảm hơn", không nên cấp nhỏ giọt
   theo từng siêu thị như Đóng Kỳ)**:
