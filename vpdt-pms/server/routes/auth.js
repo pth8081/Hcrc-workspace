@@ -4,7 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, getAppDataValueWithVersion, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, TOKEN_TTL_MS, findUserByUsernameCI, getMaxConcurrentSessions } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, TOKEN_TTL_MS, findUserByUsernameCI, getMaxConcurrentSessions, expandHrFullEditPerms } = require('../lib/auth');
 const crypto = require('crypto');
 const { setToken: setEphemeralToken, consumeToken: consumeEphemeralToken } = require('../lib/ephemeralStore');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES } = require('../lib/loginAttempts');
@@ -153,7 +153,14 @@ function toSafeUser(user) {
   // phép quay ngược lại server qua route lưu "users" chung (đã ép lại ở prepareUsersForSave(), routes/
   // data.js — cùng khuôn pinHash/webauthnCredentials/sessionVersion).
   const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, activeSessions, ...safe } = user;
-  return { ...safe, hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length, totpEnabled: !!user.totpEnabled };
+  // expandHrFullEditPerms() (12/2026, xem chú thích đầy đủ ở lib/auth.js) — ÁP DỤNG RIÊNG ở đây (ngoài
+  // requireAuth()) vì các response đăng nhập/đổi mật khẩu/PIN ở file này gọi toSafeUser() TRỰC TIẾP trên
+  // bản ghi vừa đọc từ DB, KHÔNG đi qua req.freshUser (requireAuth() chạy SAU khi đã có token, không áp
+  // dụng được cho chính request đăng nhập tạo ra token đó) — thiếu bước này client sẽ nhận đúng cờ
+  // hrProfileContractFullEdit=true nhưng KHÔNG thấy hrProfileEdit/hrContractManage=true ngay sau khi vừa
+  // đăng nhập, phải đợi gọi GET /me (qua requireAuth()) mới đúng, gây giao diện ẩn/hiện nút Sửa sai lệch
+  // trong khoảng thời gian đó.
+  return { ...safe, perms: expandHrFullEditPerms(user.perms), hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length, totpEnabled: !!user.totpEnabled };
 }
 
 // Cảnh báo 1 LẦN/tiến trình (không log lại mỗi lượt đăng nhập, tránh rác log) khi phát hiện dấu hiệu

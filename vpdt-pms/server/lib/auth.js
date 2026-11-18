@@ -147,6 +147,31 @@ function clearAuthCookie(res) {
 // (TOKEN_TTL), nếu chỉ dựa vào token thì 1 tài khoản admin vừa VÔ HIỆU HÓA (nhân viên nghỉ việc) vẫn
 // thao tác được bình thường suốt phiên đang mở cho tới khi token hết hạn — không đúng ý "vô hiệu hóa
 // là mất quyền NGAY LẬP TỨC". Gắn req.user = { username, admin } (giữ nguyên shape cũ, dùng khắp nơi),
+// expandHrFullEditPerms() (12/2026, theo yêu cầu người dùng: "1 quyền đặc biệt, sửa được tất cả các
+// trường trong hồ sơ và trong hợp đồng lao động") — quyền GỘP hrProfileContractFullEdit, bật lên tương
+// đương có ĐỦ CẢ hrProfileEdit (sửa Hồ Sơ Nhân Sự — kéo theo canFullViewProfiles() vì hàm đó đã OR sẵn
+// hrProfileEdit, xem lib/employeeProfile.js) LẪN hrContractManage (sửa Hợp Đồng Lao Động), không cần cấp
+// riêng 2 ô ở Cây Phân Quyền. Đặt hoá ĐÚNG 1 CHỖ DUY NHẤT (ở đây — nơi tạo ra req.freshUser/perms trả về
+// client, xem requireAuth() ngay dưới + toSafeUser() ở routes/auth.js) thay vì sửa rải rác từng hàm
+// canEditProfiles()/canManageContracts()/canFullViewProfiles() hay từng chỗ client tự kiểm tra
+// currentUser.perms?.hrProfileEdit/hrContractManage — đã rà soát: MỌI nơi trong hệ thống (server lẫn
+// client) kiểm tra 2 quyền này đều đọc thẳng perms.hrProfileEdit/perms.hrContractManage (không qua biến
+// trung gian nào khác), nên hàm ở đây tự động phủ đủ không sót chỗ nào, đúng bài học đã rút ra nhiều lần
+// (rải rác kiểm tra quyền ở nhiều nơi rất dễ sót — xem các "LỖI ĐÃ VÁ" nhắc tới hrProfileFullView/
+// hrProfileEdit/hrContractManage ở lib/employeeProfile.js).
+// CỐ Ý KHÔNG mở thêm gì khác: KHÔNG kèm hrProfileManage (sẽ kéo theo hrProfileCreate — tạo hồ sơ MỚI,
+// ngoài phạm vi "sửa" người dùng yêu cầu) hay hrProfileCreate riêng lẻ. Mã Nhân Viên/Mã Hợp Đồng vẫn
+// khoá cứng (KHÔNG nằm trong SELF_EDITABLE_FIELDS/HR_ONLY_EDITABLE_FIELDS/MANUAL_EDITABLE_FIELDS — xem
+// lib/employeeProfile.js/lib/laborContract.js, không có đường ghi nào chấp nhận 2 field này dù có quyền
+// gì). Trạng thái hồ sơ/Chức vụ/Phòng Ban/Cấp Bậc/Trạng thái hợp đồng vẫn đi qua ĐÚNG route nghiệp vụ
+// riêng có validate ràng buộc (PATCH .../status, POST .../set-position, .../activate, .../terminate...)
+// — hrProfileEdit/hrContractManage VỐN DĨ đã là đúng 2 quyền gác các route đó từ trước (không phải lỗ
+// hổng mới mở ra bởi quyền gộp này, xem xác nhận trực tiếp với người dùng trước khi làm).
+function expandHrFullEditPerms(perms) {
+  if (!perms?.hrProfileContractFullEdit) return perms;
+  return { ...perms, hrProfileEdit: true, hrContractManage: true };
+}
+
 // req.freshUser = bản ghi user đầy đủ vừa đọc được, và req.allUsers = toàn bộ danh sách users cùng
 // lượt đọc — để các route phía sau (create.js/workflow.js/records.js/meetingActions.js) không phải tự
 // đọc lại DB thêm 1 lần nữa cho cùng mục đích (trước đây mỗi route tự viết lại y hệt đoạn này).
@@ -234,7 +259,14 @@ async function requireAuth(req, res, next) {
     }
 
     req.user = { username: effectiveFreshUser.username, admin: !!effectiveFreshUser.perms?.admin };
-    req.freshUser = effectiveFreshUser;
+    // KHÔNG mutate effectiveFreshUser trực tiếp — object này có thể là THAM CHIẾU CHUNG từ cache
+    // getAppDataValueCached('users') (xem chú thích ở trên), sửa thẳng perms tại đây sẽ làm RÒ RỈ sang
+    // mọi request khác đọc cùng bản cache. Chỉ tạo bản sao (clone nông perms) khi THỰC SỰ có quyền gộp
+    // hrProfileContractFullEdit — giữ nguyên hiệu năng cho tuyệt đại đa số request không có quyền hiếm
+    // này (middleware chạy trên gần như mọi API).
+    req.freshUser = effectiveFreshUser.perms?.hrProfileContractFullEdit
+      ? { ...effectiveFreshUser, perms: expandHrFullEditPerms(effectiveFreshUser.perms) }
+      : effectiveFreshUser;
     req.allUsers = effectiveUsers || [];
     req.sessionJti = payload.jti || null; // dùng ở các route tự đổi mật khẩu/PIN/gỡ TOTP... của CHÍNH mình (giữ đúng phiên hiện tại khi ký lại token, xem routes/auth.js)
 
@@ -336,5 +368,6 @@ module.exports = {
   setAuthCookie,
   clearAuthCookie,
   requireAuth,
-  blockIfMustChangePassword
+  blockIfMustChangePassword,
+  expandHrFullEditPerms
 };

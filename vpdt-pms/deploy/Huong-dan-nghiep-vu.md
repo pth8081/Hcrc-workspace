@@ -7390,6 +7390,18 @@ Phải cấp đúng quyền cụ thể mới quản lý được:
   `hrProfileCreate`/`hrProfileFullView`/`hrProfileEdit` (khối 21, xem mục
   6 ở trên).
 - **Hợp Đồng Lao Động**: `hrContractManage` (khối 21).
+- **🔓 Toàn Quyền Sửa Hồ Sơ Nhân Sự + Hợp Đồng Lao Động (quyền GỘP, 12/2026,
+  theo yêu cầu người dùng)**: `hrProfileContractFullEdit` — bật 1 ô DUY NHẤT
+  là tự động có ĐỦ CẢ `hrProfileEdit` LẪN `hrContractManage` cùng lúc, không
+  cần tick riêng 2 quyền ở trên — dùng cho tài khoản Nhân Sự cần sửa cả 2
+  khu vực mà không muốn cấu hình 2 ô tách rời. Sửa được hầu hết field dữ
+  liệu của cả Hồ Sơ (liên hệ, ngân hàng, CCCD, BHXH, mã số thuế, Hình Thức/
+  Thời Gian Làm Việc...) lẫn Hợp Đồng (Loại HĐLĐ, ngày hiệu lực/hết hạn,
+  lương, phụ cấp...), **TRỪ**: Mã Nhân Viên/Mã Hợp Đồng (khoá cứng, không
+  quyền nào sửa được — dùng để đối chiếu xuyên suốt hệ thống) và Trạng Thái
+  hồ sơ/hợp đồng + Chức Vụ/Phòng Ban/Cấp Bậc (vẫn phải đi qua đúng nút
+  nghiệp vụ riêng — Đổi Trạng Thái/Gán Chức Vụ/Kích Hoạt/Chấm Dứt... — không
+  có đường tắt ghi thẳng, giữ nguyên các ràng buộc đã có).
 - **Lương**: `hrPayrollManage` (lập/tính) và/hoặc `hrPayrollApprove` (duyệt —
   tách biệt hoàn toàn với lập/tính, đúng nguyên tắc phân quyền kế toán,
   khối 21).

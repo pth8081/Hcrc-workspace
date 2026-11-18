@@ -470,6 +470,7 @@ const PERM_KEY_VN_LABELS = {
   "hrOnboardingProcessManage": "Nhân Sự — ✅ Toàn Quyền Thao Tác Quy Trình Onboarding (ép BẤT KỲ task Onboarding nào, kể cả giao người khác/phòng ban khác)",
   "hrPayrollApprove": "Nhân Sự — ✅ Duyệt Lương (tách biệt Lập/Tính)",
   "hrPayrollManage": "Nhân Sự — 💰 Lập/Tính Lương (Kế Toán/HR)",
+  "hrProfileContractFullEdit": "Nhân Sự — 🔓 Toàn Quyền Sửa Hồ Sơ Nhân Sự + Hợp Đồng Lao Động (gộp 2 quyền Sửa Hồ Sơ/Quản Lý Hợp Đồng — trừ Mã/Trạng thái/Chức vụ vẫn qua đúng luồng riêng)",
   "hrProfileCreate": "Nhân Sự — ➕ Tạo Mới Hồ Sơ Nhân Sự (tay + Excel hàng loạt)",
   "hrProfileEdit": "Nhân Sự — ✏️ Sửa Hồ Sơ Nhân Sự (đã có sẵn — không tự tạo hồ sơ mới nếu chưa tick \"Tạo Mới\")",
   "hrProfileFullView": "Nhân Sự — 👁️ Xem Toàn Bộ Hồ Sơ Nhân Sự (không giới hạn như quản lý trực tiếp, không sửa được)",
