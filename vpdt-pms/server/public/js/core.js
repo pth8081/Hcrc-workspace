@@ -16131,6 +16131,16 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
       ? matches.map(it => `<div class="px-2 py-1 text-[11px] ${hoverClass} cursor-pointer" data-op="gmsAdd" data-arg0="${escapeHtml(containerId)}" data-arg1="${cspArgLiteral(it.value)}">${escapeHtml(it.label)}</div>`).join('')
       : '<div class="px-2 py-1 text-[11px] text-gray-400 italic">Không tìm thấy.</div>';
     ddEl.classList.remove('hidden');
+    // LỖI ĐÃ VÁ (12/2026, báo cáo người dùng thật kèm ảnh chụp mobile: "Mobile ko chọn được siêu thị" —
+    // gõ tìm không hiện gợi ý gì, nhưng "Chọn Tất Cả" vẫn chọn được bình thường, xác nhận qua chẩn đoán
+    // trực tiếp với người dùng): danh sách gợi ý VẪN render đúng, chỉ bị BÀN PHÍM ẢO che khuất phía dưới
+    // ô tìm kiếm trên điện thoại (viewport co lại khi bàn phím mở, trình duyệt mobile KHÔNG tự cuộn tính
+    // luôn phần tử con/anh em bên dưới ô input đang gõ vào tầm nhìn) — người dùng tưởng "không hiện gì cả"
+    // dù dữ liệu/sự kiện đều đúng. `scrollIntoView({block:'nearest'})` AN TOÀN trên desktop (không cuộn gì
+    // nếu đã nằm trong tầm nhìn — khác 'center' sẽ luôn ép cuộn kể cả đã thấy rồi, gây giật trang không
+    // cần thiết) — chỉ cuộn khi THẬT SỰ có gợi ý để xem (bỏ qua nhánh "Không tìm thấy." cho đỡ giật khi
+    // gõ sai chính tả liên tục, không có gì để cuộn tới cũng không cần cuộn).
+    if (matches.length) ddEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   container.setAttribute('data-pms-root', '');
