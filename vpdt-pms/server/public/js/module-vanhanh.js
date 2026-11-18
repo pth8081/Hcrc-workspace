@@ -1136,7 +1136,7 @@ function renderKkScanList(tabKey) {
   // các quầy kệ) sẽ hiện "N dòng • Tổng X" ở MỖI dòng liên quan, để người quét/soát biết còn những quầy
   // kệ khác cũng đang có mã này — không phải lỗi nhập trùng, chỉ là thông tin tham khảo thêm.
   listBody.innerHTML = banners + `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên</th><th class="pr-2">Trùng Mã</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
+    <th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right pr-2">SL Kiểm Đếm</th>' : ''}<th class="text-right pr-2">SL${showKiemDemRef ? ' Soát' : ''}</th><th class="pr-2">Trùng Mã</th><th></th></tr></thead><tbody>` +
     sorted.map(c => {
       // Dòng CHƯA đồng bộ (id tạm "offline_...", xem applyOptimisticKkScan()) — CHỈ XEM, không sửa/xoá
       // trực tiếp được (chưa có id thật từ server) — chờ đồng bộ xong (trySyncPendingKkScans() sẽ tải lại
@@ -1153,9 +1153,9 @@ function renderKkScanList(tabKey) {
       <td class="py-1 pr-2 font-mono">${escapeHtml(c.maHang)}</td>
       <td class="pr-2 font-mono">${escapeHtml(c.maVach || '—')}</td>
       <td>${escapeHtml(c.tenHang || '')}</td>
+      ${showKiemDemRef ? `<td class="text-right text-gray-500 pr-2">${Number(c.slKiemDem) || 0}</td>` : ''}
+      <td class="text-right pr-2">${qtyCell}</td>
       <td class="pr-2">${dupCell}</td>
-      ${showKiemDemRef ? `<td class="text-right text-gray-500">${Number(c.slKiemDem) || 0}</td>` : ''}
-      <td class="text-right">${qtyCell}</td>
       <td class="text-right">${pending ? '' : `<button type="button" data-op="deleteKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" class="text-red-600 hover:underline">🗑️</button>`}</td>
     </tr>`;
     }).join('') + '</tbody></table>';
