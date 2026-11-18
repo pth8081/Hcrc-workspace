@@ -45,7 +45,14 @@ domain — không cần cấu hình CORS trong vận hành thông thường), d�
 Server (SQL Server) — phần lớn dữ liệu cấu hình (người dùng, phân quyền, quy
 trình mẫu...) gộp trong bảng `dbo.AppData` theo dạng 1 collection/1 dòng JSON,
 còn dữ liệu nghiệp vụ phát sinh nhiều (Tài liệu, Văn bản trình, Công việc, Nhật
-ký hệ thống...) đã tách sang bảng riêng khoá theo từng dòng. Xác thực bằng
+ký hệ thống...) đã tách sang bảng riêng khoá theo từng dòng — từ 12/2026 nhóm
+này có thêm toàn bộ nghiệp vụ "📋 Kiểm Kê" + "Kiểm Soát Hàng Hóa" (Gom Mã/Kiểm
+Đếm/Kiểm Soát, Kỳ Kiểm Kê, Cấu Hình Người Dùng/Quầy Kệ, Ghi Nhận Trên Kệ...),
+tách khỏi `dbo.AppData` đúng vì đây là 2 nghiệp vụ nhiều người thao tác ĐỒNG
+THỜI nhất trong hệ thống (mỗi siêu thị vài chục người kiểm kê cùng lúc) — khoá
+theo từng dòng/khoá tổng hợp hẹp giúp các lượt quét của người khác nhau/quầy
+kệ khác nhau không còn phải chờ nhau như khi còn gộp chung 1 dòng AppData.
+Xác thực bằng
 phiên đăng nhập JWT ký ở server (cookie `httpOnly`), server tự kiểm tra lại
 quyền trên **mỗi request** chứ không chỉ tin giao diện ẩn/hiện nút. Production
 chạy PM2 **cluster mode** (nhiều tiến trình Node tận dụng hết CPU máy chủ) —
@@ -3188,7 +3195,10 @@ thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê Duyệt Giá Bán B
 siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn
 sử dụng, dùng chung tài khoản đăng nhập hiện có (KHÔNG có đăng nhập riêng
 cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offline-first" dưới
-đây).
+đây). Danh mục Quầy Kệ + Ghi Nhận Trên Kệ (12/2026) đã tách sang bảng SQL
+riêng, giảm khoá tranh chấp khi nhiều siêu thị ghi nhận đồng thời (CÙNG lý do
+đã nêu ở mục "Kiến trúc tóm tắt" đầu tài liệu) — không đổi gì về cách dùng/
+giao diện.
 
 - **5 sub-tab**:
   - "📷 Ghi Nhận" — nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục đã khai
@@ -3685,6 +3695,16 @@ bar như vận hành, mua hàng"; trước đó từng sống chung sidebar "⚙
 thuần UI). **Phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyền độc lập
 (Phân Quyền → khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự
 kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hành từ trước.
+
+**Hiệu năng khi nhiều người kiểm kê cùng lúc (12/2026)**: toàn bộ dữ liệu của
+module này (Gom Mã/Kiểm Đếm/Kiểm Soát, Kỳ Kiểm Kê, Cấu Hình Người Dùng/Quầy
+Kệ, Xác Nhận) đã tách khỏi `dbo.AppData` sang bảng SQL riêng (xem mục "Kiến
+trúc tóm tắt" ở đầu tài liệu) — trước đây mỗi lượt quét/xác nhận phải khoá
+NGUYÊN cả collection JSON dùng chung, nên nhiều siêu thị/nhiều người kiểm kê
+đồng thời sẽ phải chờ lẫn nhau; nay chỉ khoá đúng dòng/khoá tổng hợp hẹp (VD
+đúng (kỳ, quầy kệ, mã hàng) đang quét) nên các lượt quét của người/quầy kệ/
+siêu thị khác nhau không còn chặn nhau nữa. Không đổi gì về cách dùng/giao
+diện — người dùng không cần biết/làm gì khác.
 
 - **Mọi ô chọn trong toàn module ĐỀU là ô tìm-kiếm-gõ-chọn (12/2026, theo
   yêu cầu người dùng "chuyển hết sang dạng drop down searchable")**: quầy
