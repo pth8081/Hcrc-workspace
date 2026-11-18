@@ -1111,9 +1111,15 @@ function createDispatcher(state) {
         const qs = new URL(url, 'http://x').searchParams;
         let allowedDepts = null;
         let dept = freshUser.dept;
-        // scope=report (12/2026, mirror ĐÚNG routes/stocktake.js — Tab 7 "📊 Báo Cáo" multi-store picker
-        // ĐỘC LẬP với Tab 1/5, xem chú thích đầy đủ ở route thật) — trả thêm allowedDepts.
-        if (qs.get('scope') === 'report') {
+        // scope=manage-all (MỚI, 12/2026, mirror ĐÚNG routes/stocktake.js — "🌐 Xem Tất Cả Siêu Thị" ở
+        // Tab 1, CHỈ Admin) — trả THẲNG mọi kỳ, không lọc dept.
+        let allDepts = false;
+        if (qs.get('scope') === 'manage-all') {
+          if (!freshUser.perms?.admin) return { status: 403, body: { error: 'Chỉ Admin được xem Kỳ Kiểm Kê của TẤT CẢ siêu thị cùng lúc' } };
+          allDepts = true;
+        } else if (qs.get('scope') === 'report') {
+          // scope=report (12/2026, mirror ĐÚNG routes/stocktake.js — Tab 7 "📊 Báo Cáo" multi-store
+          // picker ĐỘC LẬP với Tab 1/5, xem chú thích đầy đủ ở route thật) — trả thêm allowedDepts.
           allowedDepts = resolveKiemKeInventoryDepts(freshUser, state.stores || [], state.stocktakeUserAccess || []);
         } else {
           const qsDept = qs.get('dept');
@@ -1123,8 +1129,8 @@ function createDispatcher(state) {
             if (allowed) dept = qsDept;
           }
         }
-        const filtered = allowedDepts
-          ? (state.stocktakeSessions || []).filter(s => allowedDepts.some(d => sameDept(d, s.dept)))
+        const filtered = allDepts ? (state.stocktakeSessions || [])
+          : allowedDepts ? (state.stocktakeSessions || []).filter(s => allowedDepts.some(d => sameDept(d, s.dept)))
           : (state.stocktakeSessions || []).filter(s => sameDept(s.dept, dept));
         // batchSiblingCount — mirror ĐÚNG routes/stocktake.js (xem chú thích ở đó, 12/2026).
         const batchCounts = new Map();

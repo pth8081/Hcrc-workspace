@@ -333,6 +333,14 @@ let kkPeriodBulkSelected = new Set();
 // kỳ; người thường luôn dùng đúng currentUser.dept, KHÔNG có cờ "chọn siêu thị bất kỳ" nào ở đây (đúng
 // yêu cầu "allowlist tuyệt đối, không có cờ bất kỳ" — khác hẳn shelfAnyStoreAccess ở Kiểm Soát Hàng Hóa).
 let kkPeriodDeptSelected = '';
+// kkPeriodShowAllDepts (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "Tôi muốn chọn all siêu thị...
+// chọn all siêu thị đang có kỳ kiểm kê không phải vào từng siêu thị để chọn" — xem GET /sessions?scope=
+// manage-all, routes/stocktake.js) — biến RIÊNG của Tab 1, CHỦ Ý KHÔNG tái dùng/ghi đè kkPeriodDeptSelected
+// (biến đó còn dùng CHUNG cho Tab 5/6/8 qua kkEffectiveDept() — nhét 1 giá trị sentinel "tất cả" vào đó
+// sẽ phá các tab kia, VD Tab 5 tưởng "tất cả" là 1 tên siêu thị thật). CHỈ Admin thấy/dùng được (khớp gate
+// scope=manage-all ở server) — reset về false mỗi lần vào lại Tab 1 từ tab khác không cần thiết (giữ lựa
+// chọn xuyên suốt phiên làm việc cho tiện, như kkPeriodDeptSelected vẫn đang làm).
+let kkPeriodShowAllDepts = false;
 
 function canManageKiemKePeriodClient(user) { return !!(user?.perms?.admin || user?.perms?.kiemKePeriodManage); }
 // canCloseKiemKePeriodForDeptClient/canReopenKiemKePeriodForDeptClient (12/2026, theo yêu cầu người dùng:
@@ -2905,11 +2913,23 @@ function renderKkPeriodDeptRow() {
   const row = document.getElementById('kkPeriodDeptRow');
   if (!row) return;
   const stores = kkSelectableDepts(currentUser);
-  if (stores.length > 1) {
+  const isAdmin = !!currentUser.perms?.admin;
+  // "🌐 Xem Tất Cả Siêu Thị" (MỚI, 12/2026, xem khai báo kkPeriodShowAllDepts ở trên) — CHỈ Admin thấy
+  // checkbox này (khớp đúng gate scope=manage-all ở server), CHỈ hiện khi có từ 2 siêu thị trở lên (1
+  // siêu thị thì "tất cả" với "đúng 1 siêu thị đang chọn" là như nhau, không cần thêm lựa chọn).
+  const allToggle = (isAdmin && stores.length > 1)
+    ? `<label class="flex items-center gap-1 text-xs font-semibold text-sky-700 cursor-pointer ml-2">
+         <input type="checkbox" data-op-change="toggleKkPeriodShowAllDepts" data-arg-el="0" ${kkPeriodShowAllDepts ? 'checked' : ''}>
+         🌐 Xem Tất Cả Siêu Thị
+       </label>`
+    : '';
+  if (isAdmin && kkPeriodShowAllDepts && stores.length > 1) {
+    row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span class="text-sky-700 font-semibold">🌐 Tất cả siêu thị</span>${allToggle}`;
+  } else if (stores.length > 1) {
     if (!kkPeriodDeptSelected || !stores.includes(kkPeriodDeptSelected)) kkPeriodDeptSelected = stores.includes(currentUser.dept) ? currentUser.dept : stores[0];
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
       <input id="kkPeriodDeptInput" value="${escapeHtml(kkPeriodDeptSelected)}" data-sdd-list="kkPeriodDeptDropdown" data-op-input="onKkPeriodDeptInputChanged" placeholder="Gõ tên siêu thị..." autocomplete="off" class="border rounded px-2 py-1 w-64">
-      <div id="kkPeriodDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>`;
+      <div id="kkPeriodDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>${allToggle}`;
     sddSetOptions('kkPeriodDeptDropdown', stores);
   } else {
     kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
@@ -2917,8 +2937,15 @@ function renderKkPeriodDeptRow() {
   }
   // LỖI ĐÃ VÁ (12/2026, phát hiện qua ảnh demo — xem chú thích đầy đủ ở renderKkShelfConfigDeptRow()):
   // gọi lại NGAY TẠI ĐÂY để badge "📍 Bạn đang ở Siêu Thị" luôn khớp đúng giá trị MẶC ĐỊNH đầu tiên của
-  // kkPeriodDeptSelected, không chỉ khi người dùng chủ động đổi qua onKkPeriodDeptInputChanged().
+  // kkPeriodDeptSelected, không chỉ khi người dùng chủ động đổi qua onKkPeriodDeptInputChanged(). Badge
+  // này PHẢN ÁNH ĐÚNG phạm vi Tab 5/6/8 (kkEffectiveDept()) — KHÔNG đổi theo kkPeriodShowAllDepts (cờ đó
+  // chỉ ảnh hưởng riêng danh sách Tab 1 đang xem, không đổi "siêu thị context" dùng chung các tab khác).
   renderKkCurrentDeptBadge();
+}
+// toggleKkPeriodShowAllDepts() — MỚI, 12/2026, xem khai báo kkPeriodShowAllDepts ở trên.
+function toggleKkPeriodShowAllDepts(el) {
+  kkPeriodShowAllDepts = !!(el && el.checked);
+  loadKkPeriodSessions();
 }
 function onKkPeriodDeptInputChanged() {
   const input = document.getElementById('kkPeriodDeptInput');
@@ -2949,9 +2976,12 @@ async function loadKkPeriodSessions() {
   try {
     // Gửi ?dept= bất cứ khi nào ô "📍 Siêu thị:" đang hiện dropdown (admin HOẶC người được gán bất kỳ quyền
     // nào trong 4 quyền theo siêu thị, xem kkSelectableDepts()) — KHÔNG chỉ riêng admin như trước (server
-    // GET /sessions đã mở rộng tương ứng, xem routes/stocktake.js).
+    // GET /sessions đã mở rộng tương ứng, xem routes/stocktake.js). kkPeriodShowAllDepts (MỚI, 12/2026) —
+    // Admin bật "🌐 Xem Tất Cả Siêu Thị" thì gửi scope=manage-all THAY cho ?dept= đơn, bỏ qua
+    // kkPeriodDeptSelected hoàn toàn cho đúng lượt tải này.
     const canPickDept = kkSelectableDepts(currentUser).length > 1;
-    const qs = canPickDept ? `?dept=${encodeURIComponent(kkPeriodDeptSelected)}` : '';
+    const useAllDepts = !!currentUser.perms?.admin && kkPeriodShowAllDepts && canPickDept;
+    const qs = useAllDepts ? '?scope=manage-all' : (canPickDept ? `?dept=${encodeURIComponent(kkPeriodDeptSelected)}` : '');
     const res = await fetch(`/api/stocktake/sessions${qs}`);
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) { if (body) body.innerHTML = '<p class="text-red-500 text-sm">Không tải được danh sách kỳ kiểm kê.</p>'; return; }
@@ -3168,6 +3198,10 @@ function renderKkPeriodList() {
   const body = document.getElementById('kkPeriodListBody');
   if (!body) return;
   const canManage = canManageKiemKePeriodClient(currentUser);
+  // showDept (MỚI, 12/2026, xem kkPeriodShowAllDepts) — "🌐 Xem Tất Cả Siêu Thị" gộp NHIỀU siêu thị vào
+  // CÙNG 1 danh sách, nên mỗi dòng phải tự nêu rõ thuộc siêu thị nào (khác chế độ thường, đã ngầm hiểu
+  // "đúng siêu thị đang chọn ở ô 📍 Siêu thị:" nên không cần lặp lại trên từng dòng).
+  const showDept = !!currentUser.perms?.admin && kkPeriodShowAllDepts;
   const items = kkPeriodSessionsCache
     .filter(s => !kkPeriodLoaiFilter || s.loaiKy === kkPeriodLoaiFilter)
     .slice()
@@ -3215,6 +3249,7 @@ function renderKkPeriodList() {
         ${bulkCb}
         <div class="min-w-0">
           <div class="font-bold text-sm">${escapeHtml(s.tenKy || '')}</div>
+          ${showDept ? `<div class="text-xs font-semibold text-sky-700">🏬 ${escapeHtml(s.dept || '')}</div>` : ''}
           <div class="text-xs text-gray-500">Loại: ${KK_LOAI_KY_LABEL[s.loaiKy] || escapeHtml(s.loaiKy || '')}${thoiGian ? ' · ' + escapeHtml(thoiGian) : ''}</div>
           ${s.batchSiblingCount ? `<div class="text-[11px] text-sky-700 font-semibold mt-0.5">📦 Tạo cùng đợt với ${s.batchSiblingCount - 1} siêu thị khác — bấm "${s.trangThai === 'NHAP' ? '▶ Kích Hoạt' : s.trangThai === 'DANG_HOAT_DONG' ? '🔒 Đóng Kỳ' : '↩️ Mở Lại'}" ở ĐÂY áp dụng luôn cho CẢ NHÓM, không còn tách riêng từng siêu thị.</div>` : ''}
         </div>

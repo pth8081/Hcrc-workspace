@@ -3740,16 +3740,28 @@ diện — người dùng không cần biết/làm gì khác.
   hết")**: mỗi dòng Nháp (được phép xoá) trong danh sách ĐANG HIỆN có 1
   checkbox riêng (không phụ thuộc có cùng batch hay không) — tick vài dòng
   hoặc bấm "Chọn tất cả đang hiện" rồi bấm "🗑️ Xoá Các Kỳ Đã Chọn" để xoá 1
-  lần toàn bộ các dòng đã tick. **Lưu ý quan trọng**: danh sách Tab 1 LUÔN
-  chỉ hiện đúng 1 siêu thị tại 1 thời điểm (ô "📍 Siêu thị:" ở trên, xem mục
-  ngay trên) — "Chọn tất cả đang hiện" chỉ chọn các dòng của siêu thị ĐANG
-  XEM, KHÔNG phải mọi siêu thị trong toàn hệ thống; muốn dọn nhiều siêu thị
-  thì vẫn phải đổi ô "📍 Siêu thị:" lần lượt, nhưng mỗi lần đổi xoá được HẾT
-  các kỳ rác của siêu thị đó trong 1 lượt thay vì bấm Xoá từng dòng. Nếu 1
-  dòng được tick thuộc 1 batch nhiều siêu thị, xoá nó sẽ kéo theo CẢ các
-  siêu thị "anh em" khác trong batch đó dù không hề xuất hiện/được tick ở
-  danh sách đang xem (vì chúng thuộc siêu thị khác) — hộp thoại xác nhận và
-  thông báo kết quả đều nêu rõ việc này.
+  lần toàn bộ các dòng đã tick. Nếu 1 dòng được tick thuộc 1 batch nhiều
+  siêu thị, xoá nó sẽ kéo theo CẢ các siêu thị "anh em" khác trong batch đó
+  dù không hề xuất hiện/được tick ở danh sách đang xem (vì chúng thuộc siêu
+  thị khác) — hộp thoại xác nhận và thông báo kết quả đều nêu rõ việc này.
+- **"🌐 Xem Tất Cả Siêu Thị" (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người
+  dùng: "Tôi muốn chọn all siêu thị... chọn all siêu thị đang có kỳ kiểm kê
+  không phải vào từng siêu thị để chọn" — khắc phục đúng hạn chế nêu ở mục
+  trên: trước đây danh sách Tab 1 LUÔN chỉ hiện đúng 1 siêu thị tại 1 thời
+  điểm, nên "Chọn tất cả đang hiện" chỉ gộp được các dòng CỦA ĐÚNG siêu thị
+  đang xem, muốn dọn nhiều siêu thị vẫn phải đổi ô "📍 Siêu thị:" từng cái
+  một)**: **CHỈ Admin** thấy checkbox "🌐 Xem Tất Cả Siêu Thị" cạnh ô "📍
+  Siêu thị:" (ẩn khi hệ thống chỉ có 1 siêu thị — không cần thêm lựa chọn).
+  Bật lên, danh sách Tab 1 gộp TOÀN BỘ kỳ của MỌI siêu thị vào 1 lượt xem
+  duy nhất, mỗi dòng tự nêu rõ "🏬 <tên siêu thị>" để phân biệt (khác chế
+  độ thường, ngầm hiểu "đúng siêu thị đang chọn" nên không lặp lại trên
+  từng dòng) — từ đây "Chọn tất cả đang hiện"/tick tay rồi "🗑️ Xoá Các Kỳ Đã
+  Chọn" xoá được kỳ rác của NHIỀU/MỌI siêu thị trong đúng 1 lượt, không cần
+  đổi ô "📍 Siêu thị:" nữa. Tắt lại checkbox để quay về xem đúng 1 siêu thị
+  như cũ. Các nút Sửa/Kích Hoạt/Đóng Kỳ/Mở Lại/Xoá từng dòng vẫn hoạt động
+  bình thường trong chế độ này, tự gác đúng quyền theo SIÊU THỊ CỦA TỪNG
+  DÒNG (không phải siêu thị "đang chọn" — khái niệm đó không còn ý nghĩa
+  khi đang xem tất cả).
 - **Ô "📍 Siêu thị:" ở Tab 1 CHỈ để LỌC XEM, không phải để "chọn siêu thị sẽ
   Kích Hoạt" (làm rõ theo phản hồi người dùng)**: đổi ô này chỉ đổi danh
   sách kỳ đang xem, KHÔNG ảnh hưởng gì tới việc bấm "▶ Kích Hoạt" — nút Kích
