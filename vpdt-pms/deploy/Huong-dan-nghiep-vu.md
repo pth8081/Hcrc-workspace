@@ -8794,8 +8794,12 @@ Workspace mà không cần tự lưu mật khẩu người dùng:
   cookie/JWT) — chỉ trả lời có đúng mật khẩu hay không, dùng cho ứng dụng khác
   muốn "đăng nhập hộ" bằng đúng tài khoản HCRC.
 - `GET /api/external/users` — đồng bộ danh bạ nhân sự cơ bản (username/tên/
-  điện thoại/email/phòng ban/chức danh) — chỉ trả field công khai nội bộ,
-  **không bao giờ** kèm mật khẩu/PIN dù đã hash.
+  điện thoại/email/phòng ban/chức danh/**mã siêu thị**) — chỉ trả field công
+  khai nội bộ, **không bao giờ** kèm mật khẩu/PIN dù đã hash. Trường
+  `storeCode` (12/2026, theo yêu cầu người dùng) tái dùng NGUYÊN "Mã Điểm" đã
+  cấu hình sẵn ở Danh Mục Siêu Thị (dùng chung cho API Tồn Kho đối tác
+  BRGMART) theo đúng phòng ban/siêu thị của nhân viên — `null` nếu nhân viên
+  Văn phòng hoặc siêu thị đó chưa được cấu hình Mã Điểm.
 
 **Cấp/thu hồi key (admin)**: vào màn quản lý API key (Hệ Thống → Quản Trị) —
 tạo key mới sinh 1 chuỗi ngẫu nhiên dạng `hcrc_` + 64 ký tự hex, **chỉ hiển thị

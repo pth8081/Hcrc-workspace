@@ -17,7 +17,10 @@
 //      bộ hoặc 1 hồ sơ (?account=) ĐÚNG 7 field đối tác yêu cầu: vị trí (position, "Văn phòng"/"Siêu
 //      Thị" suy từ posType — kể cả user cũ chưa có posType tường minh), mã nhân viên (username), tên
 //      nhân viên (name), điện thoại (phone), email (11/2026, bổ sung theo yêu cầu người dùng), phòng
-//      (dept), chức danh (jobTitle) — KHÔNG BAO GIỜ kèm mật khẩu (và không kèm active vì không nằm
+//      (dept), chức danh (jobTitle) + storeCode (12/2026, bổ sung theo yêu cầu người dùng "API lấy
+//      thông tin người dùng có trả được mã siêu thị cho đối tác không" — tái dùng "Mã Điểm" có sẵn ở
+//      DB.storeExternalCodes theo dept, null nếu Văn phòng/siêu thị chưa cấu hình) — KHÔNG BAO GIỜ kèm
+//      mật khẩu (và không kèm active vì không nằm
 //      trong yêu cầu); API key thiếu/sai/đã thu hồi -> 401; account không tồn tại -> 404.
 //   4. Lớp bảo mật thứ 2 — chặn IP theo từng key (lib/externalAuth.js isIpAllowed/parseAllowedIpsInput):
 //      hàm thuần (khớp IPv4/CIDR, từ chối rule sai định dạng); key có allowedIps -> chặn IP lạ (403), cho
@@ -56,8 +59,12 @@ const STORE_EMP = { username: 'nv3', name: 'Nhân Viên Siêu Thị A', dept: 'S
 function seedUsers() {
   return [JSON.parse(JSON.stringify(ADMIN)), JSON.parse(JSON.stringify(EMP)), JSON.parse(JSON.stringify(INACTIVE_EMP)), JSON.parse(JSON.stringify(STORE_EMP))];
 }
-let APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'] };
-function resetAppData() { APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'] }; }
+// storeExternalCodes (12/2026, "Mã Điểm" đã có sẵn cho API Tồn Kho đối tác BRGMART, tái dùng để trả
+// "mã siêu thị" qua API danh bạ này — xem toDirectoryProfile()) — CỐ Ý chỉ cấu hình "Siêu Thị Quận 1",
+// để lại "Siêu Thị Quận 2" CHƯA cấu hình, phòng test nhánh null khi siêu thị chưa có Mã Điểm.
+const STORE_EXTERNAL_CODES = { 'Siêu Thị Quận 1': 'ST01' };
+let APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'], storeExternalCodes: STORE_EXTERNAL_CODES };
+function resetAppData() { APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'], storeExternalCodes: STORE_EXTERNAL_CODES }; }
 
 let systemLogEntries = [];
 stubModule('lib/systemLogStore', {
@@ -333,7 +340,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(wrong.status, 401);
   });
 
-  await run('GET /api/external/users: key đúng -> trả ĐÚNG 7 field yêu cầu (vị trí/mã NV/tên/sđt/email/phòng/chức danh), KHÔNG có mật khẩu', async () => {
+  await run('GET /api/external/users: key đúng -> trả ĐÚNG 7 field yêu cầu (vị trí/mã NV/tên/sđt/email/phòng/chức danh) + storeCode, KHÔNG có mật khẩu', async () => {
     resetAppData();
     const created = await createKeyAsAdmin('App Đồng Bộ Danh Bạ');
     const res = await directoryApi(created.body.apiKey);
@@ -342,8 +349,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const nv1 = res.body.find(u => u.username === EMP.username);
     assert.deepStrictEqual(nv1, {
       position: 'Văn phòng', username: 'nv1', name: 'Nhân Viên Kinh Doanh', phone: '0901234567', email: 'nv1@company.com',
-      dept: 'Kinh Doanh', jobTitle: 'Chuyên viên'
-    }, 'Đúng 7 field: position/username(mã NV)/name/phone/email/dept/jobTitle — không có active/mật khẩu');
+      dept: 'Kinh Doanh', jobTitle: 'Chuyên viên', storeCode: null
+    }, 'Đúng 7 field gốc + storeCode: position/username(mã NV)/name/phone/email/dept/jobTitle/storeCode — không có active/mật khẩu. nv1 ở Phòng "Kinh Doanh" (không phải tên 1 siêu thị) -> storeCode null');
     // STORE_EMP không khai email trong fixture -> phải trả chuỗi rỗng (không phải undefined/null), cùng
     // khuôn các field text khác (name/phone/dept/jobTitle) đã dùng `|| ''` từ trước.
     const nv3 = res.body.find(u => u.username === STORE_EMP.username);
@@ -363,6 +370,20 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(nv3.position, 'Siêu Thị', 'dept "Siêu Thị Quận 1" khớp DB.stores -> suy luận STORE dù không có posType tường minh');
     const nv1 = res.body.find(u => u.username === EMP.username);
     assert.strictEqual(nv1.position, 'Văn phòng', 'posType="HO" tường minh');
+  });
+
+  await run('GET /api/external/users: storeCode lấy đúng từ "Mã Điểm" (storeExternalCodes) theo dept — siêu thị CHƯA cấu hình -> null, không throw', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Kiểm Tra Mã Siêu Thị');
+    const res = await directoryApi(created.body.apiKey);
+    const nv3 = res.body.find(u => u.username === STORE_EMP.username);
+    assert.strictEqual(nv3.storeCode, 'ST01', 'dept "Siêu Thị Quận 1" đã cấu hình Mã Điểm "ST01" ở storeExternalCodes -> phải trả đúng mã này');
+    // Thêm 1 nhân viên ở "Siêu Thị Quận 2" (CHƯA cấu hình Mã Điểm trong STORE_EXTERNAL_CODES) ngay tại
+    // test này — không đụng tới seedUsers() dùng chung các test khác.
+    APP_DATA.users.push({ username: 'nv4', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu Thị Quận 2', posType: 'STORE', perms: {}, active: true, pass: 'hashed:X' });
+    const res2 = await directoryApi(created.body.apiKey);
+    const nv4 = res2.body.find(u => u.username === 'nv4');
+    assert.strictEqual(nv4.storeCode, null, 'Siêu Thị Quận 2 chưa được admin cấu hình Mã Điểm -> storeCode phải null, không lỗi/không bịa mã');
   });
 
   await run('GET /api/external/users?account=...: tra đúng 1 hồ sơ; không tồn tại -> 404', async () => {
