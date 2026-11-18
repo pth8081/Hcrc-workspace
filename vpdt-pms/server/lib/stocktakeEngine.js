@@ -248,9 +248,9 @@ function activateSessionBatch(sessions, id, user) {
       }
       try {
         activateSession(arr, sib.id, user);
-        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: true });
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: true });
       } catch (err) {
-        siblings.push({ dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
+        siblings.push({ id: sib.id, dept: sib.dept, tenKy: sib.tenKy, ok: false, error: err.message || String(err) });
       }
     }
   }

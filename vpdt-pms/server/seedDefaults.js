@@ -11,6 +11,10 @@ const { migrateLegacyInventorySnapshot } = require('./lib/inventorySnapshotStore
 const { migrateLegacyStocktakeCounts } = require('./lib/stocktakeCountsStore');
 const { migrateLegacyConfirmations } = require('./lib/stocktakeConfirmationsStore');
 const { migrateLegacyShelfRecords } = require('./lib/shelfRecordsStore');
+const { migrateLegacyStocktakeSessions } = require('./lib/stocktakeSessionsStore');
+const { migrateLegacyStocktakeUserAccess } = require('./lib/stocktakeUserAccessStore');
+const { migrateLegacyKiemKeShelfLocations } = require('./lib/kiemKeShelfLocationsStore');
+const { migrateLegacyAppDataCollection } = require('./lib/recordStore');
 const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
@@ -70,6 +74,10 @@ async function seedDefaults() {
   await migrateLegacyConfirmations('stocktakeShelfGomMaConfirmations');
   await migrateLegacyConfirmations('stocktakeShelfKiemSoatConfirmations');
   await migrateLegacyShelfRecords();
+  await migrateLegacyStocktakeSessions();
+  await migrateLegacyStocktakeUserAccess();
+  await migrateLegacyKiemKeShelfLocations();
+  await migrateLegacyAppDataCollection('shelfLocations', 'Danh Mục Quầy Kệ (Kiểm Soát Hàng Hóa)');
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   // migrateApprovedOperationOrdersToAwaitingReceipt() — TẮT (xem chú thích đầy đủ tại định nghĩa hàm):

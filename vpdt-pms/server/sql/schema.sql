@@ -1655,5 +1655,75 @@ BEGIN
 END
 GO
 
+/* StocktakeSessions (Tab 1 "Kỳ Kiểm Kê", collection AppData cũ "stocktakeSessions") — CÙNG LÝ DO BƯỚC 8
+   ở trên, nhưng ghi RẤT hiếm (tạo/kích hoạt/đóng/mở lại/sửa/xoá kỳ — vài lần/kỳ, không phải đường quét
+   nóng) nên lib/stocktakeSessionsStore.js dùng 1 khoá CHUNG (sp_getapplock) cho mọi thao tác ghi là đủ,
+   không cần khoá tổng hợp tinh như StocktakeCounts — mục tiêu chính là tách khỏi khoá AppData blob
+   dùng CHUNG với stocktakeCounts (collection NÓNG), không phải tối ưu song song riêng của sessions. */
+IF OBJECT_ID('dbo.StocktakeSessions', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StocktakeSessions (
+        Id         BIGINT         NOT NULL CONSTRAINT PK_StocktakeSessions PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Dept       NVARCHAR(100)  NOT NULL,
+        LoaiKy     NVARCHAR(20)   NOT NULL,
+        TrangThai  NVARCHAR(20)   NOT NULL,
+        BatchId    NVARCHAR(80)   NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_StocktakeSessions_Dept_LoaiKy ON dbo.StocktakeSessions (Dept, LoaiKy);
+    CREATE INDEX IX_StocktakeSessions_BatchId ON dbo.StocktakeSessions (BatchId);
+END
+GO
+
+/* StocktakeUserAccess (Tab 8 "Cấu Hình Người Dùng", collection AppData cũ "stocktakeUserAccess") —
+   allowlist (user × siêu thị × quầy kệ), CẤU HÌNH, ghi hiếm — CÙNG lý do StocktakeSessions ở trên. */
+IF OBJECT_ID('dbo.StocktakeUserAccess', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StocktakeUserAccess (
+        Id               BIGINT         NOT NULL CONSTRAINT PK_StocktakeUserAccess PRIMARY KEY,
+        CreatedAt        DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Username         NVARCHAR(100)  NOT NULL,
+        Dept             NVARCHAR(100)  NOT NULL,
+        ShelfLocationId  BIGINT         NOT NULL,
+        Payload          NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_StocktakeUserAccess_Username ON dbo.StocktakeUserAccess (Username);
+    CREATE INDEX IX_StocktakeUserAccess_Dept ON dbo.StocktakeUserAccess (Dept);
+END
+GO
+
+/* KiemKeShelfLocations (Tab 5 "Cấu Hình Quầy Kệ" — danh mục quầy kệ RIÊNG của Kiểm Kê, collection
+   AppData cũ "kiemKeShelfLocations") — Code KHÔNG unique toàn cục (2 siêu thị khác nhau được phép có
+   CÙNG mã quầy kệ — dup-check chỉ áp dụng trong CÙNG 1 siêu thị, làm ở tầng ứng dụng qua
+   lib/kiemKeShelfLocationsStore.js, KHÔNG dùng UNIQUE INDEX (Dept, Code) ở đây). */
+IF OBJECT_ID('dbo.KiemKeShelfLocations', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.KiemKeShelfLocations (
+        Id         BIGINT         NOT NULL CONSTRAINT PK_KiemKeShelfLocations PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Dept       NVARCHAR(100)  NOT NULL,
+        Code       NVARCHAR(100)  NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_KiemKeShelfLocations_Dept ON dbo.KiemKeShelfLocations (Dept);
+END
+GO
+
+/* ShelfLocations (Kiểm Soát Hàng Hóa > danh mục Quầy Kệ, collection AppData cũ "shelfLocations") — CÙNG
+   lý do KiemKeShelfLocations ở trên (Code không unique toàn cục, dup-check theo dept ở tầng ứng dụng). */
+IF OBJECT_ID('dbo.ShelfLocations', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ShelfLocations (
+        Id         BIGINT         NOT NULL CONSTRAINT PK_ShelfLocations PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Dept       NVARCHAR(100)  NOT NULL,
+        Code       NVARCHAR(100)  NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_ShelfLocations_Dept ON dbo.ShelfLocations (Dept);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO
