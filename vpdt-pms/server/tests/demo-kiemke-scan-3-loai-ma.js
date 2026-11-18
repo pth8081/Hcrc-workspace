@@ -67,10 +67,11 @@ const OUT_DIR = process.env.KIEMKE_SCAN_DEMO_OUT_DIR || path.join(__dirname, '..
   page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().includes('404')) jsErrors.push('[console.error] ' + msg.text()); });
   page.on('pageerror', (err) => jsErrors.push('[pageerror] ' + (err && err.stack || String(err))));
 
-  async function runTab(tabKey, { btnSelector, shelfSelectId, barcodeInputId, qtySubmitSelector, screenshotName }) {
+  const SHELF_A1_LABEL = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+  async function runTab(tabKey, { btnSelector, shelfInputId, barcodeInputId, qtySubmitSelector, screenshotName }) {
     await page.click(btnSelector);
     await page.waitForTimeout(200);
-    await page.selectOption(`#${shelfSelectId}`, '10');
+    await page.fill(`#${shelfInputId}`, SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     for (const scan of SCANS) {
       await page.fill(`#${barcodeInputId}`, scan.code);
@@ -87,15 +88,15 @@ const OUT_DIR = process.env.KIEMKE_SCAN_DEMO_OUT_DIR || path.join(__dirname, '..
     await page.waitForTimeout(150);
 
     await runTab('GOMMA', {
-      btnSelector: '#btnKkSubGomMa', shelfSelectId: 'kkGomMaShelfSelect', barcodeInputId: 'kkGomMaBarcodeInput',
+      btnSelector: '#btnKkSubGomMa', shelfInputId: 'kkGomMaShelfInput', barcodeInputId: 'kkGomMaBarcodeInput',
       qtySubmitSelector: '[data-op="submitKkScan"][data-arg0="GOMMA"]', screenshotName: '1-gom-ma-quet-3-loai-ma.png'
     });
     await runTab('KIEMDEM', {
-      btnSelector: '#btnKkSubKiemDem', shelfSelectId: 'kkKiemDemShelfSelect', barcodeInputId: 'kkKiemDemBarcodeInput',
+      btnSelector: '#btnKkSubKiemDem', shelfInputId: 'kkKiemDemShelfInput', barcodeInputId: 'kkKiemDemBarcodeInput',
       qtySubmitSelector: '[data-op="submitKkScan"][data-arg0="KIEMDEM"]', screenshotName: '2-kiem-dem-quet-3-loai-ma.png'
     });
     await runTab('KIEMSOAT', {
-      btnSelector: '#btnKkSubKiemSoat', shelfSelectId: 'kkKiemSoatShelfSelect', barcodeInputId: 'kkKiemSoatBarcodeInput',
+      btnSelector: '#btnKkSubKiemSoat', shelfInputId: 'kkKiemSoatShelfInput', barcodeInputId: 'kkKiemSoatBarcodeInput',
       qtySubmitSelector: '[data-op="submitKkScan"][data-arg0="KIEMSOAT"]', screenshotName: '3-kiem-soat-quet-3-loai-ma.png'
     });
 

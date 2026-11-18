@@ -32,7 +32,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
   const GOM_MA_SESSION = { id: 9003, dept: DEPT1, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [MANAGER],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [THONG_KE_SESSION, GOM_MA_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
@@ -70,12 +70,12 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Kiểm Đếm A1 + A2 (Kỳ Kiểm Kê).
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A2 — Kệ A2 — Mì, cháo');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP002');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -84,7 +84,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Gom Mã A1 (Kỳ Gom Mã RIÊNG — MỚI, trước đây không có khoá/Xác Nhận).
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkGomMaBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="GOMMA"]');
@@ -125,7 +125,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     console.log(confirmedCountAfterUn === 0 ? '✅ Bulk Gỡ Xác Nhận: cả A1+A2 gỡ xác nhận CÙNG 1 lần bấm' : `⚠️ Vẫn còn ${confirmedCountAfterUn} quầy kệ chưa gỡ được`);
 
     // Khung Gom Mã (kỳ RIÊNG) — chọn đúng Kỳ Gom Mã, hiện A1, bulk Xác Nhận.
-    await page.selectOption('#kkConfirmGomMaSessionSelect', '9003');
+    await page.fill('#kkConfirmGomMaSessionInput', 'Gom Mã Q4/2026');
     await page.waitForTimeout(250);
     await shot('tab6-khung-gom-ma-rieng-truoc-xac-nhan');
     await page.check('#kkConfirmBulkBarGomMa input[type="checkbox"]');
@@ -139,9 +139,9 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Quay lại Tab 2 Gom Mã -> quầy kệ A1 bị khoá NGAY lúc chọn (Lớp 4 Gom Mã, MỚI).
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '11');
+    await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A2 — Kệ A2 — Mì, cháo');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(200);
     await shot('tab2-gom-ma-A1-bi-khoa-ngay-sau-xac-nhan');
     const lockedInfo = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);

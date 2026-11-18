@@ -18,6 +18,12 @@ async function main() {
   const GOMMA_SESSION = { id: 9101, dept: DEPT1, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const THONGKE_SESSION = { id: 9102, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Thống Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const THONGKE_DEPT2_SESSION = { id: 9103, dept: DEPT2, loaiKy: 'THONG_KE', tenKy: 'Thống Kê Q2 — Q4/2026', trangThai: 'DA_CHOT' };
+  // Nhãn hiển thị trong ô tìm-kiếm-gõ-chọn (sdd*) / multi-select — ĐÚNG khuôn kkReportSessionOptionLabel()
+  // ở module-vanhanh.js: `${loaiKy==='GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${tenKy} (${trangThaiLabel})`.
+  const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' };
+  const kkReportLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
+  const GOMMA_LABEL = kkReportLabel(GOMMA_SESSION);
+  const THONGKE_LABEL = kkReportLabel(THONGKE_SESSION);
 
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [STAFF, MANAGER, ADMIN],
@@ -44,7 +50,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -71,7 +77,7 @@ async function main() {
     await page.waitForTimeout(200);
 
     await run.run('qlA: chọn kỳ Thống Kê Q4/2026 -> hiện đúng stat cards + bảng chi tiết', async () => {
-      await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+      await page.fill('#kkReportSessionInput', THONGKE_LABEL);
       await page.waitForTimeout(250);
       const bodyVisible = await page.isVisible('#kkReportBody');
       assert(bodyVisible, 'LỖI: #kkReportBody phải hiện sau khi chọn kỳ');
@@ -80,24 +86,30 @@ async function main() {
       assert(!rowsText.includes('Gom Mã'), 'LỖI: bảng chi tiết kỳ Thống Kê KHÔNG được có chữ "Gom Mã" (mỗi kỳ báo cáo độc lập, không trộn Gom Mã của kỳ khác)');
       // SP002: cột Kiểm Đếm=120 (raw), Kiểm Soát=108, SL Cuối Cùng=108 (A6 ghi đè) — đọc đúng từng ô
       // (không dùng includes() thô trên cả bảng vì "120" giờ hợp lệ xuất hiện ở cột Kiểm Đếm riêng).
+      // LƯU Ý (audit chéo đợt chuyển select->input sdd*): bảng đã có thêm cột "Mã Vạch" ngay SAU "Mã Hàng"
+      // (tính năng "2 cột mã", 11/2026, KHÔNG liên quan tới đợt chuyển select->input này) -> mọi index cột
+      // dời xuống +1 so với bản gốc của test này (index cũ 3/4/5/7/8 -> 4/5/6/8/9); test này ĐÃ lỗi thời ở
+      // phần cứng index TRƯỚC cả đợt chuyển select->input, cập nhật lại đúng theo cấu trúc bảng thật hiện
+      // tại ([0]=Mã Hàng,[1]=Mã Vạch,[2]=Tên,[3]=Tồn Kho,[4]=KiểmĐếm,[5]=KiểmSoát,[6]=SLCuốiCùng,
+      // [7]=ChênhLệch,[8]=Giá,[9]=GiáTrị — xem renderKkReportTable() ở module-vanhanh.js).
       const sp002Cells = await page.$$eval('#kkReportTableBody tr', (trs) => {
         const row = trs.find(tr => tr.textContent.includes('SP002'));
         return row ? [...row.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
       });
       assert(sp002Cells, 'LỖI: không tìm thấy dòng SP002');
-      assert(sp002Cells[3] === '120', `LỖI: cột Kiểm Đếm (SP002) phải là 120 (raw, chưa ghi đè) -- got: ${JSON.stringify(sp002Cells)}`);
-      assert(sp002Cells[4] === '108', `LỖI: cột Kiểm Soát (SP002) phải là 108 -- got: ${JSON.stringify(sp002Cells)}`);
-      assert(sp002Cells[5] === '108', `LỖI: cột SL Cuối Cùng (SP002) phải là 108 (Kiểm Soát ghi đè ĐÚNG A6, không phải 120) -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[4] === '120', `LỖI: cột Kiểm Đếm (SP002) phải là 120 (raw, chưa ghi đè) -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[5] === '108', `LỖI: cột Kiểm Soát (SP002) phải là 108 -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[6] === '108', `LỖI: cột SL Cuối Cùng (SP002) phải là 108 (Kiểm Soát ghi đè ĐÚNG A6, không phải 120) -- got: ${JSON.stringify(sp002Cells)}`);
       // "💰 Giá Trị Thừa/Thiếu" (12/2026, MỚI) — cột Giá/Giá Trị nối thêm SAU "Chênh Lệch" (không chèn
       // giữa, không đụng index các cột cũ đã kiểm ở trên). SP001: giá 10.000đ, chênh lệch 48-50=-2 ->
       // giá trị -20.000đ. SP002: giá 2.000đ, chênh lệch 108-30=78 -> giá trị +156.000đ.
-      assert(sp002Cells[7] === '2.000 đ', `LỖI: cột Giá (SP002) phải là "2.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
-      assert(sp002Cells[8] === '+156.000 đ', `LỖI: cột Giá Trị (SP002) phải là "+156.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[8] === '2.000 đ', `LỖI: cột Giá (SP002) phải là "2.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
+      assert(sp002Cells[9] === '+156.000 đ', `LỖI: cột Giá Trị (SP002) phải là "+156.000 đ" -- got: ${JSON.stringify(sp002Cells)}`);
       const sp001Cells = await page.$$eval('#kkReportTableBody tr', (trs) => {
         const row = trs.find(tr => tr.textContent.includes('SP001'));
         return row ? [...row.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
       });
-      assert(sp001Cells[7] === '10.000 đ' && sp001Cells[8] === '-20.000 đ', `LỖI: SP001 Giá/Giá Trị phải là "10.000 đ"/"-20.000 đ" -- got: ${JSON.stringify(sp001Cells)}`);
+      assert(sp001Cells[8] === '10.000 đ' && sp001Cells[9] === '-20.000 đ', `LỖI: SP001 Giá/Giá Trị phải là "10.000 đ"/"-20.000 đ" -- got: ${JSON.stringify(sp001Cells)}`);
     });
 
     await run.run('qlA: thẻ "💰 Giá Trị Thừa/Thiếu" hiện đúng tổng (-20.000+156.000=+136.000đ), không mã nào thiếu giá', async () => {
@@ -121,7 +133,7 @@ async function main() {
     });
 
     await run.run('qlA: Kỳ Gom Mã tự xem báo cáo của chính nó -> không có cột "Gom Mã (tham khảo)" riêng, dùng SL Gom Mã làm giá trị chính', async () => {
-      await page.selectOption('#kkReportSessionSelect', String(GOMMA_SESSION.id));
+      await page.fill('#kkReportSessionInput', GOMMA_LABEL);
       await page.waitForTimeout(250);
       const headText = await page.textContent('#kkReportTableHead');
       assert(!headText.includes('Gom Mã (tham khảo)'), 'LỖI: Kỳ Gom Mã không được có cột "Gom Mã (tham khảo)" riêng');
@@ -132,7 +144,7 @@ async function main() {
 
     await run.run('qlA: "📊 Xuất Excel" gửi ĐÚNG 1 lần, 1 sheet duy nhất (không-Admin không có So Sánh Siêu Thị)', async () => {
       state.__xlsxExports = [];
-      await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+      await page.fill('#kkReportSessionInput', THONGKE_LABEL);
       await page.waitForTimeout(200);
       await page.click('[data-op="exportKkReportExcel"]');
       await page.waitForTimeout(150);
@@ -142,11 +154,12 @@ async function main() {
     });
 
     await run.run('qlA: "📊 So Sánh Với Kỳ Khác" — chọn kỳ Gom Mã để so sánh với kỳ Thống Kê đang xem -> hiện đúng khung So Sánh, KHÔNG trộn vào bảng chi tiết chính', async () => {
-      await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+      await page.fill('#kkReportSessionInput', THONGKE_LABEL);
       await page.waitForTimeout(200);
       const compareCardHiddenBefore = await page.evaluate(() => document.getElementById('kkReportCompareCard').classList.contains('hidden'));
       assert(compareCardHiddenBefore, 'LỖI: mặc định (chưa chọn so sánh) khung So Sánh phải ẨN');
-      await page.selectOption('#kkReportCompareSelect', String(GOMMA_SESSION.id));
+      await page.fill('#kkReportCompareMultiSelect [data-pms-search]', GOMMA_SESSION.tenKy);
+      await page.click('#kkReportCompareMultiSelect [data-pms-dropdown] > div:first-child');
       await page.waitForTimeout(250);
       const compareCardVisible = await page.isVisible('#kkReportCompareCard');
       assert(compareCardVisible, 'LỖI: chọn kỳ so sánh xong phải HIỆN khung So Sánh');
@@ -155,7 +168,9 @@ async function main() {
       const headText = await page.textContent('#kkReportTableHead');
       assert(!headText.includes('Gom Mã'), 'LỖI: bật So Sánh KHÔNG được trộn cột Gom Mã vào bảng chi tiết chính (vẫn phải độc lập)');
       // Tắt so sánh lại -> khung ẩn đi, bảng chính không đổi.
-      await page.selectOption('#kkReportCompareSelect', '');
+      while (await page.locator('#kkReportCompareMultiSelect [data-op="gmsRemove"]').count() > 0) {
+        await page.click('#kkReportCompareMultiSelect [data-op="gmsRemove"]');
+      }
       await page.waitForTimeout(250);
       const compareCardHiddenAfter = await page.evaluate(() => document.getElementById('kkReportCompareCard').classList.contains('hidden'));
       assert(compareCardHiddenAfter, 'LỖI: bỏ chọn so sánh phải ẨN lại khung So Sánh');
@@ -169,7 +184,7 @@ async function main() {
     await page.waitForTimeout(200);
 
     await run.run('Admin: chọn Kỳ Thống Kê Q4/2026 -> hiện khung "So Sánh Giữa Các Siêu Thị" với CẢ 2 siêu thị', async () => {
-      await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+      await page.fill('#kkReportSessionInput', THONGKE_LABEL);
       await page.waitForTimeout(250);
       const visible = await page.isVisible('#kkReportChart3Card');
       assert(visible, 'LỖI: Admin phải thấy #kkReportChart3Card');

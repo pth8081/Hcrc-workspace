@@ -32,7 +32,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
   const GOM_MA_SESSION = { id: 9003, dept: DEPT1, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [MANAGER],
-    shelfLocations: [SHELF_A1, SHELF_A2, SHELF_A3],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2, SHELF_A3],
     stocktakeSessions: [THONG_KE_SESSION, GOM_MA_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
@@ -75,7 +75,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Chuẩn bị dữ liệu: Kiểm Đếm + Kiểm Soát A1/A2, Gom Mã A1 (kỳ riêng).
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -89,7 +89,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     console.log(sddVisible ? '✅ Ô "Tìm theo mã/tên" tự hiện gợi ý (sdd) khi focus' : '⚠️ Dropdown gợi ý không hiện');
     await page.keyboard.press('Escape');
 
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A2 — Kệ A2 — Mì, cháo');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP002');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -97,7 +97,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
 
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemSoatBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
@@ -105,7 +105,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
 
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkGomMaBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="GOMMA"]');

@@ -65,7 +65,7 @@ async function main() {
 
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await run.run('Gom Mã: camera quét ĐÚNG mã vạch PHỤ (dsMaVach, không phải mã vạch mặc định) vẫn khớp SP001', async () => {
       await simulateCameraDecode('GOMMA', '8934000099999');
@@ -82,7 +82,7 @@ async function main() {
 
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await run.run('Kiểm Đếm: nút "📷" dùng ĐÚNG CHUNG openShelfBarcodeModalForKkScan(\'KIEMDEM\') -> camera quét mã vạch phụ vẫn khớp SP001', async () => {
       await simulateCameraDecode('KIEMDEM', '8934000099999');
@@ -93,7 +93,7 @@ async function main() {
 
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await run.run('Kiểm Soát: nút "📷" dùng ĐÚNG CHUNG openShelfBarcodeModalForKkScan(\'KIEMSOAT\') -> camera quét Mã Hàng nội bộ vẫn khớp SP002', async () => {
       await simulateCameraDecode('KIEMSOAT', 'SP002');

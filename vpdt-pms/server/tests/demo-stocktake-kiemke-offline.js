@@ -65,7 +65,9 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     await page.waitForTimeout(300);
     await shot('tab3-online-a1-mo-a2-da-khoa');
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    const SHELF_A1_LABEL = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+    const SHELF_A2_LABEL = `🔒 ${SHELF_A2.dept} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(200);
     await shot('tab3-online-chon-a1-mo-o-quet');
 
@@ -76,19 +78,19 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     await page.waitForTimeout(200);
     await shot('tab3-offline-van-hien-du-quay-ke-bao-ngoai-tuyen');
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(200);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
     await page.waitForTimeout(200);
     await shot('tab3-offline-quet-thanh-cong-hien-cho-dong-bo');
 
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
     await page.waitForTimeout(200);
     await shot('tab3-offline-a2-da-khoa-tu-truoc-van-bi-chan');
 
     // ===== CÓ MẠNG LẠI =====
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(150);
     await goOnline();
     await page.evaluate(() => trySyncPendingKkScans());

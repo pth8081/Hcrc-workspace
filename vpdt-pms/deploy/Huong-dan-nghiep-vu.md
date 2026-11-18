@@ -3841,6 +3841,20 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   tiếp lên Kiểm Đếm) — danh sách Tab 4 hiện thêm cột "SL Kiểm Đếm" tham
   khảo để so sánh, mã ĐÃ soát (kể cả soát ra đúng 0) sẽ được ưu tiên thay
   số Kiểm Đếm khi lên Báo Cáo, mã chưa soát vẫn giữ nguyên số Kiểm Đếm.
+  **Cột "Trùng Mã" (MỚI, 12/2026, theo yêu cầu người dùng)**: 1 mã hàng
+  nằm RẢI RÁC ở nhiều quầy kệ khác nhau (VD vừa có ở kệ A1, vừa có ở kệ A2)
+  sẽ ra NHIỀU dòng RIÊNG — mỗi quầy kệ 1 dòng, số lượng CHỈ cộng dồn khi
+  quét TRÙNG mã trong CÙNG 1 quầy kệ đang xem, KHÔNG tự cộng dồn giữa các
+  quầy kệ khác nhau (đây KHÔNG phải lỗi, đúng thực tế hàng hoá để nhiều
+  kệ). Cột "Trùng Mã" cho biết ngay mã hàng của dòng đang xem CÒN xuất
+  hiện ở bao nhiêu quầy kệ khác trong CÙNG kỳ: VD mã X có ở 3 quầy kệ với
+  số lượng 2/3/4 thì ở MỖI dòng của mã X (dù đang xem quầy kệ nào) đều
+  hiện "⚠️ 3 dòng • Tổng 9" (3 = tổng số dòng đang có mã này tính chung
+  toàn kỳ trên mọi quầy kệ, 9 = tổng số lượng cộng lại); mã CHỈ có ở đúng
+  1 quầy kệ thì hiện "—". Đây CHỈ là thông tin tham khảo thêm (giúp người
+  quét biết sản phẩm nằm rải rác, không nhầm là nhập trùng) — **Báo Cáo**
+  (Tab 7) vẫn tự CỘNG DỒN đúng tổng số lượng của mã đó trên TOÀN BỘ quầy
+  kệ của kỳ, không cần thao tác gì thêm.
 - **Tab 5 "🗄️ Cấu Hình Quầy Kệ" + Tab 6 "✅ Xác Nhận" (11/2026)**: Tab 5 chỉ
   XEM danh sách quầy kệ đang áp dụng Kiểm Kê của siêu thị (lọc theo mã/tên),
   kèm nút "Mở Quản Lý Quầy Kệ →" dẫn thẳng sang Kiểm Soát Hàng Hóa → Quầy Kệ

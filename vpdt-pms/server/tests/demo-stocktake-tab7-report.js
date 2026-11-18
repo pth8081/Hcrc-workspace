@@ -23,7 +23,7 @@ const DEPT2 = 'Siêu thị Quận 2';
 
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [MANAGER, ADMIN],
-    shelfLocations: [{ id: 60, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true }],
+    kiemKeShelfLocations: [{ id: 60, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true }],
     stocktakeSessions: [GOMMA_SESSION, THONGKE_SESSION, THONGKE_DEPT2],
     stocktakeCounts: [
       { id: 1, sessionId: GOMMA_SESSION.id, dept: DEPT1, shelfLocationId: 60, maHang: 'SP001', tenHang: 'G7 Cà Phê 3in1', slGomMa: 46 },
@@ -65,11 +65,11 @@ const DEPT2 = 'Siêu thị Quận 2';
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Thống Kê Quý 4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await shot('qla-thongke-day-du');
 
-    await page.selectOption('#kkReportSessionSelect', String(GOMMA_SESSION.id));
+    await page.fill('#kkReportSessionInput', '📷 Gom Mã — Gom Mã Quý 4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await shot('qla-gomma-rut-gon');
 
@@ -78,7 +78,7 @@ const DEPT2 = 'Siêu thị Quận 2';
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Thống Kê Quý 4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await shot('admin-thongke-co-so-sanh-sieu-thi');
 

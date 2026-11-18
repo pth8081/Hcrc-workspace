@@ -20,7 +20,7 @@ const OUT_DIR = process.env.KK_VALUE_DEMO_OUT_DIR || path.join(__dirname, '..', 
 
   const state = createMockState({
     depts: [DEPT1, DEPT2], stores: [DEPT1, DEPT2], users: [MANAGER, ADMIN],
-    shelfLocations: [{ id: 50, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true }],
+    kiemKeShelfLocations: [{ id: 50, dept: DEPT1, code: 'A1', name: 'Kệ A1', active: true }],
     stocktakeSessions: [THONGKE_SESSION, THONGKE_DEPT2_SESSION],
     stocktakeCounts: [
       { id: 1, sessionId: THONGKE_SESSION.id, dept: DEPT1, shelfLocationId: 50, maHang: 'SP001', tenHang: 'Dầu Ăn Simply 1L', slKiemDem: 48 },
@@ -52,7 +52,7 @@ const OUT_DIR = process.env.KK_VALUE_DEMO_OUT_DIR || path.join(__dirname, '..', 
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Kiểm Kê Q4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
 
     await page.screenshot({ path: path.join(OUT_DIR, '1-the-gia-tri-va-bang-chi-tiet.png'), fullPage: true });
@@ -64,7 +64,7 @@ const OUT_DIR = process.env.KK_VALUE_DEMO_OUT_DIR || path.join(__dirname, '..', 
     await page.waitForTimeout(150);
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Kiểm Kê Q4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await page.evaluate(() => document.getElementById('kkReportValueByStoreCard')?.scrollIntoView());
     await page.waitForTimeout(150);

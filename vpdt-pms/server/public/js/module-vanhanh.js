@@ -668,13 +668,18 @@ const KK_SCAN_TAB_CONFIG = Object.freeze({
 // searchDropdownId (MỚI, 12/2026 — theo yêu cầu người dùng "lọc tìm kiếm theo mã sản phẩm... dạng drop
 // list, searchable, gợi ý nhắc") — ô "🔎 Tìm theo mã/tên để sửa/xoá..." vốn đã là ô lọc văn bản tự do, nay
 // thêm gợi ý tự nạp (sddSetOptions(), xem renderKkScanList() ngay dưới) từ ĐÚNG các mã đã quét ở quầy kệ
-// đang chọn — KHÔNG đổi hành vi/giao diện ô Quầy Kệ (vẫn <select> thường, cố ý giữ nguyên để không phá
-// hàng chục bài test Playwright đang dùng page.selectOption() trên ô này).
+// đang chọn.
 const KK_SCAN_SEARCH_DROPDOWN_ID = Object.freeze({ GOMMA: 'kkGomMaSearchDropdown', KIEMDEM: 'kkKiemDemSearchDropdown', KIEMSOAT: 'kkKiemSoatSearchDropdown' });
+// dupMap (MỚI, 12/2026, theo yêu cầu người dùng: "có thể một mã nhưng nhiều dòng do khi quét mã nằm rải
+// rác trên kệ và không cộng dồn khi ghi nhận ở các mục này... cho hiện một cột trùng mã") — Map maHang ->
+// {count, sum}, tính từ TOÀN BỘ dòng của Kỳ đang chọn (MỌI quầy kệ, không chỉ quầy kệ đang xem — xem
+// loadKkCrossShelfDupMap() ngay dưới loadKkScanCounts()), để phát hiện 1 mã hàng xuất hiện ở NHIỀU quầy
+// kệ khác nhau trong CÙNG 1 kỳ (KHÔNG cộng dồn tự động giữa các quầy kệ, khác với trong CÙNG 1 quầy kệ —
+// nơi submitKkScan()/upsertScanCount() đã tự cộng dồn đúng 1 dòng/mã hàng).
 const kkScanState = {
-  GOMMA: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
-  KIEMDEM: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' },
-  KIEMSOAT: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '' }
+  GOMMA: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '', dupMap: new Map() },
+  KIEMDEM: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '', dupMap: new Map() },
+  KIEMSOAT: { shelves: [], selectedShelfId: null, session: null, counts: [], searchText: '', dupMap: new Map() }
 };
 
 // Tải "Tồn Kho Hệ Thống" để tra mã quét — TÁI DÙNG shelfSystemInventoryCache đã có (dùng chung với "📷
@@ -958,7 +963,41 @@ async function loadKkScanCounts(tabKey) {
       .filter(p => p.mode === cfg.apiMode && p.shelfLocationId === st.selectedShelfId)
       .forEach(p => applyOptimisticKkScanRow(st, cfg, { maHang: p.maHang, tenHang: p.tenHang }, p.qty));
   }
+  await loadKkCrossShelfDupMap(tabKey);
   renderKkScanList(tabKey);
+}
+
+// loadKkCrossShelfDupMap() (MỚI, 12/2026, theo yêu cầu người dùng "cho hiện một cột trùng mã và ghi số
+// lượng dòng đang có mã bị trùng") — tải TOÀN BỘ dòng của kỳ đang chọn (KHÔNG lọc shelfLocationId, khác
+// hẳn loadKkScanCounts() ở trên chỉ lấy đúng quầy kệ đang xem) để phát hiện 1 mã hàng có mặt ở NHIỀU quầy
+// kệ khác nhau — mỗi quầy kệ 1 dòng riêng (upsertScanCount() chỉ cộng dồn trong CÙNG 1 quầy kệ, KHÔNG gộp
+// giữa các quầy kệ khác nhau, đúng thực tế hàng hoá nằm rải rác nhiều kệ). Lỗi mạng/offline -> để dupMap
+// RỖNG (chỉ là gợi ý tham khảo thêm, không phải dữ liệu bắt buộc phải có mới quét được — KHÔNG chặn luồng
+// quét chính nếu tải lỗi).
+async function loadKkCrossShelfDupMap(tabKey) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  if (!st.session) { st.dupMap = new Map(); return; }
+  let allRows = [];
+  try {
+    const res = await fetch(`/api/stocktake/counts?sessionId=${st.session.id}`);
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    allRows = res.ok ? (body.items || []) : [];
+  } catch (err) {
+    st.dupMap = new Map();
+    return;
+  }
+  const byMaHang = new Map();
+  allRows.forEach(c => {
+    const qty = Number(c[cfg.qtyField]) || 0;
+    if (qty <= 0) return;
+    const existing = byMaHang.get(c.maHang) || { count: 0, sum: 0 };
+    existing.count += 1;
+    existing.sum += qty;
+    byMaHang.set(c.maHang, existing);
+  });
+  st.dupMap = byMaHang;
 }
 
 async function submitKkScan(tabKey) {
@@ -1092,8 +1131,12 @@ function renderKkScanList(tabKey) {
   // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — c.maVach đã có sẵn
   // trên mỗi dòng stocktakeCounts (ghi lại từ lúc quét, xem upsertScanCount()/submitKkScan()), chỉ cần
   // thêm cột hiển thị, không cần tính toán gì thêm.
+  // Trùng Mã (MỚI, 12/2026, theo yêu cầu người dùng — xem loadKkCrossShelfDupMap() ở trên) — 1 mã hàng
+  // xuất hiện ở NHIỀU quầy kệ khác nhau trong CÙNG kỳ này (hàng rải rác nhiều kệ, KHÔNG tự cộng dồn giữa
+  // các quầy kệ) sẽ hiện "N dòng • Tổng X" ở MỖI dòng liên quan, để người quét/soát biết còn những quầy
+  // kệ khác cũng đang có mã này — không phải lỗi nhập trùng, chỉ là thông tin tham khảo thêm.
   listBody.innerHTML = banners + `<table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b">
-    <th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
+    <th class="py-1 pr-2">Mã Hàng</th><th class="pr-2">Mã Vạch</th><th>Tên</th><th class="pr-2">Trùng Mã</th>${showKiemDemRef ? '<th class="text-right">SL Kiểm Đếm</th>' : ''}<th class="text-right">SL${showKiemDemRef ? ' Soát' : ''}</th><th></th></tr></thead><tbody>` +
     sorted.map(c => {
       // Dòng CHƯA đồng bộ (id tạm "offline_...", xem applyOptimisticKkScan()) — CHỈ XEM, không sửa/xoá
       // trực tiếp được (chưa có id thật từ server) — chờ đồng bộ xong (trySyncPendingKkScans() sẽ tải lại
@@ -1102,10 +1145,15 @@ function renderKkScanList(tabKey) {
       const qtyCell = pending
         ? `<span class="text-amber-600 font-semibold" title="Chưa đồng bộ">⏳ ${Number(c[cfg.qtyField]) || 0}</span>`
         : `<input type="number" min="0" value="${Number(c[cfg.qtyField]) || 0}" data-op-change="editKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" data-arg-value="2" class="w-16 border rounded px-1 py-0.5 text-right">`;
+      const dup = st.dupMap.get(c.maHang);
+      const dupCell = (dup && dup.count > 1)
+        ? `<span class="text-amber-700 font-semibold" title="Mã này có mặt ở ${dup.count} quầy kệ khác nhau trong kỳ này">⚠️ ${dup.count} dòng • Tổng ${dup.sum}</span>`
+        : '—';
       return `<tr class="border-b last:border-0${pending ? ' bg-amber-50' : ''}">
       <td class="py-1 pr-2 font-mono">${escapeHtml(c.maHang)}</td>
       <td class="pr-2 font-mono">${escapeHtml(c.maVach || '—')}</td>
       <td>${escapeHtml(c.tenHang || '')}</td>
+      <td class="pr-2">${dupCell}</td>
       ${showKiemDemRef ? `<td class="text-right text-gray-500">${Number(c.slKiemDem) || 0}</td>` : ''}
       <td class="text-right">${qtyCell}</td>
       <td class="text-right">${pending ? '' : `<button type="button" data-op="deleteKkScanCount" data-arg0="${tabKey}" data-arg1="${c.id}" class="text-red-600 hover:underline">🗑️</button>`}</td>
@@ -1998,10 +2046,8 @@ async function unconfirmKkSoatShelf(id) {
 // "shelf-gom-ma-confirmations". KHÔNG tham gia updateKkConfirmAllVisibility() — Gom Mã đóng Kỳ riêng ở
 // Tab 1 (nút "Đóng Kỳ" thủ công), không liên quan điều kiện đóng Kỳ Kiểm Kê.
 async function loadKkConfirmGomMaTab() {
-  const sel = document.getElementById('kkConfirmGomMaSessionSelect');
-  const sessionId = Number(sel?.value || 0);
+  const sessionId = kkConfirmGomMaSessionId || 0;
   const bodyWrap = document.getElementById('kkConfirmGomMaBody');
-  kkConfirmGomMaSessionId = sessionId || null;
   if (!sessionId) { if (bodyWrap) bodyWrap.classList.add('hidden'); return; }
   if (bodyWrap) bodyWrap.classList.remove('hidden');
   try {

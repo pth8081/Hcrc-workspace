@@ -14,6 +14,12 @@ async function main() {
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', category: 'Gia vị', active: true };
   const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', category: 'Mì', active: true };
   const SHELF_B1 = { id: 20, dept: DEPT2, code: 'B1', name: 'Kệ B1 — Quận 2', category: 'Khác', active: true };
+  // Nhãn hiển thị trong ô tìm-kiếm-gõ-chọn (sdd*) — ĐÚNG khuôn kkShelfOptionLabel() ở module-vanhanh.js:
+  // `${kiemKeLocked ? '🔒 ' : ''}${dept} — ${code} — ${name}`. A1 bị IT khoá ở giữa bài test (giữ nguyên
+  // tiền tố 🔒 khi còn đang khoá), A2 được mở khoá lại nên KHÔNG còn tiền tố ở thời điểm dùng.
+  const SHELF_A1_LABEL = `${DEPT1} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+  const SHELF_A1_LOCKED_LABEL = `🔒 ${SHELF_A1_LABEL}`;
+  const SHELF_A2_LABEL = `${DEPT1} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   // itA: CHỈ có quyền Khoá/Mở Khoá (kiemKeShelfLockManage) + xem Tab 5 (kiemKeShelfConfigManage) — KHÔNG
   // có quyền Kiểm Đếm/Kiểm Soát/Gom Mã, đúng vai "IT thuần", không tự thao tác nghiệp vụ.
@@ -43,7 +49,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -98,7 +104,7 @@ async function main() {
       await page.waitForTimeout(100);
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A1_LOCKED_LABEL);
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
       assert(/ĐANG BỊ KHOÁ/.test(info), `Phải báo rõ "ĐANG BỊ KHOÁ" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
@@ -109,7 +115,7 @@ async function main() {
     await run.run('nv1 cố quét quầy kệ ĐÃ khoá qua Kiểm Soát -> server CŨNG chặn đúng (không chỉ ẩn UI)', async () => {
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LOCKED_LABEL);
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkKiemSoatSessionInfo').textContent);
       assert(/ĐANG BỊ KHOÁ/.test(info), `Kiểm Soát cũng phải báo khoá ngay (khoá áp dụng CẢ 3 hành động), thực tế: "${info}"`);
@@ -135,7 +141,7 @@ async function main() {
       await page.waitForTimeout(100);
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '11');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
       await page.waitForTimeout(200);
       const scanBoxHidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
       assert(!scanBoxHidden, 'A2 đã được mở khoá riêng -> ô quét Kiểm Đếm phải MỞ lại bình thường');
@@ -178,7 +184,7 @@ async function main() {
     await run.run('Admin: đổi siêu thị ở Tab 5 cũng đồng bộ sang Tab 1 "Kỳ Kiểm Kê" (dùng CHUNG 1 biến, không lệch nhau)', async () => {
       await page.click('#btnKkSubPeriod');
       await page.waitForTimeout(200);
-      const periodDeptValue = await page.evaluate(() => document.getElementById('kkPeriodDeptSelect')?.value);
+      const periodDeptValue = await page.evaluate(() => document.getElementById('kkPeriodDeptInput')?.value);
       assertEqual(periodDeptValue, DEPT2, `Tab 1 phải hiện ĐÚNG siêu thị vừa chọn ở Tab 5 (Siêu thị Quận 2), thực tế: "${periodDeptValue}"`);
     });
 

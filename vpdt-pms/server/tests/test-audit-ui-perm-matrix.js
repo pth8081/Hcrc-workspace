@@ -39,7 +39,7 @@ async function main() {
 
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [SINGLE, FULL, ADMIN],
-    shelfLocations: [SHELF_A1],
+    kiemKeShelfLocations: [SHELF_A1],
     stocktakeSessions: [GOM_MA_SESSION, THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'nvKS', dept: DEPT1, shelfLocationId: 20, canKiemSoat: true },
@@ -55,7 +55,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -112,7 +112,7 @@ async function main() {
       await page.waitForTimeout(150);
       const hiddenBefore = await page.evaluate(() => document.getElementById('kkKiemSoatScanBox').classList.contains('hidden'));
       assert(hiddenBefore, 'Chưa chọn quầy kệ -> ô quét Kiểm Soát phải ẨN');
-      await page.selectOption('#kkKiemSoatShelfSelect', '20');
+      await page.fill('#kkKiemSoatShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(200);
       const hiddenAfter = await page.evaluate(() => document.getElementById('kkKiemSoatScanBox').classList.contains('hidden'));
       const info = await page.evaluate(() => document.getElementById('kkKiemSoatSessionInfo').textContent);
@@ -144,14 +144,14 @@ async function main() {
     await run.run('FULL: Tab 6 Xác Nhận — tự chọn ĐÚNG kỳ Thống Kê "Đang hoạt động" làm mặc định (giống Tab 7)', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(250);
-      const label = await page.evaluate(() => document.getElementById('kkConfirmSessionSelect').selectedOptions[0]?.textContent);
+      const label = await page.evaluate(() => document.getElementById('kkConfirmSessionInput')?.value);
       assert(label && label.includes('Thống Kê Audit'), `Phải tự chọn đúng kỳ, thực tế: ${label}`);
       const bodyVisible = await page.isVisible('#kkConfirmBody');
       assert(bodyVisible, 'Đã tự chọn kỳ -> nội dung Tab 6 phải hiện');
     });
 
     await run.run('FULL: Tab 6 — bỏ chọn Kỳ (chọn về rỗng) -> nội dung ẨN LẠI, ĐÚNG khuôn "chọn trước" như Tab 4 (chọn quầy kệ)', async () => {
-      await page.selectOption('#kkConfirmSessionSelect', '');
+      await page.fill('#kkConfirmSessionInput', '');
       await page.waitForTimeout(150);
       const bodyVisible = await page.isVisible('#kkConfirmBody');
       assert(!bodyVisible, 'Bỏ chọn Kỳ -> nội dung Tab 6 phải ẨN LẠI (nhất quán với Tab 4: bỏ chọn quầy kệ -> ẩn ô quét)');
@@ -160,10 +160,10 @@ async function main() {
     await run.run('FULL: Tab 7 Báo Cáo — CÙNG khuôn: tự chọn đúng kỳ Thống Kê "Đang hoạt động", bỏ chọn -> ẨN lại nội dung, hiện gợi ý', async () => {
       await page.click('#btnKkSubReport');
       await page.waitForTimeout(250);
-      const label = await page.evaluate(() => document.getElementById('kkReportSessionSelect').selectedOptions[0]?.textContent);
+      const label = await page.evaluate(() => document.getElementById('kkReportSessionInput')?.value);
       assert(label && label.includes('Thống Kê Audit'), `Phải tự chọn đúng kỳ, thực tế: ${label}`);
       assert(await page.isVisible('#kkReportBody'), 'Đã tự chọn kỳ -> nội dung Tab 7 phải hiện');
-      await page.selectOption('#kkReportSessionSelect', '');
+      await page.fill('#kkReportSessionInput', '');
       await page.waitForTimeout(150);
       assert(!(await page.isVisible('#kkReportBody')), 'Bỏ chọn Kỳ -> nội dung Tab 7 phải ẨN LẠI (nhất quán với Tab 6/Tab 4)');
       assert(await page.isVisible('#kkReportEmptyNote'), 'Bỏ chọn Kỳ -> phải hiện gợi ý trống thay vì màn trắng im lặng');
@@ -174,7 +174,7 @@ async function main() {
     await run.run('FULL: quét Kiểm Đếm THẬT trên A1 (kỳ Thống Kê) trước khi Xác Nhận', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '20');
+      await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(150);
       await page.fill('#kkKiemDemBarcodeInput', 'SP900');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -186,7 +186,7 @@ async function main() {
     await run.run('FULL: Xác Nhận quầy kệ A1 ở Tab 6 (kỳ Thống Kê)', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(200);
-      await page.selectOption('#kkConfirmSessionSelect', String(THONG_KE_SESSION.id));
+      await page.fill('#kkConfirmSessionInput', 'Thống Kê Audit');
       await page.waitForTimeout(200);
       await page.click('#kkConfirmShelfListBody button[data-op="confirmKkShelf"][data-arg0="20"]');
       await page.waitForTimeout(200);
@@ -197,7 +197,7 @@ async function main() {
     await run.run('FULL: sau khi Xác Nhận A1 (kỳ Thống Kê) -> Tab 2 Gom Mã (kỳ Gom Mã, ĐỘC LẬP) trên CÙNG quầy kệ A1 VẪN quét được bình thường', async () => {
       await page.click('#btnKkSubGomMa');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '20');
+      await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(150);
       const hidden = await page.evaluate(() => document.getElementById('kkGomMaScanBox').classList.contains('hidden'));
       assert(!hidden, 'Gom Mã (kỳ Gom Mã) KHÔNG được bị khoá lây từ Xác Nhận kỳ Thống Kê — 2 loại kỳ độc lập');
@@ -219,7 +219,7 @@ async function main() {
     await run.run('FIX: Tab 3 Kiểm Đếm — chọn lại quầy kệ A1 ĐÃ Xác Nhận -> ô quét KHOÁ NGAY (không đợi submit mới biết)', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '20');
+      await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
       const hiddenAtSelect = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));

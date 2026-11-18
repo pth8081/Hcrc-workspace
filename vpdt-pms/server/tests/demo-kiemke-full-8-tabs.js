@@ -95,26 +95,26 @@ const SHELF_A2 = { id: 71, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, Chá
     // Tab 2 "📷 Gom Mã"
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', String(SHELF_A1.id));
+    await page.fill('#kkGomMaShelfInput', `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`);
     await page.waitForTimeout(250);
     await shot('tab2-gom-ma');
 
     // Tab 3 "🔢 Kiểm Đếm" — chọn quầy kệ A2 (CHƯA xác nhận, quét bình thường)
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', String(SHELF_A2.id));
+    await page.fill('#kkKiemDemShelfInput', `${SHELF_A2.dept} — ${SHELF_A2.code} — ${SHELF_A2.name}`);
     await page.waitForTimeout(250);
     await shot('tab3-kiem-dem-quay-ke-chua-xac-nhan');
 
     // Tab 3 — chọn quầy kệ A1 (ĐÃ Xác Nhận) -> demo đúng fix mới: khoá NGAY, không đợi submit.
-    await page.selectOption('#kkKiemDemShelfSelect', String(SHELF_A1.id));
+    await page.fill('#kkKiemDemShelfInput', `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`);
     await page.waitForTimeout(250);
     await shot('tab3-kiem-dem-quay-ke-da-xac-nhan-khoa-ngay');
 
     // Tab 4 "🛡️ Kiểm Soát" — CÙNG quầy kệ A1 (đã Xác Nhận ở Tab 3/Kiểm Đếm) VẪN thao tác được bình thường.
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', String(SHELF_A1.id));
+    await page.fill('#kkKiemSoatShelfInput', `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`);
     await page.waitForTimeout(250);
     await shot('tab4-kiem-soat-khong-bi-khoa-lay');
 
@@ -132,12 +132,14 @@ const SHELF_A2 = { id: 71, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, Chá
     // trộn Gom Mã của kỳ khác vào — SỬA 11/2026 theo phản hồi người dùng).
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Thống Kê Quý 4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await shot('tab7-bao-cao-quan-ly');
 
-    // Bật "So Sánh Với Kỳ Khác" (TÍNH NĂNG MỚI) -> so sánh kỳ Thống Kê đang xem với kỳ Gom Mã riêng.
-    await page.selectOption('#kkReportCompareSelect', String(GOMMA_SESSION.id));
+    // Bật "So Sánh Với Kỳ Khác" (TÍNH NĂNG MỚI, giờ chọn NHIỀU) -> so sánh kỳ Thống Kê đang xem với kỳ
+    // Gom Mã riêng — gõ tìm rồi bấm ĐÚNG 1 gợi ý khớp (widget renderMultiSelectDropdown(), core.js).
+    await page.fill('#kkReportCompareMultiSelect [data-pms-search]', 'Gom Mã Quý 4/2026');
+    await page.click('#kkReportCompareMultiSelect [data-pms-dropdown] > div:first-child');
     await page.waitForTimeout(300);
     await shot('tab7-bao-cao-so-sanh-voi-ky-khac');
 
@@ -152,7 +154,7 @@ const SHELF_A2 = { id: 71, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, Chá
 
     await page.click('#btnKkSubReport');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkReportSessionSelect', String(THONGKE_SESSION.id));
+    await page.fill('#kkReportSessionInput', '🔢 Kiểm Kê — Thống Kê Quý 4/2026 (Đang hoạt động)');
     await page.waitForTimeout(300);
     await shot('tab7-bao-cao-admin-so-sanh-sieu-thi');
 

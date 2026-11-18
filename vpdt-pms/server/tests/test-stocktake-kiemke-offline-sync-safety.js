@@ -17,6 +17,9 @@ async function main() {
   const PORT = 8992;
   const DEPT1 = 'Siêu thị Quận 1';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
+  // LABEL_A1 — nhãn hiển thị ĐÚNG công thức kkShelfOptionLabel() (module-vanhanh.js), dùng cho
+  // page.fill() vào #kkKiemDemShelfInput (ô "sdd*" MỚI thay cho <select> cũ).
+  const LABEL_A1 = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
   const USER = {
     username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1,
     perms: { kiemKeGomMaDo: true, kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true }, active: true, totpEnabled: true
@@ -59,7 +62,7 @@ async function main() {
     await page.waitForTimeout(100);
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
 
     // ===== A) Lượt quét ĐẦU TIÊN mất phản hồi NGAY LÚC GỬI TRỰC TUYẾN (chưa từng vào hàng đợi) =====

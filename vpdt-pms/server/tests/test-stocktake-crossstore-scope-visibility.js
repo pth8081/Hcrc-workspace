@@ -40,7 +40,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Mock chỉ hỗ trợ patch-mode';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -87,16 +87,16 @@ async function main() {
     await page.waitForTimeout(150);
 
     await run.run('IT_CONFIRM thấy dropdown "Siêu thị:" ở Tab 1 (dùng chung biến) với Quận 3 được gán Xác Nhận', async () => {
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkPeriodDeptSelect').options).map(o => o.value));
+      const options = await page.evaluate(() => (document.getElementById('kkPeriodDeptDropdown')._sddItems || []).map(it => it.label));
       assert(options.includes(DEPT3), `Phải có Quận 3 trong danh sách chọn, thực tế: ${options.join(',')}`);
-      await page.selectOption('#kkPeriodDeptSelect', DEPT3);
+      await page.fill('#kkPeriodDeptInput', DEPT3);
       await page.waitForTimeout(200);
     });
 
     await run.run('IT_CONFIRM vào Tab 6 Xác Nhận -> THẤY ĐƯỢC THẬT quầy kệ C1 đã Kiểm Đếm của Quận 3 (không rỗng)', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(300);
-      const sessionLabel = await page.evaluate(() => document.getElementById('kkConfirmSessionSelect').selectedOptions[0]?.textContent);
+      const sessionLabel = await page.evaluate(() => document.getElementById('kkConfirmSessionInput').value);
       assert(sessionLabel && sessionLabel.includes('Kiểm Kê Q4/2026 - Quận 3'), `Phải tự chọn đúng kỳ Quận 3, thực tế: ${sessionLabel}`);
       const text = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
       assert(text.includes('C1'), `Phải thấy quầy kệ C1 đã Kiểm Đếm của Quận 3, thực tế: ${text}`);

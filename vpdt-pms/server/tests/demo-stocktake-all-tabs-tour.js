@@ -112,21 +112,22 @@ const DEPT2 = 'Siêu thị Quận 2';
     await page.waitForTimeout(300);
     await shot('tab2-ton-kho');
 
+    const SHELF_A1_LABEL = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     await shot('tab3-gom-ma');
 
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     await shot('tab4-kiem-dem');
 
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(200);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     await shot('tab5-kiem-soat');
 

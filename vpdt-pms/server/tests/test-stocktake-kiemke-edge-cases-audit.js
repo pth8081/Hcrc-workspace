@@ -22,6 +22,15 @@ async function main() {
   const DEPT1 = 'Siêu thị Quận 1';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
   const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', active: true };
+  // LABEL_A1/LABEL_A2 — nhãn hiển thị ĐÚNG CÔNG THỨC kkShelfOptionLabel() (module-vanhanh.js:
+  // `${locked?'🔒 ':''}${dept} — ${code} — ${name}`) để page.fill() vào #kkKiemDemShelfInput khớp đúng
+  // gợi ý — tính từ CHÍNH field fixture (không chép tay) để không lệch nếu sửa fixture sau này. KHÔNG
+  // có tiền tố 🔒 trong TOÀN BỘ file test này dù SHELF_A1.kiemKeLocked bị gán true ở mục 5 (bên dưới)
+  // VÌ nhãn gõ vào luôn so khớp với `st.shelves` ĐÃ CACHE lúc vào tab (renderKkScanShelfOptions() chỉ
+  // chạy lại khi loadKkScanTab() tải MỚI — tab KIEMDEM không bị rời/vào lại trong suốt file này), không
+  // phải mảng `kiemKeShelfLocations` gốc vừa bị sửa trực tiếp qua state.
+  const LABEL_A1 = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+  const LABEL_A2 = `${SHELF_A2.dept} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
   const USER = {
     username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1,
     perms: { kiemKeGomMaDo: true, kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true }, active: true, totpEnabled: true
@@ -77,16 +86,16 @@ async function main() {
 
     // Chọn A1 (lượt gọi SẼ BỊ TRỄ 500ms) rồi NGAY LẬP TỨC chọn A2 (lượt gọi nhanh, không trễ) — không
     // await riêng từng bước, mô phỏng đúng "bấm/chọn 2 lần liên tiếp thật nhanh trước khi lượt đầu kịp
-    // trả lời". selectOption() tự chờ sự kiện 'change' được DISPATCH xong (không chờ handler async).
-    const p1 = page.selectOption('#kkKiemDemShelfSelect', '10').catch((e) => ({ __raceErr: e }));
+    // trả lời". page.fill() tự chờ sự kiện 'input' được DISPATCH xong (không chờ handler async).
+    const p1 = page.fill('#kkKiemDemShelfInput', LABEL_A1).catch((e) => ({ __raceErr: e }));
     await page.waitForTimeout(30); // đủ để lượt gọi A1 bắt đầu (qua đoạn code đồng bộ, set st.selectedShelfId=10) nhưng chưa xong fetch
-    const disabledWhilePending = await page.evaluate(() => document.getElementById('kkKiemDemShelfSelect').disabled);
-    const p2 = page.selectOption('#kkKiemDemShelfSelect', '11').catch((e) => ({ __raceErr: e }));
+    const disabledWhilePending = await page.evaluate(() => document.getElementById('kkKiemDemShelfInput').disabled);
+    const p2 = page.fill('#kkKiemDemShelfInput', LABEL_A2).catch((e) => ({ __raceErr: e }));
     const [r1, r2] = await Promise.all([p1, p2]);
-    console.log(`   [ghi nhận cơ chế bảo vệ sẵn có] <select> có bị .disabled trong lúc chờ phản hồi A1 (chưa xong)? ${disabledWhilePending} — nếu true: đây là khoá chống double-submit (runCspOp()/core.js) đã tự SERI HOÁ 2 lượt chọn này (Playwright selectOption('11') phải tự chờ nó .disabled=false trở lại rồi mới chọn được), không phải race thật xảy ra đồng thời.`);
+    console.log(`   [ghi nhận cơ chế bảo vệ sẵn có] ô chọn quầy kệ có bị .disabled trong lúc chờ phản hồi A1 (chưa xong)? ${disabledWhilePending} — nếu true: đây là khoá chống double-submit (runCspOp()/core.js) đã tự SERI HOÁ 2 lượt chọn này (page.fill() phải tự chờ nó .disabled=false trở lại rồi mới gõ được), không phải race thật xảy ra đồng thời.`);
 
     await run.run('2a) Chọn A1 rồi A2 ngay lập tức: lượt chọn A2 không bị khoá/chặn bởi khoá chống double-submit của lượt A1 đang bay', async () => {
-      // Nếu runCspOp() (core.js) đã khoá <select> trong lúc chờ fetch A1, selectOption('11') sẽ timeout/throw
+      // Nếu runCspOp() (core.js) đã khoá ô nhập trong lúc chờ fetch A1, page.fill(LABEL_A2) sẽ timeout/throw
       // — đây là hành vi AN TOÀN (không phải race) nên không coi là lỗi, chỉ ghi nhận rõ trong báo cáo.
       if (r2 && r2.__raceErr) {
         console.log('   (Ghi nhận: lượt chọn A2 bị CHẶN bởi khoá double-submit trong lúc A1 đang chờ phản hồi — xem chi tiết ở báo cáo cuối, KHÔNG coi là lỗi)');
@@ -98,17 +107,26 @@ async function main() {
 
     await run.run('2b) Sau khi CẢ 2 phản hồi đã về (A1 trễ về SAU CÙNG): màn hình phải phản ánh ĐÚNG quầy kệ ĐANG CHỌN (A2), không bị đè ngược lại thông tin của A1', async () => {
       const selectedShelfIdState = await page.evaluate(() => kkScanState.KIEMDEM.selectedShelfId);
-      const selectValue = await page.evaluate(() => document.getElementById('kkKiemDemShelfSelect').value);
+      const inputValue = await page.evaluate(() => document.getElementById('kkKiemDemShelfInput').value);
+      // Nhãn ô nhập PHẢI khớp ĐÚNG quầy kệ đang có trong state.selectedShelfId (tra lại trong chính
+      // st.shelves ĐÃ CACHE qua kkShelfOptionLabel(), cùng công thức app dùng để ghi input.value lúc
+      // chọn) — tương đương chính xác phép so sánh <select>.value === state.selectedShelfId cũ (ở khuôn
+      // <select>, value CHÍNH LÀ id; ở khuôn input mới, value là LABEL nên phải tra lại đúng label của
+      // ĐÚNG id đó rồi mới so sánh, không so trực tiếp số id với chuỗi label được).
+      const expectedLabel = await page.evaluate((id) => {
+        const shelf = (kkScanState.KIEMDEM.shelves || []).find(l => l.id === id);
+        return shelf ? kkShelfOptionLabel(shelf) : '';
+      }, selectedShelfIdState || null);
       const infoText = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
-      console.log(`   [ghi nhận thực tế] selectedShelfId state=${selectedShelfIdState}, <select>.value=${selectValue}, sessionInfo="${infoText}"`);
+      console.log(`   [ghi nhận thực tế] selectedShelfId state=${selectedShelfIdState}, input.value=${inputValue}, sessionInfo="${infoText}"`);
       // Bất kể selectedShelfIdState là 10 hay 11 (tuỳ runCspOp có chặn lượt 2 hay không), điều PHẢI đúng là:
       // sessionInfo đang hiển thị phải KHỚP với selectedShelfIdState hiện tại (không lệch nhau) — nếu lệch,
       // đây là race UI thật (phản hồi trễ của 1 quầy kệ đè lên màn hình của quầy kệ khác đang hiển thị).
-      assertEqual(String(selectValue), String(selectedShelfIdState || ''), 'Giá trị <select> phải khớp đúng state.selectedShelfId (không được lệch)');
+      assertEqual(inputValue, expectedLabel, 'Giá trị ô chọn quầy kệ phải khớp đúng state.selectedShelfId (không được lệch)');
     });
 
     // Dọn lại trạng thái sạch cho các phần sau.
-    await page.selectOption('#kkKiemDemShelfSelect', '');
+    await page.fill('#kkKiemDemShelfInput', '');
     await page.waitForTimeout(150);
 
     // ===================================================================================
@@ -119,7 +137,7 @@ async function main() {
     //    bay (đã tự kiểm chứng riêng, không phải lỗi) — nhưng vòng đồng bộ ngầm này KHÔNG qua nút nào cả,
     //    nên submitKkScan() (quét mới) vẫn gọi được bình thường trong lúc nó đang chạy.
     // ===================================================================================
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
     await goOffline();
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
@@ -179,13 +197,13 @@ async function main() {
     // Dọn: xoá hết counts hiện có khỏi quầy kệ A1/A2 trước khi vào kịch bản 4 (để phép thử "có số liệu
     // quét thật" ở bước dưới không bị lẫn dữ liệu còn sót từ mục 3).
     state.stocktakeCounts.length = 0;
-    await page.selectOption('#kkKiemDemShelfSelect', '');
+    await page.fill('#kkKiemDemShelfInput', '');
     await page.waitForTimeout(100);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200); // ONLINE lúc này -> cache session info thật cho A1 + A2 trước khi offline
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A2);
     await page.waitForTimeout(200);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
 
     await goOffline();
@@ -199,15 +217,15 @@ async function main() {
     });
 
     await page.evaluate(() => { window.__confirms = []; window.__confirmAnswers = [false]; }); // mô phỏng bấm "Huỷ"
-    await page.selectOption('#kkKiemDemShelfSelect', '11'); // đổi sang A2 trong lúc VẪN OFFLINE
+    await page.fill('#kkKiemDemShelfInput', LABEL_A2); // đổi sang A2 trong lúc VẪN OFFLINE
     await page.waitForTimeout(250);
 
     await run.run('4b) Đổi sang A2 lúc đang offline + A1 có việc dở chưa Xác Nhận -> PHẢI hỏi nhắc nhở mềm, Huỷ -> giữ nguyên A1 với dữ liệu offline còn nguyên', async () => {
       const confirms = await page.evaluate(() => window.__confirms);
       assertEqual(confirms.length, 1, `Phải hỏi đúng 1 lần kể cả khi offline, thực tế: ${JSON.stringify(confirms)}`);
       assert(/CHƯA được Xác Nhận/.test(confirms[0] || ''), `Nội dung hỏi phải đúng như lúc online, thực tế: "${confirms[0]}"`);
-      const selectValue = await page.evaluate(() => document.getElementById('kkKiemDemShelfSelect').value);
-      assertEqual(selectValue, '10', 'Huỷ hộp thoại (dù đang offline) -> ô chọn phải trả về đúng A1');
+      const selectValue = await page.evaluate(() => document.getElementById('kkKiemDemShelfInput').value);
+      assertEqual(selectValue, LABEL_A1, 'Huỷ hộp thoại (dù đang offline) -> ô chọn phải trả về đúng A1');
       const selected = await page.evaluate(() => kkScanState.KIEMDEM.selectedShelfId);
       assertEqual(selected, 10, 'State phải vẫn giữ đúng A1');
       const pendingLen = await page.evaluate(() => kkOfflinePendingScans.length);
@@ -219,7 +237,7 @@ async function main() {
     });
 
     await page.evaluate(() => { window.__confirms = []; }); // đồng ý lần này (mặc định __confirmAnswers rỗng = luôn đồng ý)
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A2);
     await page.waitForTimeout(250);
     await run.run('4c) Đồng ý hộp thoại (vẫn đang offline) -> cho đổi sang A2, A2 vẫn mở được (đã cache session info từ lúc online)', async () => {
       const confirms = await page.evaluate(() => window.__confirms);
@@ -244,7 +262,7 @@ async function main() {
     // 5) Khoá quầy kệ trong khi nhân viên đang xem dữ liệu cache cũ (offline) của quầy đó -> có mạng lại,
     //    đồng bộ -> phải báo RÕ đã bị khoá, KHÔNG cho đồng bộ ngầm tiếp, KHÔNG im lặng.
     // ===================================================================================
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
     await goOffline();
     await page.fill('#kkKiemDemBarcodeInput', 'SP002');
@@ -284,9 +302,9 @@ async function main() {
 
     // Chọn lại A1 (đang online) để xác nhận màn CHỌN QUẦY KỆ cũng phản ánh đúng trạng thái khoá MỚI NHẤT
     // (không chỉ riêng banner của hàng đợi).
-    await page.selectOption('#kkKiemDemShelfSelect', '');
+    await page.fill('#kkKiemDemShelfInput', '');
     await page.waitForTimeout(100);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
     await run.run('5d) Chọn lại A1 (đang online, sau khi biết đã bị khoá): màn hình phải báo RÕ A1 đang bị khoá, ô quét phải đóng (không cho thao tác tiếp)', async () => {
       const scanBoxHidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));

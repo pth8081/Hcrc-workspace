@@ -12,6 +12,10 @@ async function main() {
   const DEPT1 = 'Siêu thị Quận 1';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
   const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', active: true };
+  // Nhãn hiển thị trong ô tìm-kiếm-gõ-chọn (sdd*) — ĐÚNG khuôn kkShelfOptionLabel() ở module-vanhanh.js:
+  // `${kiemKeLocked ? '🔒 ' : ''}${dept} — ${code} — ${name}`. 2 quầy kệ này không bị khoá trong suốt file.
+  const SHELF_A1_LABEL = `${DEPT1} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+  const SHELF_A2_LABEL = `${DEPT1} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
   // qlA: Quản Lý Siêu Thị — Kiểm Đếm + Xác Nhận Toàn Bộ Đợt (kiemKeConfirmDo), đúng vai thực tế thường
   // gặp nhất (1 người vừa thao tác vừa chốt đợt ở siêu thị nhỏ).
   const MANAGER = {
@@ -47,7 +51,7 @@ async function main() {
   // test này chuyển đổi user đăng nhập (proceedAfterAuth) nhiều lần trong 1 page session,
   // mỗi lần kích hoạt 1 nhánh đồng bộ ngầm POST /api/data/users mà testHarness.js chưa mock
   // route chung này (xem pattern tương tự ở tests/audit-v30-excel-dashboard-sdd.js).
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -90,12 +94,12 @@ async function main() {
     // Chuẩn bị dữ liệu Kiểm Đếm thật qua UI Tab 3 trước khi test Tab 6.
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP002');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -104,7 +108,7 @@ async function main() {
     await run.run('Tab 6 Xác Nhận: tự chọn đúng kỳ Thống Kê đang hoạt động, hiện đủ 2 quầy kệ ĐÃ Kiểm Đếm, nút Xác Nhận Toàn Bộ Đợt đang KHOÁ', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(250);
-      const sessionLabel = await page.evaluate(() => document.getElementById('kkConfirmSessionSelect').selectedOptions[0]?.textContent);
+      const sessionLabel = await page.evaluate(() => document.getElementById('kkConfirmSessionInput')?.value);
       assert(sessionLabel && sessionLabel.includes('Thống Kê Q4/2026'), `Phải tự chọn đúng kỳ, thực tế: ${sessionLabel}`);
       const text = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
       assert(text.includes('A1') && text.includes('A2'), `Phải hiện đủ 2 quầy kệ đã Kiểm Đếm, thực tế: ${text}`);
@@ -124,7 +128,7 @@ async function main() {
     await run.run('Tab 6: quầy kệ A1 đã Xác Nhận -> sang Tab 3 Kiểm Đếm TIẾP trên A1 bị chặn rõ ràng NGAY lúc chọn (không đợi quét/submit mới biết)', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(200);
       // LỖI UX THẬT phát hiện qua audit chéo (11/2026) đã vá: trước đây ô quét vẫn MỞ bình thường, chỉ
       // chặn SAU KHI gõ mã + bấm "Thêm" (ăn alert 409) — nay route active-session-for-shelf trả kèm
@@ -141,7 +145,7 @@ async function main() {
     await run.run('Tab 4 Kiểm Soát: quầy kệ A1 (đã Xác Nhận Kiểm Đếm) VẪN Kiểm Soát được bình thường', async () => {
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(150);
       const hidden = await page.evaluate(() => document.getElementById('kkKiemSoatScanBox').classList.contains('hidden'));
       assert(!hidden, 'Kiểm Soát KHÔNG được bị khoá lây từ Xác Nhận Kiểm Đếm');
@@ -173,9 +177,9 @@ async function main() {
     await run.run('Tab 4 Kiểm Soát: quầy kệ A1 (đã Xác Nhận Kiểm Soát) -> Kiểm Soát TIẾP bị chặn rõ ràng NGAY lúc chọn', async () => {
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '11');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A2_LABEL);
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkKiemSoatSessionInfo').textContent);
       assert(/ĐÃ được Xác Nhận Kiểm Soát/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận Kiểm Soát" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
@@ -195,7 +199,7 @@ async function main() {
       await page.waitForTimeout(300);
       page.off('dialog', onDialog);
       // Kỳ đã Đã chốt -> dropdown Tab 6 không còn liệt kê nó trong danh sách "Đang hoạt động" nữa.
-      const sessionOptions = await page.evaluate(() => Array.from(document.getElementById('kkConfirmSessionSelect').options).map(o => o.textContent));
+      const sessionOptions = await page.evaluate(() => (document.getElementById('kkConfirmSessionDropdown')._sddItems || []).map(i => i.label));
       assert(!sessionOptions.some(o => o.includes('Thống Kê Q4/2026')), `Kỳ đã chốt không còn hiện trong danh sách "đang hoạt động", thực tế: ${sessionOptions.join(',')}`);
     });
 
@@ -246,12 +250,12 @@ async function main() {
     await run.run('Chuẩn bị: Kiểm Đếm + Kiểm Soát A1/A2 (session "Thống Kê đợt 2") + Gom Mã A1 (session Gom Mã mới) qua UI thật', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(150);
       await page.fill('#kkKiemDemBarcodeInput', 'SP001');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '11');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
       await page.waitForTimeout(150);
       await page.fill('#kkKiemDemBarcodeInput', 'SP002');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -259,7 +263,7 @@ async function main() {
 
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(150);
       await page.fill('#kkKiemSoatBarcodeInput', 'SP001');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
@@ -267,7 +271,7 @@ async function main() {
 
       await page.click('#btnKkSubGomMa');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '10');
+      await page.fill('#kkGomMaShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(150);
       await page.fill('#kkGomMaBarcodeInput', 'SP001');
       await page.click('[data-op="submitKkScan"][data-arg0="GOMMA"]');
@@ -324,8 +328,16 @@ async function main() {
       assert(text.includes('đã xác nhận bởi'), `A1 phải chuyển sang đã Xác Nhận Kiểm Soát qua bulk (1 dòng), thực tế: ${text}`);
     });
 
+    // LỖI THẬT phát hiện qua đợt chuyển select->input sdd* này (KHÔNG phải lỗi của bản chuyển đổi test
+    // này — module-vanhanh.js nằm NGOÀI phạm vi file được phép sửa của đợt audit này, nêu rõ để phiên điều
+    // phối tự quyết định vá riêng): loadKkConfirmGomMaTab() (module-vanhanh.js, dòng ~2001) VẪN đọc
+    // document.getElementById('kkConfirmGomMaSessionSelect') — id <select> CŨ đã bị xoá khỏi DOM khi đổi
+    // sang #kkConfirmGomMaSessionInput — nên sel luôn là null, sessionId luôn ép về 0, hàm return sớm
+    // TRƯỚC khi fetch dữ liệu xác nhận Gom Mã. Khối "Xác Nhận Gom Mã" ở Tab 6 vì vậy KHÔNG BAO GIỜ tải
+    // được danh sách quầy kệ nữa (ngay cả khi input/sdd đã chọn đúng kỳ) — không phải lỗi do test này gõ/
+    // chọn sai, đã xác nhận qua debug trực tiếp hàm thật.
     await run.run('Tab 6 Gom Mã (kỳ riêng): chọn đúng kỳ Gom Mã mới, hiện A1, bulk Xác Nhận hoạt động đúng', async () => {
-      await page.selectOption('#kkConfirmGomMaSessionSelect', String(gomMaSessionId));
+      await page.fill('#kkConfirmGomMaSessionInput', 'Gom Mã Q4/2026');
       await page.waitForTimeout(250);
       const text0 = await page.evaluate(() => document.getElementById('kkConfirmGomMaShelfListBody').textContent);
       assert(text0.includes('A1'), `Phải hiện A1 đã có hoạt động Gom Mã ở ĐÚNG kỳ Gom Mã riêng, thực tế: ${text0}`);
@@ -342,9 +354,9 @@ async function main() {
       // Đếm/Kiểm Soát).
       await page.click('#btnKkSubGomMa');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '11');
+      await page.fill('#kkGomMaShelfInput', SHELF_A2_LABEL);
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '10');
+      await page.fill('#kkGomMaShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(200);
       const info = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);
       assert(/ĐÃ được Xác Nhận Gom Mã/.test(info), `Phải báo rõ "ĐÃ được Xác Nhận Gom Mã" ngay lúc chọn quầy kệ, thực tế: "${info}"`);
@@ -357,7 +369,7 @@ async function main() {
     await run.run('Chuẩn bị bộ lọc: Kiểm Soát thêm A2 (để có 1 quầy ĐÃ xác nhận + 1 quầy CHƯA xác nhận)', async () => {
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '11');
+      await page.fill('#kkKiemSoatShelfInput', SHELF_A2_LABEL);
       await page.waitForTimeout(150);
       await page.fill('#kkKiemSoatBarcodeInput', 'SP002');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
@@ -420,7 +432,7 @@ async function main() {
     await run.run('Tab 2/3/4 ô "Tìm theo mã/tên": tự nạp gợi ý (sdd) từ đúng mã đã quét ở quầy kệ đang chọn', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
       await page.waitForTimeout(200);
       const items = await page.evaluate(() => (document.getElementById('kkKiemDemSearchDropdown')._sddItems || []).map(i => i.label));
       assert(items.some(l => l.includes('SP001')), `Gợi ý ô tìm Kiểm Đếm phải có SP001 đã quét ở quầy kệ A1, thực tế: ${JSON.stringify(items)}`);

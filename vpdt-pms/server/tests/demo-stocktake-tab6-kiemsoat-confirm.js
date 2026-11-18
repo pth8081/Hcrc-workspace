@@ -26,7 +26,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [MANAGER],
-    shelfLocations: [SHELF_A1],
+    kiemKeShelfLocations: [SHELF_A1],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [{ id: 1, username: 'qlA', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true }],
     stocktakeCounts: []
@@ -57,7 +57,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Kiểm Đếm + Kiểm Soát quầy kệ A1.
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -65,7 +65,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
 
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(150);
     await page.fill('#kkKiemSoatBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMSOAT"]');
@@ -95,7 +95,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     // Quay lại Tab 4 Kiểm Soát -> quầy kệ A1 giờ bị khoá NGAY.
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(200);
     await shot('tab4-kiem-soat-bi-khoa-ngay-sau-xac-nhan');
     const lockedInfo = await page.evaluate(() => document.getElementById('kkKiemSoatSessionInfo').textContent);

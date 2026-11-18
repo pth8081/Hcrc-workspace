@@ -28,7 +28,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Mock chỉ hỗ trợ patch-mode';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -52,6 +52,14 @@ async function main() {
     await page.click(`#kkNewStoresMultiSelect [data-pms-dropdown] div:text-is("${storeName}")`);
     await page.waitForTimeout(80);
   }
+  // Helper: chọn "Loại Kỳ" — ô #kkNewLoaiKyInput là sdd* NHƯNG readonly (chỉ 2 lựa chọn cố định, bắt
+  // buộc bấm-chọn, không gõ tay được) -> click mở gợi ý rồi click đúng dòng nhãn, KHÔNG dùng page.fill().
+  async function selectKkNewLoaiKy(label) {
+    await page.click('#kkNewLoaiKyInput');
+    await page.waitForTimeout(80);
+    await page.click(`#kkNewLoaiKyDropdown div:text-is("${label}")`);
+    await page.waitForTimeout(80);
+  }
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture && window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
@@ -60,10 +68,10 @@ async function main() {
 
     // ===== Bước 1: tạo kỳ "Gom Mã" riêng lẻ, SỚM HƠN, cho siêu thị X (không cùng batch) =====
     await run.run('[6] Tạo kỳ Gom Mã riêng lẻ cho X (đợt TRƯỚC, không phải batch) qua UI thật', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', X);
+      await page.fill('#kkPeriodDeptInput', X);
       await page.waitForTimeout(150);
       await openCreateBox();
-      await page.selectOption('#kkNewLoaiKy', 'GOM_MA');
+      await selectKkNewLoaiKy('Loại: Gom Mã');
       await page.waitForTimeout(150);
       await page.fill('#kkNewTenKy', 'Gom Mã cũ - đợt trước (KHÔNG thuộc batch sau)');
       await addStoreToMultiSelect(X);
@@ -79,7 +87,7 @@ async function main() {
     // ===== Bước 2: tạo kỳ "Kiểm Kê" (THONG_KE) CÙNG LÚC cho X, Y, Z (1 batch) =====
     await run.run('[6] Tạo kỳ Kiểm Kê CÙNG LÚC cho 3 siêu thị X/Y/Z (1 batch) qua ô chọn nhiều thật', async () => {
       await openCreateBox();
-      await page.selectOption('#kkNewLoaiKy', 'THONG_KE');
+      await selectKkNewLoaiKy('Loại: Kiểm Kê');
       await page.waitForTimeout(200); // renderKkNewStoresPicker() tự load lại /sessions/open-depts?loaiKy=THONG_KE
       await page.fill('#kkNewTenKy', 'Kiểm Kê Đợt Lớn - 3 siêu thị cùng lúc');
       for (const s of [X, Y, Z]) await addStoreToMultiSelect(s);
@@ -91,13 +99,13 @@ async function main() {
 
     await run.run('[6] Cả 3 kỳ Kiểm Kê (X/Y/Z) đều đã tạo, cùng ở trạng thái Nháp, kỳ Gom Mã cũ của X vẫn còn nguyên', async () => {
       for (const s of [X, Y, Z]) {
-        await page.selectOption('#kkPeriodDeptSelect', s);
+        await page.fill('#kkPeriodDeptInput', s);
         await page.waitForTimeout(150);
         const text = await page.evaluate(() => document.getElementById('kkPeriodListBody').textContent);
         assert(text.includes('Kiểm Kê Đợt Lớn'), `Siêu thị ${s} phải có kỳ "Kiểm Kê Đợt Lớn" vừa tạo, thực tế: ${text}`);
       }
       // X còn kỳ Gom Mã cũ Nháp (tạo ở Bước 1, batch khác).
-      await page.selectOption('#kkPeriodDeptSelect', X);
+      await page.fill('#kkPeriodDeptInput', X);
       await page.waitForTimeout(150);
       const textX = await page.evaluate(() => document.getElementById('kkPeriodListBody').textContent);
       assert(textX.includes('Gom Mã cũ'), `Siêu thị X phải vẫn còn kỳ Gom Mã cũ, thực tế: ${textX}`);
@@ -106,7 +114,7 @@ async function main() {
     // ===== Bước 3: bấm "▶ Kích Hoạt" ở ĐÚNG 1 siêu thị (X) trong batch =====
     let activatedIdX, activatedIdY, activatedIdZ, draftGomMaIdX;
     await run.run('[6] Bấm Kích Hoạt ở siêu thị X (1 trong 3 của batch) -> alert xác nhận đã kích hoạt thêm 2 siêu thị', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', X);
+      await page.fill('#kkPeriodDeptInput', X);
       await page.waitForTimeout(150);
       await page.evaluate(() => { window.__alerts = []; });
       // Tìm đúng nút Kích Hoạt của dòng "Kiểm Kê Đợt Lớn" (không phải dòng Gom Mã cũ — dòng đó không có
@@ -128,7 +136,7 @@ async function main() {
 
     await run.run('[6] Siêu thị Y và Z cũng TỰ ĐỘNG chuyển sang "Đang hoạt động" (kích hoạt kèm theo batch)', async () => {
       for (const s of [Y, Z]) {
-        await page.selectOption('#kkPeriodDeptSelect', s);
+        await page.fill('#kkPeriodDeptInput', s);
         await page.waitForTimeout(150);
         const text = await page.evaluate(() => document.getElementById('kkPeriodListBody').textContent);
         assert(text.includes('Kiểm Kê Đợt Lớn') && text.includes('Đang hoạt động'), `Siêu thị ${s} phải có kỳ "Kiểm Kê Đợt Lớn" ở trạng thái Đang hoạt động, thực tế: ${text}`);
@@ -136,7 +144,7 @@ async function main() {
     });
 
     await run.run('[6] RANH GIỚI QUAN TRỌNG: kỳ Gom Mã cũ của X (batch KHÁC, tạo SỚM HƠN) KHÔNG bị kích hoạt theo — vẫn "📝 Nháp"', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', X);
+      await page.fill('#kkPeriodDeptInput', X);
       await page.waitForTimeout(150);
       await page.click('#btnKkPeriodFilterGomMa');
       await page.waitForTimeout(150);

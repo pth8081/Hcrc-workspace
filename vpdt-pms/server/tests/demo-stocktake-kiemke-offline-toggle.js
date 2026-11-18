@@ -42,7 +42,7 @@ const OUT_DIR = process.env.DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-scr
     await page.waitForTimeout(150);
     await shot('bat-offline-thu-cong-banner-canh-bao');
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`);
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');

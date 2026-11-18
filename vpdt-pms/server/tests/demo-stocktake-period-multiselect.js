@@ -52,7 +52,7 @@ const OUT_DIR = process.env.KK_MULTISELECT_DEMO_OUT_DIR || path.join(__dirname, 
     // Ảnh 4: sau khi tạo — xem danh sách của 1 trong các siêu thị vừa tạo.
     await page.click('[data-op="submitCreateKkPeriod"]');
     await page.waitForTimeout(400);
-    await page.selectOption('#kkPeriodDeptSelect', 'Siêu thị số 120 Hàng Trống');
+    await page.fill('#kkPeriodDeptInput', 'Siêu thị số 120 Hàng Trống');
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT_DIR, '4-sau-khi-tao-hang-loat.png'), fullPage: true });
     console.log('Đã chụp: 4-sau-khi-tao-hang-loat.png');

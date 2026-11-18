@@ -87,7 +87,7 @@ function check(label, cond) {
       return true;
     });
     check('Chọn được gợi ý người dùng "nv1" từ ô tìm-kiếm-gõ-chọn', picked === true);
-    await page.selectOption('#kkUaDeptSelect', DEPT1);
+    await page.fill('#kkUaDeptInput', DEPT1);
     await page.waitForTimeout(150);
     const shelfCbCount = await page.evaluate(() => document.querySelectorAll('.kk-ua-shelf-cb').length);
     check('Chọn siêu thị xong -> hiện đúng 1 checkbox quầy kệ A1 của siêu thị đó', shelfCbCount === 1);

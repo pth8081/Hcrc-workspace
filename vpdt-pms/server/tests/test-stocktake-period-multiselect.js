@@ -9,6 +9,17 @@ const { startStaticServer, createMockState, launchPage } = require('./testHarnes
 
 const PORT = 8994;
 
+// selectSdd(page, inputId, dropdownId, label) — chọn 1 gợi ý ĐÚNG label trong ô tìm-kiếm-gõ-chọn "sdd*"
+// bằng click (giống hành vi người dùng thật) thay vì page.fill(): #kkNewLoaiKyInput có readonly (ÉP chỉ
+// chọn qua gợi ý, không gõ tự do — xem public/fragments/kiemKeSection.html), nên page.fill() báo lỗi
+// "element is not editable". Click vào ô mở gợi ý (sddHandleTrigger() bắt focusin), rồi bấm ĐÚNG dòng có
+// text khớp tuyệt đối.
+async function selectSdd(page, inputId, dropdownId, label) {
+  await page.click(`#${inputId}`);
+  await page.waitForTimeout(80);
+  await page.click(`#${dropdownId} div[data-sdd-idx]:text-is(${JSON.stringify(label)})`);
+}
+
 (async () => {
   const ADMIN = { username: 'admin', name: 'Admin', dept: 'Siêu thị A', perms: { admin: true }, active: true, totpEnabled: true };
   const STORES = ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'];
@@ -42,7 +53,7 @@ const PORT = 8994;
     console.log('PASS: Siêu thị đã có kỳ CÙNG loại CHƯA ĐÓNG bị loại khỏi ô chọn nhiều, siêu thị khác vẫn chọn được');
 
     // ===== 2) Đổi loại kỳ sang Kiểm Kê — Siêu thị B KHÔNG bị loại nữa (chưa có kỳ Kiểm Kê nào). =====
-    await page.fill('#kkNewLoaiKyInput', 'Loại: Kiểm Kê');
+    await selectSdd(page, 'kkNewLoaiKyInput', 'kkNewLoaiKyDropdown', 'Loại: Kiểm Kê');
     await page.waitForTimeout(250);
     note = await page.textContent('#kkNewStoresBlockedNote');
     assert.strictEqual(note.trim(), '', 'LỖI: đổi sang loại Kiểm Kê thì không còn siêu thị nào bị loại (B chỉ có kỳ Gom Mã, không phải Kiểm Kê)');
@@ -97,7 +108,7 @@ const PORT = 8994;
     await page.click('#btnKkPeriodOpenCreate');
     await page.waitForTimeout(250);
     assert.strictEqual(await page.isVisible('#kkPeriodCreateBox'), true);
-    await page.fill('#kkNewLoaiKyInput', 'Loại: Kiểm Kê');
+    await selectSdd(page, 'kkNewLoaiKyInput', 'kkNewLoaiKyDropdown', 'Loại: Kiểm Kê');
     await page.waitForTimeout(250);
     note = await page.textContent('#kkNewStoresBlockedNote');
     assert.ok(note.includes('Siêu thị A') && note.includes('Siêu thị C'), 'LỖI: sau khi tạo xong, A và C phải bị loại khỏi ô chọn cho loại Kiểm Kê (vừa có kỳ Nháp)');

@@ -27,7 +27,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
   const STAFF = { username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1, perms: { kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeGomMaDo: true }, active: true, totpEnabled: true };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [IT_ROLE, STAFF],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true, canKiemSoat: true, canGomMa: true },
@@ -77,14 +77,14 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     await page.waitForTimeout(150);
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', '🔒 Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(200);
     await shot('tab3-kiem-dem-bi-khoa-ngay-khi-chon-quay-ke');
 
     // Nhân viên vào Kiểm Soát / Gom Mã trên CHÍNH quầy đó -> cũng bị chặn (khoá áp dụng cả 3 hành động).
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', '🔒 Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(200);
     await shot('tab4-kiem-soat-cung-bi-khoa-tren-cung-quay-ke');
 
@@ -106,7 +106,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     await page.waitForTimeout(150);
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
     await page.waitForTimeout(200);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -116,7 +116,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
     console.log(listText.includes('SP001') ? '✅ A1 (đã mở khoá) quét thành công' : `⚠️ Quét không thành công: ${listText}`);
 
     // A2 vẫn khoá -> vẫn chặn.
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', '🔒 Siêu thị Quận 1 — A2 — Kệ A2 — Mì, cháo');
     await page.waitForTimeout(200);
     const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
     console.log(/ĐANG BỊ KHOÁ/.test(info) ? '✅ A2 (chưa mở khoá riêng) vẫn bị chặn đúng' : `⚠️ A2 không còn bị chặn: ${info}`);

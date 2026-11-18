@@ -40,7 +40,9 @@ const OUT_DIR = process.env.DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-scr
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(200);
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    const SHELF_A1_LABEL = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+    const SHELF_A2_LABEL = `${SHELF_A2.dept} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(150);
     await page.fill('#kkKiemDemBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -49,7 +51,7 @@ const OUT_DIR = process.env.DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-scr
 
     // Mô phỏng bấm "Huỷ" ở hộp thoại nhắc nhở mềm khi đổi sang A2
     await page.evaluate(() => { window.__confirmAnswers = [false]; });
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
     await page.waitForTimeout(250);
     const lastConfirm = await page.evaluate(() => window.__confirms[window.__confirms.length - 1] || '');
     console.log('   Nội dung hộp thoại nhắc nhở:', lastConfirm);
@@ -57,7 +59,7 @@ const OUT_DIR = process.env.DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-scr
 
     // Đồng ý đổi sang A2
     await page.evaluate(() => { window.__confirmAnswers = []; }); // mặc định rỗng = luôn đồng ý
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A2_LABEL);
     await page.waitForTimeout(250);
     await shot('dong-y-doi-thanh-cong-sang-A2');
 
