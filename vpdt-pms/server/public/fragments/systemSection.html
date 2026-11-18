@@ -3195,6 +3195,23 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrSecondaryPositionManage"> 🏷️ Gán Vị Trí Kiêm Nhiệm (riêng, không cần quyền Hồ Sơ Nhân Sự khác — sửa ngay ở màn Sửa Người Dùng)
             </label>
+            <!-- hrProfileContractFullEdit (12/2026, theo yêu cầu người dùng: "1 quyền đặc biệt, sửa được
+                 tất cả các trường trong hồ sơ và trong hợp đồng lao động, trừ sửa mã") — quyền GỘP, bật
+                 lên là tự động có ĐỦ CẢ "✏️ Sửa Hồ Sơ Nhân Sự" (pHrProfileEdit) LẪN "📝 Quản Lý Hợp Đồng
+                 Lao Động" (pHrContractManage) ở dưới CÙNG LÚC, không cần tick riêng 2 ô — xem
+                 expandHrFullEditPerms() ở lib/auth.js (áp dụng ngay tại nơi duy nhất req.freshUser.perms/
+                 currentUser.perms được tạo ra, nên MỌI chỗ đang kiểm tra hrProfileEdit/hrContractManage
+                 trong toàn hệ thống tự động coi quyền này là đủ, không cần sửa lại từng chỗ riêng lẻ).
+                 VẪN GIỮ NGUYÊN đúng các khoá đã có của 2 quyền gốc — KHÔNG mở thêm gì mới: Mã Nhân Viên/
+                 Mã Hợp Đồng không bao giờ sửa được (không nằm trong bất kỳ danh sách field nào server
+                 chấp nhận ghi); Trạng thái hồ sơ/Chức vụ/Phòng Ban/Cấp Bậc/Trạng thái hợp đồng vẫn đi qua
+                 đúng luồng nghiệp vụ riêng có kiểm tra ràng buộc (Đổi Trạng Thái/Gán Chức Vụ/Kích Hoạt/
+                 Chấm Dứt...), không có đường tắt ghi thẳng. KHÔNG kèm "➕ Tạo Mới Hồ Sơ Nhân Sự"
+                 (pHrProfileCreate) — quyền này chỉ để SỬA hồ sơ/hợp đồng đã có, tạo hồ sơ mới vẫn phải
+                 tick riêng nếu cần. -->
+            <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProfileContractFullEdit"> 🔓 Toàn Quyền Sửa Hồ Sơ Nhân Sự + Hợp Đồng Lao Động (gộp 2 quyền dưới — trừ Mã/Trạng thái/Chức vụ vẫn qua đúng luồng riêng)
+            </label>
             <p class="text-[11px] text-gray-500 italic pt-1 border-t">Quyền dưới đây cho module con "Hợp Đồng Lao Động" — toàn quyền tạo/sửa/kích hoạt/gia hạn/chấm dứt hợp đồng, không có bước phê duyệt (khác hẳn module "Hợp Đồng" mua bán/nhà cung cấp).</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrContractManage"> 📝 Quản Lý Hợp Đồng Lao Động (HR)
