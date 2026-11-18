@@ -4648,16 +4648,27 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   tất"** ngay khi mọi việc bắt buộc ở mọi giai đoạn đã xong/bỏ qua — không có
   nút "chuyển giai đoạn" thủ công. Có thể **Huỷ quy trình** (bắt buộc lý do)
   khi đang thực hiện.
-- **Bắt buộc gán Phụ Trách cho việc bắt buộc ngay lúc Tạo** (11/2026, theo
-  yêu cầu người dùng — áp dụng cho quy trình tạo TỪ NAY, KHÔNG hồi tố quy
-  trình đã tạo trước đó): ngay dưới form "+ Tạo Onboarding"/"+ Tạo
-  Offboarding" có thêm khối "👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc" — liệt
+- **Bắt buộc gán Phụ Trách cho việc bắt buộc ngay lúc Tạo — CHỈ còn áp dụng
+  cho Onboarding** (11/2026, theo yêu cầu người dùng — áp dụng cho quy trình
+  tạo TỪ NAY, KHÔNG hồi tố quy trình đã tạo trước đó): ngay dưới form "+ Tạo
+  Onboarding" có thêm khối "👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc" — liệt
   kê đúng các việc bắt buộc sẽ được sinh ra theo Checklist Mẫu hiện hành,
   mỗi việc có 1 ô tìm-kiếm-gõ-chọn người phụ trách. Thiếu người phụ trách
   cho bất kỳ việc bắt buộc nào → chặn "Tạo Quy Trình", báo rõ tên việc còn
   thiếu. Với quy trình đã bật cơ chế này, nếu sau đó "✕ Bỏ gán" 1 việc bắt
   buộc thì **không bấm "✓ Hoàn thành" được nữa** cho tới khi gán lại đúng 1
   người — việc KHÔNG bắt buộc vẫn gán/bỏ gán/hoàn thành tự do như trước.
+  **Riêng Offboarding (11/2026, gỡ bỏ theo yêu cầu người dùng — có nhân sự
+  phải nghỉ ngay trong ngày, không kịp tìm đủ người phụ trách cho từng việc
+  mới tạo được quy trình)**: khối gán Phụ Trách lúc tạo vẫn hiện (đổi nhãn
+  thành "👤 Gán Phụ Trách Cho Từng Việc (tuỳ chọn)", không còn dấu `*`) nhưng
+  **không còn chặn "Tạo Quy Trình"** dù còn việc bắt buộc chưa gán — HR có
+  thể tạo Offboarding ngay rồi gán Phụ Trách sau trong "Chi tiết" quy trình.
+  Việc bắt buộc của Offboarding chưa có người phụ trách thì vẫn **hoàn
+  thành ("✓ Hoàn thành") được bình thường** (khác Onboarding — cờ
+  `requireTaskAssignment` không còn bật cho quy trình Offboarding), chỉ
+  không gửi được email nhắc khi quá hạn (xem mục "Email nhắc quá hạn CHỈ
+  gửi cho người được gán riêng" ngay dưới) cho tới khi được gán.
 - **Email nhắc quá hạn CHỈ gửi cho người được gán riêng** (11/2026, theo yêu
   cầu người dùng "nếu không gán ai thì không ai được nhận email"): trước đây
   việc quá hạn CHƯA gán riêng sẽ gửi cảnh báo cho CẢ bộ phận phụ trách theo

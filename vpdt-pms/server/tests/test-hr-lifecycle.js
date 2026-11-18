@@ -66,6 +66,10 @@ const HR_PROFILE_VIEWER = { username: 'hr.profileview', name: 'Nhân Sự Có Qu
 const SUP_MGR = { username: 'nv.suptruong', name: 'Nguyễn Văn Trưởng Nhóm', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên', email: 'suptruong@company.com', perms: {}, active: true };
 const SUP_REPORT = { username: 'nv.baocao', name: 'Trần Thị Báo Cáo', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', perms: {}, active: true, managerUsername: 'nv.suptruong' };
 const SUP_SUCCESSOR = { username: 'nv.kenhiem', name: 'Lê Văn Kế Nhiệm', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên', perms: {}, active: true };
+// 2 nhân viên RIÊNG cho đợt test "OFFBOARDING bỏ chặn thiếu Phụ Trách" (12/2026) — không dùng chung
+// offboardId để không đụng state các test khác còn phụ thuộc.
+const EMP_OFFB_PARTIAL = { username: 'nv.gaprut1', name: 'Phạm Văn Gấp Rút', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', perms: {}, active: true };
+const EMP_OFFB_INVALID = { username: 'nv.gaprut2', name: 'Trần Thị Gấp Rút', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', perms: {}, active: true };
 
 // Danh mục checklist chuẩn tối giản — 1 việc/giai đoạn/loại, đủ để kiểm tra auto-generate + due-date +
 // department gating + auto-progress qua từng giai đoạn mà không cần chép lại nguyên 28 dòng defaults.js.
@@ -91,7 +95,7 @@ const state = createMockState({
   stores: ['Siêu Thị A'],
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
-  users: [HR1, HR_NOPERM, HR_VIEWER, HR_ONBOARDING_PROCESS_MANAGER, HR_OFFBOARDING_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, EMP_ISO, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
+  users: [HR1, HR_NOPERM, HR_VIEWER, HR_ONBOARDING_PROCESS_MANAGER, HR_OFFBOARDING_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, EMP_ISO, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR, EMP_OFFB_PARTIAL, EMP_OFFB_INVALID],
   hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES],
   // orgChartVersions — (11/2026, Onboarding Phòng Ban/Chức Danh ĐỔI SANG lấy từ Cơ Cấu Tổ Chức, hard-block
   // nếu không khớp vị trí thật — xem lib/createValidation.js) — 2 cặp dept/jobTitle DUY NHẤT file này
@@ -296,6 +300,47 @@ async function main() {
       assertEqual(item.tasks.length, 5, 'Phải sinh đúng 5 task OFFBOARDING đang bật');
       const financeTask = item.tasks.find(t => t.taskName === 'Quyết toán lương/BHXH');
       assertEqual(financeTask.dueDate, '2026-10-05', 'dueDate = lastWorkingDate + 5 ngày phải đúng');
+    });
+
+    // ===================== OFFBOARDING — KHÔNG CÒN CHẶN THIẾU "GÁN PHỤ TRÁCH" (12/2026) =====================
+    // Theo yêu cầu người dùng: "có những nhân sự có thể phải ra về ngay trong ngày... bỏ hết dấu sao để
+    // nhập bất cứ công việc gì cũng có thể exit được" — KHÁC HẲN ONBOARDING (test "Tạo Onboarding KÈM
+    // taskAssignments nhưng THIẾU 1 việc bắt buộc -> 400" ở trên, GIỮ NGUYÊN không đổi).
+
+    await run.run('Offboarding: taskAssignments THIẾU gần hết việc bắt buộc -> VẪN tạo được (KHÔNG còn chặn như ONBOARDING)', async () => {
+      const item = await page.evaluate(async () => (await callCreateAction('hrProcesses', {
+        processType: 'OFFBOARDING', employeeUsername: 'nv.gaprut1', lastWorkingDate: '2026-11-01',
+        // Chỉ gán đúng 1/4 việc bắt buộc (id 7 — Thông báo cho phòng ban), 3 việc còn lại (8/9/10) bỏ trống.
+        taskAssignments: { 7: 'hr1' }
+      })).item);
+      assertEqual(item.status, 'IN_PROGRESS', 'Phải tạo được dù thiếu Phụ Trách 3/4 việc bắt buộc');
+      const noticeTask = item.tasks.find(t => t.taskName === 'Thông báo cho phòng ban');
+      assertEqual(noticeTask.assignedToUsername, 'hr1', 'Việc CÓ gán (id 7) vẫn phải lưu đúng người phụ trách');
+      const handoverTask = item.tasks.find(t => t.taskName === 'Bàn giao công việc');
+      assertEqual(handoverTask.assignedToUsername, null, 'Việc KHÔNG gán (id 8) phải giữ null, không bị ép gán bừa');
+      assertEqual(item.requireTaskAssignment, false, 'OFFBOARDING KHÔNG bật cờ requireTaskAssignment — tránh kẹt "✓ Hoàn thành" sau này cho việc chưa có người phụ trách');
+    });
+
+    await run.run('Offboarding: taskAssignments có username KHÔNG hợp lệ (không tồn tại/đã khoá) -> VẪN bị chặn 400 (chỉ bỏ "phải gán ĐỦ", không bỏ validate dữ liệu)', async () => {
+      const err = await page.evaluate(async () => {
+        try {
+          await callCreateAction('hrProcesses', {
+            processType: 'OFFBOARDING', employeeUsername: 'nv.gaprut2', lastWorkingDate: '2026-11-02',
+            taskAssignments: { 7: 'khong-ton-tai' }
+          });
+          return null;
+        } catch (e) { return e.message; }
+      });
+      assertIncludes(err, 'không hợp lệ', 'Username rác vẫn phải bị chặn dù đã bỏ yêu cầu gán đủ');
+    });
+
+    await run.run('Offboarding: KHÔNG gửi taskAssignments (y hệt luồng Nhập Excel cũ) -> vẫn tạo được như trước, hành vi không đổi', async () => {
+      const item = await page.evaluate(async () => (await callCreateAction('hrProcesses', {
+        processType: 'OFFBOARDING', employeeUsername: 'nv.gaprut2', lastWorkingDate: '2026-11-03'
+      })).item);
+      assertEqual(item.status, 'IN_PROGRESS', 'Phải tạo được bình thường khi không gửi taskAssignments');
+      assert(!item.requireTaskAssignment, 'Không gửi taskAssignments -> requireTaskAssignment vẫn falsy như trước (cùng khuôn kiểm tra quy trình CŨ ở test phía trên)');
+      assert(item.tasks.every(t => t.assignedToUsername === null), 'Mọi task phải chưa gán ai (HR gán sau trong Chi tiết)');
     });
 
     // ===================== THAO TÁC TASK — GÁC QUYỀN THEO NHÃN PHÒNG BAN =====================

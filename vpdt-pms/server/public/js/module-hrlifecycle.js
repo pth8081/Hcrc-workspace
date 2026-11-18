@@ -38,9 +38,19 @@ function renderHrpCreateTaskAssignments(processType) {
     wrap.innerHTML = '<p class="text-[11px] text-gray-400 italic">Danh mục checklist bắt buộc hiện đang trống — không có việc nào cần gán Phụ Trách trước khi tạo.</p>';
     return;
   }
+  // OFFBOARDING (12/2026, theo yêu cầu người dùng: "có những nhân sự có thể phải ra về ngay trong ngày...
+  // bỏ hết dấu sao để nhập bất cứ công việc gì cũng có thể exit được") — KHÔNG còn bắt buộc gán đủ Phụ
+  // Trách mới tạo được quy trình (khác hẳn ONBOARDING, VẪN giữ nguyên bắt buộc như cũ — không đổi gì ở
+  // nhánh đó). HR vẫn gán được ngay tại đây nếu muốn (tuỳ chọn), phần còn thiếu tự gán sau trong modal
+  // Chi Tiết — xem submitHrpOffboarding()/lib/createValidation.js (processType !== 'OFFBOARDING').
+  const isOffboarding = processType === 'OFFBOARDING';
+  const headerHtml = isOffboarding
+    ? `<p class="text-xs font-bold text-gray-700 mb-1">👤 Gán Phụ Trách Cho Từng Việc (tuỳ chọn)</p>
+       <p class="text-[11px] text-gray-500 mb-2">Có thể bỏ trống để tạo quy trình ngay — HR gán Phụ Trách sau trong "Chi tiết" quy trình. Việc chưa có người phụ trách sẽ không gửi được email nhắc khi quá hạn.</p>`
+    : `<p class="text-xs font-bold text-gray-700 mb-1">👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc <span class="text-red-500">*</span></p>
+       <p class="text-[11px] text-gray-500 mb-2">Mỗi việc bắt buộc dưới đây phải có 1 người phụ trách cụ thể thì mới tạo được quy trình — việc không có người phụ trách sẽ không gửi được email nhắc khi quá hạn.</p>`;
   wrap.innerHTML = `
-    <p class="text-xs font-bold text-gray-700 mb-1">👤 Gán Phụ Trách Cho Từng Việc Bắt Buộc <span class="text-red-500">*</span></p>
-    <p class="text-[11px] text-gray-500 mb-2">Mỗi việc bắt buộc dưới đây phải có 1 người phụ trách cụ thể thì mới tạo được quy trình — việc không có người phụ trách sẽ không gửi được email nhắc khi quá hạn.</p>
+    ${headerHtml}
     ${templates.map(t => {
       const ddId = `hrpCreateTaskAssignDd_${processType}_${t.id}`;
       return `
@@ -455,11 +465,10 @@ async function submitHrpOffboarding(e) {
   if (!employeeUsername) return alert('⛔ Vui lòng gõ tên/tài khoản rồi bấm chọn đúng 1 nhân viên trong gợi ý!');
   const lastWorkingDate = document.getElementById('hrpOffbLastWorkingDate').value;
   if (!lastWorkingDate) return alert('⛔ Vui lòng nhập Ngày nghỉ việc!');
-  const requiredOffbTemplates = hrpRequiredCreateTemplates('OFFBOARDING');
-  const missingOffbAssign = requiredOffbTemplates.filter(t => !hrpCreateTaskAssignments.OFFBOARDING[t.id]);
-  if (missingOffbAssign.length) {
-    return alert(`⛔ Vui lòng gán Phụ Trách cho các việc bắt buộc: ${missingOffbAssign.map(t => t.taskName).join(', ')}`);
-  }
+  // OFFBOARDING (12/2026, theo yêu cầu người dùng) — KHÔNG còn chặn tạo quy trình nếu thiếu Phụ Trách
+  // cho 1 vài/toàn bộ việc bắt buộc (khác ONBOARDING, xem submitHrpOnboarding() — vẫn giữ nguyên chặn ở
+  // đó). hrpCreateTaskAssignments.OFFBOARDING vẫn gửi kèm nguyên trạng ở payload bên dưới — phần nào HR
+  // đã gán thì vẫn lưu, phần còn thiếu để trống, tự gán sau trong modal Chi Tiết.
   let customData;
   try {
     customData = await collectDynamicFieldsData('HR_OFFBOARDING');
