@@ -99,20 +99,41 @@ async function canViewStocktakeSessionData(freshUser, session) {
 // RỘNG: người được gán kiemKePeriodCloseManage/kiemKePeriodReopenManage (Đóng Kỳ/Mở Lại theo siêu thị) cũng xem được đúng
 // các siêu thị nằm trong phạm vi đó qua ?dept= (không phải admin vẫn cần XEM được thì mới Đóng/Mở Lại
 // được — quyền có mà không xem được danh sách thì vô dụng trên giao diện).
+// 12/2026 (LỖI THẬT đã vá, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "trong phần báo cáo này, nó
+// lại lấy cái siêu thị chọn ở chỗ kỳ kiểm kê là không đúng luôn... cho phép tôi chọn tất cả siêu thị, hoặc
+// chọn nhiều siêu thị, multi choice. Admin có thể báo cáo nhiều siêu thị, còn IT/người phân quyền 1 siêu
+// thị thì đứng đúng siêu thị đấy"): Tab 7 "📊 Báo Cáo" TRƯỚC ĐÂY dùng CHUNG dept đang chọn ở Tab 1/5
+// (kkPeriodDeptSelected, mặc định rơi về currentUser.dept — với admin là dept hồ sơ "Quản trị", KHÔNG
+// phải 1 siêu thị thật, nên Báo Cáo trống trơn cho tới khi admin tự qua Tab 1 đổi). Thêm `?scope=report`
+// — route trả THÊM `allowedDepts` (TOÀN BỘ siêu thị người này được PHÉP xem Báo Cáo, tính qua
+// resolveKiemKeInventoryDepts() — CÙNG hàm/CÙNG ngữ nghĩa đã dùng cho tab "📦 Tồn Kho": admin/
+// kiemKeReportView -> MỌI siêu thị, còn lại -> đúng siêu thị hồ sơ + allowlist Tab 8) và `items` gồm
+// sessions của TẤT CẢ các siêu thị đó gộp lại (KHÔNG chỉ 1 dept như nhánh mặc định) — client tự lọc tiếp
+// theo đúng tập siêu thị người dùng CHỌN trong ô multi-select (không cần gọi lại route mỗi lần đổi chọn).
+// KHÔNG đổi hành vi nhánh mặc định (không có scope=report) — Tab 1/5/6/8 vẫn dùng ?dept= đơn như cũ.
 router.get('/sessions', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   try {
-    const requestedDept = req.query.dept ? String(req.query.dept) : null;
+    const scope = String(req.query.scope || '').trim();
+    let allowedDepts = null;
     let dept = req.freshUser.dept;
-    if (requestedDept && requestedDept !== req.freshUser.dept) {
-      const allowed = req.freshUser.perms?.admin
-        || canCloseStocktakePeriodForDept(req.freshUser, requestedDept)
-        || canReopenStocktakePeriodForDept(req.freshUser, requestedDept)
-        || (canConfirmStocktake(req.freshUser) && canConfirmStocktakeForDept(req.freshUser, requestedDept));
-      if (allowed) dept = requestedDept;
+    if (scope === 'report') {
+      const stores = (await getAppDataValue('stores')) || [];
+      await ensureStocktakeKey('stocktakeUserAccess');
+      const access = (await getAppDataValue('stocktakeUserAccess')) || [];
+      allowedDepts = resolveKiemKeInventoryDepts(req.freshUser, stores, access);
+    } else {
+      const requestedDept = req.query.dept ? String(req.query.dept) : null;
+      if (requestedDept && requestedDept !== req.freshUser.dept) {
+        const allowed = req.freshUser.perms?.admin
+          || canCloseStocktakePeriodForDept(req.freshUser, requestedDept)
+          || canReopenStocktakePeriodForDept(req.freshUser, requestedDept)
+          || (canConfirmStocktake(req.freshUser) && canConfirmStocktakeForDept(req.freshUser, requestedDept));
+        if (allowed) dept = requestedDept;
+      }
     }
     const all = (await getAppDataValue('stocktakeSessions')) || [];
-    const filtered = all.filter(s => s.dept === dept);
+    const filtered = allowedDepts ? all.filter(s => allowedDepts.includes(s.dept)) : all.filter(s => s.dept === dept);
     // hasData (MỚI, theo phản hồi người dùng thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải
     // xoá nữa chứ") — Tab 1 cần biết TRƯỚC (không đợi bấm Xoá mới biết) kỳ Đang hoạt động nào đã thật sự
     // có dữ liệu quét để hiện đúng nút "🗑️ Xoá" (xem deleteDraftSession() ở lib/stocktakeEngine.js) —
@@ -124,7 +145,7 @@ router.get('/sessions', async (req, res) => {
       const sessionIdsWithData = new Set(counts.map(c => c.sessionId));
       items = filtered.map(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
     }
-    res.json({ items });
+    res.json(allowedDepts ? { items, allowedDepts } : { items });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/sessions');
   }

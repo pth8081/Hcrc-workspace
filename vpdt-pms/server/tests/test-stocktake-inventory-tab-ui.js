@@ -99,6 +99,37 @@ async function main() {
       assert(text.includes('Quận 1'), 'Vẫn phải còn hiện DEPT1');
     });
 
+    // Cache-first (MỚI, 12/2026, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp tab đứng "Đang tải..."
+    // rất lâu: "tôi phải lấy được dữ liệu từ cơ sở dữ liệu của ứng dụng đã chứ... giống phần Kiểm Soát
+    // đi"): vào lại tab lần 2 (đã có cache từ lượt vào đầu ở trên) dù mạng CHẬM -> phải hiện NGAY dữ liệu
+    // cache cũ, KHÔNG kẹt ở "Đang tải..." chờ mạng — xem loadKkInventoryTab() (module-vanhanh.js).
+    await run.run('Cache-first: vào lại tab lần 2 dù mạng CHẬM (giả lập trễ 3s) -> hiện NGAY dữ liệu cache, KHÔNG kẹt "Đang tải..."', async () => {
+      await page.evaluate(() => {
+        window.__origFetchSlow = window.fetch;
+        window.fetch = (url, opts) => {
+          if (String(url).includes('/api/stocktake/system-inventory')) {
+            return new Promise((resolve) => setTimeout(() => resolve(window.__origFetchSlow(url, opts)), 3000));
+          }
+          return window.__origFetchSlow(url, opts);
+        };
+      });
+      await page.evaluate(() => switchTab('kiemKe'));
+      await page.click('#btnKkSubInventory');
+      // CHỈ chờ 150ms (KHÔNG đủ để lượt fetch 3s trả lời) rồi kiểm tra NGAY — cache-first phải đã hiện
+      // dữ liệu trước khi mạng chậm kịp trả lời.
+      await page.waitForTimeout(150);
+      const statusText = await page.evaluate(() => document.getElementById('kkInventoryStatusNote')?.textContent || '');
+      assert(statusText !== 'Đang tải...', `Lần vào lại tab (đã có cache) KHÔNG được kẹt ở "Đang tải..." dù mạng chậm -- got: "${statusText}"`);
+      const bodyText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(bodyText.includes('SP001'), `Phải hiện NGAY dữ liệu cache (SP001) trước khi mạng chậm trả lời -- got: ${bodyText}`);
+      // Khôi phục fetch() thường NGAY cho các lượt gọi SAU, nhưng GIỮ LẠI __origFetchSlow cho tới khi
+      // lượt fetch 3s còn treo ở trên kịp tự resolve (setTimeout bên trong closure vẫn cần tham chiếu này)
+      // — xoá sớm sẽ làm callback đó ném TypeError lúc tới hạn.
+      await page.evaluate(() => { window.fetch = window.__origFetchSlow; });
+      await page.waitForTimeout(3200); // để lượt fetch chậm ở trên kịp resolve xong, tránh promise treo sang bước goOffline() kế tiếp.
+      await page.evaluate(() => { delete window.__origFetchSlow; });
+    });
+
     await goOffline();
     await page.evaluate(() => switchTab('kiemKe'));
     await page.click('#btnKkSubInventory');

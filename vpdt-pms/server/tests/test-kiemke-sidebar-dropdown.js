@@ -80,6 +80,14 @@ async function main() {
       assert(btnActive, 'Nút Gom Mã bên trong module (thanh tab con) cũng phải được đánh dấu đang chọn');
     });
 
+    // "📍 Bạn đang ở Siêu Thị" (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "phải có một cái nút là
+    // bạn đang ở siêu thị nào, để sau này xác nhận mọi người vào đúng siêu thị của mọi người chưa, giống
+    // như kiểm soát đấy") — LUÔN hiện, bất kỳ sub-tab nào, đọc đúng kkEffectiveDept().
+    await run.run('Admin: luôn thấy badge "📍 Bạn đang ở Siêu Thị" đúng siêu thị hồ sơ của mình', async () => {
+      const text = await page.evaluate(() => document.getElementById('kkCurrentDeptBadge')?.textContent || '');
+      assert(text.includes('Bạn đang ở Siêu Thị') && text.includes(DEPT), `LỖI: badge phải hiện đúng siêu thị -- got: "${text}"`);
+    });
+
     await run.run('Admin: bấm mục con "🗄️ Cấu Hình Quầy Kệ" từ sidebar khi ĐANG ở sub-tab khác -> chuyển đúng sang SHELFCONFIG', async () => {
       await page.click('#btnKiemKeTab');
       await page.waitForTimeout(100);

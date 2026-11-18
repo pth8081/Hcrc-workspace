@@ -43,6 +43,17 @@
       <span id="kkPendingSyncCount" class="hidden text-gray-600"></span>
     </div>
 
+    <!-- "📍 Bạn đang ở Siêu Thị" (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "khi vào màn hình kiểm
+         kê, người dùng được phân quyền vào siêu thị nào thì nó phải có một cái nút là bạn đang ở siêu thị
+         nào, để sau này xác nhận mọi người vào đúng siêu thị của mọi người chưa, giống như kiểm soát
+         đấy") — LUÔN hiện dù đang ở sub-tab nào (cùng khuôn kkOfflineModeBar ngay trên, KHÔNG riêng tab
+         nào), tự cập nhật theo kkEffectiveDept() mỗi khi chuyển tab/đổi siêu thị — xem
+         renderKkCurrentDeptBadge() (module-vanhanh.js), gọi ở đầu setKiemKeSubTab() + mỗi lần
+         kkPeriodDeptSelected đổi (onKkPeriodDeptInputChanged()/onKkShelfConfigDeptInputChanged()). Mục
+         đích: supervisor/admin nhìn lướt màn hình của từng người (đứng cạnh/chụp màn hình gửi) để xác
+         nhận đúng người đang thao tác đúng siêu thị trước khi tin số liệu. -->
+    <div id="kkCurrentDeptBadge" class="text-xs font-bold text-cyan-900 bg-cyan-50 border border-cyan-200 rounded px-3 py-1.5 inline-block"></div>
+
     <!-- Tab 1: Kỳ Kiểm Kê -->
     <div id="kkPeriodWrap" class="space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
