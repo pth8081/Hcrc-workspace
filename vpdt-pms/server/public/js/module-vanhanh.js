@@ -3140,6 +3140,7 @@ function renderKkPeriodList() {
       <div class="min-w-0">
         <div class="font-bold text-sm">${escapeHtml(s.tenKy || '')}</div>
         <div class="text-xs text-gray-500">Loại: ${KK_LOAI_KY_LABEL[s.loaiKy] || escapeHtml(s.loaiKy || '')}${thoiGian ? ' · ' + escapeHtml(thoiGian) : ''}</div>
+        ${s.batchSiblingCount ? `<div class="text-[11px] text-sky-700 font-semibold mt-0.5">📦 Tạo cùng đợt với ${s.batchSiblingCount - 1} siêu thị khác — bấm "${s.trangThai === 'NHAP' ? '▶ Kích Hoạt' : s.trangThai === 'DANG_HOAT_DONG' ? '🔒 Đóng Kỳ' : '↩️ Mở Lại'}" ở ĐÂY áp dụng luôn cho CẢ NHÓM, không còn tách riêng từng siêu thị.</div>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         ${KK_TRANG_THAI_BADGE[s.trangThai] || ''}
@@ -3361,26 +3362,35 @@ async function postKkPeriodAction(id, action) {
     alert('Lỗi kết nối — thử lại.');
   }
 }
-// activateKkPeriod() — server tự kích hoạt LUÔN mọi kỳ "anh em" cùng batchId (tạo cùng đợt nhiều siêu
-// thị, xem activateSessionBatch()); `data.siblings` (MỚI, 12/2026) liệt kê kết quả từng siêu thị anh em
-// để báo cho người dùng biết ĐÃ kích hoạt luôn cả nhóm, không chỉ đúng 1 dòng vừa bấm.
-async function activateKkPeriod(id) {
-  const data = await postKkPeriodAction(id, 'activate');
+// kkPeriodActionWithSiblings() — DÙNG CHUNG cho cả 3 thao tác Kích Hoạt/Đóng Kỳ/Mở Lại (MỚI, 12/2026,
+// phản hồi TRỰC TIẾP người dùng: "tôi chốt không đóng kỳ riêng lẻ siêu thị mà đóng cả kỳ là đóng hết các
+// st trong kỳ đó, ko có khái niệm đóng và mở từng siêu thị trong kỳ đó" — RÚT GỌN khỏi phương án ban đầu
+// "🔒 Đóng Nhiều Siêu Thị" tự chọn tay, theo đúng xác nhận "để không phức tạp... chỉ cần đóng Kỳ tự động
+// cả nhóm là đủ"). Cả 3 route (activate/close/reopen) server đều tự áp dụng LUÔN cho mọi kỳ "anh em" cùng
+// batchId (xem activateSessionBatch()/closeSessionBatch()/reopenSessionBatch(), lib/stocktakeEngine.js)
+// — bấm ở BẤT KỲ siêu thị nào trong 1 kỳ (tenKy/batchId) đều áp dụng cho CẢ NHÓM siêu thị đó, không còn
+// khái niệm chọn riêng từng siêu thị. `data.siblings` liệt kê kết quả từng siêu thị anh em để báo cho
+// người dùng biết đã áp dụng cả nhóm, không chỉ đúng 1 dòng vừa bấm.
+async function kkPeriodActionWithSiblings(id, action, verbDaLam, verbKhongLamDuoc) {
+  const data = await postKkPeriodAction(id, action);
   if (data && Array.isArray(data.siblings) && data.siblings.length) {
     const ok = data.siblings.filter(s => s.ok);
     const failed = data.siblings.filter(s => !s.ok);
-    let msg = `Đã kích hoạt thêm ${ok.length} siêu thị cùng nhóm: ${ok.map(s => s.dept).join(', ') || '(không có)'}.`;
-    if (failed.length) msg += `\n\nKhông kích hoạt được:\n${failed.map(s => `${s.dept}: ${s.error}`).join('\n')}`;
+    let msg = `Đã ${verbDaLam} thêm ${ok.length} siêu thị cùng kỳ: ${ok.map(s => s.dept).join(', ') || '(không có)'}.`;
+    if (failed.length) msg += `\n\n${verbKhongLamDuoc}:\n${failed.map(s => `${s.dept}: ${s.error}`).join('\n')}`;
     alert(msg);
   }
 }
+function activateKkPeriod(id) {
+  return kkPeriodActionWithSiblings(id, 'activate', 'kích hoạt', 'Không kích hoạt được');
+}
 function closeKkPeriod(id) {
-  if (!confirm('Đóng kỳ này? Sau khi đóng, mọi thao tác trên kỳ đều dừng — chỉ Admin mới mở lại được.')) return;
-  return postKkPeriodAction(id, 'close');
+  if (!confirm('Đóng kỳ này? CẢ NHÓM siêu thị cùng kỳ (nếu tạo chung đợt) sẽ đóng theo luôn — mọi thao tác kiểm kê đều dừng (Xem Báo Cáo vẫn dùng được bình thường), chỉ Admin mới mở lại được.')) return;
+  return kkPeriodActionWithSiblings(id, 'close', 'đóng', 'Không đóng được');
 }
 function reopenKkPeriod(id) {
-  if (!confirm('Mở lại kỳ đã chốt này để cập nhật/sửa lại thông tin?')) return;
-  return postKkPeriodAction(id, 'reopen');
+  if (!confirm('Mở lại kỳ đã chốt này? CẢ NHÓM siêu thị cùng kỳ (nếu tạo chung đợt) sẽ mở lại theo luôn.')) return;
+  return kkPeriodActionWithSiblings(id, 'reopen', 'mở lại', 'Không mở lại được');
 }
 
 function setVanHanhShelfSubTab(tab) {

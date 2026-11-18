@@ -42,7 +42,7 @@ const {
   LOAI_KY, TRANG_THAI,
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake, canConfirmStocktakeForDept,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
-  buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, editSessionMeta, deleteDraftSession,
+  buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
   findActiveSession, listOpenSessionsByLoaiKy,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
@@ -142,15 +142,27 @@ router.get('/sessions', async (req, res) => {
     }
     const all = await getAllSessions();
     const filtered = allowedDepts ? all.filter(s => allowedDepts.includes(s.dept)) : all.filter(s => s.dept === dept);
+    // batchSiblingCount (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "chỗ này hơi sai logic
+    // khi tôi tạo kỳ kiểm kê tôi chỉ cần chọn nhiều st... mặc định các siêu thị đó ở trong 1 kỳ, không phải
+    // chọn 1 siêu thị lại ra kỳ như bên dưới") — CHỈ sửa phần HIỂN THỊ theo đúng xác nhận của người dùng,
+    // KHÔNG gộp bản ghi thật (mỗi siêu thị vẫn cần vòng đời Kích Hoạt/Đóng Kỳ/Xác Nhận riêng — tiến độ kiểm
+    // kê mỗi siêu thị khác nhau, "▶ Kích Hoạt" đã tự áp dụng cho CẢ NHÓM cùng batchId từ trước, xem
+    // activateSessionBatch() ở lib/stocktakeEngine.js). Đếm TRÊN TOÀN BỘ `all` (chưa lọc theo dept đang
+    // xem) để ra đúng tổng số siêu thị trong nhóm dù đang xem lọc theo 1 siêu thị — client dùng số này để
+    // hiện "📦 Cùng nhóm với N siêu thị khác" thay vì để người dùng tưởng nhầm mỗi siêu thị 1 kỳ tách biệt.
+    const batchCounts = new Map();
+    for (const s of all) {
+      if (s.batchId) batchCounts.set(s.batchId, (batchCounts.get(s.batchId) || 0) + 1);
+    }
+    let items = filtered.map(s => (s.batchId && batchCounts.get(s.batchId) > 1) ? { ...s, batchSiblingCount: batchCounts.get(s.batchId) } : s);
     // hasData (MỚI, theo phản hồi người dùng thật "kỳ Gom Mã này chưa thực hiện, chưa có dữ liệu gì phải
     // xoá nữa chứ") — Tab 1 cần biết TRƯỚC (không đợi bấm Xoá mới biết) kỳ Đang hoạt động nào đã thật sự
     // có dữ liệu quét để hiện đúng nút "🗑️ Xoá" (xem deleteDraftSession() ở lib/stocktakeEngine.js) —
     // CHỈ tính khi có kỳ Đang hoạt động trong danh sách (đỡ phải đọc stocktakeCounts khi toàn Nháp/Đã chốt).
-    let items = filtered;
-    const activeSessionIds = filtered.filter(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG).map(s => s.id);
+    const activeSessionIds = items.filter(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG).map(s => s.id);
     if (activeSessionIds.length) {
       const sessionIdsWithData = await getSessionIdsWithCounts(activeSessionIds);
-      items = filtered.map(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
+      items = items.map(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
     }
     res.json(allowedDepts ? { items, allowedDepts } : { items });
   } catch (err) {
@@ -257,12 +269,19 @@ async function handleSessionTransition(req, res, routeLabel, checkPerm, transiti
 router.post('/sessions/:id/activate', (req, res) =>
   handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/activate', canManageStocktakePeriod, activateSessionBatch));
 
+// closeSessionBatch/reopenSessionBatch (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng: "tôi chốt không đóng
+// kỳ riêng lẻ siêu thị mà đóng cả kỳ là đóng hết các st trong kỳ đó, ko có khái niệm đóng và mở từng siêu
+// thị trong kỳ đó") — THAY closeSession/reopenSession đơn lẻ, CÙNG khuôn activateSessionBatch ngay trên:
+// đóng/mở lại 1 siêu thị trong kỳ tự áp dụng LUÔN cho mọi siêu thị "anh em" cùng batchId (xem chú thích
+// đầy đủ ở lib/stocktakeEngine.js). Giữ NGUYÊN itemAccessCheck cho DÒNG VỪA BẤM (handleSessionTransition
+// vẫn tự kiểm tra như cũ); việc kiểm quyền cho TỪNG sibling nằm BÊN TRONG closeSessionBatch/
+// reopenSessionBatch (gọi thẳng canCloseStocktakePeriodForDept/canReopenStocktakePeriodForDept).
 router.post('/sessions/:id/close', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canCloseStocktakePeriodAtAll, closeSession,
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/close', canCloseStocktakePeriodAtAll, closeSessionBatch,
     (user, item) => canCloseStocktakePeriodForDept(user, item.dept)));
 
 router.post('/sessions/:id/reopen', (req, res) =>
-  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakePeriodAtAll, reopenSession,
+  handleSessionTransition(req, res, 'POST /api/stocktake/sessions/:id/reopen', canReopenStocktakePeriodAtAll, reopenSessionBatch,
     (user, item) => canReopenStocktakePeriodForDept(user, item.dept)));
 
 // PATCH /sessions/:id (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi có nút sửa kỳ kiểm kê") — chỉ đổi
