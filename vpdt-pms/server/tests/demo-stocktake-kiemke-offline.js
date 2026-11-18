@@ -27,7 +27,7 @@ const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [USER],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [
       { id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canGomMa: true, canKiemDem: true, canKiemSoat: true },

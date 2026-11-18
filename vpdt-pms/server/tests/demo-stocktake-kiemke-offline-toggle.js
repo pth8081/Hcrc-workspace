@@ -16,7 +16,7 @@ const OUT_DIR = process.env.DEMO_OUT_DIR || path.join(__dirname, '..', 'demo-scr
   const THONG_KE_SESSION = { id: 9002, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [USER],
-    shelfLocations: [SHELF_A1], stocktakeSessions: [THONG_KE_SESSION],
+    kiemKeShelfLocations: [SHELF_A1], stocktakeSessions: [THONG_KE_SESSION],
     stocktakeUserAccess: [{ id: 1, username: 'nv1', dept: DEPT1, shelfLocationId: 10, canKiemDem: true }],
     stocktakeCounts: []
   });

@@ -18,7 +18,7 @@ async function main() {
 
   const state = createMockState({
     depts: [DEPT1], stores: [DEPT1], users: [ADMIN],
-    shelfLocations: [SHELF_A1, SHELF_A2],
+    kiemKeShelfLocations: [SHELF_A1, SHELF_A2],
     stocktakeSessions: [GOM_MA_SESSION, THONG_KE_SESSION],
     // Allowlist TUYỆT ĐỐI (Tab 8) — kể cả Admin vẫn cần dòng allowlist riêng để quét/kiểm đếm trên quầy
     // kệ cụ thể (my-shelf-locations lọc theo allowlist thật, admin chỉ bypass check quyền TAB, không
@@ -175,7 +175,10 @@ async function main() {
       });
       await page.waitForTimeout(300);
       const text = await page.evaluate(() => document.getElementById('kkConfirmShelfListBody').textContent);
-      const confirmedCount = (text.match(/✅/g) || []).length;
+      // Đếm theo cụm "đã xác nhận bởi" (CHỈ xuất hiện ở dòng quầy kệ đã xác nhận thật) — KHÔNG đếm thô
+      // emoji "✅" (cũng xuất hiện ở nhãn nút chọn-nhiều "✅ Xác Nhận Đã Chọn" ngay phía trên, không liên
+      // quan tới số dòng đã xác nhận, dễ đếm nhầm +1).
+      const confirmedCount = (text.match(/đã xác nhận bởi/g) || []).length;
       assertEqual(confirmedCount, 1, `Quầy kệ A2 phải hiện ĐÚNG 1 lần đã xác nhận (không trùng), thực tế: ${confirmedCount} (text: ${text})`);
     });
 

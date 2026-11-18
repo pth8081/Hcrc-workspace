@@ -17,6 +17,13 @@ async function main() {
   const DEPT1 = 'Siêu thị Quận 1';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
   const SHELF_A2 = { id: 11, dept: DEPT1, code: 'A2', name: 'Kệ A2 — Mì, cháo', active: true, kiemKeLocked: true, kiemKeLockedBy: 'itA', kiemKeLockedByName: 'IT Quản Trị' };
+  // LABEL_A1/LABEL_A2 — nhãn hiển thị ĐÚNG công thức kkShelfOptionLabel() (module-vanhanh.js:
+  // `${locked?'🔒 ':''}${dept} — ${code} — ${name}`), dùng cho page.fill() vào #kkKiemDemShelfInput (ô
+  // "sdd*" MỚI thay cho <select> cũ) — A2 có tiền tố 🔒 vì SHELF_A2.kiemKeLocked ĐÃ true NGAY TỪ ĐẦU
+  // fixture (trước cả lượt fetch online đầu tiên), nên nhãn gõ vào LUÔN có 🔒 suốt file test này (khác
+  // test-stocktake-kiemke-edge-cases-audit.js, nơi khoá được gán SAU KHI đã cache).
+  const LABEL_A1 = `${SHELF_A1.dept} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
+  const LABEL_A2 = `${SHELF_A2.kiemKeLocked ? '🔒 ' : ''}${SHELF_A2.dept} — ${SHELF_A2.code} — ${SHELF_A2.name}`;
   const USER = {
     username: 'nv1', name: 'Nhân Viên 1', dept: DEPT1,
     perms: { kiemKeGomMaDo: true, kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true }, active: true, totpEnabled: true
@@ -56,12 +63,12 @@ async function main() {
     await page.waitForTimeout(250); // để prefetchKkSessionInfoForShelves() chạy ngầm xong cho CẢ A1 và A2
 
     await run.run('Online: Tab 3 Kiểm Đếm tải đúng A1 (mở) + A2 (đã khoá, hiện 🔒) từ server', async () => {
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkKiemDemShelfSelect').options).map(o => o.textContent));
+      const options = await page.evaluate(() => (document.getElementById('kkKiemDemShelfDropdown')._sddItems || []).map(it => it.label));
       assert(options.some(o => o.includes('A1') && !o.includes('🔒')), `A1 phải hiện KHÔNG có 🔒, thực tế: ${options.join(' | ')}`);
       assert(options.some(o => o.includes('🔒') && o.includes('A2')), `A2 phải hiện CÓ 🔒, thực tế: ${options.join(' | ')}`);
     });
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
     await run.run('Online: chọn A1 -> hiện ô quét + ĐÃ cache session info cho offline sau này', async () => {
       const hidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
@@ -77,13 +84,13 @@ async function main() {
     await page.waitForTimeout(200);
 
     await run.run('Offline: vào lại Tab 3 -> danh sách quầy kệ vẫn hiện đủ (từ cache) + báo rõ "Ngoại tuyến"', async () => {
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkKiemDemShelfSelect').options).map(o => o.textContent));
+      const options = await page.evaluate(() => (document.getElementById('kkKiemDemShelfDropdown')._sddItems || []).map(it => it.label));
       assert(options.some(o => o.includes('A1')) && options.some(o => o.includes('A2')), `Phải còn đủ A1+A2 từ cache, thực tế: ${options.join(' | ')}`);
       const noteHidden = await page.evaluate(() => document.getElementById('kkKiemDemOfflineNote').classList.contains('hidden'));
       assert(!noteHidden, 'Phải hiện ghi chú "Ngoại tuyến" khi tải danh sách quầy kệ thất bại vì mất mạng');
     });
 
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(200);
     await run.run('Offline: chọn A1 (đã cache session info) -> vẫn mở được ô quét bình thường', async () => {
       const hidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
@@ -114,7 +121,7 @@ async function main() {
     });
 
     // Quầy kệ A2 (đã khoá TỪ TRƯỚC khi cache, nên cache session info/shelf list đã biết điều này).
-    await page.selectOption('#kkKiemDemShelfSelect', '11');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A2);
     await page.waitForTimeout(200);
     await run.run('Offline: chọn A2 (đã khoá TỪ TRƯỚC lúc còn mạng) -> VẪN bị chặn đúng bằng dữ liệu cache (không lách khoá được bằng cách tắt mạng)', async () => {
       const hidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
@@ -124,7 +131,7 @@ async function main() {
     });
 
     // ===== CÓ MẠNG LẠI =====
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', LABEL_A1);
     await page.waitForTimeout(150);
     await goOnline();
     await page.evaluate(() => trySyncPendingKkScans());

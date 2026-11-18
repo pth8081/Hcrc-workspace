@@ -34,7 +34,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;

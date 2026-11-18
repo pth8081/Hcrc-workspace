@@ -16,8 +16,13 @@ const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'kiemke-all-scree
   const MANAGER = {
     username: 'qlA', name: 'Nguyễn Văn Quản Lý', dept: 'Siêu thị Quận 1',
     // Có vài quyền Vận Hành KHÁC (để sidebar dropdown "⚙️ Vận Hành" hiện đủ các mục cũ, giống 1 Cửa hàng
-    // trưởng thật) CỘNG kiemKePeriodManage — đúng vai "quản lý kỳ kiểm kê" thật.
-    perms: { operationOrderCreate: true, shelfRecordCreate: true, kiemKePeriodManage: true },
+    // trưởng thật) CỘNG đủ 7 quyền Kiểm Kê còn lại (để "đi 1 vòng" demo đủ cả 7 sub-tab còn lại, không
+    // chỉ riêng kiemKePeriodManage) — đúng vai "quản lý kỳ kiểm kê" thật, có đủ quyền mọi tab.
+    perms: {
+      operationOrderCreate: true, shelfRecordCreate: true, kiemKePeriodManage: true,
+      kiemKeGomMaDo: true, kiemKeKiemDemDo: true, kiemKeKiemSoatDo: true, kiemKeShelfConfigManage: true,
+      kiemKeConfirmDo: true, kiemKeReportView: true, kiemKeUserAccessManage: true
+    },
     active: true, totpEnabled: true
   };
   const ADMIN = { username: 'admin', name: 'Admin Hệ Thống', dept: 'Siêu thị Quận 1', perms: { admin: true }, active: true, totpEnabled: true };

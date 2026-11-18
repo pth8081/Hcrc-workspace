@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**30.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.89 (2026-12): Kiểm Kê — mọi ô chọn thành dropdown tìm-kiếm-gõ-chọn + So Sánh Kỳ mở rộng N-way + cột "Trùng Mã"
+
+Người dùng yêu cầu TRỰC TIẾP: "mục nào mà đang theo kiểu là lựa chọn kiểu select ấy, thì bạn chuyển hết
+sang dạng drop down searchable. Riêng phần báo cáo ấy, thì cho phép chọn là multi select nhé, vẫn là
+dạng drop down searchable."
+
+- Chuyển TOÀN BỘ 10 `<select>` còn lại trong module Kiểm Kê (3 ô chọn quầy kệ Gom Mã/Kiểm Đếm/Kiểm
+  Soát, Loại Kỳ + Siêu thị lúc Tạo Kỳ Mới, 2 ô chọn Kỳ ở Xác Nhận, Kỳ ở Báo Cáo, Siêu thị ở Cấu Hình
+  Người Dùng) sang ô tìm-kiếm-gõ-chọn `sdd*`.
+- "So Sánh Với Kỳ Khác" (Báo Cáo): mở rộng từ so sánh 1-vs-1 sang **N-way** (chọn nhiều, tối đa 6 kỳ) —
+  `GET /api/stocktake/report` đổi field response `compare` (object) → `compares` (array), nhận
+  `compareSessionId` dạng danh sách id phân tách dấu phẩy; biểu đồ So Sánh + sheet Excel "So Sánh Kỳ"
+  mở rộng theo N cột/N màu CVD-safe cố định.
+- Cột **"Trùng Mã"** MỚI ở Gom Mã/Kiểm Đếm/Kiểm Soát: phát hiện 1 mã hàng rải rác ở NHIỀU quầy kệ khác
+  nhau trong cùng kỳ (KHÔNG tự cộng dồn giữa các quầy kệ, khác với trong CÙNG 1 quầy kệ) — hiện "⚠️ N
+  dòng • Tổng X" ở mọi dòng liên quan, chỉ là thông tin tham khảo (Báo Cáo vẫn tự cộng dồn đúng).
+- Vá 1 bug thật phát hiện qua audit: `loadKkConfirmGomMaTab()` còn đọc DOM id đã bị xoá ở đợt chuyển
+  sdd* trước đó, khiến Tab 6 Xác Nhận Gom Mã không tải được dữ liệu.
+- Cập nhật lại 33 file test/demo Playwright cũ dùng `page.selectOption()` trên các `<select>` đã bị thay
+  (phát hiện + vá thêm vài bug fixture/test lỗi thời không liên quan trong lúc rà soát).
 
 ## v30.88 (2026-11): Kiểm Kê — cột "Mã Vạch" ở mọi tab hiện mã sản phẩm + xác nhận dùng chung logic quét camera với Kiểm Soát Hàng Hóa
 

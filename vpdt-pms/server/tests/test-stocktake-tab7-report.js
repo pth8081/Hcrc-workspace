@@ -198,7 +198,7 @@ function request(port, method, urlPath, username, body) {
     check('Báo cáo KHÔNG còn field gomMaSession (đã bỏ auto-lookup kỳ Gom Mã)', res.body.gomMaSession === undefined, res.body.gomMaSession);
     check('countedSkuCount = 2 (cả SP001/SP002 đều có finalQty > 0)', res.body.countedSkuCount === 2, res.body);
     check('Người KHÔNG phải Admin: không có storeComparison (Phase 1 không xem chéo nhiều siêu thị)', res.body.storeComparison === undefined, res.body.storeComparison);
-    check('Không bật compareSessionId -> không có field compare', res.body.compare === undefined, res.body.compare);
+    check('Không bật compareSessionId -> compares là mảng rỗng', Array.isArray(res.body.compares) && res.body.compares.length === 0, res.body.compares);
 
     // 6b) "💰 Giá Trị Thừa/Thiếu" (12/2026, MỚI): SP001 thiếu 2 (48-50) * 10.000đ = -20.000đ; SP002 thừa
     // 78 (108-30) * 2.000đ = +156.000đ -> tổng +136.000đ, cả 2 mã đều có giá sẵn (soMaThieuGia=0).
@@ -213,13 +213,24 @@ function request(port, method, urlPath, username, body) {
     const gomMaSp001 = res.body.rows.find(r => r.maHang === 'SP001');
     check('Kỳ Gom Mã tự xem báo cáo: finalQty = slGomMa của chính kỳ đó (46), không có kiemDemQty', res.status === 200 && gomMaSp001 && gomMaSp001.finalQty === 46 && gomMaSp001.kiemDemQty === undefined, res.body);
 
-    // 7b) So Sánh Với Kỳ Khác (TÍNH NĂNG MỚI 11/2026, theo đúng phản hồi người dùng): người dùng TỰ CHỌN
-    // so sánh kỳ Thống Kê với kỳ Gom Mã -> trả field `compare` RIÊNG, KHÔNG trộn vào `rows` chính.
+    // 7b) So Sánh Với Kỳ Khác (TÍNH NĂNG MỚI 11/2026, theo đúng phản hồi người dùng; MỞ RỘNG 12/2026 sang
+    // N-way): người dùng TỰ CHỌN so sánh kỳ Thống Kê với kỳ Gom Mã -> trả field `compares` (MẢNG, 1 phần
+    // tử trong trường hợp 1-vs-1 này) RIÊNG, KHÔNG trộn vào `rows` chính.
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${GOMMA_SESSION_ID}`, 'qlA');
     check('So Sánh Với Kỳ Khác: 200, rows chính VẪN không có gomMaQty (độc lập)', res.status === 200 && res.body.rows.find(r => r.maHang === 'SP002').gomMaQty === undefined, res.body.rows);
-    check('So Sánh Với Kỳ Khác: trả đúng compare.session = kỳ Gom Mã đã chọn', res.body.compare && res.body.compare.session.id === GOMMA_SESSION_ID, res.body.compare);
-    const compareSp001 = res.body.compare && res.body.compare.rows.find(r => r.maHang === 'SP001');
-    check('So Sánh Với Kỳ Khác: compare.rows dùng ĐÚNG giá trị của kỳ Gom Mã (SP001 finalQty=46, tức slGomMa)', compareSp001 && compareSp001.finalQty === 46, compareSp001);
+    check('So Sánh Với Kỳ Khác: trả đúng compares[0].session = kỳ Gom Mã đã chọn', Array.isArray(res.body.compares) && res.body.compares.length === 1 && res.body.compares[0].session.id === GOMMA_SESSION_ID, res.body.compares);
+    const compareSp001 = res.body.compares && res.body.compares[0] && res.body.compares[0].rows.find(r => r.maHang === 'SP001');
+    check('So Sánh Với Kỳ Khác: compares[0].rows dùng ĐÚNG giá trị của kỳ Gom Mã (SP001 finalQty=46, tức slGomMa)', compareSp001 && compareSp001.finalQty === 46, compareSp001);
+    // 7c) So Sánh N-WAY (MỞ RỘNG 12/2026, theo yêu cầu người dùng "mở rộng so sánh NHIỀU kỳ cùng lúc") —
+    // compareSessionId nhận DANH SÁCH id cách nhau dấu phẩy, trả về đúng số lượng + đúng thứ tự trong
+    // `compares`.
+    res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${GOMMA_SESSION_ID},${THONGKE_SESSION_ID}`, 'qlA');
+    check('So Sánh N-way: 200, compares có ĐÚNG 2 phần tử, đúng thứ tự (Gom Mã trước, Thống Kê sau)', res.status === 200 && Array.isArray(res.body.compares) && res.body.compares.length === 2 && res.body.compares[0].session.id === GOMMA_SESSION_ID && res.body.compares[1].session.id === THONGKE_SESSION_ID, res.body.compares);
+    const nwaySp002 = res.body.compares[1].rows.find(r => r.maHang === 'SP002');
+    check('So Sánh N-way: compares[1] (tự so với chính Kỳ Thống Kê) SP002 finalQty=108 (ĐÚNG số Kiểm Soát đã ghi đè)', nwaySp002 && nwaySp002.finalQty === 108, nwaySp002);
+    res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${[1, 2, 3, 4, 5, 6, 7].map(n => GOMMA_SESSION_ID).join(',')}`, 'qlA');
+    check('So Sánh N-way: quá 6 kỳ -> 400 rõ ràng', res.status === 400, res);
+
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=999999`, 'qlA');
     check('So Sánh Với Kỳ Khác: compareSessionId không tồn tại -> 404', res.status === 404, res);
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_SESSION_ID}&compareSessionId=${THONGKE_DEPT2_ID}`, 'qlA');

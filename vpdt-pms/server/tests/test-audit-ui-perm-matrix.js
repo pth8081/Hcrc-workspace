@@ -6,8 +6,8 @@
 //      test-stocktake-scan-tabs-ui.js); Tab 6/7 bắt buộc chọn Kỳ trước khi mở phần nội dung — test này xác
 //      nhận bỏ chọn Kỳ ở CẢ Tab 6 VÀ Tab 7 đều ẩn lại nội dung giống NHAU (cùng khuôn phản ứng với Tab 4),
 //      và tự chọn đúng kỳ Thống Kê "Đang hoạt động" làm mặc định ở cả 2 tab.
-//   3) "Mở Quản Lý Quầy Kệ" (Tab 5) với vai ĐỦ quyền Kiểm Kê nhưng KHÔNG có shelfLocationManage (tình
-//      huống THẬT, không phải giả lập flip cờ) -> báo lỗi rõ, không âm thầm rớt tab.
+//   3) [ĐÃ XOÁ, 12/2026 — xem chú thích tại chỗ cũ ở dưới] "Mở Quản Lý Quầy Kệ" (Tab 5): nút redirect này
+//      không còn tồn tại từ đợt Tab 5 có CRUD quầy kệ riêng, scenario kiểm tra nó đã lỗi thời.
 //   4) Khoá Tab 3 Kiểm Đếm theo Xác Nhận (Tab 6) KHÔNG ảnh hưởng Tab 2 Gom Mã (loại kỳ độc lập) — mở rộng
 //      thêm so với test-stocktake-tab5-tab6-ui.js (vốn chỉ kiểm Tab 3 bị chặn + Tab 4 không bị chặn).
 // Chạy: node tests/test-audit-ui-perm-matrix.js
@@ -127,20 +127,13 @@ async function main() {
       Object.entries(v).forEach(([key, val]) => assertEqual(val, true, `${key}: ${JSON.stringify(v)}`));
     });
 
-    await run.run('FULL: Tab 5 "Mở Quản Lý Quầy Kệ" — THIẾU shelfLocationManage THẬT (không phải giả lập flip cờ) -> báo lỗi rõ, KHÔNG đổi tab', async () => {
-      await page.click('#btnKkSubShelfConfig');
-      await page.waitForTimeout(150);
-      const alertsBefore = await page.evaluate(() => (window.__alerts || []).length);
-      await page.click('[data-op="goToShelfLocationsManagement"]');
-      await page.waitForTimeout(150);
-      const alerts = await page.evaluate(() => window.__alerts || []);
-      assert(alerts.length > alertsBefore, 'Phải có alert báo lỗi khi bấm mà thiếu quyền');
-      const lastAlert = alerts[alerts.length - 1];
-      assert(/quyền/i.test(lastAlert) && /Quầy Kệ/i.test(lastAlert), `Phải báo rõ thiếu quyền Quầy Kệ, thực tế: ${lastAlert}`);
-      const stillOnKiemKe = await page.evaluate(() => !document.getElementById('kiemKeSection').classList.contains('hidden'));
-      assert(stillOnKiemKe, 'Thiếu quyền -> KHÔNG được chuyển tab, vẫn đứng yên ở Kiểm Kê');
-    });
-
+    // LƯU Ý (12/2026): scenario cũ "Mở Quản Lý Quầy Kệ -> thiếu shelfLocationManage báo lỗi" đã bị XOÁ —
+    // nút data-op="goToShelfLocationsManagement" không còn tồn tại trong kiemKeSection.html từ đợt Tab 5
+    // có CRUD quầy kệ RIÊNG (commit dee0abf0, "danh mục Quầy Kệ RIÊNG", trước đợt chuyển select->sdd* này
+    // nhưng chưa từng được dọn lại test) — Tab 5 giờ không còn redirect sang Kiểm Soát Hàng Hóa nữa nên
+    // không còn tình huống "thiếu quyền bấm nút redirect" để test. Hàm goToShelfLocationsManagement() ở
+    // module-vanhanh.js hiện không còn nút nào gọi tới (orphan), không xoá ở đây (ngoài phạm vi đợt sửa
+    // hiện tại, để tránh rủi ro không cần thiết).
     await run.run('FULL: Tab 6 Xác Nhận — tự chọn ĐÚNG kỳ Thống Kê "Đang hoạt động" làm mặc định (giống Tab 7)', async () => {
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(250);
