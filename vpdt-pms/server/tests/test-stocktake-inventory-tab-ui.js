@@ -91,10 +91,15 @@ async function main() {
       assertEqual(selected.length, 2, `Phải mặc định chọn đủ 2 siêu thị, thực tế: ${JSON.stringify(selected)}`);
     });
 
-    await run.run('DEPT1 (đã đồng bộ) hiện đúng bảng Mã Hàng + ghi chú "Đã đồng bộ lúc"', async () => {
+    // LỖI THẬT đã vá (12/2026, "Aw, Snap!" crash trên mobile — xem renderKkInventoryStoreCard(),
+    // module-vanhanh.js): KHÔNG còn dựng bảng chi tiết từng dòng Mã Hàng ở màn này nữa (chỉ hiện SỐ
+    // LƯỢNG mã hàng đã đồng bộ, dữ liệu chi tiết xem qua "📥 Xuất Excel") — test đổi theo đúng hành vi
+    // MỚI, không còn kiểm tra text SP001 trong DOM.
+    await run.run('DEPT1 (đã đồng bộ) hiện đúng SỐ LƯỢNG mã hàng + ghi chú "Đã đồng bộ lúc" (KHÔNG còn bảng chi tiết)', async () => {
       const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
-      assert(text.includes('SP001'), `Phải hiện SP001, thực tế: ${text}`);
+      assert(text.includes('1 mã hàng đã đồng bộ'), `Phải hiện đúng số lượng mã hàng (1), thực tế: ${text}`);
       assert(text.includes('Đã đồng bộ lúc'), 'Phải có ghi chú thời điểm đồng bộ');
+      assert(!text.includes('SP001'), 'KHÔNG được còn hiện chi tiết Mã Hàng (tránh crash DOM quá lớn trên mobile)');
     });
 
     await run.run('DEPT2 (CHƯA đồng bộ) hiện CẢNH BÁO rõ ràng, không giả vờ có dữ liệu', async () => {
@@ -108,6 +113,30 @@ async function main() {
       const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
       assert(!text.includes('Quận 2'), `Không được còn hiện DEPT2 sau khi bỏ chọn, thực tế: ${text}`);
       assert(text.includes('Quận 1'), 'Vẫn phải còn hiện DEPT1');
+    });
+
+    // "📥 Xuất Excel" (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi xuất ra Excel hàng tồn của TẤT CẢ
+    // các siêu thị một lần xuất, mỗi siêu thị 1 sheet") — xuất THẲNG từ kkInventoryByDept đã có sẵn
+    // trong bộ nhớ (không gọi lại /system-inventory), dùng CHUNG downloadMultiSheetXlsxFromServer() —
+    // stub lại hàm đó để bắt payload thay vì thật sự tải file.
+    await run.run('Bấm "📥 Xuất Excel" -> gọi downloadMultiSheetXlsxFromServer() với ĐỦ cả DEPT1 (có dữ liệu) VÀ DEPT2 (0 dòng, vẫn có sheet riêng)', async () => {
+      const captured = await page.evaluate(() => {
+        const orig = window.downloadMultiSheetXlsxFromServer;
+        let out = null;
+        window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { out = { fileName, sheets }; };
+        exportKkInventoryExcel();
+        window.downloadMultiSheetXlsxFromServer = orig;
+        return out;
+      });
+      assert(!!captured, 'Phải gọi downloadMultiSheetXlsxFromServer()');
+      assertEqual(captured.sheets.length, 2, 'Phải có 2 sheet (1 sheet/siêu thị), kể cả siêu thị 0 dòng');
+      const sheet1 = captured.sheets.find(s => s.sheetName === 'Siêu thị Quận 1');
+      assert(!!sheet1, 'Phải có sheet đúng tên "Siêu thị Quận 1"');
+      assertEqual(sheet1.rows.length, 1, 'Sheet DEPT1 phải có đúng 1 dòng (SP001)');
+      assertEqual(sheet1.rows[0].maHang, 'SP001', 'Dòng xuất phải đúng maHang');
+      const sheet2 = captured.sheets.find(s => s.sheetName === 'Siêu thị Quận 2');
+      assert(!!sheet2, 'Phải có sheet đúng tên "Siêu thị Quận 2" dù chưa đồng bộ');
+      assertEqual(sheet2.rows.length, 0, 'Sheet DEPT2 (chưa đồng bộ) phải là sheet rỗng, không lỗi');
     });
 
     // Cache-first, KHÔNG tự gọi mạng (MỚI, 12/2026, 2 đợt — ban đầu "tôi phải lấy được dữ liệu từ cơ sở dữ
@@ -128,7 +157,7 @@ async function main() {
       await page.click('#btnKkSubInventory');
       await page.waitForTimeout(150);
       const bodyText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
-      assert(bodyText.includes('SP001'), `Phải hiện NGAY dữ liệu cache (SP001) mà không cần bấm Đồng Bộ -- got: ${bodyText}`);
+      assert(bodyText.includes('1 mã hàng đã đồng bộ'), `Phải hiện NGAY số lượng mã hàng từ cache mà không cần bấm Đồng Bộ -- got: ${bodyText}`);
       systemInventoryFetchCount = await page.evaluate(() => window.__kkInvFetchCount || 0);
       assertEqual(systemInventoryFetchCount, 0, 'Vào lại tab (không bấm Đồng Bộ) KHÔNG được tự gọi lại /system-inventory');
       await page.evaluate(() => { window.fetch = window.__origFetchNoAuto; delete window.__origFetchNoAuto; delete window.__kkInvFetchCount; });
@@ -141,7 +170,7 @@ async function main() {
       const offlineNote = await page.evaluate(() => document.getElementById('kkInventoryStatusNote')?.textContent || '');
       assert(offlineNote.includes('Mất kết nối'), `Phải báo mất kết nối, thực tế: ${offlineNote}`);
       const text = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
-      assert(text.includes('SP001'), `Offline vẫn phải hiện dữ liệu cache cũ (SP001), thực tế: ${text}`);
+      assert(text.includes('1 mã hàng đã đồng bộ'), `Offline vẫn phải hiện số lượng mã hàng từ cache cũ, thực tế: ${text}`);
     });
     await goOnline();
 

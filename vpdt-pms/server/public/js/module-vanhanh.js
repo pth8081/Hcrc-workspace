@@ -3118,34 +3118,26 @@ function renderKkInventoryStoreOptions() {
 // dựng xong mới hiện hết 1 lúc. kkInventoryRenderToken huỷ lượt render CŨ nếu người dùng đổi lựa chọn
 // siêu thị trước khi lượt trước kịp vẽ xong (tránh 2 lượt chèn chồng nhau).
 let kkInventoryRenderToken = 0;
+// LỖI THẬT phát hiện 12/2026 (phản hồi TRỰC TIẾP người dùng, kèm ảnh chụp "Aw, Snap!" — trình duyệt
+// mobile SẬP HẲN tiến trình vẽ trang, không chỉ "đứng/không phản hồi"): bản vá trước đó (dựng + chèn
+// TỪNG siêu thị 1 qua requestAnimationFrame, xem renderKkInventoryStoresBody() ngay dưới) chỉ giải
+// quyết đúng vấn đề "luồng chính bị chặn" — KHÔNG giải quyết được nguyên nhân gốc là TỔNG SỐ NÚT DOM quá
+// lớn (mỗi siêu thị có thể hàng trăm-nghìn dòng tồn kho × tới 35 siêu thị cùng lúc khi chọn "Tất cả" =
+// có thể hàng chục-trăm nghìn thẻ <tr>) — dù chèn RẢI RA theo thời gian, tổng bộ nhớ DOM cuối cùng vẫn y
+// hệt như cũ, đủ để trình duyệt (nhất là tiến trình kết xuất trên di động, bộ nhớ hạn chế hơn desktop)
+// crash hẳn ("Aw, Snap!" là lỗi tiến trình kết xuất Chrome hết bộ nhớ, không phải lỗi mạng/dữ liệu). Vá
+// triệt để theo đúng đề xuất người dùng: KHÔNG dựng bảng chi tiết từng dòng tồn kho ở màn này nữa — chỉ
+// hiện SỐ LƯỢNG mã hàng đã đồng bộ cho mỗi siêu thị (đã có sẵn nhãn "📦 X mã hàng đã đồng bộ"). Dữ liệu
+// chi tiết đầy đủ (Mã Hàng/Mã Vạch/Tên Hàng/Tồn Kho) vẫn xem được qua "📥 Xuất Excel" (exportKkInventoryExcel(),
+// ngay dưới) — xuất THẲNG từ kkInventoryByDept đã có sẵn trong bộ nhớ, không cần gọi lại server.
 function renderKkInventoryStoreCard(dept) {
   const entry = kkInventoryByDept[dept];
   const rows = (entry && Array.isArray(entry.rows)) ? entry.rows : [];
   const syncNote = entry && entry.fetchedAt
     ? `<span class="text-emerald-700">✅ Đã đồng bộ lúc: ${escapeHtml(new Date(entry.fetchedAt).toLocaleString('vi-VN'))}</span>`
     : `<span class="text-amber-700">⚠️ Chưa có dữ liệu đồng bộ cho siêu thị này — quét mã offline ở Gom Mã/Kiểm Đếm/Kiểm Soát có thể không tra ra tên hàng.</span>`;
-  // Mã Vạch (MỚI, 11/2026, theo yêu cầu người dùng: "ở tất cả các tab của kiểm kê thì phải riêng phần
-  // mã thì có hai mã nhé, là mã vạch và mã nội bộ... bắt buộc phải có hai cột đấy") — rows đã qua
-  // aggregateSystemInventoryRowsByMaHang() ở server (GET /api/stocktake/system-inventory) nên đã sẵn
-  // field `maVach` (mã vạch MẶC ĐỊNH của mã hàng, API đối tác), không cần tính toán gì thêm ở client.
-  const tableHtml = rows.length
-    ? `<div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
-        <table class="w-full text-[11px]">
-          <thead class="bg-gray-50 sticky top-0"><tr>
-            <th class="text-left p-1.5">Mã Hàng</th><th class="text-left p-1.5">Mã Vạch</th><th class="text-left p-1.5">Tên Hàng</th><th class="text-right p-1.5">Tồn Kho</th>
-          </tr></thead>
-          <tbody>${rows.slice().sort((a, b) => String(a.maHang).localeCompare(String(b.maHang))).map(r => `
-            <tr class="border-t">
-              <td class="p-1.5">${escapeHtml(r.maHang)}</td>
-              <td class="p-1.5 font-mono">${escapeHtml(r.maVach || '—')}</td>
-              <td class="p-1.5">${escapeHtml(r.tenHang || '')}</td>
-              <td class="p-1.5 text-right font-semibold">${(r.soLuongTon || 0).toLocaleString('vi-VN')}</td>
-            </tr>`).join('')}</tbody>
-        </table>
-      </div>`
-    : '<p class="text-gray-400 text-sm">Chưa có dữ liệu tồn kho cho siêu thị này.</p>';
   return `
-    <div class="bg-white border rounded p-3 space-y-2">
+    <div class="bg-white border rounded p-3">
       <div class="flex items-center justify-between flex-wrap gap-1">
         <h4 class="font-bold text-sm text-gray-800">🏬 ${escapeHtml(dept)}</h4>
         <div class="flex items-center gap-2 flex-wrap text-[11px]">
@@ -3153,7 +3145,6 @@ function renderKkInventoryStoreCard(dept) {
           <span>${syncNote}</span>
         </div>
       </div>
-      ${tableHtml}
     </div>`;
 }
 async function renderKkInventoryStoresBody() {
@@ -3173,6 +3164,32 @@ async function renderKkInventoryStoresBody() {
     body.appendChild(wrap.firstElementChild);
     await new Promise(resolve => requestAnimationFrame(resolve));
   }
+}
+// exportKkInventoryExcel() (MỚI, 12/2026, theo yêu cầu người dùng: "cho tôi xuất ra Excel hàng tồn của
+// TẤT CẢ các siêu thị một lần xuất, mỗi siêu thị 1 sheet") — xuất TOÀN BỘ các siêu thị đang có dữ liệu
+// trong kkInventoryByDept (server trả về ĐÚNG phạm vi siêu thị người này được xem — resolveKiemKeInventoryDepts(),
+// routes/stocktake.js — KHÔNG lệ thuộc đang chọn gì ở ô multi-select lọc hiển thị phía trên), không phải
+// gọi lại server (dữ liệu đã có sẵn trong bộ nhớ từ lần Đồng Bộ/cache gần nhất). Dùng CHUNG
+// downloadMultiSheetXlsxFromServer() (core.js, POST /api/admin/export-xlsx dạng {sheets}) — server tự lo
+// lọc ký tự cấm/cắt 31 ký tự/chống trùng tên sheet (buildMultiSheetWorkbook(), lib/adminExport.js), không
+// cần tự xử lý ở đây.
+function exportKkInventoryExcel() {
+  const depts = Object.keys(kkInventoryByDept).sort((a, b) => a.localeCompare(b, 'vi'));
+  if (!depts.length) return alert('Chưa có dữ liệu tồn kho để xuất — bấm "🔄 Đồng Bộ" trước.');
+  const columns = [
+    { header: 'Mã Hàng', key: 'maHang', width: 16 },
+    { header: 'Mã Vạch', key: 'maVach', width: 18 },
+    { header: 'Tên Hàng', key: 'tenHang', width: 34 },
+    { header: 'Tồn Kho', key: 'soLuongTon', width: 12 }
+  ];
+  const sheets = depts.map(dept => {
+    const rows = ((kkInventoryByDept[dept] && kkInventoryByDept[dept].rows) || [])
+      .slice()
+      .sort((a, b) => String(a.maHang).localeCompare(String(b.maHang)))
+      .map(r => ({ maHang: r.maHang || '', maVach: r.maVach || '', tenHang: r.tenHang || '', soLuongTon: Number(r.soLuongTon) || 0 }));
+    return { sheetName: dept, columns, rows };
+  });
+  downloadMultiSheetXlsxFromServer(`TonKhoHeThong_${new Date().toISOString().slice(0, 10)}.xlsx`, sheets);
 }
 
 const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
