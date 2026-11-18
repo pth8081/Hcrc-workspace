@@ -234,6 +234,45 @@ const DEDICATED_TABLES = {
       Status:       { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
     }
   },
+  // stocktakeCounts/stocktakeShelfConfirmations/stocktakeShelfGomMaConfirmations/
+  // stocktakeShelfKiemSoatConfirmations (BƯỚC 8, 12/2026 — tách khỏi AppData, xem chú thích đầy đủ ở
+  // sql/schema.sql ngay trên CREATE TABLE dbo.StocktakeCounts) — stocktakeCounts có MaHang (khoá tổng hợp
+  // 3 phần, ghi qua lib/stocktakeCountsStore.js::upsertScanCountRow(), KHÔNG qua createForCollection()
+  // thường vì đây là "tìm-hoặc-tạo rồi CỘNG DỒN", không phải tạo mới độc lập); 3 bảng Xác Nhận chỉ khoá 2
+  // phần (SessionId, ShelfLocationId), không có MaHang.
+  stocktakeCounts: {
+    table: 'StocktakeCounts', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      MaHang:          { sqlType: () => sql.NVarChar(100), extract: r => r.maHang || null }
+    }
+  },
+  stocktakeShelfConfirmations: {
+    table: 'StocktakeShelfConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  stocktakeShelfGomMaConfirmations: {
+    table: 'StocktakeGomMaConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  stocktakeShelfKiemSoatConfirmations: {
+    table: 'StocktakeKiemSoatConfirmations', hasCode: false,
+    columns: {
+      SessionId:       { sqlType: () => sql.BigInt,        extract: r => (r.sessionId != null ? r.sessionId : null) },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
   checklistSubmissions: {
     table: 'ChecklistSubmissions', hasCode: false,
     columns: {

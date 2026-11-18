@@ -12,6 +12,18 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { HttpError } = require('../lib/httpErrors');
 const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getAllForCollection } = require('../lib/recordStore');
+// BƯỚC 8 (12/2026, tách khỏi AppData — xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE TABLE
+// dbo.StocktakeCounts): stocktakeCounts/3 collection Xác Nhận giờ đọc/ghi qua 2 store riêng này thay cho
+// getAppDataValue/withLockedAppDataValue('stocktakeCounts'/...) trực tiếp — logic nghiệp vụ THUẦN
+// (upsertScanCount/editCountValue/deleteCountRow/confirmShelf/unconfirmShelf, import ở trên từ
+// lib/stocktakeEngine.js) KHÔNG đổi gì, chỉ đổi NƠI đọc/khoá/ghi.
+const {
+  getCountsForSession, getCountsForShelf, getCountsForSessions, getCountById, getSessionIdsWithCounts,
+  upsertScanCountRow, editCountValueRow, deleteCountRowById
+} = require('../lib/stocktakeCountsStore');
+const {
+  getConfirmationsForSession, getConfirmationById, confirmShelfRow, unconfirmShelfRow
+} = require('../lib/stocktakeConfirmationsStore');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const {
   LOAI_KY, TRANG_THAI,
@@ -139,10 +151,9 @@ router.get('/sessions', async (req, res) => {
     // có dữ liệu quét để hiện đúng nút "🗑️ Xoá" (xem deleteDraftSession() ở lib/stocktakeEngine.js) —
     // CHỈ tính khi có kỳ Đang hoạt động trong danh sách (đỡ phải đọc stocktakeCounts khi toàn Nháp/Đã chốt).
     let items = filtered;
-    if (filtered.some(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG)) {
-      await ensureStocktakeKey('stocktakeCounts');
-      const counts = (await getAppDataValue('stocktakeCounts')) || [];
-      const sessionIdsWithData = new Set(counts.map(c => c.sessionId));
+    const activeSessionIds = filtered.filter(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG).map(s => s.id);
+    if (activeSessionIds.length) {
+      const sessionIdsWithData = await getSessionIdsWithCounts(activeSessionIds);
       items = filtered.map(s => s.trangThai === TRANG_THAI.DANG_HOAT_DONG ? { ...s, hasData: sessionIdsWithData.has(s.id) } : s);
     }
     res.json(allowedDepts ? { items, allowedDepts } : { items });
@@ -268,8 +279,12 @@ router.patch('/sessions/:id', (req, res) =>
 // khoá `stocktakeSessions` của handleSessionTransition() — route dùng chung này chỉ khoá đúng 1
 // collection) rồi truyền vào qua closure (CÙNG khuôn PATCH ngay trên truyền req.body).
 router.delete('/sessions/:id', async (req, res) => {
-  await ensureStocktakeKey('stocktakeCounts');
-  const counts = (await getAppDataValue('stocktakeCounts')) || [];
+  const sessionId = Number(req.params.id);
+  // deleteDraftSession() (pure, lib/stocktakeEngine.js) chỉ cần BIẾT "kỳ này có dữ liệu hay không" (counts
+  // .some(c => c.sessionId === id)) — truyền 1 mảng rút gọn khớp đúng điều kiện đó thay vì tải nguyên
+  // stocktakeCounts (BƯỚC 8, giờ chỉ cần 1 lượt tra cứu nhỏ theo đúng sessionId này).
+  const sessionIdsWithData = Number.isFinite(sessionId) ? await getSessionIdsWithCounts([sessionId]) : new Set();
+  const counts = sessionIdsWithData.has(sessionId) ? [{ sessionId }] : [];
   return handleSessionTransition(req, res, 'DELETE /api/stocktake/sessions/:id', canManageStocktakePeriod,
     (arr, id) => deleteDraftSession(arr, id, counts));
 });
@@ -469,19 +484,16 @@ router.get('/active-session-for-shelf', async (req, res) => {
     let shelfConfirmed = false;
     let shelfKiemSoatConfirmed = false;
     if (mode === 'KIEM_DEM' && activeSession) {
-      await ensureStocktakeKey('stocktakeShelfConfirmations');
-      const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+      const confirmations = await getConfirmationsForSession('stocktakeShelfConfirmations', activeSession.id);
       shelfConfirmed = isShelfConfirmed(confirmations, activeSession.id, shelfLocationId);
     }
     if (mode === 'KIEM_SOAT' && activeSession) {
-      await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-      const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+      const soatConfirmations = await getConfirmationsForSession('stocktakeShelfKiemSoatConfirmations', activeSession.id);
       shelfKiemSoatConfirmed = isShelfConfirmed(soatConfirmations, activeSession.id, shelfLocationId);
     }
     let shelfGomMaConfirmed = false;
     if (mode === 'GOM_MA' && activeSession) {
-      await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
-      const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+      const gomMaConfirmations = await getConfirmationsForSession('stocktakeShelfGomMaConfirmations', activeSession.id);
       shelfGomMaConfirmed = isShelfConfirmed(gomMaConfirmations, activeSession.id, shelfLocationId);
     }
     // shelfLocked (MỚI, 12/2026) — CÙNG lý do shelfConfirmed/shelfKiemSoatConfirmed/shelfGomMaConfirmed ở
@@ -759,15 +771,13 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
   // ĐÂY Kiểm Soát không có Lớp 4 riêng (chỉ Kiểm Đếm có), nên 1 quầy kệ dù đã "xong" Kiểm Soát từ lâu vẫn
   // bị sửa được tới tận lúc cả Kỳ chốt — nay có cờ riêng để khoá SỚM từng quầy kệ, không phải đợi đóng Kỳ.
   if (mode === 'KIEM_DEM' && !opts?.skipConfirmedCheck) {
-    await ensureStocktakeKey('stocktakeShelfConfirmations');
-    const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
+    const confirmations = await getConfirmationsForSession('stocktakeShelfConfirmations', sessionId);
     if (isShelfConfirmed(confirmations, sessionId, shelfLocationId)) {
       throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận ở Tab "Xác Nhận" — không thể Kiểm Đếm tiếp (cần gỡ Xác Nhận trước nếu cần sửa)');
     }
   }
   if (mode === 'KIEM_SOAT' && !opts?.skipConfirmedCheck) {
-    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-    const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+    const soatConfirmations = await getConfirmationsForSession('stocktakeShelfKiemSoatConfirmations', sessionId);
     if (isShelfConfirmed(soatConfirmations, sessionId, shelfLocationId)) {
       throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Kiểm Soát ở Tab "Xác Nhận" — không thể Kiểm Soát tiếp (cần gỡ Xác Nhận Kiểm Soát trước nếu cần sửa)');
     }
@@ -776,8 +786,7 @@ async function assertStocktakeScanAllowed(req, mode, shelfLocationId, sessionId,
   // Nhận/Gỡ Xác Nhận — Gom Mã TRƯỚC ĐÂY hoàn toàn không có khái niệm khoá/Xác Nhận nào, nay thêm Lớp 4
   // riêng CÙNG khuôn Kiểm Đếm/Kiểm Soát để nhất quán cả 3 bước quét).
   if (mode === 'GOM_MA' && !opts?.skipConfirmedCheck) {
-    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
-    const gomMaConfirmations = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
+    const gomMaConfirmations = await getConfirmationsForSession('stocktakeShelfGomMaConfirmations', sessionId);
     if (isShelfConfirmed(gomMaConfirmations, sessionId, shelfLocationId)) {
       throw new HttpError(409, 'Quầy kệ này đã được Xác Nhận Gom Mã ở Tab "Xác Nhận" — không thể Gom Mã tiếp (cần gỡ Xác Nhận Gom Mã trước nếu cần sửa)');
     }
@@ -813,9 +822,9 @@ router.get('/counts', async (req, res) => {
       return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
     const shelfLocationId = req.query.shelfLocationId !== undefined ? Number(req.query.shelfLocationId) : null;
-    await ensureStocktakeKey('stocktakeCounts');
-    const all = (await getAppDataValue('stocktakeCounts')) || [];
-    const items = all.filter(c => c.sessionId === sessionId && (shelfLocationId === null || c.shelfLocationId === shelfLocationId));
+    const items = shelfLocationId === null
+      ? await getCountsForSession(sessionId)
+      : await getCountsForShelf(sessionId, shelfLocationId);
     res.json({ items });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/counts');
@@ -836,15 +845,10 @@ router.post('/counts/scan', async (req, res) => {
     // upsertScanCount()/lib/stocktakeEngine.js) — optional, client cũ/không gửi vẫn hoạt động như trước
     // (không bắt buộc field mới, chỉ KHÔNG có bảo vệ chống trùng cho riêng lượt đó).
     const clientScanId = req.body?.clientScanId ? String(req.body.clientScanId).trim().slice(0, 100) : '';
-    await ensureStocktakeKey('stocktakeCounts');
-    const saved = await withLockedAppDataValue('stocktakeCounts', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      const row = upsertScanCount(arr, req.body, {
-        dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`,
-        maVach: req.body?.maVach, tenHang: req.body?.tenHang
-      }, req.freshUser, clientScanId);
-      return arr;
-    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId && c.maHang === String(req.body?.maHang || '').trim()));
+    const saved = await upsertScanCountRow(req.body, {
+      dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}`,
+      maVach: req.body?.maVach, tenHang: req.body?.tenHang
+    }, req.freshUser, clientScanId);
     res.json({ item: saved });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/stocktake/counts/scan');
@@ -861,18 +865,11 @@ router.put('/counts/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await ensureStocktakeKey('stocktakeCounts');
     const mode = String(req.body?.mode || '').trim();
-    const existingAll = (await getAppDataValue('stocktakeCounts')) || [];
-    const existingRow = existingAll.find(c => c.id === id);
+    const existingRow = await getCountById(id);
     if (!existingRow) throw new HttpError(404, 'Không tìm thấy dòng kiểm kê');
     await assertStocktakeScanAllowed(req, mode, existingRow.shelfLocationId, existingRow.sessionId);
-    let updated = null;
-    await withLockedAppDataValue('stocktakeCounts', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      updated = editCountValue(arr, id, mode, req.body?.qty, req.freshUser);
-      return arr;
-    });
+    const updated = await editCountValueRow(id, mode, req.body?.qty, req.freshUser);
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PUT /api/stocktake/counts/:id');
@@ -884,13 +881,11 @@ router.delete('/counts/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await ensureStocktakeKey('stocktakeCounts');
     const mode = String(req.query?.mode || '').trim();
-    const existingAll = (await getAppDataValue('stocktakeCounts')) || [];
-    const existingRow = existingAll.find(c => c.id === id);
+    const existingRow = await getCountById(id);
     if (!existingRow) throw new HttpError(404, 'Không tìm thấy dòng kiểm kê');
     await assertStocktakeScanAllowed(req, mode, existingRow.shelfLocationId, existingRow.sessionId);
-    await withLockedAppDataValue('stocktakeCounts', (list) => deleteCountRow(Array.isArray(list) ? list : [], id));
+    await deleteCountRowById(id);
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/counts/:id');
@@ -915,9 +910,7 @@ router.get('/shelf-confirmations', async (req, res) => {
     if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
       return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
-    await ensureStocktakeKey('stocktakeShelfConfirmations');
-    const all = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
-    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+    res.json({ items: await getConfirmationsForSession('stocktakeShelfConfirmations', sessionId) });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/shelf-confirmations');
   }
@@ -934,12 +927,8 @@ router.post('/shelf-confirmations', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
     }
     const { loc } = await assertStocktakeScanAllowed(req, 'KIEM_DEM', shelfLocationId, sessionId, { skipConfirmedCheck: true });
-    await ensureStocktakeKey('stocktakeShelfConfirmations');
-    const saved = await withLockedAppDataValue('stocktakeShelfConfirmations', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
-      return arr;
-    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    const saved = await confirmShelfRow('stocktakeShelfConfirmations',
+      { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
     res.json({ item: saved });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/stocktake/shelf-confirmations');
@@ -953,12 +942,10 @@ router.delete('/shelf-confirmations/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await ensureStocktakeKey('stocktakeShelfConfirmations');
-    const existingAll = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
-    const existingRow = existingAll.find(c => c.id === id);
+    const existingRow = await getConfirmationById('stocktakeShelfConfirmations', id);
     if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
     await assertStocktakeScanAllowed(req, 'KIEM_DEM', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
-    await withLockedAppDataValue('stocktakeShelfConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    await unconfirmShelfRow('stocktakeShelfConfirmations', id);
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/shelf-confirmations/:id');
@@ -981,9 +968,7 @@ router.get('/shelf-kiem-soat-confirmations', async (req, res) => {
     if (!(await canViewStocktakeSessionData(req.freshUser, session))) {
       return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
     }
-    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-    const all = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
-    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+    res.json({ items: await getConfirmationsForSession('stocktakeShelfKiemSoatConfirmations', sessionId) });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/shelf-kiem-soat-confirmations');
   }
@@ -1000,12 +985,8 @@ router.post('/shelf-kiem-soat-confirmations', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
     }
     const { loc } = await assertStocktakeScanAllowed(req, 'KIEM_SOAT', shelfLocationId, sessionId, { skipConfirmedCheck: true });
-    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-    const saved = await withLockedAppDataValue('stocktakeShelfKiemSoatConfirmations', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
-      return arr;
-    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    const saved = await confirmShelfRow('stocktakeShelfKiemSoatConfirmations',
+      { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
     res.json({ item: saved });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/stocktake/shelf-kiem-soat-confirmations');
@@ -1019,12 +1000,10 @@ router.delete('/shelf-kiem-soat-confirmations/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-    const existingAll = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
-    const existingRow = existingAll.find(c => c.id === id);
+    const existingRow = await getConfirmationById('stocktakeShelfKiemSoatConfirmations', id);
     if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
     await assertStocktakeScanAllowed(req, 'KIEM_SOAT', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
-    await withLockedAppDataValue('stocktakeShelfKiemSoatConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    await unconfirmShelfRow('stocktakeShelfKiemSoatConfirmations', id);
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/shelf-kiem-soat-confirmations/:id');
@@ -1057,9 +1036,7 @@ router.get('/shelf-gom-ma-confirmations', async (req, res) => {
         return res.status(403).json({ error: 'Kỳ kiểm kê không thuộc siêu thị của bạn' });
       }
     }
-    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
-    const all = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
-    res.json({ items: all.filter(c => c.sessionId === sessionId) });
+    res.json({ items: await getConfirmationsForSession('stocktakeShelfGomMaConfirmations', sessionId) });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/shelf-gom-ma-confirmations');
   }
@@ -1077,12 +1054,8 @@ router.post('/shelf-gom-ma-confirmations', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu sessionId/shelfLocationId' });
     }
     const { loc } = await assertStocktakeScanAllowed(req, 'GOM_MA', shelfLocationId, sessionId, { skipConfirmedCheck: true });
-    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
-    const saved = await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      confirmShelf(arr, { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
-      return arr;
-    }).then(arr => arr.find(c => c.sessionId === sessionId && c.shelfLocationId === shelfLocationId));
+    const saved = await confirmShelfRow('stocktakeShelfGomMaConfirmations',
+      { sessionId, shelfLocationId, dept: loc.dept, shelfLocationLabel: `${loc.code} — ${loc.name}` }, req.freshUser);
     res.json({ item: saved });
   } catch (err) {
     sendCatchError(res, err, 'POST /api/stocktake/shelf-gom-ma-confirmations');
@@ -1096,12 +1069,10 @@ router.delete('/shelf-gom-ma-confirmations/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await ensureStocktakeKey('stocktakeShelfGomMaConfirmations');
-    const existingAll = (await getAppDataValue('stocktakeShelfGomMaConfirmations')) || [];
-    const existingRow = existingAll.find(c => c.id === id);
+    const existingRow = await getConfirmationById('stocktakeShelfGomMaConfirmations', id);
     if (!existingRow) throw new HttpError(404, 'Không tìm thấy xác nhận quầy kệ này');
     await assertStocktakeScanAllowed(req, 'GOM_MA', existingRow.shelfLocationId, existingRow.sessionId, { skipConfirmedCheck: true });
-    await withLockedAppDataValue('stocktakeShelfGomMaConfirmations', (list) => unconfirmShelf(Array.isArray(list) ? list : [], id));
+    await unconfirmShelfRow('stocktakeShelfGomMaConfirmations', id);
     res.json({ ok: true });
   } catch (err) {
     sendCatchError(res, err, 'DELETE /api/stocktake/shelf-gom-ma-confirmations/:id');
@@ -1137,12 +1108,9 @@ router.post('/sessions/:id/confirm-all', async (req, res) => {
     if (session.loaiKy !== LOAI_KY.THONG_KE) {
       return res.status(400).json({ error: 'Chỉ Xác Nhận Toàn Bộ Đợt được cho Kỳ Kiểm Kê' });
     }
-    await ensureStocktakeKey('stocktakeCounts');
-    await ensureStocktakeKey('stocktakeShelfConfirmations');
-    await ensureStocktakeKey('stocktakeShelfKiemSoatConfirmations');
-    const counts = (await getAppDataValue('stocktakeCounts')) || [];
-    const confirmations = (await getAppDataValue('stocktakeShelfConfirmations')) || [];
-    const soatConfirmations = (await getAppDataValue('stocktakeShelfKiemSoatConfirmations')) || [];
+    const counts = await getCountsForSession(id);
+    const confirmations = await getConfirmationsForSession('stocktakeShelfConfirmations', id);
+    const soatConfirmations = await getConfirmationsForSession('stocktakeShelfKiemSoatConfirmations', id);
     const unconfirmedIds = listUnconfirmedCountedShelfIds(counts, confirmations, id);
     const unconfirmedSoatIds = listUnconfirmedSoatedShelfIds(counts, soatConfirmations, id);
     if (unconfirmedIds.length || unconfirmedSoatIds.length) {
@@ -1273,8 +1241,44 @@ router.get('/report', async (req, res) => {
       console.error('⛔ GET /api/stocktake/report: lỗi kích hoạt đồng bộ ngầm tồn kho hệ thống —', err.message);
     });
 
-    await ensureStocktakeKey('stocktakeCounts');
-    const allCounts = (await getAppDataValue('stocktakeCounts')) || [];
+    // BƯỚC 8 (12/2026, tách stocktakeCounts khỏi AppData): route này CẦN counts của NHIỀU kỳ cùng lúc
+    // (kỳ chính + tối đa 6 kỳ So Sánh + MỖI siêu thị ở So Sánh Giữa Các Siêu Thị của Admin) — KHÔNG thể
+    // thay bằng getCountsForSession() (chỉ 1 kỳ). Xác định TRƯỚC tập hợp đầy đủ sessionId cần dùng (kỳ
+    // chính + kỳ so sánh hợp lệ + kỳ Thống Kê gần nhất của MỖI siêu thị Admin được xem, nếu có) rồi tải
+    // counts ĐÚNG 1 lượt bằng getCountsForSessions() (SQL WHERE SessionId IN (...)) — KHÔNG còn tải toàn
+    // bộ stocktakeCounts của MỌI kỳ/MỌI siêu thị/MỌI thời điểm như thiết kế AppData cũ. Logic xử lý
+    // allCounts bên dưới (computeSessionPrimaryRows/sumCountsByMaHang, đều tự lọc theo sessionId) GIỮ
+    // NGUYÊN VẸN, không đổi gì.
+    const neededSessionIds = new Set([sessionId]);
+    const compareSessionIdRaw0 = req.query.compareSessionId;
+    let compareIds = [];
+    if (compareSessionIdRaw0 !== undefined && String(compareSessionIdRaw0).trim() !== '') {
+      compareIds = String(compareSessionIdRaw0).split(',').map(s => s.trim()).filter(Boolean).map(Number);
+      if (!compareIds.length || compareIds.some(id => !Number.isFinite(id))) return res.status(400).json({ error: 'compareSessionId không hợp lệ' });
+      if (compareIds.length > 6) return res.status(400).json({ error: 'Chỉ so sánh tối đa 6 kỳ cùng lúc' });
+      for (const id of compareIds) {
+        const compareSession = sessions.find(s => s.id === id);
+        if (!compareSession) return res.status(404).json({ error: 'Không tìm thấy kỳ để so sánh' });
+        await assertCanViewSession(req, compareSession);
+        neededSessionIds.add(id);
+      }
+    }
+    let perDeptLatestThongKe = null;
+    if (req.freshUser.perms?.admin) {
+      const stores0 = (await getAppDataValue('stores')) || [];
+      const allowedDepts0 = resolveStocktakeReportableDepts(req.freshUser, stores0);
+      perDeptLatestThongKe = new Map();
+      sessions.forEach(s => {
+        if (s.loaiKy !== LOAI_KY.THONG_KE || !allowedDepts0.includes(s.dept)) return;
+        const existing = perDeptLatestThongKe.get(s.dept);
+        const better = !existing
+          || (s.trangThai === TRANG_THAI.DANG_HOAT_DONG && existing.trangThai !== TRANG_THAI.DANG_HOAT_DONG)
+          || (s.trangThai === existing.trangThai && s.id > existing.id);
+        if (better) perDeptLatestThongKe.set(s.dept, s);
+      });
+      perDeptLatestThongKe.forEach(s => neededSessionIds.add(s.id));
+    }
+    const allCounts = await getCountsForSessions([...neededSessionIds]);
 
     const systemMap = apiConfigured ? await getDeptSystemInventoryMap(session.dept, storeExternalCodes) : null;
 
@@ -1327,20 +1331,13 @@ router.get('/report', async (req, res) => {
     // đồ còn đọc được — bảng màu CVD-safe cố định phía client KHÔNG tự sinh thêm màu an toàn ngoài 6, xem
     // KK_REPORT_COLOR_COMPARE_PALETTE ở module-vanhanh.js). Mỗi kỳ vẫn qua ĐÚNG 1 lớp kiểm tra quyền xem
     // (assertCanViewSession) độc lập.
-    let compares = [];
-    const compareSessionIdRaw = req.query.compareSessionId;
-    if (compareSessionIdRaw !== undefined && String(compareSessionIdRaw).trim() !== '') {
-      const ids = String(compareSessionIdRaw).split(',').map(s => s.trim()).filter(Boolean).map(Number);
-      if (!ids.length || ids.some(id => !Number.isFinite(id))) return res.status(400).json({ error: 'compareSessionId không hợp lệ' });
-      if (ids.length > 6) return res.status(400).json({ error: 'Chỉ so sánh tối đa 6 kỳ cùng lúc' });
-      for (const id of ids) {
-        const compareSession = sessions.find(s => s.id === id);
-        if (!compareSession) return res.status(404).json({ error: 'Không tìm thấy kỳ để so sánh' });
-        await assertCanViewSession(req, compareSession);
-        const { rows: compareRows } = computeSessionPrimaryRows(compareSession, allCounts);
-        compares.push({ session: compareSession, rows: compareRows });
-      }
-    }
+    // compareIds đã được xác thực (tồn tại + đúng quyền xem) ở khối "neededSessionIds" phía trên — ở đây
+    // chỉ cần tính rows (cần allCounts đã tải xong).
+    const compares = compareIds.map(id => {
+      const compareSession = sessions.find(s => s.id === id);
+      const { rows: compareRows } = computeSessionPrimaryRows(compareSession, allCounts);
+      return { session: compareSession, rows: compareRows };
+    });
 
     // So sánh nhiều siêu thị (A7, biểu đồ 3) — CHỈ Admin (tài liệu đề xuất A3: "Chưa có khái niệm xem
     // chéo nhiều siêu thị cho Kiểm Kê ở Phase 1" với không-Admin). Độc lập với kỳ đang chọn ở trên — mỗi
@@ -1349,15 +1346,8 @@ router.get('/report', async (req, res) => {
     if (req.freshUser.perms?.admin) {
       const stores = (await getAppDataValue('stores')) || [];
       const allowedDepts = resolveStocktakeReportableDepts(req.freshUser, stores);
-      const perDeptLatestThongKe = new Map();
-      sessions.forEach(s => {
-        if (s.loaiKy !== LOAI_KY.THONG_KE || !allowedDepts.includes(s.dept)) return;
-        const existing = perDeptLatestThongKe.get(s.dept);
-        const better = !existing
-          || (s.trangThai === TRANG_THAI.DANG_HOAT_DONG && existing.trangThai !== TRANG_THAI.DANG_HOAT_DONG)
-          || (s.trangThai === existing.trangThai && s.id > existing.id);
-        if (better) perDeptLatestThongKe.set(s.dept, s);
-      });
+      // perDeptLatestThongKe ĐÃ được tính SẴN ở khối "neededSessionIds" phía trên (cần biết TRƯỚC khi
+      // tải allCounts) — dùng lại NGUYÊN, không tính lại lần 2.
       const allMaDiems = [...new Set(allowedDepts.map(d => storeExternalCodes[d]).filter(Boolean)
         .flatMap(raw => String(raw).split(',').map(s => s.trim()).filter(Boolean)))];
       const snapshotMap = apiConfigured && allMaDiems.length ? await getSnapshotMapForMaDiems(allMaDiems) : {};

@@ -8,6 +8,8 @@ const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('./
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
 const { migrateLegacyInventorySnapshot } = require('./lib/inventorySnapshotStore');
+const { migrateLegacyStocktakeCounts } = require('./lib/stocktakeCountsStore');
+const { migrateLegacyConfirmations } = require('./lib/stocktakeConfirmationsStore');
 const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
@@ -59,6 +61,13 @@ async function seedDefaults() {
   await migrateLegacySystemLogs();
   await migrateLegacyTasks();
   await migrateLegacyInventorySnapshot();
+  // BƯỚC 8 (12/2026, tách Kiểm Kê khỏi AppData — xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE
+  // TABLE dbo.StocktakeCounts): di trú dữ liệu CŨ (nếu còn) sang 4 bảng riêng, idempotent, KHÔNG xoá
+  // nguồn AppData cũ.
+  await migrateLegacyStocktakeCounts();
+  await migrateLegacyConfirmations('stocktakeShelfConfirmations');
+  await migrateLegacyConfirmations('stocktakeShelfGomMaConfirmations');
+  await migrateLegacyConfirmations('stocktakeShelfKiemSoatConfirmations');
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   // migrateApprovedOperationOrdersToAwaitingReceipt() — TẮT (xem chú thích đầy đủ tại định nghĩa hàm):

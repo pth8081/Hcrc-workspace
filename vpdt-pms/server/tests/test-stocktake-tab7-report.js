@@ -43,6 +43,31 @@ stubModule('lib/appData.js', {
     return appDataStore[key];
   }
 });
+// BƯỚC 8 (12/2026): stocktakeCounts/confirmations giờ đi qua lib/stocktakeCountsStore.js +
+// lib/stocktakeConfirmationsStore.js (bảng riêng, không còn qua lib/appData.js) — stub 2 file này bằng
+// bản in-memory TÁI DÙNG NGUYÊN các hàm thuần lib/stocktakeEngine.js (mutate đúng mảng appDataStore),
+// giữ 100% hành vi/logic nghiệp vụ như store thật, chỉ khác tầng lưu trữ (mảng JS thay vì SQL).
+const stocktakeEngine = require('../lib/stocktakeEngine');
+function ensureStoreArr(collection) {
+  if (!Array.isArray(appDataStore[collection])) appDataStore[collection] = [];
+  return appDataStore[collection];
+}
+stubModule('lib/stocktakeCountsStore.js', {
+  getCountsForSession: async (sessionId) => ensureStoreArr('stocktakeCounts').filter(r => r.sessionId === sessionId),
+  getCountsForShelf: async (sessionId, shelfLocationId) => ensureStoreArr('stocktakeCounts').filter(r => r.sessionId === sessionId && r.shelfLocationId === shelfLocationId),
+  getCountsForSessions: async (sessionIds) => { const ids = new Set(sessionIds || []); return ensureStoreArr('stocktakeCounts').filter(r => ids.has(r.sessionId)); },
+  getCountById: async (id) => ensureStoreArr('stocktakeCounts').find(r => r.id === id) || null,
+  getSessionIdsWithCounts: async (sessionIds) => { const ids = new Set(sessionIds || []); return new Set(ensureStoreArr('stocktakeCounts').filter(r => ids.has(r.sessionId)).map(r => r.sessionId)); },
+  upsertScanCountRow: async (input, extra, user, clientScanId) => stocktakeEngine.upsertScanCount(ensureStoreArr('stocktakeCounts'), input, extra, user, clientScanId),
+  editCountValueRow: async (id, mode, newQty, user) => stocktakeEngine.editCountValue(ensureStoreArr('stocktakeCounts'), id, mode, newQty, user),
+  deleteCountRowById: async (id) => { stocktakeEngine.deleteCountRow(ensureStoreArr('stocktakeCounts'), id); }
+});
+stubModule('lib/stocktakeConfirmationsStore.js', {
+  getConfirmationsForSession: async (collection, sessionId) => ensureStoreArr(collection).filter(r => r.sessionId === sessionId),
+  getConfirmationById: async (collection, id) => ensureStoreArr(collection).find(r => r.id === id) || null,
+  confirmShelfRow: async (collection, input, user) => stocktakeEngine.confirmShelf(ensureStoreArr(collection), input, user),
+  unconfirmShelfRow: async (collection, id) => { stocktakeEngine.unconfirmShelf(ensureStoreArr(collection), id); }
+});
 stubModule('lib/auth.js', {
   requireAuth: (req, res, next) => {
     const username = req.get('x-test-username');
