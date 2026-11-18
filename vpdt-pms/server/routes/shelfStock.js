@@ -237,21 +237,27 @@ router.delete('/records/:id', async (req, res) => {
 // lưu ở dbo.AppData (jobs/inventorySync.js, tự đồng bộ nền mỗi 20 phút, v28.84 CHUYỂN TỪ CACHE RAM SANG
 // CSDL để mọi tiến trình PM2 cluster đọc chung 1 nguồn).
 // 11/2026 (theo yêu cầu người dùng: "vào Đối Chiếu phải tự có dữ liệu mới, không chờ job nền, không phải
-// bấm Đồng Bộ Ngay"): route này giờ TỰ gọi syncSystemInventory({force:false}) TRƯỚC khi đọc snapshot —
-// hàm đó tự quyết định có thật sự gọi API đối tác hay không (so sánh lastSyncAt với syncIntervalMinutes
-// admin đã cấu hình, y hệt tick nền vẫn làm), nên KHÔNG làm tăng tổng số lần gọi đối tác so với trước —
-// chỉ đổi THỜI ĐIỂM kiểm tra "đã tới chu kỳ chưa" từ "chờ tick nền mỗi 5 phút" sang "ngay khi có người mở
-// Đối Chiếu", nên dữ liệu không còn cảm giác "chờ job" dù tổng tải lên đối tác không đổi. Đã khoá chống
-// nhiều request cùng lúc đều tự gọi đối tác (xem chú thích "giành chỗ" ở syncSystemInventory()). Lỗi đồng
-// bộ ở bước này (mạng/đối tác lỗi) KHÔNG được chặn hẳn việc xem Đối Chiếu — syncSystemInventory() tự nuốt
-// lỗi, trả về snapshot CŨ vẫn còn trong CSDL (đã có từ trước) thay vì làm hỏng cả yêu cầu xem màn hình.
+// bấm Đồng Bộ Ngay"): route này TỰ kích hoạt syncSystemInventory({force:false}) — hàm đó tự quyết định có
+// thật sự gọi API đối tác hay không (so sánh lastSyncAt với syncIntervalMinutes admin đã cấu hình, y hệt
+// tick nền vẫn làm), nên KHÔNG làm tăng tổng số lần gọi đối tác so với trước.
+// 12/2026 (theo phản hồi người dùng: "sao lâu thế, đồng bộ có lịch mà" — route BAN ĐẦU `await` lời gọi
+// này, khiến request của người dùng bị TREO CHỜ nguyên lượt gọi API đối tác thật (có thể vài giây tới cả
+// phút, nhiều trang) mỗi khi đúng lúc vừa tới chu kỳ, dù dữ liệu CŨ trong CSDL vẫn đọc được ngay lập tức):
+// đổi sang FIRE-AND-FORGET (không `await`, chỉ `.catch()` log lỗi) — route LUÔN đọc + trả về snapshot
+// ĐANG CÓ trong CSDL ngay, không chờ kết quả đồng bộ. syncSystemInventory() vẫn tự chạy nền y hệt cũ (vẫn
+// giữ cơ chế "giành chỗ" chống nhiều request cùng lúc đều tự gọi đối tác — xem chú thích ở hàm đó), chỉ
+// khác là KHÔNG còn chặn response của người đang chờ xem màn hình — lần mở Đối Chiếu/Tồn Kho kế tiếp mới
+// thấy dữ liệu vừa đồng bộ xong, đúng bản chất "xem dữ liệu đã có sẵn trong CSDL", không phải "chờ đồng bộ
+// xong rồi mới xem được".
 router.get('/system-inventory', async (req, res) => {
   try {
     if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
     }
     const effectiveUser = await getShelfEffectiveUserFromReq(req);
-    await syncSystemInventory({ force: false });
+    syncSystemInventory({ force: false }).catch((err) => {
+      console.error('⛔ GET /api/shelf-stock/system-inventory: lỗi kích hoạt đồng bộ ngầm —', err.message);
+    });
     const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
     const maDiem = storeExternalCodes[effectiveUser.dept];
     if (!maDiem) {
@@ -338,7 +344,11 @@ router.get('/system-inventory/report-all', async (req, res) => {
     const stores = (await getAppDataValue('stores')) || [];
     const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
     const allowedDepts = resolveShelfReportableDepts(user, stores);
-    await syncSystemInventory({ force: false });
+    // 12/2026: fire-and-forget — cùng lý do + khuôn tại GET /system-inventory ở trên (không chặn response
+    // chờ đồng bộ xong, LUÔN đọc snapshot đang có trong CSDL ngay).
+    syncSystemInventory({ force: false }).catch((err) => {
+      console.error('⛔ GET /api/shelf-stock/system-inventory/report-all: lỗi kích hoạt đồng bộ ngầm —', err.message);
+    });
     // 1 siêu thị có thể có NHIỀU Mã Điểm cách nhau dấu phẩy (sáp nhập 2 chi nhánh cũ — xem
     // getSystemInventoryForMaDiem() ở jobs/inventorySync.js) — gộp hết vào 1 Set rồi tra ĐÚNG 1 lượt.
     const deptCodes = new Map(); // dept -> [maDiem,...]

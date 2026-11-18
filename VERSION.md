@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**30.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**30.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v30.91 (2026-12): Kiểm Kê — vá sidebar thiếu tab "📦 Tồn Kho" + Tồn Kho Hệ Thống hết treo chờ đồng bộ
+
+Người dùng phản hồi TRỰC TIẾP kèm 2 ảnh chụp: "Sao bạn ko đưa tab kiểm kê ra slidebar" + "bạn kt cơ chế
+lấy tồn tại csdl thôi nhé, đồng bộ so api có lịch mà? Sao lâu thế?".
+
+- **Sidebar thiếu tab**: đợt thêm dropdown sidebar "📋 Kiểm Kê" (v30.8x) lỡ thiếu đúng 1 trong 9 tab con —
+  "📦 Tồn Kho" (có quyền `kiemKeInventoryView` trước đó không bấm thẳng từ sidebar được, phải tự vào
+  module rồi bấm tab). Bổ sung `btnKkNavInventory` vào `index.html` + `updateKiemKeNavVisibility()`/
+  `applyPermsToUI()` (core.js).
+- **Treo chờ đồng bộ**: 4 route tự-kích-hoạt `syncSystemInventory({force:false})` (Tab "📦 Tồn Kho" + Tab 7
+  "📊 Báo Cáo" bên Kiểm Kê, "📊 Đối Chiếu" + "📊 Báo Cáo — Tất cả siêu thị" bên Kiểm Soát Hàng Hóa) trước
+  đó `await` lời gọi này — đúng lúc vừa tới chu kỳ đồng bộ, request bị treo chờ nguyên lượt gọi API đối
+  tác thật. Đổi sang fire-and-forget (không `await`, chỉ `.catch()` log lỗi) — màn hình LUÔN đọc dữ liệu
+  đang có trong CSDL ngay, đồng bộ vẫn tự chạy ngầm như cũ.
+- Thêm test mới + mở rộng `test-kiemke-sidebar-dropdown.js`, `test-inventory-recon.js` (regression guard
+  chặn `await` quay lại) — chạy lại toàn bộ test liên quan, không có regression.
 
 ## v30.90 (2026-12): Người Dùng & Phân Quyền — tự động đồng bộ Email/Số điện thoại từ Hồ Sơ Nhân Sự
 

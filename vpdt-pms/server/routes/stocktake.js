@@ -1245,7 +1245,12 @@ router.get('/report', async (req, res) => {
 
     const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
     const apiConfigured = await isInventoryApiConfigured();
-    if (apiConfigured) await syncSystemInventory({ force: false });
+    // 12/2026 (theo phản hồi người dùng: "sao lâu thế, đồng bộ có lịch mà"): fire-and-forget — KHÔNG
+    // `await`, route LUÔN đọc snapshot đang có trong CSDL ngay, không chờ cả lượt gọi API đối tác thật khi
+    // đúng lúc vừa tới chu kỳ (xem chú thích đầy đủ tại GET /system-inventory ở shelfStock.js — cùng khuôn).
+    if (apiConfigured) syncSystemInventory({ force: false }).catch((err) => {
+      console.error('⛔ GET /api/stocktake/report: lỗi kích hoạt đồng bộ ngầm tồn kho hệ thống —', err.message);
+    });
 
     await ensureStocktakeKey('stocktakeCounts');
     const allCounts = (await getAppDataValue('stocktakeCounts')) || [];
@@ -1417,7 +1422,15 @@ router.get('/system-inventory', async (req, res) => {
     await ensureStocktakeKey('stocktakeUserAccess');
     const access = (await getAppDataValue('stocktakeUserAccess')) || [];
     const allowedDepts = resolveKiemKeInventoryDepts(user, stores, access);
-    await syncSystemInventory({ force: false });
+    // 12/2026 (theo phản hồi người dùng, kèm ảnh chụp tab "📦 Tồn Kho" đứng ở "Đang tải..." lâu: "sao bạn
+    // không đưa tab kiểm kê ra slidebar bạn kt cơ chế lấy tồn tại csdl thôi nhé, đồng bộ so api có lịch mà
+    // sao lâu thế?"): fire-and-forget — KHÔNG `await`, route LUÔN đọc snapshot đang có trong CSDL ngay,
+    // không chặn response chờ cả lượt gọi API đối tác thật (có thể nhiều trang, vài giây tới cả phút) khi
+    // đúng lúc vừa tới chu kỳ syncIntervalMinutes. syncSystemInventory() vẫn tự chạy nền + tự "giành chỗ"
+    // chống gọi trùng y hệt cũ (xem chú thích ở hàm đó) — chỉ khác là không còn bắt người xem tab này chờ.
+    syncSystemInventory({ force: false }).catch((err) => {
+      console.error('⛔ GET /api/stocktake/system-inventory: lỗi kích hoạt đồng bộ ngầm —', err.message);
+    });
     const deptCodes = new Map(); // dept -> [maDiem,...]
     const allCodes = new Set();
     for (const dept of allowedDepts) {

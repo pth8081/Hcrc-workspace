@@ -1,8 +1,10 @@
 // tests/test-kiemke-sidebar-dropdown.js — Playwright THẬT cho yêu cầu người dùng (12/2026): "muốn module
 // kiểm kê trong slide bar hiện ra các tab bên trong giống module vận hành". Sidebar "📋 Kiểm Kê" đổi từ
-// nút phẳng (bấm thẳng vào module) sang dropdown 8 tab con (CÙNG khuôn #vanHanhNavWrap), mỗi tab con
+// nút phẳng (bấm thẳng vào module) sang dropdown 9 tab con (CÙNG khuôn #vanHanhNavWrap), mỗi tab con
 // ẩn/hiện riêng theo ĐÚNG quyền tab đó — các hàm canDoStocktakeGomMaClient()/... CHUYỂN từ
 // module-vanhanh.js sang core.js để sidebar dùng được ngay khi đăng nhập (xem updateKiemKeNavVisibility()).
+// LỖI ĐÃ VÁ (12/2026, phản hồi người dùng kèm ảnh chụp sidebar): đợt đầu lỡ thiếu "📦 Tồn Kho" khỏi danh
+// sách 8 mục ban đầu — nay đủ 9, test dưới đây khớp theo đúng 9 mục thật.
 //
 // Chạy: node tests/test-kiemke-sidebar-dropdown.js
 'use strict';
@@ -18,8 +20,10 @@ async function main() {
   // (canSeeStocktakeShelfConfigTabClient OR cả 2 quyền) dù không có quyền CRUD quầy kệ.
   const IT_LOCK = { username: 'it.lock', name: 'IT Khoá Quầy Kệ', dept: DEPT, perms: { kiemKeShelfLockManage: true }, active: true, totpEnabled: true };
   const NO_PERM = { username: 'nv.khac', name: 'NV Không Liên Quan', dept: DEPT, perms: {}, active: true, totpEnabled: true };
+  // nv.inv: CHỈ kiemKeInventoryView — phải THẤY "📦 Tồn Kho" (xem canViewKkInventoryClient, core.js).
+  const STAFF_INV = { username: 'nv.inv', name: 'NV Xem Tồn Kho', dept: DEPT, perms: { kiemKeInventoryView: true }, active: true, totpEnabled: true };
 
-  const state = createMockState({ depts: [DEPT], stores: [DEPT], users: [ADMIN, STAFF_GOMMA, IT_LOCK, NO_PERM] });
+  const state = createMockState({ depts: [DEPT], stores: [DEPT], users: [ADMIN, STAFF_GOMMA, IT_LOCK, NO_PERM, STAFF_INV] });
 
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
@@ -55,8 +59,8 @@ async function main() {
       assertEqual(activeTabAfter, activeTabBefore, 'Bấm nút cha KHÔNG được tự chuyển tab nội dung chính');
     });
 
-    await run.run('Admin: đủ 8 mục con đều hiện trong dropdown', async () => {
-      const ids = ['btnKkNavPeriod', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess'];
+    await run.run('Admin: đủ 9 mục con đều hiện trong dropdown', async () => {
+      const ids = ['btnKkNavPeriod', 'btnKkNavInventory', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess'];
       for (const id of ids) {
         const hidden = await page.evaluate((i) => document.getElementById(i).classList.contains('hidden'), id);
         assert(!hidden, `Admin phải thấy mục ${id}`);
@@ -85,17 +89,33 @@ async function main() {
       assert(shelfActive, 'Phải chuyển đúng sang Cấu Hình Quầy Kệ dù trước đó đang ở Gom Mã (data-op-seq override đúng thứ tự)');
     });
 
+    // ===== nv.inv: CHỈ kiemKeInventoryView — phải thấy + bấm được "📦 Tồn Kho" =====
+    await page.evaluate(async (u) => { await proceedAfterAuth(u); }, STAFF_INV);
+
+    await run.run('nv.inv (CHỈ kiemKeInventoryView): THẤY "📦 Tồn Kho" trên sidebar, bấm vào đúng sub-tab INVENTORY', async () => {
+      const hidden = await page.evaluate(() => document.getElementById('btnKkNavInventory').classList.contains('hidden'));
+      assert(!hidden, 'Phải thấy mục Tồn Kho (có kiemKeInventoryView)');
+      await page.click('#btnKiemKeTab');
+      await page.waitForTimeout(100);
+      await page.click('#btnKkNavInventory');
+      await page.waitForTimeout(200);
+      const panelHidden = await page.evaluate(() => document.getElementById('kiemKeDropdownPanel').classList.contains('hidden'));
+      assert(panelHidden, 'Bấm mục con phải tự đóng dropdown lại');
+      const invActive = await page.evaluate(() => !document.getElementById('kkInventoryWrap').classList.contains('hidden'));
+      assert(invActive, 'Phải vào ĐÚNG sub-tab Tồn Kho (kkInventoryWrap hiện)');
+    });
+
     // ===== nv.gomma: CHỈ kiemKeGomMaDo — xác nhận "nút hiện nhưng bấm không được" KHÔNG xảy ra =====
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, STAFF_GOMMA);
 
-    await run.run('nv.gomma (CHỈ Gom Mã): CHỈ thấy "Kỳ Kiểm Kê" + "Gom Mã", 6 mục còn lại ẨN', async () => {
-      const visible = await page.evaluate(() => ['btnKkNavPeriod', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess']
+    await run.run('nv.gomma (CHỈ Gom Mã): CHỈ thấy "Kỳ Kiểm Kê" + "Gom Mã", 7 mục còn lại ẨN (kể cả "Tồn Kho")', async () => {
+      const visible = await page.evaluate(() => ['btnKkNavPeriod', 'btnKkNavInventory', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess']
         .reduce((acc, id) => { acc[id] = !document.getElementById(id).classList.contains('hidden'); return acc; }, {}));
       assert(visible.btnKkNavPeriod, 'Kỳ Kiểm Kê phải LUÔN hiện (bất kỳ quyền Kiểm Kê nào)');
       assert(visible.btnKkNavGomMa, 'Gom Mã phải hiện (có kiemKeGomMaDo)');
-      assert(!visible.btnKkNavKiemDem && !visible.btnKkNavKiemSoat && !visible.btnKkNavShelfConfig
+      assert(!visible.btnKkNavInventory && !visible.btnKkNavKiemDem && !visible.btnKkNavKiemSoat && !visible.btnKkNavShelfConfig
         && !visible.btnKkNavConfirm && !visible.btnKkNavReport && !visible.btnKkNavUserAccess,
-        `6 mục còn lại phải ẨN hết cho người chỉ có Gom Mã, thực tế: ${JSON.stringify(visible)}`);
+        `7 mục còn lại phải ẨN hết cho người chỉ có Gom Mã (không có kiemKeInventoryView), thực tế: ${JSON.stringify(visible)}`);
     });
 
     // ===== it.lock: CHỈ kiemKeShelfLockManage — phải THẤY "Cấu Hình Quầy Kệ" (đối xứng Tab 5 đã vá trước đó) =====

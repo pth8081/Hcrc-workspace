@@ -292,8 +292,9 @@
 
       <!-- Kiểm Kê — module TOP-LEVEL riêng (12/2026, PROMOTE khỏi sub-tab Vận Hành theo yêu cầu người
            dùng "chuyển kiểm kê thành module chính ở slide bar như vận hành, mua hàng"). ĐỔI sang dropdown
-           hiện 8 tab con ngay trên sidebar (12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong
-           slide bar hiện ra các tab bên trong giống module vận hành") — CÙNG khuôn #vanHanhNavWrap ở
+           hiện 9 tab con ngay trên sidebar (12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong
+           slide bar hiện ra các tab bên trong giống module vận hành" — ban đầu lỡ thiếu đúng 1 tab "📦 Tồn
+           Kho", đã bổ sung đủ 9) — CÙNG khuôn #vanHanhNavWrap ở
            trên: bấm nút cha mở/đóng panel, mỗi nút con dùng data-op-seq "đóng dropdown|chuyển tab|vào
            đúng sub-tab" (setKiemKeSubTab(), module-vanhanh.js). Mỗi nút con ẩn/hiện RIÊNG theo ĐÚNG quyền
            của tab đó (các hàm canDoStocktakeGomMaClient()/... đã CHUYỂN sang core.js để sidebar dùng được
@@ -306,6 +307,7 @@
         </button>
         <div id="kiemKeDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button id="btnKkNavPeriod" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(PERIOD)" class="hidden sidebar-subitem">📅 Kỳ Kiểm Kê</button>
+          <button id="btnKkNavInventory" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(INVENTORY)" class="hidden sidebar-subitem">📦 Tồn Kho</button>
           <button id="btnKkNavGomMa" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(GOMMA)" class="hidden sidebar-subitem">📷 Gom Mã</button>
           <button id="btnKkNavKiemDem" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(KIEMDEM)" class="hidden sidebar-subitem">🔢 Kiểm Đếm</button>
           <button id="btnKkNavKiemSoat" data-op-seq="closeKiemKeDropdown()|switchTab(kiemKe)|setKiemKeSubTab(KIEMSOAT)" class="hidden sidebar-subitem">🛡️ Kiểm Soát</button>

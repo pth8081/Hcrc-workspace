@@ -3817,6 +3817,27 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   - **Offline**: tab tự lưu lại kết quả lần xem gần nhất vào máy — mất
     mạng vẫn xem được số liệu cũ (có ghi rõ "🔌 Ngoại tuyến — dữ liệu lúc
     ..." để biết là số liệu có thể chưa phải mới nhất).
+  - **LỖI ĐÃ VÁ (12/2026, phản hồi người dùng kèm ảnh chụp sidebar)**: đợt
+    thêm dropdown sidebar "📋 Kiểm Kê" (xem mục "Sidebar" ở đầu phần Kiểm
+    Kê) lỡ THIẾU đúng tab "📦 Tồn Kho" khỏi danh sách 8 mục con ban đầu —
+    người có quyền `kiemKeInventoryView` trước đó phải vào module rồi tự
+    bấm đúng tab mới xem được, không bấm thẳng từ sidebar được. Đã bổ sung
+    đủ 9 mục con (thêm "📦 Tồn Kho" ngay sau "📅 Kỳ Kiểm Kê", đúng thứ tự
+    tab thật).
+  - **LỖI HIỆU NĂNG ĐÃ VÁ (12/2026, phản hồi người dùng: "sao lâu thế, đồng
+    bộ có lịch mà")**: tab này (và "📊 Đối Chiếu" bên Kiểm Soát Hàng Hóa,
+    cùng cơ chế) TRƯỚC ĐÂY `await` lời gọi tự-kích-hoạt đồng bộ
+    (`syncSystemInventory({force:false})`) TRƯỚC khi đọc dữ liệu — đúng lúc
+    vừa tới chu kỳ đồng bộ (`syncIntervalMinutes` ở "🧺 Cấu Hình API Tồn
+    Kho"), request của người xem màn hình bị TREO CHỜ nguyên lượt gọi API
+    đối tác thật (nhiều trang, có thể vài giây tới cả phút) dù dữ liệu CŨ
+    vẫn đang có sẵn trong CSDL. Nay đổi sang chạy NỀN (fire-and-forget,
+    không chờ kết quả) — màn hình LUÔN đọc + hiện dữ liệu đang có trong
+    CSDL ngay lập tức; nếu đúng lúc vừa tới chu kỳ, đồng bộ vẫn tự chạy
+    ngầm như cũ, chỉ là lần xem SAU mới thấy dữ liệu mới hơn thay vì phải
+    chờ ngay lần này. Áp dụng cho CẢ 4 điểm gọi: Tab "📦 Tồn Kho" (Kiểm Kê),
+    Tab 7 "📊 Báo Cáo" (Kiểm Kê, cột Tồn Kho Hệ Thống), "📊 Đối Chiếu" + "📊
+    Báo Cáo — Tất cả siêu thị" (Kiểm Soát Hàng Hóa).
 - **Tab 8 "🔑 Cấu Hình Người Dùng" (12/2026)**: trước khi dùng được Tab 2/3
   dưới đây, Admin/người có quyền "🔑 Tab 8: Cấu Hình Người Dùng" phải vào
   đây GÁN TRƯỚC cho từng người: được thao tác Gom Mã/Kiểm Đếm/Kiểm Soát ở

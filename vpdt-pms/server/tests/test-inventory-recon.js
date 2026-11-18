@@ -542,6 +542,17 @@ async function main() {
     assert.ok(syncIdx < readIdx, 'phải gọi syncSystemInventory() TRƯỚC khi đọc snapshot, để người mở Đối Chiếu thấy dữ liệu MỚI ngay nếu đã tới chu kỳ, không phải đợi lần tải sau');
   });
 
+  await test('12/2026 (theo phản hồi người dùng "sao lâu thế, đồng bộ có lịch mà" — route trước đó `await` lời gọi syncSystemInventory() khiến request TREO CHỜ nguyên lượt gọi API đối tác thật mỗi khi đúng lúc vừa tới chu kỳ): route PHẢI gọi FIRE-AND-FORGET (KHÔNG `await`) — regression guard, không được âm thầm thêm `await` lại', async () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'shelfStock.js'), 'utf8');
+    const start = src.indexOf("router.get('/system-inventory'");
+    const end = src.indexOf('\n});', start);
+    const handlerSrc = src.slice(start, end);
+    assert.ok(!/await\s+syncSystemInventory\(/.test(handlerSrc),
+      'LỖI HIỆU NĂNG: route lại `await` syncSystemInventory() — sẽ treo chờ request của người dùng mỗi khi đúng lúc vừa tới chu kỳ đồng bộ (đã sửa 12/2026, không được quay lại)');
+    assert.ok(/syncSystemInventory\(\s*\{\s*force:\s*false\s*\}\s*\)\.catch\(/.test(handlerSrc),
+      'route phải gọi syncSystemInventory({force:false}).catch(...) — fire-and-forget có bắt lỗi, tránh unhandled rejection');
+  });
+
   console.log(`\n==== ${passed}/${passed + failed} scenario(s) passed ====`);
   process.exitCode = failed ? 1 : 0;
 }

@@ -10901,6 +10901,7 @@ function applyNavVisibility(user) {
   // chú thích renderKkPeriodList()/loadKkPeriodSessions() — mọi vai trò đều cần biết kỳ nào đang hoạt
   // động), không có quyền riêng của chính nó.
   document.getElementById('btnKkNavPeriod').classList.toggle('hidden', !canAccessStocktakeModule(user));
+  document.getElementById('btnKkNavInventory').classList.toggle('hidden', !canViewKkInventoryClient(user));
   document.getElementById('btnKkNavGomMa').classList.toggle('hidden', !canDoStocktakeGomMaClient(user));
   document.getElementById('btnKkNavKiemDem').classList.toggle('hidden', !canDoStocktakeKiemDemClient(user));
   document.getElementById('btnKkNavKiemSoat').classList.toggle('hidden', !canDoStocktakeKiemSoatClient(user));
@@ -11552,11 +11553,16 @@ document.addEventListener('click', (ev) => {
 });
 
 // "Kiểm Kê" (📋, 12/2026, theo yêu cầu người dùng "muốn module kiểm kê trong slide bar hiện ra các tab
-// bên trong giống module vận hành") — CÙNG khuôn dropdown "Vận Hành" ngay trên: bọc 8 tab con (module
+// bên trong giống module vận hành") — CÙNG khuôn dropdown "Vận Hành" ngay trên: bọc 9 tab con (module
 // "kiemKe", xem HTML #kiemKeNavWrap), mỗi nút con ẩn/hiện riêng theo đúng quyền tab đó (xem
-// applyPermsToUI() ở trên) — dropdown cha chỉ hiện khi có ÍT NHẤT 1 trong 8 tab con hiện.
+// applyPermsToUI() ở trên) — dropdown cha chỉ hiện khi có ÍT NHẤT 1 trong 9 tab con hiện.
+// LỖI ĐÃ VÁ (12/2026, phát hiện qua phản hồi người dùng kèm ảnh chụp sidebar: "sao bạn không đưa tab
+// kiểm kê ra slidebar" — đúng ra ĐÃ đưa, chỉ THIẾU đúng 1 tab con "📦 Tồn Kho" trong danh sách này dù tab
+// đó tồn tại thật ở setKiemKeSubTab()/module-vanhanh.js từ trước — chỉ bị bỏ sót lúc thêm dropdown này):
+// thêm 'btnKkNavInventory' vào subItemIds, khớp đúng 9 sub-tab thật (PERIOD/INVENTORY/GOMMA/KIEMDEM/
+// KIEMSOAT/SHELFCONFIG/CONFIRM/REPORT/USERACCESS) đang có ở setKiemKeSubTab().
 function updateKiemKeNavVisibility() {
-  const subItemIds = ['btnKkNavPeriod', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess'];
+  const subItemIds = ['btnKkNavPeriod', 'btnKkNavInventory', 'btnKkNavGomMa', 'btnKkNavKiemDem', 'btnKkNavKiemSoat', 'btnKkNavShelfConfig', 'btnKkNavConfirm', 'btnKkNavReport', 'btnKkNavUserAccess'];
   const anyVisible = subItemIds.some((id) => !document.getElementById(id).classList.contains('hidden'));
   document.getElementById('kiemKeNavWrap').classList.toggle('hidden', !anyVisible);
 }
