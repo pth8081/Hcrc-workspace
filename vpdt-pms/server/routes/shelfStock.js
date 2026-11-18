@@ -53,17 +53,19 @@ router.patch('/locations/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const effectiveUser = await getShelfEffectiveUserFromReq(req);
-    // Tự khoá TRỰC TIẾP qua withLockedAppDataValue (thay vì withLockedRecordForCollection(), vốn chỉ
-    // truyền ĐÚNG 1 bản ghi cho mutatorFn) để applyShelfLocationEdit() có NGUYÊN mảng đang khoá, tự kiểm
-    // trùng Mã Quầy Kệ (nếu đổi) trong CÙNG giao dịch khoá — xem chú thích đầy đủ tại hàm đó.
-    let updated;
-    await withLockedAppDataValue('shelfLocations', (list) => {
-      const arr = Array.isArray(list) ? list : [];
-      const idx = arr.findIndex(it => it.id === id);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-      updated = applyShelfLocationEdit(arr[idx], req.body, effectiveUser, arr);
-      arr[idx] = updated;
-      return arr;
+    // BƯỚC 8 (12/2026): shelfLocations đã "tốt nghiệp" bảng riêng dbo.ShelfLocations (xem
+    // lib/recordStore.js DEDICATED_TABLES.shelfLocations) — LỖI ĐÃ VÁ (audit chéo trước merge phát hiện):
+    // route này SÓT LẠI, vẫn gọi withLockedAppDataValue('shelfLocations', ...) cũ, khiến bản sửa chỉ ghi
+    // vào dòng AppData đã mồ côi (không còn ai đọc) — quầy kệ tạo SAU khi migrate thì PATCH báo 404 ngay
+    // (không có trong mảng AppData cũ), quầy kệ tạo TRƯỚC khi migrate thì PATCH "thành công" nhưng mất
+    // tích (list/dup-check/delete đều đã đọc từ bảng mới). Khoá ĐÚNG 1 dòng theo id qua
+    // withLockedRecordForCollection() (CÙNG khuôn lib/kiemKeShelfLocationsStore.js::editShelfLocationRow()
+    // cho collection song sinh bên Kiểm Kê) — applyShelfLocationEdit() vẫn cần NGUYÊN danh sách để tự kiểm
+    // trùng Mã Quầy Kệ, tải qua getAllForCollection() (CÙNG mảng đầy đủ như withLockedAppDataValue cũ
+    // từng truyền, không thu hẹp theo dept — giữ ĐÚNG hành vi cũ).
+    const updated = await withLockedRecordForCollection('shelfLocations', id, async (item) => {
+      const allLocations = await getAllForCollection('shelfLocations');
+      return applyShelfLocationEdit(item, req.body, effectiveUser, allLocations);
     });
     res.json({ item: updated });
   } catch (err) {
