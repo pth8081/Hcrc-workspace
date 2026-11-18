@@ -406,6 +406,12 @@ function editUser(id) {
   document.getElementById('uIsDriver').checked = !!user.isDriver;
   document.getElementById('uMaxConcurrentSessions').value = user.maxConcurrentSessions || '';
   document.getElementById('uStartDate').value = user.startDate || '';
+  // syncHrFieldsOnEditOpen() (MỚI, 12/2026, theo yêu cầu người dùng — xem chú thích đầy đủ tại định nghĩa
+  // hàm, module-admin-submissiongroups.js): mở Sửa 1 tài khoản đã có, tự đối chiếu Email/SĐT/Ngày Vào Làm
+  // Việc (3 ô vừa populate ở trên) với Hồ Sơ Nhân Sự/Onboarding — trống thì tự điền luôn, có rồi mà khác
+  // thì hỏi trước khi ghi đè. Fire-and-forget (CÙNG khuôn ensureHrLinkedUsernamesLoaded() ngay dưới) —
+  // không chặn phần còn lại của editUser() chạy tiếp trong lúc chờ 2 lượt fetch.
+  syncHrFieldsOnEditOpen(user);
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy
   // đổi tạm sang mảng 1 phần tử để form luôn hiển thị đúng (initDatabase() đã tự động di trú DB.users
   // khi tải dữ liệu, đây chỉ là lớp phòng vệ bổ sung).

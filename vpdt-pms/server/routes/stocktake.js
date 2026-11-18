@@ -126,7 +126,18 @@ router.get('/sessions', async (req, res) => {
     const scope = String(req.query.scope || '').trim();
     let allowedDepts = null;
     let dept = req.freshUser.dept;
-    if (scope === 'report') {
+    // scope=manage-all (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "Tôi muốn chọn all siêu thị...
+    // chọn all siêu thị đang có kỳ kiểm kê không phải vào từng siêu thị để chọn" — có nhiều kỳ Nháp rác
+    // rải rác ở 34 siêu thị khác nhau, trước đây phải đổi ô "📍 Siêu thị:" từng cái một mới dọn được).
+    // CHỈ Admin (không mở rộng cho người chỉ có kiemKePeriodManage/canCloseStocktakePeriodForDept — xem
+    // đúng tinh thần chặt hơn hẳn "xem/dọn TOÀN BỘ siêu thị cùng lúc" so với "xem/thao tác đúng phạm vi
+    // mình quản lý" — KHÁC scope=report, vốn còn mở cho kiemKeReportView không-Admin) — trả THẲNG mọi kỳ,
+    // KHÔNG lọc theo dept nào (allDepts=true, xử lý riêng ở bước filter ngay dưới).
+    let allDepts = false;
+    if (scope === 'manage-all') {
+      if (!req.freshUser.perms?.admin) return res.status(403).json({ error: 'Chỉ Admin được xem Kỳ Kiểm Kê của TẤT CẢ siêu thị cùng lúc' });
+      allDepts = true;
+    } else if (scope === 'report') {
       const stores = (await getAppDataValue('stores')) || [];
       const access = await getAllUserAccess();
       allowedDepts = resolveKiemKeInventoryDepts(req.freshUser, stores, access);
@@ -145,7 +156,9 @@ router.get('/sessions', async (req, res) => {
     // CHUẨN HOÁ thay vì `===` thô, phòng dữ liệu cũ lệch khoảng trắng/cách biểu diễn Unicode dấu tiếng
     // Việt so với tên hiện tại trong danh mục Siêu Thị — tránh kỳ cũ bị "vô hình" ở đúng view lọc 1 siêu
     // thị này dù vẫn còn tồn tại thật (gây nghịch lý với ô loại trừ lúc Tạo Kỳ Mới, vốn không so khớp dept).
-    const filtered = allowedDepts ? all.filter(s => allowedDepts.some(d => sameDept(d, s.dept))) : all.filter(s => sameDept(s.dept, dept));
+    const filtered = allDepts ? all
+      : allowedDepts ? all.filter(s => allowedDepts.some(d => sameDept(d, s.dept)))
+      : all.filter(s => sameDept(s.dept, dept));
     // batchSiblingCount (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "chỗ này hơi sai logic
     // khi tôi tạo kỳ kiểm kê tôi chỉ cần chọn nhiều st... mặc định các siêu thị đó ở trong 1 kỳ, không phải
     // chọn 1 siêu thị lại ra kỳ như bên dưới") — CHỈ sửa phần HIỂN THỊ theo đúng xác nhận của người dùng,

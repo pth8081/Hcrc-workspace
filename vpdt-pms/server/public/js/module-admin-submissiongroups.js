@@ -1083,6 +1083,59 @@ async function suggestStartDateFromOnboarding() {
   if (picked) document.getElementById('uStartDate').value = picked.startDate;
 }
 
+// syncHrFieldsOnEditOpen(user) — MỚI (12/2026, theo phản hồi TRỰC TIẾP người dùng kèm ảnh chụp form Sửa
+// 1 tài khoản: "tôi đang yêu cầu nếu tôi không nhập thì lấy tự động từ hồ sơ nhân sự hoặc onboarding sau
+// giờ chưa tự động? ... cho tôi thêm một chức năng cập nhật ngày vào, email và số điện thoại từ hồ sơ
+// nhân sự (nếu trường nào đang trống thì cho phép cập nhật, trường nào có rồi thì phải hỏi để nếu ghi đè
+// thì ghi, không thì thôi)"). Gốc rễ ĐÚNG như người dùng nghi ngờ: autoFillStartDateFromOnboarding()/
+// autoFillContactFromHrProfile() ở trên CHỈ chạy qua data-op-change gắn trên #uFullName/#uEmail — nghĩa
+// là CHỈ kích hoạt khi admin TỰ GÕ vào 2 ô đó (sự kiện "change" thật của trình duyệt). editUser() (module-
+// admin-userstaging.js) populate form bằng JS (`input.value = ...`) khi mở Sửa 1 tài khoản ĐÃ CÓ sẵn —
+// gán giá trị bằng JS KHÔNG bắn sự kiện "change", nên 2 hàm tự động trên không bao giờ chạy trong tình
+// huống phổ biến nhất (mở Sửa 1 người dùng cũ). Hàm này gọi RIÊNG ngay sau khi editUser() populate xong
+// form — dùng LẠI đúng 2 nguồn tra cứu đã có (findEmployeeContactCandidates/findStartDateCandidates),
+// nhưng khác autoFill*() ở điểm người dùng vừa yêu cầu: ô ĐÃ có giá trị KHÁC với gợi ý tìm được thì hỏi 1
+// lần (gộp chung mọi trường lệch vào 1 hộp thoại, không hỏi riêng từng trường) thay vì bỏ qua im lặng.
+async function syncHrFieldsOnEditOpen(user) {
+  const emailInput = document.getElementById('uEmail');
+  const phoneInput = document.getElementById('uPhone');
+  const startDateInput = document.getElementById('uStartDate');
+  if (!emailInput || !phoneInput || !startDateInput) return;
+  const username = user.username || '';
+  const name = (user.name || '').trim().toLowerCase();
+  const email = (user.email || '').trim().toLowerCase();
+
+  const [contactCandidates, startDateResult] = await Promise.all([
+    findEmployeeContactCandidates(username, name),
+    findStartDateCandidates(username, email, name)
+  ]);
+  // Guard: admin có thể đã chuyển sang Sửa người KHÁC (hoặc đóng form) trong lúc đang chờ 2 lượt fetch ở
+  // trên — bỏ qua nếu form không còn đúng đang hiện username này nữa (CÙNG guard đã dùng ở editUser()).
+  if (document.getElementById('uUsername')?.value !== username) return;
+
+  const contact = contactCandidates.length === 1 ? contactCandidates[0] : null;
+  const startDateCandidate = startDateResult.candidates.length === 1 ? startDateResult.candidates[0] : null;
+
+  const changes = []; // {input, label, oldValue, newValue} — CHỈ các trường ĐÃ có giá trị KHÁC gợi ý
+  const applyOrQueue = (input, label, newValue) => {
+    if (!newValue) return;
+    const current = (input.value || '').trim();
+    if (!current) { input.value = newValue; return; } // trống -> tự điền luôn, không cần hỏi gì cả
+    if (current === String(newValue).trim()) return; // đã đúng sẵn -> không có gì để hỏi
+    changes.push({ input, label, oldValue: current, newValue });
+  };
+  if (contact) {
+    applyOrQueue(emailInput, 'Email', contact.workEmail);
+    applyOrQueue(phoneInput, 'Số điện thoại', contact.contactPhone);
+  }
+  if (startDateCandidate) applyOrQueue(startDateInput, 'Ngày Vào Làm Việc', startDateCandidate.startDate);
+
+  if (!changes.length) return;
+  const lines = changes.map(c => `- ${c.label}: "${c.oldValue}" → "${c.newValue}"`).join('\n');
+  const ok = confirm(`Hồ Sơ Nhân Sự/Onboarding đang có dữ liệu KHÁC với các trường sau của tài khoản này:\n\n${lines}\n\nGhi đè theo Hồ Sơ Nhân Sự/Onboarding?`);
+  if (ok) changes.forEach(c => { c.input.value = c.newValue; });
+}
+
 function readUserFormState() {
   const editId = document.getElementById('editUserId').value;
   const username = document.getElementById('uUsername').value.trim();
