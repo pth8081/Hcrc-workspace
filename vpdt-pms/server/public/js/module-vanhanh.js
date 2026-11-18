@@ -3256,9 +3256,13 @@ async function renderKkNewStoresPicker() {
     if (res.ok) blockedItems = Array.isArray(data.items) ? data.items : [];
   } catch (err) { /* lỗi mạng — không chặn, chỉ không loại được siêu thị nào (an toàn hơn cho phép tạo
     nhầm hơn là chặn hẳn không tạo được kỳ nào — server vẫn tự chặn lại ở buildNewSession() nếu có). */ }
-  const blockedDepts = new Set(blockedItems.map(it => it.dept));
+  // So khớp CHUẨN HOÁ (NFC + gộp khoảng trắng + trim) thay vì Set.has() thô — cùng lý do/khuôn sameDept()
+  // ở lib/stocktakeEngine.js (xem chú thích đầy đủ tại đó): dữ liệu kỳ cũ có thể lưu tên siêu thị lệch 1
+  // chút Unicode so với danh mục hiện tại, nhìn giống hệt nhau nhưng so khớp thô ra sai kết quả.
+  const normKkDept = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  const blockedDeptsNorm = new Set(blockedItems.map(it => normKkDept(it.dept)));
   const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-  const selectableStores = stores.filter(s => !blockedDepts.has(s));
+  const selectableStores = stores.filter(s => !blockedDeptsNorm.has(normKkDept(s)));
   renderMultiSelectDropdown('kkNewStoresMultiSelect', selectableStores, [], {
     placeholder: '🔍 Tìm siêu thị để thêm...',
     emptyText: 'Chưa chọn siêu thị nào.'
@@ -5889,16 +5893,33 @@ function renderKkOfflineModeBar() {
     countEl.textContent = pendingTotal ? `⏳ ${pendingTotal} lượt đang chờ đồng bộ` : '';
   }
 }
-// renderKkCurrentDeptBadge() (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "khi vào màn hình kiểm kê
-// ấy, người dùng được phân quyền vào siêu thị nào ấy, thì nó phải có một cái nút là bạn đang ở siêu thị
-// nào, để sau này tôi sẽ xác nhận mọi người vào đúng siêu thị của mọi người chưa") — hiện LUÔN, bất kể
-// đang ở sub-tab nào của Kiểm Kê (CÙNG khuôn kkOfflineModeBar), đọc ĐÚNG kkEffectiveDept() (siêu thị đang
-// chọn ở Tab 1/5, hoặc siêu thị hồ sơ của chính người đó nếu chưa từng đổi) — gọi ở đầu setKiemKeSubTab()
-// (mỗi lần chuyển tab) + ngay sau khi kkPeriodDeptSelected đổi (onKkPeriodDeptInputChanged()/
-// onKkShelfConfigDeptInputChanged()) để LUÔN khớp đúng thực tế, không bị trễ 1 nhịp.
+// renderKkCurrentDeptBadge() (12/2026, theo yêu cầu TRỰC TIẾP người dùng: "khi vào màn hình kiểm kê ấy,
+// người dùng được phân quyền vào siêu thị nào ấy, thì nó phải có một cái nút là bạn đang ở siêu thị nào,
+// để sau này tôi sẽ xác nhận mọi người vào đúng siêu thị của mọi người chưa") — ban đầu hiện LUÔN cho MỌI
+// người, kể cả admin/người được chọn nhiều siêu thị.
+//
+// LỖI THẬT ĐÃ VÁ (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "tôi là admin và tôi đang chưa
+// chọn siêu thị nào mà lại ghi ở siêu thị IT?"): với người CHỌN ĐƯỢC NHIỀU siêu thị (admin/được gán quyền
+// theo siêu thị), kkEffectiveDept() rơi về `currentUser.dept` hồ sơ cá nhân (VD tài khoản admin/IT có
+// dept="IT Siêu thị" — vốn chỉ là 1 giá trị placeholder cho tài khoản không gắn hẳn 1 siêu thị bán lẻ nào,
+// KHÔNG phải "siêu thị đang thao tác" thật) — badge tuyên bố chắc nịch "Bạn đang ở Siêu Thị: IT Siêu thị"
+// dù người dùng CHƯA hề bấm chọn gì, gây hiểu nhầm nghiêm trọng (tưởng nhầm hệ thống tự gán sai). Mục
+// đích gốc của badge ("xác nhận mọi người vào ĐÚNG siêu thị của mọi người") chỉ có ý nghĩa với NHÂN VIÊN
+// cố định 1 siêu thị — với người chọn được nhiều siêu thị, ô "📍 Siêu thị:" (kkPeriodDeptRow) NGAY DƯỚI đã
+// là nguồn-sự-thật duy nhất cho lựa chọn hiện tại, không cần thêm 1 badge tuyên bố riêng dễ gây hiểu nhầm
+// — ẩn hẳn badge cho nhóm này, CÙNG cách renderVanHanhShelfStoreHeader() (Kiểm Soát Hàng Hóa) đã ẩn khối
+// "📍 Siêu Thị: ..." tĩnh cho admin/shelfAnyStoreAccess, chỉ còn lại đúng 1 ô chọn, không có tuyên bố nào
+// cạnh tranh — tham khảo/đồng bộ đúng theo khuôn đó (người dùng chỉ ra trực tiếp "cần giống như Kiểm Soát
+// Hàng Hóa"). Hiện LUÔN, bất kể đang ở sub-tab nào của Kiểm Kê (CÙNG khuôn kkOfflineModeBar) — gọi ở đầu
+// setKiemKeSubTab() (mỗi lần chuyển tab) + ngay sau khi kkPeriodDeptSelected đổi
+// (onKkPeriodDeptInputChanged()/onKkShelfConfigDeptInputChanged()) để LUÔN khớp đúng thực tế, không bị
+// trễ 1 nhịp.
 function renderKkCurrentDeptBadge() {
   const el = document.getElementById('kkCurrentDeptBadge');
   if (!el) return;
+  const multiStore = kkSelectableDepts(currentUser).length > 1;
+  el.classList.toggle('hidden', multiStore);
+  if (multiStore) return;
   el.textContent = `📍 Bạn đang ở Siêu Thị: ${kkEffectiveDept() || '(chưa rõ)'}`;
 }
 
