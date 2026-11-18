@@ -2387,6 +2387,7 @@ function renderKkReportDeptPicker(allowedDepts) {
     renderMultiSelectDropdown('kkReportDeptMultiSelect', allowedDepts, initialSelected, {
       placeholder: '🔍 Tìm siêu thị (chọn được nhiều)...',
       emptyText: 'Chưa chọn siêu thị nào — chọn ít nhất 1 để xem báo cáo.',
+      allToggle: true,
       onChange: () => { kkReportDeptsSelected = getMultiSelectValues('kkReportDeptMultiSelect'); renderKkReportSessionDropdown(); }
     });
   } else {
@@ -3002,6 +3003,7 @@ function renderKkInventoryStoreOptions() {
   renderMultiSelectDropdown('kkInventoryStoreMultiSelect', depts, initialSelected, {
     placeholder: 'Tìm siêu thị...',
     emptyText: 'Chưa chọn siêu thị nào — chọn ít nhất 1 để xem tồn kho.',
+    allToggle: true,
     onChange: () => renderKkInventoryStoresBody()
   });
   renderKkInventoryStoresBody();

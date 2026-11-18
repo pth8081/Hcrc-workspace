@@ -16070,23 +16070,47 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
   const hoverClass = opts.hoverClass || 'hover:bg-rose-50';
   const placeholder = opts.placeholder || 'Tìm để thêm...';
   const emptyText = opts.emptyText || 'Chưa chọn.';
+  // allToggle (MỚI, 12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp ô "Siêu thị" Kiểm Kê liệt kê ~30
+  // chip cùng lúc: "bạn để cho tôi tự chọn có nút all là tất cả siêu thị hoặc tôi có thể chọn từng siêu
+  // thị nhé, bạn lại chọn all kiểu liệt kê ntn ko đúng") — CỜ TỰ CHỌN (mặc định TẮT, KHÔNG đổi hành vi ~30
+  // nơi khác đang dùng widget này, VD Nhóm Quyền Đặc Biệt/Vị Trí Tham Gia Quy Trình) — bật ĐÚNG ở các ô
+  // chọn "siêu thị" của Kiểm Kê (kkReportDeptMultiSelect/kkInventoryStoreMultiSelect) có initialSelected
+  // mặc định = TOÀN BỘ danh sách. Khi bật VÀ đang chọn TRỌN VẸN tất cả item: gộp chip lại thành 1 badge
+  // "✅ Tất cả (N)" (bấm × để bỏ chọn tất cả, tự chọn lại từng mục) thay vì liệt kê N chip riêng lẻ; đồng
+  // thời hiện 1 nút "✅ Chọn Tất Cả" phía trên khi CHƯA chọn đủ, bấm là chọn hết ngay — không ép chọn tay
+  // từng siêu thị 1 nếu muốn xem hết, cũng không ép nhìn cả khối chip khi đã chọn hết.
+  const allToggle = !!opts.allToggle;
 
   function findItem(value) { return normItems.find(it => it.value === value); }
+  function isAllSelected() { return normItems.length > 0 && selected.size === normItems.length; }
+
+  function renderSelectAllBtn() {
+    const btnEl = container.querySelector('[data-pms-select-all]');
+    if (!btnEl) return;
+    btnEl.innerHTML = (!allToggle || isAllSelected() || !normItems.length) ? '' :
+      `<button type="button" data-op="gmsSelectAll" data-arg0="${escapeHtml(containerId)}" class="text-[11px] font-semibold text-sky-700 hover:underline">✅ Chọn Tất Cả (${normItems.length})</button>`;
+  }
 
   function renderChips() {
     const chipsEl = container.querySelector('[data-pms-chips]');
     const hiddenEl = container.querySelector('[data-pms-hidden]');
     if (!chipsEl) return;
-    chipsEl.innerHTML = [...selected].map(value => {
-      const it = findItem(value);
-      const lbl = it ? it.label : (opts.resolveMissingLabel ? opts.resolveMissingLabel(value) : value);
-      return `
-        <span class="inline-flex items-center gap-1 ${chipClass} rounded-full px-2 py-0.5 text-[11px]">
-          ${escapeHtml(lbl)}
-          <button type="button" data-op="gmsRemove" data-arg0="${escapeHtml(containerId)}" data-arg1="${cspArgLiteral(value)}" class="font-bold hover:opacity-70">×</button>
-        </span>
-      `;
-    }).join('') || `<span class="text-gray-400 italic text-[11px]">${escapeHtml(emptyText)}</span>`;
+    chipsEl.innerHTML = (allToggle && isAllSelected())
+      ? `<span class="inline-flex items-center gap-1 ${chipClass} rounded-full px-2 py-0.5 text-[11px] font-semibold">
+          ✅ Tất cả (${normItems.length})
+          <button type="button" data-op="gmsClear" data-arg0="${escapeHtml(containerId)}" class="font-bold hover:opacity-70" title="Bỏ chọn tất cả — tự chọn lại từng mục">×</button>
+        </span>`
+      : ([...selected].map(value => {
+          const it = findItem(value);
+          const lbl = it ? it.label : (opts.resolveMissingLabel ? opts.resolveMissingLabel(value) : value);
+          return `
+            <span class="inline-flex items-center gap-1 ${chipClass} rounded-full px-2 py-0.5 text-[11px]">
+              ${escapeHtml(lbl)}
+              <button type="button" data-op="gmsRemove" data-arg0="${escapeHtml(containerId)}" data-arg1="${cspArgLiteral(value)}" class="font-bold hover:opacity-70">×</button>
+            </span>
+          `;
+        }).join('') || `<span class="text-gray-400 italic text-[11px]">${escapeHtml(emptyText)}</span>`);
+    renderSelectAllBtn();
     if (hiddenEl) hiddenEl.innerHTML = '';
     if (opts.onChange) opts.onChange([...selected]);
     // Bắn 1 sự kiện 'change' nổi bọt (bubbles) từ chính container — để những khối lắng nghe 'change' kiểu
@@ -16111,6 +16135,7 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
 
   container.setAttribute('data-pms-root', '');
   container.innerHTML = `
+    <div data-pms-select-all class="mb-1"></div>
     <div data-pms-chips class="flex flex-wrap gap-1 mb-1"></div>
     <div class="relative">
       <input type="text" data-pms-search placeholder="${escapeHtml(placeholder)}" class="w-full border p-1.5 rounded text-[11px]"
@@ -16127,6 +16152,14 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
   renderChips();
 }
 function gmsFilter(containerId, query) { document.getElementById(containerId)?._gmsRenderDropdown(query); }
+// gmsSelectAll() — chọn hết toàn bộ item hiện có vào widget renderMultiSelectDropdown() đang bật
+// opts.allToggle (xem chú thích tại đó), nút "✅ Chọn Tất Cả" gọi hàm này.
+function gmsSelectAll(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !container._gmsSelected || !container._gmsItems) return;
+  container._gmsItems.forEach(it => container._gmsSelected.add(it.value));
+  container._gmsRenderChips();
+}
 function gmsAdd(containerId, value) {
   const container = document.getElementById(containerId);
   if (!container || !container._gmsSelected) return;
