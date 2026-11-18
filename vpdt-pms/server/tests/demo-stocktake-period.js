@@ -47,7 +47,7 @@ const PORT = 8993;
     await page.waitForTimeout(200);
     assert.strictEqual(await page.isVisible('#btnKkPeriodOpenCreate'), true, 'LỖI: Quản Lý có kiemKePeriodManage phải thấy nút Tạo Kỳ Mới');
     await page.click('#btnKkPeriodOpenCreate');
-    await page.selectOption('#kkNewLoaiKy', 'GOM_MA');
+    await page.fill('#kkNewLoaiKyInput', 'Loại: Gom Mã');
     await page.fill('#kkNewTenKy', 'Gom Mã tuần 46/2026');
     await page.click('[data-op="submitCreateKkPeriod"]');
     await page.waitForTimeout(250);
@@ -69,7 +69,7 @@ const PORT = 8993;
     // trừ khi đóng kỳ rồi mở lại" — TRƯỚC ĐÂY chỉ chặn muộn lúc Kích Hoạt, tạo được thoải mái nhiều bản
     // Nháp chồng nhau), có thông báo rõ ràng, KHÔNG tạo ra bản ghi rác trong danh sách. =====
     await page.click('#btnKkPeriodOpenCreate');
-    await page.selectOption('#kkNewLoaiKy', 'GOM_MA');
+    await page.fill('#kkNewLoaiKyInput', 'Loại: Gom Mã');
     await page.fill('#kkNewTenKy', 'Gom Mã tuần 47 (trùng loại)');
     await page.click('[data-op="submitCreateKkPeriod"]');
     await page.waitForTimeout(200);

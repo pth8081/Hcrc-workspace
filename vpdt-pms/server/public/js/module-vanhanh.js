@@ -449,15 +449,20 @@ function setKiemKeSubTab(tab) {
 let kkUaAssignableUsers = []; // [{username, name, dept}]
 let kkUaShelfLocationsForDept = []; // shelfLocations của ĐÚNG siêu thị đang chọn ở form gán quyền
 let kkUaAccessList = []; // toàn bộ stocktakeUserAccess (để vẽ bảng danh sách)
+let kkUaDeptSelected = ''; // MỚI, 12/2026 — thay cho đọc .value của <select id="kkUaDeptSelect"> cũ (đổi sang sdd*)
 
 async function loadKkUserAccessTab() {
   const listBody = document.getElementById('kkUaListBody');
   if (listBody) listBody.innerHTML = '<p class="text-gray-400 text-sm">Đang tải...</p>';
-  // Siêu thị — tái dùng DB.stores (danh mục chung, KHÔNG phải danh mục riêng của Kiểm Kê).
-  const deptSelect = document.getElementById('kkUaDeptSelect');
-  if (deptSelect) {
+  // Siêu thị — tái dùng DB.stores (danh mục chung, KHÔNG phải danh mục riêng của Kiểm Kê). ĐỔI sang sdd*
+  // (12/2026, theo yêu cầu người dùng "chuyển hết sang dạng drop down searchable") — value===label (tên
+  // siêu thị), kkUaDeptSelected giữ lựa chọn hiện tại thay cho đọc .value của <select> cũ.
+  const deptInput = document.getElementById('kkUaDeptInput');
+  if (deptInput) {
     const stores = (DB.stores || []).slice().sort((a, b) => a.localeCompare(b, 'vi'));
-    deptSelect.innerHTML = '<option value="">-- Chọn siêu thị --</option>' + stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    sddSetOptions('kkUaDeptDropdown', stores);
+    deptInput.value = '';
+    kkUaDeptSelected = '';
   }
   try {
     const [usersRes, accessRes] = await Promise.all([
@@ -478,8 +483,14 @@ async function loadKkUserAccessTab() {
   }
 }
 
-async function onKkUaDeptChanged() {
-  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+function onKkUaDeptInputChanged() {
+  const raw = (document.getElementById('kkUaDeptInput')?.value || '').trim();
+  const stores = (DB.stores || []);
+  if (raw && !stores.includes(raw)) return;
+  kkUaDeptSelected = raw;
+  applyKkUaDeptSelection(raw);
+}
+async function applyKkUaDeptSelection(dept) {
   const box = document.getElementById('kkUaShelfCheckboxes');
   const filterInput = document.getElementById('kkUaShelfFilter');
   if (filterInput) filterInput.value = '';
@@ -520,7 +531,7 @@ function resolveKkUaSelectedUsername() {
 
 async function submitKkUserAccess() {
   const username = resolveKkUaSelectedUsername();
-  const dept = document.getElementById('kkUaDeptSelect')?.value || '';
+  const dept = kkUaDeptSelected || '';
   const shelfLocationIds = Array.from(document.querySelectorAll('.kk-ua-shelf-cb:checked')).map(cb => Number(cb.value));
   const canGomMa = document.getElementById('kkUaCanGomMa')?.checked || false;
   const canKiemDem = document.getElementById('kkUaCanKiemDem')?.checked || false;
@@ -698,13 +709,21 @@ function resolveKkScanItemFromCode(code) {
   return null;
 }
 
+// kkShelfOptionLabel(l) — nhãn hiển thị DUY NHẤT dùng CẢ lúc render gợi ý (sddSetOptions()) LẪN lúc tra
+// ngược lại đúng quầy kệ từ chữ đang gõ (applyKkScanShelfSelection(), khớp CHÍNH XÁC chuỗi) — tách thành
+// 1 hàm để 2 nơi LUÔN đồng bộ tuyệt đối, không lệch nhau dù sửa sau này. KHÔNG escapeHtml() ở đây (khác
+// hẳn bản <option> cũ) — đây là literal TEXT ghi vào input.value, sddRenderRows() (core.js) tự escapeHtml
+// khi dựng HTML gợi ý, escape 2 lần sẽ hiện "&amp;" sai.
+function kkShelfOptionLabel(l) {
+  return `${l.kiemKeLocked ? '🔒 ' : ''}${l.dept} — ${l.code} — ${l.name}`;
+}
 async function loadKkScanTab(tabKey) {
   const cfg = KK_SCAN_TAB_CONFIG[tabKey];
   const st = kkScanState[tabKey];
   await ensureShelfOfflineReady();
   await ensureShelfSystemInventoryCacheLoaded();
-  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
-  if (selectEl) selectEl.innerHTML = '<option value="">-- Đang tải quầy kệ... --</option>';
+  const inputEl = document.getElementById(`${cfg.prefix}ShelfInput`);
+  if (inputEl) { inputEl.value = ''; inputEl.placeholder = 'Đang tải quầy kệ...'; }
   st.offlineShelves = false;
   try {
     const res = await fetch(`/api/stocktake/my-shelf-locations?mode=${cfg.apiMode}`);
@@ -730,10 +749,12 @@ async function loadKkScanTab(tabKey) {
   }
   renderKkScanShelfOptions(tabKey);
   // Giữ lựa chọn quầy kệ đang có (nếu còn hợp lệ) khi chuyển qua tab khác rồi quay lại — không bắt chọn
-  // lại từ đầu vô lý.
+  // lại từ đầu vô lý. Gọi THẲNG applyKkScanShelfSelection() (KHÔNG qua onKkScanShelfInputChanged() — hàm
+  // đó có gác "bỏ qua nếu trùng lựa chọn đang có", đúng cho luồng gõ nhưng sẽ VÔ TÌNH bỏ qua việc tải lại
+  // mới nhất trạng thái Kỳ/Khoá/Xác Nhận mỗi lần quay lại tab).
   if (st.selectedShelfId && st.shelves.some(l => l.id === st.selectedShelfId)) {
-    if (selectEl) selectEl.value = String(st.selectedShelfId);
-    await onKkScanShelfChanged(tabKey);
+    if (inputEl) inputEl.value = kkShelfOptionLabel(st.shelves.find(l => l.id === st.selectedShelfId));
+    await applyKkScanShelfSelection(tabKey, st.selectedShelfId);
   } else {
     st.selectedShelfId = null;
     renderKkScanBoxLocked(tabKey, st.shelves.length ? '📍 Vui lòng chọn quầy kệ để bắt đầu quét.' : null);
@@ -743,18 +764,20 @@ async function loadKkScanTab(tabKey) {
 function renderKkScanShelfOptions(tabKey) {
   const cfg = KK_SCAN_TAB_CONFIG[tabKey];
   const st = kkScanState[tabKey];
-  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
-  if (!selectEl) return;
+  const inputEl = document.getElementById(`${cfg.prefix}ShelfInput`);
+  const dropdownId = `${cfg.prefix}ShelfDropdown`;
+  if (!inputEl) return;
   if (!st.shelves.length) {
-    selectEl.innerHTML = '<option value="">-- Bạn chưa được cấp quyền quầy kệ nào --</option>';
+    inputEl.placeholder = '-- Bạn chưa được cấp quyền quầy kệ nào --';
+    sddSetOptions(dropdownId, []);
   } else {
     const opts = st.shelves.slice().sort((a, b) => `${a.dept} ${a.code}`.localeCompare(`${b.dept} ${b.code}`, 'vi'));
     // kiemKeLocked (MỚI, 12/2026): danh sách quầy kệ (kể cả đọc từ cache offline) LUÔN giữ field này từ
-    // shelfLocations gốc — đánh dấu 🔒 NGAY ở bước chọn (gợi ý sớm trước khi bấm), nhưng CỐ Ý KHÔNG
-    // `disabled` option (giữ nguyên hành vi/test cũ: chọn vẫn được, onKkScanShelfChanged() mới chặn thật +
-    // báo rõ lý do — chặn thật nằm ở đó + ở server, không phải ở việc ẩn lựa chọn này).
-    selectEl.innerHTML = '<option value="">-- Chọn quầy kệ --</option>' +
-      opts.map(l => `<option value="${l.id}">${l.kiemKeLocked ? '🔒 ' : ''}${escapeHtml(l.dept)} — ${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('');
+    // shelfLocations gốc — đánh dấu 🔒 NGAY ở bước chọn (gợi ý sớm trước khi bấm), nhưng CỐ Ý KHÔNG chặn
+    // gõ/chọn được (giữ nguyên hành vi/test cũ: chọn vẫn được, applyKkScanShelfSelection() mới chặn thật
+    // + báo rõ lý do — chặn thật nằm ở đó + ở server, không phải ở việc ẩn gợi ý này).
+    inputEl.placeholder = '-- Chọn quầy kệ --';
+    sddSetOptions(dropdownId, opts.map(l => ({ value: l.id, label: kkShelfOptionLabel(l) })));
   }
   const noteEl = document.getElementById(`${cfg.prefix}OfflineNote`);
   if (noteEl) {
@@ -780,11 +803,31 @@ function renderKkScanBoxUnlocked(tabKey) {
   if (box) box.classList.remove('hidden');
 }
 
-async function onKkScanShelfChanged(tabKey) {
+// onKkScanShelfInputChanged (MỚI, 12/2026, chuyển select→dropdown tìm-kiếm-gõ-chọn `sdd*` theo yêu cầu
+// người dùng "chuyển hết sang dạng drop down searchable"): handler `data-op-input` thật của ô nhập liệu
+// — widget sdd* chỉ ghi `input.value = label` khi chọn (xem chú thích `sddSetOptions()` ở core.js), KHÔNG
+// có "value" riêng, nên phải tự dò ngược label hiện tại trong st.shelves để tìm lại đúng shelfId. Gõ dở/
+// không khớp label nào → BỎ QUA, KHÔNG đổi trạng thái (an toàn hơn đổi nhầm sang quầy kệ khác giữa lúc
+// đang gõ tìm).
+function onKkScanShelfInputChanged(tabKey) {
   const cfg = KK_SCAN_TAB_CONFIG[tabKey];
   const st = kkScanState[tabKey];
-  const selectEl = document.getElementById(`${cfg.prefix}ShelfSelect`);
-  const shelfId = Number(selectEl?.value || 0);
+  const inputEl = document.getElementById(`${cfg.prefix}ShelfInput`);
+  const raw = (inputEl?.value || '').trim();
+  if (!raw) { applyKkScanShelfSelection(tabKey, 0); return; }
+  const matched = (st.shelves || []).find(l => kkShelfOptionLabel(l) === raw);
+  if (!matched) return;
+  applyKkScanShelfSelection(tabKey, matched.id);
+}
+
+// applyKkScanShelfSelection (MỚI, 12/2026): toàn bộ logic GỐC của onKkScanShelfChanged (trước khi tách),
+// chạy KHÔNG ĐIỀU KIỆN mỗi lần gọi — kể cả khi shelfId không đổi — vì loadKkScanTab() cần gọi lại hàm này
+// để LUÔN tải mới trạng thái Kỳ/Khoá/Xác Nhận khi quay lại tab (không có gác "bỏ qua nếu trùng" ở đây,
+// gác đó CHỈ nằm ở onKkScanShelfInputChanged() phía trên cho đúng luồng gõ/chọn).
+async function applyKkScanShelfSelection(tabKey, shelfId) {
+  const cfg = KK_SCAN_TAB_CONFIG[tabKey];
+  const st = kkScanState[tabKey];
+  const inputEl = document.getElementById(`${cfg.prefix}ShelfInput`);
   // Nhắc nhở mềm (MỚI, 12/2026, theo yêu cầu người dùng — cân nhắc giữa Khóa Quầy Kệ IT quản lý VS để mở
   // hết: nếu KHÔNG dùng Khóa, vẫn muốn hạn chế làm dở nhiều quầy kệ cùng lúc) — quầy kệ ĐANG MỞ (chưa bị
   // khóa/xác nhận, nếu không đã không mở được ô quét) mà ĐÃ có số liệu quét thật (qty>0, không phải quầy
@@ -800,7 +843,7 @@ async function onKkScanShelfChanged(tabKey) {
     const prevLoc = (st.shelves || []).find(l => l.id === previousShelfId);
     const label = prevLoc ? `${prevLoc.code} — ${prevLoc.name}` : `#${previousShelfId}`;
     const ok = confirm(`⚠️ Quầy kệ "${label}" vừa thao tác CHƯA được Xác Nhận. Bạn có chắc muốn chuyển sang quầy kệ khác không?\n\n(Nên vào tab "✅ Xác Nhận" xác nhận xong quầy kệ này trước, để tránh làm dở nhiều quầy kệ cùng lúc.)`);
-    if (!ok) { if (selectEl) selectEl.value = String(previousShelfId); return; }
+    if (!ok) { if (inputEl && prevLoc) inputEl.value = kkShelfOptionLabel(prevLoc); return; }
   }
   st.selectedShelfId = shelfId || null;
   st.session = null;
@@ -1517,6 +1560,12 @@ function goToShelfLocationsManagement() {
 // giữ nguyên để giảm rủi ro hồi quy trên code đã test kỹ). =====
 let kkConfirmSessionId = null;
 let kkConfirmGomMaSessionId = null;
+// kkConfirmActiveThongKe/kkConfirmActiveGomMa (MỚI, 12/2026, chuyển #kkConfirmSessionSelect/
+// #kkConfirmGomMaSessionSelect sang sdd* theo yêu cầu người dùng): giữ ĐÚNG danh sách kỳ đang hoạt động
+// vừa tải ở enterKkConfirmTab() — cần để dò ngược (gõ/chọn label "Tên Kỳ" -> tìm lại đúng session.id,
+// vì widget sdd* chỉ ghi lại label, không có "value" riêng — xem chú thích sddSetOptions() ở core.js).
+let kkConfirmActiveThongKe = [];
+let kkConfirmActiveGomMa = [];
 let kkConfirmCounts = [];
 let kkConfirmConfirmations = [];
 let kkConfirmSoatConfirmations = [];
@@ -1644,8 +1693,8 @@ async function enterKkConfirmTab() {
     [cfg.filterShelfInputId, cfg.filterXacNhanInputId].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     applyKkConfirmFilterPanelState(kind);
   });
-  const sel = document.getElementById('kkConfirmSessionSelect');
-  const gomMaSel = document.getElementById('kkConfirmGomMaSessionSelect');
+  const inputEl = document.getElementById('kkConfirmSessionInput');
+  const gomMaInputEl = document.getElementById('kkConfirmGomMaSessionInput');
   const dept = kkEffectiveDept();
   try {
     // Luôn gửi ?dept= khi khác siêu thị của chính mình (KHÔNG còn chỉ riêng Admin) — người được gán
@@ -1656,30 +1705,59 @@ async function enterKkConfirmTab() {
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     const sessions = res.ok ? (body.items || []) : [];
-    const activeThongKe = sessions.filter(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
-    const activeGomMa = sessions.filter(s => s.loaiKy === 'GOM_MA' && s.trangThai === 'DANG_HOAT_DONG');
-    if (sel) {
-      sel.innerHTML = '<option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>' +
-        activeThongKe.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
+    kkConfirmActiveThongKe = sessions.filter(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
+    kkConfirmActiveGomMa = sessions.filter(s => s.loaiKy === 'GOM_MA' && s.trangThai === 'DANG_HOAT_DONG');
+    if (inputEl) {
+      sddSetOptions('kkConfirmSessionDropdown', kkConfirmActiveThongKe.map(s => ({ value: s.id, label: s.tenKy })));
       // Thường chỉ có ĐÚNG 1 kỳ Thống Kê "Đang hoạt động" / siêu thị (đúng ràng buộc Tab 1) — tự chọn
       // luôn cho đỡ phải bấm thêm 1 bước, vẫn để trống nếu chưa có kỳ nào.
-      if (activeThongKe.length === 1) sel.value = String(activeThongKe[0].id);
+      if (kkConfirmActiveThongKe.length === 1) {
+        kkConfirmSessionId = kkConfirmActiveThongKe[0].id;
+        inputEl.value = kkConfirmActiveThongKe[0].tenKy;
+      } else {
+        kkConfirmSessionId = null;
+        inputEl.value = '';
+      }
     }
-    if (gomMaSel) {
-      gomMaSel.innerHTML = '<option value="">-- Chọn kỳ Gom Mã đang hoạt động --</option>' +
-        activeGomMa.map(s => `<option value="${s.id}">${escapeHtml(s.tenKy)}</option>`).join('');
-      if (activeGomMa.length === 1) gomMaSel.value = String(activeGomMa[0].id);
+    if (gomMaInputEl) {
+      sddSetOptions('kkConfirmGomMaSessionDropdown', kkConfirmActiveGomMa.map(s => ({ value: s.id, label: s.tenKy })));
+      if (kkConfirmActiveGomMa.length === 1) {
+        kkConfirmGomMaSessionId = kkConfirmActiveGomMa[0].id;
+        gomMaInputEl.value = kkConfirmActiveGomMa[0].tenKy;
+      } else {
+        kkConfirmGomMaSessionId = null;
+        gomMaInputEl.value = '';
+      }
     }
   } catch (err) {
-    if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
-    if (gomMaSel) gomMaSel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
+    if (inputEl) inputEl.placeholder = '-- Lỗi tải danh sách kỳ --';
+    if (gomMaInputEl) gomMaInputEl.placeholder = '-- Lỗi tải danh sách kỳ --';
   }
   await Promise.all([loadKkConfirmTab(), loadKkConfirmGomMaTab()]);
 }
 
+// onKkConfirmSessionInputChanged/onKkConfirmGomMaSessionInputChanged (MỚI, 12/2026) — dò ngược label gõ/
+// chọn trong kkConfirmActiveThongKe/kkConfirmActiveGomMa để lấy lại đúng session.id (xem chú thích khai
+// báo 2 mảng này ở trên). Gõ dở/không khớp kỳ nào thì BỎ QUA, giữ nguyên lựa chọn đang có.
+function onKkConfirmSessionInputChanged() {
+  const raw = (document.getElementById('kkConfirmSessionInput')?.value || '').trim();
+  if (!raw) { kkConfirmSessionId = null; loadKkConfirmTab(); return; }
+  const matched = kkConfirmActiveThongKe.find(s => s.tenKy === raw);
+  if (!matched) return;
+  kkConfirmSessionId = matched.id;
+  loadKkConfirmTab();
+}
+function onKkConfirmGomMaSessionInputChanged() {
+  const raw = (document.getElementById('kkConfirmGomMaSessionInput')?.value || '').trim();
+  if (!raw) { kkConfirmGomMaSessionId = null; loadKkConfirmGomMaTab(); return; }
+  const matched = kkConfirmActiveGomMa.find(s => s.tenKy === raw);
+  if (!matched) return;
+  kkConfirmGomMaSessionId = matched.id;
+  loadKkConfirmGomMaTab();
+}
+
 async function loadKkConfirmTab() {
-  const sel = document.getElementById('kkConfirmSessionSelect');
-  const sessionId = Number(sel?.value || 0);
+  const sessionId = kkConfirmSessionId || 0;
   const bodyWrap = document.getElementById('kkConfirmBody');
   kkConfirmSessionId = sessionId || null;
   if (!sessionId) { if (bodyWrap) bodyWrap.classList.add('hidden'); return; }
@@ -2184,14 +2262,23 @@ async function submitKkConfirmAll() {
 // Kỳ B (so sánh)=tím/hổ phách. Biểu đồ "So Sánh Siêu Thị" CHỈ Admin (server chỉ trả storeComparison cho
 // Admin — xem routes/stocktake.js GET /report, Phase 1 chưa có "xem chéo nhiều siêu thị" cho không-Admin).
 const KK_REPORT_COLOR_SYSTEM = '#2563eb', KK_REPORT_COLOR_KIEMDEM = '#ea580c', KK_REPORT_COLOR_FINAL = '#0d9488';
-const KK_REPORT_COLOR_COMPARE_A = '#7c3aed', KK_REPORT_COLOR_COMPARE_B = '#b45309';
+// KK_REPORT_COLOR_COMPARE_PALETTE (12/2026, MỞ RỘNG từ so sánh 1-vs-1 sang N-way theo yêu cầu người
+// dùng "mở rộng so sánh NHIỀU kỳ cùng lúc") — 7 màu CỐ ĐỊNH (1 kỳ chính + tối đa 6 kỳ so sánh, xem giới
+// hạn cứng ở server GET /report) theo ĐÚNG thứ tự cố định (KHÔNG xoay vòng/tự sinh thêm — quy ước
+// dataviz: "gán màu phân loại theo thứ tự cố định, không cycle").
+const KK_REPORT_COLOR_COMPARE_PALETTE = ['#7c3aed', '#b45309', '#db2777', '#0891b2', '#65a30d', '#475569', '#dc2626'];
 let kkReportSessionId = null;
-let kkReportCompareSessionId = null;
+let kkReportCompareSessionIds = null; // MỚI, 12/2026 — mảng id (N-way), thay cho 1 id đơn trước đây
+let kkReportSessionsCache = []; // MỚI, 12/2026 — giữ danh sách kỳ vừa tải ở enterKkReportTab() để dò
+// ngược label gõ/chọn ở #kkReportSessionInput (widget sdd* chỉ ghi label, không có "value" riêng).
 let kkReportData = null; // cache nguyên response GET /report, dùng lại cho cả bảng/biểu đồ/Xuất Excel
 
+function kkReportSessionOptionLabel(s) {
+  return `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${s.tenKy} (${TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai})`;
+}
 async function enterKkReportTab() {
   kkReportSessionId = null;
-  kkReportCompareSessionId = null;
+  kkReportCompareSessionIds = null;
   kkReportData = null;
   const row = document.getElementById('kkReportDeptRow');
   const dept = kkEffectiveDept();
@@ -2199,8 +2286,7 @@ async function enterKkReportTab() {
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(dept || '')}</span>` +
       (currentUser.perms?.admin ? ' <span class="text-gray-400 text-[11px]">(đổi siêu thị ở tab "📅 Kỳ Kiểm Kê")</span>' : '');
   }
-  const sel = document.getElementById('kkReportSessionSelect');
-  const compareSel = document.getElementById('kkReportCompareSelect');
+  const inputEl = document.getElementById('kkReportSessionInput');
   try {
     const url = currentUser.perms?.admin ? `/api/stocktake/sessions?dept=${encodeURIComponent(dept)}` : '/api/stocktake/sessions';
     const res = await fetch(url);
@@ -2208,35 +2294,48 @@ async function enterKkReportTab() {
     const body = await res.json().catch(() => ({}));
     const sessions = res.ok ? (body.items || []) : [];
     sessions.sort((a, b) => b.id - a.id);
-    const optionLabel = (s) => `${s.loaiKy === 'GOM_MA' ? '📷 Gom Mã' : '🔢 Kiểm Kê'} — ${escapeHtml(s.tenKy)} (${escapeHtml(TRANG_THAI_LABEL_VN[s.trangThai] || s.trangThai)})`;
-    if (sel) {
-      sel.innerHTML = '<option value="">-- Chọn kỳ để xem báo cáo --</option>' +
-        sessions.map(s => `<option value="${s.id}">${optionLabel(s)}</option>`).join('');
+    kkReportSessionsCache = sessions;
+    if (inputEl) {
+      sddSetOptions('kkReportSessionDropdown', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })));
       const activeThongKe = sessions.find(s => s.loaiKy === 'THONG_KE' && s.trangThai === 'DANG_HOAT_DONG');
-      if (activeThongKe) sel.value = String(activeThongKe.id);
+      if (activeThongKe) { kkReportSessionId = activeThongKe.id; inputEl.value = kkReportSessionOptionLabel(activeThongKe); }
+      else inputEl.value = '';
     }
-    // "So Sánh Với Kỳ Khác" (tuỳ chọn) — liệt kê MỌI kỳ (kể cả khác loại), KHÔNG tự chọn mặc định (so
-    // sánh là hành động người dùng CHỦ ĐỘNG bật, không phải trạng thái ngầm định).
-    if (compareSel) {
-      compareSel.innerHTML = '<option value="">-- Không so sánh (mặc định) --</option>' +
-        sessions.map(s => `<option value="${s.id}">${optionLabel(s)}</option>`).join('');
-    }
+    // "So Sánh Với Kỳ Khác" (tuỳ chọn, CHỌN NHIỀU — 12/2026 mở rộng N-way) — liệt kê MỌI kỳ (kể cả khác
+    // loại), KHÔNG tự chọn mặc định (so sánh là hành động người dùng CHỦ ĐỘNG bật, không phải trạng thái
+    // ngầm định).
+    renderMultiSelectDropdown('kkReportCompareMultiSelect', sessions.map(s => ({ value: s.id, label: kkReportSessionOptionLabel(s) })), [], {
+      placeholder: '🔍 Tìm kỳ để thêm vào so sánh...',
+      emptyText: 'Không so sánh (mặc định).',
+      onChange: () => loadKkReportTab()
+    });
   } catch (err) {
-    if (sel) sel.innerHTML = '<option value="">-- Lỗi tải danh sách kỳ --</option>';
+    if (inputEl) inputEl.placeholder = '-- Lỗi tải danh sách kỳ --';
   }
   await loadKkReportTab();
 }
 const TRANG_THAI_LABEL_VN = { NHAP: 'Nháp', DANG_HOAT_DONG: 'Đang hoạt động', DA_CHOT: 'Đã chốt' };
 
+// onKkReportSessionInputChanged (MỚI, 12/2026, chuyển #kkReportSessionSelect sang sdd* theo yêu cầu
+// người dùng) — dò ngược label gõ/chọn trong kkReportSessionsCache để lấy lại đúng session.id. Gõ dở/
+// không khớp kỳ nào -> BỎ QUA, giữ nguyên lựa chọn đang có.
+function onKkReportSessionInputChanged() {
+  const raw = (document.getElementById('kkReportSessionInput')?.value || '').trim();
+  if (!raw) { kkReportSessionId = null; loadKkReportTab(); return; }
+  const matched = kkReportSessionsCache.find(s => kkReportSessionOptionLabel(s) === raw);
+  if (!matched) return;
+  kkReportSessionId = matched.id;
+  loadKkReportTab();
+}
+
 async function loadKkReportTab() {
-  const sel = document.getElementById('kkReportSessionSelect');
-  const compareSel = document.getElementById('kkReportCompareSelect');
-  const sessionId = Number(sel?.value || 0);
-  const compareSessionId = Number(compareSel?.value || 0);
+  const sessionId = kkReportSessionId || 0;
+  // "So Sánh Với Kỳ Khác" giờ CHỌN NHIỀU (renderMultiSelectDropdown()) — đọc lại qua
+  // getMultiSelectValues(), KHÔNG còn 1 <select> đơn.
+  const compareSessionIds = getMultiSelectValues('kkReportCompareMultiSelect').map(Number).filter(Number.isFinite);
   const emptyNote = document.getElementById('kkReportEmptyNote');
   const bodyWrap = document.getElementById('kkReportBody');
-  kkReportSessionId = sessionId || null;
-  kkReportCompareSessionId = compareSessionId || null;
+  kkReportCompareSessionIds = compareSessionIds.length ? compareSessionIds : null;
   kkReportData = null;
   if (!sessionId) {
     if (bodyWrap) bodyWrap.classList.add('hidden');
@@ -2244,7 +2343,7 @@ async function loadKkReportTab() {
     return;
   }
   try {
-    const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionId ? `&compareSessionId=${compareSessionId}` : '');
+    const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionIds.length ? `&compareSessionId=${compareSessionIds.join(',')}` : '');
     const res = await fetch(url);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
@@ -2476,18 +2575,29 @@ function renderKkReportValueByStoreTable() {
   </table>`;
 }
 
-// Hợp nhất 2 kỳ bất kỳ theo mã hàng (dùng chung cho biểu đồ So Sánh + sheet Excel "So Sánh Kỳ") — lấy
-// `finalQty` của MỖI kỳ làm giá trị chính (Kiểm Đếm/Cuối Cùng cho kỳ Thống Kê, SL Gom Mã cho kỳ Gom Mã),
-// hợp nhất ĐỦ mã hàng của CẢ 2 kỳ (không chỉ đúng kỳ đang xem chính) để không bỏ sót mã chỉ có ở kỳ kia.
-function kkReportMergeCompareRows() {
-  const compare = kkReportData && kkReportData.compare;
-  if (!compare) return [];
-  const mapA = new Map((kkReportData.rows || []).map(r => [r.maHang, r]));
-  const mapB = new Map((compare.rows || []).map(r => [r.maHang, r]));
-  const maHangSet = new Set([...mapA.keys(), ...mapB.keys()]);
+// Hợp nhất kỳ ĐANG XEM CHÍNH với TẤT CẢ kỳ so sánh (kkReportData.compares, N-way — 12/2026, MỞ RỘNG từ
+// so sánh 1-vs-1 theo yêu cầu người dùng "mở rộng so sánh NHIỀU kỳ cùng lúc") theo mã hàng — dùng chung
+// cho biểu đồ So Sánh + sheet Excel "So Sánh Kỳ". Lấy `finalQty` của MỖI kỳ làm giá trị chính (Kiểm Đếm/
+// Cuối Cùng cho kỳ Thống Kê, SL Gom Mã cho kỳ Gom Mã), hợp nhất ĐỦ mã hàng của MỌI kỳ liên quan (không
+// chỉ đúng kỳ đang xem chính) để không bỏ sót mã chỉ có ở 1 kỳ so sánh. values[0] luôn là kỳ chính,
+// values[i+1] là kkReportData.compares[i] — cùng thứ tự với KK_REPORT_COLOR_COMPARE_PALETTE.
+function kkReportMergeAllCompareRows() {
+  const compares = (kkReportData && kkReportData.compares) || [];
+  if (!compares.length) return [];
+  const maps = [new Map((kkReportData.rows || []).map(r => [r.maHang, r]))]
+    .concat(compares.map(c => new Map((c.rows || []).map(r => [r.maHang, r]))));
+  const maHangSet = new Set();
+  maps.forEach(m => m.forEach((_, k) => maHangSet.add(k)));
   return [...maHangSet].map(maHang => {
-    const a = mapA.get(maHang), b = mapB.get(maHang);
-    return { maHang, maVach: (a && a.maVach) || (b && b.maVach) || '', tenHang: (a && a.tenHang) || (b && b.tenHang) || '', valueA: a ? a.finalQty : 0, valueB: b ? b.finalQty : 0 };
+    const entries = maps.map(m => m.get(maHang));
+    const tenHangEntry = entries.find(e => e && e.tenHang);
+    const maVachEntry = entries.find(e => e && e.maVach);
+    return {
+      maHang,
+      tenHang: tenHangEntry ? tenHangEntry.tenHang : '',
+      maVach: maVachEntry ? maVachEntry.maVach : '',
+      values: entries.map(e => e ? e.finalQty : 0)
+    };
   });
 }
 
@@ -2496,34 +2606,30 @@ function kkReportSessionLabel(s) {
 }
 
 // So Sánh Với Kỳ Khác (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với nhau ấy, thì
-// mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh") — CHỈ hiện khi người dùng TỰ
-// CHỌN kỳ thứ 2 ở bộ chọn riêng, hoàn toàn tách biệt khỏi báo cáo chính (Chart 1/bảng Chi Tiết) để không
-// lặp lại lỗi trộn ngầm Gom Mã vào kỳ Thống Kê.
+// mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh"; MỞ RỘNG 12/2026 sang N-way)
+// — CHỈ hiện khi người dùng TỰ CHỌN ít nhất 1 kỳ ở bộ chọn nhiều riêng, hoàn toàn tách biệt khỏi báo cáo
+// chính (Chart 1/bảng Chi Tiết) để không lặp lại lỗi trộn ngầm Gom Mã vào kỳ Thống Kê.
 function renderKkReportCompareChart() {
   const card = document.getElementById('kkReportCompareCard');
   const el = document.getElementById('kkReportCompareChart');
   const titleEl = document.getElementById('kkReportCompareTitle');
   if (!card || !el) return;
-  const compare = kkReportData && kkReportData.compare;
-  if (!compare) { card.classList.add('hidden'); return; }
+  const compares = kkReportData && kkReportData.compares;
+  if (!compares || !compares.length) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
-  const sessionA = kkReportData.session, sessionB = compare.session;
-  if (titleEl) titleEl.textContent = `So Sánh: ${sessionA.tenKy} vs ${sessionB.tenKy}`;
-  const combined = kkReportMergeCompareRows()
-    .sort((x, y) => Math.abs(y.valueA - y.valueB) - Math.abs(x.valueA - x.valueB))
+  const sessionLabels = [kkReportData.session.tenKy, ...compares.map(c => c.session.tenKy)];
+  if (titleEl) titleEl.textContent = `So Sánh: ${sessionLabels.join(' vs ')}`;
+  const combined = kkReportMergeAllCompareRows()
+    .sort((x, y) => (Math.max(...y.values) - Math.min(...y.values)) - (Math.max(...x.values) - Math.min(...x.values)))
     .slice(0, 12);
   if (!combined.length) { el.innerHTML = '<p class="text-gray-400 text-sm">Không có mã hàng nào để so sánh.</p>'; return; }
   const items = combined.map(r => ({
     label: kkReportTruncateLabel(`${r.maHang}${r.tenHang ? ' — ' + r.tenHang : ''}`, 34),
-    values: [
-      { value: r.valueA, color: KK_REPORT_COLOR_COMPARE_A },
-      { value: r.valueB, color: KK_REPORT_COLOR_COMPARE_B }
-    ]
+    values: r.values.map((v, i) => ({ value: v, color: KK_REPORT_COLOR_COMPARE_PALETTE[i] }))
   }));
-  el.innerHTML = kkReportHBarChartSvg(items, [
-    { label: kkReportSessionLabel(sessionA), color: KK_REPORT_COLOR_COMPARE_A },
-    { label: kkReportSessionLabel(sessionB), color: KK_REPORT_COLOR_COMPARE_B }
-  ]);
+  const legendEntries = [kkReportData.session, ...compares.map(c => c.session)]
+    .map((s, i) => ({ label: kkReportSessionLabel(s), color: KK_REPORT_COLOR_COMPARE_PALETTE[i] }));
+  el.innerHTML = kkReportHBarChartSvg(items, legendEntries);
 }
 
 function kkReportFilteredRows(filterText) {
@@ -2622,12 +2728,21 @@ function exportKkReportExcel() {
     }));
     sheets.push({ sheetName: 'So Sánh Siêu Thị', columns: cmpColumns, rows: cmpRows });
   }
-  if (kkReportData.compare) {
+  // Sheet "So Sánh Kỳ" (12/2026, MỞ RỘNG N-way) — 1 cột SL riêng cho MỖI kỳ so sánh, không còn cố định
+  // đúng 2 cột valueA/valueB như bản 1-vs-1 cũ.
+  if (kkReportData.compares && kkReportData.compares.length) {
     const compareColumns = [
       { header: 'Mã Hàng', key: 'maHang' }, { header: 'Mã Vạch', key: 'maVach' }, { header: 'Tên Hàng', key: 'tenHang' },
-      { header: kkReportData.session.tenKy, key: 'valueA' }, { header: kkReportData.compare.session.tenKy, key: 'valueB' }
+      { header: kkReportData.session.tenKy, key: 'v0' },
+      ...kkReportData.compares.map((c, i) => ({ header: c.session.tenKy, key: `v${i + 1}` }))
     ];
-    const compareRowsOut = kkReportMergeCompareRows().sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'));
+    const compareRowsOut = kkReportMergeAllCompareRows()
+      .sort((a, b) => a.maHang.localeCompare(b.maHang, 'vi'))
+      .map(r => {
+        const out = { maHang: r.maHang, maVach: r.maVach, tenHang: r.tenHang };
+        r.values.forEach((v, i) => { out[`v${i}`] = v; });
+        return out;
+      });
     sheets.push({ sheetName: 'So Sánh Kỳ', columns: compareColumns, rows: compareRowsOut });
   }
   if (sheets.length > 1) {
@@ -2637,6 +2752,11 @@ function exportKkReportExcel() {
   }
 }
 
+// renderKkPeriodDeptRow() (12/2026, ĐỔI từ <select> sang sdd* theo yêu cầu người dùng "chuyển hết sang
+// dạng drop down searchable" — trước đây CỐ Ý giữ nguyên <select> ở riêng ô này để tránh phá 2 bộ test
+// Playwright dùng page.selectOption(), nay yêu cầu đã mở rộng phạm vi ra TOÀN BỘ Kiểm Kê nên đổi theo,
+// cùng khuôn với renderKkShelfConfigDeptRow() ở Tab 5 ngay trên — value===label (tên siêu thị), không
+// cần dò ngược field nào khác).
 function renderKkPeriodDeptRow() {
   const row = document.getElementById('kkPeriodDeptRow');
   if (!row) return;
@@ -2644,17 +2764,20 @@ function renderKkPeriodDeptRow() {
   if (stores.length > 1) {
     if (!kkPeriodDeptSelected || !stores.includes(kkPeriodDeptSelected)) kkPeriodDeptSelected = stores.includes(currentUser.dept) ? currentUser.dept : stores[0];
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label>
-      <select id="kkPeriodDeptSelect" data-op-change="onKkPeriodDeptChanged" class="border rounded px-2 py-1">
-        ${stores.map(s => `<option value="${escapeHtml(s)}" ${s === kkPeriodDeptSelected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
-      </select>`;
+      <input id="kkPeriodDeptInput" value="${escapeHtml(kkPeriodDeptSelected)}" data-sdd-list="kkPeriodDeptDropdown" data-op-input="onKkPeriodDeptInputChanged" placeholder="Gõ tên siêu thị..." autocomplete="off" class="border rounded px-2 py-1 w-64">
+      <div id="kkPeriodDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>`;
+    sddSetOptions('kkPeriodDeptDropdown', stores);
   } else {
     kkPeriodDeptSelected = stores[0] || currentUser.dept || '';
     row.innerHTML = `<label class="font-semibold">📍 Siêu thị:</label> <span>${escapeHtml(kkPeriodDeptSelected)}</span>`;
   }
 }
-function onKkPeriodDeptChanged() {
-  const sel = document.getElementById('kkPeriodDeptSelect');
-  kkPeriodDeptSelected = sel ? sel.value : '';
+function onKkPeriodDeptInputChanged() {
+  const input = document.getElementById('kkPeriodDeptInput');
+  const raw = (input?.value || '').trim();
+  const stores = kkSelectableDepts(currentUser);
+  if (!stores.includes(raw) || raw === kkPeriodDeptSelected) return;
+  kkPeriodDeptSelected = raw;
   loadKkPeriodSessions();
 }
 
@@ -2802,6 +2925,22 @@ function renderKkInventoryStoresBody() {
 }
 
 const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
+// kkNewLoaiKySelected (MỚI, 12/2026, chuyển #kkNewLoaiKy từ <select> sang sdd* theo yêu cầu người dùng
+// "chuyển hết sang dạng drop down searchable") — widget sdd* chỉ ghi input.value = label khi chọn (xem
+// chú thích sddSetOptions() ở core.js), không có "value" riêng, nên phải tự giữ 1 biến state độc lập
+// (thay cho việc đọc trực tiếp DOM .value như select cũ).
+let kkNewLoaiKySelected = 'GOM_MA';
+function kkLoaiKyOptionLabel(key) { return `Loại: ${KK_LOAI_KY_LABEL[key] || key}`; }
+function renderKkNewLoaiKyOptions() {
+  sddSetOptions('kkNewLoaiKyDropdown', Object.keys(KK_LOAI_KY_LABEL).map(k => ({ value: k, label: kkLoaiKyOptionLabel(k) })));
+}
+function onKkNewLoaiKyInputChanged() {
+  const raw = (document.getElementById('kkNewLoaiKyInput')?.value || '').trim();
+  const matched = Object.keys(KK_LOAI_KY_LABEL).find(k => kkLoaiKyOptionLabel(k) === raw);
+  if (!matched) return;
+  kkNewLoaiKySelected = matched;
+  renderKkNewStoresPicker();
+}
 const KK_TRANG_THAI_BADGE = {
   NHAP: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">📝 Nháp</span>',
   DANG_HOAT_DONG: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">🟢 Đang hoạt động</span>',
@@ -2889,6 +3028,10 @@ function toggleKkPeriodCreateBox() {
     if (tenKy) tenKy.value = '';
     if (batDau) batDau.value = '';
     if (ketThuc) ketThuc.value = '';
+    kkNewLoaiKySelected = 'GOM_MA';
+    renderKkNewLoaiKyOptions();
+    const loaiKyInput = document.getElementById('kkNewLoaiKyInput');
+    if (loaiKyInput) loaiKyInput.value = kkLoaiKyOptionLabel(kkNewLoaiKySelected);
     renderKkNewStoresPicker();
   }
 }
@@ -2950,7 +3093,7 @@ async function renderKkNewStoresPicker() {
   if (!wrap) return;
   if (!currentUser.perms?.admin) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  const loaiKy = document.getElementById('kkNewLoaiKy')?.value || 'GOM_MA';
+  const loaiKy = kkNewLoaiKySelected || 'GOM_MA';
   const noteEl = document.getElementById('kkNewStoresBlockedNote');
   if (noteEl) noteEl.textContent = 'Đang tải danh sách siêu thị...';
   let blockedItems = [];
@@ -2974,7 +3117,6 @@ async function renderKkNewStoresPicker() {
       : '';
   }
 }
-function onKkNewLoaiKyChanged() { renderKkNewStoresPicker(); }
 function selectAllKkNewStores() {
   const c = document.getElementById('kkNewStoresMultiSelect');
   if (!c || !c._gmsItems) return;
@@ -3007,7 +3149,7 @@ async function submitCreateKkPeriod() {
     }
     return;
   }
-  const loaiKy = document.getElementById('kkNewLoaiKy')?.value;
+  const loaiKy = kkNewLoaiKySelected;
   // admin: tạo cho NHIỀU/TẤT CẢ siêu thị đã chọn ở ô multi-select (12/2026, MỚI) — lần lượt gọi đúng
   // route POST /sessions hiện có cho TỪNG siêu thị (không đổi API, chỉ gọi nhiều lần phía client), để
   // không phải thêm route bulk riêng + giữ nguyên validate/log mỗi lần tạo như khi tạo tay từng cái.

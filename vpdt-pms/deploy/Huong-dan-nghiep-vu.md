@@ -3686,6 +3686,12 @@ thuần UI). **Phân quyền TÁCH RIÊNG HOÀN TOÀN** thành 1 khối 8 quyề
 (Phân Quyền → khối "27. Kiểm Kê", mỗi quyền ứng với đúng 1 trong 8 tab dự
 kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hành từ trước.
 
+- **Mọi ô chọn trong toàn module ĐỀU là ô tìm-kiếm-gõ-chọn (12/2026, theo
+  yêu cầu người dùng "chuyển hết sang dạng drop down searchable")**: quầy
+  kệ ở Gom Mã/Kiểm Đếm/Kiểm Soát, Loại Kỳ + Siêu thị lúc Tạo Kỳ Mới, Kỳ ở
+  Xác Nhận/Báo Cáo, Siêu thị ở Cấu Hình Người Dùng — gõ để lọc rồi chọn
+  đúng 1 dòng (ô "So Sánh Với Kỳ Khác" ở Báo Cáo riêng là ô CHỌN NHIỀU, xem
+  chi tiết ở mục Tab 7 phía dưới), không còn dropdown `<select>` tĩnh nào.
 - **2 loại Kỳ ĐỘC LẬP, mỗi siêu thị quản lý riêng**: "Gom Mã" (chuẩn hoá/
   gắn mã hàng cho hàng chưa có mã trước khi kiểm) và "Kiểm Kê" (đếm số
   lượng thực tế trên quầy kệ — tên cũ "Thống Kê", đổi nhãn 12/2026 cho đúng
@@ -3997,11 +4003,15 @@ kiến) — không đổi gì khi promote, vì đã độc lập với Vận Hà
   CHÍNH kỳ đó; chọn 1 Kỳ Gom Mã thì chỉ có 2 cột Tồn Kho Hệ Thống/SL Gom Mã.
   Màu biểu đồ CỐ ĐỊNH: Tồn Kho Hệ Thống xanh dương, Kiểm Đếm cam, Kiểm Soát/
   Cuối Cùng xanh ngọc (đã kiểm tra an toàn người mù màu).
-  **Muốn so sánh 2 Kỳ bất kỳ với nhau (VD Gom Mã với Kiểm Kê, hay 2 Kỳ
-  Kiểm Kê khác đợt) — tính năng MỚI**: dùng riêng khung "📊 So Sánh Với Kỳ
-  Khác" (mặc định ẩn, người dùng TỰ chọn Kỳ thứ 2 ở dropdown riêng) → hiện 1
-  biểu đồ so sánh RIÊNG (màu tím/hổ phách, tách biệt khỏi báo cáo chính) —
-  bấm Xuất Excel lúc này có thêm sheet "So Sánh Kỳ". **Phạm vi xem**:
+  **Muốn so sánh NHIỀU Kỳ bất kỳ với nhau (VD Gom Mã với Kiểm Kê, hay vài Kỳ
+  Kiểm Kê khác đợt) — MỞ RỘNG 12/2026 từ so sánh 1-vs-1 sang N-way (tối đa 6
+  kỳ cùng lúc), theo yêu cầu người dùng "mở rộng so sánh NHIỀU kỳ cùng
+  lúc"**: dùng riêng khung "📊 So Sánh Với Kỳ Khác" (mặc định rỗng — ô
+  tìm-kiếm-chọn-nhiều, gõ tên Kỳ để thêm, bấm "×" trên từng thẻ để bỏ, tối
+  đa 6 thẻ) → hiện 1 biểu đồ so sánh RIÊNG (mỗi Kỳ 1 màu CỐ ĐỊNH xuyên suốt:
+  tím/hổ phách/hồng/xanh ngọc/xanh lá/xám/đỏ — tách biệt khỏi báo cáo
+  chính) — bấm Xuất Excel lúc này có thêm sheet "So Sánh Kỳ" với 1 cột SL
+  riêng cho MỖI Kỳ đã chọn. **Phạm vi xem**:
   không-Admin chỉ xem đúng siêu thị mình (áp dụng cho CẢ Kỳ chính lẫn Kỳ so
   sánh); Admin xem được mọi siêu thị VÀ thấy thêm khung "So Sánh Giữa Các
   Siêu Thị" (mỗi siêu thị dùng đúng Kỳ Kiểm Kê gần nhất của chính nó, không

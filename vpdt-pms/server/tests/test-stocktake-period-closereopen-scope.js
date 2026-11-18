@@ -39,7 +39,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -56,15 +56,15 @@ async function main() {
     await page.waitForTimeout(150);
 
     await run.run('IT1 (chỉ Đóng Kỳ) thấy dropdown "Siêu thị:" vì phạm vi Đóng Kỳ khác dept mình', async () => {
-      const isSelect = await page.evaluate(() => !!document.getElementById('kkPeriodDeptSelect'));
+      const isSelect = await page.evaluate(() => !!document.getElementById('kkPeriodDeptInput'));
       assert(isSelect, 'Phải hiện dropdown vì phạm vi Đóng Kỳ có hơn 1 siêu thị chọn được');
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkPeriodDeptSelect').options).map(o => o.value));
+      const options = await page.evaluate(() => (document.getElementById('kkPeriodDeptDropdown')._sddItems || []).map(i => i.value));
       assert(options.includes(DEPT1) && options.includes(DEPT2), `Dropdown phải có cả siêu thị nhà (${DEPT1}) và được gán (${DEPT2}), thực tế: ${options.join(',')}`);
       assert(!options.includes(DEPT3), `Dropdown KHÔNG được có ${DEPT3} (IT1 không được gán, không phải quyền Mở Lại)`);
     });
 
     await run.run('IT1 Đóng Kỳ được kỳ Đang hoạt động của Quận 2 (siêu thị được gán, không phải siêu thị mình)', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', DEPT2);
+      await page.fill('#kkPeriodDeptInput', DEPT2);
       await page.waitForTimeout(200);
       const btn = await page.$('button[data-op="closeKkPeriod"][data-arg0="7001"]');
       assert(!!btn, 'Phải thấy nút Đóng Kỳ cho kỳ 7001 (Quận 2, Đang hoạt động)');

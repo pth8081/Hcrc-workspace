@@ -13,6 +13,8 @@ async function main() {
   const PORT = 8997;
   const DEPT1 = 'Siêu thị Quận 1';
   const SHELF_A1 = { id: 10, dept: DEPT1, code: 'A1', name: 'Kệ A1 — Gia vị', active: true };
+  // Nhãn hiển thị trong ô tìm-kiếm-gõ-chọn (sdd*) — ĐÚNG khuôn kkShelfOptionLabel() ở module-vanhanh.js.
+  const SHELF_A1_LABEL = `${DEPT1} — ${SHELF_A1.code} — ${SHELF_A1.name}`;
   const ADMIN = { username: 'admin', name: 'Admin', dept: DEPT1, perms: { admin: true }, active: true, totpEnabled: true };
   const GOM_MA_SESSION = { id: 9201, dept: DEPT1, loaiKy: 'GOM_MA', tenKy: 'Gom Mã Q4/2026', trangThai: 'DANG_HOAT_DONG' };
   const THONG_KE_SESSION = { id: 9202, dept: DEPT1, loaiKy: 'THONG_KE', tenKy: 'Kiểm Kê Q4/2026', trangThai: 'DANG_HOAT_DONG' };
@@ -55,7 +57,7 @@ async function main() {
 
     await page.click('#btnKkSubKiemDem');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemDemShelfSelect', '10');
+    await page.fill('#kkKiemDemShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     await run.run('Tab "🔢 Kiểm Đếm": danh sách quét có cột "Mã Vạch" + đúng giá trị', async () => {
       const text = await page.evaluate(() => document.getElementById('kkKiemDemListBody')?.textContent || '');
@@ -65,7 +67,7 @@ async function main() {
 
     await page.click('#btnKkSubKiemSoat');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkKiemSoatShelfSelect', '10');
+    await page.fill('#kkKiemSoatShelfInput', SHELF_A1_LABEL);
     await page.waitForTimeout(250);
     await run.run('Tab "🛡️ Kiểm Soát": danh sách quét có cột "Mã Vạch" + đúng giá trị', async () => {
       const text = await page.evaluate(() => document.getElementById('kkKiemSoatListBody')?.textContent || '');
@@ -75,7 +77,7 @@ async function main() {
 
     await page.click('#btnKkSubGomMa');
     await page.waitForTimeout(150);
-    await page.selectOption('#kkGomMaShelfSelect', '10');
+    await page.fill('#kkGomMaShelfInput', SHELF_A1_LABEL);
     await page.fill('#kkGomMaBarcodeInput', 'SP001');
     await page.click('[data-op="submitKkScan"][data-arg0="GOMMA"]');
     await page.waitForTimeout(250);

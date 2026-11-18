@@ -61,10 +61,8 @@
                vanhanh.js): đổi loại kỳ sau khi tạo dễ gây lẫn dữ liệu đã gắn vào kỳ, Sửa chỉ đổi Tên
                Kỳ/Thời Gian (editSessionMeta(), lib/stocktakeEngine.js). -->
           <div id="kkNewLoaiKyWrap">
-            <select id="kkNewLoaiKy" data-op-change="onKkNewLoaiKyChanged" class="w-full border rounded px-2 py-1.5">
-              <option value="GOM_MA">Loại: Gom Mã</option>
-              <option value="THONG_KE">Loại: Kiểm Kê</option>
-            </select>
+            <input type="text" id="kkNewLoaiKyInput" data-sdd-list="kkNewLoaiKyDropdown" data-op-input="onKkNewLoaiKyInputChanged" placeholder="-- Chọn loại kỳ --" autocomplete="off" readonly class="w-full border rounded px-2 py-1.5 text-sm">
+            <div id="kkNewLoaiKyDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
           <input type="text" id="kkNewTenKy" placeholder="Tên kỳ (VD: Kiểm Kê Q4/2026)" class="border rounded px-2 py-1.5">
           <input type="date" id="kkNewBatDau" class="border rounded px-2 py-1.5">
@@ -129,9 +127,8 @@
     <div id="kkGomMaWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
-        <select id="kkGomMaShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="GOMMA" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn quầy kệ --</option>
-        </select>
+        <input type="text" id="kkGomMaShelfInput" data-sdd-list="kkGomMaShelfDropdown" data-op-input="onKkScanShelfInputChanged" data-arg0="GOMMA" placeholder="-- Chọn quầy kệ --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkGomMaShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <p id="kkGomMaSessionInfo" class="text-xs text-gray-500"></p>
         <p id="kkGomMaOfflineNote" class="hidden text-xs text-amber-600 font-semibold"></p>
       </div>
@@ -152,9 +149,8 @@
     <div id="kkKiemDemWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
-        <select id="kkKiemDemShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMDEM" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn quầy kệ --</option>
-        </select>
+        <input type="text" id="kkKiemDemShelfInput" data-sdd-list="kkKiemDemShelfDropdown" data-op-input="onKkScanShelfInputChanged" data-arg0="KIEMDEM" placeholder="-- Chọn quầy kệ --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkKiemDemShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <p id="kkKiemDemSessionInfo" class="text-xs text-gray-500"></p>
         <p id="kkKiemDemOfflineNote" class="hidden text-xs text-amber-600 font-semibold"></p>
       </div>
@@ -179,9 +175,8 @@
     <div id="kkKiemSoatWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📍 Quầy Kệ</label>
-        <select id="kkKiemSoatShelfSelect" data-op-change="onKkScanShelfChanged" data-arg0="KIEMSOAT" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn quầy kệ --</option>
-        </select>
+        <input type="text" id="kkKiemSoatShelfInput" data-sdd-list="kkKiemSoatShelfDropdown" data-op-input="onKkScanShelfInputChanged" data-arg0="KIEMSOAT" placeholder="-- Chọn quầy kệ --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkKiemSoatShelfDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <p id="kkKiemSoatSessionInfo" class="text-xs text-gray-500"></p>
         <p id="kkKiemSoatOfflineNote" class="hidden text-xs text-amber-600 font-semibold"></p>
       </div>
@@ -268,9 +263,8 @@
     <div id="kkConfirmWrap" class="hidden space-y-3">
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Kiểm Kê (dùng cho Kiểm Đếm + Kiểm Soát)</label>
-        <select id="kkConfirmSessionSelect" data-op-change="loadKkConfirmTab" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn kỳ Kiểm Kê đang hoạt động --</option>
-        </select>
+        <input type="text" id="kkConfirmSessionInput" data-sdd-list="kkConfirmSessionDropdown" data-op-input="onKkConfirmSessionInputChanged" placeholder="-- Chọn kỳ Kiểm Kê đang hoạt động --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkConfirmSessionDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
       </div>
       <div id="kkConfirmBody" class="hidden space-y-3">
         <div class="bg-white border rounded p-3">
@@ -327,9 +321,8 @@
       </div>
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📅 Kỳ Gom Mã (riêng, khác Kỳ Kiểm Kê ở trên)</label>
-        <select id="kkConfirmGomMaSessionSelect" data-op-change="loadKkConfirmGomMaTab" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn kỳ Gom Mã đang hoạt động --</option>
-        </select>
+        <input type="text" id="kkConfirmGomMaSessionInput" data-sdd-list="kkConfirmGomMaSessionDropdown" data-op-input="onKkConfirmGomMaSessionInputChanged" placeholder="-- Chọn kỳ Gom Mã đang hoạt động --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkConfirmGomMaSessionDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
       </div>
       <div id="kkConfirmGomMaBody" class="hidden space-y-3">
         <div class="bg-white border rounded p-3">
@@ -369,9 +362,8 @@
       <div id="kkReportDeptRow" class="flex items-center gap-2 text-sm"></div>
       <div class="bg-white border rounded p-3 space-y-2">
         <label class="block text-xs font-semibold text-gray-600">📅 Kỳ</label>
-        <select id="kkReportSessionSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
-          <option value="">-- Chọn kỳ để xem báo cáo --</option>
-        </select>
+        <input type="text" id="kkReportSessionInput" data-sdd-list="kkReportSessionDropdown" data-op-input="onKkReportSessionInputChanged" placeholder="-- Chọn kỳ để xem báo cáo --" autocomplete="off" class="w-full border rounded px-2 py-1.5 text-sm">
+        <div id="kkReportSessionDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
       </div>
       <div id="kkReportEmptyNote" class="hidden bg-gray-50 border rounded p-6 text-center text-gray-500 text-sm"></div>
       <div id="kkReportBody" class="hidden space-y-3">
@@ -400,12 +392,10 @@
           <div id="kkReportValueByStoreBody" class="overflow-x-auto"></div>
         </div>
         <div class="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
-          <label class="block text-xs font-semibold text-amber-800">📊 So Sánh Với Kỳ Khác (tuỳ chọn — VD so Gom Mã với Kiểm Kê, hoặc 2 kỳ Kiểm Kê khác đợt)</label>
-          <select id="kkReportCompareSelect" data-op-change="loadKkReportTab" class="w-full border rounded px-2 py-1.5 text-sm">
-            <option value="">-- Không so sánh (mặc định) --</option>
-          </select>
+          <label class="block text-xs font-semibold text-amber-800">📊 So Sánh Với Kỳ Khác (tuỳ chọn, chọn được NHIỀU kỳ cùng lúc, tối đa 6 — VD so Gom Mã với Kiểm Kê, hoặc nhiều kỳ Kiểm Kê khác đợt)</label>
+          <div id="kkReportCompareMultiSelect"></div>
           <div id="kkReportCompareCard" class="hidden bg-white border rounded p-3 mt-2">
-            <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportCompareTitle">So Sánh 2 Kỳ</div>
+            <div class="font-bold text-sm text-gray-800 mb-2" id="kkReportCompareTitle">So Sánh Kỳ</div>
             <div id="kkReportCompareChart" class="overflow-x-auto"></div>
           </div>
         </div>
@@ -447,9 +437,8 @@
           </div>
           <div>
             <label class="block text-xs text-gray-600 mb-1">Siêu thị</label>
-            <select id="kkUaDeptSelect" data-op-change="onKkUaDeptChanged" class="w-full border p-1.5 rounded">
-              <option value="">-- Chọn siêu thị --</option>
-            </select>
+            <input type="text" id="kkUaDeptInput" data-sdd-list="kkUaDeptDropdown" data-op-input="onKkUaDeptInputChanged" placeholder="-- Chọn siêu thị --" autocomplete="off" class="w-full border p-1.5 rounded">
+            <div id="kkUaDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
         </div>
         <div>

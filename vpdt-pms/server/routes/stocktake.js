@@ -1292,19 +1292,28 @@ router.get('/report', async (req, res) => {
       }
     }
 
-    // So sánh GIỮA 2 KỲ bất kỳ (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với
-    // nhau ấy, thì mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh") — người
-    // dùng TỰ CHỌN kỳ thứ 2 muốn so sánh (bất kỳ loại nào, kể cả Gom Mã), KHÔNG tự động trộn ngầm như
-    // trước. Mỗi kỳ vẫn qua ĐÚNG 1 lớp kiểm tra quyền xem (assertCanViewSession) độc lập.
-    let compare;
-    const compareSessionId = req.query.compareSessionId !== undefined ? Number(req.query.compareSessionId) : null;
-    if (compareSessionId !== null) {
-      if (!Number.isFinite(compareSessionId)) return res.status(400).json({ error: 'compareSessionId không hợp lệ' });
-      const compareSession = sessions.find(s => s.id === compareSessionId);
-      if (!compareSession) return res.status(404).json({ error: 'Không tìm thấy kỳ để so sánh' });
-      await assertCanViewSession(req, compareSession);
-      const { rows: compareRows } = computeSessionPrimaryRows(compareSession, allCounts);
-      compare = { session: compareSession, rows: compareRows };
+    // So sánh GIỮA NHIỀU KỲ bất kỳ (11/2026, theo đúng phản hồi người dùng: "nếu so sánh giữa các kỳ với
+    // nhau ấy, thì mới có phần gom mã... phải có thêm cái option để có thể lựa chọn so sánh"; MỞ RỘNG
+    // 12/2026 từ so sánh 1-vs-1 sang N-way theo yêu cầu người dùng "mở rộng so sánh NHIỀU kỳ cùng lúc") —
+    // người dùng TỰ CHỌN các kỳ muốn so sánh (bất kỳ loại nào, kể cả Gom Mã), KHÔNG tự động trộn ngầm như
+    // trước. compareSessionId nhận DANH SÁCH id cách nhau bởi dấu phẩy (giữ nguyên tên param cũ cho
+    // tương thích — 1 id đơn vẫn hoạt động y hệt như bản 1-vs-1 cũ). Giới hạn CỨNG 6 kỳ/lượt (đủ để biểu
+    // đồ còn đọc được — bảng màu CVD-safe cố định phía client KHÔNG tự sinh thêm màu an toàn ngoài 6, xem
+    // KK_REPORT_COLOR_COMPARE_PALETTE ở module-vanhanh.js). Mỗi kỳ vẫn qua ĐÚNG 1 lớp kiểm tra quyền xem
+    // (assertCanViewSession) độc lập.
+    let compares = [];
+    const compareSessionIdRaw = req.query.compareSessionId;
+    if (compareSessionIdRaw !== undefined && String(compareSessionIdRaw).trim() !== '') {
+      const ids = String(compareSessionIdRaw).split(',').map(s => s.trim()).filter(Boolean).map(Number);
+      if (!ids.length || ids.some(id => !Number.isFinite(id))) return res.status(400).json({ error: 'compareSessionId không hợp lệ' });
+      if (ids.length > 6) return res.status(400).json({ error: 'Chỉ so sánh tối đa 6 kỳ cùng lúc' });
+      for (const id of ids) {
+        const compareSession = sessions.find(s => s.id === id);
+        if (!compareSession) return res.status(404).json({ error: 'Không tìm thấy kỳ để so sánh' });
+        await assertCanViewSession(req, compareSession);
+        const { rows: compareRows } = computeSessionPrimaryRows(compareSession, allCounts);
+        compares.push({ session: compareSession, rows: compareRows });
+      }
     }
 
     // So sánh nhiều siêu thị (A7, biểu đồ 3) — CHỈ Admin (tài liệu đề xuất A3: "Chưa có khái niệm xem
@@ -1364,7 +1373,7 @@ router.get('/report', async (req, res) => {
     }
 
     res.json({
-      session, compare,
+      session, compares,
       systemConfigured: apiConfigured, rows, totalSystemSkuCount, countedSkuCount, storeComparison, valueReport
     });
   } catch (err) {

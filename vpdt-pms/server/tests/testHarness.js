@@ -1696,17 +1696,22 @@ function createDispatcher(state) {
           rows = breakdown.rows;
           valueReport = { tongGiaTri: breakdown.tongGiaTri, soMaThieuGia: breakdown.soMaThieuGia, giaCapNhatLuc: null };
         }
-        let compare;
+        // compares (12/2026, N-way — mirror ĐÚNG routes/stocktake.js GET /report): compareSessionId nhận
+        // danh sách id cách nhau bởi dấu phẩy, giữ nguyên tên param cũ, giới hạn cứng 6 kỳ/lượt.
+        let compares = [];
         const compareSessionIdRaw = qs.get('compareSessionId');
-        if (compareSessionIdRaw !== null) {
-          const compareSessionId = Number(compareSessionIdRaw);
-          if (!Number.isFinite(compareSessionId)) return { status: 400, body: { error: 'compareSessionId không hợp lệ' } };
-          const compareSession = sessions.find(s => s.id === compareSessionId);
-          if (!compareSession) return { status: 404, body: { error: 'Không tìm thấy kỳ để so sánh' } };
-          const deniedCompare = assertCanView(compareSession);
-          if (deniedCompare) return deniedCompare;
-          const { rows: compareRows } = computePrimaryRows(compareSession);
-          compare = { session: compareSession, rows: compareRows };
+        if (compareSessionIdRaw !== null && compareSessionIdRaw.trim() !== '') {
+          const ids = compareSessionIdRaw.split(',').map(s => s.trim()).filter(Boolean).map(Number);
+          if (!ids.length || ids.some(id => !Number.isFinite(id))) return { status: 400, body: { error: 'compareSessionId không hợp lệ' } };
+          if (ids.length > 6) return { status: 400, body: { error: 'Chỉ so sánh tối đa 6 kỳ cùng lúc' } };
+          for (const compareSessionId of ids) {
+            const compareSession = sessions.find(s => s.id === compareSessionId);
+            if (!compareSession) return { status: 404, body: { error: 'Không tìm thấy kỳ để so sánh' } };
+            const deniedCompare = assertCanView(compareSession);
+            if (deniedCompare) return deniedCompare;
+            const { rows: compareRows } = computePrimaryRows(compareSession);
+            compares.push({ session: compareSession, rows: compareRows });
+          }
         }
         let storeComparison;
         if (freshUser.perms?.admin) {
@@ -1737,7 +1742,7 @@ function createDispatcher(state) {
           }).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
         }
         return { status: 200, body: {
-          session, compare,
+          session, compares,
           systemConfigured: apiConfigured, rows,
           totalSystemSkuCount: systemMap ? systemMap.size : null,
           countedSkuCount: [...finalMap.values()].filter(v => v.total > 0).length,

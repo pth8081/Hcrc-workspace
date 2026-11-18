@@ -57,7 +57,7 @@ async function main() {
     await run.run('Double-click "Thêm" (Gom Mã) khi chưa có kỳ Gom Mã hoạt động — không treo, không báo lỗi trùng nhau bất thường', async () => {
       await page.click('#btnKkSubGomMa');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '30');
+      await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(150);
       // Kỳ Gom Mã đang ở NHAP (chưa Kích Hoạt) -> ô quét phải ẨN, double-click vào nút bên trong khung ẨN
       // là KHÔNG THỂ (Playwright sẽ tự chặn action vì phần tử invisible) — xác nhận đúng trạng thái này.
@@ -72,7 +72,7 @@ async function main() {
       await page.waitForTimeout(200);
       await page.click('#btnKkSubGomMa');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkGomMaShelfSelect', '30');
+      await page.fill('#kkGomMaShelfInput', 'Siêu thị Quận 1 — A1 — Kệ A1 — Gia vị');
       await page.waitForTimeout(200);
       await page.fill('#kkGomMaBarcodeInput', 'SP777');
       // 2 click THẬT, ĐỒNG BỘ LIÊN TIẾP trên CÙNG 1 phần tử DOM (el.click() 2 lần không chờ gì ở giữa) —
@@ -159,7 +159,7 @@ async function main() {
       // Cần có hoạt động Kiểm Đếm thật trên A2 trước để quầy kệ này xuất hiện ở danh sách Tab 6.
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '31');
+      await page.fill('#kkKiemDemShelfInput', 'Siêu thị Quận 1 — A2 — Kệ A2 — Mì');
       await page.waitForTimeout(200);
       await page.fill('#kkKiemDemBarcodeInput', 'SP777');
       await page.click('[data-op="submitKkScan"][data-arg0="KIEMDEM"]');
@@ -167,7 +167,7 @@ async function main() {
 
       await page.click('#btnKkSubConfirm');
       await page.waitForTimeout(200);
-      await page.selectOption('#kkConfirmSessionSelect', String(newSessionId));
+      await page.fill('#kkConfirmSessionInput', 'Thống Kê Race 2');
       await page.waitForTimeout(200);
       await page.evaluate(() => {
         const el = document.querySelector('#kkConfirmShelfListBody button[data-op="confirmKkShelf"][data-arg0="31"]');

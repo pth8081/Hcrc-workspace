@@ -67,7 +67,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chưa hỗ trợ route: POST /api/data/users';
+  const KNOWN_HARNESS_NOISE = 'Lỗi khi lưu "users" lên máy chủ: Error: Mock chỉ hỗ trợ patch-mode (__patchUser) cho /api/data/users ở harness này';
   const jsErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -140,9 +140,9 @@ async function main() {
     await page.waitForTimeout(150);
 
     await run.run('[2] IT_CLOSE_ONLY đóng được kỳ Đang hoạt động CỦA CHÍNH SIÊU THỊ NHÀ (sanity — quyền Đóng Kỳ hoạt động thật)', async () => {
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkPeriodDeptSelect').options).map(o => o.value));
+      const options = await page.evaluate(() => (document.getElementById('kkPeriodDeptDropdown')._sddItems || []).map(i => i.value));
       assert(options.includes(A), `Dropdown phải có siêu thị nhà ${A}, thực tế: ${options.join(',')}`);
-      await page.selectOption('#kkPeriodDeptSelect', A);
+      await page.fill('#kkPeriodDeptInput', A);
       await page.waitForTimeout(200);
       const btn = await page.$(`button[data-op="closeKkPeriod"][data-arg0="${sActiveHomeA.id}"]`);
       assert(!!btn, `Phải thấy nút Đóng Kỳ cho kỳ ${sActiveHomeA.id} (nhà A, Đang hoạt động)`);
@@ -170,7 +170,7 @@ async function main() {
     await page.waitForTimeout(150);
 
     await run.run('[4] kiemKeConfirmDo:true (cờ cũ) -> kkSelectableDepts CHỈ có đúng 1 siêu thị (nhà), không mở rộng', async () => {
-      const hasDropdown = await page.evaluate(() => !!document.getElementById('kkPeriodDeptSelect'));
+      const hasDropdown = await page.evaluate(() => !!document.getElementById('kkPeriodDeptInput'));
       assert(!hasDropdown, 'KHÔNG được hiện dropdown chọn siêu thị — cờ cũ true KHÔNG có phạm vi {all,depts} nào để mở rộng ra ngoài siêu thị nhà');
       const label = await page.evaluate(() => document.getElementById('kkPeriodDeptRow').textContent);
       assert(label.includes(A), `Phải hiện đúng tên siêu thị nhà ${A}, thực tế: ${label}`);
@@ -217,7 +217,7 @@ async function main() {
     });
 
     await run.run('[5] Admin Mở Lại được THẬT kỳ Đã chốt của dept C (không cần kiemKePeriodReopenManage)', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', C);
+      await page.fill('#kkPeriodDeptInput', C);
       await page.waitForTimeout(200);
       const btn = await page.$(`button[data-op="reopenKkPeriod"][data-arg0="${sClosedC.id}"]`);
       assert(!!btn, `Admin phải thấy nút Mở Lại cho kỳ ${sClosedC.id} (dept C)`);

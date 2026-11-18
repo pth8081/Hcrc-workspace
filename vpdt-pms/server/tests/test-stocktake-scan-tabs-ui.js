@@ -51,12 +51,12 @@ async function main() {
       const info = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);
       assert(hidden, 'Ô quét phải ẨN khi chưa chọn quầy kệ');
       assert(/chọn quầy kệ/i.test(info), `Phải gợi ý chọn quầy kệ, thực tế: ${info}`);
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkGomMaShelfSelect').options).map(o => o.textContent));
+      const options = await page.evaluate(() => (document.getElementById('kkGomMaShelfDropdown')._sddItems || []).map(it => it.label));
       assert(options.some(o => o.includes('A1')), `Phải hiện đúng quầy kệ A1 đã được allowlist, thực tế: ${options.join(',')}`);
     });
 
     await run.run('Tab 2 Gom Mã: chọn quầy kệ A1 (đã có kỳ Gom Mã đang hoạt động) -> hiện ô quét + tên kỳ', async () => {
-      await page.selectOption('#kkGomMaShelfSelect', '10');
+      await page.fill('#kkGomMaShelfInput', `${DEPT1} — A1 — Kệ A1 — Gia vị`);
       await page.waitForTimeout(200);
       const hidden = await page.evaluate(() => document.getElementById('kkGomMaScanBox').classList.contains('hidden'));
       const info = await page.evaluate(() => document.getElementById('kkGomMaSessionInfo').textContent);
@@ -110,7 +110,7 @@ async function main() {
     await run.run('Tab 3 Kiểm Đếm: chọn quầy kệ A1 (kỳ Thống Kê đang hoạt động) -> hiện ô quét đúng kỳ', async () => {
       await page.click('#btnKkSubKiemDem');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemDemShelfSelect', '10');
+      await page.fill('#kkKiemDemShelfInput', `${DEPT1} — A1 — Kệ A1 — Gia vị`);
       await page.waitForTimeout(200);
       const hidden = await page.evaluate(() => document.getElementById('kkKiemDemScanBox').classList.contains('hidden'));
       const info = await page.evaluate(() => document.getElementById('kkKiemDemSessionInfo').textContent);
@@ -137,7 +137,7 @@ async function main() {
     await run.run('Tab 4 Kiểm Soát: chọn quầy kệ -> quét -> danh sách hiện thêm cột "SL Kiểm Đếm" tham khảo', async () => {
       await page.click('#btnKkSubKiemSoat');
       await page.waitForTimeout(150);
-      await page.selectOption('#kkKiemSoatShelfSelect', '10');
+      await page.fill('#kkKiemSoatShelfInput', `${DEPT1} — A1 — Kệ A1 — Gia vị`);
       await page.waitForTimeout(200);
       await page.fill('#kkKiemSoatBarcodeInput', '2003330491');
       await page.fill('#kkKiemSoatQtyInput', '108');
@@ -150,7 +150,7 @@ async function main() {
     });
 
     await run.run('Đổi quầy kệ về rỗng -> ô quét ẩn lại, danh sách xoá sạch', async () => {
-      await page.selectOption('#kkKiemSoatShelfSelect', '');
+      await page.fill('#kkKiemSoatShelfInput', '');
       await page.waitForTimeout(150);
       const hidden = await page.evaluate(() => document.getElementById('kkKiemSoatScanBox').classList.contains('hidden'));
       const listEmpty = await page.evaluate(() => document.getElementById('kkKiemSoatListBody').innerHTML.trim());

@@ -54,13 +54,15 @@ const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'kiemke-all-scree
 
     // 5) Tạo 1 kỳ Gom Mã (Nháp).
     await page.click('#btnKkPeriodOpenCreate');
-    await page.selectOption('#kkNewLoaiKy', 'GOM_MA');
+    await page.click('#kkNewLoaiKyInput');
+    await page.locator('#kkNewLoaiKyDropdown').getByText('Loại: Gom Mã', { exact: true }).click();
     await page.fill('#kkNewTenKy', 'Gom Mã Tuần 46/2026');
     await page.click('[data-op="submitCreateKkPeriod"]');
     await page.waitForTimeout(200);
     // 6) Tạo thêm 1 kỳ Thống Kê (Nháp) — minh hoạ 2 loại kỳ độc lập cùng lúc.
     await page.click('#btnKkPeriodOpenCreate');
-    await page.selectOption('#kkNewLoaiKy', 'THONG_KE');
+    await page.click('#kkNewLoaiKyInput');
+    await page.locator('#kkNewLoaiKyDropdown').getByText('Loại: Kiểm Kê', { exact: true }).click();
     await page.fill('#kkNewTenKy', 'Thống Kê Quý 4/2026');
     await page.click('[data-op="submitCreateKkPeriod"]');
     await page.waitForTimeout(200);
