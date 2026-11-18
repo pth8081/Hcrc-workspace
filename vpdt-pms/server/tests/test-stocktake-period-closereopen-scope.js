@@ -91,12 +91,12 @@ async function main() {
     await page.waitForTimeout(150);
 
     await run.run('IT2 (chỉ Mở Lại) thấy dropdown với MỌI siêu thị (quyền Mở Lại luôn là tất cả, không chọn lẻ)', async () => {
-      const options = await page.evaluate(() => Array.from(document.getElementById('kkPeriodDeptSelect').options).map(o => o.value));
+      const options = await page.evaluate(() => (document.getElementById('kkPeriodDeptDropdown')._sddItems || []).map(i => i.value));
       assert(options.includes(DEPT1) && options.includes(DEPT2) && options.includes(DEPT3), `Phải thấy ĐỦ cả 3 siêu thị, thực tế: ${options.join(',')}`);
     });
 
     await run.run('IT2 Mở Lại được kỳ Đã chốt của Quận 3 (siêu thị hoàn toàn không liên quan, vì quyền Mở Lại là MỌI siêu thị)', async () => {
-      await page.selectOption('#kkPeriodDeptSelect', DEPT3);
+      await page.fill('#kkPeriodDeptInput', DEPT3);
       await page.waitForTimeout(200);
       const btn = await page.$('button[data-op="reopenKkPeriod"][data-arg0="7003"]');
       assert(!!btn, 'Phải thấy nút Mở Lại cho kỳ 7003 (Quận 3, Đã chốt) dù IT2 không liên quan gì tới Quận 3');

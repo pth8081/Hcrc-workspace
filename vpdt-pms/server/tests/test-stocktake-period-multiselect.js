@@ -42,7 +42,7 @@ const PORT = 8994;
     console.log('PASS: Siêu thị đã có kỳ CÙNG loại CHƯA ĐÓNG bị loại khỏi ô chọn nhiều, siêu thị khác vẫn chọn được');
 
     // ===== 2) Đổi loại kỳ sang Kiểm Kê — Siêu thị B KHÔNG bị loại nữa (chưa có kỳ Kiểm Kê nào). =====
-    await page.selectOption('#kkNewLoaiKy', 'THONG_KE');
+    await page.fill('#kkNewLoaiKyInput', 'Loại: Kiểm Kê');
     await page.waitForTimeout(250);
     note = await page.textContent('#kkNewStoresBlockedNote');
     assert.strictEqual(note.trim(), '', 'LỖI: đổi sang loại Kiểm Kê thì không còn siêu thị nào bị loại (B chỉ có kỳ Gom Mã, không phải Kiểm Kê)');
@@ -79,15 +79,15 @@ const PORT = 8994;
     // Danh sách Tab 1 LUÔN lọc theo ĐÚNG 1 siêu thị đang chọn ở "📍 Siêu thị:" (kkPeriodDeptRow, khác hẳn
     // ô multi-select vừa dùng để TẠO) — kiểm tra riêng từng siêu thị bằng cách đổi bộ lọc view, không
     // mong đợi 1 view hiện cả 2 cùng lúc (đúng kiến trúc hiện có, không phải lỗi tính năng mới).
-    await page.selectOption('#kkPeriodDeptSelect', 'Siêu thị A');
+    await page.fill('#kkPeriodDeptInput', 'Siêu thị A');
     await page.waitForTimeout(200);
     let rowTextA = await page.textContent('#kkPeriodListBody');
     assert.ok(rowTextA.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị A phải có kỳ vừa tạo');
-    await page.selectOption('#kkPeriodDeptSelect', 'Siêu thị C');
+    await page.fill('#kkPeriodDeptInput', 'Siêu thị C');
     await page.waitForTimeout(200);
     let rowTextC = await page.textContent('#kkPeriodListBody');
     assert.ok(rowTextC.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị C phải có kỳ vừa tạo');
-    await page.selectOption('#kkPeriodDeptSelect', 'Siêu thị B');
+    await page.fill('#kkPeriodDeptInput', 'Siêu thị B');
     await page.waitForTimeout(200);
     let rowTextB = await page.textContent('#kkPeriodListBody');
     assert.ok(!rowTextB.includes('Kiểm Kê Q4/2026'), 'LỖI: Siêu thị B KHÔNG được có kỳ này (không được chọn lúc tạo)');
@@ -97,7 +97,7 @@ const PORT = 8994;
     await page.click('#btnKkPeriodOpenCreate');
     await page.waitForTimeout(250);
     assert.strictEqual(await page.isVisible('#kkPeriodCreateBox'), true);
-    await page.selectOption('#kkNewLoaiKy', 'THONG_KE');
+    await page.fill('#kkNewLoaiKyInput', 'Loại: Kiểm Kê');
     await page.waitForTimeout(250);
     note = await page.textContent('#kkNewStoresBlockedNote');
     assert.ok(note.includes('Siêu thị A') && note.includes('Siêu thị C'), 'LỖI: sau khi tạo xong, A và C phải bị loại khỏi ô chọn cho loại Kiểm Kê (vừa có kỳ Nháp)');
