@@ -3148,7 +3148,10 @@ function renderKkInventoryStoreCard(dept) {
     <div class="bg-white border rounded p-3 space-y-2">
       <div class="flex items-center justify-between flex-wrap gap-1">
         <h4 class="font-bold text-sm text-gray-800">🏬 ${escapeHtml(dept)}</h4>
-        <span class="text-[11px]">${syncNote}</span>
+        <div class="flex items-center gap-2 flex-wrap text-[11px]">
+          <span class="font-semibold text-sky-700">📦 ${rows.length.toLocaleString('vi-VN')} mã hàng đã đồng bộ</span>
+          <span>${syncNote}</span>
+        </div>
       </div>
       ${tableHtml}
     </div>`;
