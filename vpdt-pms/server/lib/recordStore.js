@@ -273,6 +273,30 @@ const DEDICATED_TABLES = {
       Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
     }
   },
+  // shelfRecords (Kiểm Soát Hàng Hóa > "Ghi Nhận Trên Kệ", BƯỚC 8, 12/2026 — tách khỏi AppData). KHÁC
+  // stocktakeCounts (khoá tổng hợp 1 khoá CHÍNH XÁC): "CÙNG LÔ" ở đây khớp maHang HOẶC maVach (OR, không
+  // AND được cả 2) + CÒN quantity>0 (xem lib/shelfRecordUpsert.js::findMatchingActiveShelfRecord(), hàm
+  // THUẦN giữ nguyên) — không diễn đạt được bằng UNIQUE INDEX/WHERE đơn giản như stocktakeCounts, nên
+  // KHÔNG có unique index ở đây (xem sql/schema.sql ngay trên CREATE TABLE dbo.ShelfRecords). Route
+  // POST /api/shelf-stock/records/upsert (lib/shelfRecordsStore.js::upsertShelfRecordRow()) tự
+  // queryDedicatedRecords() lọc Dept+ShelfLocationId trước (thu hẹp về đúng 1 quầy kệ, không tải cả
+  // bảng) rồi mới chạy findMatchingActiveShelfRecord() trong JS trên tập đã thu hẹp đó, bọc
+  // withAppLock(`shelf_record_upsert:${dept}:${shelfLocationId}`) — khoá THEO QUẦY KỆ (không khoá được
+  // chính xác hơn vì điều kiện khớp phức tạp hơn 1 khoá đơn), vẫn hẹp hơn HẲN khoá nguyên cả AppData cũ.
+  // CRUD còn lại (tạo qua POST /api/create/shelfRecords, sửa PATCH /records/:id, xoá DELETE /records/:id)
+  // đi qua ĐÚNG các hàm generic recordStore.js (createForCollection/withLockedRecordForCollection/
+  // deleteRecordForCollection) — tự động chuyển sang bảng riêng này, KHÔNG cần sửa gì ở routes/shelfStock.js
+  // cho 3 route đó. LƯU Ý: xoá giờ tự đi qua Thùng Rác (moveDedicatedRecordToTrash, khôi phục được) —
+  // KHÁC hành vi CŨ "xoá vĩnh viễn" của AppData thuần (cải thiện, không phải lỗi).
+  shelfRecords: {
+    table: 'ShelfRecords', hasCode: false,
+    columns: {
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      ShelfLocationId: { sqlType: () => sql.BigInt,        extract: r => (r.shelfLocationId != null ? r.shelfLocationId : null) },
+      MaHang:          { sqlType: () => sql.NVarChar(20),  extract: r => r.maHang || null },
+      MaVach:          { sqlType: () => sql.NVarChar(20),  extract: r => r.maVach || null }
+    }
+  },
   checklistSubmissions: {
     table: 'ChecklistSubmissions', hasCode: false,
     columns: {

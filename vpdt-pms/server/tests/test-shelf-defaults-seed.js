@@ -10,6 +10,15 @@
 // mảng rỗng) — mà mock THẲNG '../db' (SQL Server) để tái hiện ĐÚNG cơ chế lỗi thật phía SERVER, cùng
 // khuôn tests/test-code-autogen-retry.js (TẦNG 2).
 //
+// CẬP NHẬT (BƯỚC 8, 12/2026): shelfRecords đã "tốt nghiệp" bảng riêng dbo.ShelfRecords (xem
+// lib/recordStore.js DEDICATED_TABLES.shelfRecords) — KHÔNG còn đi qua withLockedAppDataValue()/seed
+// DEFAULTS nữa (createForCollection() rẽ hẳn sang nhánh insertDedicatedRecord(), không cần dòng AppData
+// nào), nên không còn tái hiện được lớp lỗi "Key không tồn tại trong AppData" cho riêng collection này
+// nữa — bỏ 2 assertion shelfRecords (trước/sau vá) khỏi kịch bản cũ, chỉ giữ shelfLocations/
+// shelfStockThresholds (2 collection này VẪN còn ở AppData, chưa migrate). Quy tắc chung (dbKey nào
+// cũng phải có DEFAULTS HOẶC đã "tốt nghiệp" DEDICATED_TABLES) vẫn được xác nhận ở bước regression toàn
+// hệ thống cuối file — shelfRecords giờ qua nhánh DEDICATED_TABLES đúng như mong đợi.
+//
 // Kịch bản:
 //   1) Dựng 1 "dbo.AppData" giả CHỈ có đúng các key mà defaults.js BẢN CŨ (thiếu 3 key shelf) từng seed
 //      — tái hiện ĐÚNG trạng thái production trước bản vá này.
@@ -125,13 +134,6 @@ function installFakeDb(appDataMap) {
     );
   });
 
-  await checkAsync('TRƯỚC khi vá: shelfRecords CŨNG throw y hệt (đúng linh cảm người dùng "upload tài khoản này cũng báo lỗi")', async () => {
-    await assert.rejects(
-      () => ctx.recordStore.createForCollection('shelfRecords', (list) => ({ id: 2 })),
-      (err) => err.message === 'Key không tồn tại trong AppData: shelfRecords'
-    );
-  });
-
   await checkAsync('TRƯỚC khi vá: shelfStockThresholds CŨNG throw y hệt', async () => {
     await assert.rejects(
       () => ctx.recordStore.createForCollection('shelfStockThresholds', (list) => ({ id: 3 })),
@@ -143,10 +145,8 @@ function installFakeDb(appDataMap) {
   // lại khác đi) dùng defaults.js HIỆN TẠI (đã vá) — mô phỏng "pm2 restart" sau khi merge bản vá.
   const { DEFAULTS } = require('../defaults');
   assert.ok('shelfLocations' in DEFAULTS, 'defaults.js phải có key shelfLocations sau bản vá');
-  assert.ok('shelfRecords' in DEFAULTS, 'defaults.js phải có key shelfRecords sau bản vá');
   assert.ok('shelfStockThresholds' in DEFAULTS, 'defaults.js phải có key shelfStockThresholds sau bản vá');
   assert.deepStrictEqual(DEFAULTS.shelfLocations, []);
-  assert.deepStrictEqual(DEFAULTS.shelfRecords, []);
   assert.deepStrictEqual(DEFAULTS.shelfStockThresholds, []);
 
   for (const key of Object.keys(DEFAULTS)) {
@@ -161,14 +161,6 @@ function installFakeDb(appDataMap) {
       return { id: 1, code: 'KE01', name: 'Kệ 1', dept: 'Siêu thị X' };
     });
     assert.strictEqual(rec.code, 'KE01');
-  });
-
-  await checkAsync('SAU khi vá: shelfRecords THÀNH CÔNG', async () => {
-    const rec = await ctx.recordStore.createForCollection('shelfRecords', (list) => {
-      assert.deepStrictEqual(list, []);
-      return { id: 2, shelfLocationId: 1, productName: 'SP A' };
-    });
-    assert.strictEqual(rec.productName, 'SP A');
   });
 
   await checkAsync('SAU khi vá: shelfStockThresholds THÀNH CÔNG', async () => {

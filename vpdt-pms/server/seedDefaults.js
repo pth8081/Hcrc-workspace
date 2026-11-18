@@ -10,6 +10,7 @@ const { migrateLegacyTasks } = require('./lib/taskStore');
 const { migrateLegacyInventorySnapshot } = require('./lib/inventorySnapshotStore');
 const { migrateLegacyStocktakeCounts } = require('./lib/stocktakeCountsStore');
 const { migrateLegacyConfirmations } = require('./lib/stocktakeConfirmationsStore');
+const { migrateLegacyShelfRecords } = require('./lib/shelfRecordsStore');
 const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
@@ -68,6 +69,7 @@ async function seedDefaults() {
   await migrateLegacyConfirmations('stocktakeShelfConfirmations');
   await migrateLegacyConfirmations('stocktakeShelfGomMaConfirmations');
   await migrateLegacyConfirmations('stocktakeShelfKiemSoatConfirmations');
+  await migrateLegacyShelfRecords();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   // migrateApprovedOperationOrdersToAwaitingReceipt() — TẮT (xem chú thích đầy đủ tại định nghĩa hàm):

@@ -1634,5 +1634,26 @@ BEGIN
 END
 GO
 
+/* ShelfRecords (Kiểm Soát Hàng Hóa > "Ghi Nhận Trên Kệ", collection AppData cũ "shelfRecords") — CÙNG
+   LÝ DO BƯỚC 8 ở trên, module Kiểm Soát Hàng Hóa (routes/shelfStock.js) CŨNG phải tách bảng riêng. KHÔNG
+   có UNIQUE INDEX "khoá tổng hợp" như StocktakeCounts: điều kiện "cùng lô" ở đây khớp maHang HOẶC maVach
+   (OR) + CÒN quantity>0 — không diễn đạt được bằng 1 unique index đơn giản (xem
+   lib/recordStore.js::DEDICATED_TABLES.shelfRecords + lib/shelfRecordsStore.js::upsertShelfRecordRow()).
+   Index theo (Dept, ShelfLocationId) đủ cho truy vấn thu hẹp trước khi lọc tiếp trong JS. */
+IF OBJECT_ID('dbo.ShelfRecords', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ShelfRecords (
+        Id               BIGINT         NOT NULL CONSTRAINT PK_ShelfRecords PRIMARY KEY,
+        CreatedAt        DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Dept             NVARCHAR(100)  NOT NULL,
+        ShelfLocationId  BIGINT         NOT NULL,
+        MaHang           NVARCHAR(20)   NULL,
+        MaVach           NVARCHAR(20)   NULL,
+        Payload          NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_ShelfRecords_Dept_Shelf ON dbo.ShelfRecords (Dept, ShelfLocationId);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO
