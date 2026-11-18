@@ -53,10 +53,24 @@ async function main() {
     // mạng; phải bấm Đồng Bộ mới tải dữ liệu thật để kiểm cột Mã Vạch.
     await page.click('#btnKkInventorySync');
     await page.waitForTimeout(300);
-    await run.run('Tab "📦 Tồn Kho": có cột "Mã Vạch" + hiện đúng giá trị mã vạch', async () => {
-      const headText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
-      assert(headText.includes('Mã Vạch'), 'Phải có tiêu đề cột "Mã Vạch"');
-      assert(headText.includes('8934000000001'), 'Phải hiện đúng giá trị mã vạch SP001');
+    // LỖI THẬT đã vá (12/2026, "Aw, Snap!" crash trên mobile — xem renderKkInventoryStoreCard(),
+    // module-vanhanh.js): tab này KHÔNG còn dựng bảng chi tiết (cột Mã Vạch/Mã Hàng/Tên Hàng) nữa, chỉ
+    // hiện SỐ LƯỢNG mã hàng — cột Mã Vạch của Tồn Kho giờ kiểm qua payload "📥 Xuất Excel"
+    // (exportKkInventoryExcel()) thay vì DOM, các tab Kiểm Đếm/Kiểm Soát/Gom Mã/Báo Cáo KHÔNG đổi gì.
+    await run.run('Tab "📦 Tồn Kho": KHÔNG còn bảng chi tiết trong DOM (tránh crash mobile) — "📥 Xuất Excel" vẫn xuất đúng cột Mã Vạch', async () => {
+      const bodyText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
+      assert(!bodyText.includes('8934000000001'), 'KHÔNG được còn hiện chi tiết mã vạch trong DOM (đã bỏ bảng chi tiết)');
+      const captured = await page.evaluate(() => {
+        const orig = window.downloadMultiSheetXlsxFromServer;
+        let out = null;
+        window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { out = sheets; };
+        exportKkInventoryExcel();
+        window.downloadMultiSheetXlsxFromServer = orig;
+        return out;
+      });
+      const col = captured[0].columns.find(c => c.header === 'Mã Vạch');
+      assert(!!col, 'Payload Xuất Excel phải có cột "Mã Vạch"');
+      assert(captured[0].rows.some(r => r.maVach === '8934000000001'), 'Payload Xuất Excel phải có đúng giá trị mã vạch SP001');
     });
 
     await page.click('#btnKkSubKiemDem');

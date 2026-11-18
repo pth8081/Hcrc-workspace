@@ -3916,6 +3916,19 @@ diện — người dùng không cần biết/làm gì khác.
     chờ ngay lần này. Áp dụng cho CẢ 4 điểm gọi: Tab "📦 Tồn Kho" (Kiểm Kê),
     Tab 7 "📊 Báo Cáo" (Kiểm Kê, cột Tồn Kho Hệ Thống), "📊 Đối Chiếu" + "📊
     Báo Cáo — Tất cả siêu thị" (Kiểm Soát Hàng Hóa).
+  - **LỖI "Aw, Snap!" (crash trình duyệt mobile) ĐÃ VÁ (12/2026, phản hồi
+    người dùng kèm ảnh chụp)**: chọn "Tất cả" nhiều chục siêu thị (mỗi siêu
+    thị có thể hàng trăm-nghìn mã hàng) TRƯỚC ĐÂY dựng bảng chi tiết (Mã
+    Hàng/Mã Vạch/Tên Hàng/Tồn Kho) cho MỌI siêu thị cùng lúc — tổng số nút
+    DOM quá lớn (có thể tới hàng chục-trăm nghìn hàng) khiến tiến trình kết
+    xuất của trình duyệt (nhất là điện thoại, ít bộ nhớ hơn desktop) SẬP
+    HẲN ("Aw, Snap!"), không chỉ "đứng/không phản hồi" như lỗi hiệu năng ở
+    mục trên. Vá triệt để: tab này KHÔNG còn dựng bảng chi tiết nữa — mỗi
+    siêu thị chỉ hiện đúng 1 dòng tóm tắt "📦 X mã hàng đã đồng bộ" + thời
+    điểm đồng bộ. Dữ liệu chi tiết đầy đủ (Mã Hàng/Mã Vạch/Tên Hàng/Tồn
+    Kho) xem qua nút MỚI **"📥 Xuất Excel"** (cạnh "🔄 Đồng Bộ") — xuất file
+    .xlsx MỘT LẦN cho TOÀN BỘ siêu thị đang có dữ liệu (không lệ thuộc đang
+    lọc/chọn gì ở ô đa-chọn phía trên), MỖI siêu thị 1 sheet riêng.
 - **Tab 8 "🔑 Cấu Hình Người Dùng" (12/2026)**: trước khi dùng được Tab 2/3
   dưới đây, Admin/người có quyền "🔑 Tab 8: Cấu Hình Người Dùng" phải vào
   đây GÁN TRƯỚC cho từng người: được thao tác Gom Mã/Kiểm Đếm/Kiểm Soát ở
