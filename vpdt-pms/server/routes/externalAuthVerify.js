@@ -2,8 +2,9 @@
 // (cấp qua routes/externalAuthAdmin.js, xem lib/externalAuth.js) thay vì phiên đăng nhập HCRC:
 //   - POST /verify-credentials: xác thực (verify) 1 cặp tài khoản/mật khẩu HCRC Workspace, trả lời
 //     ĐÚNG/SAI — không cấp cookie/JWT, không phải "đăng nhập hộ".
-//   - GET  /users: đồng bộ danh bạ nhân sự cơ bản (username/tên/điện thoại/phòng ban/chức danh) sang
-//     ứng dụng ngoài — chỉ trả các field công khai nội bộ (KHÔNG BAO GIỜ kèm mật khẩu/PIN dù đã hash).
+//   - GET  /users: đồng bộ danh bạ nhân sự cơ bản (username/tên/điện thoại/phòng ban/chức danh/mã siêu
+//     thị) sang ứng dụng ngoài — chỉ trả các field công khai nội bộ (KHÔNG BAO GIỜ kèm mật khẩu/PIN dù
+//     đã hash).
 //
 // KHÔNG mount sau requireAuth (server.js) — caller là hệ thống ngoài, không có phiên đăng nhập HCRC, tự
 // xác thực bằng API key trong header Authorization thay cho cookie phiên (xem requireExternalApiKey()).
@@ -161,14 +162,21 @@ function resolvePosType(u, storeNames) {
 
 // Field công khai nội bộ duy nhất trả ra ngoài cho mục đích đồng bộ danh bạ — ĐÚNG 7 field đối tác yêu
 // cầu (vị trí/mã nhân viên/tên nhân viên/điện thoại/email/phòng/chức danh — "email" thêm 11/2026, yêu
-// cầu người dùng), TUYỆT ĐỐI không có pass/password/pinHash/failedLoginAttempts/lockedUntil hay bất kỳ
-// field bí mật nào khác của users. "username" đóng vai trò "mã nhân viên" (không có field mã nhân viên
-// riêng trong hệ thống — username LÀ định danh duy nhất/không đổi của mỗi nhân sự, dùng để đăng nhập).
-function toDirectoryProfile(u, storeNames) {
+// cầu người dùng) + "storeCode" (12/2026, theo yêu cầu người dùng "API lấy thông tin người dùng có trả
+// được mã siêu thị cho đối tác không" — tái dùng NGUYÊN "Mã Điểm" đã có sẵn ở DB.storeExternalCodes,
+// XEM admin cấu hình ở Danh Mục Siêu Thị, vốn chỉ dùng riêng cho API Tồn Kho đối tác BRGMART — KHÔNG
+// tạo thêm bảng mã mới. Chỉ ĐÚNG field cộng thêm, KHÔNG đổi/xoá field cũ nào -> tương thích ngược hoàn
+// toàn với tích hợp đang chạy (đối tác cũ bỏ qua field lạ, không bị vỡ parser). null khi: nhân viên Văn
+// phòng (dept không phải tên 1 siêu thị), hoặc siêu thị CHƯA được admin cấu hình Mã Điểm. TUYỆT ĐỐI
+// không có pass/password/pinHash/failedLoginAttempts/lockedUntil hay bất kỳ field bí mật nào khác của
+// users. "username" đóng vai trò "mã nhân viên" (không có field mã nhân viên riêng trong hệ thống —
+// username LÀ định danh duy nhất/không đổi của mỗi nhân sự, dùng để đăng nhập).
+function toDirectoryProfile(u, storeNames, storeExternalCodes) {
   return {
     position: posTypeLabel(resolvePosType(u, storeNames)),
     username: u.username, name: u.name || '', phone: u.phone || '', email: u.email || '',
-    dept: u.dept || '', jobTitle: u.jobTitle || ''
+    dept: u.dept || '', jobTitle: u.jobTitle || '',
+    storeCode: (storeExternalCodes || {})[u.dept] || null
   };
 }
 
@@ -179,9 +187,10 @@ function toDirectoryProfile(u, storeNames) {
 router.get('/users', async (req, res) => {
   try {
     const apiKey = req.externalApiKey;
-    const [users, stores] = await Promise.all([
+    const [users, stores, storeExternalCodes] = await Promise.all([
       getAppDataValue('users').then(v => v || []),
-      getAppDataValue('stores').then(v => v || [])
+      getAppDataValue('stores').then(v => v || []),
+      getAppDataValue('storeExternalCodes').then(v => v || {})
     ]);
     const storeNames = new Set(stores);
     const account = String(req.query?.account || '').trim();
@@ -196,11 +205,11 @@ router.get('/users', async (req, res) => {
       const user = findUserByUsernameCI(users, account);
       if (!user) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
       logExternalAuth(req, { apiKeyName: apiKey.name, username: account, actionType: 'DIRECTORY_LOOKUP', description: 'Tra cứu 1 hồ sơ danh bạ qua API ngoài', status: 'SUCCESS' });
-      return res.json(toDirectoryProfile(user, storeNames));
+      return res.json(toDirectoryProfile(user, storeNames, storeExternalCodes));
     }
 
     logExternalAuth(req, { apiKeyName: apiKey.name, actionType: 'DIRECTORY_SYNC', description: `Đồng bộ toàn bộ danh bạ qua API ngoài (${users.length} tài khoản)`, status: 'SUCCESS' });
-    res.json(users.map(u => toDirectoryProfile(u, storeNames)));
+    res.json(users.map(u => toDirectoryProfile(u, storeNames, storeExternalCodes)));
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/external/users', 'Không thể tải danh bạ');
   }
