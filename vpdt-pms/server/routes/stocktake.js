@@ -43,6 +43,7 @@ const {
   canManageStocktakePeriod, canReopenStocktakeSession, canConfirmStocktake, canConfirmStocktakeForDept,
   canCloseStocktakePeriodForDept, canReopenStocktakePeriodForDept, canCloseStocktakePeriodAtAll, canReopenStocktakePeriodAtAll,
   buildNewSession, activateSession, activateSessionBatch, closeSession, reopenSession, closeSessionBatch, reopenSessionBatch, editSessionMeta, deleteDraftSession,
+  editSessionMetaBatch, deleteDraftSessionBatch,
   findActiveSession, listOpenSessionsByLoaiKy, sameDept,
   canDoStocktakeGomMa, canDoStocktakeKiemDem, canDoStocktakeKiemSoat, canManageStocktakeUserAccess,
   canViewStocktakeReport,
