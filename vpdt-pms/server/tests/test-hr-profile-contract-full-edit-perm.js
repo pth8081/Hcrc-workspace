@@ -100,7 +100,11 @@ async function partB() {
   const NOPERM = { username: 'noperm1', name: 'Không Quyền Gì', dept: 'Kinh Doanh', perms: {}, active: true };
   const FULL = { username: 'full1', name: 'Toàn Quyền Sửa NS+HĐLĐ', dept: 'Phòng Nhân Sự', perms: { hrProfileContractFullEdit: true }, active: true };
   const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-  const USERS = [NOPERM, FULL, ADMIN];
+  // LINKED_TARGET (12/2026, cho kịch bản syncAccountContact — xem routes/employeeProfile.js) — tài khoản
+  // VPDT đóng vai "nhân viên thật" đã liên kết với hồ sơ FE002, dùng để xác nhận email/phone đồng bộ
+  // ĐÚNG xuống đúng tài khoản này (không phải tài khoản actor đang thao tác, FULL).
+  const LINKED_TARGET = { username: 'nv.linked', name: 'Nhân Viên Đã Liên Kết', dept: 'Kinh Doanh', perms: {}, active: true, email: 'email.cu@hcrc.vn', phone: '0900000000' };
+  const USERS = [NOPERM, FULL, ADMIN, LINKED_TARGET];
 
   let CURRENT_USERNAME = FULL.username;
   stubModule('lib/auth', {
@@ -123,6 +127,11 @@ async function partB() {
     employeeCode: 'FE001', username: null, status: 'ACTIVE',
     currentAddress: 'Địa chỉ cũ', nationalId: null, dateOfBirth: null, gender: null,
     createdAt: '', updatedAt: '', profileEditHistory: []
+  }, {
+    // FE002 (12/2026) — hồ sơ ĐÃ liên kết tài khoản LINKED_TARGET, dùng cho kịch bản syncAccountContact.
+    employeeCode: 'FE002', username: LINKED_TARGET.username, status: 'ACTIVE',
+    workEmail: null, contactPhone: null, nationalId: null, dateOfBirth: null, gender: null,
+    createdAt: '', updatedAt: '', profileEditHistory: []
   }];
   stubModule('lib/appData', {
     getAppDataValue: async (key) => {
@@ -131,10 +140,17 @@ async function partB() {
       return null;
     },
     getAllAppData: async () => ({ users: USERS, employeeProfiles: EMPLOYEE_PROFILES, depts: ['Phòng Nhân Sự', 'Kinh Doanh'], stores: [] }),
+    // 'users' (12/2026, thêm cho kịch bản syncAccountContact — xem routes/employeeProfile.js) — mutate
+    // THẲNG mảng USERS thật (giữ tham chiếu) để test đọc lại được giá trị đã đồng bộ, cùng khuôn
+    // 'employeeProfiles' ngay dưới.
     withLockedAppDataValue: async (key, fn) => {
-      if (key !== 'employeeProfiles') return fn([]);
-      const result = await fn(EMPLOYEE_PROFILES);
-      return result;
+      if (key === 'employeeProfiles') return fn(EMPLOYEE_PROFILES);
+      if (key === 'users') {
+        const result = await fn(USERS);
+        if (Array.isArray(result)) { USERS.length = 0; USERS.push(...result); }
+        return result;
+      }
+      return fn([]);
     }
   });
 
@@ -210,8 +226,39 @@ async function partB() {
     });
 
     await test('FULL: POST /api/hr-profile (tạo hồ sơ MỚI) -> 403 (KHÔNG kèm hrProfileCreate, quyền gộp chỉ để SỬA)', async () => {
-      const r = await call(FULL, 'POST', '/api/hr-profile', { employeeCode: 'FE002', dateOfBirth: '1995-01-01' });
+      const r = await call(FULL, 'POST', '/api/hr-profile', { employeeCode: 'FE003', dateOfBirth: '1995-01-01' });
       assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+    });
+
+    // ===================================================================================
+    // syncAccountContact (12/2026, phản hồi TRỰC TIẾP người dùng: "không đồng bộ từ VPDT mà tôi yêu cầu
+    // đồng bộ 2 trường email và SĐT từ hồ sơ NS hoặc Onboarding sang [tài khoản VPDT]") — xem chú thích
+    // đầy đủ tại nơi gán biến này ở routes/employeeProfile.js.
+    // ===================================================================================
+    await test('FULL: PATCH /by-code/FE002 sửa workEmail/contactPhone -> ĐỒNG BỘ XUỐNG tài khoản VPDT liên kết (nv.linked)', async () => {
+      const r = await call(FULL, 'PATCH', '/api/hr-profile/by-code/FE002', { workEmail: 'email.moi@hcrc.vn', contactPhone: '0911222333' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.profile.workEmail, 'email.moi@hcrc.vn');
+      const acc = USERS.find(u => u.username === LINKED_TARGET.username);
+      assert.strictEqual(acc.email, 'email.moi@hcrc.vn', 'Email tài khoản VPDT phải được đồng bộ từ workEmail của hồ sơ');
+      assert.strictEqual(acc.phone, '0911222333', 'SĐT tài khoản VPDT phải được đồng bộ từ contactPhone của hồ sơ');
+    });
+
+    await test('FULL: PATCH /by-code/FE002 sửa field KHÁC (không đụng workEmail/contactPhone) -> KHÔNG đổi gì email/SĐT tài khoản đang có', async () => {
+      const before = USERS.find(u => u.username === LINKED_TARGET.username).email;
+      const r = await call(FULL, 'PATCH', '/api/hr-profile/by-code/FE002', { currentAddress: 'Địa chỉ khác, không liên quan email/SĐT' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const acc = USERS.find(u => u.username === LINKED_TARGET.username);
+      assert.strictEqual(acc.email, before, 'KHÔNG được đụng tới email tài khoản khi payload không hề gửi workEmail');
+    });
+
+    await test('FULL: PATCH /by-code/FE002 gửi workEmail="" (xoá trắng) -> hồ sơ lưu rỗng nhưng KHÔNG xoá trắng email tài khoản đang có (chỉ đồng bộ khi giá trị MỚI khác rỗng)', async () => {
+      const before = USERS.find(u => u.username === LINKED_TARGET.username).email;
+      const r = await call(FULL, 'PATCH', '/api/hr-profile/by-code/FE002', { workEmail: '' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.profile.workEmail, '', 'Hồ sơ vẫn ghi nhận xoá trắng bình thường');
+      const acc = USERS.find(u => u.username === LINKED_TARGET.username);
+      assert.strictEqual(acc.email, before, 'KHÔNG được xoá trắng email đăng nhập của tài khoản chỉ vì HR lỡ để trống ô này trong hồ sơ');
     });
 
     // ---- Hợp Đồng Lao Động ----
