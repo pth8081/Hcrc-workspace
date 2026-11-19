@@ -9310,10 +9310,20 @@ Nhân Sự/Hợp Đồng) sẽ bị 403 nếu không mở rộng. Khớp theo `e
    thu gọn được, mặc định ĐÓNG, bấm "📖 Xem Giải Thích Các Cột" để mở, nội
    dung giữ NGUYÊN VĂN.
 2. Bộ lọc MỚI **Phòng Ban** + **Vị Trí / Chức Danh** (gõ tự do, có gợi ý sdd*
-   lấy thẳng từ báo cáo vừa tải, không gọi API riêng) — thu gọn được, mặc
-   định ĐÓNG. Báo cáo là bảng PHẲNG đã nhóm sẵn theo cây (GROUP1 ⊃ GROUP2 ⊃
-   vị trí, xem `buildFlatGroupedHeadcountReport()`, `lib/headcountReport.js`)
-   — lọc phải giữ ĐÚNG cấu trúc phân cấp này (`ocHeadcountFilteredRows()`,
+   lấy thẳng từ báo cáo vừa tải, không gọi API riêng) **+ 🔍 Tìm Kiếm Nhanh**
+   (MỚI, thêm sau khi người dùng xem demo và yêu cầu thêm: *"cho cái mục một
+   cái tìm kiếm nữa là tìm kiếm nhanh ấy, gõ bất cứ một cái ký tự nào cũng
+   hiện ra"*) — thu gọn được, mặc định ĐÓNG (3 ô cùng nằm trong 1 panel, chung
+   1 nút thu gọn). **Tìm Kiếm Nhanh** (`#ocHeadcountFilterQuick`) khác 2 ô
+   Phòng Ban/Vị Trí: nó khớp GỘP tất cả cột (phòng ban/bộ phận/nhóm/chức
+   danh/cấp bậc/mã vị trí) trong CÙNG 1 ô duy nhất — gõ 1 ký tự bất kỳ (VD mã
+   vị trí "VT3", cấp bậc "TK", hoặc tên phòng ban) là lọc ngay không cần biết
+   trước nó thuộc cột nào, theo đúng khuôn ô-tìm-từ-khoá-đơn-lẻ đã có ở Hồ Sơ
+   Nhân Sự (`#hrpfManageSearch`) — input thường, không dùng sdd (vì đây là
+   tìm "mọi cột" chứ không phải chọn đúng 1 giá trị cụ thể của 1 cột). Báo
+   cáo là bảng PHẲNG đã nhóm sẵn theo cây (GROUP1 ⊃ GROUP2 ⊃ vị trí, xem
+   `buildFlatGroupedHeadcountReport()`, `lib/headcountReport.js`) — cả 3 ô
+   lọc đều giữ ĐÚNG cấu trúc phân cấp này (`ocHeadcountFilteredRows()`,
    `module-orgchart.js`): dựng lại cây tạm, chỉ giữ vị trí khớp từ khoá, rồi
    CHỈ hiện nhóm cha (GROUP1/GROUP2) nào còn ít nhất 1 vị trí con khớp — ẩn
    HẲN nhóm cha rỗng sau khi lọc (không lọc phẳng đơn thuần, sẽ mất ngữ cảnh

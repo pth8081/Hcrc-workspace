@@ -6,6 +6,10 @@
 //   2. Bộ lọc "Phòng Ban"/"Vị Trí / Chức Danh" — thu gọn được, mặc định ĐÓNG, lọc ĐÚNG CẤU TRÚC phân cấp
 //      (GROUP1 ⊃ GROUP2 ⊃ POSITION, xem ocHeadcountFilteredRows()/module-orgchart.js): chỉ hiện nhóm cha
 //      nào còn ít nhất 1 vị trí con khớp, ẩn nhóm rỗng hoàn toàn sau khi lọc.
+//   3. Ô "🔍 Tìm Kiếm Nhanh" (#ocHeadcountFilterQuick, MỚI 12/2026, theo yêu cầu người dùng "thêm 1 cái
+//      tìm kiếm nữa là tìm kiếm nhanh ấy, gõ bất cứ ký tự nào cũng hiện ra") — khớp GỘP mọi cột (phòng
+//      ban/bộ phận/chức danh/cấp bậc/mã vị trí) trong CÙNG 1 ô, khác 2 ô Phòng Ban/Vị Trí (chỉ khớp đúng
+//      nhóm cột riêng của nó) — vẫn giữ đúng cấu trúc phân cấp khi lọc.
 //
 // Dựng theo ĐÚNG khuôn tests/test-orgchart-headcount-modal-binding.js (standalone harness, chỉ stub
 // window.fetch + DB tối thiểu) — report fixture có đủ 2 cấp nhóm (GROUP1 ⊃ GROUP2) + vị trí trực thuộc
@@ -207,6 +211,53 @@ async function main() {
   filteredText = await page.textContent('#orgChartHeadcountTableBody');
   check('Lọc không khớp gì -> hiện thông báo rõ ràng "Không có vị trí nào khớp"', filteredText.includes('Không có vị trí nào khớp'));
   await page.fill('#ocHeadcountFilterDept', '');
+  await page.waitForTimeout(150);
+
+  // ===== 6) Tìm Kiếm Nhanh (#ocHeadcountFilterQuick) — khớp GỘP mọi cột trong 1 ô duy nhất =====
+  // 6a) Khớp theo CẤP BẬC ("TK" chỉ có ở "Trưởng Khối") — cột mà 2 ô Phòng Ban/Vị Trí KHÔNG tìm tới.
+  await page.fill('#ocHeadcountFilterQuick', 'TK');
+  await page.waitForTimeout(200);
+  filteredText = await page.textContent('#orgChartHeadcountTableBody');
+  check('Tìm Kiếm Nhanh theo Cấp Bậc "TK" -> chỉ còn "Trưởng Khối" + nhóm cha "Khối Vận Hành"',
+    filteredText.includes('Trưởng Khối') && filteredText.includes('Khối Vận Hành')
+    && !filteredText.includes('Kế Toán Viên') && !filteredText.includes('Nhân Viên Kinh Doanh') && !filteredText.includes('Chuyên Viên Nhân Sự'));
+  await page.fill('#ocHeadcountFilterQuick', '');
+  await page.waitForTimeout(150);
+
+  // 6b) Khớp theo MÃ VỊ TRÍ ("VT3" chỉ có ở "Nhân Viên Kinh Doanh").
+  await page.fill('#ocHeadcountFilterQuick', 'VT3');
+  await page.waitForTimeout(200);
+  filteredText = await page.textContent('#orgChartHeadcountTableBody');
+  check('Tìm Kiếm Nhanh theo Mã Vị Trí "VT3" -> chỉ còn "Nhân Viên Kinh Doanh" + nhóm cha/nhóm con đúng',
+    filteredText.includes('Nhân Viên Kinh Doanh') && filteredText.includes('Khối Vận Hành') && filteredText.includes('Phòng Kinh Doanh')
+    && !filteredText.includes('Kế Toán Viên') && !filteredText.includes('Trưởng Khối') && !filteredText.includes('Chuyên Viên Nhân Sự'));
+  await page.fill('#ocHeadcountFilterQuick', '');
+  await page.waitForTimeout(150);
+
+  // 6c) Khớp theo TÊN PHÒNG BAN (gộp chung, giống ô Phòng Ban riêng) — xác nhận ô gộp cũng khớp được cột đó.
+  await page.fill('#ocHeadcountFilterQuick', 'Nhân Sự');
+  await page.waitForTimeout(200);
+  filteredText = await page.textContent('#orgChartHeadcountTableBody');
+  check('Tìm Kiếm Nhanh theo tên phòng ban "Nhân Sự" -> chỉ còn "Chuyên Viên Nhân Sự" + nhóm cha "Khối Hành Chính"',
+    filteredText.includes('Chuyên Viên Nhân Sự') && filteredText.includes('Khối Hành Chính')
+    && !filteredText.includes('Trưởng Khối') && !filteredText.includes('Kế Toán Viên') && !filteredText.includes('Nhân Viên Kinh Doanh'));
+  await page.fill('#ocHeadcountFilterQuick', '');
+  await page.waitForTimeout(150);
+
+  // 6d) Không dấu + không phân biệt hoa/thường (giống deptKw/posKw) -> vẫn khớp "Kế Toán Viên".
+  await page.fill('#ocHeadcountFilterQuick', 'ke toan');
+  await page.waitForTimeout(200);
+  filteredText = await page.textContent('#orgChartHeadcountTableBody');
+  check('Tìm Kiếm Nhanh không dấu/không hoa-thường "ke toan" -> vẫn khớp "Kế Toán Viên"', filteredText.includes('Kế Toán Viên'));
+  await page.fill('#ocHeadcountFilterQuick', '');
+  await page.waitForTimeout(150);
+
+  // 6e) Không khớp gì -> cùng thông báo rõ ràng như 2 ô cũ.
+  await page.fill('#ocHeadcountFilterQuick', 'Không Tồn Tại Gì Cả');
+  await page.waitForTimeout(200);
+  filteredText = await page.textContent('#orgChartHeadcountTableBody');
+  check('Tìm Kiếm Nhanh không khớp gì -> hiện thông báo rõ ràng "Không có vị trí nào khớp"', filteredText.includes('Không có vị trí nào khớp'));
+  await page.fill('#ocHeadcountFilterQuick', '');
   await page.waitForTimeout(150);
 
   check('Không có lỗi JS (pageerror) nào trong suốt quá trình thao tác THẬT', pageErrors.length === 0, pageErrors.join('\n'));
