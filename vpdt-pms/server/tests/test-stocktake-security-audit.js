@@ -341,6 +341,25 @@ function request(port, method, urlPath, username, body) {
     res = await request(port, 'GET', `/api/stocktake/counts?sessionId=999999`, 'admin');
     check('11e) sessionId không tồn tại -> 404 (không lộ dữ liệu, không 200 rỗng im lặng)', res.status === 404, res);
 
+    // ===================================================================================
+    // KỊCH BẢN 12 (12/2026, LỖI THẬT PRODUCTION — người dùng báo "DELETE /api/stocktake/sessions/:id
+    // lỗi: deleteDraftSessionBatch is not defined" trong log PM2 thật, kèm ảnh chụp "Đã xoá 0/68 kỳ"):
+    // editSessionMetaBatch()/deleteDraftSessionBatch() (lib/stocktakeEngine.js) ĐƯỢC GỌI ở PATCH|DELETE
+    // /sessions/:id (routes/stocktake.js) nhưng KHÔNG nằm trong danh sách destructure-import ở đầu file —
+    // ReferenceError khi gọi, 500 cho MỌI lượt Sửa/Xoá Kỳ Kiểm Kê. Lỗi này KHÔNG bị bộ test Playwright cũ
+    // (tests/test-stocktake-kiemke-period-edit-delete.js) bắt được vì file đó chạy qua _mock-backend.js
+    // (mô phỏng hành vi ở JS phía client, KHÔNG load routes/stocktake.js thật) — kịch bản này bổ sung đúng
+    // phần còn thiếu: gọi THẲNG route thật qua Express mount thật (như toàn bộ file audit này), xác nhận
+    // KHÔNG còn 500/ReferenceError sau khi vá (thêm editSessionMetaBatch/deleteDraftSessionBatch vào
+    // destructure-import).
+    // ===================================================================================
+    console.log('\n===== KỊCH BẢN 12: PATCH|DELETE /sessions/:id (Sửa/Xoá Kỳ) qua route THẬT — LỖI THẬT đã vá =====');
+    res = await request(port, 'PATCH', `/api/stocktake/sessions/${S3_DRAFT_DEPT1.id}`, 'admin', { tenKy: 'Thống Kê Nháp — ĐÃ SỬA (kịch bản 12)' });
+    check('12a) PATCH /sessions/:id (Sửa Tên Kỳ) -> 200, KHÔNG còn 500 "editSessionMetaBatch is not defined"', res.status === 200 && res.body?.item?.tenKy === 'Thống Kê Nháp — ĐÃ SỬA (kịch bản 12)', res);
+    res = await request(port, 'DELETE', `/api/stocktake/sessions/${S3_DRAFT_DEPT1.id}`, 'admin');
+    check('12b) DELETE /sessions/:id (Xoá kỳ Nháp, chưa có dữ liệu) -> 200, KHÔNG còn 500 "deleteDraftSessionBatch is not defined"', res.status === 200, res);
+    check('12c) Kỳ vừa xoá KHÔNG còn trong danh sách sessions', !appDataStore.stocktakeSessions.some(s => s.id === S3_DRAFT_DEPT1.id), appDataStore.stocktakeSessions.map(s => s.id));
+
     console.log(`\n==== ${pass} passed, ${fail} failed ====`);
     if (fail > 0) {
       console.log('\n==== LỖ HỔNG PHÁT HIỆN ====');

@@ -9137,3 +9137,35 @@ hợp đồng không còn nằm trong danh mục "Loại HĐLĐ" hiện có (VD 
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` mới.
+
+## 5p. LỖI THẬT PRODUCTION đã vá: Sửa/Xoá Kỳ Kiểm Kê báo lỗi 500 "...Batch is not defined" (12/2026)
+
+Phát hiện qua log PM2 thật (`pm2 logs`) người dùng gửi kèm: mọi lượt bấm
+"✏️ Sửa" hoặc "🗑️ Xoá" Kỳ Kiểm Kê (Tab 1 "Kỳ Kiểm Kê") đều báo lỗi, client
+hiện *"Đã xoá 0/68 kỳ đã chọn... Đã có lỗi xảy ra, vui lòng thử lại sau"*.
+
+**Nguyên nhân**: đợt merge "Sửa/Xoá Kỳ Kiểm Kê: cascade cho cả batch" (mở
+rộng Sửa/Xoá áp dụng cho cả các siêu thị "anh em" cùng 1 kỳ) thêm 2 hàm
+`editSessionMetaBatch()`/`deleteDraftSessionBatch()` (`lib/stocktakeEngine.js`)
+và GỌI chúng ở `routes/stocktake.js` (`PATCH`/`DELETE /sessions/:id`), nhưng
+QUÊN thêm 2 tên hàm này vào danh sách import ở đầu file — mọi lượt gọi đều
+văng `ReferenceError` (500), dù 2 hàm đã export đúng và có trong
+`lib/stocktakeEngine.js`.
+
+**Vì sao bộ test cũ không bắt được**: test Playwright có sẵn
+(`test-stocktake-kiemke-period-edit-delete.js`) chạy qua `_mock-backend.js`
+(mô phỏng hành vi route ở JS phía client để test UI nhanh, KHÔNG load
+`routes/stocktake.js` thật) — ReferenceError ở code server thật không bao
+giờ được chạy tới trong bộ test đó. Bài học: mọi route server MỚI cần ít
+nhất 1 test gọi THẲNG qua Express mount thật (xem các file
+`test-stocktake-*-security*.js` làm mẫu), không chỉ test qua mock phía
+client.
+
+**Đã sửa**: thêm `editSessionMetaBatch`/`deleteDraftSessionBatch` vào đúng
+chỗ import ở `routes/stocktake.js`. Thêm "Kịch bản 12" vào
+`test-stocktake-security-audit.js` — gọi thẳng `PATCH`/`DELETE
+/api/stocktake/sessions/:id` qua route thật, xác nhận đã tự kiểm tra lại
+đúng cách (revert tạm fix để xác nhận test FAIL với lỗi y hệt log thật,
+rồi khôi phục fix để xác nhận PASS) trước khi merge.
+
+Không cần thao tác deploy gì thêm ngoài copy code.
