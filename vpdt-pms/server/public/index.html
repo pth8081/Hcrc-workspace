@@ -384,6 +384,10 @@
                (itManage/admin) mới thấy mục này, ẩn/hiện riêng qua canManageItSupportClient() ở
                updateItSupportNavVisibility() (không dùng chung điều kiện canAccessItSupportModule). -->
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
+          <!-- "Cài Đặt Giá Bán Buôn" (12/2026) — cùng khuôn "Gia Hạn Dịch Vụ CNTT" ngay trên: chỉ ai có
+               quyền itSupportPriceWriteDsmart (hoặc admin) mới thấy mục này, ẩn/hiện qua
+               canManageDsmartPriceClient() ở applyNavVisibility() (core.js). -->
+          <button id="btnItSupportNavDsmartPrice" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(DSMARTPRICE)" class="hidden sidebar-subitem">💰 Cài Đặt Giá Bán Buôn</button>
         </div>
       </div>
       <!-- Hướng Dẫn (tên cũ: Nghiệp Vụ, đổi từ v23.63 theo yêu cầu người dùng) — màn tài liệu tham khảo
