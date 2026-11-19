@@ -9432,3 +9432,62 @@ trước khi tính năng ghi được dữ liệu thật — nên thử với v�
 khi áp dụng số lượng lớn, vì các ràng buộc khác của bảng CSPRICE thật ngoài
 5 cột đã xác nhận chưa kiểm được trực tiếp trên DSmart từ môi trường phát
 triển này.
+
+## 5u. LỖI THẬT PRODUCTION đã vá: Tab "📦 Tồn Kho" (Kiểm Kê) bấm "📥 Xuất Excel"
+báo "Failed to fetch" (12/2026)
+
+Người dùng báo cáo trực tiếp kèm ảnh chụp: *"Phải kiểm tra chức năng xuất
+Excel ở chỗ tồn kho đang bị vô tác dụng, không xử lý, không xuất được"*, ảnh
+lỗi thật hiện trên trình duyệt: **"hws.hcrc.vn says: ⛔ Không thể kết nối tới
+máy chủ: Failed to fetch"**.
+
+**Nguyên nhân thật**: `exportKkInventoryExcel()` (`module-vanhanh.js`) TRƯỚC
+ĐÂY đóng gói TOÀN BỘ dữ liệu tồn kho của MỌI siêu thị (`kkInventoryByDept`,
+có thể hàng trăm nghìn dòng cộng lại — hệ thống có tới 35 siêu thị) thành 1
+payload JSON rồi `POST` lên route dùng chung `/api/admin/export-xlsx`
+(`downloadMultiSheetXlsxFromServer()`). Server giới hạn thân request JSON ở
+đúng **5MB** (`express.json({ limit: '5mb' })`, `server.js`) — payload tồn
+kho thật quy mô lớn vượt xa mức này và/hoặc quá chậm/không ổn định khi tải
+lên từ mạng di động, khiến `fetch()` tự fail ngay ở tầng mạng (lỗi "Failed to
+fetch", KHÔNG phải lỗi HTTP trả về từ server — đúng khớp với ảnh lỗi người
+dùng gửi và nhánh `catch` của `downloadMultiSheetXlsxFromServer()`).
+
+**Cách vá (đổi kiến trúc đúng, không phải chỉ nâng giới hạn 5MB)**: dữ liệu
+tồn kho vốn ĐÃ có sẵn trên server (từ CSDL, cùng nguồn `GET
+/api/stocktake/system-inventory` tab này vẫn dùng để hiện số lượng tóm tắt)
+— thay vì bắt trình duyệt gói lại dữ liệu đó rồi gửi ngược lên server, server
+tự dựng file `.xlsx` thẳng từ dữ liệu nó đã có, trình duyệt chỉ cần gọi 1
+request `GET` không kèm payload nào:
+
+- Tách logic lấy/tổng hợp dữ liệu tồn kho theo phòng ban ra hàm dùng chung
+  `buildKkInventoryByDept(user)` (`routes/stocktake.js`) — cả route cũ (`GET
+  /system-inventory`, trả JSON tóm tắt cho UI) và route MỚI đều gọi hàm này,
+  giữ đúng 1 nguồn logic, không lặp lại.
+- Route MỚI **`GET /api/stocktake/system-inventory/export-xlsx`** — gác đúng
+  y nguyên quyền/phạm vi của route cũ (`canViewKkInventory()`,
+  `resolveKiemKeInventoryDepts()` — admin/`kiemKeReportView` xem mọi siêu
+  thị, người dùng thường chỉ xem đúng phòng ban được cấp quyền) — dựng file
+  nhiều sheet (1 sheet/siêu thị, cột Mã Hàng/Mã Vạch/Tên Hàng/Tồn Kho) bằng
+  đúng hàm dùng chung `buildMultiSheetWorkbook()` (`lib/adminExport.js`) rồi
+  trả thẳng file `.xlsx` qua response (`Content-Disposition: attachment`).
+- Client (`exportKkInventoryExcel()`, `module-vanhanh.js`) nay chỉ gọi hàm có
+  sẵn `downloadFileFromServerGet('/api/stocktake/system-inventory/export-xlsx', ...)`
+  — tải file trực tiếp bằng `fetch()` GET + `blob()`, không còn đóng gói/gửi
+  payload JSON lớn nào từ trình duyệt nữa, loại hẳn rủi ro vượt giới hạn
+  5MB/không ổn định trên mạng di động dù dữ liệu tăng lên bao nhiêu.
+
+Test mới/sửa: `tests/test-stocktake-system-inventory-tab.js` (thêm 11 kiểm
+tra cho route export mới — 401/403/503 đúng gác quyền, 200 + đúng
+Content-Type/Content-Disposition, PARSE LẠI file `.xlsx` nhị phân thật bằng
+ExcelJS để xác nhận đúng số sheet/tên sheet/dữ liệu từng dòng/cột "Mã Vạch",
+và xác nhận người dùng bị giới hạn phạm vi KHÔNG thấy sheet của phòng ban
+khác — không rò dữ liệu qua đợt sửa này). 3 file test khác
+(`test-stocktake-inventory-tab-ui.js`, `test-stocktake-mavach-columns.js`,
+`demo-stocktake-inventory-tab-crash-fix.js`) cập nhật lại đúng hàm/route mới
+được gọi (trước đó còn stub hàm `downloadMultiSheetXlsxFromServer()` đã
+không còn dùng tới). Toàn bộ test liên quan chạy lại xác nhận PASS, không có
+hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới (chỉ sửa code route +
+client, không thêm bảng/cấu hình nào).

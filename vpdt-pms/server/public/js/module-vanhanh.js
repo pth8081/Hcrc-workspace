@@ -3169,31 +3169,21 @@ async function renderKkInventoryStoresBody() {
     await new Promise(resolve => requestAnimationFrame(resolve));
   }
 }
-// exportKkInventoryExcel() (MỚI, 12/2026, theo yêu cầu người dùng: "cho tôi xuất ra Excel hàng tồn của
-// TẤT CẢ các siêu thị một lần xuất, mỗi siêu thị 1 sheet") — xuất TOÀN BỘ các siêu thị đang có dữ liệu
-// trong kkInventoryByDept (server trả về ĐÚNG phạm vi siêu thị người này được xem — resolveKiemKeInventoryDepts(),
-// routes/stocktake.js — KHÔNG lệ thuộc đang chọn gì ở ô multi-select lọc hiển thị phía trên), không phải
-// gọi lại server (dữ liệu đã có sẵn trong bộ nhớ từ lần Đồng Bộ/cache gần nhất). Dùng CHUNG
-// downloadMultiSheetXlsxFromServer() (core.js, POST /api/admin/export-xlsx dạng {sheets}) — server tự lo
-// lọc ký tự cấm/cắt 31 ký tự/chống trùng tên sheet (buildMultiSheetWorkbook(), lib/adminExport.js), không
-// cần tự xử lý ở đây.
+// exportKkInventoryExcel() — xuất TOÀN BỘ các siêu thị người này được xem (resolveKiemKeInventoryDepts(),
+// routes/stocktake.js — KHÔNG lệ thuộc đang chọn gì ở ô multi-select lọc hiển thị phía trên).
+//
+// LỖI THẬT PRODUCTION đã vá (12/2026, người dùng báo "xuất Excel tồn kho... không xử lý, không xuất
+// được", lỗi thật nhận được khi ép hiện: "Failed to fetch"): bản CŨ đóng gói TOÀN BỘ rows của MỌI siêu
+// thị đang cache ở kkInventoryByDept (có thể hàng trăm nghìn dòng với 30+ siêu thị, mỗi siêu thị hàng
+// chục nghìn mã hàng) thành 1 payload JSON khổng lồ rồi POST qua downloadMultiSheetXlsxFromServer() —
+// vượt xa giới hạn `express.json({limit:'5mb'})` (server.js) và quá nặng để tải lên ổn định qua mạng di
+// động, nên request luôn thất bại giữa chừng. SỬA TẬN GỐC: không còn tự dựng/tải lên payload nào nữa —
+// gọi THẲNG route GET mới /api/stocktake/system-inventory/export-xlsx (dựng file .xlsx NGAY TRÊN SERVER
+// từ dữ liệu đã có sẵn trong CSDL, dùng chung downloadFileFromServerGet() — cùng cách xử lý lỗi/401 như
+// mọi lượt tải file khác trong app). Không còn cần đọc kkInventoryByDept ở đây nữa (server tự truy vấn
+// lại đúng phạm vi siêu thị người dùng được xem, không tin dữ liệu client đang cache).
 function exportKkInventoryExcel() {
-  const depts = Object.keys(kkInventoryByDept).sort((a, b) => a.localeCompare(b, 'vi'));
-  if (!depts.length) return alert('Chưa có dữ liệu tồn kho để xuất — bấm "🔄 Đồng Bộ" trước.');
-  const columns = [
-    { header: 'Mã Hàng', key: 'maHang', width: 16 },
-    { header: 'Mã Vạch', key: 'maVach', width: 18 },
-    { header: 'Tên Hàng', key: 'tenHang', width: 34 },
-    { header: 'Tồn Kho', key: 'soLuongTon', width: 12 }
-  ];
-  const sheets = depts.map(dept => {
-    const rows = ((kkInventoryByDept[dept] && kkInventoryByDept[dept].rows) || [])
-      .slice()
-      .sort((a, b) => String(a.maHang).localeCompare(String(b.maHang)))
-      .map(r => ({ maHang: r.maHang || '', maVach: r.maVach || '', tenHang: r.tenHang || '', soLuongTon: Number(r.soLuongTon) || 0 }));
-    return { sheetName: dept, columns, rows };
-  });
-  downloadMultiSheetXlsxFromServer(`TonKhoHeThong_${new Date().toISOString().slice(0, 10)}.xlsx`, sheets);
+  downloadFileFromServerGet('/api/stocktake/system-inventory/export-xlsx', `TonKhoHeThong_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
