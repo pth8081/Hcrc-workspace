@@ -5802,12 +5802,18 @@ function editTrainingCourse(payload, user, course, appData) {
 
 // Sửa 1 Tài Liệu đào tạo (trainingDocuments) — 10/2026, thêm nút "✏️ Sửa" cho phần METADATA (tên/loại
 // đào tạo/Bắt Buộc Hoàn Thành/Chương Trình gắn kèm + link+thời lượng nếu là VIDEO) — CỐ Ý KHÔNG cho đổi
-// docType/fileUrl (đổi hẳn loại tài liệu hoặc thay tệp/video khác là thay đổi lớn hơn nhiều so với sửa lỗi
-// gõ sai tên, giữ nguyên đường "xoá tạo lại" cho trường hợp đó, cùng tinh thần thận trọng với file đã có
-// người xem/theo dõi tiến độ dở dang — trainingDocumentProgress vẫn trỏ theo đúng docId, không muốn đổi
-// nghĩa "đã xem" của tiến độ cũ sang 1 tệp/video hoàn toàn khác).
+// docType/fileUrl TRỰC TIẾP ở nhóm field thường (đổi hẳn loại tài liệu là thay đổi lớn hơn nhiều so với
+// sửa lỗi gõ sai tên, giữ nguyên đường "xoá tạo lại" cho trường hợp đó).
+// 🔄 "Thay Thế Tệp" (12/2026, theo phản ánh TRỰC TIẾP người dùng — Tuyển Dụng/Đào Tạo TTNB "muốn sửa 1
+// tài liệu, up tài liệu khác lên, sao không có nút xóa tài liệu cũ"): mở 1 NGOẠI LỆ CÓ KIỂM SOÁT cho
+// đúng fileUrl/fileName/fileType/thumbnail (KHÔNG cho đổi docType — vẫn phải Xoá-Tạo-Lại nếu muốn đổi
+// hẳn loại tài liệu), qua cờ TƯỜNG MINH `payload.replaceFile === true` (client chỉ gửi cờ này SAU khi
+// người dùng xác nhận cảnh báo ở confirmReplaceTrainingDocumentFile(), module-internalcomms-daotao.js).
+// Vì nội dung tệp đổi hoàn toàn, mọi trainingDocumentProgress đang trỏ theo docId này bị XOÁ SẠCH (qua
+// Thùng Rác, có thể khôi phục) ngay trong hàm này — không giữ lại tiến độ "đã xem"/"đã hoàn thành" của
+// tệp CŨ gán nhầm sang tệp MỚI.
 const TRAINING_DOCUMENT_EDITABLE_FIELDS = ['title', 'category', 'description', 'mandatory', 'courseId', 'videoUrl', 'durationSeconds'];
-function editTrainingDocument(payload, user, doc, appData) {
+async function editTrainingDocument(payload, user, doc, appData) {
   if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa tài liệu đào tạo');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
   for (const field of TRAINING_DOCUMENT_EDITABLE_FIELDS) {
@@ -5844,6 +5850,35 @@ function editTrainingDocument(payload, user, doc, appData) {
     if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) throw new HttpError(400, 'Chương trình được chọn không hợp lệ');
   }
   doc.courseId = courseId;
+
+  if (payload.replaceFile === true) {
+    if (doc.docType === 'VIDEO') throw new HttpError(400, 'Tài liệu dạng Video không dùng "Thay Thế Tệp" — sửa trực tiếp link Youtube ở trên.');
+    if (!payload.fileUrl || !payload.fileName) throw new HttpError(400, 'Thiếu tệp thay thế');
+    assertUploadedFileUrl(payload.fileUrl, 'Tệp thay thế');
+    doc.fileUrl = payload.fileUrl;
+    doc.fileName = String(payload.fileName).trim().slice(0, 200);
+    doc.fileType = payload.fileType ? String(payload.fileType).slice(0, 100) : '';
+    // Thumbnail CŨ thuộc về NỘI DUNG CŨ — xoá trước, chỉ gán lại nếu client gửi kèm thumbnail mới
+    // (DOCUMENT, best-effort — xem submitTrainingDocument()). IMAGE không sinh thumbnail riêng (dùng
+    // thẳng fileUrl gốc làm thumbnail), giữ đúng hành vi lúc Tạo Mới.
+    doc.thumbnailUrl = '';
+    doc.thumbnailFileName = '';
+    if (payload.thumbnailUrl) {
+      assertUploadedFileUrl(payload.thumbnailUrl, 'Ảnh minh hoạ tài liệu');
+      doc.thumbnailUrl = payload.thumbnailUrl;
+      doc.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).slice(0, 200) : '';
+    }
+    // pageCount CŨ thuộc tệp CŨ — reset về null; route (routes/records.js, có quyền đọc hệ thống tệp để
+    // mở file PDF thật) tự tính lại SỐ TRANG THẬT cho tệp mới ngay sau khi hàm này trả về, mirror ĐÚNG
+    // khuôn lúc Tạo Mới ở routes/create.js.
+    doc.pageCount = null;
+
+    const { queryDedicatedRecords, deleteRecordForCollection } = require('./recordStore');
+    const { items: progressRows } = await queryDedicatedRecords('trainingDocumentProgress', { where: { DocId: doc.id } });
+    for (const row of progressRows) {
+      await deleteRecordForCollection('trainingDocumentProgress', row.id, null, { username: user.username, name: user.name });
+    }
+  }
   return doc;
 }
 

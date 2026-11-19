@@ -526,9 +526,15 @@
               <div id="tdFileChip" class="mt-1"></div>
             </div>
             <!-- Chỉ hiện khi đang SỬA 1 tài liệu loại Tài Liệu/Hình Ảnh (10/2026) — KHÔNG cho đổi tệp/loại
-                 tài liệu khi sửa (xem chú thích đầy đủ tại editTrainingDocument(), lib/recordActions.js),
-                 chỉ sửa được tên/loại đào tạo/mô tả/Bắt Buộc/Chương Trình — đổi tệp thật sự phải Xoá tạo lại. -->
-            <div class="hidden md:col-span-3 text-gray-500 italic bg-gray-50 border rounded p-2" id="tdFileLockedNote">📎 Không đổi được tệp/loại tài liệu khi sửa — nếu cần thay tệp khác, vui lòng Xoá rồi Thêm lại.</div>
+                 tài liệu khi sửa trực tiếp (xem chú thích đầy đủ tại editTrainingDocument(), lib/recordActions.js).
+                 Từ 12/2026: thêm nút "🔄 Thay Thế Tệp" (theo yêu cầu người dùng, phản ánh từ Tuyển Dụng/Đào
+                 Tạo TTNB — "muốn sửa 1 tài liệu, up tài liệu khác lên") — bấm vào mới MỞ lại #tdFileField
+                 (có cảnh báo xoá tiến độ "Đã hoàn thành" trước khi cho phép, xem confirmReplaceTrainingDocumentFile()
+                 ở module-internalcomms-daotao.js), KHÔNG tự động mở sẵn để tránh đổi nhầm tệp lúc chỉ định sửa metadata. -->
+            <div class="hidden md:col-span-3 flex items-start justify-between gap-2 text-gray-500 italic bg-gray-50 border rounded p-2" id="tdFileLockedNote">
+              <span>📎 Không đổi được tệp/loại tài liệu khi sửa — nếu cần thay tệp khác, bấm nút bên cạnh.</span>
+              <button type="button" id="tdReplaceFileBtn" data-op="confirmReplaceTrainingDocumentFile" class="flex-shrink-0 not-italic bg-amber-500 text-white px-3 py-1 rounded font-bold hover:bg-amber-600 whitespace-nowrap">🔄 Thay Thế Tệp</button>
+            </div>
             <div class="md:col-span-2 hidden" id="tdVideoField">
               <label class="block font-semibold text-gray-600 mb-1">Link Video Youtube</label>
               <input id="tdVideoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." class="w-full border p-1.5 rounded">

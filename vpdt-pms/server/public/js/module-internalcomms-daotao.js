@@ -3687,11 +3687,13 @@ async function submitTrainingDocument(e) {
     const durationSeconds = Number(document.getElementById('tdVideoDuration').value);
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return alert('Vui lòng nhập thời lượng video (giây) hợp lệ!');
     payload.durationSeconds = Math.floor(durationSeconds);
-  } else if (!isEdit) {
-    // Tệp (DOCUMENT/IMAGE) CHỈ tải lên lúc TẠO MỚI — khi Sửa, ô Tệp bị ẩn hẳn (xem editTrainingDocument()),
-    // fileUrl/fileName/fileType giữ nguyên, KHÔNG gửi lại trong payload edit.
+  } else if (!isEdit || tdReplacingFile) {
+    // Tệp (DOCUMENT/IMAGE) CHỈ tải lên lúc TẠO MỚI hoặc khi đang "🔄 Thay Thế Tệp" (12/2026, tdReplacingFile
+    // === true — xem confirmReplaceTrainingDocumentFile()) — Sửa thường (không thay thế) ô Tệp vẫn ẩn hẳn
+    // (xem editTrainingDocument()), fileUrl/fileName/fileType giữ nguyên, KHÔNG gửi lại trong payload edit.
     const file = document.getElementById('tdFile').files[0];
     if (!file) return alert(docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên!' : 'Vui lòng chọn tệp tài liệu!');
+    if (isEdit) payload.replaceFile = true;
     let uploaded;
     // moduleKey 'internalImage' khi docType==='IMAGE' (LỖI ĐÃ VÁ — trước đây dùng chung 'internal' với
     // tệp văn bản, xem chú thích ở submitRecruitmentJob()/MODULE_DEFAULT_ALLOWED_EXT.internalImage).
@@ -3742,6 +3744,7 @@ async function submitTrainingDocument(e) {
 // xem core.js).
 function resetTrainingDocForm() {
   editingTrainingDocumentId = null;
+  tdReplacingFile = false;
   const formEl = document.getElementById('trainingDocForm');
   if (formEl) formEl.reset();
   document.getElementById('tdDocType').disabled = false;
@@ -4083,10 +4086,17 @@ function renderTrainingDocuments() {
 // mô tả/Bắt Buộc/Chương Trình + link+thời lượng nếu VIDEO) — xem editTrainingDocument() ở
 // lib/recordActions.js cho lý do CỐ Ý không cho đổi docType/tệp/video đã tải. null = chế độ THÊM MỚI.
 let editingTrainingDocumentId = null;
+// tdReplacingFile — cờ "đang Thay Thế Tệp" (12/2026, nút "🔄 Thay Thế Tệp" ở #tdFileLockedNote, theo
+// phản ánh TRỰC TIẾP người dùng — Tuyển Dụng/Đào Tạo TTNB "muốn sửa 1 tài liệu, up tài liệu khác lên").
+// false (mặc định mỗi lần mở Sửa) = ô Tệp vẫn khoá như cũ; true = người dùng ĐÃ xác nhận cảnh báo xoá
+// tiến độ (confirmReplaceTrainingDocumentFile()) và đang chọn tệp MỚI — submitTrainingDocument() đọc cờ
+// này để quyết định có tải tệp mới + gửi payload.replaceFile=true hay không.
+let tdReplacingFile = false;
 function editTrainingDocument(id) {
   const d = DB.trainingDocuments.find(x => x.id === id);
   if (!d) return;
   editingTrainingDocumentId = id;
+  tdReplacingFile = false;
   document.getElementById('tdCategory').value = d.category;
   document.getElementById('tdTitle').value = d.title;
   document.getElementById('tdDescription').value = d.description || '';
@@ -4099,12 +4109,27 @@ function editTrainingDocument(id) {
   const isFileType = (d.docType || 'DOCUMENT') !== 'VIDEO';
   document.getElementById('tdFileField').classList.toggle('hidden', isFileType);
   document.getElementById('tdFile').required = false;
+  clearSingleFileInput('tdFile', 'tdFileChip');
   document.getElementById('tdFileLockedNote').classList.toggle('hidden', !isFileType);
   if (d.docType === 'VIDEO') {
     document.getElementById('tdVideoUrl').value = d.videoUrl || '';
     document.getElementById('tdVideoDuration').value = d.durationSeconds || '';
   }
   updateTrainingDocFormSubmitUI();
+}
+// confirmReplaceTrainingDocumentFile() — nút "🔄 Thay Thế Tệp" ở #tdFileLockedNote, CHỈ hiện khi đang
+// Sửa 1 tài liệu DOCUMENT/IMAGE (VIDEO tự do sửa link ở trên, không qua đường này). Cảnh báo RÕ hậu quả
+// KHÔNG THỂ HOÀN TÁC (xoá sạch tiến độ "Đã hoàn thành"/xem dở của MỌI người cho tài liệu này — xem
+// editTrainingDocument(), lib/recordActions.js) trước khi mở lại ô chọn tệp, tránh đổi nhầm tệp lúc chỉ
+// định sửa tên/mô tả.
+function confirmReplaceTrainingDocumentFile() {
+  if (editingTrainingDocumentId == null) return;
+  if (!confirm('⚠️ Thay thế tệp sẽ XOÁ SẠCH tiến độ "Đã hoàn thành"/đang xem dở của TẤT CẢ mọi người cho tài liệu này (không thể hoàn tác). Ai cần xem lại sẽ phải xem từ đầu tệp mới.\n\nBạn có chắc chắn muốn thay thế tệp?')) return;
+  tdReplacingFile = true;
+  document.getElementById('tdFileField').classList.remove('hidden');
+  document.getElementById('tdFileLockedNote').classList.add('hidden');
+  document.getElementById('tdFile').required = true;
+  clearSingleFileInput('tdFile', 'tdFileChip');
 }
 function cancelEditTrainingDocument() {
   resetTrainingDocForm();

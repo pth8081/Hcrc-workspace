@@ -514,6 +514,26 @@ function __mockEditTrainingDocument(payload, user, doc) {
     doc.thumbnailFileName = '';
   }
   __mockValidateCourseId(doc);
+  // 🔄 "Thay Thế Tệp" (12/2026) — mirrors ĐÚNG khuôn editTrainingDocument() ở lib/recordActions.js (xem
+  // chú thích đầy đủ ở đó): KHÔNG tính lại pageCount PDF thật ở mock này (không có pdf-lib/hệ thống tệp
+  // thật trong harness), chỉ reset về null giống route thật trước khi tính lại — test liên quan tới
+  // pageCount thật (nếu có) phải tự so sánh đúng hành vi route thật, không dựa vào mock này.
+  if (payload.replaceFile === true) {
+    if (doc.docType === 'VIDEO') throw __mockHttpError(400, 'Tài liệu dạng Video không dùng "Thay Thế Tệp" — sửa trực tiếp link Youtube ở trên.');
+    if (!payload.fileUrl || !payload.fileName) throw __mockHttpError(400, 'Thiếu tệp thay thế');
+    doc.fileUrl = payload.fileUrl;
+    doc.fileName = String(payload.fileName).trim().slice(0, 200);
+    doc.fileType = payload.fileType ? String(payload.fileType).slice(0, 100) : '';
+    doc.thumbnailUrl = '';
+    doc.thumbnailFileName = '';
+    if (payload.thumbnailUrl) {
+      doc.thumbnailUrl = payload.thumbnailUrl;
+      doc.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).slice(0, 200) : '';
+    }
+    doc.pageCount = null;
+    if (!DB.trainingDocumentProgress) DB.trainingDocumentProgress = [];
+    DB.trainingDocumentProgress = DB.trainingDocumentProgress.filter((p) => p.docId !== doc.id);
+  }
   return doc;
 }
 
