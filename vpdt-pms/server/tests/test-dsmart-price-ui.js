@@ -88,6 +88,16 @@ async function main() {
           { rowNumber: 2, custId: '240000000009', skuId: '2900999900', price: 12345, frDate: '2026-12-01', toDate: '2026-12-31', errors: [], hasOverlap: false }
         ] }) };
       }
+      if (u === '/api/dsmart-price/config' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, config: { host: 'dsmart16.hcrc.local', port: 1433, database: 'DSmart16DB', user: 'b2b_price', hasPassword: true } }) };
+      }
+      if (u === '/api/dsmart-price/config/test-connection') {
+        window.__dsmartPriceTestConnCalled = (window.__dsmartPriceTestConnCalled || 0) + 1;
+        if (window.__dsmartPriceTestConnShouldFail) {
+          return { ok: false, status: 400, json: async () => ({ error: 'Không kết nối được tới DSmart16 Trung Tâm (giả lập)' }) };
+        }
+        return { ok: true, status: 200, json: async () => ({ ok: true, ms: 42 }) };
+      }
       return { ok: true, status: 200, json: async () => ([]) };
     };
 
@@ -212,6 +222,23 @@ async function main() {
   await page.waitForTimeout(100);
   const historyText = await page.textContent('#dsmartPriceHistoryBody');
   check('Lịch Sử hiện đúng 2 dòng từ fixture (INSERT + DELETE)', historyText.includes('240000000001'));
+
+  // ===== Cấu Hình Kết Nối + "🔌 Kiểm Tra Kết Nối" (12/2026, chỉ admin) =====
+  await page.evaluate(() => { currentUser.perms.admin = true; });
+  await page.evaluate(() => openDsmartPriceConfigModal());
+  await page.waitForTimeout(150);
+  check('Admin mở "⚙️ Cấu Hình Kết Nối" -> modal hiện, điền đúng dữ liệu đã tải', (await page.isVisible('#dsmartPriceConfigModal')) && (await page.inputValue('#dsmartPriceCfgHost')) === 'dsmart16.hcrc.local');
+  await page.click('#btnDsmartPriceTestConn');
+  await page.waitForTimeout(150);
+  let testConnStatus = await page.textContent('#dsmartPriceCfgTestStatus');
+  check('Bấm "🔌 Kiểm Tra Kết Nối" (kết nối giả lập THÀNH CÔNG) -> hiện đúng kết quả', testConnStatus.includes('thành công'), testConnStatus);
+  await page.evaluate(() => { window.__dsmartPriceTestConnShouldFail = true; });
+  await page.click('#btnDsmartPriceTestConn');
+  await page.waitForTimeout(150);
+  testConnStatus = await page.textContent('#dsmartPriceCfgTestStatus');
+  check('Bấm lại "🔌 Kiểm Tra Kết Nối" (kết nối giả lập THẤT BẠI) -> hiện đúng lỗi thật, không phải thông báo thành công cũ', testConnStatus.includes('Không kết nối được'), testConnStatus);
+  const testConnCalledCount = await page.evaluate(() => window.__dsmartPriceTestConnCalled || 0);
+  check('Nút "🔌 Kiểm Tra Kết Nối" gọi đúng route test-connection mỗi lần bấm (không bị cache/chặn lần 2)', testConnCalledCount === 2, 'count=' + testConnCalledCount);
 
   check('Không có lỗi JS (pageerror) nào trong suốt quá trình thao tác THẬT', pageErrors.length === 0, pageErrors.join('\n'));
 

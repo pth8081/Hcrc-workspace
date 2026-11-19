@@ -9403,7 +9403,14 @@ về NGUYÊN object cấu hình chung và chỉ ẩn từng khoá nhạy cảm c
 trước — tách riêng bảng để loại hẳn rủi ro lộ mật khẩu nếu có ai quên thêm
 bước ẩn cho 1 khoá mới sau này. Chưa cấu hình thì mọi thao tác Áp
 Dụng/Sửa/Xoá/Dùng Lại đều báo lỗi SQL/cấu hình **thật** (không ẩn như lỗi
-production thông thường — để đội IT tự chẩn đoán kết nối).
+production thông thường — để đội IT tự chẩn đoán kết nối). Trong cùng modal
+có nút **"🔌 Kiểm Tra Kết Nối"** (12/2026, theo yêu cầu người dùng) — kiểm
+tra NGAY với đúng giá trị đang gõ dở trên form (không cần bấm "💾 Lưu Cấu
+Hình" trước), tránh lưu nhầm cấu hình sai rồi mới phát hiện lúc Thêm Giá
+Mới thật; mật khẩu để trống khi bấm nút này thì dùng mật khẩu ĐÃ LƯU trước
+đó (cùng ngữ nghĩa "để trống = giữ nguyên" của ô Lưu Cấu Hình). Câu lệnh
+kiểm tra chỉ chạy `SELECT 1` (không đụng bảng CSPRICE) nên không cần cấp
+thêm quyền `SELECT` cho tài khoản SQL dùng riêng cho tính năng này.
 
 **Quyền mới**: `itSupportPriceWriteDsmart` (checkbox cây phân quyền + nhãn Ma
 Trận Phân Quyền đã thêm đủ, theo đúng quy tắc CLAUDE.md).

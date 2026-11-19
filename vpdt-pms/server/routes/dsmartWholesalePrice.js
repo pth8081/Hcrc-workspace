@@ -20,8 +20,8 @@ const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
-const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -78,6 +78,32 @@ router.put('/config', async (req, res) => {
     logDsmartPrice(req, 'UPDATE_DSMART_PRICE_CONFIG', 'dsmartPriceDbConfig', `Cập nhật Cấu Hình Kết Nối DSmart16 Trung Tâm (${saved.host})`);
     res.json({ ok: true, config: saved });
   } catch (err) { sendCatchError(res, err, 'PUT /api/dsmart-price/config'); }
+});
+
+// POST /config/test-connection — nút "🔌 Kiểm Tra Kết Nối" (12/2026, theo yêu cầu người dùng). Nhận
+// ĐÚNG giá trị đang gõ dở trên form (CHƯA bấm Lưu) để admin kiểm tra TRƯỚC khi lưu, tránh lưu nhầm cấu
+// hình sai rồi mới phát hiện lúc Thêm Giá Mới thật. Mật khẩu để trống -> dùng mật khẩu ĐÃ LƯU (cùng ngữ
+// nghĩa "để trống = giữ nguyên mật khẩu cũ" như PUT /config) — nếu chưa từng lưu mật khẩu nào thì báo rõ
+// lỗi, không đoán. Body rỗng hoàn toàn (không gửi gì) -> test đúng cấu hình ĐÃ LƯU hiện tại.
+router.post('/config/test-connection', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được kết nối' });
+  try {
+    const { host, port, database, user, password } = req.body || {};
+    let overrideCfg = null;
+    if (host || database || user) {
+      if (!host || !database || !user) throw new HttpError(400, 'Thiếu Host/Tên CSDL/Tài khoản để kiểm tra kết nối');
+      let pass = password ? String(password) : null;
+      if (!pass) {
+        const raw = await getRawConfig();
+        if (!raw?.passwordEnc) throw new HttpError(400, 'Chưa có mật khẩu đã lưu trước đó — vui lòng nhập mật khẩu để kiểm tra.');
+        pass = decryptSecret(raw.passwordEnc);
+      }
+      overrideCfg = { host: String(host).trim(), port: Number(port) || 1433, database: String(database).trim(), user: String(user).trim(), password: pass };
+    }
+    const result = await testDsmartConnection(overrideCfg);
+    logDsmartPrice(req, 'TEST_DSMART_PRICE_CONNECTION', 'dsmartPriceDbConfig', `Kiểm tra kết nối DSmart16 Trung Tâm thành công (${result.ms}ms)${overrideCfg ? ' — dùng giá trị đang gõ dở' : ' — dùng cấu hình đã lưu'}`);
+    res.json({ ok: true, ms: result.ms });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/test-connection'); }
 });
 
 // ===================== Tự Động Xoá Khi Hết Hạn (itSupportPriceWriteDsmart — KHÔNG cần admin, khác hẳn

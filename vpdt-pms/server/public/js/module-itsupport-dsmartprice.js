@@ -373,10 +373,40 @@ async function openDsmartPriceConfigModal() {
     document.getElementById('dsmartPriceCfgUser').value = data.config.user || '';
     document.getElementById('dsmartPriceCfgPassword').value = '';
     document.getElementById('dsmartPriceCfgPasswordHint').innerText = data.config.hasPassword ? '✅ Đã có mật khẩu lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có mật khẩu nào được lưu.';
+    const statusEl = document.getElementById('dsmartPriceCfgTestStatus');
+    if (statusEl) { statusEl.className = 'text-xs'; statusEl.innerText = ''; }
     document.getElementById('dsmartPriceConfigModal').classList.remove('hidden');
   } catch (err) { alert('⛔ ' + err.message); }
 }
 function closeDsmartPriceConfigModal() { document.getElementById('dsmartPriceConfigModal').classList.add('hidden'); }
+
+// testDsmartPriceConnection() — nút "🔌 Kiểm Tra Kết Nối" (12/2026, theo yêu cầu người dùng): dùng ĐÚNG
+// giá trị đang gõ dở trên form (CHƯA cần bấm Lưu trước) để admin xác nhận kết nối được tới DSmart16
+// Trung Tâm trước khi lưu thật — tránh lưu nhầm cấu hình sai rồi mới phát hiện lúc Thêm Giá Mới thật.
+async function testDsmartPriceConnection() {
+  const host = document.getElementById('dsmartPriceCfgHost').value.trim();
+  const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
+  const database = document.getElementById('dsmartPriceCfgDatabase').value.trim();
+  const user = document.getElementById('dsmartPriceCfgUser').value.trim();
+  const password = document.getElementById('dsmartPriceCfgPassword').value;
+  const statusEl = document.getElementById('dsmartPriceCfgTestStatus');
+  const btn = document.getElementById('btnDsmartPriceTestConn');
+  if (statusEl) { statusEl.className = 'text-xs text-gray-500'; statusEl.innerText = '⏳ Đang kiểm tra kết nối...'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/config/test-connection', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port, database, user, password: password || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (statusEl) { statusEl.className = 'text-xs text-emerald-600 font-semibold'; statusEl.innerText = `✅ Kết nối thành công (${data.ms}ms)`; }
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'text-xs text-red-600 font-semibold'; statusEl.innerText = '⛔ ' + err.message; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 async function saveDsmartPriceConfig() {
   const host = document.getElementById('dsmartPriceCfgHost').value.trim();

@@ -25,6 +25,8 @@ function stubModule(relPath, exportsObj) {
 let CSPRICE = [];
 let nextDsmartId = 1;
 let forceConfigError = false;
+let forceTestConnError = false;
+let lastTestConnOverrideCfg = 'UNSET';
 
 class FakeHttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
@@ -48,6 +50,11 @@ stubModule('lib/dsmartSqlClient', {
     if (idx === -1) return { alreadyGone: true };
     CSPRICE.splice(idx, 1);
     return { alreadyGone: false };
+  },
+  testDsmartConnection: async (overrideCfg) => {
+    lastTestConnOverrideCfg = overrideCfg;
+    if (forceTestConnError) throw new DsmartConfigError('Không kết nối được tới DSmart16 Trung Tâm (giả lập)');
+    return { ms: 7 };
   }
 });
 
@@ -71,8 +78,9 @@ stubModule('lib/recordStore', {
 stubModule('lib/httpErrors', { HttpError: FakeHttpError });
 
 let AUTO_DELETE_CFG = { autoDeleteEnabled: false, autoDeleteHour: 23, autoDeleteMinute: 0 };
+let RAW_CFG_HAS_PASSWORD = true;
 stubModule('lib/dsmartPriceConfigStore', {
-  getRawConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: 'enc', ...AUTO_DELETE_CFG }),
+  getRawConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: RAW_CFG_HAS_PASSWORD ? 'enc' : null, ...AUTO_DELETE_CFG }),
   getSanitizedConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', hasPassword: true, ...AUTO_DELETE_CFG }),
   saveConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...cfg, hasPassword: true }; },
   getAutoDeleteConfig: async () => ({ ...AUTO_DELETE_CFG }),
@@ -185,6 +193,61 @@ async function main() {
     CURRENT_USER = IT_PRICE_WRITER.username;
     const res = await apiGet('/auto-delete-config');
     assert.strictEqual(res.status, 200);
+  });
+
+  // ===== Kiểm Tra Kết Nối (nút "🔌 Kiểm Tra Kết Nối", 12/2026) =====
+  await test('POST /config/test-connection: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPost('/config/test-connection', {});
+    assert.strictEqual(res.status, 403);
+  });
+  await test('POST /config/test-connection: admin, body rỗng -> test CẤU HÌNH ĐÃ LƯU (overrideCfg null)', async () => {
+    CURRENT_USER = ADMIN.username;
+    lastTestConnOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-connection', {});
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.ms, 7);
+    assert.strictEqual(lastTestConnOverrideCfg, null);
+  });
+  await test('POST /config/test-connection: admin, gõ đủ host/db/user + KHÔNG gõ mật khẩu -> dùng mật khẩu ĐÃ LƯU', async () => {
+    CURRENT_USER = ADMIN.username;
+    RAW_CFG_HAS_PASSWORD = true;
+    lastTestConnOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-connection', { host: 'new-host', port: 1434, database: 'newdb', user: 'newuser', password: '' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(lastTestConnOverrideCfg.host, 'new-host');
+    assert.strictEqual(lastTestConnOverrideCfg.password, 'enc'); // decryptSecret() giả lập trả nguyên văn
+  });
+  await test('POST /config/test-connection: admin, gõ đủ host/db/user + CÓ gõ mật khẩu mới -> dùng mật khẩu MỚI gõ (không đụng mật khẩu đã lưu)', async () => {
+    CURRENT_USER = ADMIN.username;
+    lastTestConnOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-connection', { host: 'new-host', port: 1434, database: 'newdb', user: 'newuser', password: 'mat-khau-moi-go' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(lastTestConnOverrideCfg.password, 'mat-khau-moi-go');
+  });
+  await test('POST /config/test-connection: gõ dở thiếu Tên CSDL -> 400 (không gọi testDsmartConnection)', async () => {
+    CURRENT_USER = ADMIN.username;
+    lastTestConnOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-connection', { host: 'new-host', user: 'newuser' });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(lastTestConnOverrideCfg, 'UNSET');
+  });
+  await test('POST /config/test-connection: gõ đủ host/db/user, KHÔNG gõ mật khẩu, CHƯA từng lưu mật khẩu nào -> 400 rõ ràng', async () => {
+    CURRENT_USER = ADMIN.username;
+    RAW_CFG_HAS_PASSWORD = false;
+    lastTestConnOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-connection', { host: 'new-host', database: 'newdb', user: 'newuser' });
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.error.includes('mật khẩu'), JSON.stringify(res.body));
+    RAW_CFG_HAS_PASSWORD = true;
+  });
+  await test('POST /config/test-connection: lỗi kết nối thật (DsmartConfigError) -> hiện NGUYÊN VĂN cho admin (không bị ẩn như lỗi 500 thường)', async () => {
+    CURRENT_USER = ADMIN.username;
+    forceTestConnError = true;
+    const res = await apiPost('/config/test-connection', {});
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.error.includes('Không kết nối được'), JSON.stringify(res.body));
+    forceTestConnError = false;
   });
 
   // ===== Preview (đọc file) =====

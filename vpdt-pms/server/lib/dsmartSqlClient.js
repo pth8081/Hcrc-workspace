@@ -155,6 +155,49 @@ async function deleteWholesalePrice({ dsmartId }) {
   return { alreadyGone: false };
 }
 
+// testDsmartConnection(overrideCfg): kiểm tra kết nối NGAY — dùng cho nút "🔌 Kiểm Tra Kết Nối" ở màn
+// Cấu Hình Kết Nối (12/2026, theo yêu cầu người dùng). Có 2 chế độ:
+//  - overrideCfg CÓ giá trị (đang gõ dở trên form, CHƯA bấm Lưu): mở 1 pool TẠM THỜI RIÊNG (không đụng
+//    tới cachedPool đang dùng cho ghi dữ liệu thật), test xong đóng ngay — để admin kiểm tra trước khi
+//    lưu, tránh lưu nhầm cấu hình sai rồi mới phát hiện lúc Thêm Giá Mới thật.
+//  - overrideCfg KHÔNG truyền: test đúng cấu hình ĐÃ LƯU, tái dùng getDsmartPool() (đúng pool cache dùng
+//    cho ghi dữ liệu thật — không mở thêm kết nối thừa).
+// Câu lệnh kiểm tra CHỈ "SELECT 1" (hằng số, không đụng bảng nào) — không cần quyền SELECT trên CSPRICE,
+// khớp đúng tài khoản chỉ được GRANT INSERT/UPDATE/DELETE (xem hướng dẫn tạo tài khoản đã trao đổi).
+async function testDsmartConnection(overrideCfg) {
+  if (!overrideCfg) {
+    const pool = await getDsmartPool();
+    const started = Date.now();
+    await pool.request().query('SELECT 1 AS ok;');
+    return { ms: Date.now() - started };
+  }
+  const { host, port, database, user, password } = overrideCfg;
+  if (!host || !database || !user || !password) {
+    throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra kết nối.');
+  }
+  const pool = new sql.ConnectionPool({
+    server: host,
+    port: port || 1433,
+    database,
+    user,
+    password,
+    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+    pool: { max: 1, min: 0, idleTimeoutMillis: 5000 },
+    requestTimeout: 10000,
+    connectionTimeout: 10000
+  });
+  const started = Date.now();
+  try {
+    await pool.connect();
+    await pool.request().query('SELECT 1 AS ok;');
+  } catch (err) {
+    throw new DsmartConfigError(`Không kết nối được tới DSmart16 Trung Tâm (${host}:${port || 1433}/${database}): ${err.message}`);
+  } finally {
+    try { await pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool tạm, không ảnh hưởng kết quả test */ }
+  }
+  return { ms: Date.now() - started };
+}
+
 // Chỉ dùng cho test/khi server tắt hẳn — đóng pool đang cache (nếu có).
 async function closeDsmartPool() {
   if (cachedPool) {
@@ -166,5 +209,5 @@ async function closeDsmartPool() {
 
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  DsmartConfigError, DsmartSqlError
+  testDsmartConnection, DsmartConfigError, DsmartSqlError
 };
