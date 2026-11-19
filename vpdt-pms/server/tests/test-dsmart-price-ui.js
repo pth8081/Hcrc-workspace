@@ -82,6 +82,12 @@ async function main() {
         if (method === 'GET') return { ok: true, status: 200, json: async () => ({ ok: true, config: { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 } }) };
         return { ok: true, status: 200, json: async () => ({ ok: true, config: { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 } }) };
       }
+      if (u === '/api/dsmart-price/preview') {
+        window.__dsmartPricePreviewCalled = (window.__dsmartPricePreviewCalled || 0) + 1;
+        return { ok: true, status: 200, json: async () => ({ ok: true, fileName: 'test-upload.xlsx', rows: [
+          { rowNumber: 2, custId: '240000000009', skuId: '2900999900', price: 12345, frDate: '2026-12-01', toDate: '2026-12-31', errors: [], hasOverlap: false }
+        ] }) };
+      }
       return { ok: true, status: 200, json: async () => ([]) };
     };
 
@@ -175,6 +181,31 @@ async function main() {
   check('Công tắc "Tự Động Xoá Khi Hết Hạn" phản ánh đúng cấu hình đã tải (BẬT)', autoDeleteChecked === true);
   const hourVal = await page.inputValue('#dsmartPriceAutoDeleteHour');
   check('Giờ Tự Động Xoá hiển thị đúng (23)', hourVal === '23', hourVal);
+
+  // ===== Thêm Giá Mới: bấm chọn file THẬT qua input (page.setInputFiles), không giả lập gọi hàm =====
+  // Phát hiện bởi audit chéo (12/2026, agent Playwright độc lập): #dsmartPriceFileInput thiếu
+  // data-arg-event="0" khiến onDsmartPriceFileChange(event) nhận event=undefined và crash ngay khi
+  // người dùng THẬT chọn file — bug này không bị phát hiện bởi các scenario ở trên vì chúng chỉ gọi
+  // hàm JS trực tiếp, không bao giờ bắn sự kiện 'change' thật qua input. Test này bắn sự kiện THẬT.
+  const ExcelJS = require('exceljs');
+  const realXlsxPath = path.join(require('os').tmpdir(), `dsmart-price-ui-test-${Date.now()}.xlsx`);
+  const wbReal = new ExcelJS.Workbook();
+  const wsReal = wbReal.addWorksheet('Sheet1');
+  wsReal.addRow(['Mã Khách B2B', 'Mã sản phẩm', 'Giá sản phẩm', 'Ngày bắt đầu', 'Ngày kết thúc']);
+  wsReal.addRow(['240000000009', '2900999900', 12345, '2026-12-01', '2026-12-31']);
+  await wbReal.xlsx.writeFile(realXlsxPath);
+  await page.setInputFiles('#dsmartPriceFileInput', realXlsxPath);
+  await page.waitForTimeout(300);
+  fs.unlinkSync(realXlsxPath);
+  const previewCalled = await page.evaluate(() => window.__dsmartPricePreviewCalled || 0);
+  check('Chọn file THẬT qua input -> gọi POST /preview đúng 1 lần (không crash trước khi gọi)', previewCalled === 1, 'previewCalled=' + previewCalled);
+  check('Chọn file THẬT qua input -> không có uncaught pageerror (bug data-arg-event đã phát hiện)', pageErrors.length === 0, pageErrors.join('\n'));
+  const uploadPreviewVisible = await page.isVisible('#dsmartPriceUploadPreviewWrap');
+  check('Chọn file THẬT qua input -> bảng xem trước hiện ra với đúng dòng đã preview', uploadPreviewVisible && (await page.textContent('#dsmartPriceUploadPreviewWrap')).includes('240000000009'));
+  check('Bộ lọc mục 1 (Thêm Giá Mới) vẫn ĐÓNG sau khi có preview (chỉ mở khi bấm nút)', (await page.isVisible('#dsmartPriceUploadFilterPanel')) === false);
+  await page.click('#btnToggleDsmartPriceUploadFilter');
+  await page.waitForTimeout(100);
+  check('Bấm nút -> MỞ bộ lọc mục 1', await page.isVisible('#dsmartPriceUploadFilterPanel'));
 
   // ===== Lịch Sử Thao Tác =====
   await page.click('#btnToggleDsmartPriceHistoryFilter');

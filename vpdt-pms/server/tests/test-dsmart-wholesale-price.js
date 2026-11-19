@@ -224,6 +224,37 @@ async function main() {
     assert.strictEqual(CSPRICE.length, 0);
   });
 
+  // Phát hiện bởi audit chéo (12/2026, agent bảo mật): custId/skuId chưa có chặn độ dài server-side, dù
+  // cột CSPRICE thật khai NVARCHAR(50) — dù mssql không tự chặn giá trị quá dài ở tầng ứng dụng, vẫn thêm
+  // chặn rõ ràng ở đây để báo lỗi tiếng Việt sớm, không phụ thuộc hành vi không xác định của SQL Server
+  // thật (môi trường này không truy cập được DSmart16 thật để kiểm chứng).
+  await test('POST /apply: custId/skuId quá 50 ký tự bị chặn server-side', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const tooLong = 'A'.repeat(51);
+    const res = await apiPost('/apply', { rows: [{ custId: tooLong, skuId: 'B', price: 1, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.successCount, 0);
+    assert.strictEqual(CSPRICE.length, 0);
+    const res2 = await apiPost('/apply', { rows: [{ custId: 'A', skuId: tooLong, price: 1, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    assert.strictEqual(res2.body.successCount, 0);
+    assert.strictEqual(CSPRICE.length, 0);
+    // Đúng 50 ký tự vẫn phải qua được (biên hợp lệ, không chặn quá tay)
+    const exactly50 = 'A'.repeat(50);
+    const res3 = await apiPost('/apply', { rows: [{ custId: exactly50, skuId: 'B', price: 1, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    assert.strictEqual(res3.body.successCount, 1);
+  });
+
+  await test('POST /preview: custId/skuId quá 50 ký tự báo lỗi dòng (không chặn cứng cả file)', async () => {
+    const tooLong = 'B'.repeat(51);
+    const buf = await buildXlsxBuffer([
+      [tooLong, '2001326541', 32076, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows.length, 1);
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('quá dài')), JSON.stringify(res.body.rows[0].errors));
+  });
+
   await test('POST /apply: lỗi DsmartConfigError dừng sớm, không thử tiếp các dòng còn lại', async () => {
     CSPRICE = []; ENTRIES = [];
     forceConfigError = true;

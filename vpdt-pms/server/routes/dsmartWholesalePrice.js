@@ -199,7 +199,7 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
     const price = Number(r.price);
     const frDate = String(r.frDate || '');
     const toDate = String(r.toDate || '');
-    if (!custId || !skuId || !Number.isFinite(price) || price < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(frDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate) || frDate > toDate) {
+    if (!custId || !skuId || custId.length > 50 || skuId.length > 50 || !Number.isFinite(price) || price < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(frDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate) || frDate > toDate) {
       results.push({ custId, skuId, success: false, error: 'Dữ liệu dòng không hợp lệ (đã kiểm tra lại server-side)' });
       continue;
     }
