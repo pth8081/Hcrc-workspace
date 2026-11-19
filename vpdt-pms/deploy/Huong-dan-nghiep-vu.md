@@ -8978,3 +8978,34 @@ thành 1 bản ghi theo mã lặp lại", dùng cho mục 1 và 3 ở trên — 
 Nhóm C ("Cấu Hình Quy Trình Theo Phòng Ban" — 16 module riêng từng phòng
 ban) và Nhóm B (Áp Dụng Nhanh, VPP Ngoại Lệ) **chưa làm đợt này** (độ ưu
 tiên thấp hơn/cấu trúc dị hình hơn, để đợt sau nếu cần).
+
+## 5l. LỖI ĐÃ VÁ (12/2026): quyền "🎓 Quản lý Đào Tạo (toàn quyền)" (`trainingManage`) không xoá được tài liệu Kho Tài Liệu
+
+Phản ánh trực tiếp người dùng: *"Hiện tại tôi đã phân quyền full quyền cho
+module đào tạo, nhưng các bạn không có quyền sửa, không có quyền xóa tài
+liệu đâu"*. Kiểm tra lại thấy: SỬA tài liệu (metadata) đã đúng, dùng
+`canManageTraining()` (`trainingManage` hoặc admin) — nhưng nút **"Xóa"**
+ở danh sách Kho Tài Liệu (và route server tương ứng
+`POST /trainingDocuments/:id/delete`) lại dùng CHUNG `assertAdminForDelete()`
+— hàm admin-only, dùng chung cho cụm "quyền xoá tối cao" ở các module khác
+hoàn toàn không liên quan tới Đào Tạo (Tài liệu/Văn bản trình/Hợp đồng/Mua
+Bán-Sửa Chữa-Đầu Tư/Đăng Ký Xe). Hậu quả: người được giao "🎓 Quản lý Đào
+Tạo (toàn quyền)" vẫn bị chặn xoá tài liệu, trái với kỳ vọng "toàn quyền"
+mà nhóm quyền này quảng cáo.
+
+**Đã sửa**: thêm hàm riêng `assertCanDeleteTrainingDocument()`
+(`routes/records.js`, CHỈ áp dụng cho ĐÚNG route `trainingDocuments/:id/
+delete`, không đụng `assertAdminForDelete()` dùng chung cho 4 module khác)
+— cho phép xoá khi có `trainingManage` HOẶC `admin`, khớp đúng quyền đã
+dùng để Sửa. Nút "Xóa" ở client (`module-internalcomms-daotao.js`) cũng
+đổi từ kiểm tra thô `perms.admin` sang `canManageTrainingLocal()` (đúng
+hàm nút "Sửa" đang dùng). Các kiểm tra tham chiếu trước khi xoá (chặn 409
+khi tài liệu còn nằm trong giáo trình bắt buộc của lớp ONLINE chưa kết
+thúc, hoặc còn gắn trong `onboardingPaths.stage1DocIds`/`stage2DocIds`)
+giữ nguyên không đổi.
+
+Lưu ý: xoá/sửa **Lớp Học, Chương Trình, Ngân Hàng Câu Hỏi, Lộ Trình Tân
+Binh (`onboardingPaths`)** vẫn còn dùng `assertAdminForDelete()` admin-only
+cho hành động XOÁ — chưa nằm trong phạm vi phản ánh lần này (người dùng
+chỉ nêu đúng "tài liệu"), nhưng có cùng dạng khoảng trống kỹ thuật nếu sau
+này cần mở rộng "toàn quyền" `trainingManage` sang xoá các collection đó.

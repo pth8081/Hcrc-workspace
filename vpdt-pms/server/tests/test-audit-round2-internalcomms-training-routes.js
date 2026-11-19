@@ -277,6 +277,27 @@ async function main() {
     });
 
     // ===================================================================================
+    // LỖI THẬT đã vá (12/2026, phản hồi trực tiếp người dùng: "đã phân quyền full quyền cho module đào
+    // tạo, nhưng các bạn không có quyền sửa, không có quyền xóa tài liệu đâu") — route xoá trainingDocuments
+    // trước đây dùng CHUNG assertAdminForDelete() (admin-only), khiến người có trainingManage ("🎓 Quản lý
+    // Đào Tạo — toàn quyền") KHÔNG xoá được tài liệu dù được quảng cáo là toàn quyền quản lý Đào Tạo. Đổi
+    // sang assertCanDeleteTrainingDocument() (trainingManage HOẶC admin) — CHỈ áp dụng route này.
+    // ===================================================================================
+    await run.run('LỖI ĐÃ VÁ: trainingManage (không phải admin) XOÁ được tài liệu đào tạo', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingDocuments.length, 0);
+    });
+
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá tài liệu đào tạo (403)', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.trainingDocuments.length, 1, 'Tài liệu phải còn nguyên, không bị xoá');
+    });
+
+    // ===================================================================================
     // #146 (re-audit lần 5, mức Thấp) — chặn xoá trainingClasses/trainingDocuments còn
     // onboardingPaths.linkedClassId/stage{1,2}DocIds tham chiếu (trước vá: xoá vô điều kiện, để lại
     // tham chiếu mồ côi trong Lộ Trình Đào Tạo Tân Binh).
