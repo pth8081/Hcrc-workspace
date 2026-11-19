@@ -44,7 +44,11 @@ const HR_EDIT = { username: 'hre1', name: 'Chỉ Sửa Hồ Sơ', dept: 'Nhân S
 const HR_CONTRACT = { username: 'hrc1', name: 'Phụ Trách HĐLĐ', dept: 'Nhân Sự', perms: { hrContractManage: true }, active: true };
 const NV_A = { username: 'nv.a', name: 'Nguyễn Văn A', dept: 'Kinh Doanh', perms: {}, active: true };
 const NV_B = { username: 'nv.b', name: 'Trần Thị B', dept: 'Kinh Doanh', perms: {}, active: true };
-const USERS = [HR, HR_NO_MODULE, HR_FULLVIEW, HR_EDIT, HR_CONTRACT, NV_A, NV_B];
+// HR_ONB_ONLY/HR_OFFB_ONLY (MỚI, 12/2026, #22) — KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự/HĐLĐ nào khác, CHỈ
+// đúng 1 trong 4 quyền Onboarding/Offboarding mới được mở rộng ở canReadEmployeeDirectory().
+const HR_ONB_ONLY = { username: 'onb1', name: 'Chỉ Quản Lý Onboarding', dept: 'Nhân Sự', perms: { hrOnboardingManage: true }, active: true };
+const HR_OFFB_ONLY = { username: 'offb1', name: 'Chỉ Quản Lý Offboarding', dept: 'Nhân Sự', perms: { hrOffboardingProcessManage: true }, active: true };
+const USERS = [HR, HR_NO_MODULE, HR_FULLVIEW, HR_EDIT, HR_CONTRACT, NV_A, NV_B, HR_ONB_ONLY, HR_OFFB_ONLY];
 
 let APP_DATA;
 function resetAppData() {
@@ -226,6 +230,53 @@ async function main() {
     await test('#21 nhân viên thường KHÔNG có quyền nào vẫn bị chặn 403', async () => {
       const r = await call(NV_A, 'GET', '/api/hr-profile/employee-directory');
       assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+    });
+
+    console.log('\n== #22 (MỚI, 12/2026) — /employee-directory mở rộng cho Onboarding/Offboarding + employmentType/latestContractStatus ==');
+    // Theo yêu cầu người dùng: bộ lọc "Hình Thức Làm Việc"/"Tình Trạng Hợp Đồng" ở màn Onboarding/
+    // Offboarding (module-hrlifecycle.js) cần tra qua danh bạ này — mở rộng canReadEmployeeDirectory()
+    // cho 4 quyền hrOnboardingProcessManage/hrOnboardingManage/hrOffboardingProcessManage/
+    // hrOffboardingManage, và bổ sung field employmentType/latestContractStatus vào response.
+
+    await test('#22 hrOnboardingManage (KHÔNG có bất kỳ quyền Hồ Sơ/HĐLĐ nào khác) gọi được /employee-directory (trước đây 403)', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'BL0001', username: 'nv.a' });
+      const r = await call(HR_ONB_ONLY, 'GET', '/api/hr-profile/employee-directory');
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    });
+
+    await test('#22 hrOffboardingProcessManage (KHÔNG có bất kỳ quyền Hồ Sơ/HĐLĐ nào khác) gọi được /employee-directory (trước đây 403)', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'BL0001', username: 'nv.a' });
+      const r = await call(HR_OFFB_ONLY, 'GET', '/api/hr-profile/employee-directory');
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    });
+
+    await test('#22 directory trả đúng employmentType + latestContractStatus (hợp đồng id LỚN NHẤT của đúng mã NV, không phải hợp đồng "đang hiệu lực")', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'BL0001', username: 'nv.a', employmentType: 'Chính thức' });
+      LABOR_CONTRACTS.length = 0;
+      LABOR_CONTRACTS.push(
+        { id: 10, employeeCode: 'BL0001', status: 'EXPIRED' },
+        { id: 12, employeeCode: 'BL0001', status: 'DRAFT' }, // id LỚN NHẤT -> phải lấy status của bản này dù chỉ là Nháp
+        { id: 11, employeeCode: 'BL0001', status: 'ACTIVE' }
+      );
+      const r = await call(HR_FULLVIEW, 'GET', '/api/hr-profile/employee-directory');
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const entry = r.json.directory.find(d => d.employeeCode === 'BL0001');
+      assert.strictEqual(entry.employmentType, 'Chính thức', JSON.stringify(entry));
+      assert.strictEqual(entry.latestContractStatus, 'DRAFT', 'phải lấy đúng hợp đồng id=12 (lớn nhất), không phải ACTIVE id=11: ' + JSON.stringify(entry));
+      LABOR_CONTRACTS.length = 0;
+    });
+
+    await test('#22 hồ sơ chưa có hợp đồng nào -> latestContractStatus = null (không throw/crash)', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'BL0002', username: 'nv.b', employmentType: null });
+      const r = await call(HR_FULLVIEW, 'GET', '/api/hr-profile/employee-directory');
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const entry = r.json.directory.find(d => d.employeeCode === 'BL0002');
+      assert.strictEqual(entry.employmentType, null);
+      assert.strictEqual(entry.latestContractStatus, null);
     });
 
     console.log('\n== #2 — liên kết/đổi tài khoản đồng bộ employeeUsername xuống HĐLĐ đã có ==');

@@ -202,7 +202,22 @@ function stripForList(profile) {
     processId: profile.processId,
     onboardingQueueStatus: profile.onboardingQueueStatus || null,
     onboardingQueueCancelReason: profile.onboardingQueueCancelReason || null,
-    onboardingQueueCancelledAt: profile.onboardingQueueCancelledAt || null
+    onboardingQueueCancelledAt: profile.onboardingQueueCancelledAt || null,
+    // employmentType/nationalId/mốc Ngày Vào Làm Việc (12/2026, theo yêu cầu người dùng: thêm bộ lọc
+    // "Hình Thức Làm Việc"/"Căn Cước Công Dân"/"Khoảng Ngày Vào Làm Việc" ở màn Quản Lý Hồ Sơ) — route
+    // này vốn CHỦ Ý "danh sách nhẹ ... không lộ field nhạy cảm" (xem chú thích GET / bên dưới), nhưng 2
+    // field mới KHÔNG mở rộng phạm vi NGƯỜI XEM được — chỉ người đã canFullViewProfiles() (xem được
+    // DANH SÁCH này) mới thấy, và người đó VỐN ĐÃ xem được nationalId/employmentType của TỪNG hồ sơ qua
+    // GET /by-code/:code (Chi Tiết) rồi — bổ sung ở đây chỉ giúp LỌC HÀNG LOẠT được trên dữ liệu họ vốn
+    // đã có quyền xem, không phải field hoàn toàn mới lộ ra cho vai trò nào chưa từng thấy được.
+    employmentType: profile.employmentType || null,
+    nationalId: profile.nationalId || null,
+    // 3 field để client tự resolve "Ngày Vào Làm Việc" đúng khuôn hrpfResolveTenureBaseDate()
+    // (module-hrprofile.js: tenureBaseDate -> joinDateAtPredecessorUnit -> joinDateAtHcrc -> DB.users
+    // fallback) — không tính sẵn ở server để tránh lệch logic resolve với màn Chi Tiết đang hiển thị.
+    tenureBaseDate: profile.tenureBaseDate || null,
+    joinDateAtPredecessorUnit: profile.joinDateAtPredecessorUnit || null,
+    joinDateAtHcrc: profile.joinDateAtHcrc || null
   };
 }
 
@@ -347,13 +362,38 @@ router.post('/by-code/:employeeCode/onboarding-queue/cancel', async (req, res) =
 // 2 đều xem được TOÀN BỘ hồ sơ ở GET / với nhiều thông tin hơn hẳn route này — người được giao đúng 2
 // quyền đó lại không dùng được picker chọn nhân viên, phải xin thêm hrProfileManage (quyền rộng hơn
 // nhiều) chỉ để gõ chọn 1 mã nhân viên.
+// MỞ RỘNG quyền (12/2026, theo yêu cầu người dùng: thêm bộ lọc "Tình Trạng Hợp Đồng"/"Hình Thức Làm
+// Việc" cho màn Onboarding/Offboarding) — thêm 4 quyền quản lý Onboarding/Offboarding (module-hrlifecycle.js
+// đọc danh bạ này để tra cứu employmentType/latestContractStatus theo employeeCode/username, vì
+// hrProcesses KHÔNG tự lưu 2 field đó — xem chú thích employmentType/latestContractStatus ngay dưới).
+// CÙNG tinh thần mở rộng đã có ở trên (hrProfileFullView/hrProfileEdit/hrContractManage) — mỗi lần có
+// module KHÁC cần tra cứu nhẹ, chỉ thêm ĐÚNG quyền của module đó, không mở rộng tràn lan.
+function canReadEmployeeDirectory(user) {
+  return !!(employeeProfile.canFullViewProfiles(user) || canManageContracts(user)
+    || user?.perms?.hrOnboardingProcessManage || user?.perms?.hrOnboardingManage
+    || user?.perms?.hrOffboardingProcessManage || user?.perms?.hrOffboardingManage);
+}
 router.get('/employee-directory', async (req, res) => {
   try {
-    if (!employeeProfile.canFullViewProfiles(req.freshUser) && !canManageContracts(req.freshUser)) {
+    if (!canReadEmployeeDirectory(req.freshUser)) {
       return res.status(403).json({ error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' });
     }
     const appData = await getAllAppData();
     const list = (appData.employeeProfiles || []).filter(p => p.status !== 'INACTIVE');
+    // latestContractByEmployeeCode (12/2026) — hợp đồng MỚI TẠO GẦN NHẤT (id lớn nhất, đúng khuôn
+    // getHrContractList()/module-hopdonglaodong.js sắp theo id giảm dần) của TỪNG mã nhân viên, dùng để
+    // trả về `latestContractStatus` — KHÔNG phải "hợp đồng đang hiệu lực" (1 nhân viên có thể có nhiều
+    // hợp đồng DRAFT/ACTIVE/EXPIRED/TERMINATED/SUPERSEDED theo thời gian, lấy đúng bản MỚI NHẤT phản ánh
+    // đúng tình trạng hiện tại nhất, kể cả khi hợp đồng gần nhất chỉ mới là Nháp). laborContracts đã "tốt
+    // nghiệp" sang bảng SQL riêng (KHÔNG còn nằm trong dbo.AppData/getAllAppData() — xem
+    // sql/schema.sql::dbo.LaborContracts) — PHẢI đọc qua getAllForCollection(), không phải appData.*.
+    const allContracts = await getAllForCollection('laborContracts');
+    const latestContractByEmployeeCode = {};
+    for (const c of allContracts) {
+      if (!c.employeeCode) continue;
+      const cur = latestContractByEmployeeCode[c.employeeCode];
+      if (!cur || (c.id || 0) > (cur.id || 0)) latestContractByEmployeeCode[c.employeeCode] = c;
+    }
     const directory = list.map(p => ({
       employeeCode: p.employeeCode,
       fullName: employeeProfile.resolveProfileDisplayName(p, appData.users, appData.hrProcesses),
@@ -383,7 +423,12 @@ router.get('/employee-directory', async (req, res) => {
       // Người Dùng & Phân Quyền (module-admin-submissiongroups.js), KHÔNG phải personalEmail (email cá
       // nhân) — workEmail là "Email công ty" đúng nghĩa tài khoản đăng nhập/nhận thông báo hệ thống.
       workEmail: p.workEmail || null,
-      contactPhone: p.contactPhone || null
+      contactPhone: p.contactPhone || null,
+      // employmentType/latestContractStatus (MỚI 12/2026, theo yêu cầu người dùng — bộ lọc "Hình Thức Làm
+      // Việc"/"Tình Trạng Hợp Đồng" ở màn Onboarding/Offboarding, module-hrlifecycle.js) — CÙNG MỨC KHÔNG
+      // NHẠY CẢM với dept/jobTitle ở trên (KHÔNG nằm trong SENSITIVE_FIELDS).
+      employmentType: p.employmentType || null,
+      latestContractStatus: latestContractByEmployeeCode[p.employeeCode]?.status || null
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }

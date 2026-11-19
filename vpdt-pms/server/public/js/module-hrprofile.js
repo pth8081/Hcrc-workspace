@@ -390,8 +390,13 @@ function setHrProfileView(view) {
   document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageSearch').classList.toggle('hidden', !hrpfCanFullView());
+  document.getElementById('hrpfMgFilterToggleWrap')?.classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageNoListMsg').classList.toggle('hidden', hrpfCanFullView());
-  if (hrpfCanFullView()) loadHrProfileManageList();
+  if (hrpfCanFullView()) {
+    populateHrpfMgEmploymentTypeFilter();
+    applyHrpfMgFilterPanelState();
+    loadHrProfileManageList();
+  }
 }
 
 // ===================== 🕐 Hồ Sơ Onboarding (Ảnh 2, 9/2026, theo yêu cầu người dùng; cập nhật 10/2026) =====================
@@ -532,13 +537,64 @@ async function loadHrProfileManageList() {
   }
 }
 
+// hrpfMgFilterPanel (MỚI, 12/2026, theo yêu cầu người dùng: "phần hồ sơ nhân sự... thêm phần tìm kiếm
+// theo hình thức làm việc... căn cước công dân... khoảng ngày vào làm việc") — panel RIÊNG cho 3 trường
+// mới, tách khỏi ô tìm-kiếm-theo-từ-khoá #hrpfManageSearch đã có sẵn (1 ô đơn lẻ, được miễn nút thu gọn
+// riêng theo đúng ngoại lệ CLAUDE.md) — mặc định THU GỌN, bấm nút để mở ra, cùng khuôn
+// shelfRecordRecentFilterPanel (module-vanhanh.js).
+let _hrpfMgFilterCollapsed = true;
+function applyHrpfMgFilterPanelState() {
+  const panel = document.getElementById('hrpfMgFilterPanel');
+  const btn = document.getElementById('btnToggleHrpfMgFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _hrpfMgFilterCollapsed);
+  if (btn) btn.textContent = _hrpfMgFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleHrpfMgFilterPanel() {
+  _hrpfMgFilterCollapsed = !_hrpfMgFilterCollapsed;
+  applyHrpfMgFilterPanelState();
+}
+// hrpfMgResolveJoinDate() — ĐÚNG khuôn hrpfResolveTenureBaseDate() (định nghĩa dưới xa trong file, cho
+// màn Chi Tiết) nhưng nhận thẳng 1 dòng _hrpfManageList (field tên giống hệt profile đầy đủ, đã bổ sung
+// ở stripForList() — routes/employeeProfile.js) thay vì gọi lại hàm đó (tránh phụ thuộc thứ tự khai báo
+// function trong file, dù hoisting JS vẫn cho phép gọi trước — viết tách riêng cho rõ ràng "đây là bản
+// cho DANH SÁCH NHẸ, không phải hồ sơ đầy đủ").
+function hrpfMgResolveJoinDate(row) {
+  if (row.tenureBaseDate) return row.tenureBaseDate;
+  if (row.joinDateAtPredecessorUnit) return row.joinDateAtPredecessorUnit;
+  if (row.joinDateAtHcrc) return row.joinDateAtHcrc;
+  const u = row.username ? (DB.users || []).find(x => x.username === row.username) : null;
+  return u?.startDate || null;
+}
+function populateHrpfMgEmploymentTypeFilter() {
+  const sel = document.getElementById('hrpfMgFilterEmploymentType');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- Tất cả --</option>' +
+    (DB.employmentTypes || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  sel.value = cur;
+}
 function renderHrProfileManageList() {
   const kwInputEl = document.getElementById('hrpfManageSearch');
   const kw = (kwInputEl?.value || '').trim();
+  const employmentTypeFilter = document.getElementById('hrpfMgFilterEmploymentType')?.value || '';
+  const nationalIdFilter = (document.getElementById('hrpfMgFilterNationalId')?.value || '').trim();
+  const joinFrom = document.getElementById('hrpfMgFilterJoinFrom')?.value || '';
+  const joinTo = document.getElementById('hrpfMgFilterJoinTo')?.value || '';
   const rows = _hrpfManageList.filter(p => {
-    if (!kw) return true;
-    const idn = hrpfIdentitySnapshot(p);
-    return matchesAnyKeyword([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kwInputEl?._multiKeywords, kw);
+    if (kw) {
+      const idn = hrpfIdentitySnapshot(p);
+      if (!matchesAnyKeyword([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kwInputEl?._multiKeywords, kw)) return false;
+    }
+    if (employmentTypeFilter && p.employmentType !== employmentTypeFilter) return false;
+    if (nationalIdFilter && !String(p.nationalId || '').toLowerCase().includes(nationalIdFilter.toLowerCase())) return false;
+    if (joinFrom || joinTo) {
+      const joinDate = hrpfMgResolveJoinDate(p);
+      if (!joinDate) return false;
+      if (joinFrom && joinDate < joinFrom) return false;
+      if (joinTo && joinDate > joinTo) return false;
+    }
+    return true;
   });
   const tbody = document.getElementById('hrpfManageTableBody');
   document.getElementById('hrpfManageEmpty').classList.toggle('hidden', rows.length > 0);

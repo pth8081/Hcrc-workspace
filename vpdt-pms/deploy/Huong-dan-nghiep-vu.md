@@ -9247,3 +9247,89 @@ kiểm tra lại bằng cách tạm đổi code dùng chung 1 batchId cho cả 2
 khôi phục code gốc để xác nhận PASS, trước khi merge.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 5s. 4 bộ lọc tìm kiếm MỚI + thu gọn được: Hồ Sơ Nhân Sự / Hợp Đồng Lao
+Động / Onboarding-Offboarding / Báo Cáo Định Biên (12/2026)
+
+Theo yêu cầu người dùng (gửi kèm 2 lượt, xác nhận demo trước khi merge):
+*"phần hồ sơ nhân sự... thêm phần tìm kiếm theo hình thức làm việc... căn
+cước công dân... khoảng ngày vào làm việc... đối với hợp đồng lao động thì
+thêm phần tìm kiếm loại hợp đồng lao động... tình trạng hợp đồng lao động...
+cho phép thu gọn lại... onboarding hoặc offboarding thì cũng cho thêm cái
+phần tìm kiếm là theo tình trạng hợp đồng, hình thức làm việc"* + *"báo cáo
+định biên... lọc thông tin phòng ban... thông tin vị trí... ấn nút thu gọn...
+cả cái phần giải trình ở trên chỗ export file cũng thu gọn vào"*.
+
+**📋 Hồ Sơ Nhân Sự → Quản Lý Hồ Sơ**: panel bộ lọc MỚI (nút "🔍 Hiện Bộ Lọc",
+mặc định ĐÓNG, tách khỏi ô tìm-từ-khoá có sẵn — ô đó miễn nút thu gọn theo
+đúng ngoại lệ CLAUDE.md "1 ô tìm kiếm đơn lẻ") gồm 3 trường: **Hình Thức Làm
+Việc** (select từ danh mục `employmentTypes`), **Căn Cước Công Dân** (gõ
+khớp 1 phần), **Khoảng Ngày Vào Làm Việc** (từ-đến, resolve ĐÚNG khuôn hiển
+thị thâm niên đã có — `tenureBaseDate` → `joinDateAtPredecessorUnit` →
+`joinDateAtHcrc` → `DB.users.startDate`, xem `hrpfResolveTenureBaseDate()`/
+`module-hrprofile.js`). **Server**: `stripForList()` (`routes/employeeProfile.js`,
+hàm dựng danh sách nhẹ cho màn này) bổ sung 5 field mới
+(`employmentType`/`nationalId`/`tenureBaseDate`/`joinDateAtPredecessorUnit`/
+`joinDateAtHcrc`) — CHỈ bổ sung cho ĐÚNG người đã xem được danh sách này
+(`canFullViewProfiles()`), không mở rộng phạm vi người xem (người đó vốn đã
+xem được CCCD/Hình Thức Làm Việc của từng hồ sơ qua Chi Tiết, chỉ giờ lọc
+hàng loạt được thêm).
+
+**📝 Hợp Đồng Lao Động**: khối lọc có sẵn (Mã NV/Mã HĐ/Họ tên + Trạng Thái)
+giờ **thu gọn được** (nút "➖ Ẩn Bộ Lọc"/"🔍 Hiện Bộ Lọc", mặc định MỞ SẴN vì
+là bộ lọc đang dùng, chỉ thêm khả năng thu gọn chứ không phải panel hoàn
+toàn mới) + thêm trường MỚI **Loại Hợp Đồng** (select từ danh mục
+`laborContractTypes`, dùng chung `populateLaborContractTypeSelect()` đã có).
+**Tình trạng hợp đồng = "Đã chấm dứt"** (option `TERMINATED`) đã có sẵn TỪ
+TRƯỚC ở `#hrcFilterStatus` — không phải field mới, chỉ gộp vào panel thu gọn
+được.
+
+**🆕 Onboarding / 🚪 Offboarding → Danh Sách Quy Trình**: panel bộ lọc MỚI
+(mặc định ĐÓNG, tách khỏi 2 bộ lọc Loại/Trạng Thái có sẵn — giữ nguyên,
+không đụng) gồm **Hình Thức Làm Việc** + **Tình Trạng Hợp Đồng**. Khác 2 màn
+trên — `hrProcesses` (bản ghi quy trình) KHÔNG tự lưu đủ 2 field này cho MỌI
+bản ghi: ONBOARDING có `employmentType` snapshot NẾU HR điền lúc tạo (tuỳ
+chọn), OFFBOARDING hoàn toàn không có field này (snapshot
+fullName/dept/jobTitle từ `DB.users` lúc tạo, không đụng gì tới
+employeeProfiles/laborContracts). Giải pháp: tra thêm qua danh bạ nhẹ GET
+`/api/hr-profile/employee-directory` (route picker có sẵn, dùng chung với
+Hợp Đồng Lao Động) — **MỞ RỘNG** route này thêm field `employmentType`/
+`latestContractStatus` (hợp đồng MỚI TẠO GẦN NHẤT theo `employeeCode`, id
+lớn nhất — không phải "hợp đồng đang hiệu lực") + **mở rộng quyền đọc** cho
+đúng 4 quyền Onboarding/Offboarding
+(`hrOnboardingProcessManage`/`hrOnboardingManage`/`hrOffboardingProcessManage`/
+`hrOffboardingManage`, xem `canReadEmployeeDirectory()`,
+`routes/employeeProfile.js`) — trước đây CHỈ `hrProfileFullView`/
+`hrProfileEdit`/`hrContractManage` gọi được, người CHỈ quản lý Onboarding/
+Offboarding (rất phổ biến — 2 quyền này thường KHÔNG đi kèm quyền Hồ Sơ
+Nhân Sự/Hợp Đồng) sẽ bị 403 nếu không mở rộng. Khớp theo `employeeCode`
+(ONBOARDING) hoặc `employeeUsername` (OFFBOARDING).
+
+**📋 Báo Cáo Định Biên Nhân Sự** (Cơ Cấu Tổ Chức): 2 việc —
+1. Đoạn giải thích các cột ("Định biên = số chỗ được duyệt...", khá dài) —
+   thu gọn được, mặc định ĐÓNG, bấm "📖 Xem Giải Thích Các Cột" để mở, nội
+   dung giữ NGUYÊN VĂN.
+2. Bộ lọc MỚI **Phòng Ban** + **Vị Trí / Chức Danh** (gõ tự do, có gợi ý sdd*
+   lấy thẳng từ báo cáo vừa tải, không gọi API riêng) — thu gọn được, mặc
+   định ĐÓNG. Báo cáo là bảng PHẲNG đã nhóm sẵn theo cây (GROUP1 ⊃ GROUP2 ⊃
+   vị trí, xem `buildFlatGroupedHeadcountReport()`, `lib/headcountReport.js`)
+   — lọc phải giữ ĐÚNG cấu trúc phân cấp này (`ocHeadcountFilteredRows()`,
+   `module-orgchart.js`): dựng lại cây tạm, chỉ giữ vị trí khớp từ khoá, rồi
+   CHỈ hiện nhóm cha (GROUP1/GROUP2) nào còn ít nhất 1 vị trí con khớp — ẩn
+   HẲN nhóm cha rỗng sau khi lọc (không lọc phẳng đơn thuần, sẽ mất ngữ cảnh
+   "thuộc phòng ban/nhóm nào" của vị trí còn lại). Lọc THUẦN PHÍA CLIENT
+   (không gọi lại API — báo cáo đã tải sẵn trong bộ nhớ, cache lại để lọc
+   nhiều lần không cần tải lại).
+
+Test mới cho cả 4 màn: `tests/test-hrprofile-manage-filter-panel.js`,
+`tests/test-hrcontract-filter-panel.js`, `tests/test-hrlifecycle-filter-panel.js`,
+`tests/test-orgchart-headcount-filter-explain.js` — đều dùng Playwright thật
+(Chromium thật, không chỉ test logic thuần). Mở rộng thêm
+`tests/test-audit-nhansu-hoso.js` (test route THẬT, không qua mock client) —
+xác nhận quyền mở rộng cho Onboarding/Offboarding thật sự hoạt động + danh
+bạ trả đúng hợp đồng MỚI NHẤT (không nhầm "đang hiệu lực"). Toàn bộ test cũ
+liên quan (Hồ Sơ Nhân Sự, Hợp Đồng Lao Động, Onboarding/Offboarding, Báo Cáo
+Định Biên) đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` mới.

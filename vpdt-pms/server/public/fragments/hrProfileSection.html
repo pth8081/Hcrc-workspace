@@ -29,7 +29,15 @@
     <!-- Quản Lý Hồ Sơ (HR/admin, hoặc 1 trong 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa — 9/2026) -->
     <div id="hrpfViewManage" class="hidden space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <input id="hrpfManageSearch" data-multi-paste-search data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Mã NV, Họ tên, Tài khoản, Phòng ban, Chức danh..." class="border p-1.5 rounded text-xs w-72 bg-white">
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="hrpfManageSearch" data-multi-paste-search data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Mã NV, Họ tên, Tài khoản, Phòng ban, Chức danh..." class="border p-1.5 rounded text-xs w-72 bg-white">
+          <!-- hrpfMgFilterToggleWrap (MỚI, 12/2026, theo yêu cầu người dùng: thêm bộ lọc Hình Thức Làm
+               Việc/Căn Cước Công Dân/Khoảng Ngày Vào Làm Việc) — panel RIÊNG, mặc định thu gọn, tách khỏi
+               ô tìm-kiếm-từ-khoá #hrpfManageSearch ở trên (1 ô đơn lẻ, miễn nút thu gọn theo CLAUDE.md). -->
+          <span id="hrpfMgFilterToggleWrap">
+            <button type="button" id="btnToggleHrpfMgFilter" data-op="toggleHrpfMgFilterPanel" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+          </span>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" id="hrpfManageCreateBtn" data-op="openHrpfCreateModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">➕ Tạo Hồ Sơ Mới</button>
           <button type="button" id="hrpfManageImportBtn" data-op="openHrpfImportModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">📤 Nhập Excel</button>
@@ -46,6 +54,25 @@
                tự xem được ở "Hồ Sơ Của Tôi" (GET/PUT /api/hr-profile/self-field-config), CÙNG nguyên tắc
                opt-in mặc định KHÔNG field nào. -->
           <button type="button" id="hrpfSelfFieldConfigBtn" data-op="openHrpfSelfFieldConfigModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">⚙️ Trường Xem Của Tôi</button>
+        </div>
+      </div>
+      <!-- hrpfMgFilterPanel — xem chú thích đầy đủ ở hrpfMgFilterToggleWrap phía trên. -->
+      <div id="hrpfMgFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2 bg-gray-50 border rounded p-2 text-xs">
+        <div>
+          <label class="block text-gray-500 mb-0.5">Hình Thức Làm Việc</label>
+          <select id="hrpfMgFilterEmploymentType" data-op-change="renderHrProfileManageList" class="w-full border p-1 rounded bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-0.5">Căn Cước Công Dân</label>
+          <input id="hrpfMgFilterNationalId" data-op-input="renderHrProfileManageList" placeholder="Nhập số CCCD..." class="w-full border p-1 rounded">
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-0.5">Ngày Vào Làm Việc (từ)</label>
+          <input type="date" id="hrpfMgFilterJoinFrom" data-op-change="renderHrProfileManageList" class="w-full border p-1 rounded">
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-0.5">Ngày Vào Làm Việc (đến)</label>
+          <input type="date" id="hrpfMgFilterJoinTo" data-op-change="renderHrProfileManageList" class="w-full border p-1 rounded">
         </div>
       </div>
       <!-- Chỉ ai có hrProfileFullView/hrProfileEdit/hrProfileManage/admin mới xem được danh sách — người

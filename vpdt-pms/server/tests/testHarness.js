@@ -601,16 +601,27 @@ function createDispatcher(state) {
       }
       // GET /api/hr-profile/employee-directory — mirror ĐÚNG route thật (routes/employeeProfile.js):
       // danh sách CỰC NHẸ, chỉ field KHÔNG nhạy cảm (employeeCode/fullName/username/dept/jobTitle/
-      // joinDateAtHcrc/workEmail/contactPhone — KHÔNG personalEmail). Dùng cho
-      // autoFillStartDateFromOnboarding()/autoFillContactFromHrProfile() (module-admin-submissiongroups.js).
+      // joinDateAtHcrc/workEmail/contactPhone/employmentType/latestContractStatus — KHÔNG personalEmail).
+      // Dùng cho autoFillStartDateFromOnboarding()/autoFillContactFromHrProfile()
+      // (module-admin-submissiongroups.js) + bộ lọc Hình Thức Làm Việc/Tình Trạng HĐ ở Onboarding/
+      // Offboarding (module-hrlifecycle.js, 12/2026).
       if (method === 'GET' && pathName === '/api/hr-profile/employee-directory') {
-        // KHÔNG có vế admin bypass — mirror ĐÚNG canFullViewProfiles()/canManageContracts() thật
-        // (lib/employeeProfile.js/lib/laborContract.js): CHỈ 3 quyền hrProfile*/hrContractManage cụ thể,
-        // admin KHÔNG tự động qua được route này nếu chưa tick quyền tương ứng (chủ đích, dữ liệu Nhân
-        // Sự nhạy cảm).
+        // KHÔNG có vế admin bypass — mirror ĐÚNG canFullViewProfiles()/canManageContracts()/4 quyền
+        // Onboarding-Offboarding thật (xem canReadEmployeeDirectory(), routes/employeeProfile.js): CHỈ
+        // đúng các quyền cụ thể, admin KHÔNG tự động qua được route này nếu chưa tick quyền tương ứng
+        // (chủ đích, dữ liệu Nhân Sự nhạy cảm).
         const canFullView = !!(freshUser.perms?.hrProfileManage || freshUser.perms?.hrProfileFullView || freshUser.perms?.hrProfileEdit);
         const canManageContracts = !!freshUser.perms?.hrContractManage;
-        if (!canFullView && !canManageContracts) return { status: 403, body: { error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' } };
+        const canReadForLifecycle = !!(freshUser.perms?.hrOnboardingProcessManage || freshUser.perms?.hrOnboardingManage
+          || freshUser.perms?.hrOffboardingProcessManage || freshUser.perms?.hrOffboardingManage);
+        if (!canFullView && !canManageContracts && !canReadForLifecycle) return { status: 403, body: { error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' } };
+        // latestContractByEmployeeCode — mirror ĐÚNG route thật (hợp đồng MỚI TẠO GẦN NHẤT, id lớn nhất).
+        const latestContractByEmployeeCode = {};
+        for (const c of (state.laborContracts || [])) {
+          if (!c.employeeCode) continue;
+          const cur = latestContractByEmployeeCode[c.employeeCode];
+          if (!cur || (c.id || 0) > (cur.id || 0)) latestContractByEmployeeCode[c.employeeCode] = c;
+        }
         const directory = (state.employeeProfiles || []).filter(p => p.status !== 'INACTIVE').map(p => {
           const linkedUser = p.username ? (state.users || []).find(u => u.username === p.username) : null;
           return {
@@ -621,10 +632,36 @@ function createDispatcher(state) {
             jobTitle: p.jobTitle || null,
             joinDateAtHcrc: p.joinDateAtHcrc || null,
             workEmail: p.workEmail || null,
-            contactPhone: p.contactPhone || null
+            contactPhone: p.contactPhone || null,
+            employmentType: p.employmentType || null,
+            latestContractStatus: latestContractByEmployeeCode[p.employeeCode]?.status || null
           };
         });
         return { status: 200, body: { directory } };
+      }
+      // GET /api/hr-profile — "📋 Quản Lý Hồ Sơ" (danh sách nhẹ) — mirror ĐÚNG stripForList()
+      // (routes/employeeProfile.js), BỔ SUNG 12/2026: employmentType/nationalId/tenureBaseDate/
+      // joinDateAtPredecessorUnit/joinDateAtHcrc cho bộ lọc Hình Thức Làm Việc/Căn Cước Công Dân/Khoảng
+      // Ngày Vào Làm Việc (module-hrprofile.js).
+      if (method === 'GET' && pathName === '/api/hr-profile') {
+        const canFullView = !!(freshUser.perms?.hrProfileManage || freshUser.perms?.hrProfileFullView || freshUser.perms?.hrProfileEdit);
+        if (!canFullView) return { status: 403, body: { error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' } };
+        const isRealHrEditor = !!(freshUser.perms?.hrProfileManage || freshUser.perms?.hrProfileEdit);
+        const managed = (state.employeeProfiles || []).filter(p => p.onboardingQueueStatus !== 'CANCELLED' && (p.onboardingQueueStatus !== 'PENDING' || isRealHrEditor));
+        const profiles = managed.map(p => ({
+          employeeCode: p.employeeCode, username: p.username, status: p.status,
+          createdAt: p.createdAt, updatedAt: p.updatedAt,
+          dept: p.dept, jobTitle: p.jobTitle, positionLabel: p.positionLabel,
+          jobGrade: p.jobGrade || null, processId: p.processId,
+          onboardingQueueStatus: p.onboardingQueueStatus || null,
+          onboardingQueueCancelReason: p.onboardingQueueCancelReason || null,
+          onboardingQueueCancelledAt: p.onboardingQueueCancelledAt || null,
+          employmentType: p.employmentType || null, nationalId: p.nationalId || null,
+          tenureBaseDate: p.tenureBaseDate || null,
+          joinDateAtPredecessorUnit: p.joinDateAtPredecessorUnit || null,
+          joinDateAtHcrc: p.joinDateAtHcrc || null
+        }));
+        return { status: 200, body: { profiles } };
       }
       function canManageSecondaryPositionsOnlyMock(user) {
         return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit || user?.perms?.hrSecondaryPositionManage);

@@ -139,7 +139,11 @@ function setHrLifecycleView(view) {
   document.getElementById('btnHrpViewMyTasks').className = (view === 'MYTASKS' ? activeCls : inactiveCls) + (canMyTasks ? '' : ' hidden');
   const btnTpl = document.getElementById('btnHrpViewTemplates');
   if (btnTpl) btnTpl.className = (view === 'TEMPLATES' ? activeCls : inactiveCls) + (canTemplates ? '' : ' hidden');
-  if (view === 'LIST') renderHrProcessList();
+  if (view === 'LIST') {
+    populateHrpListEmploymentTypeFilter();
+    applyHrpListFilterPanelState();
+    renderHrProcessList();
+  }
   else if (view === 'MYTASKS') renderHrMyTasksList();
   else if (view === 'TEMPLATES') renderHrTaskTemplateAdmin();
 }
@@ -522,6 +526,78 @@ let hrpListFilterType = 'ALL', hrpListFilterStatus = 'IN_PROGRESS';
 function setHrpListFilterType(v) { hrpListFilterType = v; renderHrProcessList(); }
 function setHrpListFilterStatus(v) { hrpListFilterStatus = v; renderHrProcessList(); }
 
+// hrpDirectoryCache (MỚI, 12/2026, theo yêu cầu người dùng: "onboarding hoặc offboarding thì cũng cho
+// thêm cái phần tìm kiếm là theo tình trạng hợp đồng, hình thức làm việc") — hrProcesses KHÔNG tự lưu
+// đủ 2 field này cho MỌI bản ghi (ONBOARDING có `employmentType` snapshot lúc tạo NẾU HR có điền, nhưng
+// OFFBOARDING thì HOÀN TOÀN không có — snapshot fullName/dept/jobTitle từ DB.users lúc tạo, không đụng
+// employeeProfiles/laborContracts, xem lib/createValidation.js), nên tra thêm qua danh bạ nhẹ GET
+// /api/hr-profile/employee-directory (MỞ RỘNG quyền đọc cho đúng 4 quyền Onboarding/Offboarding ở route
+// đó — xem canReadEmployeeDirectory(), routes/employeeProfile.js) — khớp theo employeeCode (ONBOARDING)
+// hoặc username (OFFBOARDING).
+let hrpDirectoryCache = [];
+let hrpDirectoryLoaded = false;
+async function loadHrpDirectoryIfNeeded() {
+  if (hrpDirectoryLoaded) return;
+  hrpDirectoryLoaded = true; // đặt TRƯỚC khi gọi API — tránh gọi lặp nếu nhiều chỗ cùng trigger lúc đang tải dở
+  try {
+    const res = await fetch('/api/hr-profile/employee-directory');
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json();
+    if (res.ok) hrpDirectoryCache = data.directory || [];
+  } catch (err) { /* lỗi mạng — bỏ qua, bộ lọc Hình Thức Làm Việc/Tình Trạng HĐ chỉ đơn giản không lọc
+    được gì thêm (coi như trống), KHÔNG chặn xem danh sách quy trình. */ }
+}
+function hrpDirectoryEntryFor(item) {
+  if (item.processType === 'ONBOARDING') {
+    return item.employeeCode ? hrpDirectoryCache.find(d => d.employeeCode === item.employeeCode) || null : null;
+  }
+  return item.employeeUsername ? hrpDirectoryCache.find(d => d.username === item.employeeUsername) || null : null;
+}
+// Ưu tiên employmentType snapshot NGAY TRÊN hrProcesses (ONBOARDING, nếu HR có điền lúc tạo — dữ liệu
+// TẠI THỜI ĐIỂM TẠO, có thể khác hồ sơ hiện tại nếu đã sửa sau), fallback sang danh bạ (hồ sơ HIỆN TẠI)
+// khi bản ghi cũ chưa có field này hoặc với OFFBOARDING (luôn fallback, không có snapshot riêng).
+function hrpResolveEmploymentType(item) {
+  return item.employmentType || hrpDirectoryEntryFor(item)?.employmentType || null;
+}
+function hrpResolveContractStatus(item) {
+  return hrpDirectoryEntryFor(item)?.latestContractStatus || null;
+}
+// Nhãn tình trạng hợp đồng — ĐÚNG khuôn HRC_STATUS_LABELS (module-hopdonglaodong.js) nhưng khai báo
+// RIÊNG ở đây (KHÔNG tham chiếu thẳng, 2 module thuộc 2 nhóm tải lười ĐỘC LẬP — "hrlifecycle"/
+// "hopdonglaodong" không phụ thuộc nhau trong MODULE_LOAD_GROUPS, core.js — màn này có thể mở mà chưa
+// từng mở Hợp Đồng Lao Động, HRC_STATUS_LABELS khi đó chưa tồn tại).
+const HRP_CONTRACT_STATUS_LABELS = {
+  DRAFT: '📝 Nháp', ACTIVE: '✅ Đang hiệu lực', EXPIRED: '⌛ Hết hạn',
+  TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
+};
+
+// hrpListFilterPanel (thu gọn được, mặc định ĐÓNG — panel MỚI thêm vào màn, cùng khuôn
+// shelfRecordRecentFilterPanel/module-vanhanh.js) — gộp 2 trường mới (Hình Thức Làm Việc/Tình Trạng Hợp
+// Đồng), TÁCH KHỎI 2 bộ lọc Loại/Trạng Thái đã có sẵn ở trên (giữ nguyên vị trí/hành vi cũ, không đụng).
+let hrpListFilterEmploymentType = '', hrpListFilterContractStatus = '';
+let _hrpListFilterCollapsed = true;
+function applyHrpListFilterPanelState() {
+  const panel = document.getElementById('hrpListFilterPanel');
+  const btn = document.getElementById('btnToggleHrpListFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _hrpListFilterCollapsed);
+  if (btn) btn.textContent = _hrpListFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleHrpListFilterPanel() {
+  _hrpListFilterCollapsed = !_hrpListFilterCollapsed;
+  applyHrpListFilterPanelState();
+}
+function populateHrpListEmploymentTypeFilter() {
+  const sel = document.getElementById('hrpListFilterEmploymentType');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- Tất cả --</option>' +
+    (DB.employmentTypes || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  sel.value = cur;
+}
+function setHrpListFilterEmploymentType(v) { hrpListFilterEmploymentType = v; renderHrProcessList(); }
+function setHrpListFilterContractStatus(v) { hrpListFilterContractStatus = v; renderHrProcessList(); }
+
 function hrProcessProgressLabel(item) {
   const total = (item.tasks || []).length;
   const done = (item.tasks || []).filter(t => t.status === 'DONE' || t.status === 'SKIPPED').length;
@@ -534,6 +610,8 @@ function getVisibleHrProcessList() {
   let visible = (DB.hrProcesses || []).slice().sort((a, b) => b.id - a.id);
   if (hrpListFilterType !== 'ALL') visible = visible.filter(p => p.processType === hrpListFilterType);
   if (hrpListFilterStatus !== 'ALL') visible = visible.filter(p => p.status === hrpListFilterStatus);
+  if (hrpListFilterEmploymentType) visible = visible.filter(p => hrpResolveEmploymentType(p) === hrpListFilterEmploymentType);
+  if (hrpListFilterContractStatus) visible = visible.filter(p => hrpResolveContractStatus(p) === hrpListFilterContractStatus);
   return visible;
 }
 
@@ -688,6 +766,10 @@ async function confirmHrpOnbCreateImport() {
 function renderHrProcessList() {
   const container = document.getElementById('hrpListContainer');
   if (!container) return;
+  // Nạp danh bạ (employmentType/latestContractStatus) nếu chưa có — CÙNG khuôn hrcEmployeeDirectoryCache
+  // ở renderHrContractTable() (module-hopdonglaodong.js): gọi lazy, render lại 1 lần khi tải xong, không
+  // chặn hiển thị danh sách trong lúc chờ (2 cột mới đơn giản trống cho tới khi tải xong).
+  if (!hrpDirectoryLoaded) { loadHrpDirectoryIfNeeded().then(renderHrProcessList); }
   const visible = getVisibleHrProcessList();
 
   if (visible.length === 0) {
