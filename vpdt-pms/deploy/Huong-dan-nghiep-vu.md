@@ -9343,3 +9343,85 @@ liên quan (Hồ Sơ Nhân Sự, Hợp Đồng Lao Động, Onboarding/Offboardi
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` mới.
+
+## 5t. Tính năng MỚI "💰 Cài Đặt Giá Bán Buôn" (Hỗ Trợ IT) — ghi THẲNG vào CSDL
+sản xuất BÊN NGOÀI (DSmart16 Trung Tâm, bảng `CSPRICE`) (12/2026)
+
+Theo yêu cầu người dùng: *"tạo cho mình một cái tab chức năng là cài đặt giá
+bán buôn... ghi thẳng vào bảng của DSmart"*. Đây là tính năng **ghi trực
+tiếp bằng SQL vào một hệ thống sản xuất BÊN NGOÀI** đầu tiên của toàn ứng
+dụng — mọi tích hợp DSmart/BRGMART trước đây (xem các mục khác có nhắc tới
+DSmart/BRGMART) đều chỉ gọi HTTP API, chưa từng mở kết nối SQL thẳng tới CSDL
+của bên thứ ba. Vì vậy được làm cẩn trọng hơn mức thông thường: lớp kết nối
+riêng, lớp cấu hình nhạy cảm tách biệt khỏi cấu hình chung, thông báo lỗi SQL
+thật hiện cho đội IT (không ẩn như lỗi production thông thường) để tự chẩn
+đoán khi cần.
+
+**Mô hình dữ liệu (quan trọng, khác trực giác)**: `CSPRICE` là bảng **LỊCH SỬ
+GIÁ THEO THỜI GIAN**, KHÔNG phải 1-dòng-1-cặp-khách+sản-phẩm. Mỗi lần nộp giá
+mới LUÔN là 1 dòng `INSERT` hoàn toàn mới (có `ID` tự tăng) — DSmart tự chọn
+dòng đang hiệu lực theo cột `FR_DATE`/`TO_DATE` của từng dòng, ứng dụng này
+không can thiệp vào cách DSmart chọn. Ánh xạ cột (người dùng xác nhận đúng
+tên cột thật của DSmart): Mã Khách B2B → `CUST_ID`, Mã Sản Phẩm → `SKU_ID`,
+Giá Sản Phẩm → `WSPRICE`, Ngày Bắt Đầu → `FR_DATE`, Ngày Kết Thúc → `TO_DATE`.
+Phạm vi "quản lý" của màn này **CHỈ tính các dòng đã nộp QUA ĐÚNG màn này**
+(lưu mirror cục bộ ở `dbo.DsmartWholesalePriceEntries`, map 1-1 theo `ID`
+CSPRICE thật) — không quét/hiển thị dữ liệu CSPRICE có từ trước nộp bằng
+cách khác.
+
+**4 chức năng** (tab "💰 Cài Đặt Giá Bán Buôn", sidebar 🖥️ Hỗ Trợ IT, quyền
+MỚI `itSupportPriceWriteDsmart`):
+
+1. **➕ Thêm Giá Mới**: tải lên Excel ĐÚNG 5 cột cố định (Mã Khách B2B, Mã Sản
+   Phẩm, Giá Sản Phẩm, Ngày Bắt Đầu, Ngày Kết Thúc — có nút tải mẫu) → xem
+   bảng xem trước (có ô tìm kiếm Mã Khách B2B/Mã Sản Phẩm, thu gọn được) →
+   bấm "Áp Dụng" → `INSERT` từng dòng vào `CSPRICE` thật + lưu mirror cục bộ.
+2. **✏️ Sửa**: áp dụng cho dòng CHƯA xoá — mở form sửa ngay tại dòng trong
+   "🗂️ Quản Lý Giá Đã Hết Hạn" → `UPDATE` đúng dòng CSPRICE theo `ID` (không
+   insert mới) → có cảnh báo riêng nếu giá đang **SỐNG** (đang được áp dụng
+   tại thời điểm sửa, không phải đã hết hạn).
+3. **🗑️ Xoá** (tay, tick nhiều dòng rồi Áp Dụng) hoặc **🔁 Tự Động Xoá Khi Hết
+   Hạn** (công tắc BẬT/TẮT + giờ:phút tuỳ chỉnh, mặc định 23:00 cùng ngày
+   `TO_DATE` — job quét ngầm mỗi 10 phút, xem `jobs/dsmartAutoDeleteExpiredPrices.js`):
+   `DELETE` THẬT khỏi CSPRICE, không hoàn tác được qua app — mirror cục bộ chỉ
+   đổi trạng thái sang `DELETED` để tra lịch sử/Dùng Lại, không xoá bản ghi.
+4. **↩️ Dùng Lại**: chỉ hiện cho dòng ĐÃ xoá (từ "Quản Lý Giá Đã Hết Hạn" hoặc
+   "📜 Lịch Sử Thao Tác") — mở form điền sẵn khách/sản phẩm/giá cũ, để trống
+   Ngày Bắt Đầu/Kết Thúc cho người dùng nhập lại → Áp Dụng ghi dòng **HOÀN
+   TOÀN MỚI** (INSERT, `ID` mới) — không đụng/update dòng cũ (dòng cũ đã mất
+   khỏi DSmart thật từ lúc xoá, không có gì để update).
+
+Cả 3 danh sách chính (bảng xem trước Thêm Giá Mới, Quản Lý Giá Đã Hết Hạn,
+Lịch Sử Thao Tác) đều có panel tìm kiếm Mã Khách B2B + Mã Sản Phẩm, thu gọn
+được (mặc định ĐÓNG, theo đúng quy tắc chuẩn CLAUDE.md cho bộ lọc mới).
+
+**⚙️ Cấu Hình Kết Nối** (modal riêng trong cùng tab, admin): khai báo
+host/port/tên CSDL/tài khoản/mật khẩu SQL Server của DSmart16 Trung Tâm.
+Lưu vào bảng **RIÊNG** `dbo.DsmartPriceDbConfig` — **KHÔNG** đi qua
+`dbo.AppData`/API cấu hình chung (`GET /api/data`), vì route đó mặc định trả
+về NGUYÊN object cấu hình chung và chỉ ẩn từng khoá nhạy cảm cụ thể đã biết
+trước — tách riêng bảng để loại hẳn rủi ro lộ mật khẩu nếu có ai quên thêm
+bước ẩn cho 1 khoá mới sau này. Chưa cấu hình thì mọi thao tác Áp
+Dụng/Sửa/Xoá/Dùng Lại đều báo lỗi SQL/cấu hình **thật** (không ẩn như lỗi
+production thông thường — để đội IT tự chẩn đoán kết nối).
+
+**Quyền mới**: `itSupportPriceWriteDsmart` (checkbox cây phân quyền + nhãn Ma
+Trận Phân Quyền đã thêm đủ, theo đúng quy tắc CLAUDE.md).
+
+Test mới: `tests/test-dsmart-wholesale-price.js` (19 test, gọi route thật qua
+mock `requireAuth`/DB — kiểm cả 4 chức năng, job tự động xoá, validate ngày/
+cột Excel) và `tests/test-dsmart-price-ui.js` (Playwright thật — tab ẩn/hiện
+theo quyền, 3 panel lọc mặc định đóng, badge trạng thái đúng theo dữ liệu,
+mở form Sửa/Dùng Lại, công tắc Tự Động Xoá). Toàn bộ test hiện có liên quan
+đã chạy lại xác nhận không có hồi quy.
+
+**⚠️ Lưu ý khi deploy — BẮT BUỘC chạy lại `schema.sql`**: đợt này thêm 2 bảng
+mới (`dbo.DsmartPriceDbConfig`, `dbo.DsmartWholesalePriceEntries`) — chạy lại
+`server/sql/schema.sql` trên CSDL thật trước khi khởi động code mới (script
+tự bọc `IF OBJECT_ID(...) IS NULL`, an toàn chạy lại nhiều lần). Không thêm
+biến môi trường/`dependencies` npm mới. Sau khi deploy, admin cần vào
+"⚙️ Cấu Hình Kết Nối" khai báo thông tin kết nối DSmart16 Trung Tâm THẬT
+trước khi tính năng ghi được dữ liệu thật — nên thử với vài dòng nhỏ trước
+khi áp dụng số lượng lớn, vì các ràng buộc khác của bảng CSPRICE thật ngoài
+5 cột đã xác nhận chưa kiểm được trực tiếp trên DSmart từ môi trường phát
+triển này.

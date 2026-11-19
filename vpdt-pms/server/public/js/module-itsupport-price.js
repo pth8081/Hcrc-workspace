@@ -18,7 +18,11 @@ function setItSupportSubTab(subTab) {
   const canPrice = hasModuleAccess(currentUser, 'itSupportPrice');
   const canTicket = hasModuleAccess(currentUser, 'itSupportTicket');
   const canRenewal = hasModuleAccess(currentUser, 'itSupportRenewal') && canManageItRenewalClient(currentUser);
-  const itTabOrder = [['PRICE', canPrice], ['TICKET', canTicket], ['RENEWAL', canRenewal]];
+  // DSMARTPRICE (MỚI, 12/2026) — KHÔNG có công tắc "Mục 0" riêng (khác 3 tab trên, vốn mở sẵn cho nhiều
+  // người rồi mới thu hẹp): quyền itSupportPriceWriteDsmart mặc định KHÔNG ai có, chính quyền đó đã là
+  // lớp gác đủ chặt (ghi trực tiếp CSDL ngoài) — không cần thêm 1 công tắc ẩn/hiện nữa.
+  const canDsmartPrice = canManageDsmartPriceClient(currentUser);
+  const itTabOrder = [['PRICE', canPrice], ['TICKET', canTicket], ['RENEWAL', canRenewal], ['DSMARTPRICE', canDsmartPrice]];
   const curItTab = itTabOrder.find(([k]) => k === subTab);
   if (!curItTab || !curItTab[1]) {
     // LỖI ĐÃ VÁ (11/2026): trước đây `subTab = fallback ? fallback[0] : subTab` GIỮ NGUYÊN tab bị cấm khi
@@ -32,11 +36,13 @@ function setItSupportSubTab(subTab) {
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
   document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
   document.getElementById('itSubRenewal').classList.toggle('hidden', subTab !== 'RENEWAL');
+  document.getElementById('itSubDsmartPrice').classList.toggle('hidden', subTab !== 'DSMARTPRICE');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnItSubPrice').className = (subTab === 'PRICE' ? activeCls : inactiveCls) + (canPrice ? '' : ' hidden');
   document.getElementById('btnItSubTicket').className = (subTab === 'TICKET' ? activeCls : inactiveCls) + (canTicket ? '' : ' hidden');
   document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canRenewal ? '' : ' hidden');
+  document.getElementById('btnItSubDsmartPrice').className = (subTab === 'DSMARTPRICE' ? activeCls : inactiveCls) + (canDsmartPrice ? '' : ' hidden');
 
   // Không còn sub-tab nào được phép xem (cả 3 checkbox Mục 0 liên quan đều đã bị tắt) — mọi khung đã ẩn
   // hết ở trên, dừng luôn, không vẽ nội dung gì.
@@ -59,6 +65,9 @@ function setItSupportSubTab(subTab) {
   if (subTab === 'RENEWAL') {
     renderDynamicInputsForModule('IT_RENEWAL', 'dynamicFieldsContainer_IT_RENEWAL');
     renderItServiceRenewals();
+  }
+  if (subTab === 'DSMARTPRICE') {
+    initDsmartPriceTab();
   }
 }
 

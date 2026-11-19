@@ -67,6 +67,7 @@ const stocktakeRoutes = require('./routes/stocktake');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
 const inventorySyncAdminRoutes = require('./routes/inventorySyncAdmin');
+const dsmartWholesalePriceRoutes = require('./routes/dsmartWholesalePrice');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
@@ -99,6 +100,7 @@ const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
 const { checkShelfStockReconDigestAlerts } = require('./jobs/shelfStockReconDigestAlert');
 const { syncSystemInventory } = require('./jobs/inventorySync');
+const { runDsmartAutoDeleteExpiredPrices } = require('./jobs/dsmartAutoDeleteExpiredPrices');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkWorkStatusAutoRevert } = require('./jobs/workStatusAutoRevert');
@@ -247,6 +249,7 @@ app.use('/api/stocktake', stocktakeRoutes);
 app.use('/api/operation', operationImportRoutes);
 app.use('/api/operation', operationOrderApiSyncRoutes);
 app.use('/api/inventory', inventorySyncAdminRoutes);
+app.use('/api/dsmart-price', dsmartWholesalePriceRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
 // /api/admin/external-api-keys: router tự áp requireAuth + kiểm admin bên trong (khớp routes/adminCatalog.js).
 app.use('/api/admin/external-api-keys', externalAuthAdminRoutes);
@@ -576,6 +579,11 @@ async function start() {
       // nếu thiếu cấu hình (UI lẫn .env) — xem jobs/inventorySync.js.
       syncSystemInventory();
       setInterval(() => { syncSystemInventory(); }, 5 * 60 * 1000);
+      // "🔁 Tự động xoá khi hết hạn" (Hỗ Trợ IT > Cài Đặt Giá Bán Buôn, 12/2026) — 10 phút/lần đủ sát giờ
+      // đã đặt (vd 23:00) mà không cần job theo phút; tự tắt hẳn nếu chưa bật autoDeleteEnabled (xem
+      // jobs/dsmartAutoDeleteExpiredPrices.js).
+      runDsmartAutoDeleteExpiredPrices().catch(err => console.error('⛔ dsmartAutoDeleteExpiredPrices lỗi:', err.message));
+      setInterval(() => { runDsmartAutoDeleteExpiredPrices().catch(err => console.error('⛔ dsmartAutoDeleteExpiredPrices lỗi:', err.message)); }, 10 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

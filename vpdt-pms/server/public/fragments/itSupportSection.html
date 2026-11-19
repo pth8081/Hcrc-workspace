@@ -3,6 +3,7 @@
       <button type="button" data-op="setItSupportSubTab" data-arg0="PRICE" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
       <button type="button" data-op="setItSupportSubTab" data-arg0="TICKET" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
       <button type="button" data-op="setItSupportSubTab" data-arg0="RENEWAL" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="DSMARTPRICE" id="btnItSubDsmartPrice" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 Cài Đặt Giá Bán Buôn</button>
     </div>
 
     <!-- Sub-tab: Phê Duyệt Giá -->
@@ -298,3 +299,172 @@
       </div>
     </div>
   
+    <!-- Sub-tab: 💰 Cài Đặt Giá Bán Buôn (MỚI, 12/2026 — ghi trực tiếp CSDL DSmart16 Trung Tâm, bảng
+         CSPRICE). Xem chú thích mô hình dữ liệu đầy đủ ở routes/dsmartWholesalePrice.js. -->
+    <div id="itSubDsmartPrice" class="hidden space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span id="dsmartPriceConnDot" class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>
+          <span id="dsmartPriceConnStatus">Đang kiểm tra kết nối DSmart16 Trung Tâm...</span>
+        </div>
+        <button type="button" data-op="openDsmartPriceConfigModal" id="btnDsmartPriceConfig" class="hidden bg-gray-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-800">⚙️ Cấu Hình Kết Nối (Admin)</button>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 rounded p-3 text-[11px] text-blue-800 leading-relaxed">
+        💡 <b>CSPRICE là bảng lịch sử giá theo thời gian</b> — mỗi lần nộp giá mới là <b>THÊM dòng mới</b> (không ghi đè). DSmart tự chọn đúng giá hiệu lực theo Ngày Bắt Đầu/Ngày Kết Thúc của từng dòng. Dòng đã hết hạn có thể xoá tay hoặc bật <b>🔁 Tự động xoá khi hết hạn</b> bên dưới.
+      </div>
+
+      <!-- 1. Thêm Giá Mới -->
+      <div class="bg-white border rounded-lg p-4 space-y-3">
+        <div class="font-bold text-sm text-gray-800">1. Thêm Giá Mới (Nộp File → Thêm Dòng Mới Vào DSmart)</div>
+        <div class="flex flex-wrap gap-3">
+          <div class="flex-1 min-w-[260px] border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-lg p-4 flex flex-col items-center gap-2">
+            <input type="file" id="dsmartPriceFileInput" accept=".xlsx" class="hidden" data-op-change="onDsmartPriceFileChange">
+            <button type="button" data-op="clickDsmartPriceFileInput" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">📂 Chọn File Excel</button>
+            <div id="dsmartPriceFileName" class="text-[11px] text-gray-400">chưa chọn file nào</div>
+          </div>
+          <div class="flex-1 min-w-[260px] bg-gray-50 border rounded-lg p-3 text-[11px] text-gray-600 leading-relaxed">
+            <div class="font-bold text-gray-800 mb-1">Khuôn mẫu CỐ ĐỊNH (5 cột):</div>
+            <div>Mã Khách B2B · Mã sản phẩm · Giá sản phẩm · Ngày bắt đầu · Ngày kết thúc</div>
+            <a href="/api/dsmart-price/template" class="text-blue-600 font-semibold inline-block mt-2">📥 Tải File Mẫu Chuẩn</a>
+          </div>
+        </div>
+
+        <div id="dsmartPriceUploadPreviewWrap" class="hidden space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <div class="font-bold text-xs text-gray-800" id="dsmartPriceUploadStats"></div>
+              <button type="button" data-op="toggleDsmartPriceUploadFilter" id="btnToggleDsmartPriceUploadFilter" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+            </div>
+          </div>
+          <div id="dsmartPriceUploadFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
+            <div>
+              <label class="block text-gray-500 mb-0.5">Tìm theo Mã Khách B2B</label>
+              <input id="dsmartPriceUploadFilterCust" data-op-input="renderDsmartPriceUploadPreview" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            </div>
+            <div>
+              <label class="block text-gray-500 mb-0.5">Tìm theo Mã Sản Phẩm</label>
+              <input id="dsmartPriceUploadFilterSku" data-op-input="renderDsmartPriceUploadPreview" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            </div>
+          </div>
+          <div class="overflow-x-auto border rounded">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100 text-left"><tr>
+                <th class="p-1.5">STT</th><th class="p-1.5">Mã Khách B2B</th><th class="p-1.5">Mã Sản Phẩm</th>
+                <th class="p-1.5 text-right">Giá</th><th class="p-1.5">Ngày Bắt Đầu</th><th class="p-1.5">Ngày Kết Thúc</th><th class="p-1.5">Trạng Thái</th>
+              </tr></thead>
+              <tbody id="dsmartPriceUploadPreviewBody"></tbody>
+            </table>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="button" data-op="applyDsmartPriceUpload" id="btnDsmartPriceApplyUpload" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">✅ Thêm Giá Mới Vào DSmart</button>
+            <span class="text-[11px] text-gray-400">Cần quyền riêng: itSupportPriceWriteDsmart</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Quản Lý Giá Đã Hết Hạn -->
+      <div class="bg-white border rounded-lg p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <div class="font-bold text-sm text-gray-800">2. Quản Lý Giá Đã Hết Hạn (Xoá Khỏi DSmart)</div>
+            <button type="button" data-op="toggleDsmartPriceMgFilter" id="btnToggleDsmartPriceMgFilter" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-gray-600">
+            <input type="checkbox" id="dsmartPriceMgOnlyExpired" checked data-op-change="renderDsmartPriceEntries"> Chỉ hiện Đã hết hạn
+          </label>
+        </div>
+        <div id="dsmartPriceMgFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tìm theo Mã Khách B2B</label>
+            <input id="dsmartPriceMgFilterCust" data-op-input="renderDsmartPriceEntries" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tìm theo Mã Sản Phẩm</label>
+            <input id="dsmartPriceMgFilterSku" data-op-input="renderDsmartPriceEntries" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="bg-green-50 border rounded p-3 flex flex-wrap items-center gap-3">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="dsmartPriceAutoDeleteEnabled" data-op-change="saveDsmartPriceAutoDeleteConfig" class="w-4 h-4">
+            <span class="text-xs font-bold text-green-800">🔁 Tự động xoá khi hết hạn</span>
+          </label>
+          <div class="flex items-center gap-1.5 text-xs text-green-800">
+            <span>Xoá lúc</span>
+            <input type="number" id="dsmartPriceAutoDeleteHour" min="0" max="23" value="23" data-op-change="saveDsmartPriceAutoDeleteConfig" class="w-12 border rounded p-1 text-center">
+            <span>:</span>
+            <input type="number" id="dsmartPriceAutoDeleteMinute" min="0" max="59" value="0" data-op-change="saveDsmartPriceAutoDeleteConfig" class="w-12 border rounded p-1 text-center">
+            <span>cùng ngày hết hạn</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left"><tr>
+              <th class="p-1.5 w-6"></th><th class="p-1.5">Mã Khách B2B</th><th class="p-1.5">Mã Sản Phẩm</th>
+              <th class="p-1.5 text-right">Giá</th><th class="p-1.5">Hiệu Lực</th><th class="p-1.5">Trạng Thái</th>
+              <th class="p-1.5">Ghi Chú</th><th class="p-1.5">Thao Tác</th>
+            </tr></thead>
+            <tbody id="dsmartPriceEntriesBody"></tbody>
+          </table>
+        </div>
+        <div id="dsmartPriceEditForm" class="hidden bg-sky-50 border border-sky-200 rounded p-3"></div>
+        <div id="dsmartPriceReuseForm" class="hidden bg-indigo-50 border border-indigo-200 rounded p-3"></div>
+
+        <div class="bg-red-50 border border-red-200 rounded p-3 text-[11px] text-red-800 leading-relaxed">
+          ⚠️ Xoá ở đây sẽ <b>XOÁ THẬT</b> khỏi CSPRICE trên DSmart16 Trung Tâm — không có bước hoàn tác tự động.
+        </div>
+        <button type="button" data-op="applyDsmartPriceDeleteSelected" id="btnDsmartPriceDeleteSelected" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">🗑️ Áp Dụng Xoá Đã Chọn</button>
+      </div>
+
+      <!-- 3. Lịch Sử Thao Tác -->
+      <div class="bg-white border rounded-lg p-4 space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="font-bold text-sm text-gray-800">3. Lịch Sử Thao Tác</div>
+          <button type="button" data-op="toggleDsmartPriceHistoryFilter" id="btnToggleDsmartPriceHistoryFilter" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+        </div>
+        <div id="dsmartPriceHistoryFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tìm theo Mã Khách B2B</label>
+            <input id="dsmartPriceHistoryFilterCust" data-op-input="renderDsmartPriceHistory" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+          </div>
+          <div>
+            <label class="block text-gray-500 mb-0.5">Tìm theo Mã Sản Phẩm</label>
+            <input id="dsmartPriceHistoryFilterSku" data-op-input="renderDsmartPriceHistory" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+          </div>
+        </div>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left"><tr>
+              <th class="p-1.5">Thời Gian</th><th class="p-1.5">Người Thực Hiện</th><th class="p-1.5">Hành Động</th>
+              <th class="p-1.5">Mã Khách B2B</th><th class="p-1.5">Mã Sản Phẩm</th><th class="p-1.5">Chi Tiết</th><th class="p-1.5">Thao Tác</th>
+            </tr></thead>
+            <tbody id="dsmartPriceHistoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Cấu Hình Kết Nối DSmart16 Trung Tâm (CHỈ admin) -->
+    <div id="dsmartPriceConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="p-4 border-b flex justify-between items-center">
+          <h3 class="font-bold text-base text-gray-800">⚙️ Cấu Hình Kết Nối DSmart16 Trung Tâm</h3>
+          <button data-op="closeDsmartPriceConfigModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-4 space-y-3 text-sm">
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Host</label><input id="dsmartPriceCfgHost" class="w-full border p-2 rounded text-sm"></div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Port</label><input id="dsmartPriceCfgPort" type="number" value="1433" class="w-full border p-2 rounded text-sm"></div>
+            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Tên CSDL</label><input id="dsmartPriceCfgDatabase" class="w-full border p-2 rounded text-sm"></div>
+          </div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Tài khoản SQL</label><input id="dsmartPriceCfgUser" class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label><input id="dsmartPriceCfgPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu cũ" class="w-full border p-2 rounded text-sm"><div id="dsmartPriceCfgPasswordHint" class="text-[11px] text-gray-400 mt-1"></div></div>
+        </div>
+        <div class="p-4 border-t flex justify-end gap-2">
+          <button data-op="closeDsmartPriceConfigModal" class="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>
+          <button data-op="saveDsmartPriceConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">💾 Lưu Cấu Hình</button>
+        </div>
+      </div>
+    </div>
