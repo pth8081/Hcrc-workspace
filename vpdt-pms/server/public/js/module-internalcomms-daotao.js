@@ -4071,7 +4071,7 @@ function renderTrainingDocuments() {
       <div class="flex flex-col gap-1 flex-shrink-0 items-end">
         ${actionHTML}
         ${canManageTrainingLocal(currentUser) ? `<button data-op="editTrainingDocument" data-arg0="${d.id}" class="text-indigo-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
-        ${currentUser.perms?.admin ? `<button data-op="deleteTrainingDocument" data-arg0="${d.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+        ${canManageTrainingLocal(currentUser) ? `<button data-op="deleteTrainingDocument" data-arg0="${d.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
       </div>
     </div>`;
   }).join('');
