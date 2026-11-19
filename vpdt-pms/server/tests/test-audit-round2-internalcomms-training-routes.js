@@ -349,6 +349,88 @@ async function main() {
     });
 
     // ===================================================================================
+    // LỖI THẬT đã vá (12/2026, tiếp nối đợt vá quyền xoá trainingDocuments — phản hồi TRỰC TIẾP người
+    // dùng: "cả quyền xóa cho bên đào tạo đó nhá, chung vào quyền người quản lý đào tạo ấy"): 5 route xoá
+    // CÒN LẠI của cụm Đào Tạo (Lớp Học/Ngân Hàng Câu Hỏi/Chương Trình/Lộ Trình Thăng Tiến/Lộ Trình Tân
+    // Binh) CÙNG gặp lỗ hổng y hệt trainingDocuments — SỬA dùng canManageTraining()/canManageTrainingClass()
+    // (trainingManage), XOÁ lại khoá về đúng assertAdminForDelete() (admin-only). Gộp chung sang
+    // assertCanDeleteTraining() (trainingManage HOẶC admin) — xác nhận TRAINER (trainingManage, KHÔNG
+    // admin) xoá được cả 5, NV1 (không quyền) vẫn bị chặn 403 đúng như cũ.
+    // ===================================================================================
+    await run.run('LỖI ĐÃ VÁ: trainingManage XOÁ được Lớp Học (trainingClasses) — không ai đăng ký, không lộ trình tham chiếu', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/trainingClasses/901/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingClasses.length, 1);
+    });
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá Lớp Học (403)', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/trainingClasses/901/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.trainingClasses.length, 2);
+    });
+
+    await run.run('LỖI ĐÃ VÁ: trainingManage XOÁ được bài test (trainingTests) — không lớp nào gán', async () => {
+      resetRecords();
+      RECORDS.trainingClasses = RECORDS.trainingClasses.map(c => ({ ...c, testId: null })); // không lớp nào gán testId=50 ở kịch bản này
+      const res = await api('POST', '/api/records/trainingTests/50/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingTests.length, 0);
+    });
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá bài test (403)', async () => {
+      resetRecords();
+      RECORDS.trainingClasses = RECORDS.trainingClasses.map(c => ({ ...c, testId: null }));
+      const res = await api('POST', '/api/records/trainingTests/50/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.trainingTests.length, 1);
+    });
+
+    await run.run('LỖI ĐÃ VÁ: trainingManage XOÁ được Chương Trình (trainingCourses) — không có gì tham chiếu', async () => {
+      resetRecords();
+      RECORDS.trainingCourses = [{ id: 60, name: 'Chương Trình Test Xoá', category: 'Nghiệp vụ' }];
+      const res = await api('POST', '/api/records/trainingCourses/60/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingCourses.length, 0);
+    });
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá Chương Trình (403)', async () => {
+      resetRecords();
+      RECORDS.trainingCourses = [{ id: 60, name: 'Chương Trình Test Xoá', category: 'Nghiệp vụ' }];
+      const res = await api('POST', '/api/records/trainingCourses/60/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.trainingCourses.length, 1);
+    });
+
+    await run.run('LỖI ĐÃ VÁ: trainingManage XOÁ được Lộ Trình Thăng Tiến (careerPaths) — chưa ai được xác nhận mốc nào', async () => {
+      resetRecords();
+      RECORDS.careerPaths = [{ id: 70, name: 'Lộ Trình Test Xoá', stages: [] }];
+      const res = await api('POST', '/api/records/careerPaths/70/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.careerPaths.length, 0);
+    });
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá Lộ Trình Thăng Tiến (403)', async () => {
+      resetRecords();
+      RECORDS.careerPaths = [{ id: 70, name: 'Lộ Trình Test Xoá', stages: [] }];
+      const res = await api('POST', '/api/records/careerPaths/70/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.careerPaths.length, 1);
+    });
+
+    await run.run('LỖI ĐÃ VÁ: trainingManage XOÁ được Lộ Trình Tân Binh (onboardingPaths) — không hồ sơ tân binh nào đang theo', async () => {
+      resetRecords();
+      RECORDS.onboardingPaths = [{ id: 80, name: 'Lộ Trình Tân Binh Test Xoá' }];
+      const res = await api('POST', '/api/records/onboardingPaths/80/delete', {}, TRAINER);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.onboardingPaths.length, 0);
+    });
+    await run.run('Người không có trainingManage/admin vẫn bị chặn xoá Lộ Trình Tân Binh (403)', async () => {
+      resetRecords();
+      RECORDS.onboardingPaths = [{ id: 80, name: 'Lộ Trình Tân Binh Test Xoá' }];
+      const res = await api('POST', '/api/records/onboardingPaths/80/delete', {}, NV1);
+      assertEqual(res.status, 403);
+      assertEqual(RECORDS.onboardingPaths.length, 1);
+    });
+
+    // ===================================================================================
     // #7 — track-progress: durationSeconds/pageCount ép về giá trị THẬT trên bản ghi tài liệu
     // ===================================================================================
     await run.run('#7 — Request GIẢ {furthestSeconds:1, durationSeconds:1} KHÔNG hoàn tất được (server ép durationSeconds thật=600)', async () => {

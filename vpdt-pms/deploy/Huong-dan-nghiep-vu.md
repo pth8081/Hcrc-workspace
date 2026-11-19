@@ -9047,3 +9047,39 @@ hoàn toàn khác nội dung nếu cho đổi tệp tự do.
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` mới.
+
+## 5n. Mở rộng quyền XOÁ cho trainingManage sang TOÀN BỘ danh mục Đào Tạo (12/2026)
+
+Tiếp nối mục 5l (chỉ mới vá quyền xoá cho `trainingDocuments`), người dùng
+xác nhận rõ: *"cả quyền xóa cho bên đào tạo đó nhá, chung vào quyền người
+quản lý đào tạo ấy"*. Rà soát lại thì **5 route xoá còn lại** của cụm Đào
+Tạo gặp đúng lỗ hổng tương tự — SỬA đã dùng `canManageTraining()`/
+`canManageTrainingClass()` (`trainingManage`) từ trước, nhưng XOÁ vẫn khoá
+về `assertAdminForDelete()` (chỉ admin hệ thống):
+
+- **Lớp Học** (`trainingClasses`)
+- **Ngân Hàng Câu Hỏi** (`trainingTests`)
+- **Chương Trình Đào Tạo** (`trainingCourses`)
+- **Lộ Trình Thăng Tiến** (`careerPaths`)
+- **Lộ Trình Đào Tạo Tân Binh** (`onboardingPaths`)
+
+**Đã sửa**: gộp 6 route xoá (gồm cả `trainingDocuments` đã vá ở mục 5l)
+dùng CHUNG 1 helper `assertCanDeleteTraining()` (`routes/records.js`) —
+cho phép xoá khi có `trainingManage` HOẶC `admin`. Các kiểm tra tham chiếu
+trước khi xoá (lớp còn đăng ký, bài test còn lớp gán, chương trình còn lớp/
+kế hoạch/lộ trình dùng, lộ trình thăng tiến còn mốc xác nhận, lộ trình tân
+binh còn hồ sơ đang theo...) giữ nguyên không đổi. Nút "Xóa" ở client cũng
+đổi từ kiểm tra thô `perms.admin` sang `canManageTrainingLocal()` cho cả 5
+màn, khớp đúng điều kiện nút "Sửa" đang dùng.
+
+**2 ngoại lệ CỐ Ý KHÔNG mở rộng** (đã nêu rõ lý do kèm theo trong code):
+- **Kế Hoạch Đào Tạo** (`trainingPlans`) — vẫn giữ admin-only như cũ, vì
+  đây là thiết kế đã xác nhận TRƯỚC ĐÓ (kế hoạch chỉ là số dự kiến, không
+  có dữ liệu nghiệp vụ nào phụ thuộc vào việc nó còn tồn tại hay không).
+- **`trainingInstruct`** (giảng viên chỉ quản lý lớp MÌNH được gán) —
+  KHÔNG được cấp thêm quyền xoá dù họ sửa được lớp của mình qua
+  `canManageTrainingClass()`. Yêu cầu gốc chỉ nói "quyền quản lý đào tạo"
+  (`trainingManage`); xoá là hành động nặng hơn sửa nên giữ đúng phạm vi
+  `trainingManage`/`admin`, không nới thêm cho giảng viên.
+
+Không cần thao tác deploy gì thêm ngoài copy code.

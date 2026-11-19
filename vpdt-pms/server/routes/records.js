@@ -1710,17 +1710,27 @@ router.post('/trainingDocuments/:id/edit', async (req, res) => {
   }
 });
 // LỖI THẬT đã vá (12/2026, phản hồi TRỰC TIẾP người dùng: "đã phân quyền full quyền cho module đào tạo,
-// nhưng các bạn không có quyền sửa, không có quyền xóa tài liệu đâu"): route này TRƯỚC ĐÂY dùng CHUNG
-// assertAdminForDelete() — đúng quy ước "quyền xoá tối cao" của cụm Tài liệu/Văn bản trình/Hợp đồng/Mua
-// Bán-Sửa Chữa-Đầu Tư/Đăng Ký Xe (xem chú thích assertAdminForDelete() ở trên) — nhưng nhóm quyền
-// "🎓 Quản lý Đào Tạo (toàn quyền)" (trainingManage) đã ĐƯỢC QUẢNG CÁO là TOÀN QUYỀN quản lý tài liệu
-// (sửa METADATA dùng ĐÚNG canManageTraining() ở editTrainingDocument(), lib/recordActions.js), riêng
-// XOÁ lại bị khoá về đúng admin hệ thống chung — không khớp kỳ vọng "toàn quyền" của nhóm này. Đổi SANG
-// assertCanDeleteTrainingDocument() (trainingManage HOẶC admin) — CHỈ áp dụng cho ĐÚNG route này, KHÔNG
-// đụng assertAdminForDelete() dùng chung cho 4 module khác.
-function assertCanDeleteTrainingDocument(user) {
+// nhưng các bạn không có quyền sửa, không có quyền xóa tài liệu đâu" — rồi xác nhận tiếp "cả quyền xóa
+// cho bên đào tạo đó nhá, chung vào quyền người quản lý đào tạo ấy"): 6 route XOÁ danh mục Đào Tạo dưới
+// đây (Tài Liệu/Lớp Học/Lộ Trình Thăng Tiến/Ngân Hàng Câu Hỏi/Chương Trình/Lộ Trình Tân Binh) TRƯỚC ĐÂY
+// CÙNG dùng chung assertAdminForDelete() — đúng quy ước "quyền xoá tối cao" của cụm Tài liệu/Văn bản
+// trình/Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư/Đăng Ký Xe (xem chú thích assertAdminForDelete() ở trên) — nhưng
+// nhóm quyền "🎓 Quản lý Đào Tạo (toàn quyền)" (trainingManage) đã ĐƯỢC QUẢNG CÁO là TOÀN QUYỀN quản lý
+// Đào Tạo (SỬA mọi collection này đều dùng ĐÚNG canManageTraining(), xem editTrainingDocument()/
+// editOnboardingPath()/editCareerPath() ở lib/recordActions.js), riêng XOÁ lại bị khoá về đúng admin hệ
+// thống chung — không khớp kỳ vọng "toàn quyền" của nhóm này. Gộp CHUNG 1 helper
+// assertCanDeleteTraining() (trainingManage HOẶC admin) cho cả 6 route — CHỈ áp dụng ĐÚNG 6 route Đào
+// Tạo này, KHÔNG đụng assertAdminForDelete() dùng chung cho 4 module khác không liên quan.
+//
+// CỐ Ý KHÔNG áp dụng cho trainingPlans/:id/delete (ở dưới xa, vẫn admin-only CÓ CHỦ ĐÍCH — xem chú thích
+// riêng tại route đó: Kế Hoạch Đào Tạo chỉ là số dự kiến, không có dữ liệu nghiệp vụ nào phụ thuộc vào
+// việc nó còn tồn tại hay không, nên giữ nguyên "quyền tối cao" admin-only như trước).
+// CỐ Ý KHÔNG mở rộng cho trainingInstruct (giảng viên chỉ quản lý được roster/kết quả của lớp MÌNH được
+// gán, xem canManageTrainingClass()) — yêu cầu gốc chỉ nói "quyền quản lý đào tạo" (trainingManage); xoá
+// là hành động nặng hơn sửa, giữ đúng ở quyền trainingManage/admin, không nới cho trainingInstruct.
+function assertCanDeleteTraining(user) {
   if (!recordActions.canManageTraining(user) && !user.perms?.admin) {
-    throw new HttpError(403, 'Bạn không có quyền xóa tài liệu đào tạo');
+    throw new HttpError(403, 'Bạn không có quyền xóa dữ liệu đào tạo');
   }
 }
 router.post('/trainingDocuments/:id/delete', async (req, res) => {
@@ -1728,7 +1738,7 @@ router.post('/trainingDocuments/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertCanDeleteTrainingDocument(freshUser);
+    assertCanDeleteTraining(freshUser);
     const classes = await getAllForCollection('trainingClasses');
     const referencing = classes.filter(c => {
       if (c.mode !== 'ONLINE') return false;
@@ -1755,7 +1765,7 @@ router.post('/trainingDocuments/:id/delete', async (req, res) => {
       const names = referencingPaths.map(p => p.name || `#${p.id}`).join(', ');
       throw new HttpError(409, `Không thể xóa tài liệu này vì còn gắn kèm trong ${referencingPaths.length} lộ trình đào tạo tân binh (${names}). Vui lòng gỡ tài liệu khỏi lộ trình đó trước.`);
     }
-    await deleteRecordForCollection('trainingDocuments', itemId, () => assertCanDeleteTrainingDocument(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('trainingDocuments', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `trainingDocuments/${req.params.id}/delete`, err);
@@ -1766,7 +1776,7 @@ router.post('/trainingClasses/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertCanDeleteTraining(freshUser);
     const regs = await getAllForCollection('trainingRegistrations');
     const referencing = regs.filter(r => r.classId === itemId);
     if (referencing.length) {
@@ -1781,7 +1791,7 @@ router.post('/trainingClasses/:id/delete', async (req, res) => {
       const names = referencingPaths.map(p => p.name || `#${p.id}`).join(', ');
       throw new HttpError(409, `Không thể xóa lớp học này vì còn được liên kết tham khảo trong ${referencingPaths.length} lộ trình đào tạo tân binh (${names}). Vui lòng gỡ liên kết khỏi lộ trình đó trước.`);
     }
-    await deleteRecordForCollection('trainingClasses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('trainingClasses', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/delete`, err);
@@ -1820,13 +1830,13 @@ router.post('/careerPaths/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertCanDeleteTraining(freshUser);
     const confirmations = await getAllForCollection('careerPathConfirmations');
     const referencing = confirmations.filter(c => c.pathId === itemId);
     if (referencing.length) {
       throw new HttpError(409, `Không thể xóa lộ trình thăng tiến này vì đã có ${referencing.length} mốc xác nhận hoàn thành của nhân viên gắn với nó. Vui lòng thu hồi các mốc xác nhận đó trước.`);
     }
-    await deleteRecordForCollection('careerPaths', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('careerPaths', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `careerPaths/${req.params.id}/delete`, err);
@@ -1875,13 +1885,13 @@ router.post('/trainingTests/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertCanDeleteTraining(freshUser);
     const classes = await getAllForCollection('trainingClasses');
     const referencing = classes.filter(c => c.testId === itemId);
     if (referencing.length) {
       throw new HttpError(409, `Không thể xóa bài test này vì còn ${referencing.length} lớp học đang gán nó. Vui lòng gỡ bài test khỏi các lớp đó trước (sửa lớp).`);
     }
-    await deleteRecordForCollection('trainingTests', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('trainingTests', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `trainingTests/${req.params.id}/delete`, err);
@@ -1915,7 +1925,7 @@ router.post('/trainingCourses/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertCanDeleteTraining(freshUser);
     const [classes, plans, careerPaths] = await Promise.all([
       getAllForCollection('trainingClasses'),
       getAllForCollection('trainingPlans'),
@@ -1932,7 +1942,7 @@ router.post('/trainingCourses/:id/delete', async (req, res) => {
     if (refs.length) {
       throw new HttpError(409, `Không thể xóa chương trình đào tạo này vì đang được ${refs.join(', ')} sử dụng. Vui lòng gỡ/đổi chương trình ở các hồ sơ đó trước.`);
     }
-    await deleteRecordForCollection('trainingCourses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('trainingCourses', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `trainingCourses/${req.params.id}/delete`, err);
@@ -1998,13 +2008,13 @@ router.post('/onboardingPaths/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertCanDeleteTraining(freshUser);
     const progressList = await getAllForCollection('onboardingProgress');
     const referencing = progressList.filter(p => Number(p.pathId) === itemId);
     if (referencing.length) {
       throw new HttpError(409, `Không thể xoá lộ trình này vì còn ${referencing.length} hồ sơ Đào Tạo Tân Binh đang theo lộ trình (xoá đi sẽ khiến các hồ sơ đó không xác nhận tiếp giai đoạn nào được nữa). Vui lòng xử lý/xoá các hồ sơ liên quan trước.`);
     }
-    await deleteRecordForCollection('onboardingPaths', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('onboardingPaths', itemId, () => assertCanDeleteTraining(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `onboardingPaths/${req.params.id}/delete`, err);

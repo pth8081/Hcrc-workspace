@@ -704,7 +704,10 @@ function renderTrainingClasses() {
         : `<button data-op="closeTrainingClassRegistrationAction" data-arg0="${c.id}" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700 ml-1">🔒 Đóng Đăng Ký</button>`)
       : '';
     const manageHTML = canManageThis ? `<button data-op="openTrainingResultsModal" data-arg0="${c.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button data-op="openTrainingRosterModal" data-arg0="${c.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}${sessionBtnHTML}${closeRegHTML}${editHTML}` : '';
-    const delHTML = currentUser.perms?.admin ? `<button data-op="deleteTrainingClass" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    // Xoá CHỈ trainingManage/admin (KHÔNG mở cho trainingInstruct dù họ quản lý được lớp này qua
+    // canManageTrainingClassLocal() ở trên — xoá là hành động nặng hơn sửa, giữ đúng phạm vi "quyền quản
+    // lý đào tạo" như yêu cầu người dùng, mirror ĐÚNG assertCanDeleteTraining() ở routes/records.js).
+    const delHTML = canManageTrainingLocal(currentUser) ? `<button data-op="deleteTrainingClass" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     const sessionState = getTrainingClassSessionState(c);
     const sessionBadgeCls = sessionState === 'ONGOING' ? 'bg-emerald-100 text-emerald-700' : sessionState === 'ENDED' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700';
     // Chương Trình (courseId, Đợt 4, tuỳ chọn) — CHỈ hiển thị bổ sung, KHÔNG thay thế c.title (tên hiển
@@ -1112,7 +1115,7 @@ function renderTrainingCourses() {
         <div class="mt-auto pt-2 flex justify-end gap-2">
           ${docCount ? `<button data-op="openTrainingCourseDocsModal" data-arg0="${c.id}" class="text-emerald-700 font-bold hover:underline text-xs">📄 Xem Tài Liệu (${docCount})</button>` : ''}
           ${canManage ? `<button data-op="editTrainingCourse" data-arg0="${c.id}" class="text-indigo-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
-          ${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+          ${canManage ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -2734,7 +2737,7 @@ function renderTrainingTests() {
   container.innerHTML = pageItems.map(t => {
     const totalPoints = t.questions.reduce((s, q) => s + q.points, 0);
     const editHTML = canManage ? `<button data-op="editTrainingTest" data-arg0="${t.id}" class="text-indigo-600 font-bold hover:underline text-xs ml-2">Sửa</button>` : '';
-    const delHTML = currentUser.perms?.admin ? `<button data-op="deleteTrainingTest" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    const delHTML = canManageTrainingLocal(currentUser) ? `<button data-op="deleteTrainingTest" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     // Xuất Excel (mirror khuôn cột của template Nhập Từ Excel — xem exportTrainingTestQuestionsExcel())
     // — CHỈ trainingManage/admin (đáp án đúng chỉ họ thấy, xem sanitizeTrainingTestsForUser() server).
     const exportHTML = canManage ? `<button data-op="exportTrainingTestQuestionsExcel" data-arg0="${t.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 ml-2">📤 Xuất Excel</button>` : '';
@@ -4579,7 +4582,7 @@ function renderOnboardingPathsTable() {
   tbody.innerHTML = pageItems.map(p => {
     const actions = canManage ? `
       <button data-op="openEditOnboardingPath" data-arg0="${p.id}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
-      ${currentUser.perms?.admin ? `<button data-op="deleteOnboardingPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}` : '';
+      <button data-op="deleteOnboardingPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline">Xóa</button>` : '';
     const linkedClass = p.linkedClassId != null ? DB.trainingClasses.find(c => c.id === p.linkedClassId) : null;
     return `<tr class="hover:bg-gray-50">
       <td class="border p-2 font-bold">${escapeHtml(p.name)}${linkedClass ? `<div class="text-[11px] text-gray-400 font-normal mt-0.5">🔗 Tham chiếu: ${escapeHtml(linkedClass.code || '')} - ${escapeHtml(linkedClass.title)}</div>` : ''}</td>
