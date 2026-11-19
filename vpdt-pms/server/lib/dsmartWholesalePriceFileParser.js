@@ -73,7 +73,9 @@ async function parseWholesalePriceFile(buffer) {
     const toDate = toDateOnlyIso(cellRaw(cells[idx.toDate]));
 
     if (!custIdRaw) errors.push('Thiếu Mã Khách B2B');
+    else if (custIdRaw.length > 50) errors.push('Mã Khách B2B quá dài (tối đa 50 ký tự)');
     if (!skuIdRaw) errors.push('Thiếu Mã sản phẩm');
+    else if (skuIdRaw.length > 50) errors.push('Mã sản phẩm quá dài (tối đa 50 ký tự)');
     if (price == null || price < 0) errors.push('Giá sản phẩm không hợp lệ');
     if (!frDate) errors.push('Ngày bắt đầu không hợp lệ');
     if (!toDate) errors.push('Ngày kết thúc không hợp lệ');
