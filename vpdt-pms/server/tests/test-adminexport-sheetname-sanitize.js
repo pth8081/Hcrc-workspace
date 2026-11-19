@@ -13,7 +13,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { buildGenericWorkbook } = require('../lib/adminExport');
+const { buildGenericWorkbook, buildMultiSheetWorkbook } = require('../lib/adminExport');
 
 let pass = 0, fail = 0;
 function check(name, fn) {
@@ -58,5 +58,70 @@ check('SIMPLE_CATALOG_EXCEL_CONFIG: MỌI nhãn danh mục hiện có đều xu�
   }
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail > 0 ? 1 : 0);
+// LỖI THẬT đã vá (12/2026, người dùng báo tab "📦 Tồn Kho" (Kiểm Kê) xuất Excel nhiều sheet — mỗi siêu
+// thị 1 sheet, tên sheet = TÊN SIÊU THỊ THẬT do admin tự đặt, không phải nhãn cố định như Ma Trận Phân
+// Quyền — báo "Không thể tạo file Excel"): sanitizeSheetNameBase() chỉ lọc 7 ký tự cấm, KHÔNG xử lý 2
+// luật khác của exceljs: (1) tên không được bắt đầu/kết thúc bằng dấu nháy đơn ('), (2) tên "History"
+// (không phân biệt hoa/thường) bị giữ riêng. Cả 2 lỗi đều ném exception ĐỒNG BỘ ngay tại addWorksheet(),
+// route chỉ log console rồi trả lỗi chung chung. Test dưới đây tái hiện ĐÚNG tên siêu thị gây lỗi thật
+// ("Cửa hàng 'Thảo Điền'") lẫn mọi biến thể khác của 2 luật trên, cho cả buildGenericWorkbook() (1 sheet)
+// lẫn buildMultiSheetWorkbook() (nhiều sheet, đúng luồng Tồn Kho dùng).
+
+check('buildGenericWorkbook(): sheetName có dấu nháy đơn ở đầu/cuối (đúng lỗi thật — tên siêu thị) không ném lỗi', () => {
+  const wb = buildGenericWorkbook("Cửa hàng 'Thảo Điền'", [{ key: 'name', header: 'Tên' }], [{ name: 'a' }]);
+  assert.strictEqual(wb.worksheets.length, 1);
+  assert.ok(!/^'|'$/.test(wb.worksheets[0].name), `tên sheet vẫn còn dấu nháy đơn ở biên: ${wb.worksheets[0].name}`);
+});
+
+check('buildGenericWorkbook(): sheetName "History"/"history" (tên Excel giữ riêng) không ném lỗi', () => {
+  for (const n of ['History', 'history', 'HISTORY']) {
+    const wb = buildGenericWorkbook(n, [{ key: 'name', header: 'Tên' }], [{ name: 'a' }]);
+    assert.notStrictEqual(wb.worksheets[0].name.toLowerCase(), 'history', `tên sheet vẫn là "History": ${wb.worksheets[0].name}`);
+  }
+});
+
+check('buildMultiSheetWorkbook(): nhiều sheet với tên siêu thị thật (dấu nháy đơn, "History", trùng không phân biệt hoa/thường) không ném lỗi', () => {
+  const columns = [{ key: 'name', header: 'Tên' }];
+  const sheets = [
+    { sheetName: "Cửa hàng 24-26 Trần Nhật Duật", columns, rows: [{ name: 'a' }] },
+    { sheetName: "Cửa hàng 'Thảo Điền'", columns, rows: [{ name: 'b' }] },
+    { sheetName: "Cửa hàng [VIP] Phú Mỹ Hưng", columns, rows: [{ name: 'c' }] },
+    { sheetName: 'History', columns, rows: [{ name: 'd' }] },
+    { sheetName: "''''", columns, rows: [{ name: 'e' }] },
+    { sheetName: "Cùng Tên Kho", columns, rows: [{ name: 'f' }] },
+    { sheetName: "cùng tên kho", columns, rows: [{ name: 'g' }] }, // trùng không phân biệt hoa/thường với dòng trên
+  ];
+  let wb;
+  assert.doesNotThrow(() => { wb = buildMultiSheetWorkbook(sheets); }, 'buildMultiSheetWorkbook() ném lỗi với tên siêu thị thật');
+  assert.strictEqual(wb.worksheets.length, sheets.length);
+  const names = wb.worksheets.map(ws => ws.name);
+  const namesLower = names.map(n => n.toLowerCase());
+  assert.strictEqual(new Set(namesLower).size, names.length, `vẫn còn tên sheet trùng không phân biệt hoa/thường: ${JSON.stringify(names)}`);
+  names.forEach(n => {
+    assert.ok(!/^'|'$/.test(n), `tên sheet "${n}" vẫn còn dấu nháy đơn ở biên`);
+    assert.notStrictEqual(n.toLowerCase(), 'history', `tên sheet vẫn là "History": ${n}`);
+    assert.ok(n.length > 0 && n.length <= 31, `tên sheet "${n}" sai độ dài (0 < len <= 31)`);
+  });
+});
+
+(async () => {
+  // check() ở trên chỉ gọi fn() đồng bộ (không await) — test ghi file .xlsx thật (writeBuffer() là async
+  // của exceljs) phải tự await riêng ở ngoài, không dùng chung check() để tránh "pass giả" (fn() trả về
+  // Promise ngay lập tức, không throw đồng bộ dù sau đó reject).
+  const name = 'buildMultiSheetWorkbook(): xuất ra file .xlsx thật được (writeBuffer không ném lỗi) với tên siêu thị dính cả 2 luật cùng lúc';
+  try {
+    const columns = [{ key: 'name', header: 'Tên' }];
+    const sheets = [
+      { sheetName: "'History'", columns, rows: [{ name: 'a' }] }, // vừa dính dấu nháy đơn, vừa trùng "History" sau khi strip
+    ];
+    const wb = buildMultiSheetWorkbook(sheets);
+    const buf = await wb.xlsx.writeBuffer();
+    assert.ok(buf.length > 0, 'file .xlsx sinh ra rỗng');
+    pass++; console.log(`PASS: ${name}`);
+  } catch (e) {
+    fail++; console.log(`FAIL: ${name} — ${e.message}`);
+  }
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail > 0 ? 1 : 0);
+})();
