@@ -2443,15 +2443,17 @@
           <button type="button" id="btnToggleOrgChartHeadcountFilter" data-op="toggleOrgChartHeadcountFilterPanel" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
         </div>
         <p id="orgChartHeadcountExplainText" class="hidden text-[11px] text-gray-500">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí, hoặc nhập hàng loạt qua "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên"). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm — KHÔNG gồm Kiêm Nhiệm (Kiêm Nhiệm chỉ có ở Hồ Sơ Nhân Sự, không nằm trong cấu hình Định Biên). Kiêm Nhiệm/Full Time/Part Time/Đang Thử Việc hiện cột riêng (Kiêm Nhiệm tính ×0.5/người; Full Time/Part Time đếm theo "Hình thức làm việc" ở Hồ Sơ Nhân Sự; Đang Thử Việc đếm theo Hợp Đồng Lao Động đang hiệu lực loại Thử việc) — chỉ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch. "Thai sản/nghỉ ốm" tự tính theo trạng thái hồ sơ — chọn "Tình trạng làm việc hiện tại (chi tiết)" = Nghỉ thai sản/Nghỉ ốm dài ngày/Không lương sẽ tự lên cột này, không cần đổi trạng thái tay riêng. "Đang Thử Việc" đếm theo Quy Trình Onboarding đang "Đang thực hiện" (tự mất khỏi cột này khi quy trình Hoàn Tất hoặc bị Huỷ/Chấm Dứt Thử Việc). Chênh lệch = Định Biên − Thực Tế; dương = cần tuyển thêm, âm = dôi dư.</p>
-        <div id="orgChartHeadcountFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
+        <div id="orgChartHeadcountFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 bg-gray-50 border rounded p-2 text-xs">
           <!-- ocHeadcountFilterQuick (MỚI, 12/2026, theo yêu cầu người dùng: "thêm 1 cái tìm kiếm nữa là
-               tìm kiếm nhanh ấy, gõ bất cứ ký tự nào cũng hiện ra ngay") — ô tìm NHANH gộp khớp TẤT CẢ cột
-               (phòng ban/chức danh/cấp bậc/mã vị trí) trong 1 ô duy nhất, khác với 2 ô Phòng Ban/Vị Trí bên
-               dưới (chỉ khớp đúng nhóm cột riêng) — theo đúng khuôn ô-tìm-từ-khoá-đơn-lẻ #hrpfManageSearch
-               (plain input, không dùng sdd vì đây là tìm "mọi cột" chứ không phải chọn 1 giá trị cụ thể). -->
-          <div class="md:col-span-2">
+               tìm kiếm nhanh ấy, gõ bất cứ ký tự nào cũng hiện ra ngay"; sau đó yêu cầu thu nhỏ "ba ô cạnh
+               nhau đi nhỉ, ô to quá" -> đổi panel sang 3 cột, cả 3 ô cùng hàng) — ô tìm NHANH gộp khớp TẤT
+               CẢ cột (phòng ban/chức danh/cấp bậc/mã vị trí) trong 1 ô duy nhất, khác với 2 ô Phòng Ban/Vị
+               Trí bên cạnh (chỉ khớp đúng nhóm cột riêng) — theo đúng khuôn ô-tìm-từ-khoá-đơn-lẻ
+               #hrpfManageSearch (plain input, không dùng sdd vì đây là tìm "mọi cột" chứ không phải chọn 1
+               giá trị cụ thể). -->
+          <div class="relative">
             <label class="block text-gray-500 mb-0.5">🔍 Tìm Kiếm Nhanh (mọi cột)</label>
-            <input id="ocHeadcountFilterQuick" data-op-input="onOrgChartHeadcountFilterChanged" placeholder="Gõ bất kỳ ký tự nào để lọc ngay: phòng ban, bộ phận, chức danh, cấp bậc, mã vị trí..." class="w-full border p-1 rounded" autocomplete="off">
+            <input id="ocHeadcountFilterQuick" data-op-input="onOrgChartHeadcountFilterChanged" placeholder="Gõ bất kỳ ký tự nào..." class="w-full border p-1 rounded" autocomplete="off">
           </div>
           <div class="relative">
             <label class="block text-gray-500 mb-0.5">Phòng Ban</label>
