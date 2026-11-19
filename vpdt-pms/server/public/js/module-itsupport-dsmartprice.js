@@ -5,6 +5,7 @@
 let _dsmartPriceEntries = [];
 let _dsmartPriceUploadRows = null;
 let _dsmartPriceUploadFileName = null;
+let _dsmartPriceAddFormCollapsed = true;
 let _dsmartPriceUploadFilterCollapsed = true;
 let _dsmartPriceMgFilterCollapsed = true;
 let _dsmartPriceHistoryFilterCollapsed = true;
@@ -14,6 +15,7 @@ let _dsmartPriceReusingEntry = null;
 async function initDsmartPriceTab() {
   document.getElementById('btnDsmartPriceConfig').classList.toggle('hidden', !currentUser?.perms?.admin);
   document.getElementById('dsmartPriceConnStatus').innerText = 'Xem "⚙️ Cấu Hình Kết Nối" (Admin) để kiểm tra/đổi thông tin kết nối DSmart16 Trung Tâm.';
+  applyDsmartPriceAddFormState();
   applyDsmartPriceUploadFilterState();
   applyDsmartPriceMgFilterState();
   applyDsmartPriceHistoryFilterState();
@@ -22,6 +24,17 @@ async function initDsmartPriceTab() {
 }
 
 // ===================== 1. Thêm Giá Mới =====================
+// Thu gọn mặc định (12/2026, theo yêu cầu người dùng: "ấn nút Thêm Giá Mới mới mở ra") — cùng khuôn
+// toggle đã dùng cho 3 bộ lọc bên dưới trong CHÍNH file này, không cần gác quyền riêng ở đây (cả màn đã
+// gác itSupportPriceWriteDsmart từ server, xem initDsmartPriceTab() không có bước kiểm tra quyền nào
+// khác ngoài #btnDsmartPriceConfig vốn chỉ dành riêng cho admin).
+function applyDsmartPriceAddFormState() {
+  document.getElementById('dsmartPriceAddFormWrap').classList.toggle('hidden', _dsmartPriceAddFormCollapsed);
+  const btn = document.getElementById('btnDsmartPriceAddToggle');
+  if (btn) btn.textContent = _dsmartPriceAddFormCollapsed ? '➕ Thêm Giá Mới' : '✕ Đóng';
+}
+function toggleDsmartPriceAddForm() { _dsmartPriceAddFormCollapsed = !_dsmartPriceAddFormCollapsed; applyDsmartPriceAddFormState(); }
+
 function clickDsmartPriceFileInput() { document.getElementById('dsmartPriceFileInput').click(); }
 
 function applyDsmartPriceUploadFilterState() {

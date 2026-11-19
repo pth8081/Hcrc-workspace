@@ -320,9 +320,17 @@
         </div>
       </details>
 
-      <!-- 1. Thêm Giá Mới -->
+      <!-- 1. Thêm Giá Mới — thu gọn mặc định (12/2026, theo yêu cầu người dùng: "ấn nút Thêm Giá Mới
+           mới mở ra"), cùng khuôn nút "+ Đề Xuất Mới" (vanHanhSection.html#btnItPriceCreateNew) nhưng
+           đơn giản hơn: không cần gác theo quyền riêng (cả màn này đã gác itSupportPriceWriteDsmart ở
+           router), chỉ cần 1 biến trạng thái cục bộ + applyDsmartPriceAddFormState() (giống 3 bộ lọc
+           khác trong CÙNG file module-itsupport-dsmartprice.js). -->
       <div class="bg-white border rounded-lg p-4 space-y-3">
-        <div class="font-bold text-sm text-gray-800">1. Thêm Giá Mới (Nộp File → Thêm Dòng Mới Vào DSmart)</div>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="font-bold text-sm text-gray-800">1. Thêm Giá Mới (Nộp File → Thêm Dòng Mới Vào DSmart)</div>
+          <button type="button" data-op="toggleDsmartPriceAddForm" id="btnDsmartPriceAddToggle" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">➕ Thêm Giá Mới</button>
+        </div>
+        <div id="dsmartPriceAddFormWrap" class="hidden space-y-3">
         <div class="flex flex-wrap gap-3">
           <div class="flex-1 min-w-[260px] border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-lg p-4 flex flex-col items-center gap-2">
             <input type="file" id="dsmartPriceFileInput" accept=".xlsx" class="hidden" data-op-change="onDsmartPriceFileChange" data-arg-event="0">
@@ -366,6 +374,7 @@
             <button type="button" data-op="applyDsmartPriceUpload" id="btnDsmartPriceApplyUpload" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">✅ Thêm Giá Mới Vào DSmart</button>
             <span class="text-[11px] text-gray-400">Cần quyền riêng: itSupportPriceWriteDsmart</span>
           </div>
+        </div>
         </div>
       </div>
 
