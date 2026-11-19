@@ -89,7 +89,7 @@ function buildGenericWorkbook(sheetName, columns, rows) {
   // "Chức Danh (Khối VP/HO)" (SIMPLE_CATALOG_EXCEL_CONFIG.jobTitles, module-admin.js) có dấu "/" khiến
   // wb.addWorksheet() ném lỗi ngay, route chỉ log console rồi trả về thông báo chung chung. Dùng lại
   // ĐÚNG sanitizeSheetNameBase() đã có sẵn (định nghĩa ngay dưới, hoisted) thay vì chỉ String()+cắt.
-  const sheet = wb.addWorksheet(sanitizeSheetNameBase(sheetName).slice(0, 31)); // Excel giới hạn tên sheet 31 ký tự
+  const sheet = wb.addWorksheet(finalizeSheetName(sanitizeSheetNameBase(sheetName).slice(0, 31))); // Excel giới hạn tên sheet 31 ký tự
   sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18, style: c.numFmt ? { numFmt: String(c.numFmt) } : undefined }));
   styleHeaderRow(sheet.getRow(1));
   rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));
@@ -105,24 +105,45 @@ function sanitizeSheetNameBase(name) {
   return String(name || 'Sheet1').replace(SHEET_NAME_FORBIDDEN_CHARS_RE, '-').trim() || 'Sheet1';
 }
 
+// finalizeSheetName(name) — LỖI THẬT đã vá (12/2026, người dùng báo tab "📦 Tồn Kho" (Kiểm Kê) xuất Excel
+// nhiều sheet — mỗi siêu thị 1 sheet, TÊN SHEET = tên siêu thị thật, KHÔNG phải nhãn cố định như Ma Trận
+// Phân Quyền — báo "Không thể tạo file Excel"): sanitizeSheetNameBase() ở trên chỉ lọc 7 ký tự cấm
+// (\ / ? * [ ] :), nhưng exceljs CÒN chặn thêm 2 luật khác mà hàm đó bỏ sót (xem worksheet.js của
+// exceljs, hàm `set name`): (1) tên sheet KHÔNG được bắt đầu/kết thúc bằng dấu nháy đơn ('), (2) tên
+// "History" (không phân biệt hoa/thường) bị Excel giữ riêng, không được dùng. Tên siêu thị do admin tự
+// đặt hoàn toàn có thể dính 1 trong 2 luật này (VD "Cửa hàng 'Thảo Điền'") — addWorksheet() ném lỗi NGAY
+// (đồng bộ, trong try của routes/adminExport.js), route chỉ log console rồi trả thông báo chung chung,
+// không có cách nào người dùng tự đoán ra nguyên nhân thật. Gộp cả 2 luật còn thiếu vào ĐÚNG 1 hàm dùng
+// chung cho cả buildGenericWorkbook() lẫn buildMultiSheetWorkbook(), gọi SAU KHI đã cắt 31 ký tự (tránh
+// trường hợp cắt ngắn vô tình để lại dấu nháy đơn ngay tại ranh giới cắt).
+function finalizeSheetName(name) {
+  let s = String(name || '').replace(/^'+/, '').replace(/'+$/, '').trim();
+  if (!s) s = 'Sheet1';
+  if (s.toLowerCase() === 'history') s = `${s}_`;
+  return s.slice(0, 31);
+}
+
 // buildMultiSheetWorkbook(sheets) — bản nhiều sheet của buildGenericWorkbook() ở trên (10/2026, Ma Trận
 // Phân Quyền: mỗi khối quyền 1 sheet thay vì 1 sheet phẳng ~130 cột — xem module-admin-permgroups.js).
 // sheets: [{sheetName, columns, rows}, ...], mỗi phần tử ĐÚNG khuôn tham số của buildGenericWorkbook().
 // Excel giới hạn tên sheet 31 ký tự, cấm 7 ký tự ở trên, VÀ không cho trùng tên trong cùng workbook —
 // thay ký tự cấm, cắt ngắn, rồi tự thêm hậu tố số nếu vẫn trùng (hiếm khi xảy ra vì tên khối quyền thật
-// đủ khác biệt, nhưng vẫn phòng hờ).
+// đủ khác biệt, nhưng vẫn phòng hờ). So trùng KHÔNG PHÂN BIỆT hoa/thường (`usedNamesLower`) — đúng luật
+// thật của exceljs (`ws.name.toLowerCase() === name.toLowerCase()`), trước đây so trùng CÓ phân biệt hoa
+// thường nên 2 tên chỉ khác hoa/thường vẫn lọt qua rồi ném lỗi "Worksheet name already exists" ở
+// addWorksheet() (cùng họ lỗi với bug dấu nháy đơn ở trên, vá chung 1 đợt).
 function buildMultiSheetWorkbook(sheets) {
   const wb = new ExcelJS.Workbook();
-  const usedNames = new Set();
+  const usedNamesLower = new Set();
   sheets.forEach(({ sheetName, columns, rows }) => {
     const base0 = sanitizeSheetNameBase(sheetName);
-    let name = base0.slice(0, 31);
+    let name = finalizeSheetName(base0.slice(0, 31));
     let suffix = 2;
-    while (usedNames.has(name)) {
+    while (usedNamesLower.has(name.toLowerCase())) {
       const base = base0.slice(0, 31 - String(suffix).length - 1);
-      name = `${base}_${suffix++}`;
+      name = finalizeSheetName(`${base}_${suffix++}`);
     }
-    usedNames.add(name);
+    usedNamesLower.add(name.toLowerCase());
     const sheet = wb.addWorksheet(name);
     sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18 }));
     styleHeaderRow(sheet.getRow(1));

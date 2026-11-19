@@ -9169,3 +9169,38 @@ chỗ import ở `routes/stocktake.js`. Thêm "Kịch bản 12" vào
 rồi khôi phục fix để xác nhận PASS) trước khi merge.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 5q. LỖI THẬT PRODUCTION đã vá: Tab "📦 Tồn Kho" (Kiểm Kê) bấm "Xuất Excel"
+báo "Không thể tạo file Excel" (12/2026)
+
+Người dùng báo tab "📦 Tồn Kho" (Kiểm Kê → Báo Cáo) bấm nút xuất Excel toàn
+hệ thống (mỗi siêu thị 1 sheet) hiện lỗi chung chung *"Không thể tạo file
+Excel"*.
+
+**Nguyên nhân**: hàm dùng chung sinh file Excel (`buildGenericWorkbook()`/
+`buildMultiSheetWorkbook()`, `lib/adminExport.js`) chỉ lọc 7 ký tự Excel cấm
+trong tên sheet (`\ / ? * [ ] :`), nhưng thư viện `exceljs` còn chặn thêm 2
+luật khác mà hàm lọc bỏ sót: (1) tên sheet KHÔNG được bắt đầu/kết thúc bằng
+dấu nháy đơn (`'`), (2) tên "History" (không phân biệt hoa/thường) bị Excel
+giữ riêng, không dùng được. Khác với Ma Trận Phân Quyền (tên sheet lấy từ
+nhãn khối quyền cố định, không bao giờ dính 2 luật trên), tab Tồn Kho dùng
+THẲNG tên siêu thị thật do admin tự đặt làm tên sheet (VD "Cửa hàng 'Thảo
+Điền'" — có dấu nháy đơn) — `addWorksheet()` ném lỗi NGAY (đồng bộ), route
+chỉ log console rồi trả về thông báo chung chung, không có cách nào người
+dùng tự đoán ra nguyên nhân thật. Cùng họ lỗi: đối chiếu tên sheet trùng
+(chống trùng tên trong 1 workbook) trước đây so sánh CÓ phân biệt hoa/
+thường, trong khi `exceljs` so trùng KHÔNG phân biệt hoa/thường — 2 siêu thị
+chỉ khác nhau hoa/thường cũng có thể dính lỗi tương tự.
+
+**Đã sửa**: gộp cả 2 luật còn thiếu vào 1 hàm `finalizeSheetName()` dùng
+chung cho cả `buildGenericWorkbook()` (1 sheet) lẫn `buildMultiSheetWorkbook()`
+(nhiều sheet) — tự cắt dấu nháy đơn ở đầu/cuối, tự thêm hậu tố nếu tên trùng
+"History", gọi SAU KHI đã cắt 31 ký tự (tránh trường hợp cắt ngắn vô tình để
+lại dấu nháy đơn ngay tại ranh giới cắt). Đổi `buildMultiSheetWorkbook()`
+sang so trùng tên sheet KHÔNG phân biệt hoa/thường, đúng luật thật của
+`exceljs`. Mở rộng `tests/test-adminexport-sheetname-sanitize.js` — tái hiện
+đúng tên siêu thị gây lỗi thật, tự kiểm tra lại bằng cách revert tạm fix để
+xác nhận test FAIL với đúng lỗi thật của `exceljs`, rồi khôi phục fix để xác
+nhận PASS, trước khi merge.
+
+Không cần thao tác deploy gì thêm ngoài copy code.
