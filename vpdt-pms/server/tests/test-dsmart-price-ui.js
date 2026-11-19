@@ -145,6 +145,16 @@ async function main() {
   await page.waitForTimeout(300);
   check('Bấm sang sub-tab -> hiện đúng khung #itSubDsmartPrice', await page.isVisible('#itSubDsmartPrice'));
 
+  // ===== Mục 1 "Thêm Giá Mới" thu gọn mặc định (12/2026, theo yêu cầu người dùng) =====
+  check('Mục 1 "Thêm Giá Mới" mặc định ĐÓNG (chỉ hiện nút "➕ Thêm Giá Mới")', (await page.isVisible('#dsmartPriceAddFormWrap')) === false);
+  let addToggleText = await page.textContent('#btnDsmartPriceAddToggle');
+  check('Nút mục 1 hiện đúng chữ "➕ Thêm Giá Mới" khi đang đóng', addToggleText.includes('Thêm Giá Mới'), addToggleText);
+  await page.click('#btnDsmartPriceAddToggle');
+  await page.waitForTimeout(100);
+  check('Bấm "➕ Thêm Giá Mới" -> MỞ ra, thấy ô Chọn File Excel', await page.isVisible('#dsmartPriceAddFormWrap') && await page.isVisible('#dsmartPriceFileInput + button'));
+  addToggleText = await page.textContent('#btnDsmartPriceAddToggle');
+  check('Nút đổi chữ thành "✕ Đóng" khi đang mở', addToggleText.includes('Đóng'), addToggleText);
+
   // ===== 3 bộ lọc đều mặc định ĐÓNG =====
   check('Bộ lọc mục 1 (Thêm Giá Mới) mặc định ĐÓNG', (await page.isVisible('#dsmartPriceUploadFilterPanel')) === false);
   check('Bộ lọc mục 2 (Quản Lý) mặc định ĐÓNG', (await page.isVisible('#dsmartPriceMgFilterPanel')) === false);

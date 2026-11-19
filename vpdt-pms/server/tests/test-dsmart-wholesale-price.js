@@ -431,8 +431,15 @@ async function main() {
     CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
     const today = new Date().toISOString().slice(0, 10);
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2020-01-01', toDate: today }] });
-    const future = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 giờ sau (chắc chắn chưa tới nếu đặt giờ này)
-    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: future.getHours(), autoDeleteMinute: future.getMinutes() };
+    // dueForAutoDelete() chỉ so sánh GIỜ:PHÚT TRONG NGÀY (không có khái niệm ngày-kế-tiếp) — cộng thẳng 2
+    // giờ như trước có thể LẶP VÒNG qua nửa đêm (VD 23:16 + 2h = 01:16 hôm sau), khiến giờ "tương lai"
+    // tính ra lại NHỎ HƠN giờ hiện tại trong ngày -> job coi là đã quá hạn, xoá luôn (test flaky, thấy
+    // sai thật lúc chạy gần nửa đêm). Chặn trần ở 23:59 cùng ngày để luôn chắc chắn ở TƯƠNG LAI trong
+    // ngày, không bao giờ vòng qua ngày hôm sau.
+    const now = new Date();
+    const nowMinutesOfDay = now.getHours() * 60 + now.getMinutes();
+    const dueMinutesOfDay = Math.min(nowMinutesOfDay + 120, 23 * 60 + 59);
+    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: Math.floor(dueMinutesOfDay / 60), autoDeleteMinute: dueMinutesOfDay % 60 };
     delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
     const { runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices');
     const result = await runDsmartAutoDeleteExpiredPrices();
