@@ -1238,13 +1238,18 @@ function ocFmtNum(n) {
 // NÀY: dựng lại cây tạm {GROUP1 -> [{GROUP2|null, leaves[]}]}, chỉ giữ POSITION khớp từ khoá, rồi CHỈ
 // hiện GROUP1/GROUP2 nào còn ít nhất 1 POSITION con khớp (ẩn mục cha rỗng hoàn toàn sau khi lọc) — không
 // lọc phẳng đơn thuần (sẽ làm mất ngữ cảnh "thuộc phòng ban/nhóm nào" của từng dòng vị trí còn lại).
-function ocHeadcountFilteredRows(rows, deptKw, posKw) {
+// quickKw (MỚI, 12/2026, theo yêu cầu người dùng "tìm kiếm nhanh... bất cứ một cái ký tự nào cũng hiện
+// ra"): gõ ký tự nào khớp BẤT KỲ cột nào (phòng ban/chức danh/cấp bậc/mã vị trí) là hiện ngay — khác với
+// deptKw/posKw (2 ô CHỈ khớp đúng nhóm cột của nó), quickKw khớp TOÀN BỘ các cột gộp vào 1 ô duy nhất.
+function ocHeadcountFilteredRows(rows, deptKw, posKw, quickKw) {
   const deptN = stripVnDiacritics(String(deptKw || '').trim().toLowerCase());
   const posN = stripVnDiacritics(String(posKw || '').trim().toLowerCase());
-  if (!deptN && !posN) return rows;
+  const quickN = stripVnDiacritics(String(quickKw || '').trim().toLowerCase());
+  if (!deptN && !posN && !quickN) return rows;
   const matchLeaf = (r) => {
     if (deptN && !stripVnDiacritics(`${r.banPhong || ''} ${r.banPhongBoPhan || ''} ${r.boPhanNhom || ''}`.toLowerCase()).includes(deptN)) return false;
     if (posN && !stripVnDiacritics(`${r.chucDanh || ''} ${r.maViTri || ''}`.toLowerCase()).includes(posN)) return false;
+    if (quickN && !stripVnDiacritics(`${r.banPhong || ''} ${r.banPhongBoPhan || ''} ${r.boPhanNhom || ''} ${r.chucDanh || ''} ${r.capBac || ''} ${r.maViTri || ''}`.toLowerCase()).includes(quickN)) return false;
     return true;
   };
   const groups = [];
@@ -1322,7 +1327,8 @@ function onOrgChartHeadcountFilterChanged() {
   if (!_ocHeadcountReportCache) return;
   const deptKw = document.getElementById('ocHeadcountFilterDept')?.value || '';
   const posKw = document.getElementById('ocHeadcountFilterPosition')?.value || '';
-  renderOrgChartHeadcountTable({ ..._ocHeadcountReportCache, rows: ocHeadcountFilteredRows(_ocHeadcountReportCache.rows, deptKw, posKw) });
+  const quickKw = document.getElementById('ocHeadcountFilterQuick')?.value || '';
+  renderOrgChartHeadcountTable({ ..._ocHeadcountReportCache, rows: ocHeadcountFilteredRows(_ocHeadcountReportCache.rows, deptKw, posKw, quickKw) });
 }
 function renderOrgChartHeadcountTable(report) {
   const tbody = document.getElementById('orgChartHeadcountTableBody');
@@ -1378,7 +1384,7 @@ function renderOrgChartHeadcountTable(report) {
       <td class="p-1.5 text-right ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
     </tr>`;
   }).join('');
-  const filterActive = !!((document.getElementById('ocHeadcountFilterDept')?.value || '').trim() || (document.getElementById('ocHeadcountFilterPosition')?.value || '').trim());
+  const filterActive = !!((document.getElementById('ocHeadcountFilterDept')?.value || '').trim() || (document.getElementById('ocHeadcountFilterPosition')?.value || '').trim() || (document.getElementById('ocHeadcountFilterQuick')?.value || '').trim());
   const emptyRow = (report.rows || []).length === 0 && filterActive
     ? `<tr><td colspan="16" class="p-3 text-center text-gray-400 italic">Không có vị trí nào khớp bộ lọc đang chọn.</td></tr>`
     : '';
@@ -1398,8 +1404,10 @@ async function openOrgChartHeadcountModal() {
   applyOcHeadcountFilterPanelState();
   const deptInput = document.getElementById('ocHeadcountFilterDept');
   const posInput = document.getElementById('ocHeadcountFilterPosition');
+  const quickInput = document.getElementById('ocHeadcountFilterQuick');
   if (deptInput) deptInput.value = '';
   if (posInput) posInput.value = '';
+  if (quickInput) quickInput.value = '';
   try {
     const report = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
     _ocHeadcountReportCache = report;
