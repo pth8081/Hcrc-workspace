@@ -10854,6 +10854,7 @@ function applyNavVisibility(user) {
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
   document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItRenewalClient(user));
+  document.getElementById('btnItSupportNavDsmartPrice').classList.toggle('hidden', !canManageDsmartPriceClient(user));
   // ?. (v23.11): btnItSubRenewal nằm BÊN TRONG itSupportSection (khung HTML tách lười từ đợt này) — có
   // thể CHƯA có trong DOM ở đúng thời điểm đăng nhập nếu người dùng chưa từng mở tab Hỗ Trợ IT trong
   // phiên. Áp dụng lại đúng logic này ở setItSupportSubTab() (module-itsupport-price.js) khi DOM đã sẵn
