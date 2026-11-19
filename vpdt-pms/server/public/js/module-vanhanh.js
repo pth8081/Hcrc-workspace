@@ -3202,6 +3202,19 @@ const KK_LOAI_KY_LABEL = { GOM_MA: 'Gom Mã', THONG_KE: 'Kiểm Kê' };
 // chú thích sddSetOptions() ở core.js), không có "value" riêng, nên phải tự giữ 1 biến state độc lập
 // (thay cho việc đọc trực tiếp DOM .value như select cũ).
 let kkNewLoaiKySelected = 'GOM_MA';
+// kkNewCreateBoth (MỚI, 12/2026, theo yêu cầu người dùng "tôi muốn chọn được cả kiểm kê và gom mã để tạo
+// cho nhanh và hai kỳ vẫn kết thúc riêng") — true = submitCreateKkPeriod() tạo CẢ 2 loại kỳ (Gom Mã +
+// Kiểm Kê) cùng lúc cho (các) siêu thị đã chọn, thay vì chỉ đúng loại đang chọn ở ô "Loại:". Mỗi loại kỳ
+// vẫn là 1 bản ghi/1 vòng đời đóng-mở HOÀN TOÀN riêng (KHÔNG dùng chung batchId giữa 2 loại — đóng kỳ
+// này KHÔNG được kéo theo đóng kỳ kia, xem closeSessionBatch()/lib/stocktakeEngine.js chỉ cascade đúng
+// các "anh em" CÙNG batchId, và batchId ở đây luôn được sinh RIÊNG cho từng loại kỳ) — chỉ gộp chung
+// THAO TÁC TẠO cho đỡ phải bấm "+ Tạo Kỳ Mới" 2 lần.
+let kkNewCreateBoth = false;
+function toggleKkNewCreateBoth(checkbox) {
+  kkNewCreateBoth = !!checkbox?.checked;
+  renderKkNewStoresPicker();
+}
+function kkNewCreateBothLoaiKyList() { return kkNewCreateBoth ? Object.keys(KK_LOAI_KY_LABEL) : [kkNewLoaiKySelected || 'GOM_MA']; }
 function kkLoaiKyOptionLabel(key) { return `Loại: ${KK_LOAI_KY_LABEL[key] || key}`; }
 function renderKkNewLoaiKyOptions() {
   sddSetOptions('kkNewLoaiKyDropdown', Object.keys(KK_LOAI_KY_LABEL).map(k => ({ value: k, label: kkLoaiKyOptionLabel(k) })));
@@ -3394,9 +3407,12 @@ function toggleKkPeriodCreateBox() {
     if (batDau) batDau.value = '';
     if (ketThuc) ketThuc.value = '';
     kkNewLoaiKySelected = 'GOM_MA';
+    kkNewCreateBoth = false;
     renderKkNewLoaiKyOptions();
     const loaiKyInput = document.getElementById('kkNewLoaiKyInput');
     if (loaiKyInput) loaiKyInput.value = kkLoaiKyOptionLabel(kkNewLoaiKySelected);
+    const createBothCheckbox = document.getElementById('kkNewCreateBothLoai');
+    if (createBothCheckbox) createBothCheckbox.checked = false;
     renderKkNewStoresPicker();
   }
 }
@@ -3465,15 +3481,22 @@ async function renderKkNewStoresPicker() {
   if (!wrap) return;
   if (!currentUser.perms?.admin) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  const loaiKy = kkNewLoaiKySelected || 'GOM_MA';
+  // kkNewCreateBoth (MỚI, 12/2026) — khi tick "Tạo đồng thời cả 2 loại", 1 siêu thị bị loại khỏi danh
+  // sách chọn được nếu CÒN KỲ CHƯA ĐÓNG ở BẤT KỲ loại nào trong 2 loại (không chỉ đúng loại đang chọn ở
+  // ô "Loại:" như trước) — vì submitCreateKkPeriod() sẽ tạo CẢ 2 loại cho siêu thị đó, tạo loại nào đang
+  // bị chặn cũng sẽ lỗi.
+  const loaiKyList = kkNewCreateBothLoaiKyList();
   const noteEl = document.getElementById('kkNewStoresBlockedNote');
   if (noteEl) noteEl.textContent = 'Đang tải danh sách siêu thị...';
   let blockedItems = [];
   try {
-    const res = await fetch(`/api/stocktake/sessions/open-depts?loaiKy=${encodeURIComponent(loaiKy)}`);
-    if (res.status === 401) return handleSessionExpired();
-    const data = await res.json();
-    if (res.ok) blockedItems = Array.isArray(data.items) ? data.items : [];
+    const results = await Promise.all(loaiKyList.map(async (loaiKy) => {
+      const res = await fetch(`/api/stocktake/sessions/open-depts?loaiKy=${encodeURIComponent(loaiKy)}`);
+      if (res.status === 401) { handleSessionExpired(); return []; }
+      const data = await res.json();
+      return res.ok && Array.isArray(data.items) ? data.items.map(it => ({ ...it, loaiKy })) : [];
+    }));
+    blockedItems = results.flat();
   } catch (err) { /* lỗi mạng — không chặn, chỉ không loại được siêu thị nào (an toàn hơn cho phép tạo
     nhầm hơn là chặn hẳn không tạo được kỳ nào — server vẫn tự chặn lại ở buildNewSession() nếu có). */ }
   // So khớp CHUẨN HOÁ (NFC + gộp khoảng trắng + trim) thay vì Set.has() thô — cùng lý do/khuôn sameDept()
@@ -3488,8 +3511,17 @@ async function renderKkNewStoresPicker() {
     emptyText: 'Chưa chọn siêu thị nào.'
   });
   if (noteEl) {
-    noteEl.textContent = blockedItems.length
-      ? `⚠️ ${blockedItems.length} siêu thị đã có kỳ ${KK_LOAI_KY_LABEL[loaiKy] || loaiKy} chưa đóng, không chọn lại được ở đây: ${blockedItems.map(it => `${escapeHtml(it.dept)} (${escapeHtml(TRANG_THAI_LABEL_VN[it.trangThai] || it.trangThai)})`).join(', ')}. Muốn làm tiếp đúng kỳ cũ thì vào danh sách kỳ bên dưới, không tạo kỳ mới cho siêu thị đó.`
+    // Gộp theo siêu thị (1 siêu thị có thể bị chặn ở 1 HOẶC CẢ 2 loại kỳ khi kkNewCreateBoth bật) — liệt
+    // kê rõ từng loại đang chặn thay vì lặp lại cùng 1 siêu thị 2 dòng.
+    const byDept = new Map();
+    blockedItems.forEach(it => {
+      const key = normKkDept(it.dept);
+      if (!byDept.has(key)) byDept.set(key, { dept: it.dept, loaiLabels: [] });
+      byDept.get(key).loaiLabels.push(`${KK_LOAI_KY_LABEL[it.loaiKy] || it.loaiKy}: ${TRANG_THAI_LABEL_VN[it.trangThai] || it.trangThai}`);
+    });
+    const deptCount = byDept.size;
+    noteEl.textContent = deptCount
+      ? `⚠️ ${deptCount} siêu thị đã có kỳ chưa đóng, không chọn lại được ở đây: ${[...byDept.values()].map(v => `${escapeHtml(v.dept)} (${v.loaiLabels.map(escapeHtml).join(', ')})`).join('; ')}. Muốn làm tiếp đúng kỳ cũ thì vào danh sách kỳ bên dưới, không tạo kỳ mới cho siêu thị đó.`
       : '';
   }
 }
@@ -3528,49 +3560,71 @@ async function submitCreateKkPeriod() {
     }
     return;
   }
-  const loaiKy = kkNewLoaiKySelected;
+  // loaiKyList (MỚI, 12/2026) — bình thường chỉ 1 phần tử (đúng loại đang chọn ở ô "Loại:"); khi tick
+  // "Tạo đồng thời cả 2 loại" thì có CẢ 2 (GOM_MA + THONG_KE). Mỗi loại kỳ tạo ra 1 nhóm bản ghi HOÀN
+  // TOÀN RIÊNG (batchId riêng, không lẫn giữa 2 loại — xem canCreate BothLoai note ở khai báo
+  // kkNewCreateBoth) — chỉ loại ĐANG CHỌN ở ô "Loại:" giữ nguyên Tên Kỳ gõ tay, loại còn lại (do tick
+  // thêm) tự thêm hậu tố " - <Nhãn Loại>" (theo yêu cầu người dùng, xác nhận dùng "tự thêm hậu tố" thay
+  // vì 2 ô tên riêng) để không bị trùng tên giữa 2 kỳ.
+  const loaiKyList = kkNewCreateBothLoaiKyList();
+  const primaryLoaiKy = kkNewLoaiKySelected || 'GOM_MA';
+  const tenKyFor = (loaiKy) => (loaiKy === primaryLoaiKy ? tenKy : `${tenKy} - ${KK_LOAI_KY_LABEL[loaiKy] || loaiKy}`);
   // admin: tạo cho NHIỀU/TẤT CẢ siêu thị đã chọn ở ô multi-select (12/2026, MỚI) — lần lượt gọi đúng
-  // route POST /sessions hiện có cho TỪNG siêu thị (không đổi API, chỉ gọi nhiều lần phía client), để
-  // không phải thêm route bulk riêng + giữ nguyên validate/log mỗi lần tạo như khi tạo tay từng cái.
+  // route POST /sessions hiện có cho TỪNG (siêu thị, loại kỳ) (không đổi API, chỉ gọi nhiều lần phía
+  // client), để không phải thêm route bulk riêng + giữ nguyên validate/log mỗi lần tạo như khi tạo tay
+  // từng cái.
   // batchId (MỚI, 12/2026, theo yêu cầu người dùng "tôi đã tạo kỳ kiểm kê cho tất cả siêu thị, tôi chỉ
-  // cần ấn kích hoạt là nó kích hoạt vào tất cả siêu thị luôn") — 1 mã dùng CHUNG cho cả đợt tạo này, để
-  // sau này bấm "▶ Kích Hoạt" ở BẤT KỲ siêu thị nào trong nhóm sẽ kích hoạt LUÔN cả nhóm (xem
-  // activateSessionBatch(), lib/stocktakeEngine.js). Chỉ sinh khi thật sự tạo nhiều siêu thị cùng lúc.
+  // cần ấn kích hoạt là nó kích hoạt vào tất cả siêu thị luôn") — 1 mã dùng CHUNG cho cả đợt tạo CÙNG 1
+  // loại kỳ, để sau này bấm "▶ Kích Hoạt"/"🔒 Đóng Kỳ" ở BẤT KỲ siêu thị nào trong nhóm sẽ áp dụng LUÔN
+  // cho cả nhóm (xem activateSessionBatch()/closeSessionBatch(), lib/stocktakeEngine.js). Sinh RIÊNG cho
+  // TỪNG loại kỳ trong loaiKyList (KHÔNG dùng chung 1 batchId cho cả 2 loại) — nếu dùng chung, đóng kỳ
+  // Kiểm Kê sẽ vô tình kéo theo đóng luôn kỳ Gom Mã "anh em" cùng batchId, trái với yêu cầu "hai kỳ vẫn
+  // kết thúc riêng". Chỉ sinh khi thật sự tạo nhiều siêu thị cùng lúc cho ĐÚNG loại kỳ đó.
   if (currentUser.perms?.admin) {
     const depts = getMultiSelectValues('kkNewStoresMultiSelect');
     if (!depts.length) { alert('Vui lòng chọn ít nhất 1 siêu thị'); return; }
-    const batchId = depts.length > 1 ? `kk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : null;
     let okCount = 0;
     const failures = [];
-    for (const dept of depts) {
-      try {
-        const res = await fetch('/api/stocktake/sessions', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dept, loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc, batchId })
-        });
-        if (res.status === 401) return handleSessionExpired();
-        const data = await res.json();
-        if (res.ok) okCount++; else failures.push(`${dept}: ${data.error || 'lỗi không rõ'}`);
-      } catch (err) { failures.push(`${dept}: lỗi kết nối`); }
+    for (const loaiKy of loaiKyList) {
+      const batchId = depts.length > 1 ? `kk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${loaiKy}` : null;
+      for (const dept of depts) {
+        try {
+          const res = await fetch('/api/stocktake/sessions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dept, loaiKy, tenKy: tenKyFor(loaiKy), thoiGianBatDau, thoiGianKetThuc, batchId })
+          });
+          if (res.status === 401) return handleSessionExpired();
+          const data = await res.json();
+          if (res.ok) okCount++; else failures.push(`${dept} (${KK_LOAI_KY_LABEL[loaiKy] || loaiKy}): ${data.error || 'lỗi không rõ'}`);
+        } catch (err) { failures.push(`${dept} (${KK_LOAI_KY_LABEL[loaiKy] || loaiKy}): lỗi kết nối`); }
+      }
     }
+    const total = depts.length * loaiKyList.length;
     if (okCount) toggleKkPeriodCreateBox();
     await loadKkPeriodSessions();
     if (failures.length) {
-      alert(`Đã tạo ${okCount}/${depts.length} kỳ thành công.\n\nKhông tạo được cho:\n${failures.join('\n')}`);
-    } else if (okCount > 1) {
-      alert(`Đã tạo ${okCount} kỳ cho ${okCount} siêu thị — bấm "▶ Kích Hoạt" ở BẤT KỲ siêu thị nào trong nhóm này sẽ tự kích hoạt luôn cả ${okCount} siêu thị.`);
+      alert(`Đã tạo ${okCount}/${total} kỳ thành công.\n\nKhông tạo được cho:\n${failures.join('\n')}`);
+    } else if (total > 1) {
+      alert(`Đã tạo ${okCount} kỳ${loaiKyList.length > 1 ? ` (${loaiKyList.map(l => KK_LOAI_KY_LABEL[l] || l).join(' + ')})` : ''} cho ${depts.length} siêu thị — bấm "▶ Kích Hoạt"/"🔒 Đóng Kỳ" ở BẤT KỲ siêu thị nào trong CÙNG 1 loại kỳ sẽ tự áp dụng luôn cho cả nhóm siêu thị đó của đúng loại kỳ đó (2 loại kỳ vẫn kích hoạt/đóng HOÀN TOÀN riêng nhau).`);
     }
     return;
   }
   try {
-    const res = await fetch('/api/stocktake/sessions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dept: kkEffectiveDept(), loaiKy, tenKy, thoiGianBatDau, thoiGianKetThuc })
-    });
-    if (res.status === 401) return handleSessionExpired();
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Không tạo được kỳ kiểm kê'); return; }
-    toggleKkPeriodCreateBox();
+    let okCount = 0;
+    const failures = [];
+    for (const loaiKy of loaiKyList) {
+      try {
+        const res = await fetch('/api/stocktake/sessions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dept: kkEffectiveDept(), loaiKy, tenKy: tenKyFor(loaiKy), thoiGianBatDau, thoiGianKetThuc })
+        });
+        if (res.status === 401) return handleSessionExpired();
+        const data = await res.json();
+        if (res.ok) okCount++; else failures.push(`${KK_LOAI_KY_LABEL[loaiKy] || loaiKy}: ${data.error || 'lỗi không rõ'}`);
+      } catch (err) { failures.push(`${KK_LOAI_KY_LABEL[loaiKy] || loaiKy}: lỗi kết nối`); }
+    }
+    if (failures.length) { alert(`Đã tạo ${okCount}/${loaiKyList.length} kỳ thành công.\n\nKhông tạo được cho:\n${failures.join('\n')}`); }
+    if (okCount) toggleKkPeriodCreateBox();
     await loadKkPeriodSessions();
   } catch (err) {
     alert('Lỗi kết nối — thử lại.');

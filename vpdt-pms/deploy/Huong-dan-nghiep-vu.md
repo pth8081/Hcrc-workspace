@@ -9204,3 +9204,46 @@ xác nhận test FAIL với đúng lỗi thật của `exceljs`, rồi khôi ph�
 nhận PASS, trước khi merge.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 5r. Kỳ Kiểm Kê: Tạo đồng thời cả 2 loại (Kiểm Kê + Gom Mã) (12/2026)
+
+Theo yêu cầu người dùng: *"Tạo kiểm kê tôi muốn chọn được cả kiểm kê và gom
+mã để tạo cho nhanh và hai kỳ vẫn kết thúc riêng, kết thúc thì sẽ kết thúc
+tổng và áp dụng cho all st/ch thuộc kỳ kiểm kê đó (ko kết thúc riêng lẻ
+từng st/ch bạn nhé)"*.
+
+**Khảo sát trước khi làm**: 2 trong 3 ý người dùng nêu đã có sẵn từ đợt merge
+trước ("Sửa/Xoá Kỳ Kiểm Kê: cascade cho cả batch", xem mục ở trên) —
+`closeSessionBatch()`/`reopenSessionBatch()` (`lib/stocktakeEngine.js`) đã
+đóng/mở TOÀN BỘ các siêu thị cùng 1 batchId, không còn khái niệm đóng lẻ
+từng siêu thị; quyền Đóng Kỳ đã gác đúng `kiemKePeriodManage`/
+`kiemKePeriodCloseManage`/admin (người dùng xác nhận lại khi hỏi rõ: *"chỉ
+có admin và người quản lý kiểm kê mới có quyền đóng"*). Việc THẬT SỰ còn
+thiếu chỉ là ý (1): tạo kỳ mới hiện chỉ chọn được 1 trong 2 loại (Gom Mã
+HOẶC Kiểm Kê), phải bấm "+ Tạo Kỳ Mới" 2 lần để có cả 2.
+
+**Đã làm**: thêm checkbox "Tạo đồng thời cả 2 loại (Kiểm Kê + Gom Mã)" cạnh
+ô "Loại:" ở khung "+ Tạo Kỳ Mới" (Tab 1 Kỳ Kiểm Kê). Tick vào thì
+`submitCreateKkPeriod()` (`module-vanhanh.js`) tạo CẢ 2 loại kỳ cho (các)
+siêu thị đã chọn trong 1 lượt — loại ĐANG CHỌN ở ô "Loại:" giữ nguyên Tên
+Kỳ gõ tay, loại còn lại tự thêm hậu tố `" - <Nhãn Loại>"` (VD gõ "Kiểm Kê
+Q4/2026" + tick checkbox -> tạo "Kiểm Kê Q4/2026" loại Kiểm Kê và "Kiểm Kê
+Q4/2026 - Gom Mã" loại Gom Mã).
+
+**Điểm mấu chốt phải đảm bảo đúng (2 kỳ vẫn kết thúc HOÀN TOÀN riêng)**: 2
+loại kỳ sinh ra 2 `batchId` TÁCH BIỆT HOÀN TOÀN (không dùng chung 1 batchId
+giữa Kiểm Kê và Gom Mã dù tạo cùng 1 lượt bấm) — nếu dùng chung, đóng kỳ
+loại này sẽ vô tình kéo theo đóng luôn loại kia (`closeSessionBatch()` cascade
+theo đúng batchId, không lọc theo loại kỳ), trái đúng yêu cầu "hai kỳ vẫn
+kết thúc riêng". Ô "Chọn Siêu Thị" cũng tự loại siêu thị đã có kỳ CHƯA ĐÓNG
+ở BẤT KỲ loại nào trong 2 loại khi checkbox đang tick (trước đây chỉ kiểm
+tra đúng loại đang chọn).
+
+Test mới `tests/test-stocktake-period-create-both-types.js` xác nhận: tạo đủ
+4 bản ghi (2 siêu thị × 2 loại), tên kỳ đúng quy ước hậu tố, 2 loại kỳ có
+batchId khác nhau, và Đóng Kỳ loại này KHÔNG kéo theo đóng loại kia — tự
+kiểm tra lại bằng cách tạm đổi code dùng chung 1 batchId cho cả 2 loại
+(đúng hình dạng lỗi thật có thể xảy ra), xác nhận test FAIL đúng chỗ, rồi
+khôi phục code gốc để xác nhận PASS, trước khi merge.
+
+Không cần thao tác deploy gì thêm ngoài copy code.

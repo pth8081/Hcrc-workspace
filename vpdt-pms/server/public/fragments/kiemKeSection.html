@@ -74,6 +74,15 @@
           <div id="kkNewLoaiKyWrap">
             <input type="text" id="kkNewLoaiKyInput" data-sdd-list="kkNewLoaiKyDropdown" data-op-input="onKkNewLoaiKyInputChanged" placeholder="-- Chọn loại kỳ --" autocomplete="off" readonly class="w-full border rounded px-2 py-1.5 text-sm">
             <div id="kkNewLoaiKyDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <!-- kkNewCreateBothWrap (MỚI, 12/2026, theo yêu cầu người dùng "tôi muốn chọn được cả kiểm kê
+                 và gom mã để tạo cho nhanh" — hai kỳ vẫn là 2 bản ghi/2 vòng đời đóng-mở HOÀN TOÀN riêng,
+                 chỉ gộp chung THAO TÁC TẠO cho đỡ phải bấm "+ Tạo Kỳ Mới" 2 lần — xem
+                 submitCreateKkPeriod()/renderKkNewStoresPicker(), module-vanhanh.js). Ẩn ở chế độ Sửa
+                 (cùng kkNewLoaiKyWrap). -->
+            <label class="flex items-center gap-1.5 mt-1 text-xs text-gray-600">
+              <input type="checkbox" id="kkNewCreateBothLoai" data-op-change="toggleKkNewCreateBoth" data-arg-el="0">
+              Tạo đồng thời cả 2 loại (Kiểm Kê + Gom Mã)
+            </label>
           </div>
           <input type="text" id="kkNewTenKy" placeholder="Tên kỳ (VD: Kiểm Kê Q4/2026)" class="border rounded px-2 py-1.5">
           <input type="date" id="kkNewBatDau" class="border rounded px-2 py-1.5">
