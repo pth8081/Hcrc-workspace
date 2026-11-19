@@ -20,6 +20,14 @@ const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkIte
 const { createForCollection, createForCollectionSerialized, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, getTrashItems, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
+// PDFDocument/fs/path/parseUploadsFileUrl/UPLOAD_DIR — CHỈ dùng cho 1 việc: tính lại SỐ TRANG THẬT của
+// PDF mới khi "🔄 Thay Thế Tệp" tài liệu đào tạo (xem POST /trainingDocuments/:id/edit bên dưới), mirror
+// ĐÚNG khuôn + lý do dùng `ignoreEncryption: true` đã có sẵn ở routes/create.js (đọc PDF lúc Tạo Mới).
+const { PDFDocument } = require('pdf-lib');
+const fs = require('fs');
+const path = require('path');
+const { parseUploadsFileUrl } = require('../lib/fileAuthz');
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
@@ -1658,8 +1666,17 @@ router.post('/operationRepairs/:id/delete', rejectOperationDelete);
 // nên không cần chặn.
 // POST /api/records/trainingDocuments/:id/edit (10/2026 — thêm nút "✏️ Sửa", trước đây chỉ có Xoá) — sửa
 // PHẦN METADATA (tên/loại đào tạo/Bắt Buộc Hoàn Thành/Chương Trình gắn kèm + link+thời lượng nếu là
-// VIDEO), CỐ Ý KHÔNG cho đổi docType/fileUrl (xem chú thích đầy đủ tại editTrainingDocument(),
+// VIDEO), CỐ Ý KHÔNG cho đổi docType trực tiếp (xem chú thích đầy đủ tại editTrainingDocument(),
 // lib/recordActions.js). Đọc kèm trainingCourses (kiểm tra courseId mới nếu có đổi).
+// 🔄 "Thay Thế Tệp" (12/2026): khi payload.replaceFile === true, editTrainingDocument() đã gán
+// fileUrl/fileName/fileType/thumbnail MỚI + xoá sạch trainingDocumentProgress cũ — 2 việc CÒN LẠI chỉ
+// route này (có quyền truy cập hệ thống tệp + DB owner-check) mới làm được:
+//  1. assertPayloadFileUrlsOwnedByUser() — mirror ĐÚNG khuôn 20+ route "Sửa" khác nhận fileUrl từ
+//     client (chặn giả mạo fileUrl/thumbnailUrl của người khác), exemptFileUrls giữ nguyên tệp CŨ (nếu
+//     người dùng KHÔNG thay thế lần này, fileUrl/thumbnailUrl không đổi nên không cần soát lại).
+//  2. Tính lại SỐ TRANG THẬT của PDF mới (mirror ĐÚNG khuôn lúc Tạo Mới ở routes/create.js — cùng lý do
+//     dùng `ignoreEncryption: true`) — editTrainingDocument() chỉ reset pageCount về null vì KHÔNG có
+//     quyền truy cập hệ thống tệp.
 router.post('/trainingDocuments/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1667,8 +1684,26 @@ router.post('/trainingDocuments/:id/edit', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
     appData.trainingCourses = await getAllForCollection('trainingCourses');
-    const result = await withLockedRecordForCollection('trainingDocuments', itemId, (item) =>
-      recordActions.editTrainingDocument(req.body, freshUser, item, appData));
+    const result = await withLockedRecordForCollection('trainingDocuments', itemId, async (item) => {
+      const exemptFileUrls = new Set();
+      if (item.fileUrl) exemptFileUrls.add(item.fileUrl);
+      if (item.thumbnailUrl) exemptFileUrls.add(item.thumbnailUrl);
+      const updated = await recordActions.editTrainingDocument(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, thumbnailUrl: updated.thumbnailUrl }, freshUser, { exemptFileUrls });
+      if (req.body?.replaceFile === true && updated.docType === 'DOCUMENT' && /\.pdf$/i.test(updated.fileName || '')) {
+        try {
+          const fname = parseUploadsFileUrl(updated.fileUrl);
+          if (fname) {
+            const bytes = fs.readFileSync(path.join(UPLOAD_DIR, fname));
+            const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+            updated.pageCount = pdfDoc.getPageCount();
+          }
+        } catch (err) {
+          console.warn(`[trainingDocuments] Không đọc được số trang PDF thật khi Thay Thế Tệp (pageCount giữ null): ${err.message}`);
+        }
+      }
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingDocuments/${req.params.id}/edit`, err);

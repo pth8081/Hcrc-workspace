@@ -9009,3 +9009,41 @@ Binh (`onboardingPaths`)** vẫn còn dùng `assertAdminForDelete()` admin-only
 cho hành động XOÁ — chưa nằm trong phạm vi phản ánh lần này (người dùng
 chỉ nêu đúng "tài liệu"), nhưng có cùng dạng khoảng trống kỹ thuật nếu sau
 này cần mở rộng "toàn quyền" `trainingManage` sang xoá các collection đó.
+
+## 5m. Kho Tài Liệu Đào Tạo — thêm nút "🔄 Thay Thế Tệp" (12/2026)
+
+Phản ánh trực tiếp người dùng (truyền đạt lại từ Tuyển Dụng/Đào Tạo TTNB):
+*"muốn sửa một tài liệu, up tài liệu khác lên, sao không có nút xóa tài
+liệu cũ nhỉ, hay cứ up lên là thay thế tài liệu cũ luôn"*. Trước đây Sửa
+tài liệu (DOCUMENT/IMAGE) **chỉ sửa được metadata** (tên/loại đào tạo/Bắt
+Buộc/Chương Trình) — muốn đổi tệp phải Xoá rồi Thêm lại (mất `id`, phá
+liên kết `trainingDocumentProgress`/`stage1DocIds`/`documentIds` đang trỏ
+tới tài liệu đó). Lý do CỐ Ý khi thiết kế ban đầu (10/2026): tránh 1 người
+được xem đã "Đã hoàn thành" tệp A nhưng tiến độ đó bị gán nhầm sang tệp B
+hoàn toàn khác nội dung nếu cho đổi tệp tự do.
+
+**Giải pháp (12/2026)**: mở 1 đường **CÓ KIỂM SOÁT** thay vì Xoá-Tạo-Lại:
+
+- Form Sửa Tài Liệu (DOCUMENT/IMAGE — VIDEO không cần, đã tự do sửa link)
+  có thêm nút **"🔄 Thay Thế Tệp"** ngay cạnh ghi chú "Không đổi được tệp
+  khi sửa". Bấm vào hiện cảnh báo rõ ràng, KHÔNG THỂ HOÀN TÁC: *"Thay thế
+  tệp sẽ XOÁ SẠCH tiến độ 'Đã hoàn thành'/đang xem dở của TẤT CẢ mọi người
+  cho tài liệu này"* — xác nhận mới mở lại ô chọn tệp (tránh đổi nhầm tệp
+  lúc chỉ định sửa tên/mô tả).
+- Xác nhận xong, chọn tệp mới + Cập Nhật như luồng Tạo Mới bình thường
+  (kể cả sinh lại ảnh thumbnail minh hoạ cho DOCUMENT, best-effort).
+- Server (`editTrainingDocument()`, `lib/recordActions.js`) nhận cờ tường
+  minh `replaceFile: true` từ client — gán `fileUrl`/`fileName`/`fileType`
+  mới, XOÁ (qua Thùng Rác, khôi phục được) MỌI bản ghi
+  `trainingDocumentProgress` đang trỏ theo tài liệu này, và reset
+  `thumbnailUrl`/`pageCount` về trống/null. `routes/records.js` (có quyền
+  truy cập hệ thống tệp) tự tính lại **số trang PDF THẬT** cho tệp mới
+  (mirror đúng khuôn lúc Tạo Mới ở `routes/create.js`) + kiểm tra quyền sở
+  hữu tệp (`assertPayloadFileUrlsOwnedByUser()`, chặn giả mạo fileUrl của
+  người khác — cùng lớp bảo vệ 20+ route "Sửa" khác trong hệ thống).
+- **Vẫn CỐ Ý KHÔNG cho đổi `docType`** (đổi hẳn loại tài liệu — VD từ
+  Tài Liệu sang Hình Ảnh — vẫn phải Xoá-Tạo-Lại) — "Thay Thế Tệp" chỉ đổi
+  NỘI DUNG tệp, giữ nguyên LOẠI tài liệu.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` mới.

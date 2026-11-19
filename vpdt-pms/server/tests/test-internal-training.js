@@ -1123,6 +1123,72 @@ async function main() {
       assertEqual(doc.fileUrl, originalFileUrl, 'fileUrl KHÔNG được đổi khi sửa (chỉ sửa metadata)');
     });
 
+    // ===================================================================================
+    // 🔄 "Thay Thế Tệp" (12/2026, theo phản ánh TRỰC TIẾP người dùng — Tuyển Dụng/Đào Tạo TTNB "muốn sửa
+    // 1 tài liệu, up tài liệu khác lên"): nút chỉ xuất hiện khi đang Sửa 1 tài liệu DOCUMENT/IMAGE, bấm
+    // vào phải cảnh báo xoá tiến độ trước khi mở lại ô chọn tệp — từ chối cảnh báo thì KHÔNG đổi gì.
+    // ===================================================================================
+    await run('Kho Tài Liệu — "🔄 Thay Thế Tệp": từ chối cảnh báo (window.confirm = false) -> KHÔNG mở ô chọn tệp, không đổi gì', async () => {
+      await page.evaluate((id) => editTrainingDocument(id), editDocId);
+      await page.evaluate(() => { window.confirm = () => false; });
+      await page.evaluate(() => confirmReplaceTrainingDocumentFile());
+      await page.evaluate(() => { window.confirm = () => true; }); // khôi phục cho các kịch bản sau
+      const fileFieldHidden = await page.evaluate(() => document.getElementById('tdFileField').classList.contains('hidden'));
+      const lockedNoteHidden = await page.evaluate(() => document.getElementById('tdFileLockedNote').classList.contains('hidden'));
+      assert(fileFieldHidden, 'từ chối cảnh báo -> ô chọn tệp PHẢI vẫn ẩn');
+      assert(!lockedNoteHidden, 'từ chối cảnh báo -> ghi chú khoá tệp PHẢI vẫn hiện (cùng nút Thay Thế Tệp)');
+    });
+
+    await run('Kho Tài Liệu — "🔄 Thay Thế Tệp": xác nhận -> mở ô chọn tệp, tải tệp MỚI thành công -> đổi fileUrl + XOÁ SẠCH tiến độ cũ + gửi payload.replaceFile=true', async () => {
+      // Chuẩn bị 1 bản ghi tiến độ "Đã hoàn thành" GIẢ cho đúng editDocId — xác nhận bị xoá sạch sau khi
+      // thay thế tệp (nội dung đổi hoàn toàn, tiến độ cũ không còn ý nghĩa, xem editTrainingDocument()
+      // ở lib/recordActions.js).
+      await page.evaluate((docId) => {
+        DB.trainingDocumentProgress = DB.trainingDocumentProgress || [];
+        DB.trainingDocumentProgress.push({ id: 90001, docId, username: 'nv_test_progress', kind: 'PDF', viewedPages: [1], completedAt: new Date().toISOString() });
+      }, editDocId);
+      const originalFileUrl = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id).fileUrl, editDocId);
+
+      await page.evaluate((id) => editTrainingDocument(id), editDocId);
+      await page.evaluate(() => confirmReplaceTrainingDocumentFile());
+      const fileFieldHidden = await page.evaluate(() => document.getElementById('tdFileField').classList.contains('hidden'));
+      const fileRequired = await page.evaluate(() => document.getElementById('tdFile').required);
+      assert(!fileFieldHidden, 'xác nhận -> ô chọn tệp PHẢI mở lại');
+      assert(fileRequired, 'xác nhận -> ô chọn tệp PHẢI bắt buộc (không submit thiếu tệp mới)');
+
+      const fs2 = require('fs');
+      const os2 = require('os');
+      const tmpPdfPath2 = require('path').join(os2.tmpdir(), 'training-doc-replace-test.pdf');
+      fs2.writeFileSync(tmpPdfPath2, Buffer.from('%PDF-1.4 fake replaced'));
+      await page.setInputFiles('#tdFile', tmpPdfPath2);
+      const beforeCount = await page.evaluate(() => DB.trainingDocuments.length);
+      await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
+
+      const afterCount = await page.evaluate(() => DB.trainingDocuments.length);
+      const doc = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id), editDocId);
+      assertEqual(afterCount, beforeCount, 'Thay Thế Tệp KHÔNG được tạo thêm dòng mới');
+      assert(doc.fileUrl !== originalFileUrl, 'fileUrl PHẢI đổi sang tệp mới sau khi Thay Thế Tệp');
+      const remainingProgress = await page.evaluate((id) => (DB.trainingDocumentProgress || []).filter((p) => p.docId === id), editDocId);
+      assertEqual(remainingProgress.length, 0, 'tiến độ cũ của tài liệu này PHẢI bị xoá sạch sau khi Thay Thế Tệp');
+    });
+
+    await run('Kho Tài Liệu — "Huỷ Sửa" sau khi bấm "Thay Thế Tệp" -> reset đúng trạng thái, mở Sửa lại KHÔNG còn dính cờ replace (ô tệp vẫn khoá như Sửa thường)', async () => {
+      await page.evaluate((id) => editTrainingDocument(id), editDocId);
+      await page.evaluate(() => confirmReplaceTrainingDocumentFile());
+      await page.evaluate(() => cancelEditTrainingDocument());
+      const isEditing = await page.evaluate(() => editingTrainingDocumentId);
+      assertEqual(isEditing, null, 'Huỷ Sửa phải thoát hẳn chế độ Sửa');
+
+      // Mở lại Sửa ĐÚNG tài liệu đó — nếu cờ tdReplacingFile không được reset đúng, ô chọn tệp sẽ "dính"
+      // mở sẵn thay vì quay về trạng thái khoá bình thường của Sửa.
+      await page.evaluate((id) => editTrainingDocument(id), editDocId);
+      const fileFieldHidden = await page.evaluate(() => document.getElementById('tdFileField').classList.contains('hidden'));
+      const lockedNoteHidden = await page.evaluate(() => document.getElementById('tdFileLockedNote').classList.contains('hidden'));
+      assert(fileFieldHidden, 'mở lại Sửa sau khi đã Huỷ Sửa lúc đang Thay Thế Tệp -> ô chọn tệp PHẢI khoá lại bình thường');
+      assert(!lockedNoteHidden, 'mở lại Sửa sau khi đã Huỷ Sửa lúc đang Thay Thế Tệp -> ghi chú khoá tệp PHẢI hiện lại bình thường');
+      await page.evaluate(() => cancelEditTrainingDocument());
+    });
+
     await run('Ngân Hàng Câu Hỏi: trainer sửa được câu hỏi/đáp án của bài test đã tạo, giữ nguyên id (không phá liên kết testId của lớp)', async () => {
       await page.evaluate((u) => { currentUser = u; }, trainer);
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
