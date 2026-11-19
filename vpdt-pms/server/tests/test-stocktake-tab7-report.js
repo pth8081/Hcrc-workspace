@@ -329,6 +329,11 @@ function request(port, method, urlPath, username, body) {
     check('So Sánh Với Kỳ Khác: compareSessionId thuộc siêu thị khác, không có allowlist -> 403 (quyền xem áp dụng cho CẢ 2 kỳ độc lập)', res.status === 403, res);
 
     // 8) Admin xem được báo cáo của siêu thị KHÁC dept mình (DEPT2) -> 200, có storeComparison.
+    // Reset spy NGAY TRƯỚC request này — sessionId đang xem là của DEPT2 (Mã Điểm "102"), nên nếu sau
+    // request này mảng CÓ CẢ "101" (Mã Điểm của DEPT1, không liên quan session chính đang xem) thì CHỈ
+    // CÓ THỂ do vòng lặp storeComparison MỚI vá kích hoạt — cô lập đúng hành vi mới, không lẫn với lượt
+    // đồng bộ của session chính (đã test riêng ở check "Mã Điểm 101" phía trên).
+    priceSyncTriggeredFor = [];
     res = await request(port, 'GET', `/api/stocktake/report?sessionId=${THONGKE_DEPT2_ID}`, 'admin');
     check('Admin xem được báo cáo siêu thị khác -> 200', res.status === 200, res);
     check('Admin: có storeComparison liệt kê CẢ 2 siêu thị (A7 biểu đồ 3)', Array.isArray(res.body.storeComparison) && res.body.storeComparison.length === 2, res.body.storeComparison);
@@ -338,9 +343,18 @@ function request(port, method, urlPath, username, body) {
     check('storeComparison DEPT2: systemQty=20 (SP003), finalQty=0 (chưa kiểm đếm gì)', cmpDept2 && cmpDept2.sessionId === THONGKE_DEPT2_ID && cmpDept2.systemQty === 20 && cmpDept2.finalQty === 0, cmpDept2);
     // 8b) "💰 Giá Trị Thừa/Thiếu" trong storeComparison: DEPT1 đã có giá -> tongGiaTri=136000 ĐÚNG như
     // báo cáo 1 siêu thị ở trên (6b); DEPT2 CHƯA có giá nào -> tongGiaTri=0, soMaThieuGia=1 (SP003 có
-    // systemQty nhưng thiếu giá, báo rõ chứ không tự đồng bộ ngay).
+    // systemQty nhưng thiếu giá, báo rõ NGAY LƯỢT NÀY — vì đồng bộ vừa kích hoạt chạy NGẦM, không kịp
+    // có kết quả trong response này, lượt xem SAU của DEPT2 mới đủ giá).
     check('storeComparison DEPT1: tongGiaTri=136000 (khớp đúng báo cáo riêng của DEPT1)', cmpDept1.tongGiaTri === 136000 && cmpDept1.soMaThieuGia === 0, cmpDept1);
     check('storeComparison DEPT2: CHƯA có giá nào -> tongGiaTri=0, soMaThieuGia=1 (SP003 thiếu giá)', cmpDept2.tongGiaTri === 0 && cmpDept2.soMaThieuGia === 1, cmpDept2);
+    // LỖI THẬT đã vá (12/2026, phản hồi người dùng: "tất cả những mã hàng này đều đã có giá rồi, tại sao
+    // nó lại ghi là không có giá... bạn đã lấy giá được ở phần kiểm soát rồi mà") — bảng nhiều siêu thị
+    // này TRƯỚC ĐÂY chỉ đọc giá đã có sẵn, KHÔNG tự đồng bộ cho từng Mã Điểm đang hiện. Nay PHẢI kích
+    // hoạt đồng bộ ngầm cho CẢ 2 Mã Điểm (101 của DEPT1 LẪN 102 của DEPT2) — không chỉ Mã Điểm của 1
+    // siêu thị đang chọn ở sessionId chính (đã kích hoạt riêng, test ở check "Đã kích hoạt đồng bộ ngầm
+    // bảng giá... Mã Điểm 101" phía trên) — để DEPT2 dần có giá mà không cần đợi ai đó tự mở Kiểm Soát
+    // Hàng Hóa/Kiểm Tra Giá ở đúng DEPT2 trước.
+    check('storeComparison: đã kích hoạt đồng bộ ngầm bảng giá cho CẢ 2 Mã Điểm đang hiện (101 VÀ 102, không chỉ Mã Điểm của sessionId chính)', priceSyncTriggeredFor.includes('101') && priceSyncTriggeredFor.includes('102'), priceSyncTriggeredFor);
 
     // 9) Thiếu sessionId -> 400.
     res = await request(port, 'GET', '/api/stocktake/report', 'qlA');
