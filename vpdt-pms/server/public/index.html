@@ -2427,11 +2427,33 @@
         <button data-op="closeOrgChartHeadcountModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-2">
+        <!-- Giải thích các cột (MỚI, 12/2026, theo yêu cầu người dùng: "cả cái phần giải trình ở trên
+             chỗ export file cũng thu gọn vào... hơi dài, cần thì mở ra") — mặc định THU GỌN, bấm nút để
+             xem. Nội dung giữ NGUYÊN VĂN, chỉ bọc lại trong khối ẩn/hiện được — xem
+             applyOcHeadcountExplainState()/toggleOrgChartHeadcountExplain() (module-orgchart.js). -->
         <div class="flex flex-wrap items-center gap-2">
-          <p class="text-[11px] text-gray-500 flex-1">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí, hoặc nhập hàng loạt qua "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên"). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm — KHÔNG gồm Kiêm Nhiệm (Kiêm Nhiệm chỉ có ở Hồ Sơ Nhân Sự, không nằm trong cấu hình Định Biên). Kiêm Nhiệm/Full Time/Part Time/Đang Thử Việc hiện cột riêng (Kiêm Nhiệm tính ×0.5/người; Full Time/Part Time đếm theo "Hình thức làm việc" ở Hồ Sơ Nhân Sự; Đang Thử Việc đếm theo Hợp Đồng Lao Động đang hiệu lực loại Thử việc) — chỉ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch. "Thai sản/nghỉ ốm" tự tính theo trạng thái hồ sơ — chọn "Tình trạng làm việc hiện tại (chi tiết)" = Nghỉ thai sản/Nghỉ ốm dài ngày/Không lương sẽ tự lên cột này, không cần đổi trạng thái tay riêng. "Đang Thử Việc" đếm theo Quy Trình Onboarding đang "Đang thực hiện" (tự mất khỏi cột này khi quy trình Hoàn Tất hoặc bị Huỷ/Chấm Dứt Thử Việc). Chênh lệch = Định Biên − Thực Tế; dương = cần tuyển thêm, âm = dôi dư.</p>
+          <button type="button" id="btnToggleOrgChartHeadcountExplain" data-op="toggleOrgChartHeadcountExplain" class="text-xs font-bold text-teal-700 hover:underline shrink-0">📖 Xem Giải Thích Các Cột</button>
           <a id="btnOrgChartHeadcountTemplateXlsx" href="#" class="bg-purple-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-purple-700 inline-block whitespace-nowrap">📥 Tải Mẫu Định Biên</a>
           <button type="button" id="btnOrgChartHeadcountImport" data-op="openOrgChartHeadcountImportModal" class="bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">📤 Nhập Định Biên</button>
           <a id="btnOrgChartHeadcountExportXlsx" href="#" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-700 inline-block whitespace-nowrap">📊 Xuất Excel</a>
+          <!-- orgChartHeadcountFilterPanel (MỚI, 12/2026, theo yêu cầu người dùng: "báo cáo định biên...
+               thêm cái phần tìm kiếm lọc thông tin... lọc thông tin phòng ban... thông tin vị trí") —
+               panel RIÊNG thu gọn được (mặc định ĐÓNG) — xem applyOcHeadcountFilterPanelState()/
+               toggleOrgChartHeadcountFilterPanel() (module-orgchart.js). -->
+          <button type="button" id="btnToggleOrgChartHeadcountFilter" data-op="toggleOrgChartHeadcountFilterPanel" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
+        </div>
+        <p id="orgChartHeadcountExplainText" class="hidden text-[11px] text-gray-500">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí, hoặc nhập hàng loạt qua "📥 Tải Mẫu Định Biên"/"📤 Nhập Định Biên"). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm — KHÔNG gồm Kiêm Nhiệm (Kiêm Nhiệm chỉ có ở Hồ Sơ Nhân Sự, không nằm trong cấu hình Định Biên). Kiêm Nhiệm/Full Time/Part Time/Đang Thử Việc hiện cột riêng (Kiêm Nhiệm tính ×0.5/người; Full Time/Part Time đếm theo "Hình thức làm việc" ở Hồ Sơ Nhân Sự; Đang Thử Việc đếm theo Hợp Đồng Lao Động đang hiệu lực loại Thử việc) — chỉ để tham khảo/báo cáo, không ảnh hưởng Thực Tế/Chênh Lệch. "Thai sản/nghỉ ốm" tự tính theo trạng thái hồ sơ — chọn "Tình trạng làm việc hiện tại (chi tiết)" = Nghỉ thai sản/Nghỉ ốm dài ngày/Không lương sẽ tự lên cột này, không cần đổi trạng thái tay riêng. "Đang Thử Việc" đếm theo Quy Trình Onboarding đang "Đang thực hiện" (tự mất khỏi cột này khi quy trình Hoàn Tất hoặc bị Huỷ/Chấm Dứt Thử Việc). Chênh lệch = Định Biên − Thực Tế; dương = cần tuyển thêm, âm = dôi dư.</p>
+        <div id="orgChartHeadcountFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
+          <div class="relative">
+            <label class="block text-gray-500 mb-0.5">Phòng Ban</label>
+            <input id="ocHeadcountFilterDept" data-sdd-list="ocHeadcountFilterDeptDropdown" data-op-input="onOrgChartHeadcountFilterChanged" placeholder="Tìm phòng ban..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="ocHeadcountFilterDeptDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+          <div class="relative">
+            <label class="block text-gray-500 mb-0.5">Vị Trí / Chức Danh</label>
+            <input id="ocHeadcountFilterPosition" data-sdd-list="ocHeadcountFilterPositionDropdown" data-op-input="onOrgChartHeadcountFilterChanged" placeholder="Tìm vị trí/chức danh..." class="w-full border p-1 rounded" autocomplete="off">
+            <div id="ocHeadcountFilterPositionDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
         </div>
         <div class="border rounded max-h-[65vh] overflow-y-auto">
           <table class="w-full text-xs">

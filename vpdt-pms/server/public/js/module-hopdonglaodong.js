@@ -51,7 +51,36 @@ function toggleHrcAmendmentMoneyMode() {
   newEl.placeholder = isMoney ? 'Giá trị mới (đ)' : 'Giá trị mới';
 }
 
+// hrcFilterPanel (MỚI, 12/2026, theo yêu cầu người dùng: "hợp đồng... thêm phần tìm kiếm loại hợp đồng
+// lao động này. Tình trạng hợp đồng lao động này... cho phép thu gọn lại") — gộp 3 trường lọc hiện có
+// (Mã NV/HĐ/Họ tên, Trạng Thái) + trường MỚI (Loại HĐLĐ) vào 1 panel thu gọn được, cùng khuôn
+// shelfRecordRecentFilterPanel (module-vanhanh.js). Mặc định MỞ SẴN (khác các panel mới khác mặc định
+// đóng) vì đây là bộ lọc ĐANG DÙNG sẵn của màn này (chuyển từ "luôn hiện" sang "thu gọn được", không phải
+// bộ lọc hoàn toàn mới thêm vào màn còn gọn) — người dùng vẫn tự thu gọn lại nếu muốn.
+let _hrcFilterCollapsed = false;
+function applyHrcFilterPanelState() {
+  const panel = document.getElementById('hrcFilterPanel');
+  const btn = document.getElementById('btnToggleHrcFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _hrcFilterCollapsed);
+  if (btn) btn.textContent = _hrcFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleHrcFilterPanel() {
+  _hrcFilterCollapsed = !_hrcFilterCollapsed;
+  applyHrcFilterPanelState();
+}
+
 function renderHrContractModule() {
+  applyHrcFilterPanelState();
+  // laborContractTypes (danh mục "Loại HĐLĐ" tự cấu hình, dùng chung populateLaborContractTypeSelect() —
+  // CÙNG hàm đang dùng ở form Tạo/Sửa Hợp Đồng, module-hopdonglaodong.js/module-hrprofile.js) —
+  // includeEmpty: true để có "-- Tất cả --" đầu danh sách, giữ lại giá trị đang chọn (nếu có) qua lần mở
+  // lại tab (không reset bộ lọc chỉ vì chuyển tab đi rồi quay lại).
+  populateLaborContractTypeSelect('hrcFilterContractType', document.getElementById('hrcFilterContractType')?.value || '', { includeEmpty: true });
+  // populateLaborContractTypeSelect() luôn gắn nhãn "-- Chọn --" cho lựa chọn rỗng (đúng cho FORM bắt
+  // buộc chọn) — đổi lại thành "-- Tất cả --" cho ĐÚNG ngữ cảnh BỘ LỌC (rỗng = không lọc theo loại).
+  const ctSel = document.getElementById('hrcFilterContractType');
+  if (ctSel && ctSel.options[0] && ctSel.options[0].value === '') ctSel.options[0].textContent = '-- Tất cả loại HĐ --';
   renderHrContractTable();
 }
 
@@ -73,6 +102,7 @@ function renderHrContractTable() {
   const kwInputEl = document.getElementById('hrcFilterEmployeeCode');
   const kw = (kwInputEl?.value || '').trim();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
+  const contractTypeFilter = document.getElementById('hrcFilterContractType')?.value || '';
   let list = getHrContractList();
   // Nạp danh bạ Hồ Sơ Nhân Sự nếu chưa có (10/2026 dùng để tìm kiếm theo Họ Tên; MỞ RỘNG 11/2026 để LUÔN
   // hiển thị Họ Tên/Chức Danh/Phòng Ban ở bảng, không chỉ khi đang gõ tìm kiếm) — laborContracts không tự
@@ -85,6 +115,7 @@ function renderHrContractTable() {
     list = list.filter(c => matchesAnyKeyword([c.employeeCode, c.code, nameByCode[c.employeeCode], ...customDataSearchValues(c.customData)], kwInputEl?._multiKeywords, kw));
   }
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
+  if (contractTypeFilter) list = list.filter(c => c.contractType === contractTypeFilter);
 
   const tbody = document.getElementById('hrcTableBody');
   const empty = document.getElementById('hrcTableEmpty');
@@ -120,9 +151,11 @@ function onHrContractFilterChange() { renderHrContractTable(); }
 async function exportHrContractExcel() {
   const empCodeFilter = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim().toLowerCase();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
+  const contractTypeFilter = document.getElementById('hrcFilterContractType')?.value || '';
   let list = getHrContractList();
   if (empCodeFilter) list = list.filter(c => (c.employeeCode || '').toLowerCase().includes(empCodeFilter));
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
+  if (contractTypeFilter) list = list.filter(c => c.contractType === contractTypeFilter);
   if (!list.length) return alert('Chưa có hợp đồng nào để xuất (theo bộ lọc đang chọn).');
 
   if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();

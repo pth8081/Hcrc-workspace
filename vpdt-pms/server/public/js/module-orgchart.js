@@ -1232,6 +1232,98 @@ function ocFmtNum(n) {
   if (n == null) return '—';
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
+// ocHeadcountFilteredRows() (MỚI, 12/2026, theo yêu cầu người dùng: "báo cáo định biên... lọc thông tin
+// phòng ban... thông tin vị trí") — report.rows là danh sách PHẲNG đã nhóm sẵn theo cây (GROUP1 ⊃ GROUP2
+// ⊃ POSITION, xem buildFlatGroupedHeadcountReport(), lib/headcountReport.js) — lọc THEO ĐÚNG CẤU TRÚC
+// NÀY: dựng lại cây tạm {GROUP1 -> [{GROUP2|null, leaves[]}]}, chỉ giữ POSITION khớp từ khoá, rồi CHỈ
+// hiện GROUP1/GROUP2 nào còn ít nhất 1 POSITION con khớp (ẩn mục cha rỗng hoàn toàn sau khi lọc) — không
+// lọc phẳng đơn thuần (sẽ làm mất ngữ cảnh "thuộc phòng ban/nhóm nào" của từng dòng vị trí còn lại).
+function ocHeadcountFilteredRows(rows, deptKw, posKw) {
+  const deptN = stripVnDiacritics(String(deptKw || '').trim().toLowerCase());
+  const posN = stripVnDiacritics(String(posKw || '').trim().toLowerCase());
+  if (!deptN && !posN) return rows;
+  const matchLeaf = (r) => {
+    if (deptN && !stripVnDiacritics(`${r.banPhong || ''} ${r.banPhongBoPhan || ''} ${r.boPhanNhom || ''}`.toLowerCase()).includes(deptN)) return false;
+    if (posN && !stripVnDiacritics(`${r.chucDanh || ''} ${r.maViTri || ''}`.toLowerCase()).includes(posN)) return false;
+    return true;
+  };
+  const groups = [];
+  let curGroup = null, curSub = null;
+  const ensureGroup = () => { if (!curGroup) { curGroup = { header: null, children: [] }; groups.push(curGroup); curSub = null; } };
+  const ensureSub = () => { if (!curSub) { curSub = { header: null, leaves: [] }; curGroup.children.push(curSub); } };
+  for (const r of rows) {
+    if (r.kind === 'GROUP1') {
+      curGroup = { header: r, children: [] };
+      groups.push(curGroup);
+      curSub = null;
+    } else if (r.kind === 'GROUP2') {
+      ensureGroup();
+      curSub = { header: r, leaves: [] };
+      curGroup.children.push(curSub);
+    } else {
+      ensureGroup(); ensureSub();
+      curSub.leaves.push(r);
+    }
+  }
+  const out = [];
+  for (const g of groups) {
+    const matchingChildren = g.children
+      .map(sub => ({ header: sub.header, leaves: sub.leaves.filter(matchLeaf) }))
+      .filter(sub => sub.leaves.length);
+    if (!matchingChildren.length) continue;
+    if (g.header) out.push(g.header);
+    for (const sub of matchingChildren) {
+      if (sub.header) out.push(sub.header);
+      out.push(...sub.leaves);
+    }
+  }
+  return out;
+}
+
+let _ocHeadcountReportCache = null; // report THÔ (chưa lọc) — lọc lại tại chỗ không cần gọi API lần nữa
+let _ocHeadcountExplainCollapsed = true;
+let _ocHeadcountFilterCollapsed = true;
+function applyOcHeadcountExplainState() {
+  const el = document.getElementById('orgChartHeadcountExplainText');
+  const btn = document.getElementById('btnToggleOrgChartHeadcountExplain');
+  if (!el) return;
+  el.classList.toggle('hidden', _ocHeadcountExplainCollapsed);
+  if (btn) btn.textContent = _ocHeadcountExplainCollapsed ? '📖 Xem Giải Thích Các Cột' : '➖ Ẩn Giải Thích';
+}
+function toggleOrgChartHeadcountExplain() {
+  _ocHeadcountExplainCollapsed = !_ocHeadcountExplainCollapsed;
+  applyOcHeadcountExplainState();
+}
+function applyOcHeadcountFilterPanelState() {
+  const panel = document.getElementById('orgChartHeadcountFilterPanel');
+  const btn = document.getElementById('btnToggleOrgChartHeadcountFilter');
+  if (!panel) return;
+  panel.classList.toggle('hidden', _ocHeadcountFilterCollapsed);
+  if (btn) btn.textContent = _ocHeadcountFilterCollapsed ? '🔍 Hiện Bộ Lọc' : '➖ Ẩn Bộ Lọc';
+}
+function toggleOrgChartHeadcountFilterPanel() {
+  _ocHeadcountFilterCollapsed = !_ocHeadcountFilterCollapsed;
+  applyOcHeadcountFilterPanelState();
+}
+// populateOcHeadcountFilterSuggestions() — gợi ý sdd* lấy THẲNG từ report vừa tải (không gọi API riêng),
+// đúng khuôn "ô tìm-kiếm-gõ-chọn" CLAUDE.md nhưng vẫn cho gõ tự do + lọc theo từng ký tự (data-op-input),
+// gợi ý chỉ để tham khảo nhanh tên phòng ban/chức danh có sẵn, không bắt buộc chọn đúng 1 dòng gợi ý.
+function populateOcHeadcountFilterSuggestions(rows) {
+  const depts = new Set(), positions = new Set();
+  (rows || []).forEach(r => {
+    if (r.kind === 'GROUP1' || r.kind === 'GROUP2') { if (r.label) depts.add(r.label); return; }
+    [r.banPhong, r.banPhongBoPhan, r.boPhanNhom].forEach(v => { if (v) depts.add(v); });
+    if (r.chucDanh) positions.add(r.chucDanh);
+  });
+  sddSetOptions('ocHeadcountFilterDeptDropdown', [...depts].sort((a, b) => a.localeCompare(b, 'vi')).map(v => ({ value: v, label: v })));
+  sddSetOptions('ocHeadcountFilterPositionDropdown', [...positions].sort((a, b) => a.localeCompare(b, 'vi')).map(v => ({ value: v, label: v })));
+}
+function onOrgChartHeadcountFilterChanged() {
+  if (!_ocHeadcountReportCache) return;
+  const deptKw = document.getElementById('ocHeadcountFilterDept')?.value || '';
+  const posKw = document.getElementById('ocHeadcountFilterPosition')?.value || '';
+  renderOrgChartHeadcountTable({ ..._ocHeadcountReportCache, rows: ocHeadcountFilteredRows(_ocHeadcountReportCache.rows, deptKw, posKw) });
+}
 function renderOrgChartHeadcountTable(report) {
   const tbody = document.getElementById('orgChartHeadcountTableBody');
   const varianceCls = (v) => v == null ? '' : v > 0 ? 'text-amber-700 font-bold' : v < 0 ? 'text-red-600 font-bold' : '';
@@ -1286,7 +1378,11 @@ function renderOrgChartHeadcountTable(report) {
       <td class="p-1.5 text-right ${varianceCls(r.variance)}">${r.variance == null ? '—' : r.variance}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rootRow + bodyRows;
+  const filterActive = !!((document.getElementById('ocHeadcountFilterDept')?.value || '').trim() || (document.getElementById('ocHeadcountFilterPosition')?.value || '').trim());
+  const emptyRow = (report.rows || []).length === 0 && filterActive
+    ? `<tr><td colspan="16" class="p-3 text-center text-gray-400 italic">Không có vị trí nào khớp bộ lọc đang chọn.</td></tr>`
+    : '';
+  tbody.innerHTML = rootRow + bodyRows + emptyRow;
 }
 async function openOrgChartHeadcountModal() {
   if (!_ocCurrentVersion) return;
@@ -1294,8 +1390,20 @@ async function openOrgChartHeadcountModal() {
   document.getElementById('btnOrgChartHeadcountTemplateXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-template/export-xlsx`;
   document.getElementById('orgChartHeadcountModal').classList.remove('hidden');
   document.getElementById('orgChartHeadcountTableBody').innerHTML = '<tr><td colspan="16" class="p-2 text-center text-gray-400">Đang tải...</td></tr>';
+  // Reset giải thích/bộ lọc về mặc định (thu gọn) + xoá từ khoá cũ mỗi lần MỞ LẠI modal — tránh nhầm lẫn
+  // "sao danh sách thiếu dòng" nếu lần trước đóng modal mà quên xoá bộ lọc.
+  _ocHeadcountExplainCollapsed = true;
+  _ocHeadcountFilterCollapsed = true;
+  applyOcHeadcountExplainState();
+  applyOcHeadcountFilterPanelState();
+  const deptInput = document.getElementById('ocHeadcountFilterDept');
+  const posInput = document.getElementById('ocHeadcountFilterPosition');
+  if (deptInput) deptInput.value = '';
+  if (posInput) posInput.value = '';
   try {
     const report = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
+    _ocHeadcountReportCache = report;
+    populateOcHeadcountFilterSuggestions(report.rows);
     renderOrgChartHeadcountTable(report);
   } catch (err) {
     document.getElementById('orgChartHeadcountTableBody').innerHTML = `<tr><td colspan="16" class="p-2 text-center text-red-600">⛔ ${escapeHtml(err.message)}</td></tr>`;

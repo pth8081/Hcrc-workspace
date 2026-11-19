@@ -20,6 +20,12 @@
             <option value="COMPLETED">✅ Hoàn tất</option>
             <option value="CANCELLED">❌ Đã huỷ</option>
           </select>
+          <!-- hrpListFilterPanel (MỚI, 12/2026, theo yêu cầu người dùng: "onboarding hoặc offboarding thì
+               cũng cho thêm cái phần tìm kiếm là theo tình trạng hợp đồng, hình thức làm việc") — panel
+               RIÊNG thu gọn được (mặc định ĐÓNG), tách khỏi 2 bộ lọc Loại/Trạng Thái sẵn có ở trên (giữ
+               nguyên, không đụng) — xem applyHrpListFilterPanelState()/toggleHrpListFilterPanel()
+               (module-hrlifecycle.js). -->
+          <button type="button" id="btnToggleHrpListFilter" data-op="toggleHrpListFilterPanel" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
         </div>
         <div class="flex flex-wrap gap-2">
           <button type="button" id="btnHrpCreateOnboarding" data-op="showHrCreateForm" data-arg0="ONBOARDING" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">+ Tạo Onboarding</button>
@@ -37,6 +43,23 @@
             <button id="hrProcessListRefreshBtn" type="button" data-op="refreshHrProcessList" class="border rounded px-3 py-1.5 text-xs bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
             <div id="hrProcessListLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
           </div>
+        </div>
+      </div>
+      <div id="hrpListFilterPanel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2 bg-gray-50 border rounded p-2 text-xs">
+        <div>
+          <label class="block text-gray-500 mb-0.5">Hình Thức Làm Việc</label>
+          <select id="hrpListFilterEmploymentType" data-op-change="setHrpListFilterEmploymentType" data-arg-value="0" class="w-full border p-1 rounded bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-0.5">Tình Trạng Hợp Đồng</label>
+          <select id="hrpListFilterContractStatus" data-op-change="setHrpListFilterContractStatus" data-arg-value="0" class="w-full border p-1 rounded bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="DRAFT">📝 Nháp</option>
+            <option value="ACTIVE">✅ Đang hiệu lực</option>
+            <option value="EXPIRED">⌛ Hết hạn</option>
+            <option value="TERMINATED">⛔ Đã chấm dứt</option>
+            <option value="SUPERSEDED">🔄 Đã thay thế</option>
+          </select>
         </div>
       </div>
 
