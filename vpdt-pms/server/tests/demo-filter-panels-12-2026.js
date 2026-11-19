@@ -223,6 +223,12 @@ async function demoOrgChartHeadcount() {
     await page.click('#btnToggleOrgChartHeadcountExplain');
     await page.waitForTimeout(150);
     await shoot(page, '4b-dinh-bien-giai-thich-mo.png');
+    // 4c) MỚI: ô "🔍 Tìm Kiếm Nhanh" — gõ mã vị trí "VT3" (không thuộc cột Phòng Ban/Vị Trí đang gõ) vẫn
+    // lọc ra đúng ngay, theo yêu cầu bổ sung của người dùng sau khi xem demo 4a/4b.
+    await page.click('#btnToggleOrgChartHeadcountExplain');
+    await page.fill('#ocHeadcountFilterQuick', 'VT3');
+    await page.waitForTimeout(200);
+    await shoot(page, '4c-dinh-bien-tim-kiem-nhanh.png');
   } finally {
     await browser.close();
     server.close();
