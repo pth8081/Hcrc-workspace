@@ -3841,12 +3841,32 @@ diện — người dùng không cần biết/làm gì khác.
   sidebar — gác quyền riêng "📊 Tab 7: Xem Báo Cáo", không mở theo quyền
   module phẳng) — hiện tổng số kỳ + tình trạng Nháp/Đang hoạt động/Đã chốt.
   Tab 7 "📊 Báo Cáo" (bên trong module Kiểm Kê — khác mục Báo Cáo quản trị
-  này) **CẬP NHẬT 12/2026** (theo yêu cầu người dùng "tôi cần cái này để có
-  báo cáo nhanh"): đổi sang cache-first — chọn Kỳ/tổ hợp "So Sánh" đã xem
-  lần gần nhất thì mở lại hiện NGAY số liệu cũ (không phải chờ tính toán
-  lại), rồi mới âm thầm làm mới ngầm phía sau; mất mạng vẫn xem được số liệu
-  đã lưu (có ghi "🔌 Ngoại tuyến"). Đổi sang Kỳ/tổ hợp So Sánh CHƯA từng xem
-  thì vẫn phải chờ tải mới bình thường (không có gì để hiện ngay).
+  này) **CẬP NHẬT 12/2026 lần 2** (theo yêu cầu người dùng "cache không sử
+  dụng vào mục đích nào thì báo cáo không cần cache... lúc nào lấy báo cáo
+  thì mới lấy từ cơ sở dữ liệu xuống để đảm bảo không bị treo tab này" — SAU
+  KHI xác nhận: cache cũ chỉ phục vụ "hiện số cũ cho đỡ chờ", KHÔNG hề được
+  dùng làm nguồn tính so sánh): **ĐỔI LẠI, bỏ hẳn cache-first** (bản
+  12/2026 lần 1 ở trên đã GỠ) — mỗi lần mở tab/đổi Kỳ/đổi "So Sánh" đều LUÔN
+  gọi thẳng server tính lại từ CSDL (không còn hiện số cũ đón đầu trước khi
+  gọi mạng). Cache cũ (lưu trên máy) **chỉ còn dùng làm dự phòng khi MẤT
+  MẠNG THẬT** — hiện số liệu lần xem gần nhất kèm cảnh báo rõ "🔌 Ngoại
+  tuyến". Lỗi nghiệp vụ khác (hết quyền, kỳ bị xoá...) **luôn báo đúng lỗi
+  thật**, không còn âm thầm giữ nguyên số cache cũ che lỗi.
+  - **LỖI THẬT đã vá cùng đợt (phản hồi người dùng kèm ảnh chụp: "tất cả
+    những mã hàng này đều đã có giá rồi, tại sao nó lại ghi là không có
+    giá... bạn đã lấy giá được ở phần Kiểm Soát rồi mà")**: khung "💰 Giá
+    Trị Thừa/Thiếu Theo Siêu Thị" (chỉ Admin, xem nhiều siêu thị cùng lúc)
+    TRƯỚC ĐÂY chỉ đọc giá ĐÃ CÓ SẴN trong CSDL cho từng siêu thị, KHÔNG tự
+    kích hoạt đồng bộ giá như mọi nơi khác đã làm (Kiểm Soát Hàng Hóa/Kiểm
+    Tra Giá chỉ đồng bộ ĐÚNG 1 siêu thị người đang xem, không phải cả
+    chuỗi) — siêu thị nào CHƯA từng có ai mở 2 màn đó, admin cũng chưa tự
+    xem riêng Báo Cáo của đúng siêu thị đó, thì bảng giá siêu thị đó trong
+    CSDL vẫn TRỐNG, khiến TOÀN BỘ mã hàng hiện "chưa có giá" dù giá THẬT có
+    sẵn bên API đối tác. Nay khung này tự kích hoạt đồng bộ ngầm (không
+    chặn màn hình) cho TỪNG siêu thị đang hiện — lần xem này vẫn có thể
+    chưa đủ giá (đồng bộ chạy phía sau), lần xem SAU của đúng siêu thị đó
+    mới đủ, không cần đợi ai đó tự mở Kiểm Soát Hàng Hóa ở đúng siêu thị
+    đó trước.
 - **Tab "📦 Tồn Kho" (MỚI, 11/2026, theo yêu cầu TRỰC TIẾP người dùng, đặt
   ngay sau "📅 Kỳ Kiểm Kê")** — trả lời câu hỏi "tồn kho mã hàng đã đồng bộ
   về thiết bị chưa?" trước khi đi kiểm kê ở nơi hay mất mạng:

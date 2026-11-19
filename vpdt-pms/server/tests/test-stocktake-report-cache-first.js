@@ -1,7 +1,11 @@
-// tests/test-stocktake-report-cache-first.js — test Playwright THẬT cho cache-first ở Tab 7 "📊 Báo Cáo"
-// CỦA KIỂM KÊ (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng: "tôi cần cái này để có báo cáo nhanh").
-// CÙNG nguyên lý cache-first đã có ở Tồn Kho/Đối Chiếu/Báo Cáo của Kiểm Soát Hàng Hóa — xem
-// loadKkReportTab()/kkOfflineReportCache (module-vanhanh.js). Chạy: node tests/test-stocktake-report-cache-first.js
+// tests/test-stocktake-report-cache-first.js — test Playwright THẬT cho tab 7 "📊 Báo Cáo" CỦA KIỂM KÊ
+// (module-vanhanh.js::loadKkReportTab()). ĐỔI LẠI (12/2026, theo yêu cầu TRỰC TIẾP người dùng "cache
+// không sử dụng vào mục đích nào thì báo cáo không cần cache... lúc nào lấy báo cáo thì mới lấy từ cơ sở
+// dữ liệu xuống" — xác nhận giữ fallback khi MẤT MẠNG THẬT): file này TRƯỚC ĐÂY kiểm hành vi "cache-first"
+// (hiện số cũ NGAY trước khi gọi mạng) — hành vi đó đã bị GỠ BỎ hoàn toàn. Nay kiểm ĐÚNG hành vi MỚI:
+// luôn gọi thẳng CSDL mỗi khi mở tab/đổi Kỳ (không hiện số cũ đón đầu), CHỈ dùng cache gần nhất làm dự
+// phòng khi gọi mạng thất bại THẬT (TypeError), và lỗi nghiệp vụ khác thì KHÔNG dùng cache che lỗi.
+// Chạy: node tests/test-stocktake-report-cache-first.js
 'use strict';
 const { createRunner, assert, assertEqual } = require('./testHarness');
 
@@ -57,7 +61,9 @@ async function main() {
       assert(text.includes('SP001'), `Phải hiện SP001, thực tế: ${text}`);
     });
 
-    await run.run('Cache-first: chọn lại Kỳ 1 lần 2 dù mạng CHẬM (giả lập trễ 3s) -> hiện NGAY dữ liệu cache', async () => {
+    // LUÔN GỌI MẠNG LẠI — KHÔNG còn "cache-first" (MỚI, 12/2026): chọn lại ĐÚNG Kỳ đã xem trước đó,
+    // nhưng mạng CHẬM (giả lập trễ 3s) -> PHẢI chờ, KHÔNG được hiện ngay số liệu cũ trong lúc chờ.
+    await run.run('KHÔNG còn cache-first: chọn lại Kỳ 1 lần 2 khi mạng CHẬM (giả lập trễ 3s) -> KHÔNG hiện số cũ trong lúc chờ, bảng vẫn ẩn + đang tải', async () => {
       await page.evaluate(() => {
         window.__origFetchSlow = window.fetch;
         window.fetch = (url, opts) => {
@@ -72,16 +78,22 @@ async function main() {
       await page.fill('#kkReportSessionInput', SESSION2_LABEL);
       await page.waitForTimeout(100);
       await page.fill('#kkReportSessionInput', SESSION1_LABEL);
-      // CHỈ chờ 150ms (KHÔNG đủ để lượt fetch 3s trả lời) rồi kiểm tra NGAY.
+      // CHỈ chờ 150ms (KHÔNG đủ để lượt fetch 3s trả lời) rồi kiểm tra NGAY — đúng hành vi MỚI: bảng
+      // phải ẨN + ghi chú "Đang tải", KHÔNG hiện nhầm dữ liệu cũ của lượt xem trước (dù cùng Kỳ 1).
       await page.waitForTimeout(150);
-      const text = await page.evaluate(() => document.getElementById('kkReportBody')?.textContent || '');
-      assert(text.includes('SP001'), `Phải hiện NGAY dữ liệu cache (SP001) trước khi mạng chậm trả lời -- got: ${text}`);
+      const emptyNote = await page.evaluate(() => document.getElementById('kkReportEmptyNote')?.textContent || '');
+      const bodyHidden = await page.evaluate(() => document.getElementById('kkReportBody')?.classList.contains('hidden'));
+      assert(emptyNote.includes('Đang tải'), `Phải hiện "Đang tải báo cáo..." trong lúc chờ, thực tế: ${emptyNote}`);
+      assert(bodyHidden === true, 'Bảng kết quả phải ẨN trong lúc đang tải, không hiện nhầm số cũ');
+      // Chờ lượt fetch chậm trả lời xong rồi mới xác nhận hiện đúng dữ liệu MỚI.
       await page.evaluate(() => { window.fetch = window.__origFetchSlow; });
       await page.waitForTimeout(3200);
+      const textAfter = await page.evaluate(() => document.getElementById('kkReportBody')?.textContent || '');
+      assert(textAfter.includes('SP001'), `Sau khi mạng trả lời xong phải hiện đúng dữ liệu (SP001), thực tế: ${textAfter}`);
       await page.evaluate(() => { delete window.__origFetchSlow; });
     });
 
-    await run.run('Đổi sang Kỳ 2 (CHƯA có cache đúng tổ hợp) -> KHÔNG hiện nhầm số liệu của Kỳ 1', async () => {
+    await run.run('Đổi sang Kỳ 2 -> hiện đúng dữ liệu Kỳ 2, không lẫn Kỳ 1', async () => {
       await page.fill('#kkReportSessionInput', SESSION2_LABEL);
       await page.waitForTimeout(250);
       const text = await page.evaluate(() => document.getElementById('kkReportBody')?.textContent || '');
@@ -95,13 +107,40 @@ async function main() {
     await page.waitForTimeout(100);
     await page.fill('#kkReportSessionInput', SESSION1_LABEL);
     await page.waitForTimeout(300);
-    await run.run('Mất mạng (TypeError) -> fallback đúng cache Kỳ 1 lần xem gần nhất, hiện banner ngoại tuyến', async () => {
+    await run.run('Mất mạng THẬT (TypeError) -> fallback đúng cache Kỳ 1 lần xem gần nhất, hiện banner ngoại tuyến', async () => {
       const offlineNote = await page.evaluate(() => document.getElementById('kkReportOfflineNote')?.textContent || '');
       assert(offlineNote.includes('Ngoại tuyến'), `Phải hiện banner ngoại tuyến, thực tế: ${offlineNote}`);
       const text = await page.evaluate(() => document.getElementById('kkReportBody')?.textContent || '');
       assert(text.includes('SP001'), `Offline vẫn phải hiện dữ liệu cache Kỳ 1 (SP001), thực tế: ${text}`);
     });
     await goOnline();
+
+    // LỖI NGHIỆP VỤ (không phải mất mạng) -> KHÔNG được dùng cache che lỗi (MỚI, 12/2026) — mô phỏng 1
+    // lỗi nghiệp vụ thật (403 giả lập) ngay cả khi ĐÃ có cache Kỳ 1 hợp lệ từ các bước trên.
+    await run.run('Lỗi nghiệp vụ thật (không phải mất mạng) -> LUÔN báo đúng lỗi, KHÔNG âm thầm giữ nguyên số cache cũ', async () => {
+      await page.evaluate(() => {
+        window.__origFetchBiz = window.fetch;
+        window.fetch = (url, opts) => {
+          if (String(url).includes('/api/stocktake/report')) {
+            return Promise.resolve({ ok: false, status: 403, json: async () => ({ error: 'Mô phỏng lỗi nghiệp vụ (quyền vừa bị thu hồi)' }) });
+          }
+          return window.__origFetchBiz(url, opts);
+        };
+      });
+      await page.fill('#kkReportSessionInput', SESSION2_LABEL);
+      await page.waitForTimeout(100);
+      await page.fill('#kkReportSessionInput', SESSION1_LABEL);
+      await page.waitForTimeout(250);
+      const emptyNote = await page.evaluate(() => document.getElementById('kkReportEmptyNote')?.textContent || '');
+      assert(emptyNote.includes('Mô phỏng lỗi nghiệp vụ'), `Phải hiện đúng lỗi nghiệp vụ thật, thực tế: ${emptyNote}`);
+      const bodyHidden = await page.evaluate(() => document.getElementById('kkReportBody')?.classList.contains('hidden'));
+      assert(bodyHidden === true, 'Lỗi nghiệp vụ -> bảng phải ẨN, KHÔNG âm thầm hiện số cache cũ của Kỳ 1');
+      await page.evaluate(() => { window.fetch = window.__origFetchBiz; delete window.__origFetchBiz; });
+    });
+
+    // Khôi phục lại dữ liệu đúng cho test cuối (không có lỗi JS) đọc DOM ổn định.
+    await page.fill('#kkReportSessionInput', SESSION1_LABEL);
+    await page.waitForTimeout(250);
 
     await run.run('Không có lỗi JS/console nào phát sinh', async () => {
       assert(jsErrors.length === 0, 'Lỗi JS: ' + jsErrors.join(' | '));

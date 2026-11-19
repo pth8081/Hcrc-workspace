@@ -1369,11 +1369,29 @@ router.get('/report', async (req, res) => {
         .flatMap(raw => String(raw).split(',').map(s => s.trim()).filter(Boolean)))];
       const snapshotMap = apiConfigured && allMaDiems.length ? await getSnapshotMapForMaDiems(allMaDiems) : {};
       // Giá — fetch SONG SONG giá đã cache của TỪNG Mã Điểm riêng (không có hàm bulk 1-query như Tồn
-      // Kho, nhưng số Mã Điểm thường không nhiều, đủ nhanh cho màn Admin xem ít khi) — KHÔNG tự đồng bộ
-      // API đối tác ở đây (chỉ đọc cache, giữ nguyên quyết định "không tự đồng bộ ngay lúc xem báo cáo").
+      // Kho, nhưng số Mã Điểm thường không nhiều, đủ nhanh cho màn Admin xem ít khi).
+      // LỖI THẬT đã vá (12/2026, phản hồi TRỰC TIẾP người dùng kèm ảnh chụp: "tất cả những mã hàng này
+      // đều đã có giá rồi, tại sao nó lại ghi là không có giá... bạn đã lấy giá được ở phần kiểm soát rồi
+      // mà"): bảng này TRƯỚC ĐÂY chỉ đọc giá ĐÃ CÓ SẴN trong CSDL, không hề tự kích hoạt đồng bộ cho từng
+      // siêu thị như mọi nơi gọi giá khác đã làm (GET /price-catalog ở routes/shelfStock.js — chỉ đồng bộ
+      // ĐÚNG siêu thị người đang xem Kiểm Soát Hàng Hóa/Kiểm Tra Giá; nhánh "Giá Trị Thừa/Thiếu" đơn-siêu-
+      // thị ngay phía trên cũng chỉ đồng bộ ĐÚNG 1 siêu thị của session đang chọn) — siêu thị nào CHƯA
+      // từng có ai mở 2 màn trên, và admin cũng chưa từng tự xem riêng Báo Cáo của đúng siêu thị đó, thì
+      // bảng giá siêu thị đó trong CSDL vẫn TRỐNG HOÀN TOÀN, khiến TOÀN BỘ mã hàng hiện "chưa có giá" ở
+      // đây dù giá THẬT có sẵn bên API đối tác — chỉ là chưa từng được kéo về CSDL cho đúng siêu thị đó.
+      // Vá: kích hoạt đồng bộ NGẦM (fire-and-forget, KHÔNG await — không chặn response) cho TỪNG Mã Điểm
+      // đang hiện ở bảng này, dùng NGUYÊN syncStorePriceCatalog({force:false}) đã có — hàm đó tự quyết
+      // định có thật sự cần gọi API đối tác không (so lastFetchedAt với chu kỳ 1 ngày) + tự khoá chống
+      // nhiều siêu thị/nhiều admin xem cùng lúc đều gọi trùng, nên KHÔNG làm tăng tải API đối tác so với
+      // cách các màn khác đã làm — chỉ là lần xem NÀY vẫn hiện "chưa có giá" (đồng bộ chạy ngầm phía sau),
+      // lần xem SAU của đúng siêu thị đó mới đủ giá, không còn phải chờ ai đó tự mở Kiểm Soát Hàng Hóa ở
+      // đúng siêu thị đó trước.
       const priceByMaDiem = {};
       if (allMaDiems.length) {
         await Promise.all(allMaDiems.map(async (code) => {
+          if (apiConfigured) syncStorePriceCatalog(code, { force: false }).catch((err) => {
+            console.error(`⛔ GET /api/stocktake/report: lỗi kích hoạt đồng bộ ngầm bảng giá cho Mã Điểm "${code}" —`, err.message);
+          });
           const entry = await getSnapshotForMaDiem(code);
           if (entry) priceByMaDiem[code] = entry;
         }));

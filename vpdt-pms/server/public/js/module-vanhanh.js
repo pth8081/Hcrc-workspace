@@ -2468,11 +2468,16 @@ function renderKkReportBody() {
   renderKkReportCompareChart();
   renderKkReportTable('');
 }
-// loadKkReportTab() — CACHE-FIRST (MỚI, 12/2026, theo yêu cầu TRỰC TIẾP người dùng "tôi cần cái này để
-// có báo cáo nhanh") — CÙNG khuôn loadKkInventoryTab()/loadShelfReconciliation(): hiện NGAY bản cache gần
-// nhất ĐÚNG kỳ + đúng tổ hợp "So Sánh" đang chọn (nếu có, xem getKkReportOfflineFallback()) trước khi gọi
-// mạng, rồi mới âm thầm làm mới ngầm phía sau — vào tab/đổi kỳ thấy số liệu ngay, không phải chờ cả lượt
-// round-trip tính toán báo cáo (sessionId + nhiều kỳ So Sánh có thể hơi lâu).
+// loadKkReportTab() — LUÔN LẤY TỪ CSDL LÚC CẦN (MỚI, 12/2026, ĐỔI LẠI theo yêu cầu TRỰC TIẾP người dùng
+// "cache không sử dụng vào mục đích nào thì báo cáo không cần cache... lúc nào lấy báo cáo thì mới lấy
+// từ cơ sở dữ liệu xuống để đảm bảo không bị treo tab này" — SAU KHI xác nhận: cache trước đây chỉ phục
+// vụ "hiện số cũ ngay cho đỡ chờ", KHÔNG hề được dùng làm nguồn tính so sánh (so sánh luôn tính mới từ
+// CSDL thật mỗi lần gọi server, xem GET /api/stocktake/report) nên bỏ bước "hiện cache TRƯỚC khi gọi
+// mạng" không mất gì về độ chính xác). KHÁC bản CACHE-FIRST cũ (đã gỡ): KHÔNG còn render dữ liệu cache cũ
+// ngay khi vào tab/đổi kỳ nữa — luôn gọi thẳng server trước, CHỈ dùng cache làm dự phòng khi MẤT MẠNG
+// THẬT (TypeError của fetch, xác nhận lại với người dùng — "vẫn hiện bản cũ NẾU mất mạng thật"), và
+// KHÔNG dùng cache để che lỗi nghiệp vụ khác (403/404...) — lỗi nghiệp vụ luôn báo đúng lỗi thật, không
+// âm thầm giữ nguyên số cũ trên màn hình.
 async function loadKkReportTab() {
   const sessionId = kkReportSessionId || 0;
   // "So Sánh Với Kỳ Khác" giờ CHỌN NHIỀU (renderMultiSelectDropdown()) — đọc lại qua
@@ -2489,37 +2494,36 @@ async function loadKkReportTab() {
     if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = 'Chưa có kỳ nào để xem báo cáo — tạo kỳ ở tab "📅 Kỳ Kiểm Kê" trước.'; }
     return;
   }
-  const cachedFirst = getKkReportOfflineFallback(sessionId, compareSessionIds);
-  if (cachedFirst) {
-    kkReportData = cachedFirst.data;
-    renderKkReportBody();
-  }
+  if (bodyWrap) bodyWrap.classList.add('hidden');
+  if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = 'Đang tải báo cáo...'; }
   try {
     const url = `/api/stocktake/report?sessionId=${sessionId}` + (compareSessionIds.length ? `&compareSessionId=${compareSessionIds.join(',')}` : '');
     const res = await fetch(url);
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      if (!cachedFirst) {
-        if (bodyWrap) bodyWrap.classList.add('hidden');
-        if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ ' + (body.error || 'Không tải được báo cáo.'); }
-      }
+      // Lỗi nghiệp vụ thật (403/404/400...) — LUÔN báo đúng lỗi, KHÔNG âm thầm rơi về số cũ trong cache
+      // (kỳ/quyền có thể đã đổi thật, hiện nhầm số cũ sẽ gây hiểu sai).
+      if (bodyWrap) bodyWrap.classList.add('hidden');
+      if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ ' + (body.error || 'Không tải được báo cáo.'); }
       return;
     }
     kkReportData = body;
     await cacheKkReportOffline(sessionId, compareSessionIds, body);
   } catch (err) {
-    // Mất mạng thật (TypeError của fetch) — ĐÃ hiện cache ở trên (nếu có) thì giữ nguyên, chỉ báo nhẹ.
+    // Mất mạng THẬT (TypeError của fetch, không phải lỗi nghiệp vụ ở nhánh !res.ok trên) — ĐÂY LÀ
+    // TRƯỜNG HỢP DUY NHẤT được dùng bản cache gần nhất (nếu có), kèm cảnh báo rõ "dữ liệu cũ".
+    const cachedFirst = getKkReportOfflineFallback(sessionId, compareSessionIds);
     if (!cachedFirst) {
       if (bodyWrap) bodyWrap.classList.add('hidden');
       if (emptyNote) { emptyNote.classList.remove('hidden'); emptyNote.textContent = '⛔ Không thể kết nối tới máy chủ.'; }
       return;
     }
+    kkReportData = cachedFirst.data;
     if (offlineEl) {
       offlineEl.classList.remove('hidden');
       offlineEl.textContent = `🔌 Ngoại tuyến — báo cáo lúc ${cachedFirst.cachedAt ? new Date(cachedFirst.cachedAt).toLocaleString('vi-VN') : '(không rõ)'}, có thể chưa phải mới nhất.`;
     }
-    return;
   }
   renderKkReportBody();
 }
