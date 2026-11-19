@@ -64,6 +64,9 @@ const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryA
 const { getSnapshotForMaDiem, getSnapshotForMaDiemMerged } = require('../lib/priceSnapshotStore');
 const { syncStorePriceCatalog } = require('../jobs/priceSync');
 const { getSnapshotMapForMaDiems } = require('../lib/inventorySnapshotStore');
+// buildMultiSheetWorkbook() — dùng cho GET /system-inventory/export-xlsx (dựng file .xlsx thẳng trên
+// server, xem chú thích đầy đủ tại route đó).
+const { buildMultiSheetWorkbook } = require('../lib/adminExport');
 // Tải mẫu/Nhập Excel cho Tab 5 "Cấu Hình Quầy Kệ" (danh mục RIÊNG của Kiểm Kê) + Tab 8 "Cấu Hình Người
 // Dùng" (MỚI, 12/2026, theo yêu cầu người dùng) — mirror ĐÚNG khuôn routes/budgetLinesImport.js.
 const multer = require('multer');
@@ -1454,6 +1457,37 @@ router.get('/report', async (req, res) => {
 // của đúng siêu thị mình (ensureShelfSystemInventoryCacheLoaded(), module-vanhanh.js — KHÔNG gọi route
 // này, gọi route KHÔNG gác quyền riêng /api/shelf-stock/system-inventory) nên Gom Mã/Kiểm Đếm/Kiểm Soát
 // offline vẫn hoạt động bình thường dù không có quyền xem tab này.
+// buildKkInventoryByDept(user) — tách ra từ GET /system-inventory (12/2026, phục vụ THÊM
+// GET /system-inventory/export-xlsx ngay dưới dùng CHUNG đúng 1 logic truy vấn/gộp, không chép lại) —
+// trả về { dept: { rows, fetchedAt, capNhatLuc } } cho ĐÚNG phạm vi siêu thị `user` được xem.
+async function buildKkInventoryByDept(user) {
+  const stores = (await getAppDataValue('stores')) || [];
+  const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
+  const access = await getAllUserAccess();
+  const allowedDepts = resolveKiemKeInventoryDepts(user, stores, access);
+  const deptCodes = new Map(); // dept -> [maDiem,...]
+  const allCodes = new Set();
+  for (const dept of allowedDepts) {
+    const raw = storeExternalCodes[dept];
+    if (!raw) continue;
+    const codes = [...new Set(String(raw).split(',').map(s => s.trim()).filter(Boolean))];
+    if (!codes.length) continue;
+    deptCodes.set(dept, codes);
+    codes.forEach(c => allCodes.add(c));
+  }
+  const snapshotMap = allCodes.size ? await getSnapshotMapForMaDiems([...allCodes]) : {};
+  const byDept = {};
+  for (const [dept, codes] of deptCodes) {
+    const entries = codes.map(c => snapshotMap[c]).filter(Boolean);
+    if (!entries.length) continue;
+    const rows = entries.length === 1 ? entries[0].rows : entries.flatMap(e => e.rows || []);
+    const fetchedAt = entries.reduce((latest, e) => (e.fetchedAt && (!latest || e.fetchedAt > latest)) ? e.fetchedAt : latest, null);
+    const capNhatLuc = entries.reduce((latest, e) => (e.capNhatLuc && (!latest || e.capNhatLuc > latest)) ? e.capNhatLuc : latest, null);
+    byDept[dept] = { rows: aggregateSystemInventoryRowsByMaHang(rows), fetchedAt, capNhatLuc };
+  }
+  return byDept;
+}
+
 router.get('/system-inventory', async (req, res) => {
   if (!requireKiemKeModuleAccess(req, res)) return;
   if (!canViewKkInventory(req.freshUser)) {
@@ -1463,11 +1497,6 @@ router.get('/system-inventory', async (req, res) => {
     if (!(await isInventoryApiConfigured())) {
       return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
     }
-    const user = req.freshUser;
-    const stores = (await getAppDataValue('stores')) || [];
-    const storeExternalCodes = (await getAppDataValue('storeExternalCodes')) || {};
-    const access = await getAllUserAccess();
-    const allowedDepts = resolveKiemKeInventoryDepts(user, stores, access);
     // 12/2026 (theo phản hồi người dùng, kèm ảnh chụp tab "📦 Tồn Kho" đứng ở "Đang tải..." lâu: "sao bạn
     // không đưa tab kiểm kê ra slidebar bạn kt cơ chế lấy tồn tại csdl thôi nhé, đồng bộ so api có lịch mà
     // sao lâu thế?"): fire-and-forget — KHÔNG `await`, route LUÔN đọc snapshot đang có trong CSDL ngay,
@@ -1477,29 +1506,58 @@ router.get('/system-inventory', async (req, res) => {
     syncSystemInventory({ force: false }).catch((err) => {
       console.error('⛔ GET /api/stocktake/system-inventory: lỗi kích hoạt đồng bộ ngầm —', err.message);
     });
-    const deptCodes = new Map(); // dept -> [maDiem,...]
-    const allCodes = new Set();
-    for (const dept of allowedDepts) {
-      const raw = storeExternalCodes[dept];
-      if (!raw) continue;
-      const codes = [...new Set(String(raw).split(',').map(s => s.trim()).filter(Boolean))];
-      if (!codes.length) continue;
-      deptCodes.set(dept, codes);
-      codes.forEach(c => allCodes.add(c));
-    }
-    const snapshotMap = allCodes.size ? await getSnapshotMapForMaDiems([...allCodes]) : {};
-    const byDept = {};
-    for (const [dept, codes] of deptCodes) {
-      const entries = codes.map(c => snapshotMap[c]).filter(Boolean);
-      if (!entries.length) continue;
-      const rows = entries.length === 1 ? entries[0].rows : entries.flatMap(e => e.rows || []);
-      const fetchedAt = entries.reduce((latest, e) => (e.fetchedAt && (!latest || e.fetchedAt > latest)) ? e.fetchedAt : latest, null);
-      const capNhatLuc = entries.reduce((latest, e) => (e.capNhatLuc && (!latest || e.capNhatLuc > latest)) ? e.capNhatLuc : latest, null);
-      byDept[dept] = { rows: aggregateSystemInventoryRowsByMaHang(rows), fetchedAt, capNhatLuc };
-    }
+    const byDept = await buildKkInventoryByDept(req.freshUser);
     res.json({ byDept });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/stocktake/system-inventory');
+  }
+});
+
+// GET /system-inventory/export-xlsx — "📥 Xuất Excel" tab "📦 Tồn Kho" (LỖI THẬT PRODUCTION đã vá,
+// 12/2026, người dùng báo "xuất Excel tồn kho... không xuất được", lỗi thật nhận được: "Failed to
+// fetch"): BẢN CŨ của exportKkInventoryExcel() (module-vanhanh.js) đóng gói TOÀN BỘ rows của MỌI siêu
+// thị đang cache trên trình duyệt thành 1 payload JSON khổng lồ rồi POST thẳng tới
+// /api/admin/export-xlsx — với 35 siêu thị, mỗi siêu thị hàng chục nghìn mã hàng, payload JSON này dễ
+// dàng vượt xa giới hạn `express.json({limit:'5mb'})` (server.js) và quá nặng để tải lên ổn định qua
+// mạng di động, nên request luôn thất bại giữa chừng ("Failed to fetch" — lỗi tầng mạng, không phải lỗi
+// nghiệp vụ). SỬA TẬN GỐC: dựng file .xlsx NGAY TRÊN SERVER từ dữ liệu ĐÃ CÓ SẴN trong CSDL (dùng CHUNG
+// buildKkInventoryByDept() với GET /system-inventory ở trên) — client CHỈ cần GET route này, không còn
+// phải tự dựng/tải lên bất kỳ payload JSON lớn nào nữa; file .xlsx nhị phân trả về cũng nhỏ hơn nhiều so
+// với JSON tương đương (nén tốt hơn), nên vừa nhanh vừa an toàn trên mạng yếu.
+router.get('/system-inventory/export-xlsx', async (req, res) => {
+  if (!requireKiemKeModuleAccess(req, res)) return;
+  if (!canViewKkInventory(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền xem Tồn Kho Hệ Thống ở Kiểm Kê' });
+  }
+  try {
+    if (!(await isInventoryApiConfigured())) {
+      return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
+    }
+    const byDept = await buildKkInventoryByDept(req.freshUser);
+    const depts = Object.keys(byDept).sort((a, b) => a.localeCompare(b, 'vi'));
+    if (!depts.length) {
+      return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho để xuất — bấm "🔄 Đồng Bộ" trước.' });
+    }
+    const columns = [
+      { header: 'Mã Hàng', key: 'maHang', width: 16 },
+      { header: 'Mã Vạch', key: 'maVach', width: 18 },
+      { header: 'Tên Hàng', key: 'tenHang', width: 34 },
+      { header: 'Tồn Kho', key: 'soLuongTon', width: 12 }
+    ];
+    const sheets = depts.map(dept => {
+      const rows = (byDept[dept].rows || [])
+        .slice()
+        .sort((a, b) => String(a.maHang).localeCompare(String(b.maHang)))
+        .map(r => ({ maHang: r.maHang || '', maVach: r.maVach || '', tenHang: r.tenHang || '', soLuongTon: Number(r.soLuongTon) || 0 }));
+      return { sheetName: dept, columns, rows };
+    });
+    const wb = buildMultiSheetWorkbook(sheets);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="TonKhoHeThong_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/stocktake/system-inventory/export-xlsx');
   }
 });
 

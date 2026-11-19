@@ -55,22 +55,23 @@ async function main() {
     await page.waitForTimeout(300);
     // LỖI THẬT đã vá (12/2026, "Aw, Snap!" crash trên mobile — xem renderKkInventoryStoreCard(),
     // module-vanhanh.js): tab này KHÔNG còn dựng bảng chi tiết (cột Mã Vạch/Mã Hàng/Tên Hàng) nữa, chỉ
-    // hiện SỐ LƯỢNG mã hàng — cột Mã Vạch của Tồn Kho giờ kiểm qua payload "📥 Xuất Excel"
-    // (exportKkInventoryExcel()) thay vì DOM, các tab Kiểm Đếm/Kiểm Soát/Gom Mã/Báo Cáo KHÔNG đổi gì.
-    await run.run('Tab "📦 Tồn Kho": KHÔNG còn bảng chi tiết trong DOM (tránh crash mobile) — "📥 Xuất Excel" vẫn xuất đúng cột Mã Vạch', async () => {
+    // hiện SỐ LƯỢNG mã hàng — cột Mã Vạch của Tồn Kho giờ xuất qua route server-side MỚI
+    // GET /api/stocktake/system-inventory/export-xlsx (SỬA LỖI "Failed to fetch" khi xuất quy mô thật,
+    // xem routes/stocktake.js) thay vì payload JSON ở trình duyệt — cột "Mã Vạch" có đúng mặt trong file
+    // .xlsx thật đã kiểm riêng ở tests/test-stocktake-system-inventory-tab.js (parse lại bằng ExcelJS),
+    // ở đây chỉ cần xác nhận ĐÚNG route được gọi + DOM không còn hiện chi tiết.
+    await run.run('Tab "📦 Tồn Kho": KHÔNG còn bảng chi tiết trong DOM (tránh crash mobile) — "📥 Xuất Excel" gọi đúng route server-side mới', async () => {
       const bodyText = await page.evaluate(() => document.getElementById('kkInventoryStoresBody')?.textContent || '');
       assert(!bodyText.includes('8934000000001'), 'KHÔNG được còn hiện chi tiết mã vạch trong DOM (đã bỏ bảng chi tiết)');
       const captured = await page.evaluate(() => {
-        const orig = window.downloadMultiSheetXlsxFromServer;
+        const orig = window.downloadFileFromServerGet;
         let out = null;
-        window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { out = sheets; };
+        window.downloadFileFromServerGet = (url, fallbackName) => { out = url; };
         exportKkInventoryExcel();
-        window.downloadMultiSheetXlsxFromServer = orig;
+        window.downloadFileFromServerGet = orig;
         return out;
       });
-      const col = captured[0].columns.find(c => c.header === 'Mã Vạch');
-      assert(!!col, 'Payload Xuất Excel phải có cột "Mã Vạch"');
-      assert(captured[0].rows.some(r => r.maVach === '8934000000001'), 'Payload Xuất Excel phải có đúng giá trị mã vạch SP001');
+      assertEqual(captured, '/api/stocktake/system-inventory/export-xlsx', '"📥 Xuất Excel" phải gọi đúng route export-xlsx mới');
     });
 
     await page.click('#btnKkSubKiemDem');

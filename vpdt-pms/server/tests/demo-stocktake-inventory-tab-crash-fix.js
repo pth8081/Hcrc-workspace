@@ -72,18 +72,22 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, '2-cuon-xuong-thay-tung-the-sieu-thi.png'), fullPage: false });
     console.log('📸 2-cuon-xuong-thay-tung-the-sieu-thi.png');
 
-    // "📥 Xuất Excel" — xác nhận dữ liệu chi tiết VẪN xuất đủ dù không còn hiện trong DOM.
+    // "📥 Xuất Excel" (12/2026, SỬA LỖI THẬT PRODUCTION "Failed to fetch" khi xuất với quy mô thật —
+    // xem routes/stocktake.js GET /system-inventory/export-xlsx) — không còn đóng gói payload JSON ở
+    // trình duyệt nữa, chỉ cần gọi ĐÚNG route GET mới qua downloadFileFromServerGet(); server tự dựng
+    // file .xlsx từ dữ liệu đã có sẵn trong CSDL, xác nhận route thật ở tests/test-stocktake-system-
+    // inventory-tab.js (parse lại file .xlsx bằng ExcelJS) — ở demo này chỉ cần xác nhận ĐÚNG hàm/route
+    // được gọi, không crash DOM dù dữ liệu quy mô 35 siêu thị × 2000 dòng.
     const captured = await page.evaluate(() => {
-      const orig = window.downloadMultiSheetXlsxFromServer;
+      const orig = window.downloadFileFromServerGet;
       let out = null;
-      window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { out = { fileName, sheetCount: sheets.length, firstSheetRows: sheets[0].rows.length }; };
+      window.downloadFileFromServerGet = (url, fallbackName) => { out = { url, fallbackName }; };
       exportKkInventoryExcel();
-      window.downloadMultiSheetXlsxFromServer = orig;
+      window.downloadFileFromServerGet = orig;
       return out;
     });
-    assert.strictEqual(captured.sheetCount, 35, 'Xuất Excel phải có đủ 35 sheet (1/siêu thị)');
-    assert.strictEqual(captured.firstSheetRows, ROWS_PER_STORE, `Mỗi sheet phải có đủ ${ROWS_PER_STORE} dòng chi tiết (không mất dữ liệu dù đã bỏ bảng khỏi màn hình)`);
-    console.log(`✅ "📥 Xuất Excel" vẫn xuất đủ ${captured.sheetCount} sheet × ${captured.firstSheetRows} dòng/sheet — KHÔNG mất dữ liệu chi tiết.`);
+    assert.strictEqual(captured.url, '/api/stocktake/system-inventory/export-xlsx', 'Xuất Excel phải gọi đúng route export-xlsx mới');
+    console.log(`✅ "📥 Xuất Excel" gọi đúng route server-side mới (${captured.url}) — không còn đóng gói payload JSON khổng lồ ở trình duyệt, không còn rủi ro "Failed to fetch" với dữ liệu quy mô thật (35 siêu thị × ${ROWS_PER_STORE} dòng/siêu thị).`);
 
     await page.evaluate(() => document.getElementById('btnKkInventoryExport').scrollIntoView({ block: 'center' }));
     await page.waitForTimeout(100);

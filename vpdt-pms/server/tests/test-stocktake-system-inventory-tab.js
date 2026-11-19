@@ -122,8 +122,8 @@ let syncCallCount = 0;
 const FAKE_SNAPSHOT = {
   '101': {
     rows: [
-      { maHang: 'SP001', tenHang: 'Hàng 1', soLuongTon: 30 },
-      { maHang: 'SP001', tenHang: 'Hàng 1', soLuongTon: 20 },
+      { maHang: 'SP001', maVach: '8934000000001', tenHang: 'Hàng 1', soLuongTon: 30 },
+      { maHang: 'SP001', maVach: '8934000000001', tenHang: 'Hàng 1', soLuongTon: 20 },
       { maHang: 'SP002', tenHang: 'Hàng 2', soLuongTon: 15 }
     ],
     capNhatLuc: '10:00 01/12/2026', fetchedAt: '2026-12-01T03:00:00.000Z'
@@ -174,6 +174,24 @@ function request(port, method, urlPath, username) {
       let raw = '';
       res.on('data', (c) => (raw += c));
       res.on('end', () => { let json; try { json = JSON.parse(raw); } catch (e) { json = raw; } resolve({ status: res.statusCode, body: json }); });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// requestBuffer() — NHƯ request() nhưng giữ đúng BYTE NHỊ PHÂN (không ép qua chuỗi/JSON) — dùng riêng
+// cho GET /system-inventory/export-xlsx (trả về file .xlsx thật, cần parse lại bằng ExcelJS để kiểm nội
+// dung, không thể JSON.parse như các route khác).
+function requestBuffer(port, urlPath, username) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: '127.0.0.1', port, path: urlPath, method: 'GET',
+      headers: { ...(username ? { 'X-Test-Username': username } : {}) }
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, buffer: Buffer.concat(chunks) }));
     });
     req.on('error', reject);
     req.end();
@@ -268,6 +286,55 @@ function request(port, method, urlPath, username) {
     const invViewReportDepts = Object.keys(invViewReportRes.body.byDept || {}).sort();
     check('Có CẢ kiemKeInventoryView LẪN kiemKeReportView: qua cửa quyền VÀ scope bypass thấy TẤT CẢ siêu thị',
       invViewReportRes.status === 200 && JSON.stringify(invViewReportDepts) === JSON.stringify([DEPT1, DEPT2].sort()), invViewReportDepts);
+
+    // ===== 4. GET /api/stocktake/system-inventory/export-xlsx — LỖI THẬT PRODUCTION đã vá (12/2026,
+    // người dùng báo "xuất Excel tồn kho không xuất được", lỗi thật "Failed to fetch" vì bản CŨ POST
+    // nguyên payload JSON khổng lồ lên /api/admin/export-xlsx) — route MỚI dựng file .xlsx NGAY TRÊN
+    // SERVER, không nhận bất kỳ payload nào từ client, cùng cửa quyền/phạm vi y hệt GET /system-inventory
+    // ở trên (dùng chung buildKkInventoryByDept()) =====
+    const exportNoAuth = await request(port, 'GET', '/api/stocktake/system-inventory/export-xlsx', null);
+    check('Export: chưa đăng nhập -> 401', exportNoAuth.status === 401, exportNoAuth);
+
+    const exportPlainRes = await request(port, 'GET', '/api/stocktake/system-inventory/export-xlsx', 'plain');
+    check('Export: không có quyền kiemKeInventoryView -> 403', exportPlainRes.status === 403, exportPlainRes);
+
+    inventoryApiConfigured = false;
+    const exportNotConfigured = await request(port, 'GET', '/api/stocktake/system-inventory/export-xlsx', 'admin');
+    check('Export: chưa cấu hình API Tồn Kho đối tác -> 503', exportNotConfigured.status === 503, exportNotConfigured);
+    inventoryApiConfigured = true;
+
+    const exportAdminRes = await requestBuffer(port, '/api/stocktake/system-inventory/export-xlsx', 'admin');
+    check('Export (admin): 200 OK', exportAdminRes.status === 200, exportAdminRes.status);
+    check('Export (admin): đúng Content-Type xlsx',
+      exportAdminRes.headers['content-type'] === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', exportAdminRes.headers['content-type']);
+    check('Export (admin): Content-Disposition có tên file đúng khuôn TonKhoHeThong_YYYY-MM-DD.xlsx',
+      /attachment; filename="TonKhoHeThong_\d{4}-\d{2}-\d{2}\.xlsx"/.test(exportAdminRes.headers['content-disposition'] || ''), exportAdminRes.headers['content-disposition']);
+
+    const ExcelJS = require('exceljs');
+    const wbAdmin = new ExcelJS.Workbook();
+    await wbAdmin.xlsx.load(exportAdminRes.buffer);
+    const sheetNamesAdmin = wbAdmin.worksheets.map(ws => ws.name).sort();
+    check('Export (admin): đúng 2 sheet (1 sheet/siêu thị), khớp byDept đã kiểm ở route GET trên',
+      JSON.stringify(sheetNamesAdmin) === JSON.stringify([DEPT1, DEPT2].sort()), sheetNamesAdmin);
+    const sheetDept1 = wbAdmin.getWorksheet(DEPT1);
+    // Dòng 1 = header -> dòng dữ liệu đầu tiên ở row 2. Phải thấy đúng mã hàng đã GỘP (SP001, tổng 50).
+    const dept1DataRows = [];
+    sheetDept1.eachRow((row, rowNumber) => { if (rowNumber > 1) dept1DataRows.push(row.values.slice(1)); });
+    check('Export (admin): sheet DEPT1 có đúng 2 dòng dữ liệu (SP001 đã gộp + SP002)', dept1DataRows.length === 2, dept1DataRows);
+    const sp001Row = dept1DataRows.find(r => r[0] === 'SP001');
+    check('Export (admin): dòng SP001 trong file .xlsx có tổng số lượng ĐÃ GỘP = 50', sp001Row && sp001Row[3] === 50, sp001Row);
+    // "2 cột mã" (theo yêu cầu TRỰC TIẾP người dùng, xem tests/test-stocktake-mavach-columns.js) — cột
+    // Mã Vạch phải có mặt ĐÚNG VỊ TRÍ (cột 2, sau Mã Hàng) trong file .xlsx thật, không chỉ ở payload
+    // JSON cũ (đã đổi hẳn sang route server-side này).
+    check('Export (admin): cột "Mã Vạch" đúng header + đúng giá trị SP001 (8934000000001)',
+      sheetDept1.getRow(1).getCell(2).value === 'Mã Vạch' && sp001Row && sp001Row[1] === '8934000000001', sp001Row);
+
+    const exportInvViewRes = await requestBuffer(port, '/api/stocktake/system-inventory/export-xlsx', 'invView');
+    check('Export (invView, chỉ xem DEPT1): 200 OK', exportInvViewRes.status === 200, exportInvViewRes.status);
+    const wbInvView = new ExcelJS.Workbook();
+    await wbInvView.xlsx.load(exportInvViewRes.buffer);
+    check('Export (invView): CHỈ 1 sheet (đúng phạm vi hồ sơ, không rò rỉ DEPT2)',
+      wbInvView.worksheets.length === 1 && wbInvView.worksheets[0].name === DEPT1, wbInvView.worksheets.map(ws => ws.name));
   } finally {
     server.close();
   }

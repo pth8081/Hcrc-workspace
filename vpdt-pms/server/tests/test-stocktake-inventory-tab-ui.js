@@ -115,28 +115,24 @@ async function main() {
       assert(text.includes('Quận 1'), 'Vẫn phải còn hiện DEPT1');
     });
 
-    // "📥 Xuất Excel" (MỚI, 12/2026, theo yêu cầu người dùng "cho tôi xuất ra Excel hàng tồn của TẤT CẢ
-    // các siêu thị một lần xuất, mỗi siêu thị 1 sheet") — xuất THẲNG từ kkInventoryByDept đã có sẵn
-    // trong bộ nhớ (không gọi lại /system-inventory), dùng CHUNG downloadMultiSheetXlsxFromServer() —
-    // stub lại hàm đó để bắt payload thay vì thật sự tải file.
-    await run.run('Bấm "📥 Xuất Excel" -> gọi downloadMultiSheetXlsxFromServer() với ĐỦ cả DEPT1 (có dữ liệu) VÀ DEPT2 (0 dòng, vẫn có sheet riêng)', async () => {
+    // "📥 Xuất Excel" — LỖI THẬT PRODUCTION đã vá (12/2026, người dùng báo "không xuất được", lỗi thật
+    // "Failed to fetch" vì payload JSON POST quá lớn với dữ liệu thật nhiều siêu thị) — SỬA sang gọi
+    // THẲNG route GET /api/stocktake/system-inventory/export-xlsx (server tự dựng file .xlsx, không còn
+    // đóng gói/tải lên payload nào từ client nữa) qua downloadFileFromServerGet() — stub lại hàm đó để
+    // bắt URL/filename thay vì thật sự tải file (route thật đã kiểm riêng ở
+    // tests/test-stocktake-system-inventory-tab.js).
+    await run.run('Bấm "📥 Xuất Excel" -> gọi downloadFileFromServerGet() với đúng URL route export-xlsx mới', async () => {
       const captured = await page.evaluate(() => {
-        const orig = window.downloadMultiSheetXlsxFromServer;
+        const orig = window.downloadFileFromServerGet;
         let out = null;
-        window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { out = { fileName, sheets }; };
+        window.downloadFileFromServerGet = (url, fallbackName) => { out = { url, fallbackName }; };
         exportKkInventoryExcel();
-        window.downloadMultiSheetXlsxFromServer = orig;
+        window.downloadFileFromServerGet = orig;
         return out;
       });
-      assert(!!captured, 'Phải gọi downloadMultiSheetXlsxFromServer()');
-      assertEqual(captured.sheets.length, 2, 'Phải có 2 sheet (1 sheet/siêu thị), kể cả siêu thị 0 dòng');
-      const sheet1 = captured.sheets.find(s => s.sheetName === 'Siêu thị Quận 1');
-      assert(!!sheet1, 'Phải có sheet đúng tên "Siêu thị Quận 1"');
-      assertEqual(sheet1.rows.length, 1, 'Sheet DEPT1 phải có đúng 1 dòng (SP001)');
-      assertEqual(sheet1.rows[0].maHang, 'SP001', 'Dòng xuất phải đúng maHang');
-      const sheet2 = captured.sheets.find(s => s.sheetName === 'Siêu thị Quận 2');
-      assert(!!sheet2, 'Phải có sheet đúng tên "Siêu thị Quận 2" dù chưa đồng bộ');
-      assertEqual(sheet2.rows.length, 0, 'Sheet DEPT2 (chưa đồng bộ) phải là sheet rỗng, không lỗi');
+      assert(!!captured, 'Phải gọi downloadFileFromServerGet()');
+      assertEqual(captured.url, '/api/stocktake/system-inventory/export-xlsx', 'Phải gọi đúng route export-xlsx mới');
+      assert(/^TonKhoHeThong_\d{4}-\d{2}-\d{2}\.xlsx$/.test(captured.fallbackName), `Tên file phải đúng khuôn TonKhoHeThong_YYYY-MM-DD.xlsx, thực tế: ${captured.fallbackName}`);
     });
 
     // Cache-first, KHÔNG tự gọi mạng (MỚI, 12/2026, 2 đợt — ban đầu "tôi phải lấy được dữ liệu từ cơ sở dữ
