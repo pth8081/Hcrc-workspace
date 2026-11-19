@@ -337,6 +337,19 @@ const DEDICATED_TABLES = {
       Code: { sqlType: () => sql.NVarChar(100), extract: r => r.code || null }
     }
   },
+  // dsmartWholesalePriceEntries (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026) — xem chú thích đầy đủ ở
+  // sql/schema.sql ngay trên CREATE TABLE dbo.DsmartWholesalePriceEntries + routes/dsmartWholesalePrice.js.
+  // Mirror nội bộ cho từng dòng giá ĐÃ GHI qua tính năng này vào CSDL BÊN NGOÀI (DSmart16 Trung Tâm, bảng
+  // CSPRICE) — status ACTIVE/DELETED theo dõi đúng trạng thái dòng đó TRÊN DSMART (không phải chỉ ẩn/hiện
+  // phía app), lịch sử thao tác nằm ngay trong Payload (mảng history), không cần bảng audit riêng.
+  dsmartWholesalePriceEntries: {
+    table: 'DsmartWholesalePriceEntries', hasCode: false,
+    columns: {
+      CustId: { sqlType: () => sql.NVarChar(50), extract: r => r.custId || null },
+      SkuId:  { sqlType: () => sql.NVarChar(50), extract: r => r.skuId || null },
+      Status: { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
   checklistSubmissions: {
     table: 'ChecklistSubmissions', hasCode: false,
     columns: {

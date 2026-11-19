@@ -239,6 +239,7 @@ function collectPermsFromForm() {
     itManage: document.getElementById('pItManage').checked,
     itPriceSupport: document.getElementById('pItPriceSupport').checked,
     itServiceRenewalManage: document.getElementById('pItServiceRenewalManage').checked,
+    itSupportPriceWriteDsmart: document.getElementById('pItSupportPriceWriteDsmart').checked,
     itPriceEmergencyRejectApproveWholesale: document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked,
     itPriceEmergencyRejectApproveRetail: document.getElementById('pItPriceEmergencyRejectApproveRetail').checked,
     // itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú
@@ -437,6 +438,7 @@ function populatePermsForm(permsInput, targetDept) {
   document.getElementById('pItManage').checked = !!perms.itManage;
   document.getElementById('pItPriceSupport').checked = !!perms.itPriceSupport;
   document.getElementById('pItServiceRenewalManage').checked = !!perms.itServiceRenewalManage;
+  document.getElementById('pItSupportPriceWriteDsmart').checked = !!perms.itSupportPriceWriteDsmart;
   document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!perms.itPriceEmergencyRejectApproveWholesale;
   document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!perms.itPriceEmergencyRejectApproveRetail;
   document.getElementById('pItPriceAllowSelfApproveWholesale').checked = !!perms.itPriceAllowSelfApproveWholesale;

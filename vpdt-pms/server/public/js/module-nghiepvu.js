@@ -65,6 +65,7 @@ const NGHIEP_VU_NAV = [
   { group: 'Hỗ Trợ IT', items: [
     { key: 'itSupport', icon: '🎫', label: 'Hỗ Trợ Yêu Cầu (Ticket)' },
     { key: 'itPriceApproval', icon: '🏷️', label: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)' },
+    { key: 'itDsmartPrice', icon: '💰', label: 'Cài Đặt Giá Bán Buôn (DSmart)' },
   ]},
   { group: 'Mua Hàng', items: [
     { key: 'muaHang', icon: '🔗', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
@@ -1524,6 +1525,39 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cây phân quyền (10/2026)', text: 'trước đây 3 quyền gộp — nay tách 7 quyền riêng: Đề xuất Bán Buôn/Bán Lẻ tách 2 cờ (itPriceProposeCreateWholesale/Retail — ai chỉ phụ trách 1 loại chỉ đề xuất đúng loại đó); "Đội Hỗ Trợ IT" (itManage) giờ CHỈ còn xử lý ticket "Hỗ Trợ Yêu Cầu", KHÔNG còn tự động áp giá/xem hết Phê Duyệt Giá; áp giá sau khi duyệt + xem toàn bộ hồ sơ Phê Duyệt Giá chuyển sang quyền riêng itPriceSupport (vẫn gộp chung Bán Buôn/Bán Lẻ); Gia Hạn Dịch Vụ CNTT chuyển sang quyền riêng itServiceRenewalManage; Từ chối khẩn cấp tách 2 cờ theo đúng loại giá (itPriceEmergencyRejectApproveWholesale/Retail). Việc DUYỆT thật sự (bước "Duyệt" ở sơ đồ trên) không đổi — vẫn theo cấu hình phòng ban/mức Margin-Chiết Khấu ở "Hệ Thống → Quy Trình & Phê Duyệt".' },
       { label: 'Nhắc hạn tự động khi treo lâu (9/2026)', text: 'Yêu Cầu Bổ Sung chưa được người đề xuất phản hồi, hoặc Từ Chối Khẩn Cấp chưa được người có quyền xử lý — treo quá 2 ngày sẽ tự động gửi email nhắc (job chạy mỗi 24h), mỗi yêu cầu chỉ nhắc đúng 1 lần.' },
       { label: 'Mẫu Giá tách riêng theo Bán Lẻ/Bán Buôn (10/2026)', text: 'mỗi Mẫu Giá (khuôn cột) giờ gắn cố định với đúng 1 kênh (Bán Lẻ hoặc Bán Buôn) — màn "Sửa Bán Lẻ"/"Sửa Bán Buôn" chỉ liệt kê/cho chọn đúng mẫu của kênh đang sửa, xoá 1 mẫu ở kênh này KHÔNG còn ảnh hưởng gì tới mẫu của kênh kia (trước đây dùng chung 1 danh sách, xoá nhầm mẫu bên này làm mất luôn đối chiếu cột của bên kia). Mẫu tạo TRƯỚC đợt này (chưa gắn kênh) vẫn hiện ở CẢ 2 kênh như cũ — không mất dữ liệu cũ, chỉ mẫu tạo MỚI mới bắt buộc theo đúng kênh đang thao tác.' },
+    ] },
+  },
+  // itDsmartPrice (12/2026): tính năng GHI THẲNG vào CSDL sản xuất BÊN NGOÀI (DSmart16 Trung Tâm, bảng
+  // CSPRICE) — lần ĐẦU TIÊN toàn hệ thống có tính năng ghi trực tiếp SQL vào hệ thống ngoài (mọi tích hợp
+  // DSmart/BRGMART trước đây chỉ qua HTTP API). CSPRICE là bảng LỊCH SỬ GIÁ THEO THỜI GIAN — mỗi lần nộp
+  // giá mới là 1 dòng INSERT MỚI (không UPDATE đè), DSmart tự chọn giá đang hiệu lực theo FR_DATE/TO_DATE
+  // của từng dòng. Phạm vi "quản lý" ở màn này CHỈ tính các dòng đã nộp QUA ĐÚNG màn này (không quét dữ
+  // liệu CSPRICE có từ trước).
+  itDsmartPrice: {
+    icon: '💰', title: 'Cài Đặt Giá Bán Buôn (DSmart)', badge: 'Hỗ Trợ IT',
+    desc: 'Ghi giá bán buôn TRỰC TIẾP vào bảng CSPRICE của hệ thống DSmart16 Trung Tâm (POS/ERP bán lẻ, bên ngoài) — khác hẳn "Phê Duyệt Giá Bán (Bán Buôn)" ở mục trên (đó là quy trình ĐỀ XUẤT + DUYỆT nội bộ, chưa đụng tới DSmart; màn này là bước THỰC THI SAU CÙNG, ghi thẳng giá đã duyệt vào hệ thống bán hàng thật). CSPRICE lưu LỊCH SỬ giá theo thời gian — không có khái niệm "sửa đè 1 dòng duy nhất cho 1 khách+sản phẩm", mỗi lần đổi giá là 1 dòng mới, DSmart tự áp dụng đúng dòng theo ngày hiệu lực.',
+    flow: { ariaLabel: 'Quy trình Cài Đặt Giá Bán Buôn (DSmart)', chain: [
+      { label: 'Tải lên Excel', sub: '5 cột: Mã Khách B2B/Mã SP/Giá/Ngày BĐ/Ngày KT' },
+      { label: 'Xem trước', sub: 'Kiểm tra dữ liệu trước khi ghi' },
+      { label: 'Áp dụng → INSERT', sub: 'Ghi dòng MỚI vào CSPRICE (DSmart thật)' },
+      { label: 'Theo dõi / Sửa / Xoá', sub: 'Quản Lý Giá Đã Hết Hạn', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Đội Hỗ Trợ IT (quyền itSupportPriceWriteDsmart)', text: 'vào <b>🖥️ Hỗ Trợ IT</b> (sidebar) → tab <b>"💰 Cài Đặt Giá Bán Buôn"</b> → mục <b>"➕ Thêm Giá Mới"</b> → tải lên tệp Excel ĐÚNG 5 cột (Mã Khách B2B, Mã Sản Phẩm, Giá Sản Phẩm, Ngày Bắt Đầu, Ngày Kết Thúc — tải mẫu có sẵn nếu cần) → xem bảng xem trước → bấm <b>"Áp Dụng"</b> (ghi thẳng dòng mới vào CSPRICE thật, không hoàn tác được qua app).' },
+      { role: 'Đội Hỗ Trợ IT', text: 'giá đang áp dụng mà CHƯA hết hạn/chưa xoá, cần đổi giá: mở <b>"✏️ Sửa"</b> ngay tại dòng đó (mục "🗂️ Quản Lý Giá Đã Hết Hạn") — hệ thống UPDATE đúng dòng CSPRICE đó theo Id, có cảnh báo riêng nếu giá đang SỐNG (áp dụng ngay lúc thao tác).' },
+      { role: 'Đội Hỗ Trợ IT', text: 'xoá giá đã hết hạn: tick chọn các dòng đã hết hạn → bấm <b>"🗑️ Xoá"</b> (xoá thật khỏi CSPRICE, không hoàn tác — app chỉ còn đánh dấu "Đã xoá" để tra lịch sử) — hoặc bật <b>"🔁 Tự Động Xoá Khi Hết Hạn"</b> để hệ thống tự xoá vào đúng giờ:phút cấu hình (mặc định 23:00) cùng ngày hết hạn, không cần tự tay xoá từng dòng.' },
+      { role: 'Đội Hỗ Trợ IT', text: 'muốn áp lại giá cho đúng khách+sản phẩm đã từng xoá: từ mục "🗂️ Quản Lý Giá Đã Hết Hạn" hoặc "📜 Lịch Sử Thao Tác", tìm đúng dòng đã xoá → bấm <b>"↩️ Dùng Lại"</b> → form điền sẵn khách/sản phẩm/giá cũ (chỉ cần nhập lại Ngày Bắt Đầu/Kết Thúc mới) → Áp Dụng ghi dòng HOÀN TOÀN MỚI (không đụng tới dòng cũ đã mất khỏi DSmart từ lúc xoá).' },
+      { role: 'Quản trị viên (1 lần, trước khi dùng thật)', text: 'vào <b>"⚙️ Cấu Hình Kết Nối"</b> (modal trong cùng tab) → khai báo host/port/tên CSDL/tài khoản/mật khẩu kết nối tới SQL Server của DSmart16 Trung Tâm → Lưu. Chưa cấu hình thì mọi thao tác Áp Dụng/Sửa/Xoá/Dùng Lại đều báo lỗi rõ ràng, không ghi được gì.' },
+    ],
+    footer: { left: [
+      { label: 'CSPRICE là bảng LỊCH SỬ, không phải 1-dòng-1-cặp-khách-sản-phẩm', text: 'mọi lần đổi giá đều INSERT dòng mới (Id tự tăng) — DSmart tự chọn dòng đang hiệu lực theo FR_DATE/TO_DATE, hệ thống này KHÔNG can thiệp vào cách DSmart chọn.' },
+      { label: 'Phạm vi quản lý: CHỈ dòng nộp qua màn này', text: 'dữ liệu CSPRICE có từ trước (nộp bằng cách khác, VD nhập tay trực tiếp trên DSmart) KHÔNG hiện ở "Quản Lý Giá Đã Hết Hạn"/"Lịch Sử Thao Tác" — màn này chỉ theo dõi đúng những dòng do chính nó tạo ra.' },
+      { label: '"Sửa" = UPDATE, "Dùng Lại" = INSERT mới', text: 'Sửa áp dụng cho dòng CHƯA xoá (update đúng Id); Dùng Lại chỉ xuất hiện cho dòng ĐÃ xoá (không còn tồn tại ở DSmart để update) — luôn tạo dòng Id mới, không trùng/đụng dòng cũ.' },
+    ], right: [
+      { label: 'Xoá là TRỰC TIẾP và KHÔNG hoàn tác', text: 'bấm Xoá (tay hoặc tự động) là xoá thật khỏi CSPRICE ngay lúc đó — ứng dụng chỉ giữ lại bản ghi "Đã xoá" ở phía mình để tra lịch sử/Dùng Lại, không phục hồi được dòng gốc trên DSmart.' },
+      { label: 'Tự Động Xoá Khi Hết Hạn', text: 'công tắc BẬT/TẮT riêng + giờ:phút xoá tuỳ chỉnh (mặc định 23:00 cùng ngày Ngày Kết Thúc) — job chạy ngầm quét định kỳ, không cần ai tự tay bấm Xoá mỗi ngày.' },
+      { label: 'Cấu hình kết nối tách riêng, không qua AppData chung', text: 'host/mật khẩu DSmart lưu ở bảng riêng (dbo.DsmartPriceDbConfig), KHÔNG đi qua API cấu hình chung của hệ thống — tránh rủi ro lộ mật khẩu qua các API đọc cấu hình dùng chung.' },
+      { label: 'Rủi ro còn lại cần lưu ý khi dùng thật lần đầu', text: 'ngoài 5 cột đã xác nhận (CUST_ID/SKU_ID/WSPRICE/FR_DATE/TO_DATE), các ràng buộc khác của bảng CSPRICE thật (VD cột bắt buộc khác, kiểu dữ liệu chính xác) chưa kiểm được trực tiếp trên DSmart — nên thử với vài dòng nhỏ trước khi áp dụng số lượng lớn.' },
     ] },
   },
   muaHang: {

@@ -1725,5 +1725,58 @@ BEGIN
 END
 GO
 
+/* DsmartPriceDbConfig (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026) — thông tin kết nối CSDL BÊN NGOÀI
+   (DSmart16 Trung Tâm: host/port/database/user + mật khẩu MÃ HOÁ) do admin tự nhập qua màn Cấu Hình
+   riêng (lib/dsmartPriceConfigStore.js + routes/dsmartWholesalePrice.js). CỐ Ý đặt bảng RIÊNG, TÁCH HẲN
+   khỏi dbo.AppData (không đi qua getAppDataValue/setAppDataValue) — GET /api/data (routes/data.js) trả
+   NGUYÊN VẸN spread toàn bộ dbo.AppData cho MỌI tài khoản đã đăng nhập (chỉ sanitize từng key CỤ THỂ đã
+   biết trước, xem sanitizeInventoryApiConfig() làm mẫu) — nếu lỡ lưu config CÓ MẬT KHẨU này vào AppData
+   mà QUÊN thêm dòng sanitize tương ứng, mật khẩu mã hoá (dù đã mã hoá) + địa chỉ hạ tầng nội bộ sẽ lộ ra
+   MỌI người dùng qua GET /api/data. Bảng riêng này KHÔNG được bất kỳ route/hàm nào khác đọc tới — chỉ
+   lib/dsmartPriceConfigStore.js, loại bỏ hẳn rủi ro quên sanitize ở trên. Luôn đúng 1 dòng (Id=1). */
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DsmartPriceDbConfig (
+        Id                BIGINT         NOT NULL CONSTRAINT PK_DsmartPriceDbConfig PRIMARY KEY,
+        UpdatedAt         DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedBy         NVARCHAR(100)  NULL,
+        Host              NVARCHAR(255)  NULL,
+        Port              INT            NULL,
+        DatabaseName      NVARCHAR(100)  NULL,
+        DbUser            NVARCHAR(100)  NULL,
+        PasswordEnc       NVARCHAR(500)  NULL,
+        AutoDeleteEnabled BIT            NOT NULL DEFAULT 0,
+        AutoDeleteHour    INT            NOT NULL DEFAULT 23,
+        AutoDeleteMinute  INT            NOT NULL DEFAULT 0
+    );
+END
+GO
+
+/* DsmartWholesalePriceEntries (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026) — bảng MIRROR nội bộ,
+   theo dõi các dòng giá bán buôn ĐÃ GHI qua tính năng này vào bảng CSPRICE của hệ thống DSmart16 Trung
+   Tâm (CSDL BÊN NGOÀI, kết nối riêng qua lib/dsmartSqlClient.js, KHÔNG phải CSDL app này — xem chú thích
+   đầy đủ ở routes/dsmartWholesalePrice.js). CSPRICE là bảng LỊCH SỬ GIÁ THEO THỜI GIAN (nhiều dòng/1 cặp
+   khách-hàng+sản phẩm, phân biệt bởi FR_DATE/TO_DATE) — mỗi dòng ở đây ứng với ĐÚNG 1 dòng thật trong
+   CSPRICE (DsmartId = cột ID tự tăng của CSPRICE, người dùng xác nhận CSPRICE CÓ cột này). Phạm vi quản
+   lý CHỈ gồm dữ liệu TỰ NỘP qua chính tính năng này (người dùng xác nhận rõ) — KHÔNG quét/đồng bộ dữ
+   liệu có sẵn trong CSPRICE từ trước.
+   Status: 'ACTIVE' (còn tồn tại thật trong CSPRICE) | 'DELETED' (đã xoá thật khỏi CSPRICE qua tính năng
+   này — xoá tay hoặc tự động). Payload lưu đầy đủ lịch sử thao tác (mảng history) ngay trong bản ghi —
+   không cần bảng audit log riêng, màn "Lịch Sử Thao Tác" đọc GỘP (flatten) history của toàn bộ bản ghi. */
+IF OBJECT_ID('dbo.DsmartWholesalePriceEntries', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DsmartWholesalePriceEntries (
+        Id         BIGINT         NOT NULL CONSTRAINT PK_DsmartWholesalePriceEntries PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        CustId     NVARCHAR(50)   NOT NULL,
+        SkuId      NVARCHAR(50)   NOT NULL,
+        Status     NVARCHAR(20)   NOT NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_DsmartWholesalePriceEntries_Cust_Sku ON dbo.DsmartWholesalePriceEntries (CustId, SkuId);
+    CREATE INDEX IX_DsmartWholesalePriceEntries_Status ON dbo.DsmartWholesalePriceEntries (Status);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

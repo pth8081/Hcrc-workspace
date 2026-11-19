@@ -1,0 +1,83 @@
+// jobs/dsmartAutoDeleteExpiredPrices.js — "🔁 Tự động xoá khi hết hạn" (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán
+// Buôn", 12/2026, theo yêu cầu người dùng: "cứ cái nào hết hạn nó tự động xóa và sẽ xóa vào 23 giờ cùng
+// ngày hết hạn. Hoặc cho phép tôi set cái thời gian xóa cùng ngày hết hạn là bao nhiêu"). Chạy định kỳ
+// (10 phút/lần — đủ sát giờ đã đặt mà không cần job theo phút), với MỖI dòng ACTIVE của
+// dbo.DsmartWholesalePriceEntries có TO_DATE <= hôm nay VÀ đã qua giờ:phút đã cấu hình (nếu TO_DATE =
+// hôm nay) hoặc TO_DATE đã qua từ trước (không cần chờ gì thêm, coi như "đã trễ hạn xoá") — XOÁ THẬT khỏi
+// CSPRICE (dùng chung lib/dsmartSqlClient.js với luồng xoá tay routes/dsmartWholesalePrice.js), đánh dấu
+// local entry DELETED (mode AUTO).
+//
+// AN TOÀN: tắt hẳn (không chạy gì) nếu dsmartPriceDbConfig.autoDeleteEnabled=false (mặc định) hoặc chưa
+// cấu hình kết nối — không bao giờ tự ý bật ngầm. Lỗi xoá 1 dòng (VD mất kết nối DSmart) KHÔNG làm hỏng
+// các dòng khác trong cùng lượt chạy — log cảnh báo rõ ràng, tự thử lại ở lượt chạy kế tiếp (dòng vẫn giữ
+// nguyên ACTIVE nếu xoá thất bại, không đánh dấu DELETED sai).
+const { getRawConfig } = require('../lib/dsmartPriceConfigStore');
+const { deleteWholesalePrice } = require('../lib/dsmartSqlClient');
+const { getAllForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
+const { insertSystemLog } = require('../lib/systemLogStore');
+
+function todayDateOnlyIso(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// dueForAutoDelete(): TO_DATE đã qua hẳn (< hôm nay) -> xoá ngay không chờ gì thêm (đã trễ hạn, không có
+// lý do giữ thêm); TO_DATE = hôm nay -> chỉ xoá khi đã qua đúng giờ:phút đã cấu hình.
+function dueForAutoDelete(entry, now, cfg) {
+  const today = todayDateOnlyIso(now);
+  if (entry.toDate < today) return true;
+  if (entry.toDate > today) return false;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const dueMinutes = (cfg.autoDeleteHour || 0) * 60 + (cfg.autoDeleteMinute || 0);
+  return nowMinutes >= dueMinutes;
+}
+
+async function runDsmartAutoDeleteExpiredPrices() {
+  let cfg;
+  try {
+    cfg = await getRawConfig();
+  } catch (err) {
+    console.error('⛔ jobs/dsmartAutoDeleteExpiredPrices: không đọc được cấu hình —', err.message);
+    return { skipped: true, reason: 'config-read-error' };
+  }
+  if (!cfg || !cfg.autoDeleteEnabled) return { skipped: true, reason: 'disabled' };
+
+  const now = new Date();
+  let entries;
+  try {
+    entries = await getAllForCollection('dsmartWholesalePriceEntries');
+  } catch (err) {
+    console.error('⛔ jobs/dsmartAutoDeleteExpiredPrices: không đọc được danh sách giá —', err.message);
+    return { skipped: true, reason: 'entries-read-error' };
+  }
+
+  const due = entries.filter(e => e.status === 'ACTIVE' && dueForAutoDelete(e, now, cfg));
+  let deletedCount = 0, errorCount = 0;
+  for (const e of due) {
+    try {
+      await deleteWholesalePrice({ dsmartId: e.dsmartId });
+      await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
+        if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
+        const nowIso = now.toISOString();
+        return {
+          ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso,
+          history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso }]
+        };
+      });
+      deletedCount++;
+    } catch (err) {
+      errorCount++;
+      console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (DsmartId=${e.dsmartId}) —`, err.message);
+    }
+  }
+  if (deletedCount || errorCount) {
+    insertSystemLog({
+      username: 'SYSTEM', fullName: 'Hệ thống (tự động)', ipAddress: null, module: 'IT_SUPPORT',
+      actionType: 'AUTO_DELETE_DSMART_PRICE', targetObject: 'dsmartWholesalePriceEntries',
+      description: `Tự động xoá giá bán buôn hết hạn: ${deletedCount} thành công, ${errorCount} lỗi`,
+      status: errorCount && !deletedCount ? 'FAILED' : 'SUCCESS'
+    }).catch(() => {});
+  }
+  return { skipped: false, deletedCount, errorCount, checked: due.length };
+}
+
+module.exports = { runDsmartAutoDeleteExpiredPrices };

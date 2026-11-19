@@ -495,6 +495,7 @@ const PERM_KEY_VN_LABELS = {
   "itPriceProposeCreateWholesale": "Vận Hành — 🏷️ Đề xuất duyệt giá Bán Buôn",
   "itPriceSupport": "Hỗ Trợ IT — 💲 Hỗ trợ giá Bán Buôn/Bán Lẻ (áp giá sau khi duyệt, xem toàn bộ Phê Duyệt Giá)",
   "itServiceRenewalManage": "Hỗ Trợ IT — 🔔 Sử dụng Gia Hạn Dịch Vụ",
+  "itSupportPriceWriteDsmart": "Hỗ Trợ IT — 💰 Cài Đặt Giá Bán Buôn (ghi trực tiếp CSDL DSmart16 Trung Tâm)",
   "kpiFlowConfigManage": "Nhân Sự — 🎯 Cấu Hình Luồng Đánh Giá KPI",
   "licenseApprove": "Giấy Phép — ✔️ Duyệt Giấy Phép (kể cả Gia Hạn/Thu Hồi)",
   "licenseCreate": "Giấy Phép — 📤 Tạo / Tải Lên Giấy Phép",

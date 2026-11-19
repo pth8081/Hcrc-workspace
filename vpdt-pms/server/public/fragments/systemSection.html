@@ -3012,6 +3012,14 @@
               <label class="flex items-center gap-2 text-violet-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItServiceRenewalManage"> 🔔 Sử dụng Gia Hạn Dịch Vụ
               </label>
+              <!-- itSupportPriceWriteDsmart (MỚI, 12/2026) — quyền RIÊNG, HẸP: ghi/sửa/xoá trực tiếp vào
+                   CSDL BÊN NGOÀI (DSmart16 Trung Tâm, bảng CSPRICE) qua tab "💰 Cài Đặt Giá Bán Buôn".
+                   KHÁC HẲN itPriceSupport ở trên (chỉ "áp giá" bằng tick tay xác nhận, không đụng CSDL
+                   ngoài nào) — quyền này cho phép GHI THẬT vào hệ thống bán hàng sản xuất, nên tách riêng
+                   hoàn toàn, không gộp chung với itPriceSupport dù tên nghe gần giống. -->
+              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItSupportPriceWriteDsmart"> 💰 Cài Đặt Giá Bán Buôn (ghi trực tiếp CSDL DSmart16 Trung Tâm)
+              </label>
             </div>
           </div>
         </details>
