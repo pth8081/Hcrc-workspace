@@ -302,6 +302,21 @@ async function openHrContractDetailModal(id) {
   // mở modal trước khi bảng kịp nạp xong (lần đầu vào màn).
   if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();
   document.getElementById('hrcDetailBody').innerHTML = buildHrContractDetailHTML(c);
+  // Loại HĐ (12/2026, thêm khối "✏️ Sửa Thông Tin Hợp Đồng" — xem buildHrContractDetailHTML()) — cùng
+  // khuôn gọi SAU khi HTML đã có trong DOM như openHrContractCreateModal() (dựng <option> động từ
+  // DB.laborContractTypes, hiện cả loại tự thêm, xem populateLaborContractTypeSelect() ở core.js).
+  // An toàn khi contractType hiện tại KHÔNG còn nằm trong danh mục (VD loại tự thêm đã bị admin xoá sau
+  // khi hợp đồng này được tạo) — populateLaborContractTypeSelect() không có option nào khớp thì mặc định
+  // rơi về option ĐẦU TIÊN trong danh sách, khiến bấm "Lưu Thay Đổi" mà KHÔNG hề đụng tới ô này vẫn âm
+  // thầm đổi sang loại hợp đồng KHÁC. Tự chèn thêm 1 option giữ ĐÚNG giá trị cũ (nhãn mirror đúng fallback
+  // của laborContractTypeLabel() ở core.js) để giữ nguyên lựa chọn thật, không đoán/ghi đè.
+  if (c.status === 'DRAFT' || c.status === 'ACTIVE') {
+    populateLaborContractTypeSelect('hrcEditContractType', c.contractType);
+    const sel = document.getElementById('hrcEditContractType');
+    if (sel && c.contractType && sel.value !== c.contractType) {
+      sel.insertAdjacentHTML('afterbegin', `<option value="${escapeHtml(c.contractType)}" selected>${escapeHtml(laborContractTypeLabel(c.contractType))}</option>`);
+    }
+  }
   document.getElementById('hrContractDetailModal').classList.remove('hidden');
 }
 function closeHrContractDetailModal() {
@@ -444,6 +459,8 @@ function buildHrContractDetailHTML(c) {
     <div class="border rounded p-2">
       <div class="font-semibold mb-1">✏️ Hoàn thiện trước khi kích hoạt</div>
       <div class="grid grid-cols-2 gap-2">
+        <div><label class="block text-gray-600 mb-1">Loại HĐ</label><select id="hrcEditContractType" class="w-full border p-1.5 rounded bg-white"></select></div>
+        <div><label class="block text-gray-600 mb-1">Ngày hiệu lực</label><input type="date" id="hrcEditStartDate" value="${escapeHtml(c.startDate || '')}" class="w-full border p-1.5 rounded"></div>
         <div><label class="block text-gray-600 mb-1">Ngày hết hạn</label><input type="date" id="hrcEditEndDate" value="${escapeHtml(c.endDate || '')}" class="w-full border p-1.5 rounded"></div>
         <div><label class="block text-gray-600 mb-1">Lương cơ bản (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
       </div>
@@ -458,14 +475,24 @@ function buildHrContractDetailHTML(c) {
          thấy phụ lục hiện ra, nhưng mọi kỳ Lương sau đó vẫn tính theo baseSalary CŨ vô thời hạn, không
          cảnh báo gì (xem lib/payroll.js::computeEmployeePayslip() đọc thẳng contract.baseSalary). Server
          (applyManualEdit()/route POST .../edit) vốn đã hỗ trợ sửa baseSalary ở BẤT KỲ trạng thái nào và
-         tự ghi history — chỉ thiếu đúng 1 khối UI này để dùng tới. -->
+         tự ghi history — chỉ thiếu đúng 1 khối UI này để dùng tới.
+         MỞ RỘNG (12/2026, phản hồi TRỰC TIẾP người dùng "không sửa được phần loại hợp đồng... phải cập
+         nhật bằng file à?"): server (MANUAL_EDITABLE_FIELDS, lib/laborContract.js) từ trước đã hỗ trợ
+         sửa contractType/startDate/endDate cho hợp đồng ACTIVE y hệt baseSalary — chỉ thiếu đúng khối UI
+         này. Thêm Loại HĐ/Ngày hiệu lực/Ngày hết hạn vào CÙNG khối (không tách nút Lưu riêng, cùng khuôn
+         saveHrContractEdit() đọc theo id, field nào có mặt trên DOM mới gửi lên — xem chú thích tại đó). -->
     ${c.status === 'ACTIVE' ? `
     <div class="border border-blue-300 rounded p-2 bg-blue-50">
-      <div class="font-semibold mb-1 text-blue-900">💰 Cập Nhật Lương Cơ Bản</div>
-      <p class="text-[11px] text-blue-800 mb-1.5">Đây là cách DUY NHẤT thay đổi số tiền hệ thống dùng để tính Lương hàng tháng — mục "➕ Thêm Thay Đổi" bên dưới chỉ ghi lại lịch sử/văn bản, KHÔNG tự cập nhật số này.</p>
-      <div><label class="block text-gray-600 mb-1">Lương cơ bản mới (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
+      <div class="font-semibold mb-1 text-blue-900">✏️ Sửa Thông Tin Hợp Đồng</div>
+      <p class="text-[11px] text-blue-800 mb-1.5">Đây là cách DUY NHẤT thay đổi Loại HĐ/Ngày hiệu lực/Ngày hết hạn/Lương cơ bản mà hệ thống dùng để tính Lương hàng tháng — mục "➕ Thêm Thay Đổi" bên dưới chỉ ghi lại lịch sử/văn bản, KHÔNG tự cập nhật các số này.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="block text-gray-600 mb-1">Loại HĐ</label><select id="hrcEditContractType" class="w-full border p-1.5 rounded bg-white"></select></div>
+        <div><label class="block text-gray-600 mb-1">Ngày hiệu lực</label><input type="date" id="hrcEditStartDate" value="${escapeHtml(c.startDate || '')}" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block text-gray-600 mb-1">Ngày hết hạn</label><input type="date" id="hrcEditEndDate" value="${escapeHtml(c.endDate || '')}" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block text-gray-600 mb-1">Lương cơ bản mới (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
+      </div>
       ${allowancesEditHTML}
-      <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Lương Cơ Bản</button>
+      <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Thay Đổi</button>
     </div>` : ''}
 
     <div class="flex flex-wrap gap-2">${activateBtn}${terminateProbationBtn}${closeBtn}${deleteBtn}</div>
@@ -518,6 +545,10 @@ function buildHrContractDetailHTML(c) {
 // payload, dù giá trị null, là "xoá field đó" — xem MANUAL_EDITABLE_FIELDS).
 async function saveHrContractEdit(id) {
   const payload = {};
+  const contractTypeEl = document.getElementById('hrcEditContractType');
+  if (contractTypeEl) payload.contractType = contractTypeEl.value || null;
+  const startDateEl = document.getElementById('hrcEditStartDate');
+  if (startDateEl) payload.startDate = startDateEl.value || null;
   const endDateEl = document.getElementById('hrcEditEndDate');
   if (endDateEl) payload.endDate = endDateEl.value || null;
   const baseSalaryEl = document.getElementById('hrcEditBaseSalary');

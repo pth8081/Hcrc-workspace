@@ -9083,3 +9083,57 @@ màn, khớp đúng điều kiện nút "Sửa" đang dùng.
   `trainingManage`/`admin`, không nới thêm cho giảng viên.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 5o. Đồng bộ Email/SĐT từ Hồ Sơ Nhân Sự xuống tài khoản VPDT liên kết + thêm ô sửa Loại HĐ/Ngày hiệu lực/hết hạn cho Hợp Đồng ACTIVE (12/2026)
+
+Phản ánh trực tiếp người dùng (kèm ảnh chụp 3 màn: Chi Tiết Hợp Đồng, Hồ Sơ
+Nhân Sự đang sửa, Phân Quyền): *"Email, số điện thoại phải sửa được chứ...
+Bên hợp đồng vậy, không sửa được phần loại hợp đồng... Phải cập nhật bằng
+file à?"*. Rà soát ra 2 việc khác nhau:
+
+**1. Email/Số điện thoại ở đầu Hồ Sơ Nhân Sự (Họ Tên/Email công ty/Số điện
+thoại)** — các ô này CỐ Ý luôn chỉ đọc (lấy "ảnh chụp" trực tiếp từ tài
+khoản VPDT đã liên kết/hồ sơ Onboarding, xem `hrpfIdentitySnapshot()`,
+`module-hrprofile.js`). Người dùng xác nhận **đảo ngược chiều đồng bộ**:
+*"Không đồng bộ từ VPDT mà tôi yêu cầu đồng bộ 2 trường email và SĐT từ hồ
+sơ NS hoặc Onboarding sang [tài khoản VPDT]"*. Đã sửa:
+
+- `routes/employeeProfile.js`, `PATCH /by-code/:employeeCode` — khi HR lưu
+  hồ sơ có đụng tới "Email liên hệ công việc" (`workEmail`)/"Điện thoại
+  liên hệ" (`contactPhone`) VÀ hồ sơ đã liên kết tài khoản VPDT, tự động
+  đồng bộ giá trị MỚI xuống `email`/`phone` của tài khoản đó ngay trong
+  CÙNG request (mirror đúng khuôn đồng bộ `dept`/`jobTitle`/
+  `secondaryPositions` đã có từ trước). CHỈ đồng bộ khi field thực sự có
+  mặt trong payload và giá trị MỚI khác rỗng — không xoá trắng email/SĐT
+  đăng nhập hiện có chỉ vì HR lỡ để trống 1 ô không liên quan trong cùng
+  lượt lưu.
+- `POST /by-code/:employeeCode/link-account` và `.../relink-account` —
+  nếu hồ sơ đã có sẵn `workEmail`/`contactPhone` TRƯỚC KHI liên kết tài
+  khoản (VD nhập ngay lúc còn ở hàng đợi Onboarding), đồng bộ luôn ngay
+  lúc liên kết, không phải đợi HR sửa lại 2 ô này 1 lần nữa mới kích hoạt
+  đồng bộ.
+- Đầu form Hồ Sơ Nhân Sự ("Email công ty"/"Số điện thoại") vẫn giữ nguyên
+  cơ chế đọc LIVE từ tài khoản VPDT — nay sẽ tự đúng vì tài khoản đã được
+  đồng bộ xuống từ hồ sơ, không cần sửa gì thêm ở màn hiển thị.
+- **Lưu ý**: tính năng này KHÁC với `syncHrFieldsOnEditOpen()` (đã có từ
+  trước, `module-admin-submissiongroups.js`) — tính năng cũ chỉ gợi ý/hỏi
+  xác nhận khi ADMIN tự mở màn "Sửa Người Dùng" của ĐÚNG tài khoản đó (pull,
+  thủ công); tính năng mới này tự đẩy xuống NGAY khi HR lưu Hồ Sơ Nhân Sự
+  (push, tự động), không cần ai phải mở lại màn Sửa Người Dùng.
+
+**2. Chi Tiết Hợp Đồng Lao Động chỉ sửa được Lương Cơ Bản** — server
+(`MANUAL_EDITABLE_FIELDS`, `lib/laborContract.js`) từ trước đã hỗ trợ sửa
+`contractType`/`startDate`/`endDate` cho hợp đồng ACTIVE y hệt
+`baseSalary`, chỉ thiếu đúng khối giao diện để dùng tới (Phụ Cấp/Thu Nhập
+Khác thực ra ĐÃ sửa được từ trước, chỉ đang thu gọn trong 1 dòng
+`<details>` dễ bị bỏ sót). Đã thêm 3 ô **Loại HĐ/Ngày hiệu lực/Ngày hết
+hạn** vào khối sửa (đổi tên "💰 Cập Nhật Lương Cơ Bản" → "✏️ Sửa Thông Tin
+Hợp Đồng") cho CẢ hợp đồng DRAFT lẫn ACTIVE — dùng chung 1 nút "💾 Lưu Thay
+Đổi" như cũ, không tách nút riêng. An toàn khi `contractType` hiện tại của
+hợp đồng không còn nằm trong danh mục "Loại HĐLĐ" hiện có (VD loại tự thêm
+đã bị admin xoá sau khi hợp đồng được tạo) — tự chèn thêm 1 lựa chọn giữ
+đúng giá trị cũ thay vì âm thầm đổi sang loại khác khi bấm Lưu mà không hề
+đụng tới ô này.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` mới.

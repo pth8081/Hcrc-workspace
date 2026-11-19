@@ -1019,7 +1019,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     // orgChartAppliedVersion (11/2026, cho case 'secondaryPositions') — cùng cách set-position đọc bản
     // Cơ Cấu Tổ Chức đang áp dụng, đọc 1 LẦN ở đây (đỡ phải đọc lại bên trong khối khoá).
     const applied = orgChart.getAppliedVersion(catalogAppData.orgChartVersions || []);
-    let updated, syncSecondaryPositions = null, isOnboardingQueueOnlyActor = false, onboardingQueueBypassTier = null;
+    let updated, syncSecondaryPositions = null, syncAccountContact = null, isOnboardingQueueOnlyActor = false, onboardingQueueBypassTier = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
@@ -1090,6 +1090,26 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       if (req.body && 'secondaryPositions' in req.body && profile.username) {
         syncSecondaryPositions = { username: profile.username, secondaryPositions: (profile.secondaryPositions || []).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })) };
       }
+      // syncAccountContact (12/2026, phản hồi TRỰC TIẾP người dùng: "không đồng bộ từ VPDT mà tôi yêu cầu
+      // đồng bộ 2 trường email và SĐT từ hồ sơ NS hoặc Onboarding sang [tài khoản VPDT]") — CHIỀU NGƯỢC
+      // với syncSecondaryPositions ở trên nhưng CÙNG khuôn (chỉ đồng bộ khi field THỰC SỰ có mặt trong
+      // payload — HR thật sự sửa field này ở đợt lưu này — và hồ sơ ĐÃ liên kết tài khoản). Trước đây màn
+      // Hồ Sơ Nhân Sự hiển thị "Email công ty"/"Số điện thoại" ở đầu form bằng cách ĐỌC NGƯỢC từ
+      // DB.users.email/phone (xem hrpfIdentitySnapshot(), module-hrprofile.js) — khiến 2 ô "Email liên hệ
+      // công việc"/"Điện thoại liên hệ" (profile.workEmail/contactPhone, HR_ONLY_EDITABLE_FIELDS, đã sửa
+      // được từ trước) trông như KHÔNG có tác dụng gì (sửa xong vẫn không thấy đổi ở đầu form) — người
+      // dùng xác nhận muốn CHIỀU NGƯỢC LẠI: hồ sơ Nhân Sự (nơi HR thực sự sửa) là NGUỒN, tài khoản VPDT
+      // chỉ là nơi NHẬN đồng bộ xuống — đầu form khi đó tự động đúng vì đọc LIVE từ DB.users đã được cập
+      // nhật. CHỈ ghi đè khi giá trị MỚI khác rỗng (không xoá trắng email/SĐT đăng nhập hiện có chỉ vì HR
+      // lỡ để trống 1 ô không liên quan trong cùng lượt lưu).
+      const editBody = req.body || {};
+      if (profile.username && ((('workEmail' in editBody) && profile.workEmail) || (('contactPhone' in editBody) && profile.contactPhone))) {
+        syncAccountContact = {
+          username: profile.username,
+          email: (('workEmail' in editBody) && profile.workEmail) ? profile.workEmail : null,
+          phone: (('contactPhone' in editBody) && profile.contactPhone) ? profile.contactPhone : null
+        };
+      }
       // "Xác Nhận" (Ảnh 2, 10/2026 — cập nhật theo yêu cầu người dùng): lưu thành công lúc đang PENDING =
       // coi như ứng viên ĐÃ NHẬN VIỆC — chuyển onboardingQueueStatus sang CONFIRMED (KHÔNG còn reset về
       // null như trước) để vẫn giữ lại ở tab "🕐 Hồ Sơ Onboarding" phục vụ báo cáo (cùng cách CANCELLED
@@ -1115,6 +1135,14 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
         u.username === syncSecondaryPositions.username
           ? { ...u, secondaryPositions: [...syncSecondaryPositions.secondaryPositions, ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')] }
+          : u
+      ));
+    }
+    // syncAccountContact — xem chú thích đầy đủ tại nơi gán biến này ở trên.
+    if (syncAccountContact) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === syncAccountContact.username
+          ? { ...u, ...(syncAccountContact.email ? { email: syncAccountContact.email } : {}), ...(syncAccountContact.phone ? { phone: syncAccountContact.phone } : {}) }
           : u
       ));
     }
@@ -1218,7 +1246,11 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
     // Nhiệm 1 lần nữa mới kích hoạt. CHỈ ghi đè phần source:'HR_PROFILE', giữ lại mọi dòng khác (gán qua
     // quyền riêng hrSecondaryPositionManage/dữ liệu cũ) — xem chú thích đầy đủ tại PATCH /by-code phía
     // trên + POST /secondary-positions.
-    if (updated.positionKey || (updated.secondaryPositions || []).length) {
+    // email/phone (12/2026) — hồ sơ có thể đã được HR nhập Email liên hệ công việc/Điện thoại liên hệ
+    // (workEmail/contactPhone) TRƯỚC KHI liên kết tài khoản (VD ngay lúc còn ở hàng đợi Onboarding) — đồng
+    // bộ luôn ngay khi liên kết, cùng lý do/khuôn với positionKey/secondaryPositions ở trên. Xem chú thích
+    // đầy đủ tại syncAccountContact ở PATCH /by-code phía trên.
+    if (updated.positionKey || (updated.secondaryPositions || []).length || updated.workEmail || updated.contactPhone) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
         u.username === username ? {
           ...u,
@@ -1228,7 +1260,9 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
               ...updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })),
               ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')
             ]
-          } : {})
+          } : {}),
+          ...(updated.workEmail ? { email: updated.workEmail } : {}),
+          ...(updated.contactPhone ? { phone: updated.contactPhone } : {})
         } : u
       ));
     }
@@ -1258,8 +1292,9 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
       return list;
     });
     // secondaryPositions (11/2026) — xem chú thích đầy đủ ở route link-account phía trên (chỉ ghi đè
-    // phần source:'HR_PROFILE', giữ lại mọi dòng khác).
-    if (updated.positionKey || (updated.secondaryPositions || []).length) {
+    // phần source:'HR_PROFILE', giữ lại mọi dòng khác). email/phone (12/2026) — mirror ĐÚNG khuôn
+    // link-account phía trên (xem chú thích đầy đủ tại syncAccountContact ở PATCH /by-code).
+    if (updated.positionKey || (updated.secondaryPositions || []).length || updated.workEmail || updated.contactPhone) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
         u.username === username ? {
           ...u,
@@ -1269,7 +1304,9 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
               ...updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '', source: 'HR_PROFILE' })),
               ...(u.secondaryPositions || []).filter(sp => sp.source !== 'HR_PROFILE')
             ]
-          } : {})
+          } : {}),
+          ...(updated.workEmail ? { email: updated.workEmail } : {}),
+          ...(updated.contactPhone ? { phone: updated.contactPhone } : {})
         } : u
       ));
     }
