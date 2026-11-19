@@ -310,9 +310,15 @@
         <button type="button" data-op="openDsmartPriceConfigModal" id="btnDsmartPriceConfig" class="hidden bg-gray-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-800">⚙️ Cấu Hình Kết Nối (Admin)</button>
       </div>
 
-      <div class="bg-blue-50 border border-blue-200 rounded p-3 text-[11px] text-blue-800 leading-relaxed">
-        💡 <b>CSPRICE là bảng lịch sử giá theo thời gian</b> — mỗi lần nộp giá mới là <b>THÊM dòng mới</b> (không ghi đè). DSmart tự chọn đúng giá hiệu lực theo Ngày Bắt Đầu/Ngày Kết Thúc của từng dòng. Dòng đã hết hạn có thể xoá tay hoặc bật <b>🔁 Tự động xoá khi hết hạn</b> bên dưới.
-      </div>
+      <!-- Giải thích CSPRICE — thu gọn mặc định (cùng khuôn <details>/.filter-box-details đã dùng cho
+           các khối "🔍 Tìm Kiếm & Lọc" ở Phê Duyệt Giá/Hợp Đồng/Tài Liệu..., theo yêu cầu người dùng
+           12/2026: "giống bên phê duyệt giá là có cái nút để ấn mở ra, bình thường thu gọn lại"). -->
+      <details class="filter-box-details bg-blue-50 border border-blue-200 rounded p-3">
+        <summary class="font-bold text-blue-800 text-[11px] flex items-center gap-1.5 cursor-pointer"><span class="filter-box-chevron text-blue-400">▸</span><span>💡 Giải Thích CSPRICE (Cách Hoạt Động)</span></summary>
+        <div class="text-[11px] text-blue-800 leading-relaxed mt-2">
+          <b>CSPRICE là bảng lịch sử giá theo thời gian</b> — mỗi lần nộp giá mới là <b>THÊM dòng mới</b> (không ghi đè). DSmart tự chọn đúng giá hiệu lực theo Ngày Bắt Đầu/Ngày Kết Thúc của từng dòng. Dòng đã hết hạn có thể xoá tay hoặc bật <b>🔁 Tự động xoá khi hết hạn</b> bên dưới.
+        </div>
+      </details>
 
       <!-- 1. Thêm Giá Mới -->
       <div class="bg-white border rounded-lg p-4 space-y-3">
