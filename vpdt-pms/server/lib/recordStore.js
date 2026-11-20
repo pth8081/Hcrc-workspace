@@ -1839,40 +1839,72 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
 // không phải cache có thể đồng bộ lại nếu mất). Gọi 1 LẦN lúc server khởi động (seedDefaults.js). Rút
 // ra từ 2 phiên bản gần như y hệt từng viết tay cho stocktakeCounts/shelfRecords (BƯỚC 8 đợt đầu) — các
 // collection migrate SAU dùng chung hàm này, tránh lặp lại đúng khối code này thêm lần nữa mỗi collection.
+// isLegacyMigrationDone()/markLegacyMigrationDone() — LỖI THẬT PRODUCTION đã vá (12/2026, người dùng báo
+// "đã xoá hết Kỳ Kiểm Kê mà mỗi lần lên code mới lại xuất hiện lại"): MỌI hàm `migrateLegacy*` trong hệ
+// thống (không riêng gì Kiểm Kê — xem toàn bộ danh sách gọi ở seedDefaults.js) trước đây tự coi "bảng đích
+// hiện ĐANG RỖNG" (SELECT COUNT(*) = 0) là dấu hiệu CHƯA di trú — nhưng bảng rỗng cũng xảy ra khi người
+// dùng đã chủ động XOÁ HẾT dữ liệu thật, trong khi dữ liệu gốc AppData chưa từng bị xoá (giữ "phòng hờ")
+// — mỗi lần server khởi động lại (deploy code mới = pm2 restart) hàm di trú chạy lại, thấy bảng rỗng,
+// tưởng CHƯA di trú, đọc lại y nguyên dữ liệu CŨ rồi chèn lại — "sống lại" đúng các dòng người dùng vừa
+// xoá. 2 hàm dùng chung này (bảng đánh dấu RIÊNG dbo.AppDataMigrations, ghi 1 lần duy nhất khi đã xử lý
+// xong, KHÔNG phụ thuộc số dòng hiện tại của bảng đích) là nguồn sự thật DUY NHẤT cho "đã di trú xong
+// chưa" — mọi hàm `migrateLegacy*` (lib/recordStore.js, lib/stocktakeConfirmationsStore.js,
+// lib/stocktakeCountsStore.js, lib/shelfRecordsStore.js, lib/inventorySnapshotStore.js, lib/taskStore.js,
+// lib/systemLogStore.js) đều PHẢI gọi 2 hàm này bọc quanh logic di trú hiện có của mình — không bao giờ
+// chạy lại sau lần đầu tiên, bất kể sau đó người dùng xoá bao nhiêu dòng.
+async function isLegacyMigrationDone(collection) {
+  const pool = await getPool();
+  const result = await pool.request().input('collection', sql.NVarChar(200), collection)
+    .query('SELECT 1 FROM dbo.AppDataMigrations WHERE CollectionName = @collection;');
+  return result.recordset.length > 0;
+}
+async function markLegacyMigrationDone(collection) {
+  const pool = await getPool();
+  await pool.request().input('collection', sql.NVarChar(200), collection)
+    .query('INSERT INTO dbo.AppDataMigrations (CollectionName) VALUES (@collection);');
+}
+
 async function migrateLegacyAppDataCollection(collection, labelVi) {
   const cfg = DEDICATED_TABLES[collection];
   const table = dedicatedTableName(collection);
   const pool = await getPool();
+
+  if (await isLegacyMigrationDone(collection)) return; // đã đánh dấu xử lý xong trước đây -> KHÔNG BAO GIỜ chạy lại
+
   const countResult = await pool.request().query(`SELECT COUNT(*) AS c FROM ${table}`);
-  if (countResult.recordset[0].c > 0) return; // đã có dữ liệu -> bỏ qua
-
-  let legacy;
-  try {
-    legacy = await getAppDataValue(collection);
-  } catch (err) {
-    return; // Key chưa từng được seedDefaults() tạo -> không có gì để di trú.
-  }
-  if (!Array.isArray(legacy) || !legacy.length) return;
-
-  let migrated = 0, failed = 0;
-  for (const record of legacy) {
+  if (countResult.recordset[0].c === 0) {
+    let legacy;
     try {
-      const req = pool.request();
-      req.input('id', sql.BigInt, record.id);
-      req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
-      const colNames = ['Id', 'Payload'];
-      const colParams = ['@id', '@payload'];
-      for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
-        colNames.push(col); colParams.push('@' + param);
-      }
-      await req.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
-      migrated++;
+      legacy = await getAppDataValue(collection);
     } catch (err) {
-      failed++;
-      console.error(`   ⛔ Lỗi di trú ${collection} Id=${record.id}: ${err.message}`);
+      legacy = null; // Key chưa từng được seedDefaults() tạo -> không có gì để di trú.
+    }
+    if (Array.isArray(legacy) && legacy.length) {
+      let migrated = 0, failed = 0;
+      for (const record of legacy) {
+        try {
+          const req = pool.request();
+          req.input('id', sql.BigInt, record.id);
+          req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+          const colNames = ['Id', 'Payload'];
+          const colParams = ['@id', '@payload'];
+          for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+            colNames.push(col); colParams.push('@' + param);
+          }
+          await req.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+          migrated++;
+        } catch (err) {
+          failed++;
+          console.error(`   ⛔ Lỗi di trú ${collection} Id=${record.id}: ${err.message}`);
+        }
+      }
+      console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng ${labelVi || collection} sang bảng ${table} riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
     }
   }
-  console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng ${labelVi || collection} sang bảng ${table} riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
+
+  // Đánh dấu ĐÃ XỬ LÝ xong (dù di trú thật, bỏ qua vì bảng đích đã có dữ liệu sẵn, hay không có gì để di
+  // trú) — ghi 1 lần duy nhất, từ nay về sau hàm này luôn bỏ qua ngay từ bước kiểm tra ở trên.
+  await markLegacyMigrationDone(collection);
 }
 
 module.exports = {
@@ -1884,5 +1916,5 @@ module.exports = {
   moveRecordToTrash, getTrashItems, getTrashItemCollection, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads, sweepOrphanedUploads,
   DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords,
-  migrateLegacyAppDataCollection
+  migrateLegacyAppDataCollection, isLegacyMigrationDone, markLegacyMigrationDone
 };

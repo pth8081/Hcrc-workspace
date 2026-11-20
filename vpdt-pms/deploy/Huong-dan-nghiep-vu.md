@@ -10209,3 +10209,57 @@ sẵn từ trước, thêm 5 kịch bản preview mới khiến 1 kịch bản `
 không liên quan bị chặn giả — không phải lỗi logic.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
+
+Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần
+lên code mới** (deploy/pm2 restart) các kỳ đã xoá lại tự xuất hiện lại —
+"bị vài lần liên quan đến upcode rồi".
+
+**Nguyên nhân thật**: đợt tách bảng AppData → bảng SQL riêng (11-12/2026,
+xem mục 108-119) để lại 1 hàm di trú dữ liệu cũ (`migrateLegacy*`, chạy
+1 lần lúc server khởi động qua `seedDefaults.js`) có check **SAI**:
+"bảng đích hiện ĐANG RỖNG → coi như CHƯA di trú → đọc lại dữ liệu CŨ từ
+AppData (chưa từng bị xoá, giữ phòng hờ) rồi chèn lại". Vấn đề: bảng
+đích RỖNG cũng xảy ra khi người dùng đã **chủ động xoá hết** dữ liệu
+thật — không phân biệt được 2 trường hợp. Mỗi lần server khởi động lại
+(deploy code mới), hàm này chạy lại, thấy bảng rỗng, tưởng chưa di trú,
+"hồi sinh" nguyên dữ liệu cũ — kể cả khi bạn vừa xoá xong.
+
+Lỗi này nằm ở **4 file** (ảnh hưởng **9 collection**, không chỉ Kỳ Kiểm
+Kê): `lib/recordStore.js` (`migrateLegacyAppDataCollection()` — dùng
+chung cho Kỳ Kiểm Kê, Cấu Hình Người Dùng Kiểm Kê, Cấu Hình Quầy Kệ
+Kiểm Kê, Danh Mục Quầy Kệ Kiểm Soát Hàng Hoá), `lib/stocktakeConfirmationsStore.js`
+(`migrateLegacyConfirmations()` — cả 3 loại Xác Nhận Tab 6), `lib/stocktakeCountsStore.js`
+(`migrateLegacyStocktakeCounts()`), `lib/shelfRecordsStore.js`
+(`migrateLegacyShelfRecords()`). 3 hàm di trú khác (SystemLogs, Tasks,
+Tồn Kho Hệ Thống) **không bị lỗi này** — các hàm đó tự XOÁ dòng AppData
+cũ ngay sau khi di trú xong, nên không còn gì để "hồi sinh" lại.
+
+**Cách vá**: thêm bảng đánh dấu RIÊNG `dbo.AppDataMigrations`
+(`CollectionName` + `MigratedAt`, xem `sql/schema.sql`) — ghi đúng 1
+dòng khi 1 collection đã xử lý xong (dù di trú thật hay không có gì để
+di trú), **KHÔNG BAO GIỜ** dựa vào số dòng hiện tại của bảng đích nữa.
+2 hàm dùng chung mới `isLegacyMigrationDone()`/`markLegacyMigrationDone()`
+(`lib/recordStore.js`) bọc quanh logic di trú hiện có của cả 4 file
+trên — không đổi hành vi di trú thật (vẫn giữ nguyên AppData cũ "phòng
+hờ" như trước), chỉ sửa đúng điều kiện "có cần di trú lại hay không".
+
+**⚠️ LƯU Ý QUAN TRỌNG lúc deploy lần này**: vì bảng `AppDataMigrations`
+là bảng MỚI HOÀN TOÀN (rỗng lúc vừa tạo), lần khởi động server ĐẦU TIÊN
+sau khi deploy bản vá này vẫn sẽ chạy di trú **1 LẦN CUỐI** cho mọi
+collection đang rỗng (vì chưa có cờ đánh dấu nào từ trước) — nghĩa là
+các "Kỳ Kiểm Kê" bạn đã xoá trước đó **có thể xuất hiện lại đúng 1 LẦN
+NỮA** ngay sau khi deploy lần này. Đây là lần cuối cùng — xoá lại 1 lần
+sau khi deploy xong thì từ đó về sau sẽ **không bao giờ** tự xuất hiện
+lại nữa, kể cả qua bao nhiêu lần deploy/restart tiếp theo.
+
+Test: file mới `test-legacy-migration-no-resurrection.js` — mô phỏng
+đúng chuỗi sự kiện gây lỗi thật (di trú lần 1 → xoá hết → "restart" lần
+2) cho cả 4 hàm bị ảnh hưởng, xác nhận lần 2 KHÔNG chèn lại dữ liệu đã
+xoá. 6/6 kịch bản pass.
+
+**Thao tác deploy**: ngoài copy code, **PHẢI chạy lại `sql/schema.sql`**
+(tạo bảng `dbo.AppDataMigrations` mới — script tự bọc
+`IF OBJECT_ID(...) IS NULL`, an toàn chạy lại nhiều lần) trước khi
+`pm2 restart`.
