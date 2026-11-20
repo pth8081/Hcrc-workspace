@@ -121,6 +121,11 @@ stubModule('lib/dsmartSqlClient', {
 
 // ===== Giả lập mirror nội bộ dbo.DsmartWholesalePriceEntries =====
 let ENTRIES = [];
+// APP_LOCK_CALLS (audit chéo trước deploy, 12/2026 — vá race PATCH /entries/:id, POST /entries/:id/delete,
+// jobs/dsmartAutoDeleteExpiredPrices.js): ghi lại MỌI khoá (key) đã giành qua withAppLock() — closure dùng
+// CHUNG cho mọi module require('lib/recordStore') (kể cả module đã require 1 LẦN lúc đầu file như
+// routes/dsmartWholesalePrice.js), nên test xác nhận được ĐÚNG lệnh gọi mà không cần re-require module đó.
+let APP_LOCK_CALLS = [];
 stubModule('lib/recordStore', {
   getAllForCollection: async (c) => (c === 'dsmartWholesalePriceEntries' ? ENTRIES.slice() : []),
   createForCollection: async (c, builderFn) => {
@@ -135,8 +140,9 @@ stubModule('lib/recordStore', {
     return ENTRIES[idx];
   },
   // withAppLock() (Lần 5, audit chéo) — mock chạy thẳng fn() không khoá thật (test này đơn luồng, không có
-  // race thật để mô phỏng) — chỉ cần đúng chữ ký để route gọi được.
-  withAppLock: async (lockKeyOrKeys, fn) => fn()
+  // race thật để mô phỏng bằng luồng song song) — chỉ cần đúng chữ ký để route gọi được, có ghi lại key đã
+  // gọi vào APP_LOCK_CALLS để test xác nhận ĐÚNG khoá đã giành (xem chú thích ở trên).
+  withAppLock: async (lockKeyOrKeys, fn) => { APP_LOCK_CALLS.push(lockKeyOrKeys); return fn(); }
 });
 
 stubModule('lib/httpErrors', { HttpError: FakeHttpError });
@@ -901,6 +907,66 @@ async function main() {
     const staleEntry = ENTRIES.find(e => e.id === manualActiveEntry.id);
     assert.strictEqual(staleEntry.status, 'DELETED', 'entry ACTIVE CŨ (từ lượt Thêm tay) phải bị job tự đánh dấu DELETED');
     assert.strictEqual(staleEntry.history[staleEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
+  });
+
+  // LỖI THẬT đã vá (audit chéo TRƯỚC DEPLOY, 12/2026 — phát hiện bởi agent kiểm tra độc lập): job "Tự Động
+  // Xoá Khi Hết Hạn" (jobs/dsmartAutoDeleteExpiredPrices.js) TRƯỚC ĐÂY gọi deleteWholesalePrice() THẲNG,
+  // KHÔNG khoá theo withAppLock(`dsmartWholesalePrice:${custId}:${skuId}`) như job "Lên Lịch Áp Giá"/
+  // POST /apply đang dùng — 2 job CÙNG cadence 10 phút, khởi động gần như đồng thời (server.js). Nếu giá
+  // CŨ (ACTIVE, hết hạn) và giá MỚI (ghi đè ĐÚNG cặp CUST_ID/SKU_ID, VD qua "Lên Lịch" nối tiếp giá sắp
+  // hết hạn) xảy ra CHỒNG lượt chạy: job Lên Lịch ghi đè CSPRICE bằng giá mới TRƯỚC, job Xoá Hết Hạn
+  // (không khoá, dùng snapshot CŨ đọc trước đó) vẫn XOÁ dòng đó theo cùng khoá tự nhiên NGAY SAU — MẤT
+  // TRẮNG giá mới trên CSPRICE dù mirror nội bộ vẫn báo "ACTIVE" (giá treo, không có thật). Vá: khoá ĐÚNG
+  // cùng khoá + đọc lại (fresh) trạng thái entry NGAY TRONG khoá trước khi quyết định xoá — nếu entry đã
+  // đổi (không còn ACTIVE) trong lúc chờ khoá, BỎ QUA dòng đó (không xoá nhầm dòng CSPRICE vừa ghi mới).
+  //
+  // Mô phỏng ĐÚNG thời điểm interleave (không cần luồng song song thật — đơn luồng Node vẫn tái hiện được):
+  // tạm thay getAllForCollection() để NGAY SAU lần job đọc snapshot `due` ĐẦU TIÊN (nhưng TRƯỚC khi job kịp
+  // giành khoá/đọc lại), giả lập 1 thao tác khác (ở đây gọi THẲNG /apply, tương đương job Lên Lịch Áp Giá
+  // tự áp dụng) ghi đè ĐÚNG cặp này — con trỏ/snapshot job đang cầm đã LỖI THỜI NGAY LÚC ĐÓ.
+  await test('jobs/dsmartAutoDeleteExpiredPrices: RACE ĐÃ VÁ — cặp đến hạn xoá bị ghi đè ĐÚNG LÚC job đang chờ khoá -> KHÔNG xoá mất giá MỚI (trước đây sẽ xoá nhầm)', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'RACE1', skuId: 'SKR1', price: 100, frDate: '2020-01-01', toDate: '2020-01-31' }] });
+    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: 0, autoDeleteMinute: 0 };
+
+    const recordStoreStub = require('../lib/recordStore');
+    const originalGetAll = recordStoreStub.getAllForCollection;
+    let callCount = 0;
+    recordStoreStub.getAllForCollection = async (c) => {
+      callCount++;
+      const snapshot = await originalGetAll(c);
+      if (c === 'dsmartWholesalePriceEntries' && callCount === 1) {
+        // Lần gọi ĐẦU TIÊN = snapshot `due` ban đầu của job — NGAY SAU khi job "cầm" snapshot này (nhưng
+        // trước khi giành khoá), mô phỏng 1 thao tác khác ghi đè ĐÚNG cặp RACE1/SKR1 (giá MỚI = 999).
+        await apiPost('/apply', { rows: [{ custId: 'RACE1', skuId: 'SKR1', price: 999, frDate: today, toDate: '2099-12-31' }] });
+      }
+      return snapshot;
+    };
+    try {
+      delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
+      const { runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices');
+      const result = await runDsmartAutoDeleteExpiredPrices();
+      assert.strictEqual(result.deletedCount, 0, 'job PHẢI bỏ qua (không xoá) vì entry đã đổi trạng thái trong lúc chờ khoá — đọc lại (fresh) thấy KHÔNG còn ACTIVE nữa');
+      assert.strictEqual(CSPRICE.length, 1, 'CSPRICE VẪN còn đúng 1 dòng — KHÔNG bị xoá mất');
+      assert.strictEqual(CSPRICE[0].WSPRICE, 999, 'dòng còn lại phải là giá MỚI (999) — xác nhận không bị job Xoá Hết Hạn xoá nhầm dòng vừa ghi đè');
+    } finally {
+      recordStoreStub.getAllForCollection = originalGetAll;
+    }
+  });
+
+  await test('PATCH /entries/:id (Sửa) và POST /entries/:id/delete (Xoá tay) nay ĐÃ khoá theo cặp (CUST_ID, SKU_ID) — vá cùng loại race vừa phát hiện ở job Tự Động Xoá', async () => {
+    CSPRICE = []; ENTRIES = []; APP_LOCK_CALLS = [];
+    await apiPost('/apply', { rows: [{ custId: 'LOCKCHK', skuId: 'SKLC', price: 100, frDate: '2020-01-01', toDate: '2099-12-31' }] });
+    const entry = ENTRIES.find(e => e.custId === 'LOCKCHK' && e.status === 'ACTIVE');
+    assert.ok(entry);
+
+    await apiPatch(`/entries/${entry.id}`, { price: 200, frDate: '2020-01-01', toDate: '2099-12-31' });
+    assert.ok(APP_LOCK_CALLS.includes('dsmartWholesalePrice:LOCKCHK:SKLC'), 'PATCH Sửa phải giành khoá đúng cặp CUST_ID/SKU_ID trước khi ghi');
+
+    APP_LOCK_CALLS = [];
+    await apiPost(`/entries/${entry.id}/delete`, {});
+    assert.ok(APP_LOCK_CALLS.includes('dsmartWholesalePrice:LOCKCHK:SKLC'), 'POST Xoá tay phải giành khoá đúng cặp CUST_ID/SKU_ID trước khi ghi');
   });
 
   // ===== 🏬 Kết Nối Siêu Thị — Nhập Hàng Loạt (Excel), 12/2026 =====

@@ -13,7 +13,7 @@
 // nguyên ACTIVE nếu xoá thất bại, không đánh dấu DELETED sai).
 const { getRawConfig } = require('../lib/dsmartPriceConfigStore');
 const { deleteWholesalePrice } = require('../lib/dsmartSqlClient');
-const { getAllForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
+const { getAllForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 function todayDateOnlyIso(d = new Date()) {
@@ -58,16 +58,35 @@ async function runDsmartAutoDeleteExpiredPrices() {
   const errorDetails = [];
   for (const e of due) {
     try {
-      await deleteWholesalePrice({ dsmartKey: e.dsmartKey });
-      await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
-        if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
-        const nowIso = now.toISOString();
-        return {
-          ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso,
-          history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso }]
-        };
+      // LỖI THẬT đã vá (audit chéo trước deploy, 12/2026): job này TRƯỚC ĐÂY gọi deleteWholesalePrice()
+      // THẲNG, KHÔNG khoá theo withAppLock(`dsmartWholesalePrice:${custId}:${skuId}`) như POST /apply và
+      // job "Lên Lịch Áp Giá" (dsmartAutoApplyScheduledPrices.js) đang dùng — 2 job này CÙNG cadence 10
+      // phút, khởi động gần như đồng thời (server.js). Nếu giá CŨ (ACTIVE, TO_DATE vừa hết hạn) và giá
+      // MỚI (SCHEDULED, FR_DATE=hôm nay) là CÙNG 1 cặp CUST_ID/SKU_ID (tình huống "lên lịch nối tiếp giá
+      // sắp hết hạn" — cách dùng điển hình), 2 job có thể chạy chồng nhau: job Lên Lịch ghi đè CSPRICE
+      // bằng giá mới TRƯỚC, job Xoá Hết Hạn (không khoá) vẫn XOÁ dòng đó theo cùng khoá tự nhiên NGAY SAU
+      // — mất trắng giá mới trên CSPRICE dù mirror nội bộ vẫn báo "ACTIVE" (giá treo, không có thật).
+      // Vá: khoá ĐÚNG CÙNG khoá `dsmartWholesalePrice:${custId}:${skuId}` — job nào giành khoá trước thì
+      // job kia phải CHỜ, và BẮT BUỘC đọc lại (fresh) trạng thái entry NGAY TRONG khoá trước khi quyết
+      // định xoá (không tin snapshot `e` đọc TRƯỚC khi giành khoá) — nếu entry đã bị đổi bởi thao tác
+      // khác (VD Lên Lịch vừa ghi đè, hoặc người dùng vừa Sửa/Xoá tay) trong lúc chờ khoá, bỏ qua dòng
+      // này (coi như không còn đến hạn xoá nữa), không xoá nhầm dòng CSPRICE vừa được ghi mới.
+      const acted = await withAppLock(`dsmartWholesalePrice:${e.custId}:${e.skuId}`, async () => {
+        const freshList = await getAllForCollection('dsmartWholesalePriceEntries');
+        const fresh = freshList.find(x => x.id === e.id);
+        if (!fresh || fresh.status !== 'ACTIVE' || !dueForAutoDelete(fresh, now, cfg)) return false;
+        await deleteWholesalePrice({ dsmartKey: fresh.dsmartKey });
+        await withLockedRecordForCollection('dsmartWholesalePriceEntries', fresh.id, (item) => {
+          if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
+          const nowIso = now.toISOString();
+          return {
+            ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso,
+            history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso }]
+          };
+        });
+        return true;
       });
-      deletedCount++;
+      if (acted) deletedCount++;
     } catch (err) {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);

@@ -10565,3 +10565,51 @@ truyền thẳng xuống `fanOutToStores()`. `routes/dsmartWholesalePrice.js`: `
 trường mới — chỉ thêm 1 trường `targetStoreIds` vào bản ghi JSON hiện có của
 `dbo.DsmartWholesalePriceEntries`, entry CŨ trước khi có tính năng này tự hiểu là `undefined` → coi như
 `null`/"Tất Cả", KHÔNG cần script di trú dữ liệu).
+
+## 6o. LỖI THẬT đã vá TRƯỚC DEPLOY: race giữa job "Tự Động Xoá Khi Hết Hạn" và "Lên Lịch Áp Giá" có thể xoá mất giá vừa ghi đè (12/2026)
+
+Trước khi đưa toàn bộ đợt mục 6n lên server thật, người dùng yêu cầu rà soát
+lại một lượt nữa ("đảm bảo không lỗi với thao tác, nhất là phần khai báo kết
+nối siêu thị và đặt lịch") — cho 2 agent audit độc lập chạy song song (1
+soát toàn bộ nghiệp vụ/code, 1 lái Playwright thao tác thật). Agent soát
+code phát hiện 1 lỗi **NGHIÊM TRỌNG** thật, đã tự kiểm chứng lại bằng cách
+đọc code + viết script tái hiện độc lập trước khi vá:
+
+**Nguyên nhân**: `jobs/dsmartAutoDeleteExpiredPrices.js` ("🔁 Tự Động Xoá
+Khi Hết Hạn") gọi `deleteWholesalePrice()` THẲNG, KHÔNG khoá theo
+`withAppLock(\`dsmartWholesalePrice:${custId}:${skuId}\`)` như `POST /apply`
+và job "📅 Lên Lịch Áp Giá" (`dsmartAutoApplyScheduledPrices.js`) đang dùng.
+2 job này CÙNG cadence 10 phút, khởi động gần như đồng thời (`server.js`).
+Nếu giá CŨ (ACTIVE, đến hạn tự xoá) và giá MỚI (đã lên lịch, đến hạn áp
+dụng) là CÙNG 1 cặp Mã Khách B2B/Mã Sản Phẩm — tình huống **điển hình** khi
+dùng "Lên Lịch" để nối tiếp giá mới ngay khi giá cũ sắp hết hạn — 2 job có
+thể chạy chồng: job Lên Lịch ghi đè CSPRICE bằng giá MỚI trước, job Xoá Hết
+Hạn (không khoá, dùng snapshot đọc TRƯỚC khi job kia ghi đè) vẫn XOÁ dòng đó
+theo đúng khoá tự nhiên (CUST_ID, SKU_ID — không đổi dù bị ghi đè) NGAY SAU
+— **mất trắng giá MỚI trên CSPRICE thật**, dù mirror nội bộ vẫn báo entry đó
+"ACTIVE" (giá treo, không có thật trên DSmart). Cùng 2 route `PATCH
+/entries/:id` (Sửa) và `POST /entries/:id/delete` (Xoá tay) cũng chỉ khoá
+theo record-id nội bộ, KHÔNG khoá theo cặp CUST_ID/SKU_ID — cùng loại lỗ
+hổng (rủi ro thấp hơn, cần 2 thao tác TAY trùng đúng lúc, nhưng vẫn vá cho
+nhất quán).
+
+**Cách vá**: cả 3 nơi (job Tự Động Xoá, PATCH Sửa, POST Xoá tay) nay khoá
+ĐÚNG CÙNG khoá `dsmartWholesalePrice:${custId}:${skuId}` như `/apply`/job
+Lên Lịch đang dùng. Riêng job Tự Động Xoá còn **đọc lại (fresh) trạng thái
+entry NGAY TRONG khoá** trước khi quyết định xoá (không tin snapshot đọc
+TRƯỚC khi giành khoá) — nếu entry đã đổi trạng thái (không còn ACTIVE, hoặc
+không còn đến hạn) trong lúc chờ khoá, BỎ QUA dòng đó thay vì xoá nhầm.
+
+**Test**: thêm 2 kịch bản mới vào `tests/test-dsmart-wholesale-price.js` —
+(1) mô phỏng ĐÚNG race (tạm thay `getAllForCollection()` để giả lập 1 thao
+tác khác ghi đè ĐÚNG lúc job đang cầm snapshot cũ, trước khi giành khoá) —
+xác nhận **CSPRICE vẫn còn đúng 1 dòng (giá MỚI), KHÔNG bị xoá mất**; đã tự
+kiểm chứng kịch bản này THẬT SỰ FAIL trên code cũ (tái hiện đúng lỗi) trước
+khi xác nhận PASS sau khi vá; (2) xác nhận `PATCH /entries/:id`/
+`POST /entries/:id/delete` nay giành đúng khoá cặp CUST_ID/SKU_ID. 75/75
+pass (file này) — không regression ở `test-dsmart-store-fanout.js` (23/23),
+`test-dsmart-natural-key-matching.js` (19/19), `test-dsmart-price-ui.js`
+(70/70, Playwright thật), CSP sweep sạch.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
