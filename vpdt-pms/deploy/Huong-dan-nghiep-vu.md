@@ -9491,3 +9491,55 @@ hồi quy.
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới (chỉ sửa code route +
 client, không thêm bảng/cấu hình nào).
+
+## 5v. Tối ưu tốc độ: Lưu/Xoá "Nhóm Phân Quyền" (12/2026)
+
+Người dùng báo trực tiếp kèm ảnh chụp mobile: *"phần phân quyền cho nhóm bạn
+cũng xử lý theo hướng phân quyền với user nhé, nó đang hơi chậm"*.
+
+**Nguyên nhân**: `savePermGroup()`/`deletePermGroup()`
+(`module-admin-permgroups.js`) TRƯỚC ĐÂY luôn chụp (`JSON.parse(JSON.stringify(...))`)
+VÀ gửi lên server **NGUYÊN CẢ `DB.users`** (toàn bộ nhân viên công ty) mỗi khi
+sửa/xoá 1 Nhóm Phân Quyền — dù vòng lặp tính quyền thực tế chỉ sửa đúng các
+thành viên LIÊN QUAN tới nhóm đó (thêm/gỡ thủ công + khớp/hết khớp tiêu chí
+chức danh). Đây CHÍNH LÀ gốc rễ "chậm" đã từng vá cho màn "Sửa 1 Người Dùng"
+(xem mục đã có, `syncUserPatch()`/`__patchUser`, 11/2026) — nhưng lúc đó CHỦ Ý
+chưa áp dụng cho Nhóm Phân Quyền vì 1 nhóm có thể ảnh hưởng NHIỀU người cùng
+lúc (không chỉ đúng 1 người).
+
+**Cách vá**: mở rộng đúng cơ chế patch đã có (không viết lại logic nghiệp vụ
+tính quyền) để nhận MẢNG thay vì 1 bản ghi:
+
+- `routes/data.js` (`isUsersPatchMode`): nhận thêm hình dạng
+  `{ __patchUsers: [...] }` (bên cạnh `{ __patchUser: {...} }` đã có) — cùng
+  cơ chế khoá-đọc-mới-nhất-rồi-ghi (`withLockedAppDataValue`) + chạy NGUYÊN
+  VẸN `prepareUsersForSave()` trên danh sách đã gộp, chỉ khác: gộp NHIỀU bản
+  ghi patch cùng lúc thay vì 1. Response trả thêm `items` (mảng bản ghi thật
+  đã lưu) bên cạnh `item` (1 bản ghi, giữ nguyên cho `saveUser()`).
+- `module-admin-submissiongroups.js`: thêm `syncUsersPatchBatch(changedUsers)`
+  — cùng khuôn `syncUserPatch()`, gửi `{ __patchUsers: [...] }`.
+- `module-admin-permgroups.js`: `savePermGroup()`/`deletePermGroup()` giữ
+  NGUYÊN VẸN logic tính quyền/thành viên (vòng lặp `DB.users.forEach()` vẫn
+  early-return cho người KHÔNG liên quan tới nhóm đang sửa như cũ) — chỉ đổi
+  phạm vi CHỤP (snapshot rollback) và GỬI từ "toàn bộ `DB.users`" thành "chỉ
+  đúng những người thật sự thay đổi" (`changedUsers`). `syncStorage('permGroups', ...)`
+  (gửi nguyên mảng `permGroups`, vốn nhỏ, KHÔNG phải gốc rễ chậm) giữ nguyên
+  không đổi.
+
+**Phạm vi KHÔNG đổi** (cố ý, rủi ro thấp): 13 nơi khác đang gọi
+`syncStorage('users', {usersBaseline})` (Nhập Excel, Đặt Lại Mật Khẩu Hàng
+Loạt, Ma Trận Phân Quyền...) — những luồng đó bản chất đã đụng rất nhiều
+người cùng lúc (gần hoặc bằng cả công ty), không có gì để thu hẹp thêm.
+
+Test mới: `tests/test-user-save-patch-mode.js` thêm 7 kịch bản cho
+`__patchUsers` (sửa nhiều người cùng lúc, tạo mới lẫn trong batch, atomic —
+1 bản ghi vi phạm chặn CẢ batch, đọc fresh giữa 2 lượt, gate quyền, payload
+rác). `tests/test-admin-users-permgroups.js` thêm 4 kịch bản Playwright thật
+((w1)-(w4)) xác nhận ĐÚNG qua UI thật: payload `/api/data/users` CHỈ chứa
+đúng số thành viên liên quan (xác nhận bằng cách so với tổng số user đã tích
+luỹ trong phiên test, không phải gửi nguyên mảng), rollback đúng khi server
+từ chối. Toàn bộ test liên quan tới `users`/`permGroups`/Ma Trận Phân Quyền
+đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.

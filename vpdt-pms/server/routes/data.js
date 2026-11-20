@@ -2452,18 +2452,38 @@ router.post('/:key', async (req, res) => {
     // request sửa 2 người KHÁC NHAU không bao giờ còn báo xung đột nhau nữa (lock chỉ chặn 2 request
     // cùng sửa "users" THẬT SỰ chồng chéo mili-giây, không dựa vào "phiên bản" của cả mảng như cũ), và
     // payload gửi lên/validate chỉ còn đúng 1 bản ghi thay vì toàn bộ nhân viên công ty.
+    //
+    // __patchUsers (12/2026, "màn Nhóm Phân Quyền lưu chậm" — người dùng yêu cầu xử lý Nhóm Phân Quyền
+    // THEO HƯỚNG đã làm cho 1 Người Dùng ở trên): savePermGroup()/deletePermGroup()
+    // (module-admin-permgroups.js) trước đây vẫn gửi NGUYÊN CẢ DB.users (toàn công ty) mỗi khi sửa/xoá 1
+    // Nhóm Phân Quyền, dù thực tế chỉ CÁC THÀNH VIÊN LIÊN QUAN tới đúng nhóm đó (thêm/gỡ thủ công + khớp/
+    // hết khớp tiêu chí chức danh) có thay đổi gì — JSON.parse(JSON.stringify(DB.users)) + gửi mảng lớn đó
+    // lên mạng là gốc rễ "chậm", CÙNG TRIỆU CHỨNG đã vá cho saveUser() ở trên, chỉ khác: 1 nhóm có thể ảnh
+    // hưởng NHIỀU người cùng lúc (không phải đúng 1 người) nên cần mảng, không phải 1 object. Hình dạng
+    // { __patchUsers: [...] } (mảng trong 1 OBJECT, không phải mảng trần) để không lẫn với nhánh
+    // "Array.isArray(value)" cũ (Nhập Excel/Đặt Lại Mật Khẩu Hàng Loạt... hoàn toàn không đổi gì, vẫn gửi
+    // mảng trần như trước). Cùng cơ chế khoá-đọc-mới-nhất-rồi-ghi + prepareUsersForSave() CHẠY NGUYÊN VẸN
+    // trên TOÀN BỘ danh sách đã gộp (không viết lại logic nghiệp vụ gán quyền/validate) — chỉ payload
+    // gửi lên từ trình duyệt mới thu hẹp còn đúng các bản ghi thật sự thay đổi.
     let usersPatchAlreadyWritten = false;
     let patchedUserId = null;
-    const isUsersPatchMode = key === 'users' && value && typeof value === 'object' && !Array.isArray(value) && value.__patchUser;
+    let patchedUserIds = null;
+    const isUsersPatchMode = key === 'users' && value && typeof value === 'object' && !Array.isArray(value) && (value.__patchUser || value.__patchUsers);
     if (isUsersPatchMode) {
-      const patchUser = value.__patchUser;
-      patchedUserId = patchUser.id;
+      const isBatch = !!value.__patchUsers;
+      const patchUsersArr = isBatch ? value.__patchUsers : [value.__patchUser];
+      if (!Array.isArray(patchUsersArr) || !patchUsersArr.length || patchUsersArr.some(u => !u || typeof u !== 'object' || u.id === undefined || u.id === null)) {
+        throw new HttpError(400, 'Dữ liệu người dùng cần lưu (patch) không hợp lệ.');
+      }
+      if (isBatch) patchedUserIds = patchUsersArr.map(u => u.id); else patchedUserId = patchUsersArr[0].id;
       value = await withLockedAppDataValue('users', async (freshUsers) => {
         const arr = Array.isArray(freshUsers) ? freshUsers : [];
         oldUsersForProfileCascade = arr;
-        const idx = arr.findIndex(u => u.id === patchUser.id);
-        const merged = idx === -1 ? [...arr, patchUser] : arr.map((u, i) => (i === idx ? patchUser : u));
-        return prepareUsersForSave(merged, req.user.username);
+        const byId = new Map(patchUsersArr.map(u => [u.id, u]));
+        const merged = arr.map(u => (byId.has(u.id) ? byId.get(u.id) : u));
+        const existingIds = new Set(arr.map(u => u.id));
+        const toAppend = patchUsersArr.filter(u => !existingIds.has(u.id));
+        return prepareUsersForSave([...merged, ...toAppend], req.user.username);
       });
       usersPatchAlreadyWritten = true;
     } else if (key === 'users' && Array.isArray(value)) {
@@ -2690,17 +2710,22 @@ router.post('/:key', async (req, res) => {
     // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.
     logAdminSensitiveDataWrite(req, key);
 
-    // patch-mode (xem isUsersPatchMode ở trên) trả kèm ĐÚNG bản ghi vừa lưu (đã qua prepareUsersForSave(),
-    // KHÔNG phải nguyên văn client gửi lên — có thể đã hash mật khẩu/PIN mới, giữ lại field server quản
-    // lý...) để client tự thay đúng 1 phần tử trong DB.users, không cần cả mảng trả về.
-    const patchedItem = usersPatchAlreadyWritten
+    // patch-mode (xem isUsersPatchMode ở trên) trả kèm ĐÚNG (các) bản ghi vừa lưu (đã qua
+    // prepareUsersForSave(), KHÔNG phải nguyên văn client gửi lên — có thể đã hash mật khẩu/PIN mới, giữ
+    // lại field server quản lý...) để client tự thay đúng (các) phần tử trong DB.users, không cần cả
+    // mảng trả về. `item` (1 bản ghi) giữ nguyên cho __patchUser (saveUser()); `items` (mảng) MỚI cho
+    // __patchUsers (savePermGroup()/deletePermGroup(), xem chú thích __patchUsers ở trên).
+    const patchedItem = usersPatchAlreadyWritten && patchedUserId != null
       ? stripPasswords([(value || []).find(u => u.id === patchedUserId)])[0]
+      : undefined;
+    const patchedItems = usersPatchAlreadyWritten && patchedUserIds
+      ? stripPasswords((value || []).filter(u => patchedUserIds.includes(u.id)))
       : undefined;
     if (ifMatch) {
       res.set('ETag', savedVersion);
-      return res.json({ ok: true, version: savedVersion, usersVersion, syncedVersions, item: patchedItem });
+      return res.json({ ok: true, version: savedVersion, usersVersion, syncedVersions, item: patchedItem, items: patchedItems });
     }
-    res.json({ ok: true, usersVersion, syncedVersions, item: patchedItem });
+    res.json({ ok: true, usersVersion, syncedVersions, item: patchedItem, items: patchedItems });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, `POST /api/data/${key}`, 'Không thể lưu dữ liệu vào SQL Server');

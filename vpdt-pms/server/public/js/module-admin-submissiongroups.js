@@ -1288,6 +1288,35 @@ async function syncUserPatch(patchUser) {
   }
 }
 
+// syncUsersPatchBatch(changedUsers) — lưu ĐÚNG những người dùng THẬT SỰ thay đổi, không phải nguyên cả
+// DB.users (12/2026, theo yêu cầu người dùng: "phần phân quyền cho nhóm cũng xử lý theo hướng phân
+// quyền với user nhé, nó đang hơi chậm" — savePermGroup()/deletePermGroup() ở module-admin-permgroups.js
+// TRƯỚC ĐÂY gửi NGUYÊN CẢ danh sách toàn công ty mỗi khi sửa/xoá 1 Nhóm Phân Quyền, dù thực tế chỉ các
+// THÀNH VIÊN LIÊN QUAN tới đúng nhóm đó thay đổi — CÙNG GỐC RỄ "chậm" đã vá cho syncUserPatch() ở trên,
+// chỉ khác: 1 nhóm có thể ảnh hưởng NHIỀU người cùng lúc nên cần gửi 1 MẢNG thay vì 1 object). Gửi
+// { __patchUsers: [...] } — xem nhánh isUsersPatchMode ở routes/data.js (CHUNG khoá-đọc-mới-nhất-rồi-ghi
+// + prepareUsersForSave() với __patchUser, không viết lại logic nghiệp vụ). Trả về { ok, items,
+// usersVersion } (items = CÁC bản ghi THẬT server đã lưu) hoặc null nếu lỗi (alert đã tự hiện).
+async function syncUsersPatchBatch(changedUsers) {
+  if (!changedUsers || !changedUsers.length) return { ok: true, items: [] };
+  // Cùng lý do loại mustChangePassword ở syncUserPatch() ngay trên — áp dụng cho TỪNG người trong mảng.
+  const payloadUsers = changedUsers.map(({ mustChangePassword, ...rest }) => rest);
+  try {
+    const res = await fetch('/api/data/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ __patchUsers: payloadUsers })
+    });
+    if (res.status === 401) { handleSessionExpired(); return null; }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`⚠️ ${body.error || `Lỗi máy chủ (HTTP ${res.status})`}`); return null; }
+    return body;
+  } catch (err) {
+    alert(`⚠️ Không thể kết nối tới máy chủ để lưu: ${err.message}`);
+    return null;
+  }
+}
+
 async function saveUser(e) {
   e.preventDefault();
   if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()

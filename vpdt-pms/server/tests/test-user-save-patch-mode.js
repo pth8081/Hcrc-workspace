@@ -231,6 +231,84 @@ async function main() {
       assertEqual(APP_DATA.users.find(u => u.id === 2).phone, '0908888888', 'vẫn ghi đúng như cơ chế cũ');
     });
 
+    // ==========================================================================
+    // __patchUsers (12/2026, "màn Nhóm Phân Quyền lưu chậm" — theo yêu cầu người dùng "phần phân quyền
+    // cho nhóm bạn cũng xử lý theo hướng phân quyền với user nhé"): savePermGroup()/deletePermGroup()
+    // (module-admin-permgroups.js) có thể ảnh hưởng NHIỀU thành viên cùng lúc (không chỉ đúng 1 người
+    // như saveUser()) — mở rộng isUsersPatchMode nhận { __patchUsers: [...] } (MẢNG trong 1 OBJECT, khác
+    // mảng TRẦN của nhánh classic) — CÙNG cơ chế khoá-đọc-mới-nhất-rồi-ghi + prepareUsersForSave() với
+    // __patchUser, chỉ khác số lượng bản ghi gộp vào 1 lượt khoá.
+    // ==========================================================================
+    await run.run('Patch-mode (batch): __patchUsers sửa 2 người CÙNG LÚC -> CHỈ đúng 2 người đó đổi, người thứ 3 GIỮ NGUYÊN', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, dept: 'Phòng B' }, { ...NV2, dept: 'Phòng B' }] });
+      assertEqual(res.status, 200, `phải lưu thành công, got: ${JSON.stringify(res.body)}`);
+      assertEqual(res.body.items.length, 2, 'items trả về phải đúng 2 bản ghi vừa patch');
+      assertEqual(APP_DATA.users.length, 3, 'không được thêm/bớt user nào ngoài ý muốn');
+      assertEqual(APP_DATA.users.find(u => u.id === 2).dept, 'Phòng B', 'nv1 phải đổi dept thật trong CSDL (mock)');
+      assertEqual(APP_DATA.users.find(u => u.id === 3).dept, 'Phòng B', 'nv2 phải đổi dept thật trong CSDL (mock)');
+      assertEqual(APP_DATA.users.find(u => u.id === 1).dept, 'Ban Giám Đốc', 'admin (KHÔNG nằm trong batch) phải giữ nguyên, không bị đụng');
+      assert(!!res.body.usersVersion, 'phải trả kèm usersVersion để client tự đồng bộ DB._versions.users');
+    });
+
+    await run.run('Patch-mode (batch): items trả về KHÔNG lộ mật khẩu/PIN hash (stripPasswords, cùng khuôn __patchUser)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, pass: 'MatKhauMoi@2024' }] });
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.items[0].pass, undefined, 'item KHÔNG được có field pass');
+      assertEqual(res.body.items[0].pinHash, undefined, 'item KHÔNG được có field pinHash');
+    });
+
+    await run.run('Patch-mode (batch): 1 người MỚI (id chưa tồn tại) trong cùng mảng -> thêm vào danh sách, 1 người còn lại chỉ SỬA', async () => {
+      resetData();
+      const newUser = { id: 999, username: 'nv3', pass: 'MatKhau@2024', name: 'Nhân Viên 3', dept: 'Phòng B', perms: {}, active: true };
+      const res = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, phone: '0905555555' }, newUser] });
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(APP_DATA.users.length, 4, 'phải thêm đúng 1 user mới, giữ nguyên 3 user cũ (1 trong đó vừa sửa)');
+      assertEqual(APP_DATA.users.find(u => u.id === 2).phone, '0905555555', 'nv1 phải được sửa thật');
+      assert(!!APP_DATA.users.find(u => u.username === 'nv3'), 'nv3 phải được tạo mới thật');
+    });
+
+    await run.run('Patch-mode (batch): LUÔN đọc "users" MỚI NHẤT — thay đổi "từ nơi khác" giữa 2 lượt batch KHÔNG bị mất (cùng cơ chế __patchUser)', async () => {
+      resetData();
+      const res1 = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, phone: '0901111111' }] });
+      assertEqual(res1.status, 200, JSON.stringify(res1.body));
+      const nv2InDb = APP_DATA.users.find(u => u.id === 3);
+      nv2InDb.name = 'Nhân Viên 2 (đã tự đổi tên ở nơi khác)';
+      const res2 = await api('POST', '/api/data/users', { __patchUsers: [{ ...ADMIN, email: 'admin@hcrc.vn' }] });
+      assertEqual(res2.status, 200, JSON.stringify(res2.body));
+      assertEqual(APP_DATA.users.find(u => u.id === 2).phone, '0901111111', 'thay đổi lượt 1 phải còn nguyên');
+      assertEqual(APP_DATA.users.find(u => u.id === 3).name, 'Nhân Viên 2 (đã tự đổi tên ở nơi khác)', 'thay đổi "từ nơi khác" KHÔNG được bị ghi đè mất');
+      assertEqual(APP_DATA.users.find(u => u.id === 1).email, 'admin@hcrc.vn', 'thay đổi lượt 2 phải được áp dụng');
+    });
+
+    await run.run('Patch-mode (batch): gỡ quyền Admin của ADMIN DUY NHẤT còn lại trong batch -> 400 (assertAtLeastOneAdmin), không ghi gì', async () => {
+      resetData();
+      APP_DATA.users = [{ ...ADMIN, username: 'nonadmin', perms: {} }, { ...NV1 }, { ...NV2 }];
+      const res = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, phone: '0900001111' }, { ...NV2, perms: {} }] });
+      assertEqual(res.status, 400, `phải chặn KHÔNG CÒN ADMIN NÀO, got: ${JSON.stringify(res.body)}`);
+      assertEqual(APP_DATA.users.find(u => u.id === 3).perms.admin, true, 'KHÔNG được ghi đè — nv2 vẫn phải còn admin:true sau khi bị chặn');
+      assertEqual(APP_DATA.users.find(u => u.id === 2).phone, undefined, 'KHÔNG được ghi gì (kể cả bản ghi hợp lệ khác trong CÙNG batch) khi 1 bản ghi trong batch vi phạm — cả lượt lưu phải ATOMIC');
+    });
+
+    await run.run('Patch-mode (batch): KHÔNG phải Quản Trị Viên -> 403, không ghi gì (gate ADMIN_ONLY_KEYS vẫn áp dụng)', async () => {
+      resetData();
+      currentIsAdmin = false;
+      const res = await api('POST', '/api/data/users', { __patchUsers: [{ ...NV1, phone: '0900000000' }] });
+      assertEqual(res.status, 403, `phải bị chặn 403, got: ${JSON.stringify(res.body)}`);
+      assertEqual(APP_DATA.users.find(u => u.id === 2).phone, undefined, 'KHÔNG được ghi gì khi bị chặn quyền');
+      currentIsAdmin = true;
+    });
+
+    await run.run('Patch-mode (batch): mảng rỗng/thiếu id -> 400, không ghi gì (chặn payload rác)', async () => {
+      resetData();
+      const res1 = await api('POST', '/api/data/users', { __patchUsers: [] });
+      assertEqual(res1.status, 400, `mảng rỗng phải bị chặn, got: ${JSON.stringify(res1.body)}`);
+      const res2 = await api('POST', '/api/data/users', { __patchUsers: [{ username: 'thieu-id' }] });
+      assertEqual(res2.status, 400, `thiếu id phải bị chặn, got: ${JSON.stringify(res2.body)}`);
+      assertEqual(APP_DATA.users.length, 3, 'KHÔNG được thêm/sửa gì khi payload rác');
+    });
+
     run.summary();
   } finally {
     server.close();
