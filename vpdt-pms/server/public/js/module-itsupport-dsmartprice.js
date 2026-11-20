@@ -203,8 +203,13 @@ async function renderDsmartPriceEntries() {
     const note = isActive
       ? `Nộp ${dsmartPriceFmtDate((e.createdAt || '').slice(0, 10))} bởi ${escapeHtml(e.createdBy || '—')}`
       : `Xoá bởi ${escapeHtml(e.deletedBy || 'hệ thống tự động')}`;
+    // Nút "🗑️ Xoá" cho dòng ĐANG ACTIVE (12/2026, theo yêu cầu người dùng — trước đây dòng active CHỈ có
+    // nút Sửa, không có cách nào xoá sớm được dù chưa hết hạn, phải đợi qua Ngày Kết Thúc mới tick xoá
+    // hàng loạt được ở mục 2) — xác nhận 2 LỚP nếu giá đang THẬT SỰ áp dụng tại quầy (FR_DATE<=hôm nay<=
+    // TO_DATE), chỉ 1 lớp nếu chưa tới hiệu lực (🔵 Sắp áp dụng, chưa ai dùng thật).
     const actions = isActive
       ? `<button type="button" data-op="startDsmartPriceEdit" data-arg0="${e.id}" class="bg-white border text-gray-700 text-[10.5px] font-bold px-2 py-0.5 rounded">✏️ Sửa</button>`
+        + ` <button type="button" data-op="deleteDsmartPriceActiveEntry" data-arg0="${e.id}" class="bg-red-50 border border-red-300 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded">🗑️ Xoá</button>`
         + (e.toDate >= today && e.frDate <= today ? `<span class="block text-[9.5px] text-red-600 mt-0.5">⚠️ Giá đang áp dụng tại quầy</span>` : '')
       : `<button type="button" data-op="startDsmartPriceReuse" data-arg0="${e.id}" class="bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10.5px] font-bold px-2 py-0.5 rounded">↩️ Dùng Lại</button>`;
     return `<tr class="${isActive ? '' : 'opacity-60'}">
@@ -258,6 +263,27 @@ async function saveDsmartPriceEdit() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     alert('✅ Đã sửa giá thành công');
+    await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ----- Xoá sớm dòng ĐANG ACTIVE (12/2026, theo yêu cầu người dùng) — trước đây mục "Quản Lý Giá Đã Hết
+// Hạn" CHỈ cho tick xoá dòng đã QUA Ngày Kết Thúc, dòng còn hiệu lực chỉ Sửa được, không xoá sớm được dù
+// cần (VD xoá dòng nhập nhầm/test). Xác nhận 2 LỚP riêng nếu giá đang THẬT SỰ áp dụng tại quầy ngay lúc
+// này (an toàn hơn xoá hàng loạt — đây là xoá CHỦ Ý 1 dòng đang sống, không phải dọn dẹp dòng đã hết hạn).
+async function deleteDsmartPriceActiveEntry(id) {
+  id = Number(id);
+  const entry = _dsmartPriceEntries.find(e => e.id === id);
+  if (!entry) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const isLiveNow = entry.frDate <= today && entry.toDate >= today;
+  if (!confirm(`Xác nhận XOÁ THẬT giá ${escapeHtml(entry.custId)}/${escapeHtml(entry.skuId)} khỏi CSPRICE (DSmart16 Trung Tâm)? Không thể hoàn tác.`)) return;
+  if (isLiveNow && !confirm('⚠️ XÁC NHẬN LẦN 2: giá này ĐANG ÁP DỤNG THẬT tại quầy ngay lúc này. Bạn CHẮC CHẮN muốn xoá ngay (không đợi hết hạn)?')) return;
+  try {
+    const res = await fetch(`/api/dsmart-price/entries/${id}/delete`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    alert('✅ Đã xoá thành công');
     await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
   } catch (err) { alert('⛔ ' + err.message); }
 }
