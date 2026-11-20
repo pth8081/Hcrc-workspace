@@ -106,7 +106,8 @@ stubModule('lib/dsmartSqlClient', {
     if (!host || !database || !user || !password) throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra kết nối.');
     if (forceStoreTestConnError) throw new DsmartConfigError('Không kết nối được (giả lập)');
     return { ms: 9 };
-  }
+  },
+  closeStorePool: async () => {}
 });
 
 // ===== Giả lập mirror nội bộ dbo.DsmartWholesalePriceEntries =====
@@ -836,6 +837,38 @@ async function main() {
     assert.strictEqual(result.appliedCount, 0);
     assert.strictEqual(CSPRICE.length, 0);
     assert.strictEqual(ENTRIES[0].status, 'CANCELLED');
+  });
+
+  // LỖI THẬT đã vá (audit chéo 12/2026 — xem lịch sử ở jobs/dsmartAutoApplyScheduledPrices.js): job cũ
+  // KHÔNG khoá/dọn stale entry như POST /apply, có thể để sót >1 entry mirror ACTIVE cùng trỏ 1 dòng
+  // CSPRICE thật nếu ai đó "Thêm Giá Mới" tay cho ĐÚNG cặp đang chờ lên lịch trước khi job tới lượt.
+  await test('jobs/dsmartAutoApplyScheduledPrices: cặp đang chờ lên lịch bị "Thêm Giá Mới" tay ghi đè TRƯỚC khi tới hạn -> job dọn đúng entry ACTIVE cũ, KHÔNG để sót 2 entry ACTIVE cùng trỏ 1 dòng CSPRICE', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    // 1) Đặt lịch giá cho cặp AUTO4/SKA4, Ngày Bắt Đầu tương lai.
+    await apiPost('/apply', { rows: [{ custId: 'AUTO4', skuId: 'SKA4', price: 1111, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    const scheduledEntry = ENTRIES.find(e => e.status === 'SCHEDULED');
+    assert.ok(scheduledEntry, 'phải có 1 entry SCHEDULED');
+    // 2) TRƯỚC khi tới hạn, người dùng "Thêm Giá Mới" tay (áp NGAY, không đặt lịch) cho ĐÚNG cùng cặp
+    //    AUTO4/SKA4 — ghi thật vào CSPRICE, tạo 1 entry ACTIVE riêng.
+    await apiPost('/apply', { rows: [{ custId: 'AUTO4', skuId: 'SKA4', price: 2222, frDate: today, toDate: '2099-12-31' }] });
+    const manualActiveEntry = ENTRIES.find(e => e.status === 'ACTIVE' && e.custId === 'AUTO4');
+    assert.ok(manualActiveEntry, 'phải có 1 entry ACTIVE từ lượt Thêm tay');
+    assert.strictEqual(CSPRICE.length, 1, 'CSPRICE chỉ có đúng 1 dòng (PK CUST_ID+SKU_ID)');
+    // 3) Mô phỏng "đã tới Ngày Bắt Đầu" của dòng SCHEDULED, chạy job.
+    scheduledEntry.frDate = today;
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 1);
+    assert.strictEqual(CSPRICE.length, 1, 'VẪN chỉ đúng 1 dòng CSPRICE (ghi đè, không tạo dòng mới)');
+    const afterActive = ENTRIES.filter(e => e.custId === 'AUTO4' && e.skuId === 'SKA4' && e.status === 'ACTIVE');
+    assert.strictEqual(afterActive.length, 1, `CHỈ ĐÚNG 1 entry mirror ACTIVE cho cặp AUTO4/SKA4 sau khi job chạy — got ${afterActive.length}`);
+    assert.strictEqual(afterActive[0].id, scheduledEntry.id, 'entry ACTIVE còn lại phải là entry VỪA được job áp dụng (từ SCHEDULED)');
+    const staleEntry = ENTRIES.find(e => e.id === manualActiveEntry.id);
+    assert.strictEqual(staleEntry.status, 'DELETED', 'entry ACTIVE CŨ (từ lượt Thêm tay) phải bị job tự đánh dấu DELETED');
+    assert.strictEqual(staleEntry.history[staleEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
   });
 
   await stopServer();

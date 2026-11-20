@@ -741,6 +741,19 @@ async function closeAllStorePools() {
   storePoolCache.clear();
 }
 
+// closeStorePool(storeId) — audit chéo 12/2026 phát hiện: xoá hẳn 1 kết nối siêu thị
+// (routes/dsmartWholesalePrice.js DELETE /store-connections/:id) trước đây KHÔNG đóng pool đang cache
+// theo đúng id đó trong storePoolCache (chỉ getStorePool() tự đóng pool CŨ khi đổi "chữ ký" cấu hình,
+// không xử lý trường hợp kết nối bị XOÁ hẳn) — pool đó (tối đa 3 connection) treo lơ lửng tới khi server
+// restart, tích tụ rò tài nguyên nếu admin xoá/tạo lại kết nối siêu thị nhiều lần. Gọi hàm này ngay sau
+// khi xoá kết nối khỏi dbo.DsmartStorePriceConnections.
+async function closeStorePool(storeId) {
+  const cached = storePoolCache.get(storeId);
+  if (!cached) return;
+  try { await cached.pool.close(); } catch (_) { /* ignore */ }
+  storePoolCache.delete(storeId);
+}
+
 // testStoreConnection(overrideCfg): nút "🔌 Kiểm Tra Kết Nối" ở màn Cấu Hình Kết Nối Siêu Thị — cùng
 // khuôn testDsmartConnection() ở trên (test giá trị đang gõ dở, KHÔNG đụng pool cache dùng cho ghi thật).
 // overrideCfg: { host, port, database, user, password } — luôn dùng giá trị client gửi (KHÔNG có "test
@@ -770,6 +783,6 @@ async function testStoreConnection({ host, port, database, user, password }) {
 
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  closeAllStorePools, testStoreConnection,
+  closeAllStorePools, closeStorePool, testStoreConnection,
   testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
 };

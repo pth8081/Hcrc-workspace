@@ -28,7 +28,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { HttpError } = require('../lib/httpErrors');
@@ -214,6 +214,9 @@ router.delete('/store-connections/:id', async (req, res) => {
   try {
     const existing = await storeConnStore.getRawById(id);
     await storeConnStore.deleteStore(id);
+    // Đóng luôn pool kết nối đang cache (nếu có) theo đúng id này — audit chéo 12/2026 phát hiện xoá
+    // kết nối trước đây không dọn storePoolCache, treo pool lơ lửng tới khi server restart.
+    await closeStorePool(id);
     logDsmartPrice(req, 'DELETE_DSMART_STORE_CONNECTION', existing?.storeCode || String(id), `Xoá kết nối siêu thị "${existing?.storeName || ''}" (${existing?.storeCode || id})`);
     res.json({ ok: true });
   } catch (err) { sendCatchError(res, err, 'DELETE /api/dsmart-price/store-connections/:id'); }

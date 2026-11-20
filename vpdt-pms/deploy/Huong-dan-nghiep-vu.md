@@ -10415,3 +10415,33 @@ chuyển ACTIVE.
 tự khai báo kết nối cho từng siêu thị (host/port/CSDL/tài khoản/mật
 khẩu) — tính năng fan-out không làm gì nếu chưa có kết nối nào được
 thêm (an toàn, không tự bật ngầm).
+
+### Audit chéo trước merge (2 agent độc lập) — 4 lỗi thật đã vá
+
+Theo đúng quy tắc "test thật kỹ, nhiều agent test chéo" — 2 agent độc
+lập (1 đọc code + chạy test tĩnh, 1 lái Playwright thật thao tác UI)
+audit song song trước khi merge, tìm được 4 vấn đề thật:
+
+1. **(Mức trung bình, đã vá)** `jobs/dsmartAutoApplyScheduledPrices.js`
+   KHÔNG khoá (`withAppLock`) và KHÔNG dọn entry mirror ACTIVE cũ như
+   `POST /apply` đã làm — nếu ai đó "Thêm Giá Mới" tay (áp NGAY) cho
+   ĐÚNG cặp Mã Khách B2B/Mã Sản Phẩm đang chờ lên lịch TRƯỚC khi job
+   tới hạn, cả 2 entry mirror đều thành ACTIVE dù CSPRICE thật chỉ có 1
+   dòng — sai dữ liệu hiển thị (không sai CSPRICE thật). Đã vá: job giờ
+   khoá + tái dùng đúng logic dọn stale-entry của `/apply`. Thêm 1
+   kịch bản test mới xác nhận đúng hành vi sau vá.
+2. **(Mức trung bình, đã vá)** `lib/dsmartStorePriceConnectionsStore.js`
+   ném lỗi validate (thiếu trường, trùng Mã Siêu Thị...) bằng `Error`
+   thường thay vì `HttpError` — trên production (`NODE_ENV=production`)
+   bị `sendCatchError()` thay bằng thông báo chung "Đã có lỗi xảy ra",
+   ẩn mất lý do thật (VD "Mã Siêu Thị đã có kết nối khác"). Đã đổi
+   toàn bộ sang `HttpError(400/404, ...)`.
+3. **(Mức thấp, đã vá)** Xoá hẳn 1 kết nối siêu thị không đóng pool
+   đang cache (`storePoolCache`) — treo tài nguyên tới khi restart. Đã
+   thêm `closeStorePool(id)`, gọi ngay sau khi xoá.
+4. **(Mức thấp, đã vá)** Thêm/Sửa kết nối siêu thị thiếu validate độ
+   dài field (khớp đúng cột SQL) — lỗi SQL "truncated" khó hiểu nếu gõ
+   quá dài. Đã thêm `checkFieldLengths()`.
+
+Sau khi vá: 170/170 test pass (5 file test, gồm 1 kịch bản MỚI tái
+hiện đúng lỗi #1 để xác nhận đã vá đúng).

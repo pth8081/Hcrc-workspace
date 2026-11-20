@@ -6,6 +6,20 @@
 // (fan-out) được gọi tới file này.
 const { getPool, sql } = require('../db');
 const { encryptSecret, decryptSecret } = require('./emailCrypto');
+const { HttpError } = require('./httpErrors');
+
+// Giới hạn độ dài khớp đúng kiểu cột SQL khai báo ở sql/schema.sql (NVARCHAR(50)/(200)/(255)/(100)) — báo
+// lỗi rõ ràng ngay ở tầng ứng dụng thay vì để SQL Server tự chặn bằng lỗi "String or binary data would
+// be truncated" khó hiểu (audit chéo 12/2026 phát hiện route /apply đã có check tương tự, store-
+// connections thì chưa).
+const MAX_LEN = { storeCode: 50, storeName: 200, host: 255, database: 100, user: 100 };
+function checkFieldLengths(fields) {
+  for (const [key, max] of Object.entries(MAX_LEN)) {
+    if (fields[key] && String(fields[key]).length > max) {
+      throw new HttpError(400, `Trường "${key}" vượt quá ${max} ký tự cho phép.`);
+    }
+  }
+}
 
 function rowToRaw(row) {
   return {
@@ -52,13 +66,14 @@ async function getRawById(id) {
 
 async function createStore({ storeCode, storeName, host, port, database, user, password }, actor) {
   if (!storeCode || !storeName || !host || !database || !user || !password) {
-    throw new Error('Thiếu Mã Siêu Thị/Tên/Host/Tên CSDL/Tài khoản/Mật khẩu');
+    throw new HttpError(400, 'Thiếu Mã Siêu Thị/Tên/Host/Tên CSDL/Tài khoản/Mật khẩu');
   }
+  checkFieldLengths({ storeCode, storeName, host, database, user });
   const pool = await getPool();
   const existing = await pool.request().input('code', sql.NVarChar(50), String(storeCode).trim())
     .query('SELECT Id FROM dbo.DsmartStorePriceConnections WHERE StoreCode = @code');
   if (existing.recordset.length) {
-    throw new Error(`Mã Siêu Thị "${storeCode}" đã có kết nối khác — sửa kết nối đã có thay vì tạo trùng.`);
+    throw new HttpError(400, `Mã Siêu Thị "${storeCode}" đã có kết nối khác — sửa kết nối đã có thay vì tạo trùng.`);
   }
   const id = Date.now() + Math.floor(Math.random() * 1000);
   await pool.request()
@@ -81,15 +96,16 @@ async function createStore({ storeCode, storeName, host, port, database, user, p
 // updateStore(): password rỗng/không gửi = GIỮ NGUYÊN mật khẩu cũ (cùng ngữ nghĩa dsmartPriceConfigStore).
 async function updateStore(id, { storeCode, storeName, host, port, database, user, password, enabled }, actor) {
   const existing = await getRawById(id);
-  if (!existing) throw new Error('Không tìm thấy kết nối siêu thị này — có thể đã bị xoá.');
+  if (!existing) throw new HttpError(404, 'Không tìm thấy kết nối siêu thị này — có thể đã bị xoá.');
   if (!storeCode || !storeName || !host || !database || !user) {
-    throw new Error('Thiếu Mã Siêu Thị/Tên/Host/Tên CSDL/Tài khoản');
+    throw new HttpError(400, 'Thiếu Mã Siêu Thị/Tên/Host/Tên CSDL/Tài khoản');
   }
+  checkFieldLengths({ storeCode, storeName, host, database, user });
   const pool = await getPool();
   const dupCheck = await pool.request().input('code', sql.NVarChar(50), String(storeCode).trim()).input('id', sql.BigInt, id)
     .query('SELECT Id FROM dbo.DsmartStorePriceConnections WHERE StoreCode = @code AND Id <> @id');
   if (dupCheck.recordset.length) {
-    throw new Error(`Mã Siêu Thị "${storeCode}" đã được dùng cho 1 kết nối khác.`);
+    throw new HttpError(400, `Mã Siêu Thị "${storeCode}" đã được dùng cho 1 kết nối khác.`);
   }
   const passwordEnc = password ? encryptSecret(String(password)) : existing.passwordEnc;
   await pool.request()

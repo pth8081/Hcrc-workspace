@@ -14,7 +14,7 @@
 // AN TOÀN: lỗi ghi 1 dòng (VD mất kết nối DSmart) KHÔNG làm hỏng các dòng khác trong cùng lượt chạy — log
 // cảnh báo rõ ràng, tự thử lại ở lượt chạy kế tiếp (dòng vẫn giữ nguyên SCHEDULED nếu áp thất bại).
 const { insertWholesalePrice, DsmartConfigError } = require('../lib/dsmartSqlClient');
-const { getAllForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
+const { getAllForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 function todayDateOnlyIso(d = new Date()) {
@@ -38,26 +38,54 @@ async function runDsmartAutoApplyScheduledPrices() {
   for (const e of due) {
     if (stoppedEarly) break;
     try {
-      const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({
-        custId: e.custId, skuId: e.skuId, price: e.price, frDate: e.frDate, toDate: e.toDate
-      });
-      await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
-        if (item.status !== 'SCHEDULED') return item; // đã bị hủy/xử lý bởi thao tác khác trong lúc job đang chạy
+      // Khoá theo đúng cặp (CUST_ID, SKU_ID) — CÙNG khoá routes/dsmartWholesalePrice.js::POST /apply dùng
+      // — để 2 thao tác cùng chạm cặp này (VD người dùng "Thêm Giá Mới" tay cho ĐÚNG cặp đang chờ lên
+      // lịch, ngay trước khi job này tới lượt) không xen vào giữa, tránh mirror nội bộ có >1 entry ACTIVE
+      // cùng trỏ 1 dòng CSPRICE thật (audit chéo 12/2026 phát hiện: job cũ KHÔNG khoá/dọn stale entry như
+      // /apply, có thể để sót entry ACTIVE cũ khi insertWholesalePrice() ghi đè — xem lịch sử ở trên).
+      await withAppLock(`dsmartWholesalePrice:${e.custId}:${e.skuId}`, async () => {
+        const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({
+          custId: e.custId, skuId: e.skuId, price: e.price, frDate: e.frDate, toDate: e.toDate
+        });
         const now = new Date().toISOString();
-        return {
-          ...item, dsmartKey, status: 'ACTIVE', appliedAt: now,
-          history: [...(item.history || []), {
-            action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: 'AUTO_SCHEDULED', actor: null, at: now,
-            price: item.price, frDate: item.frDate, toDate: item.toDate, storeResults,
-            note: 'Tự động áp dụng đúng Ngày Bắt Đầu đã lên lịch'
-          }]
-        };
+        // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
+        // DSmart. Đánh dấu DELETED MỌI entry mirror ACTIVE khác cho đúng cặp này (cùng logic routes/
+        // dsmartWholesalePrice.js::POST /apply) — tránh mirror có nhiều entry ACTIVE cùng trỏ 1 dòng
+        // CSPRICE thật.
+        if (wasOverwrite) {
+          const existingActive = await getAllForCollection('dsmartWholesalePriceEntries');
+          const staleList = existingActive.filter(x => x.custId === e.custId && x.skuId === e.skuId && x.status === 'ACTIVE');
+          for (const stale of staleList) {
+            await withLockedRecordForCollection('dsmartWholesalePriceEntries', stale.id, (item) => {
+              if (item.status !== 'ACTIVE') return item;
+              return {
+                ...item, status: 'DELETED', deletedBy: null, deletedAt: now,
+                history: [...(item.history || []), {
+                  action: 'DELETE', mode: 'AUTO_OVERWRITTEN', actor: null, at: now,
+                  oldPrice: item.price, oldFrDate: item.frDate, oldToDate: item.toDate,
+                  note: 'Bị ghi đè tự động bởi 1 dòng khác (Lên Lịch Áp Giá hoặc Thêm Giá Mới) cho cùng Mã Khách B2B/Mã Sản Phẩm (CSPRICE chỉ cho phép 1 dòng/cặp)'
+                }]
+              };
+            });
+          }
+        }
+        await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
+          if (item.status !== 'SCHEDULED') return item; // đã bị hủy/xử lý bởi thao tác khác trong lúc job đang chạy
+          return {
+            ...item, dsmartKey, status: 'ACTIVE', appliedAt: now,
+            history: [...(item.history || []), {
+              action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: 'AUTO_SCHEDULED', actor: null, at: now,
+              price: item.price, frDate: item.frDate, toDate: item.toDate, storeResults,
+              note: 'Tự động áp dụng đúng Ngày Bắt Đầu đã lên lịch'
+            }]
+          };
+        });
+        if (storeFanOutError || (storeResults || []).some(r => !r.ok)) {
+          const failCount = (storeResults || []).filter(r => !r.ok).length;
+          errorDetails.push(`${e.custId}/${e.skuId}: áp dụng HO thành công nhưng ${storeFanOutError ? 'không đọc được danh sách siêu thị' : `${failCount} siêu thị fan-out lỗi`}`);
+        }
       });
       appliedCount++;
-      if (storeFanOutError || (storeResults || []).some(r => !r.ok)) {
-        const failCount = (storeResults || []).filter(r => !r.ok).length;
-        errorDetails.push(`${e.custId}/${e.skuId}: áp dụng HO thành công nhưng ${storeFanOutError ? 'không đọc được danh sách siêu thị' : `${failCount} siêu thị fan-out lỗi`}`);
-      }
     } catch (err) {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoApplyScheduledPrices: áp dụng thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);
