@@ -640,8 +640,15 @@ router.patch('/entries/:id', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(frDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate) || frDate > toDate) {
       throw new HttpError(400, 'Ngày bắt đầu/kết thúc không hợp lệ');
     }
+    // LỖI THẬT đã vá (audit chéo trước deploy, 12/2026): route này TRƯỚC ĐÂY chỉ khoá theo record-id nội
+    // bộ (withLockedRecordForCollection), KHÔNG khoá theo cặp (CUST_ID, SKU_ID) như POST /apply và job
+    // "Lên Lịch Áp Giá" đang dùng — nên có thể đụng độ (race) với 1 request /apply/job khác CÙNG lúc ghi
+    // đè đúng cặp CUST_ID/SKU_ID này (hiếm nhưng cùng loại lỗi vừa vá ở jobs/dsmartAutoDeleteExpiredPrices.js).
+    // Vá: đọc trước CUST_ID/SKU_ID (không đổi qua Sửa) để giành ĐÚNG khoá chung, rồi mới khoá record-id.
+    const peek = (await getAllForCollection('dsmartWholesalePriceEntries')).find(x => x.id === id);
+    if (!peek) throw new HttpError(404, 'Không tìm thấy hồ sơ');
     let storeResults, storeFanOutError;
-    const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
+    const updated = await withAppLock(`dsmartWholesalePrice:${peek.custId}:${peek.skuId}`, () => withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'ACTIVE') throw new HttpError(409, 'Dòng này đã bị xoá khỏi DSmart — không thể sửa, dùng "↩️ Dùng Lại" để tạo dòng mới.');
       // Lần 5: khoá chính thật CHỈ gồm CUST_ID+SKU_ID (KHÔNG đổi khi FR_DATE/TO_DATE đổi như giả định Lần 2
       // sai trước đây) — lưu lại khoá trả về chỉ để nhất quán, không còn bắt buộc như trước (xem chú thích
@@ -657,7 +664,7 @@ router.patch('/entries/:id', async (req, res) => {
         ...item, price, frDate, toDate, dsmartKey: newDsmartKey, updatedBy: req.freshUser.username, updatedAt: now,
         history: [...(item.history || []), { action: 'UPDATE', actor: req.freshUser.username, at: now, oldPrice: item.price, oldFrDate: item.frDate, oldToDate: item.toDate, newPrice: price, newFrDate: frDate, newToDate: toDate, storeResults }]
       };
-    });
+    }));
     logDsmartPrice(req, 'UPDATE_DSMART_PRICE', String(id), `Sửa giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
     res.json({ ok: true, item: updated, storeResults, storeFanOutError });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/entries/:id'); }
@@ -689,8 +696,13 @@ router.post('/entries/:id/delete', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
+    // Khoá theo cặp (CUST_ID, SKU_ID) TRƯỚC khi khoá record-id — cùng lý do đã vá ở PATCH /entries/:id và
+    // jobs/dsmartAutoDeleteExpiredPrices.js ngay trên (tránh race với /apply/job Lên Lịch cùng chạm đúng
+    // cặp này).
+    const peek = (await getAllForCollection('dsmartWholesalePriceEntries')).find(x => x.id === id);
+    if (!peek) throw new HttpError(404, 'Không tìm thấy hồ sơ');
     let storeResults, storeFanOutError;
-    const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
+    const updated = await withAppLock(`dsmartWholesalePrice:${peek.custId}:${peek.skuId}`, () => withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'ACTIVE') throw new HttpError(409, 'Dòng này đã được xoá trước đó rồi.');
       // targetStoreIds: tái dùng đúng danh sách đã chọn lúc Thêm (xem chú thích ở PATCH /entries/:id ở trên).
       const delResult = await deleteWholesalePrice({ dsmartKey: item.dsmartKey }, item.targetStoreIds);
@@ -700,7 +712,7 @@ router.post('/entries/:id/delete', async (req, res) => {
         ...item, status: 'DELETED', deletedBy: req.freshUser.username, deletedAt: now,
         history: [...(item.history || []), { action: 'DELETE', mode: 'MANUAL', actor: req.freshUser.username, at: now, storeResults }]
       };
-    });
+    }));
     logDsmartPrice(req, 'DELETE_DSMART_PRICE', String(id), `Xoá giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
     res.json({ ok: true, item: updated, storeResults, storeFanOutError });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/entries/:id/delete'); }
