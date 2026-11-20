@@ -10029,3 +10029,61 @@ buộc).
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới/quyền SQL nào khác
 ngoài quyền đã xin ở bản vá "6d".
+
+## 6f. LỖI THẬT PRODUCTION đã vá LẦN 6: Giá Bán Buôn — tự sửa 2 điểm sai lệch so với công thức gốc BRG_APP.sql khi ghi đè (12/2026)
+
+Sau khi vá "6e" (upsert chuẩn, khoá chống race, dọn hết entry cũ), IT báo
+giá ghi qua tính năng này **chưa đồng bộ xuống được các siêu thị**. Người
+dùng tự đối chiếu 2 dòng CSPRICE thật qua SSMS (1 dòng do tool này ghi, 1
+dòng do phần mềm DSmart gốc ghi) và nghi ngờ tool tự thêm sai lệch, yêu
+cầu rà lại đúng nguyên văn `_job_sp_WEBAPP_Item_Price` (`BRG_APP.sql`).
+
+**Rà lại kỹ nguyên văn câu UPDATE của bản gốc**:
+
+```sql
+update T
+set T.LASTWSPR=T.WSPRICE, T.WSPRICE = S.WSPRICE, T.OPEN_DATE = GETDATE(),
+    T.MODI_DATE = GETDATE(), STATUS=1, FR_DATE=startDate, TO_DATE=endDate
+```
+
+Phát hiện **2 điểm sai lệch THẬT** so với bản vá "6e":
+
+- **`LASTWSPR`**: bản gốc LUÔN lưu giá CŨ vào cột này trước khi ghi đè —
+  bản vá "6e" bỏ sót hoàn toàn cột này, giá cũ bị mất không dấu vết. Vá:
+  thêm `LASTWSPR = WSPRICE` NGAY TRƯỚC `WSPRICE = @price` trong CÙNG 1
+  mệnh đề `SET` của câu UPDATE (T-SQL đảm bảo mọi biểu thức trong `SET`
+  đọc giá trị CŨ của dòng trước khi cập nhật, nên viết trên 1 dòng vẫn
+  cho đúng kết quả như bản gốc).
+- **`OPEN_DATE`**: bản gốc LUÔN set lại `GETDATE()` mỗi lần ghi giá (kể cả
+  ghi đè). Bản vá "6e" CHỈ set nếu đang NULL (lựa chọn tự thêm lúc code,
+  không có trong bản gốc, với lý do "giữ nguyên ngày mở giá gốc" — SAI vì
+  phần mềm gốc không có khái niệm đó, OPEN_DATE là mốc "lần set giá gần
+  nhất"). Vá: bỏ hẳn điều kiện `ISNULL(...)`, LUÔN gán `GETDATE()`.
+
+**Về USER_ID/WS_ID (đều = 0 trong dòng tool ghi, khác dòng mẫu có USER_ID/
+WS_ID khác 0)**: tra cứu thêm trong `BRG_APP.sql`, xác nhận đây là 2 cột
+audit chung "máy trạm/người dùng nào thao tác" dùng y hệt ở nhiều bảng
+KHÁC hoàn toàn không liên quan tới giá (`STOCKBLK`, `GOODS`) — và chính
+`_job_sp_WEBAPP_Item_Price` (phần mềm áp giá cũ) **cũng KHÔNG hề set 2 cột
+này khi ghi CSPRICE**. Vì vậy **KHÔNG sửa** — để nguyên 0 như bản vá "6e"
+đã làm, vì đây mới là hành vi khớp đúng bản gốc.
+
+**Giới hạn quan trọng, nêu rõ không giấu**: `BRG_APP.sql` chỉ mô tả bước
+"bảng trung gian BRG_APP → CSPRICE trên DSmart16 Trung Tâm". Bước **"CSPRICE
+DSmart16 Trung Tâm → xuống từng siêu thị"** (đúng cái IT đang báo lỗi)
+**không xuất hiện ở đâu trong file này** — đây là một bước hoàn toàn khác,
+nằm ngoài phạm vi mã nguồn đang có. 2 điểm vá trên (LASTWSPR/OPEN_DATE) là
+sai lệch THẬT đã xác nhận chắc chắn so với bản gốc nên vá ngay, nhưng
+**chưa có cơ sở khẳng định đây là nguyên nhân** khiến giá không đồng bộ
+xuống siêu thị — người dùng sẽ hỏi lại đội DSmart/IT về tiêu chí của bước
+đồng bộ đó (bảng riêng? cột nào? tần suất quét?) để tra tiếp.
+
+Test: `tests/test-dsmart-natural-key-matching.js` sửa lại kịch bản ghi đè
+để xác nhận đúng hành vi MỚI (OPEN_DATE luôn reset, LASTWSPR lưu đúng giá
+cũ qua 2 lần ghi đè liên tiếp) — vẫn 19 kịch bản (sửa nội dung, không đổi
+số lượng). `test-dsmart-wholesale-price.js` (35) + `test-dsmart-price-ui.js`
+(44) chạy lại xác nhận không hồi quy. Tổng **98 kịch bản pass** (không đổi
+số lượng so với "6e", chỉ sửa lại 1 kịch bản cho đúng hành vi mới).
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới/quyền SQL nào khác.
