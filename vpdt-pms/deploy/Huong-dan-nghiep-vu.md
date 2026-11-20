@@ -9698,3 +9698,73 @@ nhận không có hồi quy.
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6b. LỖI THẬT PRODUCTION đã vá LẦN 2: Giá Bán Buôn — CSPRICE KHÔNG CÓ cột ID tự tăng (dùng khoá tự nhiên) (12/2026)
+
+Sau bản vá "5y" (TỰ TRA CỨU tên cột identity qua `sys.identity_columns`
+thay vì hard-code "ID"), người dùng thử lại và bấm nút **"🔍 Kiểm Tra Cấu
+Trúc Bảng CSPRICE"**, gửi ảnh chụp kết quả THẬT: `⛔ KHÔNG tìm thấy cột
+identity nào trên CSPRICE` — kèm đủ 23 cột thật của bảng. Đây **KHÔNG phải**
+lỗi tra sai tên cột (như lần 1) — `sys.identity_columns` trả về ĐÚNG, chỉ
+là **CSPRICE hoàn toàn không có cột ID tự tăng nào** — bảng này dùng
+**khoá tự nhiên (composite key)** nhiều cột, không có surrogate key riêng
+(mô hình phổ biến ở ERP cũ, dữ liệu đẩy từ nhiều nguồn khác nhau).
+
+**Cách vá**: `insertWholesalePrice()`/`updateWholesalePrice()`/
+`deleteWholesalePrice()` (`lib/dsmartSqlClient.js`) đổi hẳn sang dùng
+**khoá tự nhiên 7 cột**: `CUST_ID + TYPE + STK_ID + SKU_ID + WS_ID +
+FR_DATE + TO_DATE` (khách hàng + loại giá + kho/quầy + sản phẩm + bảng giá
++ khoảng ngày hiệu lực — suy luận từ đúng cấu trúc bảng thật, loại trừ
+`WSPRICE` vì đó là giá trị SẼ bị đổi khi Sửa, và loại trừ các cột sổ sách
+`OPEN_DATE`/`MODI_DATE`/`MODIFY`/`USER_ID` vì có thể bị hệ thống khác đụng
+tới ngoài tầm kiểm soát). Khi "Thêm Giá Mới", hệ thống ghi đúng 5 cột đã
+xác nhận rồi **đọc lại NGAY** dòng vừa ghi để lấy đủ 3 cột còn lại
+(`TYPE`/`STK_ID`/`WS_ID`) do SQL Server tự áp DEFAULT — lưu nguyên "khoá tự
+nhiên" này (`dsmartKey`) vào mirror nội bộ `dbo.DsmartWholesalePriceEntries`
+để Sửa/Xoá sau này khớp lại.
+
+**An toàn chống sửa/xoá nhầm** (vì đây là khoá SUY LUẬN, không phải
+PRIMARY KEY khai báo chính thức — môi trường phát triển không truy cập
+được CSDL DSmart thật để xác nhận 100%): mọi lượt Sửa/Xoá đều **ĐẾM
+`COUNT(*)` theo khoá tự nhiên TRƯỚC** khi ghi thật — nếu khớp **0 dòng**
+(đã bị xoá/sửa thủ công ngoài hệ thống) hoặc khớp **HƠN 1 DÒNG** (khoá suy
+luận không còn duy nhất — rủi ro đụng nhầm dòng của khách/sản phẩm khác)
+thì **DỪNG LẠI NGAY**, báo lỗi rõ ràng, không bao giờ âm thầm Sửa/Xoá mù.
+Sau khi ghi còn double-check lại `rowsAffected` đúng bằng 1 lần nữa. Lưu ý
+kỹ thuật: Ngày Bắt Đầu/Kết Thúc là 1 PHẦN của khoá tự nhiên — sau khi Sửa
+đổi ngày, khoá cũ không còn khớp dòng đó nữa, nên `updateWholesalePrice()`
+luôn trả về khoá MỚI để hệ thống tự lưu đè lại (không cần thao tác gì
+thêm, tự động).
+
+**Công cụ chẩn đoán "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" mở rộng thêm**: giờ
+hiện cả **PRIMARY KEY/UNIQUE INDEX khai báo thật** trên CSPRICE (nếu có,
+tra qua `sys.indexes`/`sys.index_columns`) để đội IT/DBA tự đối chiếu xem
+khoá tự nhiên hệ thống đang dùng có khớp đúng ý đồ thiết kế thật của
+DSmart hay không — vẫn hoạt động đúng dù không tìm thấy khoá khai báo nào
+(các lớp an toàn đếm trước khi ghi không phụ thuộc kết quả tra cứu này,
+đây CHỈ là công cụ chẩn đoán/đối chiếu thêm, khuyến nghị dùng trước khi
+triển khai diện rộng).
+
+Test: `tests/test-dsmart-identity-column-discovery.js` (lần vá trước) đã
+**thay bằng** `tests/test-dsmart-natural-key-matching.js` (10 kịch bản, mô
+phỏng THẬT gói `mssql` qua require.cache, CSPRICE giả lập KHÔNG có cột
+identity nào — đúng thực tế thật) — xác nhận: ghi được dù không có cột
+identity, đọc lại đủ khoá tự nhiên gồm cột DEFAULT, Sửa/Xoá khớp đúng 1
+dòng, khoá MỚI sau Sửa vẫn dùng được cho lượt kế tiếp, **DỪNG LẠI** khi
+khoá khớp 0 hoặc >1 dòng (2 kịch bản an toàn riêng), `inspectCspriceColumns()`
+trả đúng `identityColumn=null`/`naturalKeyColumns`/`keyIndexes`. Toàn bộ
+test Giá Bán Buôn khác (`test-dsmart-wholesale-price.js` 29 kịch bản,
+`test-dsmart-price-ui.js` 41 kịch bản) đã chạy lại xác nhận không có hồi
+quy.
+
+**Rủi ro còn tồn đọng (nêu rõ, không giấu)**: khoá tự nhiên ở trên là suy
+luận từ cấu trúc cột thật, KHÔNG phải xác nhận chính thức từ đội DSmart —
+nếu suy luận không đúng 100% ý đồ thiết kế thật (VD Ngày Kết Thúc không
+thực sự là 1 phần khoá phân biệt), các lớp an toàn (đếm trước khi ghi,
+chặn khớp >1 dòng) sẽ TỰ CHẶN và báo lỗi rõ ràng thay vì âm thầm sửa/xoá
+sai — khuyến nghị đội IT dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" xác
+nhận lại với đội DSmart/DBA trước khi dùng thật diện rộng, và thử 1-2 dòng
+nhỏ (thêm/sửa/xoá) trước khi dùng hàng loạt.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.

@@ -471,10 +471,12 @@ async function testDsmartPriceConnection() {
 }
 
 // inspectDsmartPriceCspriceTable() — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT
-// PRODUCTION đã phát hiện: giả định "CSPRICE có cột ID tự tăng" hoá ra SAI trên CSDL thật — hệ thống báo
-// "Invalid column name 'ID'." khi Thêm/Sửa/Xoá. Đã vá cho hệ thống TỰ TRA CỨU tên cột đúng, không cần
-// bấm nút này trước khi dùng bình thường — nút này chỉ để đội IT TỰ XEM LẠI đầy đủ cấu trúc cột khi cần
-// chẩn đoán thêm, dùng ĐÚNG giá trị đang gõ dở trên form, cùng khuôn testDsmartPriceConnection() ở trên.
+// PRODUCTION đã phát hiện 2 lần liên tiếp: lần 1 giả định "CSPRICE có cột ID tự tăng" SAI (lỗi "Invalid
+// column name 'ID'."); lần 2 (ảnh chụp thật kết quả bấm nút này) xác nhận CSPRICE KHÔNG CÓ cột identity
+// nào — hệ thống đã vá sang dùng "khoá tự nhiên" nhiều cột (xem lib/dsmartSqlClient.js). Nút này không
+// cần bấm trước khi dùng bình thường — chỉ để đội IT/DBA TỰ XEM LẠI cấu trúc cột + mọi PRIMARY KEY/UNIQUE
+// INDEX khai báo thật (nếu có) để đối chiếu với khoá tự nhiên hệ thống đang dùng, dùng ĐÚNG giá trị đang
+// gõ dở trên form, cùng khuôn testDsmartPriceConnection() ở trên.
 async function inspectDsmartPriceCspriceTable() {
   const host = document.getElementById('dsmartPriceCfgHost').value.trim();
   const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
@@ -492,15 +494,23 @@ async function inspectDsmartPriceCspriceTable() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    const rows = (data.columns || []).map(c => `<tr class="${c.name === data.identityColumn ? 'bg-emerald-50 font-bold' : ''}">
-      <td class="pr-3">${escapeHtml(c.name)}${c.name === data.identityColumn ? ' 🔑' : ''}</td>
+    const naturalKeySet = new Set(data.naturalKeyColumns || []);
+    const rows = (data.columns || []).map(c => `<tr class="${naturalKeySet.has(c.name) ? 'bg-emerald-50 font-bold' : ''}">
+      <td class="pr-3">${escapeHtml(c.name)}${naturalKeySet.has(c.name) ? ' 🔑' : ''}</td>
       <td class="pr-3 text-gray-500">${escapeHtml(c.dataType)}</td>
       <td class="text-gray-500">${c.nullable ? 'NULL được' : 'NOT NULL'}</td>
     </tr>`).join('');
+    // CSPRICE KHÔNG có cột ID tự tăng (identity) — hệ thống dùng "khoá tự nhiên" (naturalKeyColumns, 🔑
+    // đánh dấu trong bảng dưới) để khớp đúng 1 dòng khi Sửa/Xoá, xem lib/dsmartSqlClient.js. Nếu CSPRICE có
+    // khai báo PRIMARY KEY/UNIQUE INDEX thật (keyIndexes), hiện thêm để đội IT/DBA tự đối chiếu.
     const idNote = data.identityColumn
-      ? `<div class="text-emerald-700 font-semibold mb-1">🔑 Cột ID tự tăng (identity) thật: <code>${escapeHtml(data.identityColumn)}</code> — hệ thống đã tự dùng đúng cột này khi Thêm/Sửa/Xoá.</div>`
-      : `<div class="text-red-600 font-semibold mb-1">⛔ KHÔNG tìm thấy cột identity nào trên CSPRICE — Thêm/Sửa/Xoá sẽ báo lỗi, liên hệ đội phát triển.</div>`;
-    if (resultEl) resultEl.innerHTML = `${idNote}<table class="w-full">${rows}</table>`;
+      ? `<div class="text-emerald-700 font-semibold mb-1">🔑 Cột ID tự tăng (identity) thật: <code>${escapeHtml(data.identityColumn)}</code>.</div>`
+      : `<div class="text-amber-700 font-semibold mb-1">ℹ️ CSPRICE KHÔNG có cột ID tự tăng (identity) — hệ thống dùng khoá tự nhiên <code>${escapeHtml((data.naturalKeyColumns || []).join(' + '))}</code> (đánh dấu 🔑 bên dưới) để khớp đúng 1 dòng khi Sửa/Xoá.</div>`;
+    const keyIndexes = Array.isArray(data.keyIndexes) ? data.keyIndexes : [];
+    const idxNote = keyIndexes.length
+      ? `<div class="text-gray-600 mb-1">PRIMARY KEY/UNIQUE INDEX khai báo thật trên CSPRICE: ${keyIndexes.map(idx => `<code>${escapeHtml(idx.name)}${idx.isPrimaryKey ? ' (PK)' : ''} = ${escapeHtml(idx.columns.join(' + '))}</code>`).join(', ')}</div>`
+      : `<div class="text-gray-600 mb-1">Không có PRIMARY KEY/UNIQUE INDEX nào khai báo thật trên CSPRICE (bảng dùng ràng buộc duy nhất ở tầng ứng dụng, không khai báo trên CSDL).</div>`;
+    if (resultEl) resultEl.innerHTML = `${idNote}${idxNote}<table class="w-full">${rows}</table>`;
   } catch (err) {
     if (resultEl) resultEl.innerHTML = `<span class="text-red-600 font-semibold">⛔ ${escapeHtml(err.message)}</span>`;
   } finally {

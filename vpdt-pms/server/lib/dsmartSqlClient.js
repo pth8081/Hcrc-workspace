@@ -6,17 +6,35 @@
 // MAPPING CỘT (người dùng xác nhận trực tiếp qua trao đổi, KHÔNG đoán):
 //   Mã Khách B2B -> CUST_ID   |  Mã Sản Phẩm -> SKU_ID  |  Giá Sản Phẩm -> WSPRICE
 //   Ngày Bắt Đầu -> FR_DATE   |  Ngày Kết Thúc -> TO_DATE
-// CSPRICE có cột ID TỰ TĂNG riêng (người dùng xác nhận) — insertWholesalePrice() lấy lại đúng ID này qua
-// OUTPUT INSERTED.ID, lưu vào dbo.DsmartWholesalePriceEntries (mirror nội bộ) để mọi lượt Sửa/Xoá sau
-// này khớp CHÍNH XÁC đúng 1 dòng theo ID, không đoán theo tổ hợp cột.
 //
-// RỦI RO CÒN TỒN ĐỌNG (nêu rõ, không giấu): CSPRICE có nhiều cột khác ngoài 5 cột trên (TYPE, STK_ID,
-// UNIT_SYMB, BASE_UNIT, UNITCONV, LASTWSPR, SURP_PC, MINPRICE, MAXPRICE, MODIFY, OUT_DISCPC, OUT_CM...)
-// mà người dùng xác nhận KHÔNG cần quan tâm/không có trong file mẫu — insertWholesalePrice() CHỈ ghi
-// đúng 5 cột đã xác nhận, để SQL Server tự áp DEFAULT/NULL cho các cột còn lại. Nếu CSPRICE thật có cột
-// NOT NULL không có DEFAULT ngoài 5 cột này, lượt ghi ĐẦU TIÊN sẽ báo lỗi rõ ràng (không bị nuốt lỗi, xem
-// routes/dsmartWholesalePrice.js) — KHUYẾN NGHỊ người triển khai thử 1 dòng nhỏ trước khi dùng thật diện
-// rộng, vì môi trường này không có quyền truy cập CSDL DSmart thật để tự kiểm tra trước.
+// KHOÁ TỰ NHIÊN, KHÔNG PHẢI ID TỰ TĂNG (12/2026, PHÁT HIỆN LẦN 2 — đợt vá trước giả định CSPRICE "có cột
+// ID tự tăng" vẫn SAI): người dùng gửi ảnh chụp thật nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" — CSPRICE
+// HOÀN TOÀN KHÔNG CÓ cột identity/auto-increment nào (23 cột, không cột nào là identity). Tra `sys.
+// identity_columns` trả về RỖNG — không phải lỗi dò tên cột sai như lần trước, mà bảng này THỰC SỰ dùng
+// KHOÁ TỰ NHIÊN (composite key) nhiều cột, không có surrogate key riêng.
+//
+// Vì vậy insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() bên dưới KHÔNG còn dựa vào
+// 1 cột ID duy nhất — thay vào đó dùng tổ hợp CUST_ID + TYPE + STK_ID + SKU_ID + WS_ID + FR_DATE + TO_DATE
+// (suy luận từ cấu trúc bảng thật: khách hàng + loại giá + kho/quầy + sản phẩm + bảng giá + khoảng ngày
+// hiệu lực — đúng mô hình "giá đặc biệt theo khách hàng" phổ biến ở ERP; KHÔNG gồm WSPRICE vì đó là giá
+// trị SẼ bị đổi khi Sửa, và KHÔNG gồm các cột sổ sách như OPEN_DATE/MODI_DATE/MODIFY/USER_ID vì có thể bị
+// hệ thống khác đụng tới ngoài tầm kiểm soát). insertWholesalePrice() đọc lại NGAY dòng vừa thêm (SELECT
+// theo đúng 5 giá trị vừa ghi) để lấy đủ 7 cột khoá trên (gồm cả TYPE/STK_ID/WS_ID do SQL Server tự áp
+// DEFAULT, ứng dụng không ghi trực tiếp) — lưu nguyên "khoá tự nhiên" này (dsmartKey) vào
+// dbo.DsmartWholesalePriceEntries (mirror nội bộ) để Sửa/Xoá sau này khớp lại.
+//
+// AN TOÀN CHỐNG SỬA/XOÁ NHẦM: vì đây là khoá SUY LUẬN (không phải PRIMARY KEY khai báo chính thức trên
+// CSPRICE — môi trường này không truy cập được CSDL thật để xác nhận 100%), updateWholesalePrice()/
+// deleteWholesalePrice() LUÔN đếm SELECT COUNT(*) theo đúng khoá tự nhiên TRƯỚC khi UPDATE/DELETE — nếu
+// khớp 0 dòng (đã bị xoá/sửa thủ công ngoài hệ thống) hoặc KHỚP HƠN 1 DÒNG (khoá suy luận không còn duy
+// nhất — rủi ro sửa/xoá nhầm dòng của khách khác) thì DỪNG LẠI NGAY, báo lỗi rõ ràng, không bao giờ âm
+// thầm UPDATE/DELETE mù. Sau UPDATE/DELETE còn double-check lại rowsAffected đúng bằng 1 lần nữa.
+//
+// RỦI RO CÒN TỒN ĐỌNG (nêu rõ, không giấu): nếu suy luận khoá tự nhiên ở trên KHÔNG đúng 100% ý đồ thiết
+// kế thật của DSmart (VD TO_DATE không thực sự là 1 phần khoá phân biệt), các lớp an toàn (đếm trước khi
+// ghi, chặn khớp >1 dòng) sẽ TỰ CHẶN và báo lỗi rõ ràng thay vì âm thầm sửa/xoá sai — nhưng vẫn khuyến
+// nghị đội IT dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (đã mở rộng hiển thị PRIMARY KEY/UNIQUE INDEX
+// khai báo thật trên CSPRICE nếu có) để xác nhận lại với đội DSmart/DBA trước khi dùng thật diện rộng.
 //
 // PHẠM VI AN TOÀN: mọi câu lệnh dưới đây đều dùng THAM SỐ HOÁ (sql.Request().input(), KHÔNG BAO GIỜ nối
 // chuỗi giá trị người dùng trực tiếp vào SQL) — chống SQL injection đúng chuẩn đã áp dụng xuyên suốt
@@ -27,10 +45,11 @@ const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
 let cachedSignature = null;
-// cachedIdentityColumn (12/2026, xem resolveCspriceIdentityColumn() bên dưới) — PHẢI reset mỗi khi
-// cachedPool đổi (kết nối khác CSDL khác có thể có tên cột identity khác), nên gán/xoá LUÔN ĐI CÙNG
-// cachedPool ở mọi điểm trong file (không tách rời).
-let cachedIdentityColumn = null;
+
+// NATURAL_KEY_COLUMNS: 7 cột tạo thành "khoá tự nhiên" dùng để khớp CHÍNH XÁC 1 dòng CSPRICE khi Sửa/Xoá
+// (xem chú thích đầy đủ ở đầu file) — thứ tự liệt kê ở đây chỉ để tham chiếu, KHÔNG ảnh hưởng câu lệnh SQL
+// (mỗi câu lệnh tự liệt kê tường minh, không loop động, để dễ đọc/dễ rà soát khi audit).
+const NATURAL_KEY_COLUMNS = ['CUST_ID', 'TYPE', 'STK_ID', 'SKU_ID', 'WS_ID', 'FR_DATE', 'TO_DATE'];
 
 function configSignature(cfg) {
   return [cfg.host, cfg.port, cfg.database, cfg.user, cfg.passwordEnc].join('|');
@@ -56,7 +75,6 @@ async function getDsmartPool() {
   if (cachedPool) {
     try { await cachedPool.close(); } catch (_) { /* phớt lờ lỗi đóng pool cũ, không chặn mở pool mới */ }
     cachedPool = null;
-    cachedIdentityColumn = null; // đổi pool -> có thể đổi CSDL -> xoá cache tên cột identity cũ (xem resolveCspriceIdentityColumn()).
   }
   let password;
   try {
@@ -93,110 +111,163 @@ function toDateOnly(value) {
   return d;
 }
 
-// resolveCspriceIdentityColumn(pool): TỰ TRA CỨU tên cột ID tự tăng (identity) THẬT của dbo.CSPRICE
-// ngay trên CSDL DSmart16 — KHÔNG còn đoán/hard-code "ID" như trước.
+// captureCspriceNaturalKey(pool, {custId, skuId, price, frDate, toDate}): đọc lại NGAY dòng CSPRICE vừa
+// INSERT/UPDATE theo ĐÚNG 5 giá trị vừa ghi (CUST_ID/SKU_ID/WSPRICE/FR_DATE/TO_DATE — duy nhất ngay lúc
+// này vì vừa ghi xong), lấy đủ 7 cột tạo "khoá tự nhiên" NATURAL_KEY_COLUMNS (gồm cả TYPE/STK_ID/WS_ID do
+// SQL Server tự áp DEFAULT, ứng dụng không ghi trực tiếp) — xem chú thích đầy đủ ở đầu file.
 //
-// LỖI THẬT PRODUCTION đã phát hiện (12/2026, người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart
-// nhưng lỗi" kèm ảnh chụp — SAU KHI đã vá cho hiện lỗi thật thay vì chỉ "xem console", lỗi THẬT hiện ra
-// là "Invalid column name 'ID'."): giả định "CSPRICE có cột ID tự tăng" (ghi ở đầu file, nói là người
-// dùng đã xác nhận qua trao đổi) hoá ra SAI trên CSDL thật — mọi lượt ghi/sửa/xoá đều lỗi ngay từ dòng
-// đầu tiên vì OUTPUT INSERTED.ID/WHERE ID=... dùng cứng tên cột không tồn tại. KHÔNG thể tự đoán lại tên
-// cột đúng (môi trường phát triển này không truy cập được CSDL DSmart thật) — thay vào đó TỰ TRA CỨU qua
-// sys.identity_columns (catalog view chuẩn của SQL Server, luôn đúng bất kể tên cột thật là gì) mỗi khi
-// mở pool mới, cache lại (cachedIdentityColumn, reset cùng lúc với cachedPool ở getDsmartPool()) để không
-// phải tra lại mỗi lượt ghi.
-//
-// AN TOÀN SQL INJECTION: tên cột không thể tham số hoá qua sql.Request().input() (chỉ tham số hoá được
-// GIÁ TRỊ, không tham số hoá được TÊN cột/bảng) — nhưng giá trị trả về ở đây đến từ chính catalog view
-// sys.identity_columns của SQL Server (không phải input người dùng), và CÒN được validate thêm bằng regex
-// allow-list /^[A-Za-z0-9_]+$/ trước khi nối thẳng vào câu lệnh — loại hẳn rủi ro dù tên cột là gì.
-async function resolveCspriceIdentityColumn(pool) {
-  if (cachedIdentityColumn) return cachedIdentityColumn;
-  let idResult;
-  try {
-    idResult = await pool.request().query(`
-      SELECT c.name AS ColumnName
-      FROM sys.identity_columns c
-      WHERE OBJECT_NAME(c.object_id) = 'CSPRICE';
-    `);
-  } catch (err) {
-    throw new DsmartSqlError(`Lỗi tra cứu cột ID tự tăng của CSPRICE: ${err.message}`);
-  }
-  const colName = idResult.recordset?.[0]?.ColumnName;
-  if (!colName || !/^[A-Za-z0-9_]+$/.test(colName)) {
-    throw new DsmartSqlError('Không tìm thấy cột ID tự tăng (identity) nào trên bảng CSPRICE — dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" ở Cấu Hình Kết Nối để xem đầy đủ danh sách cột, rồi liên hệ đội phát triển xác nhận lại cột nào dùng làm khoá.');
-  }
-  cachedIdentityColumn = colName;
-  return colName;
-}
-
-// insertWholesalePrice(): THÊM 1 dòng MỚI vào CSPRICE — CHỈ 5 cột đã xác nhận, trả lại ID tự tăng CSPRICE
-// vừa tạo (OUTPUT INSERTED.<cột identity thật>, xem resolveCspriceIdentityColumn()) để lưu vào mirror
-// nội bộ.
-async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
-  const pool = await getDsmartPool();
-  const idCol = await resolveCspriceIdentityColumn(pool);
+// Nếu khớp NHIỀU hơn 1 dòng (hiếm — trùng hệt cả 5 giá trị với 1 dòng có sẵn từ trước, VD nhập tay ngoài
+// hệ thống này): lấy dòng có OPEN_DATE/MODI_DATE MỚI NHẤT (gần như chắc chắn là dòng vừa ghi), đánh dấu
+// ambiguousMatch=true để caller biết mà cẩn trọng hơn khi Sửa/Xoá dòng này sau này (dù vẫn còn lớp an toàn
+// đếm COUNT(*) ở updateWholesalePrice()/deleteWholesalePrice() chặn thêm 1 lần nữa).
+async function captureCspriceNaturalKey(pool, { custId, skuId, price, frDate, toDate }) {
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
   req.input('skuId', sql.NVarChar(50), String(skuId));
   req.input('price', sql.Decimal(18, 4), Number(price));
-  req.input('frDate', sql.Date, toDateOnly(frDate));
-  req.input('toDate', sql.Date, toDateOnly(toDate));
-  try {
-    const result = await req.query(`
-      INSERT INTO dbo.CSPRICE (CUST_ID, SKU_ID, WSPRICE, FR_DATE, TO_DATE)
-      OUTPUT INSERTED.[${idCol}] AS Id
-      VALUES (@custId, @skuId, @price, @frDate, @toDate);
-    `);
-    const dsmartId = result.recordset?.[0]?.Id;
-    if (dsmartId == null) throw new DsmartSqlError(`DSmart không trả lại ID của dòng vừa thêm (OUTPUT INSERTED.[${idCol}] rỗng) — kiểm tra lại cột ${idCol} trên CSPRICE có đúng là tự tăng không.`);
-    return dsmartId;
-  } catch (err) {
-    if (err instanceof DsmartSqlError) throw err;
-    throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
-  }
-}
-
-// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (theo dsmartId) — CHỈ sửa Giá/Ngày, không đụng cột
-// nào khác (TYPE/UNIT_SYMB/MINPRICE/MAXPRICE/LASTWSPR... giữ nguyên nguyên trạng bên DSmart).
-async function updateWholesalePrice({ dsmartId, price, frDate, toDate }) {
-  const pool = await getDsmartPool();
-  const idCol = await resolveCspriceIdentityColumn(pool);
-  const req = pool.request();
-  req.input('dsmartId', sql.BigInt, dsmartId);
-  req.input('price', sql.Decimal(18, 4), Number(price));
-  req.input('frDate', sql.Date, toDateOnly(frDate));
-  req.input('toDate', sql.Date, toDateOnly(toDate));
+  req.input('frDate', sql.DateTime, toDateOnly(frDate));
+  req.input('toDate', sql.DateTime, toDateOnly(toDate));
   let result;
   try {
     result = await req.query(`
-      UPDATE dbo.CSPRICE SET WSPRICE = @price, FR_DATE = @frDate, TO_DATE = @toDate
-      WHERE [${idCol}] = @dsmartId;
+      SELECT CUST_ID, TYPE, STK_ID, SKU_ID, WS_ID, FR_DATE, TO_DATE
+      FROM dbo.CSPRICE
+      WHERE CUST_ID = @custId AND SKU_ID = @skuId AND WSPRICE = @price AND FR_DATE = @frDate AND TO_DATE = @toDate
+      ORDER BY OPEN_DATE DESC, MODI_DATE DESC;
     `);
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, ${idCol}=${dsmartId}): ${err.message}`);
+    throw new DsmartSqlError(`Đã ghi CSPRICE nhưng lỗi khi đọc lại khoá tự nhiên của dòng vừa ghi: ${err.message}`);
   }
-  if (!result.rowsAffected?.[0]) {
-    throw new DsmartSqlError(`Không tìm thấy dòng ${idCol}=${dsmartId} trong CSPRICE để sửa — có thể đã bị xoá thủ công ngoài hệ thống này.`);
+  const rows = result.recordset || [];
+  if (!rows.length) {
+    throw new DsmartSqlError('Đã ghi CSPRICE nhưng không đọc lại được dòng vừa ghi để xác định khoá tự nhiên — dữ liệu CÓ THỂ đã được ghi dù hệ thống này báo lỗi ở bước xác nhận, kiểm tra thủ công trên DSmart.');
   }
+  const row = rows[0];
+  return {
+    custId: String(row.CUST_ID).trim(), type: String(row.TYPE).trim(), stkId: String(row.STK_ID),
+    skuId: String(row.SKU_ID).trim(), wsId: row.WS_ID, frDate: row.FR_DATE, toDate: row.TO_DATE,
+    ambiguousMatch: rows.length > 1
+  };
 }
 
-// deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (theo dsmartId) khỏi CSPRICE — KHÔNG hoàn tác được.
-async function deleteWholesalePrice({ dsmartId }) {
-  const pool = await getDsmartPool();
-  const idCol = await resolveCspriceIdentityColumn(pool);
+// buildNaturalKeyWhere(req, dsmartKey): gán tham số hoá đủ 7 cột khoá tự nhiên vào request SQL đã cho,
+// trả về mệnh đề WHERE tương ứng — dùng CHUNG cho cả bước đếm COUNT(*) lẫn bước UPDATE/DELETE thật bên
+// dưới, đảm bảo 2 bước LUÔN khớp đúng cùng 1 điều kiện.
+function buildNaturalKeyWhere(req, dsmartKey) {
+  if (!dsmartKey || typeof dsmartKey !== 'object') {
+    throw new DsmartSqlError('Thiếu khoá tự nhiên (dsmartKey) của dòng CSPRICE cần sửa/xoá — dữ liệu nội bộ có thể bị hỏng, liên hệ đội phát triển.');
+  }
+  const { custId, type, stkId, skuId, wsId, frDate, toDate } = dsmartKey;
+  if (custId == null || type == null || stkId == null || skuId == null || wsId == null || frDate == null || toDate == null) {
+    throw new DsmartSqlError(`Khoá tự nhiên (dsmartKey) thiếu 1 trong các trường ${NATURAL_KEY_COLUMNS.join('/')}  — không thể xác định đúng 1 dòng CSPRICE để sửa/xoá an toàn.`);
+  }
+  req.input('kCustId', sql.NVarChar(50), String(custId));
+  req.input('kType', sql.NVarChar(20), String(type));
+  req.input('kStkId', sql.NVarChar(50), String(stkId));
+  req.input('kSkuId', sql.NVarChar(50), String(skuId));
+  req.input('kWsId', sql.Int, Number(wsId));
+  req.input('kFrDate', sql.DateTime, toDateOnly(frDate));
+  req.input('kToDate', sql.DateTime, toDateOnly(toDate));
+  return 'CUST_ID = @kCustId AND TYPE = @kType AND STK_ID = @kStkId AND SKU_ID = @kSkuId AND WS_ID = @kWsId AND FR_DATE = @kFrDate AND TO_DATE = @kToDate';
+}
+
+// assertExactlyOneMatch(pool, dsmartKey, action): đếm SELECT COUNT(*) theo khoá tự nhiên TRƯỚC khi
+// UPDATE/DELETE thật — DỪNG LẠI NGAY (ném lỗi rõ ràng) nếu khớp 0 dòng hoặc khớp HƠN 1 dòng, không bao
+// giờ để UPDATE/DELETE chạy mù theo khoá suy luận (xem chú thích RỦI RO ở đầu file). action chỉ dùng để
+// lời lỗi hiển thị đúng ngữ cảnh ("sửa"/"xoá").
+async function assertExactlyOneMatch(pool, dsmartKey, action) {
   const req = pool.request();
-  req.input('dsmartId', sql.BigInt, dsmartId);
+  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
+  let countResult;
+  try {
+    countResult = await req.query(`SELECT COUNT(*) AS Cnt FROM dbo.CSPRICE WHERE ${whereClause};`);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi kiểm tra dòng CSPRICE trước khi ${action}: ${err.message}`);
+  }
+  const cnt = countResult.recordset?.[0]?.Cnt ?? 0;
+  if (cnt === 0) return 0;
+  if (cnt > 1) {
+    throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${cnt} dòng CSPRICE (không còn DUY NHẤT) — DỪNG LẠI để tránh ${action} nhầm dòng của khách/sản phẩm khác, liên hệ đội phát triển kiểm tra thủ công trước khi thử lại.`);
+  }
+  return 1;
+}
+
+// insertWholesalePrice(): THÊM 1 dòng MỚI vào CSPRICE — CHỈ 5 cột đã xác nhận (SQL Server tự áp DEFAULT
+// cho các cột còn lại, xem rủi ro nêu ở đầu file) — trả lại "khoá tự nhiên" (dsmartKey, xem
+// captureCspriceNaturalKey()) để lưu vào mirror nội bộ, dùng cho Sửa/Xoá sau này.
+async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
+  const pool = await getDsmartPool();
+  const req = pool.request();
+  req.input('custId', sql.NVarChar(50), String(custId));
+  req.input('skuId', sql.NVarChar(50), String(skuId));
+  req.input('price', sql.Decimal(18, 4), Number(price));
+  req.input('frDate', sql.DateTime, toDateOnly(frDate));
+  req.input('toDate', sql.DateTime, toDateOnly(toDate));
+  try {
+    await req.query(`
+      INSERT INTO dbo.CSPRICE (CUST_ID, SKU_ID, WSPRICE, FR_DATE, TO_DATE)
+      VALUES (@custId, @skuId, @price, @frDate, @toDate);
+    `);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
+  }
+  return captureCspriceNaturalKey(pool, { custId, skuId, price, frDate, toDate });
+}
+
+// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (khớp theo dsmartKey — khoá tự nhiên) — CHỈ sửa
+// Giá/Ngày, không đụng cột nào khác. LƯU Ý QUAN TRỌNG: FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — sau
+// khi UPDATE, khoá tự nhiên CŨ (dsmartKey truyền vào) không còn khớp dòng này nữa nếu ngày bị đổi, nên hàm
+// này LUÔN đọc lại + TRẢ VỀ khoá tự nhiên MỚI (caller PHẢI lưu đè lại dsmartKey trong mirror nội bộ, nếu
+// không lần Sửa/Xoá kế tiếp sẽ dùng khoá cũ đã sai).
+async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
+  const pool = await getDsmartPool();
+  await assertExactlyOneMatch(pool, dsmartKey, 'sửa');
+  const req = pool.request();
+  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
+  req.input('newPrice', sql.Decimal(18, 4), Number(price));
+  req.input('newFrDate', sql.DateTime, toDateOnly(frDate));
+  req.input('newToDate', sql.DateTime, toDateOnly(toDate));
   let result;
   try {
-    result = await req.query(`DELETE FROM dbo.CSPRICE WHERE [${idCol}] = @dsmartId;`);
+    result = await req.query(`
+      UPDATE dbo.CSPRICE SET WSPRICE = @newPrice, FR_DATE = @newFrDate, TO_DATE = @newToDate
+      WHERE ${whereClause};
+    `);
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi xoá CSPRICE (${idCol}=${dsmartId}): ${err.message}`);
+    throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
   }
-  if (!result.rowsAffected?.[0]) {
+  const affected = result.rowsAffected?.[0] ?? 0;
+  if (affected === 0) {
+    throw new DsmartSqlError('Không tìm thấy dòng CSPRICE khớp đúng khoá tự nhiên đã lưu để sửa — có thể đã bị xoá/sửa thủ công ngoài hệ thống này (giữa lúc kiểm tra và lúc ghi thật).');
+  }
+  if (affected > 1) {
+    throw new DsmartSqlError(`UPDATE CSPRICE đã ảnh hưởng ${affected} dòng (kỳ vọng đúng 1) — liên hệ đội phát triển kiểm tra NGAY, dữ liệu CSPRICE có thể đã bị sửa ngoài ý muốn.`);
+  }
+  return captureCspriceNaturalKey(pool, { custId: dsmartKey.custId, skuId: dsmartKey.skuId, price, frDate, toDate });
+}
+
+// deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (khớp theo dsmartKey — khoá tự nhiên) khỏi CSPRICE — KHÔNG
+// hoàn tác được.
+async function deleteWholesalePrice({ dsmartKey }) {
+  const pool = await getDsmartPool();
+  const matchCount = await assertExactlyOneMatch(pool, dsmartKey, 'xoá');
+  if (matchCount === 0) {
     // Dòng không còn tồn tại (có thể đã bị xoá thủ công/lần trước) — KHÔNG ném lỗi (coi như đã đạt mục
     // tiêu "dòng này không còn trong CSPRICE"), chỉ báo rõ cho caller để ghi chú lại lịch sử.
     return { alreadyGone: true };
+  }
+  const req = pool.request();
+  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
+  let result;
+  try {
+    result = await req.query(`DELETE FROM dbo.CSPRICE WHERE ${whereClause};`);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi xoá CSPRICE (CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
+  }
+  const affected = result.rowsAffected?.[0] ?? 0;
+  if (affected === 0) return { alreadyGone: true };
+  if (affected > 1) {
+    throw new DsmartSqlError(`DELETE CSPRICE đã xoá ${affected} dòng (kỳ vọng đúng 1) — liên hệ đội phát triển kiểm tra NGAY, dữ liệu CSPRICE có thể đã bị ảnh hưởng ngoài ý muốn.`);
   }
   return { alreadyGone: false };
 }
@@ -244,23 +315,24 @@ async function testDsmartConnection(overrideCfg) {
   return { ms: Date.now() - started };
 }
 
-// inspectCspriceColumns(overrideCfg): LIỆT KÊ THẬT các cột của dbo.CSPRICE trên DSmart16 Trung Tâm +
-// cột nào là ID tự tăng (identity) — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026).
+// inspectCspriceColumns(overrideCfg): LIỆT KÊ THẬT các cột của dbo.CSPRICE trên DSmart16 Trung Tâm + mọi
+// PRIMARY KEY/UNIQUE INDEX khai báo thật (nếu có) — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026).
 //
-// LỖI THẬT PRODUCTION đã phát hiện (người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart nhưng lỗi"
-// kèm ảnh chụp, SAU KHI đã vá cho hiện lỗi thật thay vì "xem console" — xem module-itsupport-dsmartprice.js):
-// lỗi thật là "Invalid column name 'ID'." — giả định "CSPRICE có cột ID tự tăng" (ghi ở đầu file này,
-// nói là NGƯỜI DÙNG đã xác nhận qua trao đổi) hoá ra SAI trên CSDL DSmart16 thật — insertWholesalePrice()/
-// updateWholesalePrice()/deleteWholesalePrice() đều dùng cứng tên cột "ID" (OUTPUT INSERTED.ID, WHERE
-// ID=...), nên MỌI lượt ghi/sửa/xoá đều lỗi ngay từ dòng đầu tiên. KHÔNG thể tự đoán tên cột thật đúng
-// (môi trường phát triển này không có quyền truy cập CSDL DSmart thật) — thay vào đó cung cấp công cụ để
-// CHÍNH đội IT tự tra cứu ngay trên UI (không cần nhờ DBA/mở SSMS), từ đó xác nhận lại tên cột thật rồi
-// mới sửa cứng insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() cho đúng.
+// LỊCH SỬ (2 lần vá liên tiếp trên CÙNG 1 giả định sai, nêu rõ để không lặp lại): lần 1 giả định "CSPRICE
+// có cột ID tự tăng tên ID" -> lỗi "Invalid column name 'ID'." -> vá bằng cách TỰ TRA sys.identity_columns
+// thay vì hard-code "ID". Lần 2 (người dùng gửi ảnh chụp thật kết quả bấm nút này): sys.identity_columns
+// trả về RỖNG — CSPRICE HOÀN TOÀN KHÔNG CÓ cột identity nào (không phải lỗi tên cột, mà bảng này THỰC SỰ
+// dùng khoá tự nhiên nhiều cột) -> vá lần 2 bằng khoá tự nhiên NATURAL_KEY_COLUMNS (xem chú thích đầy đủ ở
+// đầu file/insertWholesalePrice()). Nút này giờ mở rộng thêm: hiển thị PRIMARY KEY/UNIQUE INDEX khai báo
+// thật trên CSPRICE (nếu CÓ) để đội IT/DBA tự đối chiếu xem khoá tự nhiên hệ thống đang dùng có khớp đúng
+// ý đồ thiết kế thật của DSmart hay không — vẫn hoạt động đúng dù không tìm thấy khoá nào (các lớp an toàn
+// đếm COUNT(*)/chặn khớp >1 dòng ở updateWholesalePrice()/deleteWholesalePrice() không phụ thuộc kết quả
+// tra cứu này, đây CHỈ là công cụ chẩn đoán/đối chiếu thêm).
 //
-// CHỈ ĐỌC METADATA (INFORMATION_SCHEMA.COLUMNS + sys.identity_columns) — KHÔNG đọc bất kỳ dữ liệu THẬT
-// nào trong CSPRICE, nên KHÔNG cần quyền SELECT trên dữ liệu bảng (cùng tinh thần testDsmartConnection()
-// "SELECT 1" ở trên — tài khoản chỉ GRANT INSERT/UPDATE/DELETE vẫn thấy được metadata của bảng mình có
-// ít nhất 1 quyền, đây là hành vi chuẩn của SQL Server, không phải giả định).
+// CHỈ ĐỌC METADATA (INFORMATION_SCHEMA.COLUMNS + sys.identity_columns + sys.indexes) — KHÔNG đọc bất kỳ
+// dữ liệu THẬT nào trong CSPRICE, nên KHÔNG cần quyền SELECT trên dữ liệu bảng (cùng tinh thần
+// testDsmartConnection() "SELECT 1" ở trên — tài khoản chỉ GRANT INSERT/UPDATE/DELETE vẫn thấy được
+// metadata của bảng mình có ít nhất 1 quyền, đây là hành vi chuẩn của SQL Server, không phải giả định).
 async function inspectCspriceColumns(overrideCfg) {
   let pool;
   let shouldClose = false;
@@ -296,12 +368,28 @@ async function inspectCspriceColumns(overrideCfg) {
       FROM sys.identity_columns c
       WHERE OBJECT_NAME(c.object_id) = 'CSPRICE';
     `);
+    // Mọi PRIMARY KEY/UNIQUE INDEX khai báo thật trên CSPRICE (nếu có) — nhóm theo tên index, sắp đúng
+    // thứ tự cột trong khoá (key_ordinal) để IT/DBA đối chiếu với NATURAL_KEY_COLUMNS đang dùng.
+    const idxResult = await pool.request().query(`
+      SELECT i.name AS IndexName, i.is_primary_key AS IsPrimaryKey, c.name AS ColumnName, ic.key_ordinal AS KeyOrdinal
+      FROM sys.indexes i
+      JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+      JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+      WHERE i.object_id = OBJECT_ID('dbo.CSPRICE') AND (i.is_primary_key = 1 OR i.is_unique = 1)
+      ORDER BY i.index_id, ic.key_ordinal;
+    `);
     const columns = (colsResult.recordset || []).map(r => ({ name: r.COLUMN_NAME, dataType: r.DATA_TYPE, nullable: r.IS_NULLABLE === 'YES' }));
     if (!columns.length) {
       throw new DsmartSqlError('Không thấy cột nào của dbo.CSPRICE — kiểm tra lại tên CSDL/quyền của tài khoản (cần ít nhất 1 quyền INSERT/UPDATE/DELETE/SELECT trên bảng CSPRICE để thấy được metadata).');
     }
     const identityColumn = idResult.recordset?.[0]?.ColumnName || null;
-    return { columns, identityColumn };
+    const keyIndexesMap = new Map();
+    for (const r of (idxResult.recordset || [])) {
+      if (!keyIndexesMap.has(r.IndexName)) keyIndexesMap.set(r.IndexName, { name: r.IndexName, isPrimaryKey: !!r.IsPrimaryKey, columns: [] });
+      keyIndexesMap.get(r.IndexName).columns.push(r.ColumnName);
+    }
+    const keyIndexes = [...keyIndexesMap.values()];
+    return { columns, identityColumn, keyIndexes, naturalKeyColumns: NATURAL_KEY_COLUMNS };
   } catch (err) {
     if (err instanceof DsmartSqlError || err instanceof DsmartConfigError) throw err;
     throw new DsmartSqlError(`Lỗi đọc cấu trúc bảng CSPRICE: ${err.message}`);
@@ -316,7 +404,6 @@ async function closeDsmartPool() {
     try { await cachedPool.close(); } catch (_) { /* ignore */ }
     cachedPool = null;
     cachedSignature = null;
-    cachedIdentityColumn = null;
   }
 }
 

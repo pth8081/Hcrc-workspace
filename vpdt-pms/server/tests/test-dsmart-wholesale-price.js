@@ -21,9 +21,10 @@ function stubModule(relPath, exportsObj) {
   return exportsObj;
 }
 
-// ===== Giả lập CSPRICE (DSmart16 Trung Tâm) trong bộ nhớ =====
+// ===== Giả lập CSPRICE (DSmart16 Trung Tâm) trong bộ nhớ — KHÔNG có cột ID tự tăng (đúng cấu trúc thật
+// người dùng xác nhận qua ảnh chụp "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE", 12/2026) — mỗi dòng khớp bởi
+// "khoá tự nhiên" CUST_ID+TYPE+STK_ID+SKU_ID+WS_ID+FR_DATE+TO_DATE, giống đúng lib/dsmartSqlClient.js =====
 let CSPRICE = [];
-let nextDsmartId = 1;
 let forceConfigError = false;
 let forceTestConnError = false;
 let lastTestConnOverrideCfg = 'UNSET';
@@ -32,22 +33,35 @@ class FakeHttpError extends Error { constructor(status, message) { super(message
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
 class DsmartSqlError extends FakeHttpError { constructor(m) { super(502, m); } }
 
+function naturalKeyOf(row) {
+  return { custId: row.CUST_ID, type: row.TYPE, stkId: row.STK_ID, skuId: row.SKU_ID, wsId: row.WS_ID, frDate: row.FR_DATE, toDate: row.TO_DATE };
+}
+function findByNaturalKey(k) {
+  return CSPRICE.filter(r => r.CUST_ID === k.custId && r.TYPE === k.type && r.STK_ID === k.stkId && r.SKU_ID === k.skuId && r.WS_ID === k.wsId && r.FR_DATE === k.frDate && r.TO_DATE === k.toDate);
+}
+
 stubModule('lib/dsmartSqlClient', {
   DsmartConfigError, DsmartSqlError,
   insertWholesalePrice: async ({ custId, skuId, price, frDate, toDate }) => {
     if (forceConfigError) throw new DsmartConfigError('Chưa cấu hình kết nối (giả lập)');
-    const row = { ID: nextDsmartId++, CUST_ID: custId, SKU_ID: skuId, WSPRICE: price, FR_DATE: frDate, TO_DATE: toDate };
+    // TYPE/STK_ID/WS_ID KHÔNG do ứng dụng ghi — SQL Server tự áp DEFAULT (mô phỏng đúng thực tế thật).
+    const row = { CUST_ID: custId, TYPE: '4', STK_ID: '', SKU_ID: skuId, WS_ID: 30, WSPRICE: price, FR_DATE: frDate, TO_DATE: toDate };
     CSPRICE.push(row);
-    return row.ID;
+    return naturalKeyOf(row);
   },
-  updateWholesalePrice: async ({ dsmartId, price, frDate, toDate }) => {
-    const row = CSPRICE.find(r => r.ID === dsmartId);
-    if (!row) throw new DsmartSqlError(`Không tìm thấy dòng ID=${dsmartId}`);
+  updateWholesalePrice: async ({ dsmartKey, price, frDate, toDate }) => {
+    const matches = findByNaturalKey(dsmartKey);
+    if (matches.length === 0) throw new DsmartSqlError('Không tìm thấy dòng CSPRICE khớp đúng khoá tự nhiên đã lưu để sửa');
+    if (matches.length > 1) throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${matches.length} dòng CSPRICE (không còn DUY NHẤT)`);
+    const row = matches[0];
     row.WSPRICE = price; row.FR_DATE = frDate; row.TO_DATE = toDate;
+    return naturalKeyOf(row);
   },
-  deleteWholesalePrice: async ({ dsmartId }) => {
-    const idx = CSPRICE.findIndex(r => r.ID === dsmartId);
-    if (idx === -1) return { alreadyGone: true };
+  deleteWholesalePrice: async ({ dsmartKey }) => {
+    const matches = findByNaturalKey(dsmartKey);
+    if (matches.length === 0) return { alreadyGone: true };
+    if (matches.length > 1) throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${matches.length} dòng CSPRICE (không còn DUY NHẤT)`);
+    const idx = CSPRICE.indexOf(matches[0]);
     CSPRICE.splice(idx, 1);
     return { alreadyGone: false };
   },
@@ -265,15 +279,17 @@ async function main() {
   });
 
   // ===== Apply (INSERT thật) =====
-  await test('POST /apply INSERT đúng dòng mới, lưu dsmartId + history', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+  await test('POST /apply INSERT đúng dòng mới, lưu dsmartKey (khoá tự nhiên) + history', async () => {
+    CSPRICE = []; ENTRIES = [];
     const res = await apiPost('/apply', { rows: [{ custId: '240000000001', skuId: '2001326541', price: 32076, frDate: '2026-10-08', toDate: '2026-10-31' }], sourceFileName: 'test.xlsx', sourceAction: 'UPLOAD' });
     assert.strictEqual(res.status, 200, JSON.stringify(res.body));
     assert.strictEqual(res.body.successCount, 1);
     assert.strictEqual(CSPRICE.length, 1);
     assert.strictEqual(CSPRICE[0].CUST_ID, '240000000001');
     assert.strictEqual(ENTRIES.length, 1);
-    assert.strictEqual(ENTRIES[0].dsmartId, CSPRICE[0].ID);
+    assert.strictEqual(ENTRIES[0].dsmartKey.custId, '240000000001');
+    assert.strictEqual(ENTRIES[0].dsmartKey.skuId, '2001326541');
+    assert.strictEqual(ENTRIES[0].dsmartKey.wsId, CSPRICE[0].WS_ID);
     assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
     assert.strictEqual(ENTRIES[0].history.length, 1);
     assert.strictEqual(ENTRIES[0].history[0].action, 'INSERT');
@@ -333,7 +349,7 @@ async function main() {
 
   // ===== Sửa (UPDATE dòng chưa xoá) =====
   await test('PATCH /entries/:id sửa đúng dòng CHƯA xoá -> UPDATE thật + history', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     const res = await apiPatch(`/entries/${entryId}`, { price: 150, frDate: '2026-01-01', toDate: '2026-02-28' });
@@ -344,8 +360,23 @@ async function main() {
     assert.strictEqual(ENTRIES[0].history[1].action, 'UPDATE');
   });
 
+  // FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — Sửa xong PHẢI lưu đè khoá MỚI (dsmartKey.toDate đổi
+  // theo), nếu không lần Sửa/Xoá KẾ TIẾP sẽ dùng khoá CŨ đã sai -> lỗi "không tìm thấy dòng" dù dòng vẫn
+  // còn (xem chú thích đầy đủ tại updateWholesalePrice()/lib/dsmartSqlClient.js).
+  await test('PATCH /entries/:id: khoá tự nhiên (dsmartKey) được CẬP NHẬT sau khi đổi ngày -> Sửa LẦN 2 vẫn khớp đúng', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    const entryId = ENTRIES[0].id;
+    await apiPatch(`/entries/${entryId}`, { price: 150, frDate: '2026-01-01', toDate: '2026-02-28' });
+    assert.strictEqual(ENTRIES[0].dsmartKey.toDate, '2026-02-28', 'LỖI: dsmartKey.toDate phải cập nhật theo ngày MỚI sau Sửa, không giữ ngày CŨ');
+    const res2 = await apiPatch(`/entries/${entryId}`, { price: 200, frDate: '2026-01-01', toDate: '2026-03-31' });
+    assert.strictEqual(res2.status, 200, JSON.stringify(res2.body));
+    assert.strictEqual(CSPRICE[0].WSPRICE, 200);
+    assert.strictEqual(CSPRICE.length, 1, 'LỖI: Sửa lần 2 phải vẫn là ĐÚNG 1 dòng CSPRICE cũ (không tạo nhầm dòng mới)');
+  });
+
   await test('PATCH /entries/:id: dòng ĐÃ xoá không sửa được -> 409', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     await apiPost(`/entries/${entryId}/delete`, {});
@@ -355,7 +386,7 @@ async function main() {
 
   // ===== Xoá (DELETE thật) =====
   await test('POST /entries/:id/delete xoá thật khỏi CSPRICE + đánh dấu DELETED', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     const res = await apiPost(`/entries/${entryId}/delete`, {});
@@ -367,7 +398,7 @@ async function main() {
   });
 
   await test('POST /entries/:id/delete: xoá lần 2 -> 409 (không xoá trùng)', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     await apiPost(`/entries/${entryId}/delete`, {});
@@ -377,7 +408,7 @@ async function main() {
 
   // ===== Dùng Lại (INSERT mới từ dòng đã xoá, không qua /preview) =====
   await test('Dùng Lại (apply trực tiếp, không qua file) -> INSERT dòng MỚI, không đụng dòng cũ', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const oldEntryId = ENTRIES[0].id;
     await apiPost(`/entries/${oldEntryId}/delete`, {});
@@ -392,7 +423,7 @@ async function main() {
 
   // ===== Lịch Sử (flatten) =====
   await test('GET /history gộp đúng history của mọi entry, mới nhất trước', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     await apiPatch(`/entries/${entryId}`, { price: 110, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -404,7 +435,7 @@ async function main() {
 
   // ===== Job tự động xoá =====
   await test('jobs/dsmartAutoDeleteExpiredPrices: tắt autoDeleteEnabled -> không làm gì', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2020-01-01', toDate: '2020-01-31' }] });
     AUTO_DELETE_CFG = { autoDeleteEnabled: false, autoDeleteHour: 23, autoDeleteMinute: 0 };
     delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
@@ -415,7 +446,7 @@ async function main() {
   });
 
   await test('jobs/dsmartAutoDeleteExpiredPrices: bật + TO_DATE đã qua hẳn -> tự xoá ngay', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2020-01-01', toDate: '2020-01-31' }] });
     AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 };
     delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
@@ -428,7 +459,7 @@ async function main() {
   });
 
   await test('jobs/dsmartAutoDeleteExpiredPrices: TO_DATE = hôm nay nhưng CHƯA tới giờ đã đặt -> chưa xoá', async () => {
-    CSPRICE = []; ENTRIES = []; nextDsmartId = 1;
+    CSPRICE = []; ENTRIES = [];
     const today = new Date().toISOString().slice(0, 10);
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2020-01-01', toDate: today }] });
     // dueForAutoDelete() chỉ so sánh GIỜ:PHÚT TRONG NGÀY (không có khái niệm ngày-kế-tiếp) — cộng thẳng 2

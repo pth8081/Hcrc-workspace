@@ -6,9 +6,10 @@
 // MÔ HÌNH DỮ LIỆU (người dùng xác nhận rõ, KHÔNG phải suy đoán): CSPRICE là bảng LỊCH SỬ GIÁ THEO THỜI
 // GIAN — nhiều dòng/1 cặp (CUST_ID, SKU_ID), phân biệt bởi (FR_DATE, TO_DATE). Mỗi lần "Thêm Giá Mới" là
 // INSERT 1 dòng MỚI (không UPDATE đè dòng cũ). "Sửa" chỉ áp dụng cho dòng CHƯA xoá (UPDATE đúng dòng đó
-// theo DsmartId). "Xoá" (tay hoặc tự động theo giờ đặt) là DELETE THẬT khỏi CSPRICE, không hoàn tác được
-// qua hệ thống này. "Dùng Lại" (từ 1 dòng đã xoá) là INSERT dòng MỚI (vì dòng cũ không còn tồn tại trên
-// DSmart để update) — KHÔNG đụng gì tới dòng đã xoá.
+// theo "khoá tự nhiên" dsmartKey — CSPRICE KHÔNG có cột ID tự tăng, xem chú thích đầy đủ tại
+// lib/dsmartSqlClient.js). "Xoá" (tay hoặc tự động theo giờ đặt) là DELETE THẬT khỏi CSPRICE, không hoàn
+// tác được qua hệ thống này. "Dùng Lại" (từ 1 dòng đã xoá) là INSERT dòng MỚI (vì dòng cũ không còn tồn
+// tại trên DSmart để update) — KHÔNG đụng gì tới dòng đã xoá.
 //
 // PHẠM VI QUẢN LÝ (người dùng xác nhận rõ): CHỈ dữ liệu TỰ NỘP qua chính tính năng này (bảng mirror nội
 // bộ dbo.DsmartWholesalePriceEntries) — KHÔNG quét/hiển thị dữ liệu có sẵn trong CSPRICE từ trước.
@@ -256,16 +257,16 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
       continue;
     }
     try {
-      const dsmartId = await insertWholesalePrice({ custId, skuId, price, frDate, toDate });
+      const dsmartKey = await insertWholesalePrice({ custId, skuId, price, frDate, toDate });
       const now = new Date().toISOString();
       const entry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        dsmartId, custId, skuId, price, frDate, toDate, status: 'ACTIVE',
+        dsmartKey, custId, skuId, price, frDate, toDate, status: 'ACTIVE',
         createdBy: req.freshUser.username, createdAt: now, sourceFileName,
         history: [{ action: 'INSERT', mode: sourceAction, actor: req.freshUser.username, at: now, price, frDate, toDate, sourceFileName }]
       };
       await createForCollection('dsmartWholesalePriceEntries', () => entry);
-      results.push({ custId, skuId, success: true, dsmartId, entryId: entry.id });
+      results.push({ custId, skuId, success: true, entryId: entry.id });
     } catch (err) {
       results.push({ custId, skuId, success: false, error: err instanceof DsmartConfigError ? err.message : (err.message || 'Lỗi không xác định') });
       // Lỗi kết nối/cấu hình (DsmartConfigError) sẽ LẶP LẠI y hệt cho mọi dòng còn lại — dừng sớm thay vì
@@ -297,14 +298,17 @@ router.patch('/entries/:id', async (req, res) => {
     }
     const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'ACTIVE') throw new HttpError(409, 'Dòng này đã bị xoá khỏi DSmart — không thể sửa, dùng "↩️ Dùng Lại" để tạo dòng mới.');
-      await updateWholesalePrice({ dsmartId: item.dsmartId, price, frDate, toDate });
+      // updateWholesalePrice() trả về khoá tự nhiên MỚI (FR_DATE/TO_DATE đổi -> khoá cũ không còn khớp
+      // dòng này nữa) — PHẢI lưu đè lại item.dsmartKey, nếu không lần Sửa/Xoá kế tiếp sẽ dùng khoá cũ sai
+      // (xem chú thích đầy đủ tại updateWholesalePrice()/lib/dsmartSqlClient.js).
+      const newDsmartKey = await updateWholesalePrice({ dsmartKey: item.dsmartKey, price, frDate, toDate });
       const now = new Date().toISOString();
       return {
-        ...item, price, frDate, toDate, updatedBy: req.freshUser.username, updatedAt: now,
+        ...item, price, frDate, toDate, dsmartKey: newDsmartKey, updatedBy: req.freshUser.username, updatedAt: now,
         history: [...(item.history || []), { action: 'UPDATE', actor: req.freshUser.username, at: now, oldPrice: item.price, oldFrDate: item.frDate, oldToDate: item.toDate, newPrice: price, newFrDate: frDate, newToDate: toDate }]
       };
     });
-    logDsmartPrice(req, 'UPDATE_DSMART_PRICE', String(id), `Sửa giá bán buôn DSmart ID=${updated.dsmartId} (${updated.custId}/${updated.skuId})`);
+    logDsmartPrice(req, 'UPDATE_DSMART_PRICE', String(id), `Sửa giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/entries/:id'); }
 });
@@ -316,14 +320,14 @@ router.post('/entries/:id/delete', async (req, res) => {
   try {
     const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'ACTIVE') throw new HttpError(409, 'Dòng này đã được xoá trước đó rồi.');
-      await deleteWholesalePrice({ dsmartId: item.dsmartId });
+      await deleteWholesalePrice({ dsmartKey: item.dsmartKey });
       const now = new Date().toISOString();
       return {
         ...item, status: 'DELETED', deletedBy: req.freshUser.username, deletedAt: now,
         history: [...(item.history || []), { action: 'DELETE', mode: 'MANUAL', actor: req.freshUser.username, at: now }]
       };
     });
-    logDsmartPrice(req, 'DELETE_DSMART_PRICE', String(id), `Xoá giá bán buôn DSmart ID=${updated.dsmartId} (${updated.custId}/${updated.skuId})`);
+    logDsmartPrice(req, 'DELETE_DSMART_PRICE', String(id), `Xoá giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/entries/:id/delete'); }
 });
