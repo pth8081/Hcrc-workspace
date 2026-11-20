@@ -9576,3 +9576,41 @@ quan đã chạy lại xác nhận không có hồi quy.
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 5x. Giá Bán Buôn: lỗi khi Thêm/Xoá giờ hiện THẲNG lý do thật (không chỉ "xem console") (12/2026)
+
+Người dùng báo trực tiếp kèm 2 ảnh (1 ảnh Log hệ thống, 1 ảnh màn hình
+MOBILE thật): *"Team IT của tôi vừa up giá ghi vào dsmart nhưng lỗi"* — ảnh
+cho thấy alert chỉ báo *"Đã thêm 0/1 dòng thành công, 1 dòng lỗi (xem
+console)"*.
+
+**Nguyên nhân**: `applyDsmartPriceUpload()`/`applyDsmartPriceDeleteSelected()`
+(`module-itsupport-dsmartprice.js`) — khi 1 dòng ghi/xoá thất bại, server
+(`routes/dsmartWholesalePrice.js`) ĐÃ trả về đúng lý do lỗi thật (SQL Server
+DSmart16 hoặc validate) trong `data.results[].error`, nhưng client CHỈ
+`console.error()` chi tiết đó rồi báo alert "xem console" — trên ĐIỆN THOẠI
+(như ảnh người dùng gửi) KHÔNG có cách nào mở DevTools để xem console, nên lý
+do lỗi thật hoàn toàn bị giấu kín, người dùng chỉ biết "có lỗi" mà không biết
+VÌ SAO để tự xử lý.
+
+**Đã vá**: alert giờ hiện THẲNG nội dung lỗi thật của từng dòng (tối đa 5
+dòng đầu, kèm "Mã Khách B2B/Mã Sản Phẩm" để biết đúng dòng nào) ngay trong
+hộp thoại — vẫn giữ `console.error()` đầy đủ cho ai có DevTools, nhưng không
+còn là cách DUY NHẤT để biết lý do. Áp dụng cho cả "➕ Thêm Giá Mới" (mục 1)
+lẫn "🗑️ Xoá hàng loạt" (mục 2).
+
+**Lưu ý cho đội IT**: lỗi THẬT của dòng cụ thể trong ảnh người dùng gửi
+(240000000001 / 296019320000) phải đợi thử lại với bản vá này mới biết chính
+xác — các ràng buộc của bảng CSPRICE thật trên DSmart16 ngoài 5 cột đã xác
+nhận (VD Mã Khách B2B/Mã Sản Phẩm phải đã tồn tại sẵn trong hệ thống DSmart)
+chưa kiểm được trực tiếp từ môi trường phát triển (xem mục "5t" — lưu ý khi
+deploy tính năng gốc). Thử lại lượt upload sau khi deploy bản vá, lỗi thật sẽ
+hiện ngay trong hộp thoại.
+
+Test mới: `tests/test-dsmart-price-ui.js` thêm 3 kịch bản (bấm nút Apply thật
+qua UI, mock server trả về 1 dòng lỗi có thông điệp thật, xác nhận alert hiện
+đúng nội dung lỗi + số liệu thành công/lỗi). Toàn bộ test Giá Bán Buôn liên
+quan đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.

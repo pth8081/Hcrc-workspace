@@ -69,7 +69,8 @@ async function main() {
   ];
 
   await page.evaluate(({ entries, history }) => {
-    window.alert = () => {};
+    window.__alerts = [];
+    window.alert = (m) => { window.__alerts.push(String(m)); };
     window.confirm = () => true;
     window.prompt = () => '';
 
@@ -87,6 +88,21 @@ async function main() {
         return { ok: true, status: 200, json: async () => ({ ok: true, fileName: 'test-upload.xlsx', rows: [
           { rowNumber: 2, custId: '240000000009', skuId: '2900999900', price: 12345, frDate: '2026-12-01', toDate: '2026-12-31', errors: [], hasOverlap: false }
         ] }) };
+      }
+      // /apply (12/2026, "LỖI THẬT đã vá" — người dùng báo "Team IT vừa up giá ghi vào dsmart nhưng
+      // lỗi" kèm ảnh chụp MOBILE báo "0/1 dòng thành công, 1 dòng lỗi (xem console)" — trên điện thoại
+      // KHÔNG mở được DevTools nên không ai thấy được lý do thật) — giả lập ĐÚNG 1 dòng lỗi với thông
+      // điệp lỗi thật (giống hình dạng server trả về, routes/dsmartWholesalePrice.js) để xác nhận
+      // alert() MỚI hiện thẳng nội dung lỗi, không còn chỉ "xem console".
+      if (u === '/api/dsmart-price/apply' && method === 'POST') {
+        window.__dsmartPriceApplyCalled = (window.__dsmartPriceApplyCalled || 0) + 1;
+        const body = JSON.parse(opts.body);
+        const r = body.rows[0];
+        return { ok: true, status: 200, json: async () => ({
+          ok: true,
+          results: [{ custId: r.custId, skuId: r.skuId, success: false, error: 'Khách hàng không tồn tại trong CSPRICE (giả lập lỗi thật từ DSmart16)' }],
+          successCount: 0, failCount: 1
+        }) };
       }
       if (u === '/api/dsmart-price/config' && method === 'GET') {
         return { ok: true, status: 200, json: async () => ({ ok: true, config: { host: 'dsmart16.hcrc.local', port: 1433, database: 'DSmart16DB', user: 'b2b_price', hasPassword: true } }) };
@@ -226,6 +242,22 @@ async function main() {
   await page.click('#btnToggleDsmartPriceUploadFilter');
   await page.waitForTimeout(100);
   check('Bấm nút -> MỞ bộ lọc mục 1', await page.isVisible('#dsmartPriceUploadFilterPanel'));
+
+  // ===== LỖI THẬT đã vá (12/2026, người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart nhưng lỗi"
+  // kèm ảnh chụp MOBILE: alert cũ chỉ ghi "0/1 dòng thành công, 1 dòng lỗi (xem console)" — trên điện
+  // thoại KHÔNG có DevTools, lý do lỗi thật bị giấu kín hoàn toàn) — bấm "✅ Thêm Giá Mới Vào DSmart"
+  // với dòng preview đã có sẵn (240000000009), mock /apply trả về ĐÚNG 1 dòng lỗi có thông điệp thật —
+  // xác nhận alert() MỚI hiện thẳng nội dung lỗi đó, không còn chỉ "xem console".
+  await page.click('#btnDsmartPriceApplyUpload');
+  await page.waitForTimeout(200);
+  const applyCalled = await page.evaluate(() => window.__dsmartPriceApplyCalled || 0);
+  const alertsAfterApply = await page.evaluate(() => window.__alerts.slice());
+  check('Bấm "✅ Thêm Giá Mới Vào DSmart" -> gọi đúng 1 lần POST /apply', applyCalled === 1, 'applyCalled=' + applyCalled);
+  const applyAlert = alertsAfterApply[alertsAfterApply.length - 1] || '';
+  check('LỖI THẬT đã vá: alert khi có dòng lỗi phải hiện THẲNG nội dung lỗi thật (không chỉ "xem console", vì mobile không mở được DevTools)',
+    applyAlert.includes('Khách hàng không tồn tại trong CSPRICE') && applyAlert.includes('240000000009'), applyAlert);
+  check('Alert vẫn báo đúng số dòng thành công/lỗi (0/1 thành công, 1 lỗi)',
+    applyAlert.includes('0/1') && applyAlert.includes('1 dòng lỗi'), applyAlert);
 
   // ===== Lịch Sử Thao Tác =====
   await page.click('#btnToggleDsmartPriceHistoryFilter');
