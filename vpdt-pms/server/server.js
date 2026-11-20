@@ -101,6 +101,7 @@ const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAl
 const { checkShelfStockReconDigestAlerts } = require('./jobs/shelfStockReconDigestAlert');
 const { syncSystemInventory } = require('./jobs/inventorySync');
 const { runDsmartAutoDeleteExpiredPrices } = require('./jobs/dsmartAutoDeleteExpiredPrices');
+const { runDsmartAutoApplyScheduledPrices } = require('./jobs/dsmartAutoApplyScheduledPrices');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkWorkStatusAutoRevert } = require('./jobs/workStatusAutoRevert');
@@ -584,6 +585,11 @@ async function start() {
       // jobs/dsmartAutoDeleteExpiredPrices.js).
       runDsmartAutoDeleteExpiredPrices().catch(err => console.error('⛔ dsmartAutoDeleteExpiredPrices lỗi:', err.message));
       setInterval(() => { runDsmartAutoDeleteExpiredPrices().catch(err => console.error('⛔ dsmartAutoDeleteExpiredPrices lỗi:', err.message)); }, 10 * 60 * 1000);
+      // "📅 Lên Lịch Áp Giá" (Hỗ Trợ IT > Cài Đặt Giá Bán Buôn, 12/2026) — 10 phút/lần, cùng cadence job
+      // xoá ở trên (xem jobs/dsmartAutoApplyScheduledPrices.js). Không có công tắc bật/tắt module-wide —
+      // luôn chạy, chỉ xử lý nếu có dòng SCHEDULED nào đến hạn.
+      runDsmartAutoApplyScheduledPrices().catch(err => console.error('⛔ dsmartAutoApplyScheduledPrices lỗi:', err.message));
+      setInterval(() => { runDsmartAutoApplyScheduledPrices().catch(err => console.error('⛔ dsmartAutoApplyScheduledPrices lỗi:', err.message)); }, 10 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

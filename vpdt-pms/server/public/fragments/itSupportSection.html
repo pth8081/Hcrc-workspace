@@ -307,7 +307,63 @@
           <span id="dsmartPriceConnDot" class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>
           <span id="dsmartPriceConnStatus">Đang kiểm tra kết nối DSmart16 Trung Tâm...</span>
         </div>
-        <button type="button" data-op="openDsmartPriceConfigModal" id="btnDsmartPriceConfig" class="hidden bg-gray-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-800">⚙️ Cấu Hình Kết Nối (Admin)</button>
+        <div class="flex items-center gap-2">
+          <button type="button" data-op="openDsmartPriceConfigModal" id="btnDsmartPriceConfig" class="hidden bg-gray-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-800">⚙️ Cấu Hình Kết Nối (Admin)</button>
+          <!-- "🏬 Kết Nối Siêu Thị" (12/2026, FAN-OUT — theo yêu cầu người dùng "tôi muốn cài đặt giá đến
+               tận máy chủ db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả
+               các siêu thị"). CHỈ admin, cùng khuôn ẩn/hiện #btnDsmartPriceConfig. -->
+          <button type="button" data-op="toggleDsmartStoreConnSection" id="btnDsmartStoreConnToggle" class="hidden bg-purple-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-purple-800">🏬 Kết Nối Siêu Thị (Admin)</button>
+        </div>
+      </div>
+
+      <!-- "🏬 Kết Nối Siêu Thị" — danh sách kết nối SQL Server riêng của TỪNG siêu thị, dùng để FAN-OUT
+           TỰ ĐỘNG mọi thao tác Thêm/Sửa/Xoá giá ở mục 1/2 phía dưới xuống CSPRICE local của MỖI siêu thị
+           đang BẬT — xem lib/dsmartSqlClient.js::fanOutToStores(). Thu gọn mặc định, admin tự mở. -->
+      <div id="dsmartStoreConnSection" class="hidden bg-white border rounded-lg p-4 space-y-3">
+        <div class="font-bold text-sm text-gray-800">🏬 Kết Nối Siêu Thị (Fan-Out Tự Động Khi Thêm/Sửa/Xoá Giá)</div>
+        <div class="text-[11px] text-gray-500 leading-relaxed">Mọi thao tác Thêm/Sửa/Xoá giá ở các mục dưới sẽ TỰ ĐỘNG lặp lại xuống CSPRICE của <b>TẤT CẢ siêu thị đang BẬT</b> dưới đây, ngay sau khi ghi thành công ở DSmart16 Trung Tâm. 1 siêu thị lỗi (mất mạng...) KHÔNG chặn các siêu thị khác — kết quả báo rõ ngay sau mỗi lần Thêm/Sửa/Xoá.</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-op="toggleDsmartStoreConnAddForm" id="btnDsmartStoreConnAddToggle" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">➕ Thêm Siêu Thị</button>
+          <button type="button" data-op="toggleDsmartStoreConnImportForm" id="btnDsmartStoreConnImportToggle" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📂 Nhập Hàng Loạt (Excel)</button>
+        </div>
+        <div id="dsmartStoreConnFormWrap" class="hidden bg-gray-50 border rounded p-3"></div>
+
+        <!-- "📂 Nhập Hàng Loạt" (12/2026, theo yêu cầu người dùng — vài chục siêu thị, nhập tay từng dòng
+             quá mất công) — tải file mẫu + chọn file Excel + xem trước (phân biệt THÊM MỚI/SỬA theo Mã
+             Siêu Thị đã có) trước khi bấm Nhập thật. CẢNH BÁO rõ: cột Mật Khẩu trong file là chữ thường,
+             người dùng đã xác nhận chấp nhận rủi ro này. -->
+        <div id="dsmartStoreConnImportFormWrap" class="hidden bg-indigo-50 border border-indigo-200 rounded p-3 space-y-2">
+          <div class="text-[11px] text-red-700 font-bold">⚠️ File Excel chứa MẬT KHẨU dạng chữ thường (chưa mã hoá) — không lưu/gửi file này cho người không liên quan, xoá file khỏi máy sau khi nhập xong.</div>
+          <div class="flex items-center gap-3 flex-wrap">
+            <a href="/api/dsmart-price/store-connections/template" class="text-indigo-700 font-semibold text-xs">📥 Tải File Mẫu</a>
+            <input type="file" id="dsmartStoreConnImportFileInput" accept=".xlsx" class="hidden" data-op-change="onDsmartStoreConnImportFileChange" data-arg-event="0">
+            <button type="button" data-op="clickDsmartStoreConnImportFileInput" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">📂 Chọn File Excel</button>
+            <div id="dsmartStoreConnImportFileName" class="text-[11px] text-gray-400">chưa chọn file nào</div>
+          </div>
+          <div id="dsmartStoreConnImportPreviewWrap" class="hidden space-y-2">
+            <div class="font-bold text-xs text-gray-800" id="dsmartStoreConnImportStats"></div>
+            <div class="overflow-x-auto border rounded max-h-64 overflow-y-auto">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100 text-left"><tr>
+                  <th class="p-1.5">STT</th><th class="p-1.5">Mã</th><th class="p-1.5">Tên</th><th class="p-1.5">Host:Port/CSDL</th>
+                  <th class="p-1.5">Tài Khoản</th><th class="p-1.5">Trạng Thái</th>
+                </tr></thead>
+                <tbody id="dsmartStoreConnImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <button type="button" data-op="applyDsmartStoreConnImport" id="btnDsmartStoreConnApplyImport" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">✅ Nhập Vào Hệ Thống</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left"><tr>
+              <th class="p-1.5">Mã Siêu Thị</th><th class="p-1.5">Tên Siêu Thị</th><th class="p-1.5">Host:Port/CSDL</th>
+              <th class="p-1.5">Bật</th><th class="p-1.5">Thao Tác</th>
+            </tr></thead>
+            <tbody id="dsmartStoreConnBody"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Giải thích CSPRICE — thu gọn mặc định (cùng khuôn <details>/.filter-box-details đã dùng cho
@@ -370,11 +426,45 @@
               <tbody id="dsmartPriceUploadPreviewBody"></tbody>
             </table>
           </div>
+          <!-- "📅 Đặt Lịch Áp Giá" (12/2026, theo yêu cầu người dùng: "giá sẽ theo ngày bắt đầu trong
+               file excel và lịch tự động bắt ngày bắt đầu và áp giá từ 0 giờ, nếu người tạo chọn đặt
+               lịch, còn không đặt lịch thì sẽ là áp giá luôn"). KHÔNG tick (mặc định) = áp NGAY như cũ. -->
+          <label class="flex items-center gap-1.5 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded p-2 w-fit">
+            <input type="checkbox" id="dsmartPriceScheduleApply" class="w-4 h-4">
+            📅 Đặt Lịch Áp Giá (dòng có Ngày Bắt Đầu ở TƯƠNG LAI sẽ tự áp từ 0h đúng ngày đó, không áp ngay — dòng Ngày Bắt Đầu hôm nay/đã qua vẫn áp ngay như thường)
+          </label>
+          <!-- "🏬 Áp Dụng Cho Siêu Thị" (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất
+               cả siêu thị, hoặc cho tôi chọn từng siêu thị theo dạng dropdown searchable multi-choice...
+               lấy luôn từ cái phần cấu hình admin ấy") — ô chọn nhiều (renderMultiSelectDropdown(),
+               core.js, allToggle:true — ĐÚNG widget đã dùng cho ô chọn siêu thị Kiểm Kê, cùng khuôn "nút
+               all là tất cả siêu thị hoặc tự chọn từng siêu thị"), nguồn dữ liệu GET
+               /store-connections/options (chỉ liệt kê siêu thị ĐANG BẬT trong "🏬 Kết Nối Siêu Thị" ở
+               trên — siêu thị chưa cấu hình/đang Tắt KHÔNG hiện ở đây). Mặc định chọn SẴN tất cả (giữ
+               đúng hành vi fan-out "Tất Cả" như trước khi có tính năng này). -->
+          <div class="bg-sky-50 border border-sky-200 rounded p-2">
+            <div class="text-xs font-bold text-sky-800 mb-1">🏬 Áp Dụng Cho Siêu Thị</div>
+            <div id="dsmartPriceApplyStoreMultiSelect" class="w-full max-w-md"></div>
+          </div>
           <div class="flex items-center gap-3">
             <button type="button" data-op="applyDsmartPriceUpload" id="btnDsmartPriceApplyUpload" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">✅ Thêm Giá Mới Vào DSmart</button>
             <span class="text-[11px] text-gray-400">Cần quyền riêng: itSupportPriceWriteDsmart</span>
           </div>
         </div>
+        </div>
+      </div>
+
+      <!-- 2b. Giá Đã Lên Lịch (chưa áp dụng) — danh sách status='SCHEDULED', chưa ghi gì vào CSPRICE. -->
+      <div class="bg-white border rounded-lg p-4 space-y-3">
+        <div class="font-bold text-sm text-gray-800">2b. Giá Đã Lên Lịch <span id="dsmartPriceScheduledCount"></span></div>
+        <div class="text-[11px] text-gray-500">Các dòng đã tick "📅 Đặt Lịch Áp Giá" với Ngày Bắt Đầu ở tương lai — CHƯA ghi gì vào CSPRICE, hệ thống tự áp dụng (kèm đồng bộ mọi siêu thị) ngay khi tới Ngày Bắt Đầu.</div>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left"><tr>
+              <th class="p-1.5">Mã Khách B2B</th><th class="p-1.5">Mã Sản Phẩm</th><th class="p-1.5 text-right">Giá</th>
+              <th class="p-1.5">Hiệu Lực</th><th class="p-1.5">Ghi Chú</th><th class="p-1.5">Thao Tác</th>
+            </tr></thead>
+            <tbody id="dsmartPriceScheduledBody"></tbody>
+          </table>
         </div>
       </div>
 

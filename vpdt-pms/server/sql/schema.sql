@@ -1752,6 +1752,36 @@ BEGIN
 END
 GO
 
+/* DsmartStorePriceConnections (12/2026, theo yêu cầu người dùng "tôi muốn cài đặt giá đến tận máy chủ
+   db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả các siêu thị") — danh
+   sách kết nối SQL Server RIÊNG của TỪNG siêu thị (đã xác nhận: server HWS có VPN/kết nối sẵn tới SQL
+   Server từng siêu thị), dùng để FAN-OUT TRỰC TIẾP cùng thao tác Thêm/Sửa/Xoá giá vừa ghi ở DSmart16
+   Trung Tâm (dbo.CSPRICE) xuống CSPRICE local của MỌI siêu thị ĐANG BẬT (Enabled=1) — thay thế hẳn việc
+   phải chờ cơ chế đồng bộ ngoài (tool bên ngoài, theo sự kiện lưu của phần mềm DSmart desktop) mà hệ
+   thống này KHÔNG kiểm soát được. Mật khẩu MÃ HOÁ 2 chiều (lib/emailCrypto.js, cùng khuôn
+   DsmartPriceDbConfig.PasswordEnc) — bảng RIÊNG, TÁCH HẲN khỏi dbo.AppData (cùng lý do PasswordEnc ở
+   DsmartPriceDbConfig phía trên — tránh lộ qua GET /api/data chung nếu lỡ quên sanitize). CHỈ
+   lib/dsmartStorePriceConnectionsStore.js + lib/dsmartSqlClient.js (fan-out) được đọc bảng này. */
+IF OBJECT_ID('dbo.DsmartStorePriceConnections', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DsmartStorePriceConnections (
+        Id           BIGINT         NOT NULL CONSTRAINT PK_DsmartStorePriceConnections PRIMARY KEY,
+        StoreCode    NVARCHAR(50)   NOT NULL,
+        StoreName    NVARCHAR(200)  NOT NULL,
+        Host         NVARCHAR(255)  NOT NULL,
+        Port         INT            NOT NULL DEFAULT 1433,
+        DatabaseName NVARCHAR(100)  NOT NULL,
+        DbUser       NVARCHAR(100)  NOT NULL,
+        PasswordEnc  NVARCHAR(500)  NOT NULL,
+        Enabled      BIT            NOT NULL DEFAULT 1,
+        CreatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedBy    NVARCHAR(100)  NULL
+    );
+    CREATE UNIQUE INDEX UX_DsmartStorePriceConnections_StoreCode ON dbo.DsmartStorePriceConnections (StoreCode);
+END
+GO
+
 /* DsmartWholesalePriceEntries (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026) — bảng MIRROR nội bộ,
    theo dõi các dòng giá bán buôn ĐÃ GHI qua tính năng này vào bảng CSPRICE của hệ thống DSmart16 Trung
    Tâm (CSDL BÊN NGOÀI, kết nối riêng qua lib/dsmartSqlClient.js, KHÔNG phải CSDL app này — xem chú thích

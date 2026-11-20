@@ -12,16 +12,309 @@ let _dsmartPriceMgFilterCollapsed = true;
 let _dsmartPriceHistoryFilterCollapsed = true;
 let _dsmartPriceEditingId = null;
 let _dsmartPriceReusingEntry = null;
+let _dsmartStoreConnSectionCollapsed = true;
+let _dsmartStoreConnList = [];
+let _dsmartStoreConnEditingId = null; // null = đang Thêm mới, có giá trị = đang Sửa
+let _dsmartStoreConnImportRows = null;
+let _dsmartStoreConnImportFileName = null;
+// _dsmartPriceStoreOptions (12/2026, ô chọn "🏬 Áp Dụng Cho Siêu Thị") — danh sách RÚT GỌN (chỉ
+// id/storeCode/storeName) các siêu thị ĐANG BẬT, nạp qua GET /store-connections/options (KHÔNG cần
+// quyền admin, khác GET /store-connections đầy đủ chỉ admin xem được) — dùng cho CẢ 2 ô chọn: "1. Thêm
+// Giá Mới" (#dsmartPriceApplyStoreMultiSelect) và "↩️ Dùng Lại" (#dsmartPriceReuseStoreMultiSelect).
+let _dsmartPriceStoreOptions = [];
 
 async function initDsmartPriceTab() {
-  document.getElementById('btnDsmartPriceConfig').classList.toggle('hidden', !currentUser?.perms?.admin);
+  const isAdmin = !!currentUser?.perms?.admin;
+  document.getElementById('btnDsmartPriceConfig').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btnDsmartStoreConnToggle').classList.toggle('hidden', !isAdmin);
   document.getElementById('dsmartPriceConnStatus').innerText = 'Xem "⚙️ Cấu Hình Kết Nối" (Admin) để kiểm tra/đổi thông tin kết nối DSmart16 Trung Tâm.';
   applyDsmartPriceAddFormState();
   applyDsmartPriceUploadFilterState();
   applyDsmartPriceMgFilterState();
   applyDsmartPriceHistoryFilterState();
   await loadDsmartPriceAutoDeleteConfig();
-  await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
+  const tasks = [renderDsmartPriceEntries(), renderDsmartPriceHistory(), loadDsmartPriceStoreOptions()];
+  if (isAdmin) tasks.push(renderDsmartStoreConnList());
+  await Promise.all(tasks);
+}
+
+// loadDsmartPriceStoreOptions()/renderDsmartPriceApplyStoreMultiSelect()/resolveDsmartPriceTargetStoreIds()
+// (12/2026, theo yêu cầu người dùng — xem chú thích đầy đủ tại GET /store-connections/options,
+// routes/dsmartWholesalePrice.js, và fanOutToStores(), lib/dsmartSqlClient.js).
+async function loadDsmartPriceStoreOptions() {
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/options');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _dsmartPriceStoreOptions = data.items || [];
+  } catch (err) {
+    _dsmartPriceStoreOptions = [];
+    console.error('Không tải được danh sách siêu thị để chọn:', err.message);
+  }
+  renderDsmartPriceApplyStoreMultiSelect();
+}
+function renderDsmartPriceApplyStoreMultiSelect() {
+  const items = _dsmartPriceStoreOptions.map(s => ({ value: s.id, label: `${s.storeCode} - ${s.storeName}` }));
+  const allIds = items.map(it => it.value);
+  renderMultiSelectDropdown('dsmartPriceApplyStoreMultiSelect', items, allIds, {
+    placeholder: 'Tìm siêu thị...',
+    emptyText: items.length ? 'Chưa chọn siêu thị nào — CHỈ ghi ở DSmart16 Trung Tâm, KHÔNG đồng bộ xuống siêu thị nào.' : 'Chưa cấu hình/bật siêu thị nào ở "🏬 Kết Nối Siêu Thị" — sẽ CHỈ ghi ở DSmart16 Trung Tâm.',
+    allToggle: true
+  });
+}
+// resolveDsmartPriceTargetStoreIds(containerId): đọc lựa chọn hiện tại của 1 ô renderMultiSelectDropdown()
+// chọn siêu thị -> trả về giá trị gửi lên server cho POST /apply. Chọn ĐỦ TẤT CẢ (hoặc KHÔNG đổi gì, mặc
+// định đã chọn sẵn hết) -> trả null (fan-out LINH ĐỘNG theo đúng danh sách Enabled hiện tại mỗi lần ghi,
+// GIỮ NGUYÊN hành vi mặc định trước khi có tính năng này — tự nhận siêu thị MỚI thêm sau này mà không cần
+// sửa lại từng dòng giá cũ). Chọn 1 PHẦN (kể cả rỗng = không siêu thị nào) -> trả mảng id đã chọn, ĐÓNG
+// BĂNG lại trên entry để "Sửa"/"Xoá"/job tự động áp dụng lịch sau này nhắm đúng y hệt các siêu thị đó.
+function resolveDsmartPriceTargetStoreIds(containerId) {
+  const selected = getMultiSelectValues(containerId);
+  const allIds = _dsmartPriceStoreOptions.map(s => s.id);
+  if (!allIds.length || selected.length === allIds.length) return null;
+  return selected;
+}
+
+// ===================== 🏬 Kết Nối Siêu Thị (Fan-Out) — CHỈ admin =====================
+function toggleDsmartStoreConnSection() {
+  _dsmartStoreConnSectionCollapsed = !_dsmartStoreConnSectionCollapsed;
+  document.getElementById('dsmartStoreConnSection').classList.toggle('hidden', _dsmartStoreConnSectionCollapsed);
+}
+
+async function renderDsmartStoreConnList() {
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _dsmartStoreConnList = data.items || [];
+  } catch (err) {
+    document.getElementById('dsmartStoreConnBody').innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">⛔ ${escapeHtml(err.message)}</td></tr>`;
+    return;
+  }
+  document.getElementById('dsmartStoreConnBody').innerHTML = _dsmartStoreConnList.map(s => `
+    <tr>
+      <td class="p-1.5 font-semibold">${escapeHtml(s.storeCode)}</td>
+      <td class="p-1.5">${escapeHtml(s.storeName)}</td>
+      <td class="p-1.5 text-gray-500">${escapeHtml(s.host)}:${s.port}/${escapeHtml(s.database)}</td>
+      <td class="p-1.5"><input type="checkbox" ${s.enabled ? 'checked' : ''} data-op-change="toggleDsmartStoreConnEnabled" data-arg0="${s.id}" data-arg-el="1"></td>
+      <td class="p-1.5 space-x-1 whitespace-nowrap">
+        <button type="button" data-op="testDsmartStoreConn" data-arg0="${s.id}" class="bg-teal-50 border border-teal-300 text-teal-700 text-[10.5px] font-bold px-2 py-0.5 rounded">🔌 Kiểm Tra</button>
+        <button type="button" data-op="startDsmartStoreConnEdit" data-arg0="${s.id}" class="bg-white border text-gray-700 text-[10.5px] font-bold px-2 py-0.5 rounded">✏️ Sửa</button>
+        <button type="button" data-op="deleteDsmartStoreConn" data-arg0="${s.id}" class="bg-red-50 border border-red-300 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded">🗑️ Xoá</button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Chưa cấu hình kết nối siêu thị nào — Thêm/Sửa/Xoá giá sẽ chỉ áp dụng ở DSmart16 Trung Tâm.</td></tr>`;
+}
+
+function dsmartStoreConnFormHtml(existing) {
+  const isEdit = !!existing;
+  return `
+    <div class="text-xs font-bold text-gray-800 mb-2">${isEdit ? '✏️ Sửa' : '➕ Thêm'} Kết Nối Siêu Thị</div>
+    <div class="flex flex-wrap gap-2 items-end">
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Mã Siêu Thị</label><input id="dsmartStoreConnCode" value="${isEdit ? escapeHtml(existing.storeCode) : ''}" class="w-24 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Tên Siêu Thị</label><input id="dsmartStoreConnName" value="${isEdit ? escapeHtml(existing.storeName) : ''}" class="w-36 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Host</label><input id="dsmartStoreConnHost" value="${isEdit ? escapeHtml(existing.host) : ''}" class="w-32 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Port</label><input id="dsmartStoreConnPort" type="number" value="${isEdit ? existing.port : 1433}" class="w-16 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Tên CSDL</label><input id="dsmartStoreConnDatabase" value="${isEdit ? escapeHtml(existing.database) : ''}" class="w-28 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Tài khoản SQL</label><input id="dsmartStoreConnUser" value="${isEdit ? escapeHtml(existing.user) : ''}" class="w-28 border rounded p-1 text-xs"></div>
+      <div><label class="block text-[10px] text-gray-500 mb-0.5">Mật khẩu${isEdit ? ' (để trống=giữ cũ)' : ''}</label><input id="dsmartStoreConnPassword" type="password" class="w-28 border rounded p-1 text-xs"></div>
+      <button type="button" data-op="saveDsmartStoreConn" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">💾 Lưu</button>
+      <button type="button" data-op="cancelDsmartStoreConnForm" class="bg-white border px-3 py-1 rounded text-xs font-semibold">Huỷ</button>
+    </div>`;
+}
+
+function toggleDsmartStoreConnAddForm() {
+  _dsmartStoreConnEditingId = null;
+  const wrap = document.getElementById('dsmartStoreConnFormWrap');
+  const willShow = wrap.classList.contains('hidden');
+  wrap.innerHTML = willShow ? dsmartStoreConnFormHtml(null) : '';
+  wrap.classList.toggle('hidden', !willShow);
+}
+
+function startDsmartStoreConnEdit(id) {
+  id = Number(id);
+  const existing = _dsmartStoreConnList.find(s => s.id === id);
+  if (!existing) return;
+  _dsmartStoreConnEditingId = id;
+  const wrap = document.getElementById('dsmartStoreConnFormWrap');
+  wrap.innerHTML = dsmartStoreConnFormHtml(existing);
+  wrap.classList.remove('hidden');
+}
+
+function cancelDsmartStoreConnForm() {
+  _dsmartStoreConnEditingId = null;
+  const wrap = document.getElementById('dsmartStoreConnFormWrap');
+  wrap.classList.add('hidden');
+  wrap.innerHTML = '';
+}
+
+async function saveDsmartStoreConn() {
+  const storeCode = document.getElementById('dsmartStoreConnCode').value.trim();
+  const storeName = document.getElementById('dsmartStoreConnName').value.trim();
+  const host = document.getElementById('dsmartStoreConnHost').value.trim();
+  const port = Number(document.getElementById('dsmartStoreConnPort').value) || 1433;
+  const database = document.getElementById('dsmartStoreConnDatabase').value.trim();
+  const user = document.getElementById('dsmartStoreConnUser').value.trim();
+  const password = document.getElementById('dsmartStoreConnPassword').value;
+  if (!storeCode || !storeName || !host || !database || !user) return alert('⛔ Thiếu Mã Siêu Thị/Tên/Host/Tên CSDL/Tài khoản');
+  if (!_dsmartStoreConnEditingId && !password) return alert('⛔ Thiếu mật khẩu (bắt buộc khi thêm kết nối mới)');
+  try {
+    const isEdit = !!_dsmartStoreConnEditingId;
+    const existing = isEdit ? _dsmartStoreConnList.find(s => s.id === _dsmartStoreConnEditingId) : null;
+    const url = isEdit ? `/api/dsmart-price/store-connections/${_dsmartStoreConnEditingId}` : '/api/dsmart-price/store-connections';
+    const res = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeCode, storeName, host, port, database, user, password: password || undefined, enabled: isEdit ? existing.enabled : true })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    alert(isEdit ? '✅ Đã sửa kết nối siêu thị' : '✅ Đã thêm kết nối siêu thị');
+    cancelDsmartStoreConnForm();
+    await renderDsmartStoreConnList();
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+async function deleteDsmartStoreConn(id) {
+  id = Number(id);
+  const existing = _dsmartStoreConnList.find(s => s.id === id);
+  if (!existing) return;
+  if (!confirm(`Xác nhận xoá kết nối siêu thị "${existing.storeName}" (${existing.storeCode})? Các lần Thêm/Sửa/Xoá giá SAU đó sẽ không còn đồng bộ xuống siêu thị này nữa.`)) return;
+  try {
+    const res = await fetch(`/api/dsmart-price/store-connections/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    await renderDsmartStoreConnList();
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+async function toggleDsmartStoreConnEnabled(id, el) {
+  id = Number(id);
+  const existing = _dsmartStoreConnList.find(s => s.id === id);
+  if (!existing) return;
+  const enabled = el.checked;
+  try {
+    const res = await fetch(`/api/dsmart-price/store-connections/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeCode: existing.storeCode, storeName: existing.storeName, host: existing.host, port: existing.port, database: existing.database, user: existing.user, enabled })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    await renderDsmartStoreConnList();
+  } catch (err) {
+    el.checked = !enabled; // hoàn tác trạng thái tick nếu lưu lỗi
+    alert('⛔ ' + err.message);
+  }
+}
+
+async function testDsmartStoreConn(id) {
+  id = Number(id);
+  try {
+    const res = await fetch(`/api/dsmart-price/store-connections/${id}/test-connection`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    alert(`✅ Kết nối thành công (${data.ms}ms)`);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// toggleDsmartStoreConnImportForm()/onDsmartStoreConnImportFileChange()/applyDsmartStoreConnImport()
+// (12/2026, theo yêu cầu người dùng: "vì nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu
+// và upload file mẫu được không") — cùng khuôn "1. Thêm Giá Mới" (file mẫu cố định cột, xem trước
+// THÊM MỚI/SỬA trước khi ghi thật) ngay dưới, qua lib/dsmartStoreConnectionFileParser.js + 3 route
+// /store-connections/template|preview|import ở routes/dsmartWholesalePrice.js.
+function toggleDsmartStoreConnImportForm() {
+  const wrap = document.getElementById('dsmartStoreConnImportFormWrap');
+  const willShow = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', !willShow);
+  if (willShow) return;
+  // Đóng lại: dọn trạng thái xem trước cũ, không để sót dữ liệu (kể cả mật khẩu chữ thường) trong biến JS.
+  _dsmartStoreConnImportRows = null;
+  _dsmartStoreConnImportFileName = null;
+  document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+  clearSingleFileInput('dsmartStoreConnImportFileInput', 'dsmartStoreConnImportFileName');
+}
+
+function clickDsmartStoreConnImportFileInput() { document.getElementById('dsmartStoreConnImportFileInput').click(); }
+
+async function onDsmartStoreConnImportFileChange(event) {
+  onSingleFileChosen(event.target, 'dsmartStoreConnImportFileName');
+  const file = event.target.files[0];
+  _dsmartStoreConnImportRows = null;
+  _dsmartStoreConnImportFileName = null;
+  document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/preview', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _dsmartStoreConnImportRows = data.rows;
+    _dsmartStoreConnImportFileName = data.fileName;
+    document.getElementById('dsmartStoreConnImportPreviewWrap').classList.remove('hidden');
+    renderDsmartStoreConnImportPreview();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+function dsmartStoreConnImportModeBadge(r) {
+  if (r.errors.length) return `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⛔ ${escapeHtml(r.errors.join('; '))}</span>`;
+  if (r.mode === 'UPDATE') return `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✏️ Sẽ SỬA (đã có Mã Siêu Thị)</span>`;
+  return `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✅ Sẽ thêm mới</span>`;
+}
+
+function renderDsmartStoreConnImportPreview() {
+  if (!_dsmartStoreConnImportRows) return;
+  const validCount = _dsmartStoreConnImportRows.filter(r => !r.errors.length).length;
+  const createCount = _dsmartStoreConnImportRows.filter(r => r.mode === 'CREATE').length;
+  const updateCount = _dsmartStoreConnImportRows.filter(r => r.mode === 'UPDATE').length;
+  document.getElementById('dsmartStoreConnImportStats').innerText =
+    `${_dsmartStoreConnImportRows.length} dòng trong file — ${validCount} hợp lệ (${createCount} thêm mới, ${updateCount} sửa)`;
+  document.getElementById('dsmartStoreConnImportPreviewBody').innerHTML = _dsmartStoreConnImportRows.map((r, i) => `
+    <tr class="${r.errors.length ? 'bg-red-50' : r.mode === 'UPDATE' ? 'bg-amber-50' : ''}">
+      <td class="p-1.5 text-gray-400">${i + 1}</td>
+      <td class="p-1.5 font-semibold">${escapeHtml(r.storeCode)}</td>
+      <td class="p-1.5">${escapeHtml(r.storeName)}</td>
+      <td class="p-1.5 text-gray-500">${escapeHtml(r.host)}:${r.port}/${escapeHtml(r.database)}</td>
+      <td class="p-1.5">${escapeHtml(r.user)}</td>
+      <td class="p-1.5">${dsmartStoreConnImportModeBadge(r)}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Không có dòng nào</td></tr>`;
+}
+
+async function applyDsmartStoreConnImport() {
+  if (!_dsmartStoreConnImportRows) return;
+  const validRows = _dsmartStoreConnImportRows.filter(r => !r.errors.length);
+  if (!validRows.length) return alert('⛔ Không có dòng hợp lệ nào để nhập');
+  const createCount = validRows.filter(r => r.mode === 'CREATE').length;
+  const updateCount = validRows.filter(r => r.mode === 'UPDATE').length;
+  if (!confirm(`Xác nhận NHẬP ${validRows.length} dòng kết nối siêu thị (${createCount} thêm mới, ${updateCount} sửa)? Mật khẩu từng dòng sẽ được mã hoá ngay khi lưu vào hệ thống.`)) return;
+  const btn = document.getElementById('btnDsmartStoreConnApplyImport');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartStoreConnImportFileName })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (data.failCount) {
+      const failedRows = data.results.filter(r => !r.success);
+      const errLines = failedRows.slice(0, 5).map(r => `• ${r.storeCode}: ${r.error}`).join('\n');
+      const moreNote = failedRows.length > 5 ? `\n... và ${failedRows.length - 5} dòng lỗi khác (xem console)` : '';
+      alert(`✅ Đã nhập ${data.successCount}/${validRows.length} dòng thành công, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
+      console.error('Dòng lỗi khi nhập kết nối siêu thị:', failedRows);
+    } else {
+      alert(`✅ Đã nhập ${data.successCount}/${validRows.length} dòng thành công`);
+    }
+    _dsmartStoreConnImportRows = null;
+    _dsmartStoreConnImportFileName = null;
+    document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+    clearSingleFileInput('dsmartStoreConnImportFileInput', 'dsmartStoreConnImportFileName');
+    await renderDsmartStoreConnList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ===================== 1. Thêm Giá Mới =====================
@@ -71,6 +364,44 @@ function dsmartPriceFmtDate(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+// dsmartPriceStoreResultsSummary()/dsmartPriceAggregateStoreSummary() (12/2026, FAN-OUT) — tóm tắt kết
+// quả đồng bộ xuống TỪNG siêu thị để nối thêm vào alert sau Thêm/Sửa/Xoá giá — xem fanOutToStores()/
+// lib/dsmartSqlClient.js. storeResults rỗng (không phải undefined) nghĩa là ĐÃ fan-out nhưng chưa cấu
+// hình siêu thị nào (khác hẳn undefined = route cũ/stub test không trả field này).
+function dsmartPriceStoreResultsSummary(storeResults, storeFanOutError) {
+  if (storeFanOutError) return `\n⚠️ Đồng bộ siêu thị: ${storeFanOutError}`;
+  if (!storeResults) return '';
+  if (!storeResults.length) return '\n(Chưa cấu hình kết nối siêu thị nào — chỉ ghi ở DSmart16 Trung Tâm)';
+  const failed = storeResults.filter(r => !r.ok);
+  if (!failed.length) return `\n✅ Đồng bộ ${storeResults.length}/${storeResults.length} siêu thị thành công`;
+  const lines = failed.slice(0, 5).map(r => `• ${r.storeCode} (${r.storeName}): ${r.error}`).join('\n');
+  const more = failed.length > 5 ? `\n... và ${failed.length - 5} siêu thị lỗi khác (xem console)` : '';
+  if (failed.length > 5) console.error('Siêu thị đồng bộ lỗi:', failed);
+  return `\n⚠️ Đồng bộ siêu thị: ${storeResults.length - failed.length}/${storeResults.length} thành công, ${failed.length} lỗi:\n${lines}${more}`;
+}
+
+// dsmartPriceAggregateStoreSummary(results): dùng cho thao tác NHIỀU dòng cùng lúc (Thêm hàng loạt qua
+// file, Xoá hàng loạt) — gộp storeResults của TẤT CẢ dòng thành công thành 1 dòng tóm tắt theo SIÊU THỊ
+// (không lặp lại y nguyên từng dòng, dễ rối nếu có nhiều dòng cùng lỗi 1 siêu thị).
+function dsmartPriceAggregateStoreSummary(perRowResults) {
+  const flat = perRowResults.filter(r => r.success).flatMap(r => r.storeResults || []);
+  const fanOutErrorCount = perRowResults.filter(r => r.success && r.storeFanOutError).length;
+  if (!flat.length && !fanOutErrorCount) return '';
+  const failed = flat.filter(s => !s.ok);
+  let line = `\nĐồng bộ siêu thị: ${flat.length - failed.length}/${flat.length} lượt ghi thành công`;
+  if (failed.length) {
+    const byStore = new Map();
+    for (const f of failed) {
+      if (!byStore.has(f.storeCode)) byStore.set(f.storeCode, { storeName: f.storeName, count: 0, error: f.error });
+      byStore.get(f.storeCode).count++;
+    }
+    const lines = [...byStore.entries()].slice(0, 5).map(([code, v]) => `• ${code} (${v.storeName}): ${v.count} lượt lỗi — ${v.error}`).join('\n');
+    line += `\n${lines}`;
+  }
+  if (fanOutErrorCount) line += `\n⚠️ ${fanOutErrorCount} dòng không đọc được danh sách kết nối siêu thị`;
+  return line;
 }
 
 function renderDsmartPriceUploadPreview() {
@@ -124,12 +455,13 @@ async function applyDsmartPriceUpload() {
     if (!confirm(`⚠️ ${newCustIds.length} Mã Khách B2B sau CHƯA TỪNG xuất hiện trong CSPRICE (DSmart16 Trung Tâm) trước đây:\n${shown}${moreNote}\n\nNếu đây KHÔNG đúng là mã khách THẬT của siêu thị/khách hàng cần đổi giá, giá sẽ KHÔNG áp dụng đúng chỗ. Bạn có CHẮC CHẮN các mã khách trên là ĐÚNG không?`)) return;
   }
   if (!confirm(`Xác nhận THÊM ${validRows.length} dòng giá MỚI vào CSPRICE (DSmart16 Trung Tâm)? Thao tác này ghi trực tiếp vào hệ thống bán hàng thật.`)) return;
+  const schedule = !!document.getElementById('dsmartPriceScheduleApply')?.checked;
   const btn = document.getElementById('btnDsmartPriceApplyUpload');
   btn.disabled = true;
   try {
     const res = await fetch('/api/dsmart-price/apply', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartPriceUploadFileName, sourceAction: 'UPLOAD' })
+      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartPriceUploadFileName, sourceAction: 'UPLOAD', schedule, targetStoreIds: resolveDsmartPriceTargetStoreIds('dsmartPriceApplyStoreMultiSelect') })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
@@ -142,14 +474,16 @@ async function applyDsmartPriceUpload() {
     // — vẫn console.error() đầy đủ cho ai có DevTools, nhưng KHÔNG còn là cách DUY NHẤT để biết lý do.
     const overwrittenCount = data.results.filter(r => r.success && r.overwritten).length;
     const overwriteNote = overwrittenCount ? ` (trong đó ${overwrittenCount} dòng GHI ĐÈ giá đã có)` : '';
+    const scheduledNote = data.scheduledCount ? ` (trong đó ${data.scheduledCount} dòng ĐÃ LÊN LỊCH, chưa áp dụng ngay — xem mục "2b. Giá Đã Lên Lịch")` : '';
+    const storeNote = dsmartPriceAggregateStoreSummary(data.results);
     if (data.failCount) {
       const failedRows = data.results.filter(r => !r.success);
       const errLines = failedRows.slice(0, 5).map(r => `• ${r.custId}/${r.skuId}: ${r.error}`).join('\n');
       const moreNote = failedRows.length > 5 ? `\n... và ${failedRows.length - 5} dòng lỗi khác (xem console để biết đầy đủ)` : '';
-      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}${scheduledNote}, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}${storeNote}`);
       console.error('Dòng lỗi khi thêm giá DSmart:', failedRows);
     } else {
-      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}`);
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}${scheduledNote}${storeNote}`);
     }
     _dsmartPriceUploadRows = null;
     document.getElementById('dsmartPriceUploadPreviewWrap').classList.add('hidden');
@@ -199,11 +533,17 @@ async function renderDsmartPriceEntries() {
     document.getElementById('dsmartPriceEntriesBody').innerHTML = `<tr><td colspan="8" class="p-3 text-center text-red-500">⛔ ${escapeHtml(err.message)}</td></tr>`;
     return;
   }
+  renderDsmartPriceScheduled();
   const onlyExpired = document.getElementById('dsmartPriceMgOnlyExpired')?.checked;
   const custKw = (document.getElementById('dsmartPriceMgFilterCust')?.value || '').trim().toLowerCase();
   const skuKw = (document.getElementById('dsmartPriceMgFilterSku')?.value || '').trim().toLowerCase();
   const today = new Date().toISOString().slice(0, 10);
-  let list = [..._dsmartPriceEntries].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  // Mục này CHỈ quản lý dòng ACTIVE (đang thật trong CSPRICE)/DELETED (đã xoá) — dòng SCHEDULED (chưa ghi
+  // gì, xem mục "2b. Giá Đã Lên Lịch")/CANCELLED (đã hủy lịch) KHÔNG thuộc phạm vi mục này (12/2026, FAN-
+  // OUT + Lên Lịch Áp Giá — nếu không loại trừ, badge/nút "Sửa"/"Dùng Lại" ở dưới sẽ hiểu sai 2 trạng thái
+  // mới này vì chúng chưa từng tồn tại khi logic đó được viết).
+  let list = [..._dsmartPriceEntries].filter(e => e.status === 'ACTIVE' || e.status === 'DELETED')
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   if (onlyExpired) list = list.filter(e => e.status === 'DELETED' || e.toDate < today);
   if (custKw) list = list.filter(e => e.custId.toLowerCase().includes(custKw));
   if (skuKw) list = list.filter(e => e.skuId.toLowerCase().includes(skuKw));
@@ -267,6 +607,38 @@ function updateDsmartPriceDeleteSelectedButtonState() {
     : `🗑️ Áp Dụng Xoá Đã Chọn (${checked}/${total})`;
 }
 
+// ===================== 2b. Giá Đã Lên Lịch (chưa áp dụng) =====================
+// renderDsmartPriceScheduled() (12/2026, "Lên Lịch Áp Giá") — tái dùng NGUYÊN _dsmartPriceEntries đã
+// fetch trong renderDsmartPriceEntries() (gọi NGAY SAU khi fetch xong ở đó), không fetch lại GET /entries
+// lần 2 — dòng SCHEDULED chỉ hiện ở ĐÚNG mục này, không lẫn vào mục "2. Quản Lý Giá Đã Hết Hạn" phía trên.
+function renderDsmartPriceScheduled() {
+  const list = _dsmartPriceEntries.filter(e => e.status === 'SCHEDULED').sort((a, b) => (a.frDate || '').localeCompare(b.frDate || ''));
+  const countEl = document.getElementById('dsmartPriceScheduledCount');
+  if (countEl) countEl.textContent = list.length ? `(${list.length})` : '';
+  document.getElementById('dsmartPriceScheduledBody').innerHTML = list.map(e => `
+    <tr>
+      <td class="p-1.5">${escapeHtml(e.custId)}</td>
+      <td class="p-1.5">${escapeHtml(e.skuId)}</td>
+      <td class="p-1.5 text-right">${Number(e.price).toLocaleString('vi-VN')}</td>
+      <td class="p-1.5">${dsmartPriceFmtDate(e.frDate)} → ${dsmartPriceFmtDate(e.toDate)}</td>
+      <td class="p-1.5 text-gray-400">Tạo ${dsmartPriceFmtDate((e.createdAt || '').slice(0, 10))} bởi ${escapeHtml(e.createdBy || '—')}</td>
+      <td class="p-1.5"><button type="button" data-op="cancelDsmartPriceSchedule" data-arg0="${e.id}" class="bg-red-50 border border-red-300 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded">❌ Hủy Lịch</button></td>
+    </tr>`).join('') || `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Không có dòng nào đang chờ áp dụng</td></tr>`;
+}
+
+async function cancelDsmartPriceSchedule(id) {
+  id = Number(id);
+  const entry = _dsmartPriceEntries.find(e => e.id === id);
+  if (!entry) return;
+  if (!confirm(`Xác nhận hủy lịch áp giá ${escapeHtml(entry.custId)}/${escapeHtml(entry.skuId)}? Dòng này CHƯA từng ghi gì vào CSPRICE, hủy xong sẽ mất hẳn — cần Thêm Giá Mới lại từ đầu nếu muốn áp dụng.`)) return;
+  try {
+    const res = await fetch(`/api/dsmart-price/entries/${id}/cancel-schedule`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    await renderDsmartPriceEntries();
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
 // ----- Sửa (UPDATE dòng chưa xoá) -----
 function startDsmartPriceEdit(id) {
   id = Number(id);
@@ -302,7 +674,7 @@ async function saveDsmartPriceEdit() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    alert('✅ Đã sửa giá thành công');
+    alert('✅ Đã sửa giá thành công' + dsmartPriceStoreResultsSummary(data.storeResults, data.storeFanOutError));
     await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
   } catch (err) { alert('⛔ ' + err.message); }
 }
@@ -323,7 +695,7 @@ async function deleteDsmartPriceActiveEntry(id) {
     const res = await fetch(`/api/dsmart-price/entries/${id}/delete`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    alert('✅ Đã xoá thành công');
+    alert('✅ Đã xoá thành công' + dsmartPriceStoreResultsSummary(data.storeResults, data.storeFanOutError));
     await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
   } catch (err) { alert('⛔ ' + err.message); }
 }
@@ -345,10 +717,22 @@ function startDsmartPriceReuse(id) {
       <div><label class="block text-[10px] text-gray-500 mb-0.5">Giá (điền sẵn, sửa được)</label><input id="dsmartPriceReusePrice" type="number" value="${entry.price}" class="w-28 border rounded p-1 text-xs"></div>
       <div><label class="block text-[10px] text-amber-700 font-bold mb-0.5">Ngày bắt đầu</label><input id="dsmartPriceReuseFrDate" type="date" class="border rounded p-1 text-xs"></div>
       <div><label class="block text-[10px] text-amber-700 font-bold mb-0.5">Ngày kết thúc</label><input id="dsmartPriceReuseToDate" type="date" class="border rounded p-1 text-xs"></div>
+    </div>
+    <div class="mt-2">
+      <div class="text-[10px] font-bold text-sky-800 mb-0.5">🏬 Áp Dụng Cho Siêu Thị</div>
+      <div id="dsmartPriceReuseStoreMultiSelect" class="w-full max-w-md"></div>
+    </div>
+    <div class="flex items-center gap-3 mt-2">
       <button type="button" data-op="saveDsmartPriceReuse" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">✅ Thêm Giá Mới</button>
       <button type="button" data-op="cancelDsmartPriceReuse" class="bg-white border px-3 py-1 rounded text-xs font-semibold">Huỷ</button>
     </div>`;
   form.classList.remove('hidden');
+  const reuseItems = _dsmartPriceStoreOptions.map(s => ({ value: s.id, label: `${s.storeCode} - ${s.storeName}` }));
+  renderMultiSelectDropdown('dsmartPriceReuseStoreMultiSelect', reuseItems, reuseItems.map(it => it.value), {
+    placeholder: 'Tìm siêu thị...',
+    emptyText: reuseItems.length ? 'Chưa chọn siêu thị nào — CHỈ ghi ở DSmart16 Trung Tâm.' : 'Chưa cấu hình/bật siêu thị nào.',
+    allToggle: true
+  });
 }
 function cancelDsmartPriceReuse() { _dsmartPriceReusingEntry = null; document.getElementById('dsmartPriceReuseForm').classList.add('hidden'); }
 
@@ -362,12 +746,13 @@ async function saveDsmartPriceReuse() {
   try {
     const res = await fetch('/api/dsmart-price/apply', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: [{ custId: _dsmartPriceReusingEntry.custId, skuId: _dsmartPriceReusingEntry.skuId, price, frDate, toDate }], sourceAction: 'REUSE' })
+      body: JSON.stringify({ rows: [{ custId: _dsmartPriceReusingEntry.custId, skuId: _dsmartPriceReusingEntry.skuId, price, frDate, toDate }], sourceAction: 'REUSE', targetStoreIds: resolveDsmartPriceTargetStoreIds('dsmartPriceReuseStoreMultiSelect') })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     if (!data.successCount) throw new Error(data.results?.[0]?.error || 'Ghi thất bại');
-    alert(data.results?.[0]?.overwritten ? '✅ Đã GHI ĐÈ giá hiện có thành công (đã có dòng khác cho đúng Mã Khách B2B/Mã Sản Phẩm này)' : '✅ Đã thêm giá mới thành công');
+    const reuseStoreNote = dsmartPriceStoreResultsSummary(data.results?.[0]?.storeResults, data.results?.[0]?.storeFanOutError);
+    alert((data.results?.[0]?.overwritten ? '✅ Đã GHI ĐÈ giá hiện có thành công (đã có dòng khác cho đúng Mã Khách B2B/Mã Sản Phẩm này)' : '✅ Đã thêm giá mới thành công') + reuseStoreNote);
     cancelDsmartPriceReuse();
     await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
   } catch (err) { alert('⛔ ' + err.message); }
@@ -380,22 +765,40 @@ async function applyDsmartPriceDeleteSelected() {
   if (!confirm(`Xác nhận XOÁ THẬT ${ids.length} dòng khỏi CSPRICE (DSmart16 Trung Tâm)? Không thể hoàn tác.`)) return;
   let success = 0;
   const failMsgs = [];
+  const allStoreResults = [];
+  let fanOutErrorCount = 0;
   for (const id of ids) {
     try {
       const res = await fetch(`/api/dsmart-price/entries/${id}/delete`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       success++;
+      if (data.storeResults) allStoreResults.push(...data.storeResults);
+      if (data.storeFanOutError) fanOutErrorCount++;
     } catch (err) { failMsgs.push(err.message); console.error(`Xoá dòng ID=${id} lỗi:`, err.message); }
   }
   // Cùng lý do đã vá ở applyDsmartPriceUpload() ngay trên (12/2026) — hiện THẲNG lỗi thật, không chỉ "xem
   // console" (không dùng được trên mobile).
+  let storeNote = '';
+  if (allStoreResults.length) {
+    const storeFailed = allStoreResults.filter(r => !r.ok);
+    storeNote = `\nĐồng bộ siêu thị: ${allStoreResults.length - storeFailed.length}/${allStoreResults.length} lượt ghi thành công`;
+    if (storeFailed.length) {
+      const byStore = new Map();
+      for (const f of storeFailed) {
+        if (!byStore.has(f.storeCode)) byStore.set(f.storeCode, { storeName: f.storeName, count: 0, error: f.error });
+        byStore.get(f.storeCode).count++;
+      }
+      storeNote += '\n' + [...byStore.entries()].slice(0, 5).map(([code, v]) => `• ${code} (${v.storeName}): ${v.count} lượt lỗi — ${v.error}`).join('\n');
+    }
+  }
+  if (fanOutErrorCount) storeNote += `\n⚠️ ${fanOutErrorCount} dòng không đọc được danh sách kết nối siêu thị`;
   if (failMsgs.length) {
     const errLines = failMsgs.slice(0, 5).map(m => `• ${m}`).join('\n');
     const moreNote = failMsgs.length > 5 ? `\n... và ${failMsgs.length - 5} dòng lỗi khác (xem console để biết đầy đủ)` : '';
-    alert(`✅ Đã xoá ${success}/${ids.length} dòng, ${failMsgs.length} dòng lỗi:\n${errLines}${moreNote}`);
+    alert(`✅ Đã xoá ${success}/${ids.length} dòng, ${failMsgs.length} dòng lỗi:\n${errLines}${moreNote}${storeNote}`);
   } else {
-    alert(`✅ Đã xoá ${success}/${ids.length} dòng`);
+    alert(`✅ Đã xoá ${success}/${ids.length} dòng${storeNote}`);
   }
   await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
 }

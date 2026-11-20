@@ -9935,7 +9935,14 @@ Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới. **Riêng quyền SQL
 trên DSmart16 Trung Tâm (GRANT SELECT trên `dbo.SKU_DEF`) là thao tác 1
 lần CẦN LÀM trên hệ thống DSmart thật — không phải thay đổi trong code
-này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.**
+này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.** Script
+T-SQL mẫu (CREATE LOGIN + CREATE USER + GRANT INSERT/UPDATE/DELETE trên
+CSPRICE + GRANT SELECT trên SKU_DEF, dùng CHUNG được cho cả DSmart16 Trung
+Tâm lẫn CSDL DSmart của TỪNG siêu thị khi bật fan-out, mục 6n) — xem
+`deploy/Dsmart16-Cap-Quyen-Tai-Khoan-Gia-Ban-Buon.sql` (12/2026, tạo SAU khi
+có tính năng fan-out xuống siêu thị — trước đó quyền ở DSmart16 Trung Tâm
+do đội DBA khách hàng tự cấp tay theo mô tả yêu cầu, KHÔNG có script lưu
+sẵn trong repo).
 
 ## 6e. LỖI THẬT PRODUCTION đã vá LẦN 5: Giá Bán Buôn — sửa SAI mô hình dữ liệu, khoá chính thật CHỈ gồm (CUST_ID, SKU_ID) (12/2026)
 
@@ -10319,3 +10326,242 @@ checkbox → bộ đếm đổi sống). 54/54 pass (`test-dsmart-price-ui.js`) 
 
 Không cần thao tác deploy gì thêm ngoài copy code (thuần JS phía
 client, không đụng route/schema).
+
+## 6n. Giá Bán Buôn: FAN-OUT trực tiếp xuống SIÊU THỊ + "📅 Lên Lịch Áp Giá" (12/2026)
+
+Người dùng nêu rõ hướng xử lý mới cho vấn đề "giá không đồng bộ xuống
+siêu thị" (đã điều tra kỹ trước đó, xác nhận cơ chế đồng bộ CHÍNH THỨC
+là 1 tool bên ngoài theo sự kiện lưu của phần mềm DSmart desktop, hệ
+thống này không kiểm soát/trigger được): **"Tôi có ý tưởng này là tôi
+muốn cài đặt giá đến tận máy chủ db của siêu thị và tôi sẽ khai báo kết
+nối xuống siêu thị như ở trung tâm và khi tôi thay đổi như xóa, sửa nó
+cũng truyền xuống tất cả các siêu thị."** — xác nhận server HWS có
+VPN/kết nối sẵn tới SQL Server của TỪNG siêu thị (vài chục siêu thị).
+
+Kèm theo là tính năng lên lịch: **"Và giá sẽ theo ngày bắt đầu trong
+file excel và lịch tự động bắt ngày bắt đầu và áp giá từ 0 giờ, nếu
+người tạo chọn đặt lịch, còn không đặt lịch thì sẽ là áp giá luôn."**
+
+### A. Fan-out xuống từng siêu thị
+
+**Cơ chế**: thêm bảng mới `dbo.DsmartStorePriceConnections` (quản lý
+qua màn **"🏬 Kết Nối Siêu Thị"**, CHỈ admin — nút cạnh "⚙️ Cấu Hình Kết
+Nối") lưu danh sách kết nối SQL Server riêng của từng siêu thị (Mã Siêu
+Thị, Tên, Host/Port/Tên CSDL/Tài khoản, mật khẩu MÃ HOÁ 2 chiều cùng
+khuôn `lib/emailCrypto.js`, cờ Bật/Tắt). Mỗi khi **Thêm/Sửa/Xoá giá**
+(mục 1/2) ghi THÀNH CÔNG vào CSPRICE của DSmart16 Trung Tâm (HO) như
+trước, hệ thống **TỰ ĐỘNG lặp lại ĐÚNG CÙNG thao tác** đó trên CSPRICE
+local của MỌI siêu thị đang **Enabled=1** (song song theo lô 5 kết nối/
+lần, không dồn quá nhiều kết nối cùng lúc).
+
+**Xử lý lỗi (v1, theo yêu cầu người dùng — đơn giản, không hàng đợi tự
+động thử lại)**: 1 siêu thị lỗi (mất mạng, SQL Server tạm không phản
+hồi...) **KHÔNG chặn/rollback** thao tác đã ghi xong ở HO, và **KHÔNG
+chặn** các siêu thị khác — mỗi siêu thị chạy độc lập, kết quả
+`storeResults` (mảng `{storeCode, storeName, ok, error}`) trả về NGAY
+trong response, hiện rõ trong `alert` sau khi Thêm/Sửa/Xoá (gộp theo
+siêu thị nếu là thao tác hàng loạt) để IT tự biết siêu thị nào cần áp
+lại tay. "Sửa" fan-out xuống 1 siêu thị CHƯA từng có dòng giá đó (VD
+lần đầu bật fan-out) sẽ báo lỗi rõ cho đúng siêu thị đó (không tự âm
+thầm ghi thiếu cột) — IT cần dùng "Thêm Giá Mới" để tạo dòng ở siêu thị
+đó trước.
+
+**Kỹ thuật**: `lib/dsmartSqlClient.js` tách các hàm ghi CSPRICE thành
+phần LÕI pool-agnostic (`upsertPriceOnPool()`/`updatePriceOnPool()`/
+`deletePriceOnPool()`) dùng CHUNG cho cả HO và từng siêu thị (tránh lệch
+công thức ghi CSPRICE như các lỗi Lần 1-6 ở HO đã gặp) — 3 hàm export
+`insertWholesalePrice()`/`updateWholesalePrice()`/`deleteWholesalePrice()`
+giờ LUÔN ghi HO trước rồi tự fan-out, trả thêm `storeResults`/
+`storeFanOutError`. Mỗi siêu thị có pool kết nối riêng (cache theo
+chữ ký cấu hình, tự đóng/mở lại khi đổi mật khẩu/host, cùng khuôn
+`getDsmartPool()` cho HO).
+
+### B. "📅 Lên Lịch Áp Giá"
+
+Checkbox MỚI "📅 Đặt Lịch Áp Giá" cạnh nút "✅ Thêm Giá Mới Vào DSmart"
+— KHÔNG tick (mặc định) = áp NGAY như trước. CÓ tick: dòng nào có Ngày
+Bắt Đầu ở **TƯƠNG LAI** (> hôm nay) được lưu nội bộ với trạng thái MỚI
+**SCHEDULED** (`dsmartKey=null`, **CHƯA ghi gì vào CSPRICE**), hiện ở
+mục mới **"2b. Giá Đã Lên Lịch"** (có nút "❌ Hủy Lịch" — chuyển trạng
+thái **CANCELLED**, không cần hoàn tác gì ở DSmart vì chưa từng ghi).
+Dòng có Ngày Bắt Đầu hôm nay/quá khứ **vẫn áp NGAY** dù có tick (không
+có gì để chờ).
+
+Job nền mới `jobs/dsmartAutoApplyScheduledPrices.js` (10 phút/lần, cùng
+cadence job "🔁 Tự Động Xoá Khi Hết Hạn" — KHÔNG có công tắc bật/tắt
+riêng vì đây là lựa chọn TỪNG LƯỢT của người tạo, không phải cấu hình
+module-wide) quét các dòng SCHEDULED có Ngày Bắt Đầu <= hôm nay, tự gọi
+`insertWholesalePrice()` (kèm FAN-OUT xuống mọi siêu thị như mục A) và
+chuyển ACTIVE.
+
+### Test
+
+- `tests/test-dsmart-store-fanout.js` (MỚI) — test THẬT (không stub
+  `lib/dsmartSqlClient.js`) toàn bộ luồng fan-out + CRUD kết nối siêu
+  thị + mã hoá mật khẩu, giả lập "đa máy chủ" SQL Server ảo (mỗi chữ ký
+  kết nối = 1 CSDL độc lập, đúng mô hình thật). 23/23 pass.
+- `tests/test-dsmart-wholesale-price.js` — thêm kịch bản schedule=true/
+  false, cancel-schedule, CRUD route `/store-connections` (tầng route,
+  stub logic CRUD/fan-out thật), job `dsmartAutoApplyScheduledPrices`.
+  55/55 pass.
+- `tests/test-dsmart-price-ui.js` — thêm kịch bản checkbox "Đặt Lịch",
+  mục "2b. Giá Đã Lên Lịch" + Hủy Lịch, màn "🏬 Kết Nối Siêu Thị" (thêm/
+  sửa/tắt-bật/kiểm tra/xoá kết nối, thao tác Playwright THẬT). 70/70
+  pass.
+- `tests/test-dsmart-natural-key-matching.js` — sửa 1 assertion quá rộng
+  ("không được có SELECT nào trong luồng Sửa") thành đúng phạm vi gốc
+  ("không được SELECT trên CSPRICE") — fan-out hợp lệ thêm 1 SELECT
+  trên bảng cấu hình CỦA APP (`DsmartStorePriceConnections`), KHÔNG đụng
+  CSPRICE nên không vi phạm ràng buộc quyền tài khoản DSmart16 thật.
+  19/19 pass.
+
+**Thao tác deploy**: ngoài copy code, **PHẢI chạy lại `sql/schema.sql`**
+(tạo bảng `dbo.DsmartStorePriceConnections` mới — script tự bọc
+`IF OBJECT_ID(...) IS NULL`, an toàn chạy lại nhiều lần) trước khi
+`pm2 restart`. Sau khi deploy, admin cần vào **"🏬 Kết Nối Siêu Thị"**
+tự khai báo kết nối cho từng siêu thị (host/port/CSDL/tài khoản/mật
+khẩu) — tính năng fan-out không làm gì nếu chưa có kết nối nào được
+thêm (an toàn, không tự bật ngầm).
+
+### Audit chéo trước merge (2 agent độc lập) — 4 lỗi thật đã vá
+
+Theo đúng quy tắc "test thật kỹ, nhiều agent test chéo" — 2 agent độc
+lập (1 đọc code + chạy test tĩnh, 1 lái Playwright thật thao tác UI)
+audit song song trước khi merge, tìm được 4 vấn đề thật:
+
+1. **(Mức trung bình, đã vá)** `jobs/dsmartAutoApplyScheduledPrices.js`
+   KHÔNG khoá (`withAppLock`) và KHÔNG dọn entry mirror ACTIVE cũ như
+   `POST /apply` đã làm — nếu ai đó "Thêm Giá Mới" tay (áp NGAY) cho
+   ĐÚNG cặp Mã Khách B2B/Mã Sản Phẩm đang chờ lên lịch TRƯỚC khi job
+   tới hạn, cả 2 entry mirror đều thành ACTIVE dù CSPRICE thật chỉ có 1
+   dòng — sai dữ liệu hiển thị (không sai CSPRICE thật). Đã vá: job giờ
+   khoá + tái dùng đúng logic dọn stale-entry của `/apply`. Thêm 1
+   kịch bản test mới xác nhận đúng hành vi sau vá.
+2. **(Mức trung bình, đã vá)** `lib/dsmartStorePriceConnectionsStore.js`
+   ném lỗi validate (thiếu trường, trùng Mã Siêu Thị...) bằng `Error`
+   thường thay vì `HttpError` — trên production (`NODE_ENV=production`)
+   bị `sendCatchError()` thay bằng thông báo chung "Đã có lỗi xảy ra",
+   ẩn mất lý do thật (VD "Mã Siêu Thị đã có kết nối khác"). Đã đổi
+   toàn bộ sang `HttpError(400/404, ...)`.
+3. **(Mức thấp, đã vá)** Xoá hẳn 1 kết nối siêu thị không đóng pool
+   đang cache (`storePoolCache`) — treo tài nguyên tới khi restart. Đã
+   thêm `closeStorePool(id)`, gọi ngay sau khi xoá.
+4. **(Mức thấp, đã vá)** Thêm/Sửa kết nối siêu thị thiếu validate độ
+   dài field (khớp đúng cột SQL) — lỗi SQL "truncated" khó hiểu nếu gõ
+   quá dài. Đã thêm `checkFieldLengths()`.
+
+Sau khi vá: 170/170 test pass (5 file test, gồm 1 kịch bản MỚI tái
+hiện đúng lỗi #1 để xác nhận đã vá đúng).
+
+### C. "🏬 Kết Nối Siêu Thị" — Nhập Hàng Loạt qua Excel (12/2026)
+
+Người dùng hỏi tiếp, sau khi được giải thích sự khác nhau giữa "⚙️ Cấu
+Hình Kết Nối" (1 kết nối NGUỒN duy nhất — DSmart16 Trung Tâm) và "🏬 Kết
+Nối Siêu Thị" (NHIỀU kết nối ĐÍCH nhận bản sao fan-out, mục A/B ở trên):
+**"...vì là nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu
+và upload file mẫu được không?"** — xác nhận thêm dù biết rõ rủi ro cột
+Mật Khẩu trong file Excel là CHỮ THƯỜNG (chưa mã hoá): **"Ok, bạn nốt
+vào để làm cái job này nhé."**
+
+**Cơ chế**: thêm 1 nút **"📂 Nhập Hàng Loạt (Excel)"** cạnh nút "➕ Thêm
+Siêu Thị" trong màn "🏬 Kết Nối Siêu Thị" (CHỈ admin, giống mục A), mở ra
+cùng khuôn "1. Thêm Giá Mới" đã có (tải file mẫu → chọn file → xem
+trước → bấm Nhập thật):
+
+1. **"📥 Tải File Mẫu"** — `GET /api/dsmart-price/store-connections/
+   template`, trả file `.xlsx` 7 cột cố định: Mã Siêu Thị, Tên Siêu Thị,
+   Host, Port, Tên CSDL, Tài Khoản, **Mật Khẩu**.
+2. **"📂 Chọn File Excel"** → `POST /store-connections/preview` đọc file
+   (qua `lib/dsmartStoreConnectionFileParser.js`, cùng khuôn an toàn
+   zip-bomb `lib/xlsxSafeRead.js` như "Thêm Giá Mới"), so khớp Mã Siêu
+   Thị với danh sách đã có để đánh dấu từng dòng **CREATE** (mã mới,
+   BẮT BUỘC có Mật Khẩu) hay **UPDATE** (mã đã có — Mật Khẩu để trống =
+   giữ nguyên mật khẩu cũ), hiện bảng xem trước (không ghi gì).
+3. **"✅ Nhập Vào Hệ Thống"** → `POST /store-connections/import` ghi
+   THẬT từng dòng hợp lệ (validate lại server-side, không tin dữ liệu
+   client gửi dù đã qua `/preview`) — lỗi 1 dòng (thiếu trường, trùng
+   Mã Siêu Thị theo cách khác...) **không chặn** các dòng còn lại (cùng
+   nguyên tắc cô lập lỗi như "Thêm Giá Mới" hàng loạt). Mật khẩu được
+   **MÃ HOÁ ngay khi lưu** (gọi đúng `createStore()`/`updateStore()` có
+   sẵn ở mục A, không có đường ghi plaintext xuống DB).
+
+**⚠️ Rủi ro ĐÃ NÊU RÕ với người dùng, người dùng CHẤP NHẬN**: file Excel
+tải mẫu/tải lên chứa Mật Khẩu DẠNG CHỮ THƯỜNG (chỉ mã hoá SAU KHI nhập
+vào hệ thống) — nếu file này bị lưu/gửi nhầm cho người không liên quan
+sẽ lộ mật khẩu SQL Server của siêu thị đó. Để giảm rủi ro trong phạm vi
+có thể: server **KHÔNG lưu file lên đĩa** (chỉ đọc buffer trong request,
+y hệt "Thêm Giá Mới"); `/preview` trả nguyên mật khẩu lại CHO ĐÚNG trình
+duyệt/request vừa tải file lên (để `/import` không bắt tải file lần 2),
+không phải lộ cho ai khác. UI có dòng cảnh báo đỏ nhắc admin tự xoá file
+khỏi máy sau khi dùng xong — không có cách nào loại bỏ hoàn toàn rủi ro
+này nếu vẫn cần nhập hàng loạt qua Excel, chỉ có thể nhắc nhở thao tác.
+
+### Test (phần C)
+
+- `tests/test-dsmart-wholesale-price.js` — thêm 11 kịch bản: quyền admin
+  cho cả 3 route, phân loại đúng CREATE/UPDATE/lỗi dòng, file sai khuôn
+  mẫu (thiếu cột), mã mới thiếu Mật Khẩu (preview + import), ghi thật
+  CREATE+UPDATE cùng lúc kèm cô lập lỗi 1 dòng, rows rỗng → 400. 66/66
+  pass (file này, cộng dồn toàn bộ mục 6n).
+- CSP sweep (`on[a-z]+="`, ` style="` ngoài `data-style`, `javascript:`,
+  `eval(`) trên `itSupportSection.html` + `module-itsupport-dsmartprice.js`
+  — không khớp gì.
+
+**Thao tác deploy**: KHÔNG cần thêm gì ngoài copy code + `pm2 restart`
+(không đổi `schema.sql`/biến môi trường mới — dùng lại đúng bảng
+`dbo.DsmartStorePriceConnections` và route CRUD đã có ở mục A).
+
+### D. "🏬 Áp Dụng Cho Siêu Thị" — chọn "Tất Cả" hoặc chọn riêng từng siêu thị khi Thêm Giá (12/2026)
+
+Người dùng yêu cầu thêm, sau khi xem demo mục C: **"...khi áp giá cho phép tôi chọn ôn là tất cả siêu
+thị, hoặc cho tôi chọn từng siêu thị theo dạng dropdown cộng searchable và multi choice nhé. Việc chọn và
+áp giá siêu thị này sẽ lấy luôn từ cái phần mà cấu hình admin ấy. Phải hiển thị, phải cấu hình cái siêu
+thị nào sẽ sử dụng luôn, mà siêu thị nào chưa được cấu hình thì coi như là không hiện trong danh sách."**
+— trước đây mục A (fan-out) LUÔN tự động áp dụng cho TẤT CẢ siêu thị đang Enabled=1, không có cách chọn
+riêng cho từng lượt Thêm Giá.
+
+**Cơ chế**: ô chọn mới **"🏬 Áp Dụng Cho Siêu Thị"** (ô chọn nhiều — searchable, có nút "✅ Chọn Tất Cả",
+cùng widget `renderMultiSelectDropdown()` đã dùng cho ô chọn siêu thị ở Kiểm Kê) xuất hiện ở **CẢ 2 nơi**
+tạo dòng giá mới: **"1. Thêm Giá Mới"** (áp dụng chung cho cả lượt nộp file 1 dòng lẫn hàng loạt) và
+**"↩️ Dùng Lại"** (tạo lại dòng từ 1 dòng đã xoá). Nguồn danh sách: `GET /store-connections/options` —
+CHỈ liệt kê siêu thị ĐANG BẬT (Enabled=1) trong "🏬 Kết Nối Siêu Thị" (mục A) — siêu thị chưa cấu hình
+hoặc đang Tắt sẽ KHÔNG hiện ra để chọn, đúng yêu cầu. Route này KHÔNG gác riêng admin như
+`GET /store-connections` đầy đủ (chỉ trả về id/Mã/Tên siêu thị, không có host/user/port — thông tin hạ
+tầng chỉ admin mới cần) vì MỌI người được áp giá đều cần chọn được phạm vi, không chỉ admin.
+
+- **Mặc định**: chọn SẴN "✅ Tất cả" — GIỮ NGUYÊN hành vi cũ (fan-out xuống TOÀN BỘ siêu thị đang Enabled=1
+  tại thời điểm ghi, kể cả siêu thị MỚI được bật SAU NÀY — không cần sửa lại dòng giá cũ).
+- **Bỏ chọn "Tất cả" rồi tự chọn riêng 1 phần (kể cả 0 siêu thị)**: ĐÓNG BĂNG đúng danh sách đã chọn lúc
+  Thêm — CHỈ những siêu thị đó nhận được dòng giá này (siêu thị khác, kể cả Enabled=1, sẽ KHÔNG nhận gì).
+  Giá trị này lưu trên chính dòng giá (`targetStoreIds`, `null` = đã chọn "Tất Cả" lúc đó) để **"Sửa"/
+  "Xoá"/job tự động "📅 Lên Lịch Áp Giá" áp dụng SAU NÀY luôn tái dùng ĐÚNG phạm vi đã chọn lúc Thêm** —
+  không có ô chọn lại ở bước Sửa/Xoá (tránh vô tình fan-out sang 1 siêu thị CHƯA từng nhận dòng này, sẽ bị
+  `updatePriceOnPool()` báo lỗi rõ "siêu thị CHƯA từng có dòng giá đó").
+
+**Kỹ thuật**: `fanOutToStores(operation, targetStoreIds)` (`lib/dsmartSqlClient.js`) nhận thêm tham số thứ
+2 — `null`/thiếu = lấy TOÀN BỘ siêu thị Enabled=1 tại thời điểm gọi (linh động, hành vi cũ); mảng id = giao
+với danh sách Enabled=1 (siêu thị bị Tắt sau khi chọn vẫn KHÔNG nhận được, an toàn đúng ý nghĩa "Tắt").
+3 hàm `insertWholesalePrice()`/`updateWholesalePrice()`/`deleteWholesalePrice()` nhận thêm tham số này,
+truyền thẳng xuống `fanOutToStores()`. `routes/dsmartWholesalePrice.js`: `POST /apply` đọc
+`req.body.targetStoreIds`, lưu lại trên MỖI entry (cả ACTIVE lẫn SCHEDULED); `PATCH /entries/:id` và
+`POST /entries/:id/delete` tự đọc `item.targetStoreIds` đã lưu (không nhận input mới từ client);
+`jobs/dsmartAutoApplyScheduledPrices.js` cũng tự đọc `entry.targetStoreIds` khi tự động áp dụng.
+
+### Test (phần D)
+
+- `tests/test-dsmart-wholesale-price.js` — thêm 8 kịch bản: `GET /store-connections/options` không gác
+  admin (khác GET đầy đủ) + chỉ trả id/Mã/Tên + chỉ liệt kê Enabled=1; `POST /apply` không gửi
+  `targetStoreIds` → lưu `null` + truyền `null`; có gửi mảng → lưu + truyền ĐÚNG mảng đó (kể cả mảng rỗng
+  = không siêu thị nào, phân biệt rõ với `null` = "Tất Cả"); `PATCH /entries/:id` và
+  `POST /entries/:id/delete` tái dùng ĐÚNG `targetStoreIds` đã lưu (không có input mới); job tự động áp
+  dụng lịch cũng truyền đúng `targetStoreIds` đã đóng băng lúc đặt lịch. 73/73 pass (file này, cộng dồn
+  toàn bộ mục 6n).
+- CSP sweep (`on[a-z]+="`, ` style="` ngoài `data-style`, `javascript:`, `eval(`) trên
+  `itSupportSection.html` + `module-itsupport-dsmartprice.js` — không khớp gì.
+- Chạy lại đầy đủ `test-dsmart-store-fanout.js` (23/23), `test-dsmart-natural-key-matching.js` (19/19),
+  `test-dsmart-price-ui.js` (70/70, Playwright thật) — không regression.
+
+**Thao tác deploy**: KHÔNG cần thêm gì ngoài copy code + `pm2 restart` (không đổi `schema.sql`/biến môi
+trường mới — chỉ thêm 1 trường `targetStoreIds` vào bản ghi JSON hiện có của
+`dbo.DsmartWholesalePriceEntries`, entry CŨ trước khi có tính năng này tự hiểu là `undefined` → coi như
+`null`/"Tất Cả", KHÔNG cần script di trú dữ liệu).
