@@ -482,6 +482,15 @@
             <button type="button" id="btnDsmartPriceTestConn" data-op="testDsmartPriceConnection" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-600 text-white hover:bg-teal-700">🔌 Kiểm Tra Kết Nối</button>
             <span id="dsmartPriceCfgTestStatus" class="text-xs"></span>
           </div>
+          <!-- "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT PRODUCTION đã phát hiện: cột "ID" giả
+               định trước đây sai trên CSDL thật, SQL báo "Invalid column name 'ID'." — xem chú thích đầy
+               đủ tại resolveCspriceIdentityColumn()/lib/dsmartSqlClient.js). Hệ thống giờ TỰ TRA CỨU tên
+               cột identity thật khi ghi/sửa/xoá, nút này chỉ để đội IT TỰ XEM LẠI đầy đủ cấu trúc cột khi
+               cần chẩn đoán thêm — KHÔNG bắt buộc phải bấm trước khi dùng bình thường. -->
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnDsmartPriceInspectTable" data-op="inspectDsmartPriceCspriceTable" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700">🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE</button>
+          </div>
+          <div id="dsmartPriceInspectTableResult" class="hidden text-xs bg-gray-50 border rounded p-2 max-h-48 overflow-y-auto"></div>
         </div>
         <div class="p-4 border-t flex justify-end gap-2">
           <button data-op="closeDsmartPriceConfigModal" class="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>

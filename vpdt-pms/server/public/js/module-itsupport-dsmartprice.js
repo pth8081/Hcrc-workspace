@@ -444,6 +444,44 @@ async function testDsmartPriceConnection() {
   }
 }
 
+// inspectDsmartPriceCspriceTable() — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT
+// PRODUCTION đã phát hiện: giả định "CSPRICE có cột ID tự tăng" hoá ra SAI trên CSDL thật — hệ thống báo
+// "Invalid column name 'ID'." khi Thêm/Sửa/Xoá. Đã vá cho hệ thống TỰ TRA CỨU tên cột đúng, không cần
+// bấm nút này trước khi dùng bình thường — nút này chỉ để đội IT TỰ XEM LẠI đầy đủ cấu trúc cột khi cần
+// chẩn đoán thêm, dùng ĐÚNG giá trị đang gõ dở trên form, cùng khuôn testDsmartPriceConnection() ở trên.
+async function inspectDsmartPriceCspriceTable() {
+  const host = document.getElementById('dsmartPriceCfgHost').value.trim();
+  const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
+  const database = document.getElementById('dsmartPriceCfgDatabase').value.trim();
+  const user = document.getElementById('dsmartPriceCfgUser').value.trim();
+  const password = document.getElementById('dsmartPriceCfgPassword').value;
+  const resultEl = document.getElementById('dsmartPriceInspectTableResult');
+  const btn = document.getElementById('btnDsmartPriceInspectTable');
+  if (resultEl) { resultEl.classList.remove('hidden'); resultEl.innerHTML = '⏳ Đang đọc cấu trúc bảng CSPRICE...'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/config/inspect-table', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port, database, user, password: password || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    const rows = (data.columns || []).map(c => `<tr class="${c.name === data.identityColumn ? 'bg-emerald-50 font-bold' : ''}">
+      <td class="pr-3">${escapeHtml(c.name)}${c.name === data.identityColumn ? ' 🔑' : ''}</td>
+      <td class="pr-3 text-gray-500">${escapeHtml(c.dataType)}</td>
+      <td class="text-gray-500">${c.nullable ? 'NULL được' : 'NOT NULL'}</td>
+    </tr>`).join('');
+    const idNote = data.identityColumn
+      ? `<div class="text-emerald-700 font-semibold mb-1">🔑 Cột ID tự tăng (identity) thật: <code>${escapeHtml(data.identityColumn)}</code> — hệ thống đã tự dùng đúng cột này khi Thêm/Sửa/Xoá.</div>`
+      : `<div class="text-red-600 font-semibold mb-1">⛔ KHÔNG tìm thấy cột identity nào trên CSPRICE — Thêm/Sửa/Xoá sẽ báo lỗi, liên hệ đội phát triển.</div>`;
+    if (resultEl) resultEl.innerHTML = `${idNote}<table class="w-full">${rows}</table>`;
+  } catch (err) {
+    if (resultEl) resultEl.innerHTML = `<span class="text-red-600 font-semibold">⛔ ${escapeHtml(err.message)}</span>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function saveDsmartPriceConfig() {
   const host = document.getElementById('dsmartPriceCfgHost').value.trim();
   const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
