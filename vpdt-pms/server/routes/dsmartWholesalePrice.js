@@ -108,9 +108,8 @@ router.post('/config/test-connection', async (req, res) => {
 });
 
 // POST /config/inspect-table — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT PRODUCTION đã
-// phát hiện: cột "ID" giả định trước đây hoá ra SAI trên CSDL thật — xem chú thích đầy đủ tại
-// resolveCspriceIdentityColumn()/lib/dsmartSqlClient.js). Cùng khuôn overrideCfg như test-connection ở
-// trên (admin xem được NGAY với giá trị đang gõ dở, không cần bấm Lưu trước) — CHỈ đọc metadata
+// phát hiện qua 3 lần vá liên tiếp — xem chú thích đầy đủ ở đầu lib/dsmartSqlClient.js). Cùng khuôn
+// overrideCfg như test-connection ở trên (admin xem được NGAY với giá trị đang gõ dở, không cần bấm Lưu trước) — CHỈ đọc metadata
 // (INFORMATION_SCHEMA.COLUMNS + sys.identity_columns), không đụng dữ liệu thật trong CSPRICE.
 router.post('/config/inspect-table', async (req, res) => {
   if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được cấu trúc bảng' });

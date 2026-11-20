@@ -9808,3 +9808,60 @@ hiếm gặp này (không có giao dịch phân tán giữa 2 CSDL khác nhau).
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6c. LỖI THẬT PRODUCTION đã vá LẦN 3: Giá Bán Buôn — tài khoản SQL DSmart KHÔNG có quyền SELECT trên CSPRICE (12/2026)
+
+Người dùng thử lại ngay sau bản vá "6b" và gặp lỗi THẬT: *"Đã ghi CSPRICE
+nhưng lỗi khi đọc lại khoá tự nhiên của dòng vừa ghi: The SELECT permission
+was denied on the object 'CSPRICE', database 'DSMART16', schema 'dbo'."*
+Thông báo lỗi tự nó đã nói rõ: **dữ liệu dòng đó NHIỀU KHẢ NĂNG đã ghi
+thành công** vào CSPRICE thật — lỗi xảy ra ở bước đọc lại để xác nhận SAU
+khi ghi, không phải lúc ghi.
+
+**Nguyên nhân gốc**: tài khoản SQL tạo riêng cho tính năng này (đúng
+nguyên tắc least-privilege đã thống nhất lúc đầu) **CHỈ được GRANT
+INSERT/UPDATE/DELETE trên CSPRICE, KHÔNG có SELECT**. Bản vá "6b" (khoá tự
+nhiên) đọc lại khoá bằng 1 câu `SELECT` riêng sau khi ghi — câu này bị
+CSDL từ chối thẳng, không phải lỗi logic mà là lỗi QUYỀN tài khoản.
+
+**Cách vá**: bỏ HẲN mọi câu `SELECT` trên dữ liệu CSPRICE. Dùng mệnh đề
+`OUTPUT INSERTED.*`/`OUTPUT DELETED.*` **ngay trên chính câu lệnh**
+INSERT/UPDATE/DELETE để lấy lại dữ liệu dòng vừa ảnh hưởng — `OUTPUT` đọc
+trực tiếp từ thao tác ghi (không phải 1 câu SELECT độc lập trên bảng), chỉ
+cần đúng quyền ghi đã có sẵn:
+- **Thêm Giá Mới**: `INSERT ... OUTPUT INSERTED.*` — 1 câu lệnh DUY NHẤT,
+  tự rollback nếu lỗi (kể cả lỗi ở OUTPUT), không còn tình trạng "ghi xong
+  nhưng báo lỗi ở bước sau" như bản vá "6b".
+- **Sửa/Xoá**: `UPDATE`/`DELETE ... OUTPUT ...` chạy trong 1 **transaction
+  SQL thật** — đọc SỐ DÒNG mà `OUTPUT` trả về (đã là số dòng vừa ảnh hưởng,
+  không cần đếm riêng): khớp đúng 1 dòng → COMMIT; khớp 0 dòng → COMMIT
+  (không có gì thay đổi, vô hại); khớp **NHIỀU HƠN 1 dòng** (khoá tự nhiên
+  suy luận không còn duy nhất) → **ROLLBACK NGAY để HOÀN TÁC** thao tác đã
+  lỡ áp dụng cho nhiều dòng, báo lỗi rõ ràng — giữ nguyên đúng mức an toàn
+  chống sửa/xoá nhầm như bản vá "6b", chỉ đổi cách phát hiện (không cần
+  `SELECT COUNT(*)` nữa).
+
+Test: `tests/test-dsmart-natural-key-matching.js` viết lại hoàn toàn theo
+cơ chế mới (12 kịch bản) — mock gói `mssql` giờ còn mô phỏng ĐÚNG 2 điều
+quan trọng: (1) **ROLLBACK THẬT SỰ hoàn tác dữ liệu** (snapshot lúc
+`begin()`, phục hồi lúc `rollback()` — không chỉ log suông, để kiểm chứng
+đúng lớp an toàn chống sửa/xoá nhầm vẫn hoạt động đúng với cơ chế OUTPUT
+mới); (2) **mọi câu SELECT dữ liệu thật trên CSPRICE đều bị từ chối** (tái
+hiện đúng lỗi quyền thật) — nếu code lỡ thêm lại 1 câu SELECT như vậy,
+test này bắt được ngay, không phải đợi production báo lại lần 4. Toàn bộ
+test Giá Bán Buôn khác (`test-dsmart-wholesale-price.js` 29 kịch bản,
+`test-dsmart-price-ui.js` 41 kịch bản) đã chạy lại xác nhận không có hồi
+quy — tổng 82 kịch bản pass.
+
+**Lưu ý cho đội IT/vận hành**: những lượt "Thêm Giá Mới" đã báo lỗi dạng
+"Đã ghi CSPRICE nhưng lỗi khi đọc lại khoá tự nhiên..." ở bản vá "6b" (TRƯỚC
+bản vá này) **có thể đã ghi dữ liệu thật vào CSPRICE** dù hệ thống báo lỗi
+và KHÔNG tạo được hồ sơ quản lý trong mục "2. Quản Lý Giá Đã Hết Hạn" của
+tính năng này (vì bước xác nhận thất bại nên hồ sơ mirror nội bộ không
+được tạo) — nên kiểm tra thủ công trên DSmart xem các dòng đó đã tồn tại
+chưa để tránh nộp trùng, và nếu cần sửa/xoá các dòng đó thì phải thao tác
+trực tiếp trên DSmart (hệ thống này không quản lý được các dòng không có
+hồ sơ mirror).
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
