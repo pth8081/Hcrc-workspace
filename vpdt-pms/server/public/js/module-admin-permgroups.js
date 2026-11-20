@@ -219,6 +219,16 @@ function closeUserPermForm() {
 // rollback đúng chuẩn) — báo "✅ Đã lưu"/render UI thành công NGAY dù server sau đó từ chối (409 do
 // version users/permGroups vừa bị đổi bởi thao tác khác), khiến admin tin đã đổi/gỡ quyền cho ai đó
 // trong khi quyền hiệu lực thật trên server chưa hề đổi — chỉ lộ ra sau khi tải lại trang.
+//
+// CHỈ GỬI LÊN ĐÚNG NHỮNG NGƯỜI THẬT SỰ THAY ĐỔI (12/2026, theo yêu cầu người dùng kèm ảnh chụp mobile:
+// "phần phân quyền cho nhóm bạn cũng xử lý theo hướng phân quyền với user nhé, nó đang hơi chậm") —
+// TRƯỚC ĐÂY vòng lặp dưới đây vẫn CHỈ sửa đúng các user liên quan tới nhóm đang sửa (early-return ở
+// dòng "không liên quan gì tới nhóm đang sửa"), nhưng bước CHỤP (JSON.parse(JSON.stringify(DB.users)))
+// VÀ GỬI LÊN lại luôn là NGUYÊN CẢ DB.users (toàn công ty, có thể hàng trăm người) — y hệt gốc rễ "chậm"
+// đã vá cho saveUser() (xem patchUser/syncUserPatch() ở module-admin-submissiongroups.js, 11/2026). Nay
+// CHỈ chụp + gửi đúng những bản ghi THẬT SỰ đổi (changedUsers, xem syncUsersPatchBatch() ở
+// module-admin-submissiongroups.js) — logic tính quyền/thành viên BÊN DƯỚI giữ NGUYÊN VẸN, không viết
+// lại nghiệp vụ, chỉ đổi phạm vi chụp/gửi.
 async function savePermGroup(e) {
   e.preventDefault();
   const name = document.getElementById('gGroupName').value.trim();
@@ -228,7 +238,7 @@ async function savePermGroup(e) {
   const jobTitles = getMultiSelectValues('pgJobTitlesMultiSelect');
   const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
-  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  const isNewGroup = !editingGroupId;
 
   // group.scope (VD 'STORE') — field cũ chỉ phục vụ sub-tab "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục,
   // đã gỡ hẳn, xem VERSION.md); form này không còn đọc/ghi field đó nữa — nhóm cũ nào đã có sẵn giá trị
@@ -262,7 +272,8 @@ async function savePermGroup(e) {
   // groupIds của họ, không đụng tới các nhóm khác họ đang có; người bị bỏ chọn khỏi nhóm này thì mất
   // đúng phần đóng góp của nhóm này (permOverrides reset về rỗng vì "nền" đã đổi, khớp hành vi
   // deletePermGroup() hiện có).
-  let membersUpdated = 0;
+  const changedUsers = [];
+  const changedUsersSnapshot = [];
   DB.users.forEach(u => {
     if (u.username === 'admin') return; // admin luôn toàn quyền, không đụng tới ở đây.
     const shouldBeMember = selectedMembers.has(u.username);
@@ -276,6 +287,8 @@ async function savePermGroup(e) {
     const matchedJobTitleBefore = (u.jobTitleGroupIds || []).includes(group.id);
     if (!shouldBeMember && !wasMember && !matchesJobTitleNow && !matchedJobTitleBefore) return; // không liên quan gì tới nhóm đang sửa.
 
+    changedUsersSnapshot.push(JSON.parse(JSON.stringify(u))); // chụp RIÊNG đúng người này để phục hồi khi lưu thất bại.
+
     if (shouldBeMember && !wasMember) {
       u.groupIds = [...currentGroupIds, group.id];
       u.permOverrides = null;
@@ -288,24 +301,35 @@ async function savePermGroup(e) {
     const allGroupIds = [...new Set([...(u.groupIds || []), ...autoGroupIds])];
     const userGroups = allGroupIds.map(gid => gid === group.id ? group : DB.permGroups.find(x => x.id === gid)).filter(Boolean);
     u.perms = userGroups.length ? mergePerms(mergeGroupsBasePerms(userGroups.map(g => g.perms)), u.permOverrides) : u.perms;
-    membersUpdated++;
+    changedUsers.push(u);
   });
 
   // baseline: permGroupsSnapshot — cùng cơ chế thử-lại-1-lần-sau-409 vốn chỉ có ở "users" (10/2026, "Item
   // 6" đợt golive: tổng quát hoá retryArraySaveAfterConflict() sang "permGroups" — nhiều admin cùng sửa
   // các nhóm KHÁC nhau gần như đồng thời trước đây vẫn bị 409 giả vì cùng 1 version dùng chung cho cả
-  // collection, y hệt triệu chứng "users" đã vá — xem syncStorageOnce()/core.js).
+  // collection, y hệt triệu chứng "users" đã vá — xem syncStorageOnce()/core.js). "permGroups" vẫn gửi
+  // NGUYÊN mảng như cũ (nhỏ, không phải gốc rễ chậm — chỉ "users" mới cần patch theo đúng người thay đổi).
   const savedGroups = await syncStorage('permGroups', { baseline: permGroupsSnapshot });
-  const savedUsers = membersUpdated > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
-  if (!savedGroups || !savedUsers) {
+  const savedUsersResult = changedUsers.length > 0 ? await syncUsersPatchBatch(changedUsers) : { ok: true, items: [] };
+  if (!savedGroups || !savedUsersResult) {
     DB.permGroups = permGroupsSnapshot;
-    DB.users = usersSnapshot;
+    changedUsersSnapshot.forEach(snap => {
+      const idx = DB.users.findIndex(u => u.id === snap.id);
+      if (idx !== -1) DB.users[idx] = snap;
+    });
+    if (isNewGroup) DB.permGroups = DB.permGroups.filter(g => g.id !== group.id);
     renderPermGroupsList();
     renderUsers();
     return;
   }
-  logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${membersUpdated ? `, cập nhật ${membersUpdated} thành viên` : ''}`, 'SUCCESS', name);
-  alert(`✅ Đã lưu nhóm phân quyền!${membersUpdated ? ` Đã cập nhật ${membersUpdated} thành viên.` : ''}`);
+  // Thay đúng các bản ghi vừa lưu bằng bản THẬT server trả về (có thể đã áp lại field server tự quản lý —
+  // cùng lý do saveUser() đã làm với "item", xem syncUserPatch()).
+  (savedUsersResult.items || []).forEach(item => {
+    const idx = DB.users.findIndex(u => u.id === item.id);
+    if (idx !== -1) DB.users[idx] = item;
+  });
+  logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${changedUsers.length ? `, cập nhật ${changedUsers.length} thành viên` : ''}`, 'SUCCESS', name);
+  alert(`✅ Đã lưu nhóm phân quyền!${changedUsers.length ? ` Đã cập nhật ${changedUsers.length} thành viên.` : ''}`);
 
   cancelPermFormEdit();
   renderPermGroupsList();
@@ -326,13 +350,17 @@ async function deletePermGroup(id) {
   if (!confirm(msg)) return;
 
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
-  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   const remainingGroupsList = DB.permGroups.filter(g => g.id !== id);
+  // Chỉ chụp + sửa ĐÚNG những người liên quan tới nhóm bị xoá — cùng tối ưu đã áp dụng ở savePermGroup()
+  // ngay trên (xem chú thích đầy đủ tại đó).
+  const changedUsers = [];
+  const changedUsersSnapshot = [];
   DB.users.forEach(u => {
     if (u.username === 'admin') return;
     const wasExplicitMember = (u.groupIds || []).includes(id);
     const matchedJobTitleBefore = (u.jobTitleGroupIds || []).includes(id);
     if (!wasExplicitMember && !matchedJobTitleBefore) return;
+    changedUsersSnapshot.push(JSON.parse(JSON.stringify(u)));
     if (wasExplicitMember) {
       u.groupIds = (u.groupIds || []).filter(gid => gid !== id);
       u.permOverrides = null;
@@ -344,18 +372,26 @@ async function deletePermGroup(id) {
     const allGroupIds = [...new Set([...(u.groupIds || []), ...autoGroupIds])];
     const remainingGroups = allGroupIds.map(gid => remainingGroupsList.find(g => g.id === gid)).filter(Boolean);
     u.perms = remainingGroups.length ? mergeGroupsBasePerms(remainingGroups.map(g => g.perms)) : u.perms;
+    changedUsers.push(u);
   });
   DB.permGroups = remainingGroupsList;
 
   const savedGroups = await syncStorage('permGroups', { baseline: permGroupsSnapshot });
-  const savedUsers = memberCount > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
-  if (!savedGroups || !savedUsers) {
+  const savedUsersResult = changedUsers.length > 0 ? await syncUsersPatchBatch(changedUsers) : { ok: true, items: [] };
+  if (!savedGroups || !savedUsersResult) {
     DB.permGroups = permGroupsSnapshot;
-    DB.users = usersSnapshot;
+    changedUsersSnapshot.forEach(snap => {
+      const idx = DB.users.findIndex(u => u.id === snap.id);
+      if (idx !== -1) DB.users[idx] = snap;
+    });
     renderPermGroupsList();
     renderUsers();
     return;
   }
+  (savedUsersResult.items || []).forEach(item => {
+    const idx = DB.users.findIndex(u => u.id === item.id);
+    if (idx !== -1) DB.users[idx] = item;
+  });
   logSystemAction('USER_MGM', 'DELETE_PERM_GROUP', `Xóa nhóm phân quyền [${group.name}]`, 'SUCCESS', group.name);
   renderPermGroupsList();
   renderUsers();

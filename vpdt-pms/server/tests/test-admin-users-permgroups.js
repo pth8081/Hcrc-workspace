@@ -2201,6 +2201,210 @@ async function scenario(name, fn) {
       r.after.some(p => p.jobTitle === 'Giám Đốc Siêu Thị'), JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (w) savePermGroup()/deletePermGroup() CHỈ gửi lên ĐÚNG những người dùng THẬT SỰ thay đổi (12/2026,
+  //     theo yêu cầu người dùng kèm ảnh chụp mobile: "phần phân quyền cho nhóm bạn cũng xử lý theo
+  //     hướng phân quyền với user nhé, nó đang hơi chậm") — TRƯỚC ĐÂY 2 hàm này luôn gửi NGUYÊN CẢ
+  //     DB.users (ở thời điểm chạy tới đây trong CÙNG 1 phiên Playwright, DB.users đã tích luỹ rất
+  //     nhiều user từ các scenario TRƯỚC — chính là phép thử thực tế cho optimization này: nếu code lỡ
+  //     quay lại gửi nguyên mảng, độ dài payload sẽ LỚN HƠN HẲN 2-3, không còn đúng đáp số mong đợi) khi
+  //     sửa/xoá 1 Nhóm Phân Quyền. Nay CHỈ gửi đúng các thành viên liên quan (xem chú thích đầy đủ ở
+  //     savePermGroup()/deletePermGroup(), module-admin-permgroups.js + syncUsersPatchBatch()/
+  //     module-admin-submissiongroups.js + isUsersPatchMode nhánh __patchUsers ở routes/data.js).
+  // ==========================================================================
+  let pgTestGroupId = null;
+  await scenario('(w1) savePermGroup() TẠO MỚI: __patchUsers CHỈ gồm đúng 2 thành viên được chọn, KHÔNG gửi nguyên DB.users (đã tích luỹ nhiều user từ các scenario trước)', async () => {
+    const r = await page.evaluate(async () => {
+      DB.users.push(
+        { id: 90001, username: 'nv.pgtest1', name: 'PG Test Một', dept: 'Kế Toán', perms: {}, groupIds: [], permOverrides: null, active: true },
+        { id: 90002, username: 'nv.pgtest2', name: 'PG Test Hai', dept: 'Kế Toán', perms: {}, groupIds: [], permOverrides: null, active: true },
+        { id: 90003, username: 'nv.pgtest3', name: 'PG Test Ba (KHÔNG chọn)', dept: 'Kế Toán', perms: {}, groupIds: [], permOverrides: null, active: true }
+      );
+      const totalUsersInDb = DB.users.length; // đã tích luỹ rất nhiều từ các scenario trước (a)...(v4).
+
+      const savedFetch = window.fetch;
+      let permGroupsBody = null, usersBody = null;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          permGroupsBody = JSON.parse(opts.body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: 'v-pg' }) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          usersBody = JSON.parse(opts.body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, usersVersion: 'v-users', items: usersBody.__patchUsers }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      startCreateGroup();
+      document.getElementById('gGroupName').value = 'Nhóm PG Test';
+      document.getElementById('gGroupDesc').value = 'Test batch patch';
+      pmsAdd('groupMembersPicker', 'nv.pgtest1');
+      pmsAdd('groupMembersPicker', 'nv.pgtest2');
+
+      window.__alerts.length = 0;
+      await savePermGroup({ preventDefault() {} });
+      window.fetch = savedFetch;
+
+      const newGroup = DB.permGroups.find(g => g.name === 'Nhóm PG Test');
+      return {
+        alerts: window.__alerts.slice(),
+        totalUsersInDb,
+        permGroupsBodyLength: Array.isArray(permGroupsBody) ? permGroupsBody.length : null,
+        usersBodyIsPatchUsers: !!usersBody && Array.isArray(usersBody.__patchUsers) && !Array.isArray(usersBody),
+        patchUsersCount: usersBody && usersBody.__patchUsers ? usersBody.__patchUsers.length : null,
+        patchUsernames: usersBody && usersBody.__patchUsers ? usersBody.__patchUsers.map(u => u.username).sort() : null,
+        newGroupId: newGroup ? newGroup.id : null,
+        nv1GroupIds: DB.users.find(u => u.username === 'nv.pgtest1')?.groupIds,
+        nv2GroupIds: DB.users.find(u => u.username === 'nv.pgtest2')?.groupIds,
+        nv3GroupIds: DB.users.find(u => u.username === 'nv.pgtest3')?.groupIds,
+      };
+    });
+    pgTestGroupId = r.newGroupId;
+    record('(w1) không có alert lỗi, có alert "Đã lưu"', !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(w1) /api/data/permGroups vẫn gửi nguyên mảng NHỎ (không đổi, không phải gốc rễ chậm)', r.permGroupsBodyLength !== null, JSON.stringify(r));
+    record('(w1) /api/data/users gửi ĐÚNG hình dạng { __patchUsers: [...] } (KHÔNG phải mảng trần)', r.usersBodyIsPatchUsers, JSON.stringify(r));
+    record('(w1) ĐIỂM MẤU CHỐT: patchUsers CHỈ có đúng 2 bản ghi (2 thành viên được chọn) — KHÔNG phải totalUsersInDb (' + r.totalUsersInDb + ') đã tích luỹ từ các scenario trước',
+      r.patchUsersCount === 2, JSON.stringify(r));
+    record('(w1) patchUsers đúng là nv.pgtest1 + nv.pgtest2 (KHÔNG có nv.pgtest3 không được chọn, không có user nào khác)',
+      JSON.stringify(r.patchUsernames) === JSON.stringify(['nv.pgtest1', 'nv.pgtest2']), JSON.stringify(r));
+    record('(w1) nv.pgtest1/nv.pgtest2 đã được gán đúng groupIds nhóm mới trên DB.users client (sau khi server trả "items")',
+      r.nv1GroupIds?.includes(r.newGroupId) && r.nv2GroupIds?.includes(r.newGroupId), JSON.stringify(r));
+    record('(w1) nv.pgtest3 (KHÔNG chọn) KHÔNG bị đụng tới, groupIds vẫn rỗng', (r.nv3GroupIds || []).length === 0, JSON.stringify(r));
+  });
+
+  await scenario('(w2) savePermGroup() SỬA: đổi thành viên (gỡ 1, thêm 1) -> __patchUsers CHỈ gồm đúng 2 người thay đổi (người KHÔNG đổi gì không nằm trong payload)', async () => {
+    const r = await page.evaluate(async (groupId) => {
+      // nv.pgtest3 CHƯA từng liên quan tới nhóm này — thêm làm thành viên MỚI; nv.pgtest1 (đang là thành
+      // viên từ (w1)) sẽ bị gỡ; nv.pgtest2 (đang là thành viên) giữ nguyên nhưng vẫn PHẢI nằm trong patch
+      // vì quyền nền của nhóm (group.perms) cũng đổi trong lượt sửa này (đúng logic gốc: "quyền hiệu lực
+      // của MỌI thành viên phải cập nhật NGAY" khi sửa nhóm, xem chú thích savePermGroup()).
+      const savedFetch = window.fetch;
+      let usersBody = null;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: 'v-pg-2' }) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          usersBody = JSON.parse(opts.body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, usersVersion: 'v-users-2', items: usersBody.__patchUsers }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      editPermGroup(groupId);
+      // Tick thêm 1 quyền MỚI cho nhóm (thay đổi "nền") — bất kỳ checkbox quyền boolean có sẵn nào.
+      const permCb = document.querySelector('#permFieldsContainer input[type="checkbox"]:not(:checked)');
+      if (permCb) { permCb.checked = true; permCb.dispatchEvent(new Event('change', { bubbles: true })); }
+      // Gỡ nv.pgtest1 (đang checked), giữ nv.pgtest2, thêm nv.pgtest3.
+      const cb1 = document.querySelector('#groupMembersPicker input.group-member-toggle[value="nv.pgtest1"]');
+      if (cb1) { const btn = document.querySelector('[data-op="pmsRemove"][data-arg1="nv.pgtest1"]'); if (btn) btn.click(); }
+      pmsAdd('groupMembersPicker', 'nv.pgtest3');
+
+      window.__alerts.length = 0;
+      await savePermGroup({ preventDefault() {} });
+      window.fetch = savedFetch;
+
+      return {
+        alerts: window.__alerts.slice(),
+        patchUsernames: usersBody && usersBody.__patchUsers ? usersBody.__patchUsers.map(u => u.username).sort() : null,
+        nv1GroupIds: DB.users.find(u => u.username === 'nv.pgtest1')?.groupIds,
+        nv2GroupIds: DB.users.find(u => u.username === 'nv.pgtest2')?.groupIds,
+        nv3GroupIds: DB.users.find(u => u.username === 'nv.pgtest3')?.groupIds,
+      };
+    }, pgTestGroupId);
+    record('(w2) không có alert lỗi, có alert "Đã lưu"', !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(w2) patchUsers ĐÚNG 3 người liên quan (gỡ nv.pgtest1, giữ nv.pgtest2 vì quyền nền nhóm đổi, thêm nv.pgtest3) — KHÔNG có ai khác',
+      JSON.stringify(r.patchUsernames) === JSON.stringify(['nv.pgtest1', 'nv.pgtest2', 'nv.pgtest3']), JSON.stringify(r));
+    record('(w2) nv.pgtest1 đã bị gỡ khỏi groupIds', !(r.nv1GroupIds || []).includes(pgTestGroupId), JSON.stringify(r));
+    record('(w2) nv.pgtest2 vẫn còn trong groupIds (giữ nguyên thành viên)', (r.nv2GroupIds || []).includes(pgTestGroupId), JSON.stringify(r));
+    record('(w2) nv.pgtest3 đã được thêm vào groupIds', (r.nv3GroupIds || []).includes(pgTestGroupId), JSON.stringify(r));
+  });
+
+  await scenario('(w3) savePermGroup()/syncUsersPatchBatch(): lưu thất bại (server lỗi) -> rollback ĐÚNG cả permGroups lẫn users về trạng thái trước đó', async () => {
+    const r = await page.evaluate(async (groupId) => {
+      const groupNameBefore = DB.permGroups.find(g => g.id === groupId)?.name;
+      const nv2GroupIdsBefore = [...(DB.users.find(u => u.username === 'nv.pgtest2')?.groupIds || [])];
+
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: 'v-pg-3' }) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          return { ok: false, status: 500, json: async () => ({ error: 'Lỗi máy chủ giả lập' }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      editPermGroup(groupId);
+      document.getElementById('gGroupName').value = 'Nhóm PG Test (ĐÃ ĐỔI TÊN, phải bị rollback)';
+      // gỡ nv.pgtest2 khỏi nhóm (sẽ bị rollback vì lượt lưu "users" thất bại).
+      const btn = document.querySelector('[data-op="pmsRemove"][data-arg1="nv.pgtest2"]');
+      if (btn) btn.click();
+
+      window.__alerts.length = 0;
+      await savePermGroup({ preventDefault() {} });
+      window.fetch = savedFetch;
+
+      return {
+        alerts: window.__alerts.slice(),
+        groupNameAfter: DB.permGroups.find(g => g.id === groupId)?.name,
+        groupNameBefore,
+        nv2GroupIdsAfter: DB.users.find(u => u.username === 'nv.pgtest2')?.groupIds,
+        nv2GroupIdsBefore,
+      };
+    }, pgTestGroupId);
+    record('(w3) KHÔNG báo alert "Đã lưu" khi server từ chối', !r.alerts.some(a => /Đã lưu/.test(a)), JSON.stringify(r));
+    record('(w3) DB.permGroups ROLLBACK đúng (tên nhóm KHÔNG đổi dù "permGroups" đã gửi thành công — vì "users" thất bại)',
+      r.groupNameAfter === r.groupNameBefore, JSON.stringify(r));
+    record('(w3) DB.users ROLLBACK đúng (nv.pgtest2 vẫn còn groupIds như trước, KHÔNG bị gỡ)',
+      JSON.stringify(r.nv2GroupIdsAfter) === JSON.stringify(r.nv2GroupIdsBefore), JSON.stringify(r));
+  });
+
+  await scenario('(w4) deletePermGroup(): __patchUsers CHỈ gồm đúng các thành viên của nhóm bị xoá, KHÔNG gửi nguyên DB.users', async () => {
+    const r = await page.evaluate(async (groupId) => {
+      const totalUsersInDb = DB.users.length;
+      const savedFetch = window.fetch;
+      let usersBody = null, permGroupsBody = null;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          permGroupsBody = JSON.parse(opts.body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: 'v-pg-4' }) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          usersBody = JSON.parse(opts.body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, usersVersion: 'v-users-4', items: usersBody.__patchUsers }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      window.confirm = () => true;
+      window.__alerts.length = 0;
+      await deletePermGroup(groupId);
+      window.fetch = savedFetch;
+
+      return {
+        alerts: window.__alerts.slice(),
+        totalUsersInDb,
+        groupStillExists: !!DB.permGroups.find(g => g.id === groupId),
+        permGroupsBodyLength: Array.isArray(permGroupsBody) ? permGroupsBody.length : null,
+        patchUsernames: usersBody && usersBody.__patchUsers ? usersBody.__patchUsers.map(u => u.username).sort() : null,
+        nv2GroupIds: DB.users.find(u => u.username === 'nv.pgtest2')?.groupIds,
+        nv3GroupIds: DB.users.find(u => u.username === 'nv.pgtest3')?.groupIds,
+      };
+    }, pgTestGroupId);
+    record('(w4) nhóm đã bị xoá khỏi DB.permGroups', !r.groupStillExists, JSON.stringify(r));
+    record('(w4) /api/data/permGroups gửi mảng ĐÃ LOẠI nhóm bị xoá', r.permGroupsBodyLength !== null, JSON.stringify(r));
+    record('(w4) ĐIỂM MẤU CHỐT: patchUsers CHỈ gồm đúng thành viên của nhóm bị xoá (nv.pgtest2, nv.pgtest3) — KHÔNG phải totalUsersInDb (' + r.totalUsersInDb + ')',
+      JSON.stringify(r.patchUsernames) === JSON.stringify(['nv.pgtest2', 'nv.pgtest3']), JSON.stringify(r));
+    record('(w4) nv.pgtest2/nv.pgtest3 đã được gỡ groupIds của nhóm vừa xoá', (r.nv2GroupIds || []).length === 0 && (r.nv3GroupIds || []).length === 0, JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 
