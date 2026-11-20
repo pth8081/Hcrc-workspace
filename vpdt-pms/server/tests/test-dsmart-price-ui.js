@@ -65,9 +65,14 @@ async function main() {
     { id: 2, dsmartKey: { custId: '240000000005', skuId: '2900555210' }, custId: '240000000005', skuId: '2900555210', price: 52000, frDate: addDays(-5), toDate: addDays(30), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-10-28T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-10-28T00:00:00.000Z' }] },
     { id: 3, dsmartKey: { custId: '240000000001', skuId: '2900022700' }, custId: '240000000001', skuId: '2900022700', price: 38200, frDate: addDays(-200), toDate: addDays(-150), status: 'DELETED', createdBy: 'nguyenvana', createdAt: '2026-05-01T00:00:00.000Z', deletedBy: 'nguyenvana', deletedAt: '2026-10-10T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-05-01T00:00:00.000Z' }, { action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }] }
   ];
+  // 2 dòng cuối (Lần 5, action INSERT_OVERWRITE/mode AUTO_OVERWRITTEN) — LỖI THẬT đã vá (12/2026, người
+  // dùng báo cột "Chi Tiết" hiện nhầm "Tick tay"): trước khi vá, dsmartPriceHistoryActionBadge()/
+  // dsmartPriceHistoryDetail() không nhận diện 2 giá trị MỚI này, rơi vào nhánh mặc định dành cho Xoá tay.
   const HISTORY_FIXTURE = [
     { entryId: 1, custId: '240000000001', skuId: '2900381100', action: 'INSERT', actor: 'nguyenvana', at: '2026-08-02T00:00:00.000Z' },
-    { entryId: 3, custId: '240000000001', skuId: '2900022700', action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }
+    { entryId: 3, custId: '240000000001', skuId: '2900022700', action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' },
+    { entryId: 4, custId: '240000000009', skuId: '2900999900', action: 'INSERT_OVERWRITE', mode: 'UPLOAD', sourceFileName: 'gia-ghi-de.xlsx', actor: 'nguyenvana', at: '2026-11-20T13:20:32.000Z' },
+    { entryId: 1, custId: '240000000001', skuId: '2900381100', action: 'DELETE', mode: 'AUTO_OVERWRITTEN', note: 'Bị ghi đè tự động bởi 1 lượt "Thêm Giá Mới" khác cho cùng Mã Khách B2B/Mã Sản Phẩm', actor: 'nguyenvana', at: '2026-11-20T13:20:32.000Z' }
   ];
 
   await page.evaluate(({ entries, history }) => {
@@ -254,8 +259,8 @@ async function main() {
   }));
   check('Mục "2. Quản Lý Giá Đã Hết Hạn" có thanh phân trang + đúng tổng số dòng (3, từ fixture)',
     pagination.entriesBoxHTML.length > 0 && pagination.entriesInfoText.includes('Tổng 3 dòng giá'), JSON.stringify(pagination));
-  check('Mục "3. Lịch Sử Thao Tác" có thanh phân trang + đúng tổng số dòng (2, từ fixture)',
-    pagination.historyBoxHTML.length > 0 && pagination.historyInfoText.includes('Tổng 2 dòng lịch sử'), JSON.stringify(pagination));
+  check('Mục "3. Lịch Sử Thao Tác" có thanh phân trang + đúng tổng số dòng (4, từ fixture)',
+    pagination.historyBoxHTML.length > 0 && pagination.historyInfoText.includes('Tổng 4 dòng lịch sử'), JSON.stringify(pagination));
 
   // Gõ vào ô lọc sau khi tay đã đẩy page lên 2 -> phải tự lùi về trang 1 (onDsmartPriceEntriesFilterChange()/
   // onDsmartPriceHistoryFilterChange() mới thêm) — không gõ lọc còn bảng trống khó hiểu vì đang kẹt ở trang cũ.
@@ -346,7 +351,15 @@ async function main() {
   await page.click('#btnToggleDsmartPriceHistoryFilter');
   await page.waitForTimeout(100);
   const historyText = await page.textContent('#dsmartPriceHistoryBody');
-  check('Lịch Sử hiện đúng 2 dòng từ fixture (INSERT + DELETE)', historyText.includes('240000000001'));
+  check('Lịch Sử hiện đúng các dòng từ fixture (INSERT + DELETE)', historyText.includes('240000000001'));
+
+  // LỖI THẬT đã vá (12/2026, người dùng báo cột "Chi Tiết" hiện nhầm "Tick tay" ở dòng "+ Thêm giá") —
+  // xác nhận 2 giá trị MỚI của Lần 5 (action INSERT_OVERWRITE, mode AUTO_OVERWRITTEN) hiện ĐÚNG, không
+  // còn rơi vào nhánh mặc định "Tick tay" vô nghĩa.
+  check('LỖI THẬT đã vá: dòng INSERT_OVERWRITE hiện badge "♻️ Ghi đè giá" + Chi Tiết đúng tên file (trước khi vá sẽ hiện "Tick tay" thay vì tên file này)',
+    historyText.includes('Ghi đè giá') && historyText.includes('gia-ghi-de.xlsx'), historyText);
+  check('LỖI THẬT đã vá: dòng DELETE mode=AUTO_OVERWRITTEN hiện badge "♻️ Bị ghi đè tự động" + Chi Tiết đúng nguyên văn ghi chú (trước khi vá sẽ hiện "Tick tay" thay vì ghi chú này)',
+    historyText.includes('Bị ghi đè tự động') && historyText.includes('Bị ghi đè tự động bởi 1 lượt'), historyText);
 
   // ===== Cấu Hình Kết Nối + "🔌 Kiểm Tra Kết Nối" (12/2026, chỉ admin) =====
   await page.evaluate(() => { currentUser.perms.admin = true; });

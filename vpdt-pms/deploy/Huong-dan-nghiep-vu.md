@@ -10112,3 +10112,29 @@ nút THẬT (từ 44 lên 47 kịch bản). Tổng Giá Bán Buôn: 19+35+47 = *
 kịch bản pass** (từ 98).
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 6h. LỖI THẬT đã vá: cột "Chi Tiết" ở "3. Lịch Sử Thao Tác" hiện nhầm "Tick tay" cho dòng Thêm/Ghi đè (12/2026)
+
+Người dùng báo: dòng "+ Thêm giá" trong Lịch Sử Thao Tác hiện "Chi Tiết" =
+"Tick tay" — vô nghĩa với 1 dòng Thêm giá. Rà lại: Lần 5 thêm 2 giá trị
+MỚI (`action: 'INSERT_OVERWRITE'` khi Thêm trùng khoá tự ghi đè;
+`mode: 'AUTO_OVERWRITTEN'` khi 1 entry mirror cũ bị tự đánh dấu Xoá vì có
+entry khác ghi đè cùng cặp) nhưng **quên cập nhật**
+`dsmartPriceHistoryActionBadge()`/`dsmartPriceHistoryDetail()`
+(`module-itsupport-dsmartprice.js`) — cả 2 giá trị rơi vào nhánh MẶC ĐỊNH
+dành riêng cho Xoá tay, hiện nhầm "Tick tay".
+
+**Cách vá**: 2 hàm trên giờ nhận diện đúng 2 giá trị mới —
+`INSERT_OVERWRITE` coi cùng nhóm với `INSERT` (Chi Tiết hiện đúng tên
+file/nguồn ghi, badge riêng "♻️ Ghi đè giá"); `mode: 'AUTO_OVERWRITTEN'`
+có badge riêng "♻️ Bị ghi đè tự động" + Chi Tiết ưu tiên hiện NGUYÊN VĂN
+trường `note` đã có sẵn trong dữ liệu (trước đây bị bỏ qua hoàn toàn).
+
+Lưu ý: "Thao Tác" (nút "↩️ Dùng Lại") trống cho dòng Thêm/Ghi đè là ĐÚNG
+thiết kế (chỉ hiện cho dòng đã Xoá) — không phải lỗi, không cần sửa.
+
+Test: `test-dsmart-price-ui.js` thêm 2 dòng fixture (INSERT_OVERWRITE +
+AUTO_OVERWRITTEN) + 2 kịch bản xác nhận hiện đúng (49 kịch bản, từ 47).
+Tổng Giá Bán Buôn: 19+35+49 = **103 kịch bản pass** (từ 101).
+
+Không cần thao tác deploy gì thêm ngoài copy code.
