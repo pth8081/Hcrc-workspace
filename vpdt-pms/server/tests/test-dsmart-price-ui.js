@@ -63,7 +63,10 @@ async function main() {
   const ENTRIES_FIXTURE = [
     { id: 1, dsmartKey: { custId: '240000000001', skuId: '2900381100' }, custId: '240000000001', skuId: '2900381100', price: 25920, frDate: addDays(-60), toDate: addDays(-10), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-08-02T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-08-02T00:00:00.000Z' }] },
     { id: 2, dsmartKey: { custId: '240000000005', skuId: '2900555210' }, custId: '240000000005', skuId: '2900555210', price: 52000, frDate: addDays(-5), toDate: addDays(30), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-10-28T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-10-28T00:00:00.000Z' }] },
-    { id: 3, dsmartKey: { custId: '240000000001', skuId: '2900022700' }, custId: '240000000001', skuId: '2900022700', price: 38200, frDate: addDays(-200), toDate: addDays(-150), status: 'DELETED', createdBy: 'nguyenvana', createdAt: '2026-05-01T00:00:00.000Z', deletedBy: 'nguyenvana', deletedAt: '2026-10-10T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-05-01T00:00:00.000Z' }, { action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }] }
+    { id: 3, dsmartKey: { custId: '240000000001', skuId: '2900022700' }, custId: '240000000001', skuId: '2900022700', price: 38200, frDate: addDays(-200), toDate: addDays(-150), status: 'DELETED', createdBy: 'nguyenvana', createdAt: '2026-05-01T00:00:00.000Z', deletedBy: 'nguyenvana', deletedAt: '2026-10-10T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-05-01T00:00:00.000Z' }, { action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }] },
+    // id=4: status SCHEDULED (12/2026, "Lên Lịch Áp Giá") — CHƯA ghi gì vào CSPRICE (dsmartKey=null),
+    // CHỈ hiện ở mục "2b. Giá Đã Lên Lịch", KHÔNG được hiện ở mục "2. Quản Lý Giá Đã Hết Hạn".
+    { id: 4, dsmartKey: null, custId: '240000000099', skuId: '2900999999', price: 61000, frDate: addDays(45), toDate: addDays(90), status: 'SCHEDULED', createdBy: 'nguyenvana', createdAt: '2026-11-01T00:00:00.000Z', history: [{ action: 'SCHEDULE', actor: 'nguyenvana', at: '2026-11-01T00:00:00.000Z' }] }
   ];
   // 2 dòng cuối (Lần 5, action INSERT_OVERWRITE/mode AUTO_OVERWRITTEN) — LỖI THẬT đã vá (12/2026, người
   // dùng báo cột "Chi Tiết" hiện nhầm "Tick tay"): trước khi vá, dsmartPriceHistoryActionBadge()/
@@ -75,7 +78,7 @@ async function main() {
     { entryId: 1, custId: '240000000001', skuId: '2900381100', action: 'DELETE', mode: 'AUTO_OVERWRITTEN', note: 'Bị ghi đè tự động bởi 1 lượt "Thêm Giá Mới" khác cho cùng Mã Khách B2B/Mã Sản Phẩm', actor: 'nguyenvana', at: '2026-11-20T13:20:32.000Z' }
   ];
 
-  await page.evaluate(({ entries, history }) => {
+  await page.evaluate(({ entries, history, storeConns }) => {
     window.__alerts = [];
     window.alert = (m) => { window.__alerts.push(String(m)); };
     window.confirm = () => true;
@@ -106,7 +109,15 @@ async function main() {
       if (u === '/api/dsmart-price/apply' && method === 'POST') {
         window.__dsmartPriceApplyCalled = (window.__dsmartPriceApplyCalled || 0) + 1;
         const body = JSON.parse(opts.body);
+        window.__dsmartPriceLastApplyBody = body; // 12/2026 — xác nhận UI gửi đúng cờ schedule
         const r = body.rows[0];
+        if (window.__mockApplyScheduled) {
+          return { ok: true, status: 200, json: async () => ({
+            ok: true,
+            results: [{ custId: r.custId, skuId: r.skuId, success: true, entryId: 888, scheduled: true }],
+            successCount: 1, failCount: 0, scheduledCount: 1
+          }) };
+        }
         if (window.__mockApplyOverwritten) {
           return { ok: true, status: 200, json: async () => ({
             ok: true,
@@ -127,6 +138,46 @@ async function main() {
         window.__dsmartPriceDeleteCalled = (window.__dsmartPriceDeleteCalled || 0) + 1;
         window.__dsmartPriceLastDeletedId = Number(delMatch[1]);
         return { ok: true, status: 200, json: async () => ({ ok: true, item: { id: Number(delMatch[1]), status: 'DELETED' } }) };
+      }
+      // POST /entries/:id/cancel-schedule (12/2026, "Lên Lịch Áp Giá" — nút "❌ Hủy Lịch").
+      const cancelMatch = /^\/api\/dsmart-price\/entries\/(\d+)\/cancel-schedule$/.exec(u);
+      if (cancelMatch && method === 'POST') {
+        window.__dsmartPriceCancelScheduleCalled = (window.__dsmartPriceCancelScheduleCalled || 0) + 1;
+        window.__dsmartPriceLastCancelledId = Number(cancelMatch[1]);
+        const e = entries.find(x => x.id === Number(cancelMatch[1]));
+        if (e) e.status = 'CANCELLED';
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: { id: Number(cancelMatch[1]), status: 'CANCELLED' } }) };
+      }
+      // 🏬 Kết Nối Siêu Thị (12/2026, FAN-OUT) — CRUD giả lập trong bộ nhớ (mảng storeConns, khai báo
+      // ngay trên closure này cùng entries/history) + test-connection.
+      if (u === '/api/dsmart-price/store-connections' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, items: storeConns.map(({ passwordEnc, ...r }) => ({ ...r, hasPassword: !!passwordEnc })) }) };
+      }
+      if (u === '/api/dsmart-price/store-connections' && method === 'POST') {
+        const body = JSON.parse(opts.body);
+        const row = { id: Date.now(), storeCode: body.storeCode, storeName: body.storeName, host: body.host, port: body.port, database: body.database, user: body.user, passwordEnc: body.password ? 'enc' : null, enabled: true };
+        storeConns.push(row);
+        const { passwordEnc, ...rest } = row;
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: { ...rest, hasPassword: !!passwordEnc } }) };
+      }
+      const storeConnPutMatch = /^\/api\/dsmart-price\/store-connections\/(\d+)$/.exec(u);
+      if (storeConnPutMatch && method === 'PUT') {
+        const body = JSON.parse(opts.body);
+        const row = storeConns.find(s => s.id === Number(storeConnPutMatch[1]));
+        if (row) Object.assign(row, { storeCode: body.storeCode, storeName: body.storeName, host: body.host, port: body.port, database: body.database, user: body.user, enabled: !!body.enabled });
+        const { passwordEnc, ...rest } = row;
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: { ...rest, hasPassword: !!passwordEnc } }) };
+      }
+      if (storeConnPutMatch && method === 'DELETE') {
+        const idx = storeConns.findIndex(s => s.id === Number(storeConnPutMatch[1]));
+        if (idx !== -1) storeConns.splice(idx, 1);
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      const storeConnTestMatch = /^\/api\/dsmart-price\/store-connections\/(\d+)\/test-connection$/.exec(u);
+      if (storeConnTestMatch && method === 'POST') {
+        window.__dsmartStoreConnTestCalled = (window.__dsmartStoreConnTestCalled || 0) + 1;
+        if (window.__mockStoreConnTestShouldFail) return { ok: false, status: 400, json: async () => ({ error: 'Không kết nối được (giả lập)' }) };
+        return { ok: true, status: 200, json: async () => ({ ok: true, ms: 11 }) };
       }
       if (u === '/api/dsmart-price/config' && method === 'GET') {
         return { ok: true, status: 200, json: async () => ({ ok: true, config: { host: 'dsmart16.hcrc.local', port: 1433, database: 'DSmart16DB', user: 'b2b_price', hasPassword: true } }) };
@@ -171,7 +222,7 @@ async function main() {
       _versions: {}
     });
     finishLogin(DB.users[0]);
-  }, { entries: ENTRIES_FIXTURE, history: HISTORY_FIXTURE });
+  }, { entries: ENTRIES_FIXTURE, history: HISTORY_FIXTURE, storeConns: [] });
 
   await page.waitForTimeout(200);
   await page.evaluate(() => Promise.all(Object.keys(MODULE_LOAD_GROUPS || {}).map(k => loadModuleGroup(k))));
@@ -410,6 +461,79 @@ async function main() {
   check('Bấm lại "🔌 Kiểm Tra Kết Nối" (kết nối giả lập THẤT BẠI) -> hiện đúng lỗi thật, không phải thông báo thành công cũ', testConnStatus.includes('Không kết nối được'), testConnStatus);
   const testConnCalledCount = await page.evaluate(() => window.__dsmartPriceTestConnCalled || 0);
   check('Nút "🔌 Kiểm Tra Kết Nối" gọi đúng route test-connection mỗi lần bấm (không bị cache/chặn lần 2)', testConnCalledCount === 2, 'count=' + testConnCalledCount);
+
+  // ===== "📅 Giá Đã Lên Lịch" (12/2026) — dòng id=4 (status SCHEDULED) CHỈ hiện ở mục 2b, KHÔNG hiện ở
+  // mục "2. Quản Lý Giá Đã Hết Hạn" =====
+  const mgTextAfter = await page.textContent('#dsmartPriceEntriesBody');
+  check('Mục "2. Quản Lý Giá Đã Hết Hạn" KHÔNG hiện dòng SCHEDULED (id=4)', !mgTextAfter.includes('240000000099'), mgTextAfter);
+  const scheduledText = await page.textContent('#dsmartPriceScheduledBody');
+  check('Mục "2b. Giá Đã Lên Lịch" hiện đúng dòng SCHEDULED (id=4)', scheduledText.includes('240000000099'), scheduledText);
+  check('Mục "2b. Giá Đã Lên Lịch" hiện đếm (1) ngay cạnh tiêu đề', (await page.textContent('#dsmartPriceScheduledCount')).includes('1'));
+  check('Dòng SCHEDULED có nút "❌ Hủy Lịch"', await page.isVisible('[data-op="cancelDsmartPriceSchedule"][data-arg0="4"]'));
+  await page.click('[data-op="cancelDsmartPriceSchedule"][data-arg0="4"]');
+  await page.waitForTimeout(150);
+  const cancelCalledCount = await page.evaluate(() => window.__dsmartPriceCancelScheduleCalled || 0);
+  check('Bấm "❌ Hủy Lịch" -> gọi đúng 1 lần POST /entries/4/cancel-schedule', cancelCalledCount === 1, 'count=' + cancelCalledCount);
+  check('Sau khi hủy, mục "2b" không còn hiện dòng đó nữa', !(await page.textContent('#dsmartPriceScheduledBody')).includes('240000000099'));
+
+  // ===== "📅 Đặt Lịch Áp Giá" checkbox (12/2026) — tick checkbox -> gửi đúng schedule:true trong body
+  // POST /apply, hiện đúng thông báo "ĐÃ LÊN LỊCH" từ scheduledCount server trả về. =====
+  await page.evaluate(() => { window.__mockApplyScheduled = true; });
+  const realXlsxPath3 = path.join(require('os').tmpdir(), `dsmart-price-ui-test-schedule-${Date.now()}.xlsx`);
+  const wbReal3 = new (require('exceljs')).Workbook();
+  const wsReal3 = wbReal3.addWorksheet('Sheet1');
+  wsReal3.addRow(['Mã Khách B2B', 'Mã sản phẩm', 'Giá sản phẩm', 'Ngày bắt đầu', 'Ngày kết thúc']);
+  wsReal3.addRow(['240000000009', '2900999900', 12345, '2026-12-01', '2026-12-31']);
+  await wbReal3.xlsx.writeFile(realXlsxPath3);
+  await page.setInputFiles('#dsmartPriceFileInput', realXlsxPath3);
+  await page.waitForTimeout(200);
+  fs.unlinkSync(realXlsxPath3);
+  await page.check('#dsmartPriceScheduleApply');
+  await page.click('#btnDsmartPriceApplyUpload');
+  await page.waitForTimeout(150);
+  const lastApplyBody = await page.evaluate(() => window.__dsmartPriceLastApplyBody);
+  check('Tick "📅 Đặt Lịch Áp Giá" -> POST /apply gửi đúng schedule:true', lastApplyBody && lastApplyBody.schedule === true, lastApplyBody);
+  const alertsAfterSchedule = await page.evaluate(() => window.__alerts || []);
+  check('Alert kết quả nêu rõ "ĐÃ LÊN LỊCH" khi server trả scheduledCount > 0',
+    alertsAfterSchedule.some(a => a.includes('LÊN LỊCH')), alertsAfterSchedule.slice(-1));
+  await page.evaluate(() => { window.__mockApplyScheduled = false; });
+
+  // ===== 🏬 Kết Nối Siêu Thị (12/2026, FAN-OUT, CHỈ admin) =====
+  // currentUser.perms.admin được set true ở phần "Cấu Hình Kết Nối" phía trên, nhưng initDsmartPriceTab()
+  // chỉ tự ẩn/hiện nút admin đúng 1 lần LÚC VÀO TAB (trước khi admin=true) — gọi lại NGAY ĐÂY để nút
+  // "🏬 Kết Nối Siêu Thị (Admin)" phản ánh đúng quyền mới (giống hành vi thật: F5 lại trang sau khi được
+  // cấp quyền admin, không phải lỗi thiếu reactivity cần vá).
+  await page.evaluate(() => initDsmartPriceTab());
+  await page.waitForTimeout(150);
+  check('Nút "🏬 Kết Nối Siêu Thị (Admin)" hiện ra cho admin', await page.isVisible('#btnDsmartStoreConnToggle'));
+  await page.click('#btnDsmartStoreConnToggle');
+  await page.waitForTimeout(150);
+  check('Bấm nút -> mở khung "🏬 Kết Nối Siêu Thị"', await page.isVisible('#dsmartStoreConnSection'));
+  check('Chưa có kết nối siêu thị nào -> bảng báo rõ', (await page.textContent('#dsmartStoreConnBody')).includes('Chưa cấu hình'));
+  await page.click('#btnDsmartStoreConnAddToggle');
+  await page.waitForTimeout(100);
+  await page.fill('#dsmartStoreConnCode', 'ST01');
+  await page.fill('#dsmartStoreConnName', 'Siêu Thị Test 01');
+  await page.fill('#dsmartStoreConnHost', 'store01-test-host');
+  await page.fill('#dsmartStoreConnDatabase', 'CSDL_ST01');
+  await page.fill('#dsmartStoreConnUser', 'st01_user');
+  await page.fill('#dsmartStoreConnPassword', 'st01-pass');
+  await page.click('[data-op="saveDsmartStoreConn"]');
+  await page.waitForTimeout(150);
+  let storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('Thêm kết nối siêu thị THẬT (điền form + bấm Lưu) -> hiện đúng trong bảng', storeConnBodyText.includes('ST01') && storeConnBodyText.includes('Siêu Thị Test 01'), storeConnBodyText);
+  check('Checkbox "Bật" của kết nối vừa thêm mặc định ĐƯỢC tick', await page.isChecked('[data-op-change="toggleDsmartStoreConnEnabled"]'));
+  await page.uncheck('[data-op-change="toggleDsmartStoreConnEnabled"]');
+  await page.waitForTimeout(150);
+  check('Bỏ tick "Bật" -> gọi PUT lưu enabled=false thành công (không báo lỗi)', await page.isChecked('[data-op-change="toggleDsmartStoreConnEnabled"]') === false);
+  await page.click('[data-op="testDsmartStoreConn"]');
+  await page.waitForTimeout(150);
+  const storeConnTestCalledCount = await page.evaluate(() => window.__dsmartStoreConnTestCalled || 0);
+  check('Bấm "🔌 Kiểm Tra" trên dòng siêu thị -> gọi đúng route test-connection', storeConnTestCalledCount === 1, 'count=' + storeConnTestCalledCount);
+  await page.click('[data-op="deleteDsmartStoreConn"]');
+  await page.waitForTimeout(150);
+  storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('Bấm "🗑️ Xoá" trên dòng siêu thị -> không còn trong bảng', !storeConnBodyText.includes('ST01'), storeConnBodyText);
 
   check('Không có lỗi JS (pageerror) nào trong suốt quá trình thao tác THẬT', pageErrors.length === 0, pageErrors.join('\n'));
 

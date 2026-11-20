@@ -388,7 +388,12 @@ async function main() {
     // ngày KHÔNG làm khoá đổi theo nữa, khoá mới phải GIỐNG khoá cũ (vẫn cùng custId/skuId).
     assertEqual(newKey.custId, key.custId); assertEqual(newKey.skuId, key.skuId);
     assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /OUTPUT INSERTED/.test(q)), 'câu UPDATE phải có OUTPUT INSERTED để biết số dòng bị ảnh hưởng + khoá mới, không cần SELECT COUNT riêng');
-    assert(!queryLog.some(q => /^SELECT\b/.test(q)), 'KHÔNG được có câu SELECT nào (kể cả SELECT COUNT) trong luồng Sửa');
+    // 12/2026, FAN-OUT (lib/dsmartSqlClient.js::fanOutToStores()) — SỬA giờ CÓ thêm đúng 1 câu SELECT,
+    // nhưng là `SELECT ... FROM dbo.DsmartStorePriceConnections` (bảng CẤU HÌNH danh sách siêu thị, nằm
+    // trong CSDL CỦA CHÍNH APP này — db.js, KHÁC HẲN CSDL DSmart16) để biết siêu thị nào đang Enabled cần
+    // fan-out — KHÔNG đụng gì tới CSPRICE nên không vi phạm ràng buộc "tài khoản DSmart16 không có quyền
+    // SELECT trên CSPRICE" mà quy tắc này bảo vệ. Chỉ cấm SELECT trên CSPRICE, không cấm SELECT nói chung.
+    assert(!queryLog.some(q => /^SELECT\b/.test(q) && /\bdbo\.CSPRICE\b/.test(q)), 'KHÔNG được có câu SELECT nào trên dbo.CSPRICE (kể cả SELECT COUNT) trong luồng Sửa');
     assertEqual(transactionLog.join(','), 'BEGIN,COMMIT', 'phải mở transaction THẬT quanh UPDATE, rồi COMMIT khi khớp đúng 1 dòng');
     queryLog = [];
     const delResult = await deleteWholesalePrice({ dsmartKey: newKey });

@@ -32,6 +32,7 @@ let forceConfigError = false;
 let forceTestConnError = false;
 let lastTestConnOverrideCfg = 'UNSET';
 let forceSkuDefAccessError = false;
+let forceStoreTestConnError = false;
 let lastSkuDefAccessOverrideCfg = 'UNSET';
 
 class FakeHttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -97,6 +98,14 @@ stubModule('lib/dsmartSqlClient', {
     custIdExistsCallLog.push(custId);
     if (forceConfigError) throw new DsmartConfigError('Chưa cấu hình kết nối (giả lập)');
     return CSPRICE.some(r => r.CUST_ID === custId);
+  },
+  // testStoreConnection() (12/2026, FAN-OUT) — nút "🔌 Kiểm Tra" trên TỪNG dòng siêu thị ở màn Cấu Hình
+  // Kết Nối Siêu Thị — logic thật đã test đầy đủ ở test-dsmart-store-fanout.js, ở đây chỉ cần đúng hành
+  // vi trả về để test tầng route.
+  testStoreConnection: async ({ host, port, database, user, password }) => {
+    if (!host || !database || !user || !password) throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra kết nối.');
+    if (forceStoreTestConnError) throw new DsmartConfigError('Không kết nối được (giả lập)');
+    return { ms: 9 };
   }
 });
 
@@ -139,6 +148,34 @@ stubModule('lib/dsmartPriceConfigStore', {
   saveConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...cfg, hasPassword: true }; },
   getAutoDeleteConfig: async () => ({ ...AUTO_DELETE_CFG }),
   saveAutoDeleteConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...AUTO_DELETE_CFG }; },
+  decryptSecret: (v) => v
+});
+
+// ===== Giả lập dbo.DsmartStorePriceConnections (12/2026, FAN-OUT) — logic THẬT của store này đã test
+// riêng + đầy đủ ở tests/test-dsmart-store-fanout.js (CRUD thật + mã hoá mật khẩu thật, không mock) —
+// ở ĐÂY chỉ cần mock ĐỦ hành vi để test TẦNG ROUTE (quyền hạn, validate input, nối storeResults vào
+// response) không phụ thuộc kết nối SQL thật. =====
+let STORE_CONNS = [];
+stubModule('lib/dsmartStorePriceConnectionsStore', {
+  listSanitized: async () => STORE_CONNS.map(({ passwordEnc, ...rest }) => ({ ...rest, hasPassword: !!passwordEnc })),
+  listRaw: async ({ onlyEnabled } = {}) => onlyEnabled ? STORE_CONNS.filter(s => s.enabled) : STORE_CONNS.slice(),
+  getRawById: async (id) => STORE_CONNS.find(s => s.id === id) || null,
+  createStore: async ({ storeCode, storeName, host, port, database, user, password }, actor) => {
+    if (STORE_CONNS.some(s => s.storeCode === storeCode)) throw new Error(`Mã Siêu Thị "${storeCode}" đã có kết nối khác`);
+    const row = { id: Date.now() + Math.floor(Math.random() * 1000), storeCode, storeName, host, port, database, user, passwordEnc: password ? 'enc' : null, enabled: true, updatedBy: actor };
+    STORE_CONNS.push(row);
+    const { passwordEnc, ...rest } = row;
+    return { ...rest, hasPassword: !!passwordEnc };
+  },
+  updateStore: async (id, { storeCode, storeName, host, port, database, user, password, enabled }, actor) => {
+    const row = STORE_CONNS.find(s => s.id === id);
+    if (!row) throw new Error('Không tìm thấy kết nối siêu thị này');
+    Object.assign(row, { storeCode, storeName, host, port, database, user, enabled: !!enabled, updatedBy: actor });
+    if (password) row.passwordEnc = 'enc';
+    const { passwordEnc, ...rest } = row;
+    return { ...rest, hasPassword: !!passwordEnc };
+  },
+  deleteStore: async (id) => { STORE_CONNS = STORE_CONNS.filter(s => s.id !== id); },
   decryptSecret: (v) => v
 });
 
@@ -193,6 +230,10 @@ async function apiPatch(p, body) {
 }
 async function apiPut(p, body) {
   const res = await fetch(baseUrl + p, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  return { status: res.status, body: await res.json() };
+}
+async function apiDelete(p) {
+  const res = await fetch(baseUrl + p, { method: 'DELETE' });
   return { status: res.status, body: await res.json() };
 }
 
@@ -638,6 +679,163 @@ async function main() {
     const result = await runDsmartAutoDeleteExpiredPrices();
     assert.strictEqual(result.deletedCount, 0);
     assert.strictEqual(CSPRICE.length, 1);
+  });
+
+  // ===== "📅 Lên Lịch Áp Giá" (12/2026, theo yêu cầu người dùng "giá sẽ theo ngày bắt đầu trong file
+  // excel và lịch tự động bắt ngày bắt đầu và áp giá từ 0 giờ, nếu người tạo chọn đặt lịch, còn không
+  // đặt lịch thì sẽ là áp giá luôn") =====
+  await test('POST /apply schedule=true + Ngày Bắt Đầu TƯƠNG LAI -> tạo entry SCHEDULED, KHÔNG ghi gì vào CSPRICE', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    CSPRICE = []; ENTRIES = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const res = await apiPost('/apply', { rows: [{ custId: 'SCH1', skuId: 'SKS1', price: 1000, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.scheduledCount, 1);
+    assert.strictEqual(res.body.successCount, 1);
+    assert.strictEqual(CSPRICE.length, 0, 'Chưa ghi gì vào CSPRICE khi còn ở trạng thái SCHEDULED');
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+    assert.strictEqual(ENTRIES[0].dsmartKey, null);
+  });
+
+  await test('POST /apply schedule=true nhưng Ngày Bắt Đầu HÔM NAY/quá khứ -> vẫn áp dụng NGAY (không delay vô lý)', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await apiPost('/apply', { rows: [{ custId: 'SCH2', skuId: 'SKS2', price: 2000, frDate: today, toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.scheduledCount, 0);
+    assert.strictEqual(res.body.successCount, 1);
+    assert.strictEqual(CSPRICE.length, 1, 'Ngày Bắt Đầu không ở tương lai -> áp ngay như cũ');
+    assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
+  });
+
+  await test('POST /apply schedule=false (mặc định) -> luôn áp NGAY dù Ngày Bắt Đầu ở tương lai', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const res = await apiPost('/apply', { rows: [{ custId: 'SCH3', skuId: 'SKS3', price: 3000, frDate: futureDate, toDate: '2099-12-31' }] });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.scheduledCount, 0);
+    assert.strictEqual(CSPRICE.length, 1);
+    assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
+  });
+
+  await test('POST /entries/:id/cancel-schedule: hủy đúng dòng SCHEDULED -> chuyển CANCELLED', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'SCH4', skuId: 'SKS4', price: 4000, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    const id = ENTRIES[0].id;
+    const res = await apiPost(`/entries/${id}/cancel-schedule`, {});
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.item.status, 'CANCELLED');
+  });
+
+  await test('POST /entries/:id/cancel-schedule: dòng KHÔNG ở trạng thái SCHEDULED -> 409', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'SCH5', skuId: 'SKS5', price: 5000, frDate: '2020-01-01', toDate: '2099-12-31' }] });
+    const id = ENTRIES[0].id; // status ACTIVE, không phải SCHEDULED
+    const res = await apiPost(`/entries/${id}/cancel-schedule`, {});
+    assert.strictEqual(res.status, 409);
+  });
+
+  // ===== "🏬 Kết Nối Siêu Thị" (CRUD, CHỈ admin) — logic CRUD THẬT đã test đầy đủ ở
+  // test-dsmart-store-fanout.js; ở đây chỉ test TẦNG ROUTE (quyền hạn, mã lỗi). =====
+  await test('GET /store-connections: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiGet('/store-connections');
+    assert.strictEqual(res.status, 403);
+  });
+
+  await test('POST /store-connections: admin -> tạo thành công, KHÔNG trả passwordEnc', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    const res = await apiPost('/store-connections', { storeCode: 'ST01', storeName: 'Siêu Thị 01', host: 'h1', port: 1433, database: 'd1', user: 'u1', password: 'p1' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.item.storeCode, 'ST01');
+    assert.strictEqual(res.body.item.hasPassword, true);
+    assert.strictEqual('passwordEnc' in res.body.item, false);
+  });
+
+  await test('GET /store-connections: admin -> thấy danh sách đã tạo', async () => {
+    const res = await apiGet('/store-connections');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.items.length, 1);
+  });
+
+  await test('PUT /store-connections/:id: admin -> sửa được (đổi tên, tắt Enabled)', async () => {
+    const id = STORE_CONNS[0].id;
+    const res = await apiPut(`/store-connections/${id}`, { storeCode: 'ST01', storeName: 'Siêu Thị 01 (đổi tên)', host: 'h1', port: 1433, database: 'd1', user: 'u1', enabled: false });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.item.storeName, 'Siêu Thị 01 (đổi tên)');
+    assert.strictEqual(res.body.item.enabled, false);
+  });
+
+  await test('POST /store-connections/:id/test-connection: admin -> gọi testStoreConnection(), trả ms', async () => {
+    forceStoreTestConnError = false;
+    const id = STORE_CONNS[0].id;
+    const res = await apiPost(`/store-connections/${id}/test-connection`, { password: 'nhap-lai-de-test' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.ms, 9);
+  });
+
+  await test('POST /store-connections/:id/test-connection: mất kết nối -> báo lỗi thật', async () => {
+    forceStoreTestConnError = true;
+    const id = STORE_CONNS[0].id;
+    const res = await apiPost(`/store-connections/${id}/test-connection`, { password: 'nhap-lai-de-test' });
+    assert.strictEqual(res.status, 400);
+    forceStoreTestConnError = false;
+  });
+
+  await test('DELETE /store-connections/:id: admin -> xoá thành công, không còn trong danh sách', async () => {
+    const id = STORE_CONNS[0].id;
+    const res = await apiDelete(`/store-connections/${id}`);
+    assert.strictEqual(res.status, 200);
+    const listRes = await apiGet('/store-connections');
+    assert.strictEqual(listRes.body.items.length, 0);
+  });
+
+  // ===== jobs/dsmartAutoApplyScheduledPrices (12/2026, "Lên Lịch Áp Giá") =====
+  await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu ĐÃ ĐẾN -> tự áp dụng, ghi vào CSPRICE, chuyển ACTIVE', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'AUTO1', skuId: 'SKA1', price: 7000, frDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+    // Mô phỏng "đã tới Ngày Bắt Đầu" bằng cách tự sửa thẳng frDate của entry về hôm nay (tương đương
+    // thời gian trôi qua tới đúng ngày đã đặt) — không cần giả lập đồng hồ hệ thống.
+    ENTRIES[0].frDate = today;
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 1);
+    assert.strictEqual(CSPRICE.length, 1, 'Đã tự ghi vào CSPRICE');
+    assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
+    assert.ok(ENTRIES[0].dsmartKey, 'Đã có dsmartKey sau khi tự áp dụng');
+    assert.strictEqual(ENTRIES[0].history[ENTRIES[0].history.length - 1].mode, 'AUTO_SCHEDULED');
+  });
+
+  await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu CHƯA ĐẾN -> chưa áp dụng gì', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'AUTO2', skuId: 'SKA2', price: 8000, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 0);
+    assert.strictEqual(CSPRICE.length, 0);
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+  });
+
+  await test('jobs/dsmartAutoApplyScheduledPrices: dòng đã bị Hủy Lịch (CANCELLED) -> job KHÔNG động vào', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'AUTO3', skuId: 'SKA3', price: 9000, frDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), toDate: '2099-12-31' }], schedule: true });
+    const id = ENTRIES[0].id;
+    await apiPost(`/entries/${id}/cancel-schedule`, {});
+    ENTRIES[0].frDate = today; // dù "đã tới ngày", dòng đã CANCELLED thì job phải bỏ qua
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 0);
+    assert.strictEqual(CSPRICE.length, 0);
+    assert.strictEqual(ENTRIES[0].status, 'CANCELLED');
   });
 
   await stopServer();

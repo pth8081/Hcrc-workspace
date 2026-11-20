@@ -58,10 +58,93 @@
 // toàn bộ hệ thống (xem db.js/lib/recordStore.js).
 const sql = require('mssql');
 const { getRawConfig, decryptSecret } = require('./dsmartPriceConfigStore');
+const storeConnStore = require('./dsmartStorePriceConnectionsStore');
 const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
 let cachedSignature = null;
+
+// FAN-OUT XUỐNG TỪNG SIÊU THỊ (12/2026, theo yêu cầu người dùng: "tôi muốn cài đặt giá đến tận máy chủ
+// db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả các siêu thị" — thay vì
+// chờ cơ chế đồng bộ ngoài (tool bên ngoài, theo sự kiện lưu của phần mềm DSmart desktop) mà hệ thống
+// này KHÔNG kiểm soát/trigger được, xem điều tra dài ở lịch sử trao đổi trước đó). CÁCH LÀM: sau khi ghi
+// THÀNH CÔNG vào CSPRICE DSmart16 Trung Tâm (HO) như cũ, lặp lại ĐÚNG CÙNG thao tác (ghi/sửa/xoá) trên
+// pool riêng của MỖI siêu thị đang Enabled=1 (dbo.DsmartStorePriceConnections) — tái dùng NGUYÊN các hàm
+// writePriceToPool()/updatePriceInPool()/deletePriceInPool() pool-agnostic bên dưới, không viết lại 2 bộ
+// logic khác nhau cho HO và siêu thị (tránh lệch công thức ghi CSPRICE như các lỗi Lần 1-6 đã gặp ở HO).
+//
+// XỬ LÝ LỖI (12/2026, người dùng xác nhận rõ): 1 siêu thị lỗi (mất mạng, SQL Server tạm không phản hồi)
+// KHÔNG chặn/rollback thao tác ở HO (đã commit xong, không hoàn tác) VÀ KHÔNG chặn các siêu thị khác —
+// chạy ĐỘC LẬP, báo rõ TỪNG siêu thị thành công/lỗi ngay trong response để IT tự biết siêu thị nào cần
+// áp lại. Không có hàng đợi/tự động thử lại (v1, theo yêu cầu người dùng — đơn giản hơn, nâng cấp sau
+// nếu cần). Đọc danh sách siêu thị LỖI (VD mất kết nối CSDL app) cũng KHÔNG chặn thao tác HO đã xong —
+// trả storeResults rỗng kèm storeFanOutError để UI tự báo rõ.
+const storePoolCache = new Map(); // storeId -> { pool, signature }
+
+function storeConfigSignature(store) {
+  return [store.host, store.port, store.database, store.user, store.passwordEnc].join('|');
+}
+
+async function getStorePool(store) {
+  const sig = storeConfigSignature(store);
+  const cached = storePoolCache.get(store.id);
+  if (cached && cached.signature === sig) return cached.pool;
+  if (cached) {
+    try { await cached.pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool cũ */ }
+    storePoolCache.delete(store.id);
+  }
+  let password;
+  try {
+    password = decryptSecret(store.passwordEnc);
+  } catch (err) {
+    throw new DsmartConfigError(`Không giải mã được mật khẩu đã lưu cho siêu thị "${store.storeCode}" — vào Cấu Hình Kết Nối Siêu Thị nhập lại mật khẩu.`);
+  }
+  const pool = new sql.ConnectionPool({
+    server: store.host,
+    port: store.port || 1433,
+    database: store.database,
+    user: store.user,
+    password,
+    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+    pool: { max: 3, min: 0, idleTimeoutMillis: 30000 },
+    requestTimeout: 15000,
+    connectionTimeout: 15000
+  });
+  try {
+    await pool.connect();
+  } catch (err) {
+    throw new DsmartConfigError(`Không kết nối được tới siêu thị "${store.storeCode}" (${store.host}:${store.port}/${store.database}): ${err.message}`);
+  }
+  storePoolCache.set(store.id, { pool, signature: sig });
+  return pool;
+}
+
+const STORE_FANOUT_CONCURRENCY = 5;
+
+// fanOutToStores(operation): operation(pool) thực hiện ĐÚNG 1 thao tác ghi/sửa/xoá trên 1 pool — gọi
+// LẶP LẠI cho từng siêu thị Enabled=1, chạy song song theo lô (không dồn quá nhiều kết nối cùng lúc).
+async function fanOutToStores(operation) {
+  let stores;
+  try {
+    stores = await storeConnStore.listRaw({ onlyEnabled: true });
+  } catch (err) {
+    return { storeResults: [], storeFanOutError: `Không đọc được danh sách kết nối siêu thị: ${err.message}` };
+  }
+  const storeResults = [];
+  for (let i = 0; i < stores.length; i += STORE_FANOUT_CONCURRENCY) {
+    const chunk = stores.slice(i, i + STORE_FANOUT_CONCURRENCY);
+    await Promise.all(chunk.map(async (store) => {
+      try {
+        const pool = await getStorePool(store);
+        await operation(pool);
+        storeResults.push({ storeId: store.id, storeCode: store.storeCode, storeName: store.storeName, ok: true });
+      } catch (err) {
+        storeResults.push({ storeId: store.id, storeCode: store.storeCode, storeName: store.storeName, ok: false, error: err.message || 'Lỗi không xác định' });
+      }
+    }));
+  }
+  return { storeResults, storeFanOutError: null };
+}
 
 // NATURAL_KEY_COLUMNS: khoá tự nhiên (= PRIMARY KEY THẬT của CSPRICE, xác nhận Lần 5 qua sys.indexes) dùng
 // để khớp CHÍNH XÁC 1 dòng CSPRICE khi Sửa/Xoá/phát hiện trùng khoá lúc Thêm — thứ tự liệt kê ở đây chỉ để
@@ -176,17 +259,26 @@ function toDateOnly(value) {
 // có dòng) cho ĐÚNG cùng 1 cặp CUST_ID+SKU_ID — cả 2 đều thấy UPDATE khớp 0 dòng, 1 trong 2 INSERT trước sẽ
 // thành công, request còn lại gặp lỗi PK_CSPRICE THẬT từ SQL Server (ném thẳng ra, không cố bắt/chuyển đổi
 // nữa — trung thực hơn, người dùng thử lại là xong, khác hẳn case GHI ĐÈ vốn là tình huống thường xuyên).
-async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
-  if (!Number.isFinite(Number(price))) {
-    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
-  }
-  const pool = await getDsmartPool();
+// upsertPriceOnPool(pool, ...): phần LÕI pool-agnostic của insertWholesalePrice() — tách riêng để FAN-OUT
+// (xem fanOutToStores() ở đầu file) gọi LẶP LẠI ĐÚNG CÙNG logic này trên pool của từng siêu thị, không
+// viết lại 1 bộ công thức ghi CSPRICE khác cho siêu thị (tránh lệch công thức như các lỗi Lần 1-6 ở HO).
+async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate }) {
   const { unit, unitConv, taxCode } = await lookupSkuDefUnitInfo(pool, skuId);
   const common = { custId, skuId, unit, unitConv, price, taxCode, frDate, toDate };
   const overwritten = await tryOverwriteExistingRow(pool, common);
   if (overwritten) return { ...overwritten, wasOverwrite: true };
   const inserted = await insertNewRow(pool, common);
   return { ...inserted, wasOverwrite: false };
+}
+
+async function insertWholesalePrice(params) {
+  if (!Number.isFinite(Number(params.price))) {
+    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
+  }
+  const pool = await getDsmartPool();
+  const hoResult = await upsertPriceOnPool(pool, params);
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params));
+  return { ...hoResult, storeResults, storeFanOutError };
 }
 
 // tryOverwriteExistingRow(): thử UPDATE đúng dòng khớp khoá chính thật (CUST_ID, SKU_ID) TRƯỚC — ghi đè ĐỦ
@@ -327,11 +419,22 @@ function buildNaturalKeyWhere(req, dsmartKey) {
 // SQL ở trên). Từ Lần 5: khoá CHỈ gồm CUST_ID+SKU_ID (không còn gồm FR_DATE/TO_DATE như giả định Lần 2 sai)
 // nên đổi Giá/Ngày KHÔNG làm khoá đổi theo nữa — vẫn trả về khoá (giờ luôn giống khoá cũ) để caller lưu đè
 // lại cho nhất quán, dù không còn bắt buộc như trước.
-async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
-  if (!Number.isFinite(Number(price))) {
-    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
+async function updateWholesalePrice(params) {
+  if (!Number.isFinite(Number(params.price))) {
+    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
   const pool = await getDsmartPool();
+  const hoResult = await updatePriceOnPool(pool, params);
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => updatePriceOnPool(storePool, params));
+  return { ...hoResult, storeResults, storeFanOutError };
+}
+
+// updatePriceOnPool(pool, ...): phần LÕI pool-agnostic của updateWholesalePrice() — tái dùng cho FAN-OUT
+// xuống từng siêu thị (xem fanOutToStores() ở đầu file). Nếu 1 siêu thị KHÔNG có dòng này (0 dòng khớp —
+// VD lần đầu bật fan-out, siêu thị đó chưa từng có giá này), hàm ném lỗi rõ ràng (không tự fallback sang
+// INSERT) — "Sửa" LUÔN có nghĩa "dòng đã tồn tại", báo lỗi đúng để IT biết cần "Thêm Giá Mới" ở siêu thị
+// đó trước, không âm thầm ghi 1 dòng thiếu cột (upsertPriceOnPool mới có đủ UNIT_SYMB/TAX_CODE/...).
+async function updatePriceOnPool(pool, { dsmartKey, price, frDate, toDate }) {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin();
@@ -374,8 +477,17 @@ async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
 // deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (khớp theo dsmartKey — khoá tự nhiên) khỏi CSPRICE — KHÔNG
 // hoàn tác được SAU KHI commit. Cùng cơ chế transaction + OUTUT như updateWholesalePrice() ở trên — khớp
 // >1 dòng thì ROLLBACK (không xoá gì cả), khớp 0 dòng thì coi như đã đạt mục tiêu (không ném lỗi).
-async function deleteWholesalePrice({ dsmartKey }) {
+async function deleteWholesalePrice(params) {
   const pool = await getDsmartPool();
+  const hoResult = await deletePriceOnPool(pool, params);
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => deletePriceOnPool(storePool, params));
+  return { ...hoResult, storeResults, storeFanOutError };
+}
+
+// deletePriceOnPool(pool, ...): phần LÕI pool-agnostic của deleteWholesalePrice() — tái dùng cho FAN-OUT
+// (xem fanOutToStores() ở đầu file). 0 dòng khớp ở 1 siêu thị KHÔNG ném lỗi (coi như đã đạt mục tiêu,
+// giống hành vi ở HO) — siêu thị đó vẫn báo "ok: true" trong storeResults.
+async function deletePriceOnPool(pool, { dsmartKey }) {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin();
@@ -621,7 +733,43 @@ async function closeDsmartPool() {
   }
 }
 
+// Chỉ dùng cho test/khi server tắt hẳn — đóng TOÀN BỘ pool siêu thị đang cache.
+async function closeAllStorePools() {
+  for (const { pool } of storePoolCache.values()) {
+    try { await pool.close(); } catch (_) { /* ignore */ }
+  }
+  storePoolCache.clear();
+}
+
+// testStoreConnection(overrideCfg): nút "🔌 Kiểm Tra Kết Nối" ở màn Cấu Hình Kết Nối Siêu Thị — cùng
+// khuôn testDsmartConnection() ở trên (test giá trị đang gõ dở, KHÔNG đụng pool cache dùng cho ghi thật).
+// overrideCfg: { host, port, database, user, password } — luôn dùng giá trị client gửi (KHÔNG có "test
+// theo cấu hình đã lưu, không truyền gì" như testDsmartConnection(), vì mỗi lần test là 1 trong NHIỀU
+// siêu thị, route luôn biết id cụ thể, không cần nhánh không truyền gì).
+async function testStoreConnection({ host, port, database, user, password }) {
+  if (!host || !database || !user || !password) {
+    throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra kết nối.');
+  }
+  const pool = new sql.ConnectionPool({
+    server: host, port: port || 1433, database, user, password,
+    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+    pool: { max: 1, min: 0, idleTimeoutMillis: 5000 },
+    requestTimeout: 10000, connectionTimeout: 10000
+  });
+  const started = Date.now();
+  try {
+    await pool.connect();
+    await pool.request().query('SELECT 1 AS ok;');
+  } catch (err) {
+    throw new DsmartConfigError(`Không kết nối được (${host}:${port || 1433}/${database}): ${err.message}`);
+  } finally {
+    try { await pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool tạm */ }
+  }
+  return { ms: Date.now() - started };
+}
+
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
+  closeAllStorePools, testStoreConnection,
   testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
 };
