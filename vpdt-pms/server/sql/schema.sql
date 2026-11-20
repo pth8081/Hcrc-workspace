@@ -1778,5 +1778,22 @@ BEGIN
 END
 GO
 
+/* AppDataMigrations — LỖI THẬT PRODUCTION đã vá (12/2026, người dùng báo "đã xoá hết Kỳ Kiểm Kê mà mỗi
+   lần lên code mới lại xuất hiện lại"): migrateLegacyAppDataCollection() (lib/recordStore.js) trước đây
+   coi "bảng đích hiện ĐANG RỖNG" là dấu hiệu CHƯA di trú — nhưng bảng rỗng cũng xảy ra khi người dùng đã
+   chủ động XOÁ HẾT dữ liệu thật, trong khi dữ liệu gốc trong AppData CHƯA TỪNG bị xoá (giữ "phòng hờ") —
+   mỗi lần server khởi động lại (deploy code mới = pm2 restart) hàm di trú chạy lại, thấy bảng rỗng, tưởng
+   chưa di trú, đọc lại y nguyên dữ liệu CŨ từ AppData rồi chèn lại — làm "sống lại" đúng những dòng người
+   dùng vừa xoá. Bảng này đánh dấu DỨT ĐIỂM "collection X đã di trú xong" (ghi 1 lần duy nhất, không phụ
+   thuộc số dòng hiện tại của bảng đích), không bao giờ bị xoá nên di trú không bao giờ chạy lại. */
+IF OBJECT_ID('dbo.AppDataMigrations', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AppDataMigrations (
+        CollectionName NVARCHAR(200)  NOT NULL CONSTRAINT PK_AppDataMigrations PRIMARY KEY,
+        MigratedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

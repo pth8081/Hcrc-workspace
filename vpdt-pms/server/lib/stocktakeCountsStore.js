@@ -17,7 +17,7 @@ const { getPool, sql } = require('../db');
 const { getAppDataValue } = require('./appData');
 const {
   withAppLock, withLockedRecordForCollection, insertRecord, queryDedicatedRecords, deleteRecordForCollection,
-  bindExtractedColumns, DEDICATED_TABLES
+  bindExtractedColumns, DEDICATED_TABLES, isLegacyMigrationDone, markLegacyMigrationDone
 } = require('./recordStore');
 const { upsertScanCount, editCountValue } = require('./stocktakeEngine');
 
@@ -115,39 +115,47 @@ async function deleteCountRowById(id, checkFn, actor) {
 // giữ lại làm bản sao lưu, code từ nay không còn đọc/ghi key cũ này nữa nên để nguyên không ảnh hưởng gì).
 async function migrateLegacyStocktakeCounts() {
   const pool = await getPool();
+
+  // LỖI THẬT PRODUCTION đã vá (12/2026, xem chú thích đầy đủ tại isLegacyMigrationDone()/
+  // markLegacyMigrationDone() — lib/recordStore.js): check CŨ chỉ dựa "bảng đích rỗng" để quyết định di
+  // trú lại, khiến dữ liệu người dùng đã XOÁ bị "sống lại" sau mỗi lần deploy/restart.
+  if (await isLegacyMigrationDone('stocktakeCounts')) return;
+
   const countResult = await pool.request().query('SELECT COUNT(*) AS c FROM dbo.StocktakeCounts');
-  if (countResult.recordset[0].c > 0) return; // đã có dữ liệu -> bỏ qua
-
-  let legacy;
-  try {
-    legacy = await getAppDataValue('stocktakeCounts');
-  } catch (err) {
-    // Key "stocktakeCounts" chưa từng được seedDefaults() tạo (môi trường hoàn toàn mới, chưa ai dùng
-    // Kiểm Kê bao giờ) — không có gì để di trú, không phải lỗi.
-    return;
-  }
-  if (!Array.isArray(legacy) || !legacy.length) return;
-
-  const cfg = DEDICATED_TABLES.stocktakeCounts;
-  let migrated = 0, failed = 0;
-  for (const record of legacy) {
+  if (countResult.recordset[0].c === 0) {
+    let legacy;
     try {
-      const req = pool.request();
-      req.input('id', sql.BigInt, record.id);
-      req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
-      const colNames = ['Id', 'Payload'];
-      const colParams = ['@id', '@payload'];
-      for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
-        colNames.push(col); colParams.push('@' + param);
-      }
-      await req.query(`INSERT INTO dbo.StocktakeCounts (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
-      migrated++;
+      legacy = await getAppDataValue('stocktakeCounts');
     } catch (err) {
-      failed++;
-      console.error(`   ⛔ Lỗi di trú stocktakeCounts Id=${record.id}: ${err.message}`);
+      // Key "stocktakeCounts" chưa từng được seedDefaults() tạo (môi trường hoàn toàn mới, chưa ai dùng
+      // Kiểm Kê bao giờ) — không có gì để di trú, không phải lỗi.
+      legacy = null;
+    }
+    if (Array.isArray(legacy) && legacy.length) {
+      const cfg = DEDICATED_TABLES.stocktakeCounts;
+      let migrated = 0, failed = 0;
+      for (const record of legacy) {
+        try {
+          const req = pool.request();
+          req.input('id', sql.BigInt, record.id);
+          req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+          const colNames = ['Id', 'Payload'];
+          const colParams = ['@id', '@payload'];
+          for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+            colNames.push(col); colParams.push('@' + param);
+          }
+          await req.query(`INSERT INTO dbo.StocktakeCounts (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+          migrated++;
+        } catch (err) {
+          failed++;
+          console.error(`   ⛔ Lỗi di trú stocktakeCounts Id=${record.id}: ${err.message}`);
+        }
+      }
+      console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng Kiểm Kê (stocktakeCounts) sang bảng dbo.StocktakeCounts riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
     }
   }
-  console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng Kiểm Kê (stocktakeCounts) sang bảng dbo.StocktakeCounts riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
+
+  await markLegacyMigrationDone('stocktakeCounts');
 }
 
 module.exports = {

@@ -19,7 +19,7 @@ const { getPool, sql } = require('../db');
 const { getAppDataValue } = require('./appData');
 const {
   withAppLock, withLockedRecordForCollection, insertRecord, queryDedicatedRecords,
-  bindExtractedColumns, DEDICATED_TABLES
+  bindExtractedColumns, DEDICATED_TABLES, isLegacyMigrationDone, markLegacyMigrationDone
 } = require('./recordStore');
 const { findMatchingActiveShelfRecord, formatCreatedAt } = require('./shelfRecordUpsert');
 
@@ -65,37 +65,45 @@ async function upsertShelfRecordRow(normalized, dept, freshUser, clientRecordId)
 // AppData "shelfRecords" cũ sau khi di trú xong (dữ liệu nghiệp vụ người dùng nhập tay).
 async function migrateLegacyShelfRecords() {
   const pool = await getPool();
+
+  // LỖI THẬT PRODUCTION đã vá (12/2026, xem chú thích đầy đủ tại isLegacyMigrationDone()/
+  // markLegacyMigrationDone() — lib/recordStore.js): check CŨ chỉ dựa "bảng đích rỗng" để quyết định di
+  // trú lại, khiến dữ liệu người dùng đã XOÁ bị "sống lại" sau mỗi lần deploy/restart.
+  if (await isLegacyMigrationDone('shelfRecords')) return;
+
   const countResult = await pool.request().query('SELECT COUNT(*) AS c FROM dbo.ShelfRecords');
-  if (countResult.recordset[0].c > 0) return; // đã có dữ liệu -> bỏ qua
-
-  let legacy;
-  try {
-    legacy = await getAppDataValue('shelfRecords');
-  } catch (err) {
-    return; // Key chưa từng được seedDefaults() tạo -> không có gì để di trú.
-  }
-  if (!Array.isArray(legacy) || !legacy.length) return;
-
-  const cfg = DEDICATED_TABLES.shelfRecords;
-  let migrated = 0, failed = 0;
-  for (const record of legacy) {
+  if (countResult.recordset[0].c === 0) {
+    let legacy;
     try {
-      const req = pool.request();
-      req.input('id', sql.BigInt, record.id);
-      req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
-      const colNames = ['Id', 'Payload'];
-      const colParams = ['@id', '@payload'];
-      for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
-        colNames.push(col); colParams.push('@' + param);
-      }
-      await req.query(`INSERT INTO dbo.ShelfRecords (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
-      migrated++;
+      legacy = await getAppDataValue('shelfRecords');
     } catch (err) {
-      failed++;
-      console.error(`   ⛔ Lỗi di trú shelfRecords Id=${record.id}: ${err.message}`);
+      legacy = null; // Key chưa từng được seedDefaults() tạo -> không có gì để di trú.
+    }
+    if (Array.isArray(legacy) && legacy.length) {
+      const cfg = DEDICATED_TABLES.shelfRecords;
+      let migrated = 0, failed = 0;
+      for (const record of legacy) {
+        try {
+          const req = pool.request();
+          req.input('id', sql.BigInt, record.id);
+          req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+          const colNames = ['Id', 'Payload'];
+          const colParams = ['@id', '@payload'];
+          for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+            colNames.push(col); colParams.push('@' + param);
+          }
+          await req.query(`INSERT INTO dbo.ShelfRecords (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+          migrated++;
+        } catch (err) {
+          failed++;
+          console.error(`   ⛔ Lỗi di trú shelfRecords Id=${record.id}: ${err.message}`);
+        }
+      }
+      console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng Ghi Nhận Trên Kệ (shelfRecords) sang bảng dbo.ShelfRecords riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
     }
   }
-  console.log(`   ↳ Đã di chuyển ${migrated}/${legacy.length} dòng Ghi Nhận Trên Kệ (shelfRecords) sang bảng dbo.ShelfRecords riêng${failed ? ` — ⚠️ ${failed} dòng LỖI, xem log ở trên` : ''}. Dữ liệu gốc trong AppData VẪN GIỮ NGUYÊN (không xoá) để phòng hờ.`);
+
+  await markLegacyMigrationDone('shelfRecords');
 }
 
 module.exports = { upsertShelfRecordRow, migrateLegacyShelfRecords };
