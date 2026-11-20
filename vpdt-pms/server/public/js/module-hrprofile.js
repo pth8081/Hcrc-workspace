@@ -581,9 +581,14 @@ function renderHrProfileManageList() {
   const nationalIdFilter = (document.getElementById('hrpfMgFilterNationalId')?.value || '').trim();
   const joinFrom = document.getElementById('hrpfMgFilterJoinFrom')?.value || '';
   const joinTo = document.getElementById('hrpfMgFilterJoinTo')?.value || '';
+  // "Lọc hồ sơ thiếu Chức Danh/Phòng Ban" (12/2026) — xem chú thích đầy đủ tại khối checkbox tương ứng
+  // ở hrProfileSection.html. Gộp OR: tick cả 2 thì hiện hồ sơ thiếu BẤT KỲ mục nào trong 2.
+  const missingJobTitle = !!document.getElementById('hrpfMgFilterMissingJobTitle')?.checked;
+  const missingDept = !!document.getElementById('hrpfMgFilterMissingDept')?.checked;
+  const anyMissingFilterActive = missingJobTitle || missingDept;
   const rows = _hrpfManageList.filter(p => {
+    const idn = hrpfIdentitySnapshot(p);
     if (kw) {
-      const idn = hrpfIdentitySnapshot(p);
       if (!matchesAnyKeyword([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kwInputEl?._multiKeywords, kw)) return false;
     }
     if (employmentTypeFilter && p.employmentType !== employmentTypeFilter) return false;
@@ -594,15 +599,25 @@ function renderHrProfileManageList() {
       if (joinFrom && joinDate < joinFrom) return false;
       if (joinTo && joinDate > joinTo) return false;
     }
+    if (anyMissingFilterActive) {
+      const matchesMissing = (missingJobTitle && !String(idn.jobTitle || '').trim()) || (missingDept && !String(idn.dept || '').trim());
+      if (!matchesMissing) return false;
+    }
     return true;
   });
   const tbody = document.getElementById('hrpfManageTableBody');
   document.getElementById('hrpfManageEmpty').classList.toggle('hidden', rows.length > 0);
   tbody.innerHTML = sortByCreatedAtDesc(rows).map(p => {
     const idn = hrpfIdentitySnapshot(p);
+    // Badge "thiếu thông tin" — CHỈ hiện đúng mục đang được tick lọc (không làm ồn bảng khi không ai lọc
+    // gì cả), cùng khuôn missingBadges ở renderUsers() (module-admin-userstaging.js).
+    const missingBadgesHtml = [
+      missingJobTitle && !String(idn.jobTitle || '').trim() ? '💼 Thiếu Chức Danh' : null,
+      missingDept && !String(idn.dept || '').trim() ? '🏢 Thiếu Phòng Ban' : null
+    ].filter(Boolean).map(b => `<span class="ml-1 inline-block bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">⚠️ ${escapeHtml(b)}</span>`).join('');
     return `<tr class="border-t hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(p.employeeCode)}</td>
-      <td class="p-2">${escapeHtml(idn.fullName || '(chưa rõ)')}</td>
+      <td class="p-2">${escapeHtml(idn.fullName || '(chưa rõ)')}${missingBadgesHtml}</td>
       <td class="p-2">${escapeHtml(idn.dept)}${idn.jobTitle ? ' — ' + escapeHtml(idn.jobTitle) : ''}</td>
       <td class="p-2">${p.username ? '<span class="font-mono">' + escapeHtml(p.username) + '</span>' : '<span class="text-gray-400 italic">Chưa liên kết</span>'}</td>
       <td class="p-2">${HRPF_STATUS_BADGES[p.status] || p.status}</td>

@@ -25,7 +25,16 @@ const PORT = 8996;
       createdAt: '2026-01-02', updatedAt: '2026-01-02' },
     { employeeCode: 'FE003', username: null, status: 'ACTIVE', dept: 'Phòng Kế Toán', jobTitle: 'Kế Toán Trưởng',
       employmentType: 'Chính thức', nationalId: '003090009999', joinDateAtHcrc: '2023-03-10',
-      createdAt: '2026-01-03', updatedAt: '2026-01-03' }
+      createdAt: '2026-01-03', updatedAt: '2026-01-03' },
+    // FE004/FE005 (12/2026, theo yêu cầu người dùng: "bộ phận nhân sự có nhiều vị trí chưa gán chức
+    // danh... thêm lọc tìm hồ sơ chưa gán chức danh, phòng ban") — FE004 có Phòng Ban nhưng THIẾU Chức
+    // Danh (dept có, jobTitle rỗng); FE005 có Chức Danh nhưng THIẾU Phòng Ban (dept rỗng, jobTitle có).
+    { employeeCode: 'FE004', username: null, status: 'ACTIVE', dept: 'Phòng Kinh Doanh', jobTitle: '',
+      employmentType: 'Chính thức', nationalId: '004090001111', joinDateAtHcrc: '2025-01-01',
+      createdAt: '2026-01-04', updatedAt: '2026-01-04' },
+    { employeeCode: 'FE005', username: null, status: 'ACTIVE', dept: '', jobTitle: 'Nhân Viên Kho',
+      employmentType: 'Chính thức', nationalId: '005090002222', joinDateAtHcrc: '2025-02-01',
+      createdAt: '2026-01-05', updatedAt: '2026-01-05' }
   ];
   const state = createMockState({
     users: [HR, LINKED_USER], employeeProfiles: PROFILES,
@@ -89,11 +98,53 @@ const PORT = 8996;
     tbodyText = await page.textContent('#hrpfManageTableBody');
     assert.ok(tbodyText.includes('FE002') && tbodyText.includes('FE003') && !tbodyText.includes('FE001'), 'LỖI: khoảng 2023-01-01..2024-12-31 phải còn FE002(2024-06-15)+FE003(2023-03-10), loại FE001(2020-01-01 qua fallback DB.users)');
     console.log('PASS: Lọc theo Khoảng Ngày Vào Làm Việc hoạt động đúng, kể cả fallback DB.users.startDate cho hồ sơ chưa có joinDateAtHcrc');
+    await page.fill('#hrpfMgFilterJoinFrom', '');
+    await page.fill('#hrpfMgFilterJoinTo', '');
+    await page.waitForTimeout(100);
+
+    // ==========================================================================
+    // 6)-9) Lọc "hồ sơ thiếu Chức Danh/Phòng Ban" (12/2026, theo yêu cầu người dùng: "bộ phận nhân sự có
+    // nhiều vị trí chưa gán chức danh nên tôi muốn ô tìm kiếm sẽ có thêm lọc tìm hồ sơ chưa gán chức
+    // danh, phòng ban") — FE004 thiếu Chức Danh (có Phòng Ban), FE005 thiếu Phòng Ban (có Chức Danh),
+    // FE001/FE002/FE003 đủ cả 2 (KHÔNG match bất kỳ tick nào).
+    // ==========================================================================
+    await page.check('#hrpfMgFilterMissingJobTitle');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrpfManageTableBody');
+    assert.ok(tbodyText.includes('FE004') && !tbodyText.includes('FE001') && !tbodyText.includes('FE002') && !tbodyText.includes('FE003') && !tbodyText.includes('FE005'),
+      'LỖI: tick "Chưa gán Chức Danh" phải CHỈ còn FE004 (thiếu jobTitle)');
+    assert.ok(tbodyText.includes('Thiếu Chức Danh'), 'LỖI: dòng FE004 phải có badge "⚠️ Thiếu Chức Danh"');
+    console.log('PASS: (6) Tick "💼 Chưa gán Chức Danh" -> CHỈ còn đúng FE004 (có Phòng Ban, thiếu Chức Danh) + hiện badge');
+    await page.uncheck('#hrpfMgFilterMissingJobTitle');
+    await page.waitForTimeout(100);
+
+    await page.check('#hrpfMgFilterMissingDept');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrpfManageTableBody');
+    assert.ok(tbodyText.includes('FE005') && !tbodyText.includes('FE001') && !tbodyText.includes('FE002') && !tbodyText.includes('FE003') && !tbodyText.includes('FE004'),
+      'LỖI: tick "Chưa gán Phòng Ban" phải CHỈ còn FE005 (thiếu dept)');
+    assert.ok(tbodyText.includes('Thiếu Phòng Ban'), 'LỖI: dòng FE005 phải có badge "⚠️ Thiếu Phòng Ban"');
+    console.log('PASS: (7) Tick "🏢 Chưa gán Phòng Ban" -> CHỈ còn đúng FE005 (có Chức Danh, thiếu Phòng Ban) + hiện badge');
+
+    await page.check('#hrpfMgFilterMissingJobTitle');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrpfManageTableBody');
+    assert.ok(tbodyText.includes('FE004') && tbodyText.includes('FE005') && !tbodyText.includes('FE001') && !tbodyText.includes('FE002') && !tbodyText.includes('FE003'),
+      'LỖI: tick CẢ 2 ô phải gộp kiểu OR -> còn đúng FE004+FE005, loại FE001/FE002/FE003 (đủ cả 2 trường)');
+    console.log('PASS: (8) Tick CẢ 2 ô "Chưa gán Chức Danh"+"Chưa gán Phòng Ban" -> gộp OR đúng (FE004+FE005)');
+
+    await page.uncheck('#hrpfMgFilterMissingJobTitle');
+    await page.uncheck('#hrpfMgFilterMissingDept');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrpfManageTableBody');
+    assert.ok(tbodyText.includes('FE001') && tbodyText.includes('FE002') && tbodyText.includes('FE003') && tbodyText.includes('FE004') && tbodyText.includes('FE005') && !tbodyText.includes('Thiếu Chức Danh') && !tbodyText.includes('Thiếu Phòng Ban'),
+      'LỖI: bỏ tick cả 2 -> hiện lại đủ cả 5 hồ sơ, KHÔNG còn badge "thiếu" nào (chỉ hiện khi đang tick lọc)');
+    console.log('PASS: (9) Bỏ tick cả 2 ô -> hiện lại đủ 5 hồ sơ, badge "thiếu" biến mất đúng (chỉ hiện khi đang lọc)');
 
     assert.strictEqual(jsErrors.length, 0, 'LỖI: có lỗi JS phát sinh: ' + jsErrors.join('\n'));
     console.log('PASS: Không có lỗi JS (pageerror) nào trong suốt quá trình thao tác THẬT');
 
-    console.log('\n==== 6/6 scenario(s) passed ====');
+    console.log('\n==== 10/10 scenario(s) passed ====');
   } finally {
     await browser.close();
     server.close();
