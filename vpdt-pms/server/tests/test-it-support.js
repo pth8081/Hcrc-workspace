@@ -175,6 +175,45 @@ async function main() {
       assertIncludes(result.alerts, 'Phê duyệt đề xuất giá thành công', 'Phải thông báo phê duyệt hoàn tất, chờ đội IT áp giá');
     });
 
+    // ===== 1c) LỖI ĐÃ VÁ (12/2026, người dùng báo email "Đã Duyệt" thiếu "Lý do") — ghi chú tuỳ chọn
+    // người duyệt gõ lúc Phê Duyệt phải được truyền vào notifyUsersByEmail() làm tham số `reason` (thứ 7)
+    // ở đúng điểm hoàn tất (transition COMPLETED), khớp đúng cách luồng Từ Chối đã làm từ trước.
+    await run.run('Phê Duyệt Giá: Lý do (ghi chú phê duyệt) phải được gửi vào email NOTIFY_APPROVED lúc hồ sơ hoàn tất', async () => {
+      await loginAs(page, STAFF_KD);
+      const newId = await page.evaluate(async () => {
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm();
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Cài giá nhập CP';
+        mhItPricePendingFile = {
+          fileUrl: '/uploads/gia-de-xuat-2.xlsx', fileName: 'gia-de-xuat-2.xlsx',
+          items: [{ values: { code: 'SP002', name: 'Mì gói Hảo Hảo 2', oldPrice: '5000', newPrice: '5500' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return DB.itPriceApprovals[0].id;
+      });
+      await loginAs(page, APPROVER1);
+      const result = await page.evaluate(async (id) => {
+        window.__resetCapture();
+        window.__emailCalls = [];
+        window.notifyUsersByEmail = (...args) => { window.__emailCalls.push(args); };
+        await approveItPriceConfirmed(id, 'Đã xác nhận với phòng kế toán, đồng ý áp giá mới');
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.status, emailCalls: window.__emailCalls };
+      }, newId);
+      assertEqual(result.status, 'APPROVED', 'Hồ sơ phải chuyển APPROVED (hoàn tất) sau bước duyệt duy nhất');
+      const approvedCall = result.emailCalls.find(args => args[1] === 'NOTIFY_APPROVED');
+      assert(approvedCall, 'Phải gọi notifyUsersByEmail với actionType NOTIFY_APPROVED khi hồ sơ hoàn tất');
+      assertEqual(approvedCall[6], 'Đã xác nhận với phòng kế toán, đồng ý áp giá mới',
+        `Tham số reason (thứ 7) phải đúng ghi chú người duyệt đã gõ — got: ${JSON.stringify(approvedCall[6])}`);
+    });
+
     // ===== 2) Validation: chưa chọn tệp bảng giá thì không gửi được =====
     await run.run('Validation: Phê Duyệt Giá không cho gửi khi chưa chọn tệp bảng giá', async () => {
       const before = await page.evaluate(() => DB.itPriceApprovals.length);

@@ -1520,9 +1520,15 @@ async function approveItPriceConfirmed(id, comment) {
   let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
   if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đề xuất giá thành công! Đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.';
+    // LỖI ĐÃ VÁ (12/2026, người dùng báo email "Đã Duyệt" thiếu "Lý do" — hạ tầng chung buildReasonRowHtml()/
+    // tham số `reason` thứ 7 của notifyUsersByEmail() đã có sẵn từ đợt "thêm lý do vào MỌI email trả về"
+    // (11/2026, xem chú thích tại notifyUsersByEmail()/core.js) và luồng Từ chối ngay dưới ĐÃ dùng đúng, nhưng
+    // điểm gọi NÀY bị sót — biến `comment` (ghi chú tuỳ chọn người duyệt gõ lúc Phê Duyệt) đã có sẵn trong
+    // scope nhưng chưa truyền vào, khiến khối "📝 Lý do phê duyệt" không bao giờ hiện trong email hoàn tất.
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
       `[VPDT] Đề xuất duyệt giá ${updated.code} đã được phê duyệt`,
-      `Đề xuất duyệt giá (${updated.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `Đề xuất duyệt giá (${updated.code}) của bạn đã được phê duyệt hoàn tất.`,
+      comment);
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {
