@@ -54,7 +54,7 @@ async function runDsmartAutoDeleteExpiredPrices() {
   let deletedCount = 0, errorCount = 0;
   for (const e of due) {
     try {
-      await deleteWholesalePrice({ dsmartId: e.dsmartId });
+      await deleteWholesalePrice({ dsmartKey: e.dsmartKey });
       await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
         if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
         const nowIso = now.toISOString();
@@ -66,7 +66,7 @@ async function runDsmartAutoDeleteExpiredPrices() {
       deletedCount++;
     } catch (err) {
       errorCount++;
-      console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (DsmartId=${e.dsmartId}) —`, err.message);
+      console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);
     }
   }
   if (deletedCount || errorCount) {

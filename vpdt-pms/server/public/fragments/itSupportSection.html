@@ -487,11 +487,12 @@
             <button type="button" id="btnDsmartPriceTestConn" data-op="testDsmartPriceConnection" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-600 text-white hover:bg-teal-700">🔌 Kiểm Tra Kết Nối</button>
             <span id="dsmartPriceCfgTestStatus" class="text-xs"></span>
           </div>
-          <!-- "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT PRODUCTION đã phát hiện: cột "ID" giả
-               định trước đây sai trên CSDL thật, SQL báo "Invalid column name 'ID'." — xem chú thích đầy
-               đủ tại resolveCspriceIdentityColumn()/lib/dsmartSqlClient.js). Hệ thống giờ TỰ TRA CỨU tên
-               cột identity thật khi ghi/sửa/xoá, nút này chỉ để đội IT TỰ XEM LẠI đầy đủ cấu trúc cột khi
-               cần chẩn đoán thêm — KHÔNG bắt buộc phải bấm trước khi dùng bình thường. -->
+          <!-- "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT PRODUCTION đã phát hiện 2 lần liên
+               tiếp: lần 1 giả định "cột ID tự tăng" sai; lần 2 xác nhận CSPRICE KHÔNG CÓ cột identity nào
+               — xem chú thích đầy đủ tại lib/dsmartSqlClient.js). Hệ thống giờ dùng "khoá tự nhiên" nhiều
+               cột khi ghi/sửa/xoá, nút này chỉ để đội IT/DBA TỰ XEM LẠI đầy đủ cấu trúc cột + PRIMARY
+               KEY/UNIQUE INDEX thật (nếu có) khi cần chẩn đoán/đối chiếu thêm — KHÔNG bắt buộc phải bấm
+               trước khi dùng bình thường. -->
           <div class="flex items-center gap-2">
             <button type="button" id="btnDsmartPriceInspectTable" data-op="inspectDsmartPriceCspriceTable" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700">🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE</button>
           </div>
