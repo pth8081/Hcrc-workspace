@@ -283,8 +283,10 @@ async function main() {
     assertEqual(CSPRICE_DB[0].WSPRICE, 999, 'phải ghi đè đúng giá MỚI');
     assert(sameDate(CSPRICE_DB[0].FR_DATE, '2026-03-01') && sameDate(CSPRICE_DB[0].TO_DATE, '2026-03-31'), 'phải ghi đè đúng ngày MỚI');
     assertEqual(key2.wasOverwrite, true, 'phải báo wasOverwrite=true để route biết đây là ghi đè, không phải thêm mới');
-    assert(queryLog.some(q => /^INSERT INTO dbo\.CSPRICE/.test(q)), 'vẫn phải THỬ INSERT trước (không bỏ qua bước này)');
-    assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /TYPE = '04'/.test(q)), 'sau khi INSERT gặp trùng khoá phải TỰ chuyển sang UPDATE ghi đè đủ cột');
+    // Kiến trúc upsert chuẩn (sửa sau audit chéo): UPDATE thử TRƯỚC — nếu khớp dòng thì GHI ĐÈ luôn, KHÔNG
+    // cần thử INSERT trước rồi bắt lỗi trùng khoá nữa (cách cũ dựa exception-driven control flow, đã bỏ).
+    assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /TYPE = '04'/.test(q)), 'phải thử UPDATE ghi đè TRƯỚC (khuôn upsert chuẩn)');
+    assert(!queryLog.some(q => /^INSERT INTO dbo\.CSPRICE/.test(q)), 'KHÔNG được thử INSERT khi UPDATE đã khớp được dòng (tránh tự tạo lỗi ràng buộc PK thật không cần thiết)');
   });
 
   await run.run('LẦN 5: ghi đè do trùng khoá (dòng cũ hỏng Lần 3, OPEN_DATE NULL) -> TỰ backfill OPEN_DATE; dòng đã có OPEN_DATE hợp lệ -> GIỮ NGUYÊN (không đổi ngày mở giá gốc)', async () => {

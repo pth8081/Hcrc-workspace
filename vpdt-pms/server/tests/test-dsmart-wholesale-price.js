@@ -103,7 +103,10 @@ stubModule('lib/recordStore', {
     if (idx === -1) throw new FakeHttpError(404, 'Không tìm thấy hồ sơ');
     ENTRIES[idx] = await mutatorFn(ENTRIES[idx]);
     return ENTRIES[idx];
-  }
+  },
+  // withAppLock() (Lần 5, audit chéo) — mock chạy thẳng fn() không khoá thật (test này đơn luồng, không có
+  // race thật để mô phỏng) — chỉ cần đúng chữ ký để route gọi được.
+  withAppLock: async (lockKeyOrKeys, fn) => fn()
 });
 
 stubModule('lib/httpErrors', { HttpError: FakeHttpError });
@@ -351,11 +354,33 @@ async function main() {
     assert.strictEqual(ENTRIES.length, 2, 'mirror nội bộ vẫn giữ CẢ 2 entry (lịch sử), chỉ đổi trạng thái entry cũ');
     const oldEntry = ENTRIES.find(e => e.id === oldEntryId);
     assert.strictEqual(oldEntry.status, 'DELETED', 'entry CŨ phải bị đánh dấu DELETED (dữ liệu của nó không còn đúng với CSPRICE thật nữa)');
-    assert.strictEqual(oldEntry.history[oldEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
+    const autoNote = oldEntry.history[oldEntry.history.length - 1];
+    assert.strictEqual(autoNote.mode, 'AUTO_OVERWRITTEN');
+    assert.strictEqual(autoNote.oldPrice, 100, 'lịch sử ghi đè tự động phải lưu snapshot giá CŨ (audit trail)');
+    assert.strictEqual(autoNote.oldFrDate, '2026-01-01');
     const newEntry = ENTRIES.find(e => e.id !== oldEntryId);
     assert.strictEqual(newEntry.status, 'ACTIVE');
     assert.strictEqual(newEntry.price, 999);
     assert.strictEqual(newEntry.history[0].action, 'INSERT_OVERWRITE');
+  });
+
+  // Audit chéo (12/2026) phát hiện: bản vá đầu chỉ đánh dấu DELETED entry ACTIVE ĐẦU TIÊN khớp — nếu mirror
+  // tồn đọng >1 entry ACTIVE cho cùng cặp (VD dữ liệu cũ trước khi có khoá withAppLock), entry còn lại bị bỏ
+  // sót, vẫn hiện ACTIVE dù dữ liệu đã sai. Sửa: đánh dấu DELETED TẤT CẢ entry ACTIVE khớp.
+  await test('POST /apply: trùng khoá khi mirror có SẴN >1 entry ACTIVE tồn đọng cho cùng cặp -> đánh dấu DELETED TẤT CẢ, không sót entry nào', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    // Mô phỏng mirror tồn đọng 1 entry ACTIVE orphan thứ 2 cho ĐÚNG cặp này (VD dữ liệu cũ trước khi có khoá)
+    ENTRIES.unshift({
+      id: 999999, dsmartKey: { custId: 'A1', skuId: 'S1' }, custId: 'A1', skuId: 'S1', price: 50,
+      frDate: '2025-01-01', toDate: '2025-01-31', status: 'ACTIVE', createdBy: 'x', createdAt: new Date().toISOString(),
+      history: [{ action: 'INSERT', actor: 'x', at: new Date().toISOString() }]
+    });
+    assert.strictEqual(ENTRIES.filter(e => e.custId === 'A1' && e.skuId === 'S1' && e.status === 'ACTIVE').length, 2, 'fixture phải có đúng 2 entry ACTIVE tồn đọng trước khi test');
+    await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 999, frDate: '2026-05-01', toDate: '2026-05-31' }] });
+    const stillActive = ENTRIES.filter(e => e.custId === 'A1' && e.skuId === 'S1' && e.status === 'ACTIVE');
+    assert.strictEqual(stillActive.length, 1, 'phải đánh dấu DELETED HẾT các entry ACTIVE cũ, chỉ còn đúng 1 entry ACTIVE (entry MỚI)');
+    assert.strictEqual(stillActive[0].price, 999);
   });
 
   await test('POST /apply: khác CUST_ID (cùng SKU_ID) hoặc khác SKU_ID (cùng CUST_ID) -> VẪN insert bình thường, KHÔNG ghi đè', async () => {
