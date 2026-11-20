@@ -10,14 +10,18 @@
 --       CHUNG 1 tên đăng nhập cho mọi siêu thị, hoặc đặt riêng theo mã siêu
 --       thị — tuỳ quy ước nội bộ, không bắt buộc theo khuôn cụ thể).
 --
--- NGUYÊN TẮC LEAST-PRIVILEGE (đã thống nhất với người dùng, xác nhận qua 3
--- lỗi THẬT production trước khi quyền được cấp đúng — xem Huong-dan-nghiep-
--- vu.md mục 6c/6d để biết lịch sử):
---   - dbo.CSPRICE : CHỈ GRANT INSERT/UPDATE/DELETE — TUYỆT ĐỐI KHÔNG GRANT
---     SELECT (ứng dụng dùng OUTPUT INSERTED./OUTPUT DELETED. ngay trên câu
---     lệnh ghi để đọc lại dữ liệu, không bao giờ cần SELECT độc lập trên
---     bảng này — nếu vô tình cấp thêm SELECT cũng không hỏng gì, chỉ là
---     thừa quyền so với nguyên tắc đã thống nhất).
+-- QUYỀN CẦN CẤP (12/2026, người dùng xác nhận rõ CẦN thêm SELECT trên
+-- CSPRICE — cập nhật lại nguyên tắc least-privilege ban đầu, xem lịch sử ở
+-- Huong-dan-nghiep-vu.md mục 6c/6d):
+--   - dbo.CSPRICE : GRANT SELECT, INSERT, UPDATE, DELETE. LƯU Ý: bản thân
+--     code ứng dụng (lib/dsmartSqlClient.js) vẫn KHÔNG tự ý chạy SELECT
+--     trên bảng này cho luồng ghi/sửa/xoá giá (dùng OUTPUT INSERTED./
+--     OUTPUT DELETED. ngay trên câu lệnh ghi để đọc lại dữ liệu vừa ảnh
+--     hưởng, đúng như đã vá ở lỗi thật Lần 3 production — tài khoản TỪNG
+--     bị từ chối quyền SELECT lúc đó) — quyền SELECT ở đây cấp THÊM theo
+--     yêu cầu, phục vụ việc đội DBA/IT tự tra cứu/đối chiếu dữ liệu CSPRICE
+--     trực tiếp qua SSMS khi cần (không bắt buộc về mặt kỹ thuật cho ứng
+--     dụng hoạt động, nhưng không có gì xung đột nếu cấp thêm).
 --   - dbo.SKU_DEF  : CHỈ GRANT SELECT (ứng dụng tra Đơn Vị Tính/Hệ Số Quy
 --     Đổi/Mã Thuế theo Mã Sản Phẩm trước khi ghi giá — xem
 --     lookupSkuDefUnitInfo(), server/lib/dsmartSqlClient.js).
@@ -55,8 +59,9 @@ BEGIN
 END
 GO
 
--- 3) Cấp ĐÚNG quyền tối thiểu — CSPRICE: ghi được nhưng KHÔNG đọc được.
-GRANT INSERT, UPDATE, DELETE ON [dbo].[CSPRICE] TO [<TEN_LOGIN>];
+-- 3) CSPRICE: đọc + ghi (SELECT bổ sung theo yêu cầu 12/2026 — phục vụ DBA/
+--    IT tự tra cứu/đối chiếu trực tiếp, KHÔNG phải ứng dụng bắt buộc cần).
+GRANT SELECT, INSERT, UPDATE, DELETE ON [dbo].[CSPRICE] TO [<TEN_LOGIN>];
 GO
 
 -- 4) Cấp ĐÚNG quyền tối thiểu — SKU_DEF: CHỈ đọc (tra Đơn Vị Tính/Thuế).
@@ -74,7 +79,7 @@ GO
 -- WHERE dp.grantee_principal_id = USER_ID('<TEN_LOGIN>')
 -- ORDER BY obj.name, dp.permission_name;
 --
--- Kỳ vọng ĐÚNG 5 dòng: CSPRICE (INSERT/UPDATE/DELETE) + SKU_DEF (SELECT).
+-- Kỳ vọng ĐÚNG 5 dòng: CSPRICE (SELECT/INSERT/UPDATE/DELETE) + SKU_DEF (SELECT).
 -- ============================================================================
 
 -- ============================================================================
