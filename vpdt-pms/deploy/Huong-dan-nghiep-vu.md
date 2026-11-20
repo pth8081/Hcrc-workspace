@@ -10087,3 +10087,28 @@ số lượng so với "6e", chỉ sửa lại 1 kịch bản cho đúng hành v
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới/quyền SQL nào khác.
+
+## 6g. Giá Bán Buôn — thêm nút "🗑️ Xoá" cho dòng ĐANG ACTIVE ở "2. Quản Lý Giá Đã Hết Hạn" (12/2026)
+
+Người dùng phát hiện: dòng giá còn hiệu lực (chưa qua Ngày Kết Thúc) chỉ
+có nút "✏️ Sửa", **không có cách nào xoá sớm được** — mục "2. Quản Lý Giá
+Đã Hết Hạn" chỉ cho tick chọn xoá hàng loạt với dòng ĐÃ THẬT SỰ qua Ngày
+Kết Thúc (`isExpiredNotDeleted = isActive && toDate < hôm nay`). Đây là
+thiết kế an toàn có chủ ý (tránh xoá nhầm giá đang chạy tại quầy), nhưng
+thiếu hẳn 1 lối ra khi cần xoá sớm (VD dòng nhập nhầm/dòng test).
+
+**Thêm mới**: nút **"🗑️ Xoá"** cạnh nút "✏️ Sửa" cho MỌI dòng ACTIVE
+(`module-itsupport-dsmartprice.js`, `deleteDsmartPriceActiveEntry()`) —
+gọi đúng route xoá đã có sẵn (`POST /api/dsmart-price/entries/:id/delete`,
+không đổi gì ở server). Xác nhận **2 LỚP** nếu giá đang THẬT SỰ áp dụng
+tại quầy ngay lúc bấm (`FR_DATE <= hôm nay <= TO_DATE`) — lớp đầu xác
+nhận xoá thật khỏi CSPRICE (không hoàn tác được), lớp 2 nhắc rõ "giá này
+đang áp dụng tại quầy, chắc chắn muốn xoá ngay không đợi hết hạn?"; chỉ
+1 lớp nếu giá CHƯA tới hiệu lực (🔵 Sắp áp dụng — chưa ai dùng thật).
+
+Không đổi gì ở server/route/quyền — chỉ thêm 1 nút ở client gọi lại route
+xoá đã có. Test: `test-dsmart-price-ui.js` thêm 3 kịch bản thao tác bấm
+nút THẬT (từ 44 lên 47 kịch bản). Tổng Giá Bán Buôn: 19+35+47 = **101
+kịch bản pass** (từ 98).
+
+Không cần thao tác deploy gì thêm ngoài copy code.

@@ -115,6 +115,14 @@ async function main() {
           successCount: 0, failCount: 1
         }) };
       }
+      // POST /entries/:id/delete (Lần 6, 12/2026 — nút "🗑️ Xoá" MỚI cho dòng đang ACTIVE, kể cả đang áp
+      // dụng tại quầy) — giả lập THÀNH CÔNG, đếm số lần gọi + lưu lại id cuối cùng để xác nhận đúng dòng.
+      const delMatch = /^\/api\/dsmart-price\/entries\/(\d+)\/delete$/.exec(u);
+      if (delMatch && method === 'POST') {
+        window.__dsmartPriceDeleteCalled = (window.__dsmartPriceDeleteCalled || 0) + 1;
+        window.__dsmartPriceLastDeletedId = Number(delMatch[1]);
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: { id: Number(delMatch[1]), status: 'DELETED' } }) };
+      }
       if (u === '/api/dsmart-price/config' && method === 'GET') {
         return { ok: true, status: 200, json: async () => ({ ok: true, config: { host: 'dsmart16.hcrc.local', port: 1433, database: 'DSmart16DB', user: 'b2b_price', hasPassword: true } }) };
       }
@@ -210,6 +218,19 @@ async function main() {
   mgText = await page.textContent('#dsmartPriceEntriesBody');
   check('Bỏ tick "Chỉ hiện Đã hết hạn" -> hiện lại dòng còn hiệu lực lâu (240000000005)', mgText.includes('240000000005'));
   check('Dòng ACTIVE đang trong hiệu lực -> hiện "Đang áp dụng"', mgText.includes('Đang áp dụng'));
+
+  // ===== LẦN 6 (12/2026, theo yêu cầu người dùng — trước đây dòng ACTIVE chỉ có nút Sửa, không xoá sớm
+  // được dù chưa hết hạn) — bấm THẬT nút "🗑️ Xoá" trên dòng id=2 (đang áp dụng tại quầy, frDate=-5/toDate=
+  // +30 ngày), xác nhận gọi đúng route xoá với đúng id (window.confirm luôn trả true ở harness này — xem
+  // đầu file — nên cả 2 lớp xác nhận tự qua, không cần giả lập click dialog). =====
+  check('Dòng ACTIVE (id=2) có nút "🗑️ Xoá"', await page.isVisible('[data-op="deleteDsmartPriceActiveEntry"][data-arg0="2"]'));
+  await page.click('[data-op="deleteDsmartPriceActiveEntry"][data-arg0="2"]');
+  await page.waitForTimeout(200);
+  const deleteCalled = await page.evaluate(() => window.__dsmartPriceDeleteCalled || 0);
+  const lastDeletedId = await page.evaluate(() => window.__dsmartPriceLastDeletedId);
+  check('LẦN 6: bấm "🗑️ Xoá" trên dòng ĐANG ACTIVE -> gọi đúng 1 lần POST /entries/:id/delete với đúng id=2 (thao tác bấm nút THẬT)',
+    deleteCalled === 1 && lastDeletedId === 2, `deleteCalled=${deleteCalled} lastDeletedId=${lastDeletedId}`);
+  check('LẦN 6: không có pageerror nào sau khi bấm Xoá dòng active', pageErrors.length === 0, pageErrors.join('\n'));
 
   // ===== Sửa (mở form inline) =====
   await page.evaluate(() => startDsmartPriceEdit(1));
