@@ -22,7 +22,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
 const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, inspectCspriceColumns, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -130,6 +130,33 @@ router.post('/config/inspect-table', async (req, res) => {
     logDsmartPrice(req, 'INSPECT_DSMART_CSPRICE_TABLE', 'dsmartPriceDbConfig', `Kiểm tra cấu trúc bảng CSPRICE — ${result.columns.length} cột, cột ID tự tăng: ${result.identityColumn || '(không thấy)'}`);
     res.json({ ok: true, ...result });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/inspect-table'); }
+});
+
+// POST /config/test-skudef-access — nút "🔍 Kiểm Tra Quyền Đọc SKU_DEF" (12/2026, LỖI THẬT PRODUCTION LẦN
+// 4: người dùng gửi nguyên văn mã nguồn phần mềm áp giá CŨ (BRG_APP.sql) cho thấy CSPRICE cần tra thêm
+// Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế từ bảng dbo.SKU_DEF theo Mã Sản Phẩm — xem lookupSkuDefUnitInfo()/
+// lib/dsmartSqlClient.js). Bảng SKU_DEF CÙNG CSDL DSmart16 nhưng KHÁC CSPRICE, nên cần quyền SELECT RIÊNG
+// — nút này để đội IT tự xác nhận quyền đã đủ TRƯỚC khi thử ghi giá thật, cùng khuôn overrideCfg như
+// test-connection/inspect-table ở trên.
+router.post('/config/test-skudef-access', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được quyền đọc SKU_DEF' });
+  try {
+    const { host, port, database, user, password } = req.body || {};
+    let overrideCfg = null;
+    if (host || database || user) {
+      if (!host || !database || !user) throw new HttpError(400, 'Thiếu Host/Tên CSDL/Tài khoản để kiểm tra quyền đọc SKU_DEF');
+      let pass = password ? String(password) : null;
+      if (!pass) {
+        const raw = await getRawConfig();
+        if (!raw?.passwordEnc) throw new HttpError(400, 'Chưa có mật khẩu đã lưu trước đó — vui lòng nhập mật khẩu để kiểm tra.');
+        pass = decryptSecret(raw.passwordEnc);
+      }
+      overrideCfg = { host: String(host).trim(), port: Number(port) || 1433, database: String(database).trim(), user: String(user).trim(), password: pass };
+    }
+    const result = await testSkuDefAccess(overrideCfg);
+    logDsmartPrice(req, 'TEST_DSMART_PRICE_SKUDEF_ACCESS', 'dsmartPriceDbConfig', `Kiểm tra quyền đọc SKU_DEF thành công (${result.ms}ms)${overrideCfg ? ' — dùng giá trị đang gõ dở' : ' — dùng cấu hình đã lưu'}`);
+    res.json({ ok: true, ms: result.ms, sampleRow: result.sampleRow });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/test-skudef-access'); }
 });
 
 // ===================== Tự Động Xoá Khi Hết Hạn (itSupportPriceWriteDsmart — KHÔNG cần admin, khác hẳn

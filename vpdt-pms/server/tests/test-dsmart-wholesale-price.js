@@ -28,6 +28,8 @@ let CSPRICE = [];
 let forceConfigError = false;
 let forceTestConnError = false;
 let lastTestConnOverrideCfg = 'UNSET';
+let forceSkuDefAccessError = false;
+let lastSkuDefAccessOverrideCfg = 'UNSET';
 
 class FakeHttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
@@ -69,6 +71,11 @@ stubModule('lib/dsmartSqlClient', {
     lastTestConnOverrideCfg = overrideCfg;
     if (forceTestConnError) throw new DsmartConfigError('Không kết nối được tới DSmart16 Trung Tâm (giả lập)');
     return { ms: 7 };
+  },
+  testSkuDefAccess: async (overrideCfg) => {
+    lastSkuDefAccessOverrideCfg = overrideCfg;
+    if (forceSkuDefAccessError) throw new DsmartConfigError('Không đọc được bảng dbo.SKU_DEF (giả lập)');
+    return { ms: 5, sampleRow: { SKU_ID: 'S1', PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
   }
 });
 
@@ -262,6 +269,31 @@ async function main() {
     assert.strictEqual(res.status, 400);
     assert.ok(res.body.error.includes('Không kết nối được'), JSON.stringify(res.body));
     forceTestConnError = false;
+  });
+
+  // ===== Kiểm Tra Quyền Đọc SKU_DEF (nút "🔍 Kiểm Tra Quyền Đọc SKU_DEF", 12/2026 — LỖI THẬT PRODUCTION
+  // LẦN 4: cần tra Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế từ bảng SKU_DEF, khác quyền với CSPRICE) =====
+  await test('POST /config/test-skudef-access: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPost('/config/test-skudef-access', {});
+    assert.strictEqual(res.status, 403);
+  });
+  await test('POST /config/test-skudef-access: admin, body rỗng -> test CẤU HÌNH ĐÃ LƯU (overrideCfg null), trả về sampleRow', async () => {
+    CURRENT_USER = ADMIN.username;
+    lastSkuDefAccessOverrideCfg = 'UNSET';
+    const res = await apiPost('/config/test-skudef-access', {});
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.ms, 5);
+    assert.strictEqual(res.body.sampleRow.SKU_ID, 'S1');
+    assert.strictEqual(lastSkuDefAccessOverrideCfg, null);
+  });
+  await test('POST /config/test-skudef-access: lỗi quyền thật (DsmartConfigError) -> hiện NGUYÊN VĂN cho admin', async () => {
+    CURRENT_USER = ADMIN.username;
+    forceSkuDefAccessError = true;
+    const res = await apiPost('/config/test-skudef-access', {});
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.error.includes('SKU_DEF'), JSON.stringify(res.body));
+    forceSkuDefAccessError = false;
   });
 
   // ===== Preview (đọc file) =====

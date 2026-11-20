@@ -116,6 +116,20 @@ function toDateOnly(value) {
   return d;
 }
 
+// CÁC CỘT BẮT BUỘC ĐỂ DSMART THỰC SỰ "ÁP DỤNG" ĐƯỢC GIÁ (12/2026, LỖI THẬT PRODUCTION LẦN 4 — người dùng
+// tự so sánh dòng vừa ghi với 1 dòng giá THẬT hoạt động bình thường qua SSMS, phát hiện CSPRICE còn cần
+// NHIỀU cột nữa ngoài 5 cột đã xác nhận, nếu không DSmart không dùng được giá dù dòng đã ghi "thành
+// công" về mặt kỹ thuật): người dùng gửi NGUYÊN VĂN mã nguồn phần mềm áp giá CŨ (BRG_APP.sql, stored
+// procedure `_job_sp_WEBAPP_Item_Price`) — đây là CÔNG THỨC THẬT DSmart từng dùng, không phải suy đoán:
+//   INSERT INTO CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV, WSPRICE, VAT_INCL,
+//                         TAX_CODE, OPEN_DATE, MODI_DATE, STATUS, FR_DATE, TO_DATE)
+//   SELECT CUST_ID, '04', SKU_ID, PICEUNIT, PICEUNIT, UNITCONV, WSPRICE, 1, TAX_CODE, GETDATE(),
+//          GETDATE(), 1, startDate, endDate FROM SKU_DEF ...
+// Tức là: TYPE/VAT_INCL/STATUS là HẰNG SỐ CỐ ĐỊNH ('04'/1/1), còn UNIT_SYMB/BASE_UNIT/UNITCONV/TAX_CODE
+// PHẢI tra từ bảng `dbo.SKU_DEF` (CÙNG CSDL DSmart16, KHÁC bảng CSPRICE) theo đúng SKU_ID — xem
+// lookupSkuDefUnitInfo() bên dưới. WS_ID/USER_ID/STK_ID: script gốc KHÔNG set, để trống đúng như hệ
+// thống này đã làm từ đầu (không cần sửa).
+//
 // TÀI KHOẢN SQL CHỈ ĐƯỢC GRANT INSERT/UPDATE/DELETE, KHÔNG CÓ SELECT (12/2026, LỖI THẬT PRODUCTION LẦN 3):
 // bản vá "khoá tự nhiên" (xem lịch sử ở đầu file) ban đầu đọc lại dòng vừa ghi bằng 1 câu SELECT riêng để
 // xác nhận khoá — người dùng thử lại và gặp lỗi THẬT: "The SELECT permission was denied on the object
@@ -142,18 +156,22 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
   }
   const pool = await getDsmartPool();
+  const { unit, unitConv, taxCode } = await lookupSkuDefUnitInfo(pool, skuId);
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
   req.input('skuId', sql.NVarChar(50), String(skuId));
+  req.input('unit', sql.NVarChar(10), unit);
+  req.input('unitConv', sql.Int, unitConv);
   req.input('price', sql.Decimal(18, 4), Number(price));
+  req.input('taxCode', sql.NVarChar(10), taxCode);
   req.input('frDate', sql.DateTime, toDateOnly(frDate));
   req.input('toDate', sql.DateTime, toDateOnly(toDate));
   let result;
   try {
     result = await req.query(`
-      INSERT INTO dbo.CSPRICE (CUST_ID, SKU_ID, WSPRICE, FR_DATE, TO_DATE)
+      INSERT INTO dbo.CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV, WSPRICE, VAT_INCL, TAX_CODE, OPEN_DATE, MODI_DATE, STATUS, FR_DATE, TO_DATE)
       OUTPUT INSERTED.CUST_ID, INSERTED.TYPE, INSERTED.STK_ID, INSERTED.SKU_ID, INSERTED.WS_ID, INSERTED.FR_DATE, INSERTED.TO_DATE
-      VALUES (@custId, @skuId, @price, @frDate, @toDate);
+      VALUES (@custId, '04', @skuId, @unit, @unit, @unitConv, @price, 1, @taxCode, GETDATE(), GETDATE(), 1, @frDate, @toDate);
     `);
   } catch (err) {
     throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
@@ -163,6 +181,35 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
     throw new DsmartSqlError('DSmart không trả lại dòng vừa thêm (OUTPUT INSERTED rỗng) — kiểm tra thủ công trên DSmart xem dòng đã được ghi chưa.');
   }
   return naturalKeyFromRow(rows[0]);
+}
+
+// lookupSkuDefUnitInfo(pool, skuId): tra Đơn Vị Tính (PICEUNIT, dùng chung cho cả UNIT_SYMB lẫn BASE_UNIT
+// — đúng công thức BRG_APP) + Hệ Số Quy Đổi (UNITCONV) + Mã Thuế (TAX_CODE) theo Mã Sản Phẩm từ bảng
+// `dbo.SKU_DEF` — CÙNG CSDL DSmart16 nhưng KHÁC bảng CSPRICE, nên quyền SELECT bị chặn trên CSPRICE (xem
+// chú thích ở trên) KHÔNG áp dụng cho bảng này — tài khoản SQL cần được GRANT RIÊNG quyền SELECT trên
+// dbo.SKU_DEF (đội DBA xác nhận/cấp thêm). Phân biệt rõ 2 nguyên nhân lỗi khác nhau để người dùng biết
+// hướng xử lý đúng: (1) bị từ chối quyền -> cần xin GRANT SELECT; (2) không tìm thấy/thiếu dữ liệu SKU_ID
+// -> cần bổ sung danh mục sản phẩm trên DSmart, không phải lỗi quyền.
+async function lookupSkuDefUnitInfo(pool, skuId) {
+  const req = pool.request();
+  req.input('skuId', sql.NVarChar(50), String(skuId));
+  let result;
+  try {
+    result = await req.query('SELECT PICEUNIT, UNITCONV, TAX_CODE FROM dbo.SKU_DEF WHERE SKU_ID = @skuId;');
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi tra Đơn Vị Tính/Thuế theo Mã Sản Phẩm (bảng SKU_DEF, SKU_ID=${skuId}): ${err.message} — kiểm tra tài khoản SQL đã được GRANT SELECT trên dbo.SKU_DEF chưa (khác quyền trên CSPRICE).`);
+  }
+  const row = result.recordset?.[0];
+  if (!row) {
+    throw new DsmartSqlError(`Không tìm thấy Mã Sản Phẩm "${skuId}" trong danh mục SKU_DEF trên DSmart — kiểm tra lại đúng Mã Sản Phẩm, hoặc sản phẩm chưa được tạo trên DSmart.`);
+  }
+  const unit = String(row.PICEUNIT || '').trim();
+  const taxCode = String(row.TAX_CODE || '').trim();
+  const unitConvNum = Number(row.UNITCONV);
+  if (!unit || !taxCode || !Number.isFinite(unitConvNum)) {
+    throw new DsmartSqlError(`Mã Sản Phẩm "${skuId}" thiếu dữ liệu Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế trong SKU_DEF (PICEUNIT="${unit}", UNITCONV=${row.UNITCONV}, TAX_CODE="${taxCode}") — cần đội DSmart bổ sung đầy đủ danh mục sản phẩm trước khi áp giá.`);
+  }
+  return { unit, unitConv: unitConvNum, taxCode };
 }
 
 // naturalKeyFromRow(row): chuyển 1 dòng kết quả OUTPUT (hoặc tương đương) thành object "khoá tự nhiên"
@@ -331,6 +378,48 @@ async function testDsmartConnection(overrideCfg) {
   return { ms: Date.now() - started };
 }
 
+// testSkuDefAccess(overrideCfg): kiểm tra tài khoản SQL có đọc được dbo.SKU_DEF không — nút "🔍 Kiểm Tra
+// Quyền Đọc SKU_DEF" (12/2026, sau khi insertWholesalePrice() cần tra SKU_DEF để lấy đủ Đơn Vị Tính/Hệ
+// Số Quy Đổi/Mã Thuế, xem lookupSkuDefUnitInfo()) — để đội IT tự xác nhận quyền đã được cấp đủ TRƯỚC khi
+// thử ghi giá thật, không cần đợi submit 1 dòng thật rồi mới biết lỗi quyền. Cùng khuôn 2 chế độ như
+// testDsmartConnection() ở dưới (cấu hình đã lưu / giá trị đang gõ dở).
+async function testSkuDefAccess(overrideCfg) {
+  async function runCheck(pool) {
+    const started = Date.now();
+    let result;
+    try {
+      result = await pool.request().query('SELECT TOP 1 SKU_ID, PICEUNIT, UNITCONV, TAX_CODE FROM dbo.SKU_DEF;');
+    } catch (err) {
+      throw new DsmartConfigError(`Không đọc được bảng dbo.SKU_DEF (cần quyền SELECT riêng, khác quyền trên CSPRICE): ${err.message}`);
+    }
+    return { ms: Date.now() - started, sampleRow: result.recordset?.[0] || null };
+  }
+  if (!overrideCfg) {
+    const pool = await getDsmartPool();
+    return runCheck(pool);
+  }
+  const { host, port, database, user, password } = overrideCfg;
+  if (!host || !database || !user || !password) {
+    throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra quyền đọc SKU_DEF.');
+  }
+  const pool = new sql.ConnectionPool({
+    server: host, port: port || 1433, database, user, password,
+    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+    pool: { max: 1, min: 0, idleTimeoutMillis: 5000 },
+    requestTimeout: 10000, connectionTimeout: 10000
+  });
+  try {
+    await pool.connect();
+  } catch (err) {
+    throw new DsmartConfigError(`Không kết nối được tới DSmart16 Trung Tâm (${host}:${port || 1433}/${database}): ${err.message}`);
+  }
+  try {
+    return await runCheck(pool);
+  } finally {
+    try { await pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool tạm */ }
+  }
+}
+
 // inspectCspriceColumns(overrideCfg): LIỆT KÊ THẬT các cột của dbo.CSPRICE trên DSmart16 Trung Tâm + mọi
 // PRIMARY KEY/UNIQUE INDEX khai báo thật (nếu có) — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026).
 //
@@ -425,5 +514,5 @@ async function closeDsmartPool() {
 
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  testDsmartConnection, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

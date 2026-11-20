@@ -38,7 +38,13 @@ function stubModule(relPath, exportsObj) {
 let CSPRICE_DB = [];
 let queryLog = [];
 let seq = 0; // dùng làm OPEN_DATE/MODI_DATE giả (số tăng dần đóng vai trò mốc thời gian)
-const DEFAULT_TYPE = '4', DEFAULT_STK_ID = '', DEFAULT_WS_ID = 30;
+const DEFAULT_TYPE = '04', DEFAULT_STK_ID = '', DEFAULT_WS_ID = 0;
+
+// ===== Giả lập dbo.SKU_DEF (danh mục sản phẩm, CÙNG CSDL DSmart16 nhưng KHÁC bảng CSPRICE) — nguồn tra
+// Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế theo đúng công thức lấy từ mã nguồn phần mềm áp giá CŨ (BRG_APP.sql,
+// người dùng gửi nguyên văn 12/2026) — xem lookupSkuDefUnitInfo()/lib/dsmartSqlClient.js. =====
+let SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
+let SKU_DEF_PERMISSION_DENIED = false; // mô phỏng trường hợp tài khoản CHƯA được cấp quyền SELECT riêng trên SKU_DEF
 
 function dateMs(v) { return v instanceof Date ? v.getTime() : new Date(v).getTime(); }
 function sameDate(a, b) { return dateMs(a) === dateMs(b); }
@@ -83,12 +89,31 @@ class FakeRequest {
     if (/^SELECT\b/.test(sql) && /\bdbo\.CSPRICE\b/.test(sql)) {
       throw new Error("The SELECT permission was denied on the object 'CSPRICE', database 'DSMART16', schema 'dbo'.");
     }
+    // lookupSkuDefUnitInfo() — tra Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế theo SKU_ID, bảng KHÁC CSPRICE nên
+    // được phép SELECT (nếu tài khoản có quyền riêng, SKU_DEF_PERMISSION_DENIED mô phỏng trường hợp chưa
+    // được cấp quyền).
+    if (/^SELECT PICEUNIT, UNITCONV, TAX_CODE FROM dbo\.SKU_DEF WHERE SKU_ID = @skuId;?$/.test(sql)) {
+      if (SKU_DEF_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'SKU_DEF', database 'DSMART16', schema 'dbo'.");
+      }
+      const info = SKU_DEF_DB[this.inputs.skuId];
+      return { recordset: info ? [{ PICEUNIT: info.PICEUNIT, UNITCONV: info.UNITCONV, TAX_CODE: info.TAX_CODE }] : [] };
+    }
+    if (/^SELECT TOP 1 SKU_ID, PICEUNIT, UNITCONV, TAX_CODE FROM dbo\.SKU_DEF;?$/.test(sql)) {
+      if (SKU_DEF_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'SKU_DEF', database 'DSMART16', schema 'dbo'.");
+      }
+      const first = Object.keys(SKU_DEF_DB)[0];
+      return { recordset: first ? [{ SKU_ID: first, ...SKU_DEF_DB[first] }] : [] };
+    }
     if (/^INSERT INTO dbo\.CSPRICE/.test(sql)) {
       const now = ++seq;
       const row = {
-        CUST_ID: this.inputs.custId, SKU_ID: this.inputs.skuId, WSPRICE: this.inputs.price,
+        CUST_ID: this.inputs.custId, TYPE: DEFAULT_TYPE, SKU_ID: this.inputs.skuId,
+        UNIT_SYMB: this.inputs.unit, BASE_UNIT: this.inputs.unit, UNITCONV: this.inputs.unitConv,
+        WSPRICE: this.inputs.price, VAT_INCL: 1, TAX_CODE: this.inputs.taxCode,
+        STK_ID: DEFAULT_STK_ID, WS_ID: DEFAULT_WS_ID, STATUS: 1,
         FR_DATE: this.inputs.frDate, TO_DATE: this.inputs.toDate,
-        TYPE: DEFAULT_TYPE, STK_ID: DEFAULT_STK_ID, WS_ID: DEFAULT_WS_ID,
         OPEN_DATE: now, MODI_DATE: now
       };
       this.db.push(row);
@@ -173,13 +198,72 @@ async function main() {
     assertEqual(key.custId, 'C1'); assertEqual(key.skuId, 'S1');
   });
 
-  await run.run('insertWholesalePrice(): khoá tự nhiên trả về gồm cả TYPE/STK_ID/WS_ID do SQL Server tự áp DEFAULT (ứng dụng không ghi trực tiếp)', async () => {
+  await run.run('insertWholesalePrice(): khoá tự nhiên trả về đúng TYPE=\'04\' (hằng số ghi tường minh) + STK_ID/WS_ID do SQL Server tự áp DEFAULT (không ghi trực tiếp)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
-    assertEqual(key.type, DEFAULT_TYPE, 'phải đọc lại đúng TYPE mặc định SQL Server tự áp');
-    assertEqual(key.wsId, DEFAULT_WS_ID, 'phải đọc lại đúng WS_ID mặc định SQL Server tự áp');
-    assertEqual(key.stkId, DEFAULT_STK_ID, 'phải đọc lại đúng STK_ID mặc định SQL Server tự áp');
+    assertEqual(key.type, DEFAULT_TYPE, 'phải ghi đúng TYPE=\'04\' (hằng số cố định, trích công thức BRG_APP.sql)');
+    assertEqual(key.wsId, DEFAULT_WS_ID, 'phải đọc lại đúng WS_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
+    assertEqual(key.stkId, DEFAULT_STK_ID, 'phải đọc lại đúng STK_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
+  });
+
+  // Audit theo nguồn mã BRG_APP.sql thật (12/2026, người dùng gửi): UNIT_SYMB/BASE_UNIT/UNITCONV/TAX_CODE
+  // PHẢI tra từ bảng dbo.SKU_DEF theo SKU_ID — KHÔNG được để trống/0 như bản vá trước, nếu không DSmart
+  // không áp dụng được giá (người dùng tự so sánh qua SSMS, phát hiện dòng thiếu Đơn Vị Tính không dùng
+  // được trong khi dòng có đủ thì dùng được).
+  await run.run('insertWholesalePrice(): tra ĐÚNG Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế từ SKU_DEF + ghi đủ VAT_INCL=1/STATUS=1 (công thức BRG_APP.sql)', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
+    const { insertWholesalePrice } = freshClient();
+    await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    assert(queryLog.some(q => /^SELECT PICEUNIT, UNITCONV, TAX_CODE FROM dbo\.SKU_DEF WHERE SKU_ID = @skuId/.test(q)), 'phải tra SKU_DEF theo đúng SKU_ID trước khi ghi');
+    const row = CSPRICE_DB[0];
+    assertEqual(row.TYPE, '04', 'TYPE phải là hằng số \'04\' (công thức BRG_APP.sql)');
+    assertEqual(row.UNIT_SYMB.trim(), 'BO', 'UNIT_SYMB phải lấy từ SKU_DEF.PICEUNIT (đã trim)');
+    assertEqual(row.BASE_UNIT.trim(), 'BO', 'BASE_UNIT phải lấy CÙNG giá trị PICEUNIT như UNIT_SYMB (đúng công thức BRG_APP.sql)');
+    assertEqual(row.UNITCONV, 1, 'UNITCONV phải lấy từ SKU_DEF.UNITCONV');
+    assertEqual(row.TAX_CODE.trim(), 'T5', 'TAX_CODE phải lấy từ SKU_DEF.TAX_CODE (đã trim)');
+    assertEqual(row.VAT_INCL, 1, 'VAT_INCL phải là hằng số 1 (công thức BRG_APP.sql)');
+    assertEqual(row.STATUS, 1, 'STATUS phải là hằng số 1 (công thức BRG_APP.sql — thiếu cột này có thể là lý do DSmart không áp dụng được giá)');
+  });
+
+  await run.run('insertWholesalePrice(): Mã Sản Phẩm KHÔNG có trong SKU_DEF -> báo lỗi rõ ràng, KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_DB = {}; // không có SKU nào trong danh mục
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C1', skuId: 'KHONG_TON_TAI', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi không tìm thấy SKU_ID trong SKU_DEF');
+    assert(/Không tìm thấy Mã Sản Phẩm/.test(threw.message), `thông báo phải nêu rõ không tìm thấy Mã Sản Phẩm — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi chưa tra được Đơn Vị Tính');
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } }; // khôi phục cho các test sau
+  });
+
+  await run.run('insertWholesalePrice(): tài khoản CHƯA được cấp quyền SELECT trên SKU_DEF -> báo lỗi rõ ràng phân biệt với lỗi "không tìm thấy", KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_PERMISSION_DENIED = true;
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    SKU_DEF_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi bị từ chối quyền SELECT trên SKU_DEF');
+    assert(/GRANT SELECT trên dbo\.SKU_DEF/.test(threw.message), `thông báo phải hướng dẫn rõ cần GRANT SELECT trên SKU_DEF — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi bị từ chối quyền tra SKU_DEF');
+  });
+
+  await run.run('testSkuDefAccess(): đọc được SKU_DEF -> trả ms + sampleRow; bị từ chối quyền -> DsmartConfigError rõ ràng', async () => {
+    const { testSkuDefAccess, DsmartConfigError } = freshClient();
+    SKU_DEF_PERMISSION_DENIED = false;
+    const ok = await testSkuDefAccess();
+    assert(ok.sampleRow && ok.sampleRow.SKU_ID === 'S1', 'phải trả về 1 dòng mẫu từ SKU_DEF khi đọc được');
+    SKU_DEF_PERMISSION_DENIED = true;
+    let threw = null;
+    try { await testSkuDefAccess(); } catch (err) { threw = err; }
+    SKU_DEF_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartConfigError, 'phải ném DsmartConfigError khi bị từ chối quyền');
+    assert(/SKU_DEF/.test(threw.message), `thông báo phải nêu rõ bảng SKU_DEF — got: ${threw.message}`);
   });
 
   await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {
