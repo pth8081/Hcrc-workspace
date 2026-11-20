@@ -113,8 +113,22 @@ async function applyDsmartPriceUpload() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công` + (data.failCount ? `, ${data.failCount} dòng lỗi (xem console)` : ''));
-    if (data.failCount) console.error('Dòng lỗi khi thêm giá DSmart:', data.results.filter(r => !r.success));
+    // LỖI THẬT đã vá (12/2026, người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart nhưng lỗi" kèm
+    // ảnh chụp MOBILE — alert cũ chỉ ghi "xem console", nhưng trên điện thoại KHÔNG có cách nào mở
+    // DevTools để xem console, nên lỗi THẬT (server đã trả về đủ trong data.results[].error — xem
+    // routes/dsmartWholesalePrice.js POST /apply) bị giấu kín hoàn toàn, người dùng chỉ thấy "0/1 dòng
+    // thành công" mà không biết VÌ SAO). Nay hiện THẲNG nội dung lỗi thật của từng dòng ngay trong alert
+    // (tối đa 5 dòng đầu, đủ cho hầu hết lượt upload thực tế — ít khi upload hàng trăm dòng lỗi cùng lúc)
+    // — vẫn console.error() đầy đủ cho ai có DevTools, nhưng KHÔNG còn là cách DUY NHẤT để biết lý do.
+    if (data.failCount) {
+      const failedRows = data.results.filter(r => !r.success);
+      const errLines = failedRows.slice(0, 5).map(r => `• ${r.custId}/${r.skuId}: ${r.error}`).join('\n');
+      const moreNote = failedRows.length > 5 ? `\n... và ${failedRows.length - 5} dòng lỗi khác (xem console để biết đầy đủ)` : '';
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
+      console.error('Dòng lỗi khi thêm giá DSmart:', failedRows);
+    } else {
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công`);
+    }
     _dsmartPriceUploadRows = null;
     document.getElementById('dsmartPriceUploadPreviewWrap').classList.add('hidden');
     clearSingleFileInput('dsmartPriceFileInput', 'dsmartPriceFileName');
@@ -279,16 +293,25 @@ async function applyDsmartPriceDeleteSelected() {
   const ids = Array.from(document.querySelectorAll('.dsmartPriceDeleteCheck:checked')).map(el => Number(el.value));
   if (!ids.length) return alert('⛔ Chưa chọn dòng nào để xoá');
   if (!confirm(`Xác nhận XOÁ THẬT ${ids.length} dòng khỏi CSPRICE (DSmart16 Trung Tâm)? Không thể hoàn tác.`)) return;
-  let success = 0, fail = 0;
+  let success = 0;
+  const failMsgs = [];
   for (const id of ids) {
     try {
       const res = await fetch(`/api/dsmart-price/entries/${id}/delete`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       success++;
-    } catch (err) { fail++; console.error(`Xoá dòng ID=${id} lỗi:`, err.message); }
+    } catch (err) { failMsgs.push(err.message); console.error(`Xoá dòng ID=${id} lỗi:`, err.message); }
   }
-  alert(`✅ Đã xoá ${success}/${ids.length} dòng` + (fail ? `, ${fail} dòng lỗi (xem console)` : ''));
+  // Cùng lý do đã vá ở applyDsmartPriceUpload() ngay trên (12/2026) — hiện THẲNG lỗi thật, không chỉ "xem
+  // console" (không dùng được trên mobile).
+  if (failMsgs.length) {
+    const errLines = failMsgs.slice(0, 5).map(m => `• ${m}`).join('\n');
+    const moreNote = failMsgs.length > 5 ? `\n... và ${failMsgs.length - 5} dòng lỗi khác (xem console để biết đầy đủ)` : '';
+    alert(`✅ Đã xoá ${success}/${ids.length} dòng, ${failMsgs.length} dòng lỗi:\n${errLines}${moreNote}`);
+  } else {
+    alert(`✅ Đã xoá ${success}/${ids.length} dòng`);
+  }
   await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
 }
 
