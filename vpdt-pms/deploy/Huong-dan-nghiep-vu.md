@@ -10166,3 +10166,46 @@ thật, duyệt kèm ghi chú, spy `notifyUsersByEmail()` xác nhận tham số 
 7 đúng nội dung ghi chú đã gõ. 25/25 kịch bản `test-it-support.js` pass.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 6j. Giá Bán Buôn: cảnh báo MỀM khi Mã Khách B2B CHƯA TỪNG có trong CSPRICE (12/2026)
+
+Phát hiện qua điều tra trực tiếp với người dùng (Extended Events + plan
+cache DSmart16 Trung Tâm — xem trao đổi đầy đủ trong phiên làm việc):
+"giá không đồng bộ xuống siêu thị" KHÔNG phải lỗi đồng bộ/code — lookup
+giá lúc lập phiếu bán buôn khoá CHẶT theo `CUST_ID` (`SELECT * FROM
+CSPRICE WHERE STATUS=1 AND TYPE='04' AND CUST_ID=@P1 AND SKU_ID=@P2`,
+câu lệnh chạy hàng nghìn lần/ngày theo plan cache thật). Người dùng đã
+set giá cho 1 `CUST_ID` KHÔNG phải mã khách thật của siêu thị cần đổi
+giá — 2 mã khách khác nhau hoàn toàn không liên quan, giá set nhầm mã sẽ
+KHÔNG BAO GIỜ áp đúng chỗ. Xác nhận qua dòng CSPRICE thật: `CUST_ID =
+244000000309` (khách thật) vẫn giữ nguyên giá CŨ dù đã test nhiều cách
+(đổi FR_DATE/TO_DATE/USER_ID/WS_ID) trên 1 `CUST_ID` khác hoàn toàn.
+
+**Cách vá (phòng ngừa, không sửa được lỗi dữ liệu đã xảy ra)**: thêm
+`custIdExistsInCsprice(custId)` (`lib/dsmartSqlClient.js`) — kiểm tra Mã
+Khách B2B đã TỪNG xuất hiện trong CSPRICE (bất kỳ SKU nào) hay chưa,
+dùng đúng mẹo `UPDATE TOP(1) ... SET CUST_ID = CUST_ID OUTPUT
+INSERTED.CUST_ID` (tài khoản SQL không có quyền SELECT trên CSPRICE —
+xem chú thích đầu file). Bước xem trước "Thêm Giá Mới"
+(`routes/dsmartWholesalePrice.js::annotateNewCustIds()`) giờ kiểm tra
+từng Mã Khách B2B PHÂN BIỆT trong file tải lên (chỉ gọi DSmart 1 lần/mã,
+fail-open nếu DSmart lỗi kết nối — không chặn mất bước xem trước chính),
+gắn cờ `custIdNeverSeen` cho dòng có mã khách hoàn toàn MỚI.
+
+Giao diện (`module-itsupport-dsmartprice.js`): dòng có `custIdNeverSeen`
+hiện badge tím "🆕 Mã Khách B2B CHƯA từng có trong DSmart — kiểm tra
+lại!" (ưu tiên cao hơn cảnh báo "Sẽ GHI ĐÈ" hiện có). Bấm "Ghi" thêm 1
+lớp xác nhận RIÊNG liệt kê đích danh các mã khách mới trước khi hỏi xác
+nhận ghi chung — **CẢNH BÁO MỀM, không chặn cứng** (khách hàng/siêu thị
+hoàn toàn MỚI vẫn là tình huống hợp lệ, người dùng tự quyết định).
+
+Test: `test-dsmart-wholesale-price.js` thêm 5 kịch bản (đã có/chưa có
+mã khách, dòng lỗi bỏ qua không gọi DSmart, dedupe chỉ gọi 1 lần/mã,
+fail-open khi DSmart lỗi kết nối) — 40/40 pass (từ 35). Cũng thêm stub
+`lib/uploadRateLimiter` (pass-through) cho file test này — route
+`/preview`/`/apply` dùng CHUNG 1 bộ đếm rate-limit thật (30 lần/10
+phút), số lượt gọi tích luỹ trong 1 lần chạy file test đã tiệm cận trần
+sẵn từ trước, thêm 5 kịch bản preview mới khiến 1 kịch bản `/apply`
+không liên quan bị chặn giả — không phải lỗi logic.
+
+Không cần thao tác deploy gì thêm ngoài copy code.

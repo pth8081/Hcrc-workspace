@@ -582,6 +582,36 @@ async function inspectCspriceColumns(overrideCfg) {
   }
 }
 
+// custIdExistsInCsprice(custId): kiểm tra Mã Khách B2B (CUST_ID) đã TỪNG xuất hiện trong CSPRICE (với BẤT
+// KỲ Mã Sản Phẩm nào) hay chưa — dùng ở bước xem trước (preview) "Thêm Giá Mới" để CẢNH BÁO MỀM nếu mã
+// khách hoàn toàn MỚI (12/2026, LỖI THẬT production: người dùng set giá cho 1 CUST_ID không phải mã khách
+// thật của siêu thị/khách hàng cần đổi giá — xác nhận qua plan cache DSmart16: lookup giá lúc lập phiếu
+// bán buôn khoá CHẶT theo CUST_ID (`SELECT * FROM CSPRICE WHERE STATUS=1 AND TYPE='04' AND CUST_ID=@P1 AND
+// SKU_ID=@P2`), 2 mã khách khác nhau hoàn toàn KHÔNG liên quan nhau — giá set nhầm mã sẽ KHÔNG BAO GIỜ áp
+// đúng chỗ, không phải lỗi đồng bộ/code).
+//
+// KHÔNG DÙNG SELECT (tài khoản không có quyền — xem chú thích đầu file): dùng đúng mẹo OUTPUT trên 1 câu
+// UPDATE "vô hại" (gán lại CHÍNH giá trị CUST_ID hiện có cho CHÍNH dòng đó, TOP 1, KHÔNG đổi dữ liệu gì) —
+// khớp được >=1 dòng thì CUST_ID này đã từng tồn tại trong CSPRICE; khớp 0 dòng thì là mã khách hoàn toàn
+// MỚI (cần người dùng tự xác nhận lại trước khi tiếp tục, xem routes/dsmartWholesalePrice.js /preview).
+async function custIdExistsInCsprice(custId) {
+  const pool = await getDsmartPool();
+  const req = pool.request();
+  req.input('custId', sql.NVarChar(50), String(custId));
+  let result;
+  try {
+    result = await req.query(`
+      UPDATE TOP (1) dbo.CSPRICE
+      SET CUST_ID = CUST_ID
+      OUTPUT INSERTED.CUST_ID
+      WHERE CUST_ID = @custId;
+    `);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi kiểm tra Mã Khách B2B "${custId}" đã từng có trong CSPRICE chưa: ${err.message}`);
+  }
+  return (result.recordset || []).length > 0;
+}
+
 // Chỉ dùng cho test/khi server tắt hẳn — đóng pool đang cache (nếu có).
 async function closeDsmartPool() {
   if (cachedPool) {
@@ -593,5 +623,5 @@ async function closeDsmartPool() {
 
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
 };

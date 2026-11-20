@@ -28,7 +28,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -238,6 +238,31 @@ function overlapsExisting(existingActive, custId, skuId) {
   return existingActive.some(e => e.custId === custId && e.skuId === skuId && e.status === 'ACTIVE');
 }
 
+// annotateNewCustIds(rows): gắn cờ `custIdNeverSeen` (12/2026, LỖI THẬT PRODUCTION — người dùng tự điều
+// tra qua Extended Events/plan cache DSmart16, xác nhận lookup giá lúc lập phiếu bán buôn khoá CHẶT theo
+// CUST_ID, set nhầm mã khách thì giá KHÔNG BAO GIỜ áp đúng chỗ, không phải lỗi đồng bộ) — CẢNH BÁO MỀM nếu
+// Mã Khách B2B CHƯA TỪNG xuất hiện trong CSPRICE thật (mọi SKU), để người dùng tự soát lại trước khi ghi,
+// không chặn cứng (khách hàng/siêu thị MỚI hoàn toàn vẫn là tình huống hợp lệ). Chỉ kiểm tra 1 lần / Mã
+// Khách PHÂN BIỆT (nhiều dòng cùng mã chỉ gọi DSmart 1 lần), chạy theo từng đợt nhỏ (không dồn quá nhiều
+// kết nối cùng lúc). Nếu DSmart không kết nối được lúc xem trước, fail-open (coi như KHÔNG kiểm tra được,
+// không cảnh báo gì) — đây chỉ là cảnh báo bổ sung, không được để chặn mất luôn bước xem trước chính.
+const NEW_CUST_CHECK_CONCURRENCY = 5;
+async function annotateNewCustIds(rows) {
+  const distinctCustIds = [...new Set(rows.filter(r => r.errors.length === 0).map(r => r.custId))];
+  const existsMap = new Map();
+  for (let i = 0; i < distinctCustIds.length; i += NEW_CUST_CHECK_CONCURRENCY) {
+    const chunk = distinctCustIds.slice(i, i + NEW_CUST_CHECK_CONCURRENCY);
+    await Promise.all(chunk.map(async (custId) => {
+      try {
+        existsMap.set(custId, await custIdExistsInCsprice(custId));
+      } catch (_) {
+        existsMap.set(custId, null); // không kiểm tra được -> fail-open, không cảnh báo
+      }
+    }));
+  }
+  return rows.map(r => ({ ...r, custIdNeverSeen: r.errors.length === 0 && existsMap.get(r.custId) === false }));
+}
+
 // ===================== 1. Thêm Giá Mới: xem trước (đọc file, KHÔNG ghi gì) =====================
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
 const priceFileUpload = multer({
@@ -264,7 +289,8 @@ router.post('/preview', uploadRateLimiter, (req, res) => {
         ...r,
         hasOverlap: r.errors.length === 0 && overlapsExisting(existingActive, r.custId, r.skuId)
       }));
-      res.json({ ok: true, fileName: req.file.originalname, rows: withOverlap });
+      const withNewCustCheck = await annotateNewCustIds(withOverlap);
+      res.json({ ok: true, fileName: req.file.originalname, rows: withNewCustCheck });
     } catch (err2) { sendCatchError(res, err2, 'POST /api/dsmart-price/preview'); }
   });
 });
