@@ -17,6 +17,11 @@ let _dsmartStoreConnList = [];
 let _dsmartStoreConnEditingId = null; // null = đang Thêm mới, có giá trị = đang Sửa
 let _dsmartStoreConnImportRows = null;
 let _dsmartStoreConnImportFileName = null;
+// _dsmartPriceStoreOptions (12/2026, ô chọn "🏬 Áp Dụng Cho Siêu Thị") — danh sách RÚT GỌN (chỉ
+// id/storeCode/storeName) các siêu thị ĐANG BẬT, nạp qua GET /store-connections/options (KHÔNG cần
+// quyền admin, khác GET /store-connections đầy đủ chỉ admin xem được) — dùng cho CẢ 2 ô chọn: "1. Thêm
+// Giá Mới" (#dsmartPriceApplyStoreMultiSelect) và "↩️ Dùng Lại" (#dsmartPriceReuseStoreMultiSelect).
+let _dsmartPriceStoreOptions = [];
 
 async function initDsmartPriceTab() {
   const isAdmin = !!currentUser?.perms?.admin;
@@ -28,9 +33,46 @@ async function initDsmartPriceTab() {
   applyDsmartPriceMgFilterState();
   applyDsmartPriceHistoryFilterState();
   await loadDsmartPriceAutoDeleteConfig();
-  const tasks = [renderDsmartPriceEntries(), renderDsmartPriceHistory()];
+  const tasks = [renderDsmartPriceEntries(), renderDsmartPriceHistory(), loadDsmartPriceStoreOptions()];
   if (isAdmin) tasks.push(renderDsmartStoreConnList());
   await Promise.all(tasks);
+}
+
+// loadDsmartPriceStoreOptions()/renderDsmartPriceApplyStoreMultiSelect()/resolveDsmartPriceTargetStoreIds()
+// (12/2026, theo yêu cầu người dùng — xem chú thích đầy đủ tại GET /store-connections/options,
+// routes/dsmartWholesalePrice.js, và fanOutToStores(), lib/dsmartSqlClient.js).
+async function loadDsmartPriceStoreOptions() {
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/options');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _dsmartPriceStoreOptions = data.items || [];
+  } catch (err) {
+    _dsmartPriceStoreOptions = [];
+    console.error('Không tải được danh sách siêu thị để chọn:', err.message);
+  }
+  renderDsmartPriceApplyStoreMultiSelect();
+}
+function renderDsmartPriceApplyStoreMultiSelect() {
+  const items = _dsmartPriceStoreOptions.map(s => ({ value: s.id, label: `${s.storeCode} - ${s.storeName}` }));
+  const allIds = items.map(it => it.value);
+  renderMultiSelectDropdown('dsmartPriceApplyStoreMultiSelect', items, allIds, {
+    placeholder: 'Tìm siêu thị...',
+    emptyText: items.length ? 'Chưa chọn siêu thị nào — CHỈ ghi ở DSmart16 Trung Tâm, KHÔNG đồng bộ xuống siêu thị nào.' : 'Chưa cấu hình/bật siêu thị nào ở "🏬 Kết Nối Siêu Thị" — sẽ CHỈ ghi ở DSmart16 Trung Tâm.',
+    allToggle: true
+  });
+}
+// resolveDsmartPriceTargetStoreIds(containerId): đọc lựa chọn hiện tại của 1 ô renderMultiSelectDropdown()
+// chọn siêu thị -> trả về giá trị gửi lên server cho POST /apply. Chọn ĐỦ TẤT CẢ (hoặc KHÔNG đổi gì, mặc
+// định đã chọn sẵn hết) -> trả null (fan-out LINH ĐỘNG theo đúng danh sách Enabled hiện tại mỗi lần ghi,
+// GIỮ NGUYÊN hành vi mặc định trước khi có tính năng này — tự nhận siêu thị MỚI thêm sau này mà không cần
+// sửa lại từng dòng giá cũ). Chọn 1 PHẦN (kể cả rỗng = không siêu thị nào) -> trả mảng id đã chọn, ĐÓNG
+// BĂNG lại trên entry để "Sửa"/"Xoá"/job tự động áp dụng lịch sau này nhắm đúng y hệt các siêu thị đó.
+function resolveDsmartPriceTargetStoreIds(containerId) {
+  const selected = getMultiSelectValues(containerId);
+  const allIds = _dsmartPriceStoreOptions.map(s => s.id);
+  if (!allIds.length || selected.length === allIds.length) return null;
+  return selected;
 }
 
 // ===================== 🏬 Kết Nối Siêu Thị (Fan-Out) — CHỈ admin =====================
@@ -419,7 +461,7 @@ async function applyDsmartPriceUpload() {
   try {
     const res = await fetch('/api/dsmart-price/apply', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartPriceUploadFileName, sourceAction: 'UPLOAD', schedule })
+      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartPriceUploadFileName, sourceAction: 'UPLOAD', schedule, targetStoreIds: resolveDsmartPriceTargetStoreIds('dsmartPriceApplyStoreMultiSelect') })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
@@ -675,10 +717,22 @@ function startDsmartPriceReuse(id) {
       <div><label class="block text-[10px] text-gray-500 mb-0.5">Giá (điền sẵn, sửa được)</label><input id="dsmartPriceReusePrice" type="number" value="${entry.price}" class="w-28 border rounded p-1 text-xs"></div>
       <div><label class="block text-[10px] text-amber-700 font-bold mb-0.5">Ngày bắt đầu</label><input id="dsmartPriceReuseFrDate" type="date" class="border rounded p-1 text-xs"></div>
       <div><label class="block text-[10px] text-amber-700 font-bold mb-0.5">Ngày kết thúc</label><input id="dsmartPriceReuseToDate" type="date" class="border rounded p-1 text-xs"></div>
+    </div>
+    <div class="mt-2">
+      <div class="text-[10px] font-bold text-sky-800 mb-0.5">🏬 Áp Dụng Cho Siêu Thị</div>
+      <div id="dsmartPriceReuseStoreMultiSelect" class="w-full max-w-md"></div>
+    </div>
+    <div class="flex items-center gap-3 mt-2">
       <button type="button" data-op="saveDsmartPriceReuse" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">✅ Thêm Giá Mới</button>
       <button type="button" data-op="cancelDsmartPriceReuse" class="bg-white border px-3 py-1 rounded text-xs font-semibold">Huỷ</button>
     </div>`;
   form.classList.remove('hidden');
+  const reuseItems = _dsmartPriceStoreOptions.map(s => ({ value: s.id, label: `${s.storeCode} - ${s.storeName}` }));
+  renderMultiSelectDropdown('dsmartPriceReuseStoreMultiSelect', reuseItems, reuseItems.map(it => it.value), {
+    placeholder: 'Tìm siêu thị...',
+    emptyText: reuseItems.length ? 'Chưa chọn siêu thị nào — CHỈ ghi ở DSmart16 Trung Tâm.' : 'Chưa cấu hình/bật siêu thị nào.',
+    allToggle: true
+  });
 }
 function cancelDsmartPriceReuse() { _dsmartPriceReusingEntry = null; document.getElementById('dsmartPriceReuseForm').classList.add('hidden'); }
 
@@ -692,7 +746,7 @@ async function saveDsmartPriceReuse() {
   try {
     const res = await fetch('/api/dsmart-price/apply', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: [{ custId: _dsmartPriceReusingEntry.custId, skuId: _dsmartPriceReusingEntry.skuId, price, frDate, toDate }], sourceAction: 'REUSE' })
+      body: JSON.stringify({ rows: [{ custId: _dsmartPriceReusingEntry.custId, skuId: _dsmartPriceReusingEntry.skuId, price, frDate, toDate }], sourceAction: 'REUSE', targetStoreIds: resolveDsmartPriceTargetStoreIds('dsmartPriceReuseStoreMultiSelect') })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');

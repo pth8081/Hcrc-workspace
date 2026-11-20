@@ -178,6 +178,23 @@ router.get('/store-connections', async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'GET /api/dsmart-price/store-connections'); }
 });
 
+// GET /store-connections/options (12/2026, theo yêu cầu người dùng: ô chọn "🏬 Áp Dụng Cho Siêu Thị" ở
+// "1. Thêm Giá Mới"/"↩️ Dùng Lại" CẦN danh sách siêu thị đang Enabled=1 để chọn — KHÔNG gác riêng admin
+// như GET /store-connections ở trên (chỉ cần itSupportPriceWriteDsmart/admin, đã gác sẵn ở router.use()
+// đầu file) vì MỌI người được áp giá đều cần chọn được siêu thị áp dụng, không chỉ admin. Trả về RẤT ÍT
+// trường (chỉ id/Mã/Tên — KHÔNG có host/user/port, vốn là thông tin hạ tầng chỉ admin mới cần biết) để
+// không mở rộng phạm vi lộ thông tin kết nối ngoài ý "cấu hình admin siêu thị"/"cấu hình admin HO" mà
+// người dùng xác nhận chỉ CHỨA sẵn ở màn Cấu Hình (admin), không phải lộ thêm field mới cho người không
+// quản trị. Siêu thị CHƯA cấu hình (không có dòng nào) hoặc đang Tắt sẽ KHÔNG xuất hiện ở đây — đúng ý
+// "siêu thị nào chưa được cấu hình thì coi như không hiện trong danh sách".
+router.get('/store-connections/options', async (req, res) => {
+  try {
+    const items = (await storeConnStore.listRaw({ onlyEnabled: true }))
+      .map(s => ({ id: s.id, storeCode: s.storeCode, storeName: s.storeName }));
+    res.json({ ok: true, items });
+  } catch (err) { sendCatchError(res, err, 'GET /api/dsmart-price/store-connections/options'); }
+});
+
 router.post('/store-connections', async (req, res) => {
   if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới thêm được kết nối siêu thị' });
   try {
@@ -505,6 +522,16 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
   const sourceFileName = req.body?.sourceFileName || null;
   const sourceAction = req.body?.sourceAction === 'REUSE' ? 'REUSE' : 'UPLOAD';
   const schedule = !!req.body?.schedule;
+  // targetStoreIds (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất cả siêu thị, hoặc cho
+  // tôi chọn từng siêu thị... lấy luôn từ cái phần cấu hình admin ấy"): null/thiếu = ÁP DỤNG TẤT CẢ siêu
+  // thị đang Enabled=1 (mặc định, GIỮ NGUYÊN hành vi cũ) — xem fanOutToStores()/lib/dsmartSqlClient.js.
+  // Mảng id = ĐÓNG BĂNG đúng danh sách đã chọn, lưu lại trên MỖI entry (ACTIVE lẫn SCHEDULED) để "Sửa"/
+  // "Xoá"/job tự động áp dụng đã lên lịch SAU NÀY nhắm đúng những siêu thị đã từng nhận dòng này, không bị
+  // lệch nếu sau đó có thêm siêu thị mới Enabled. KHÔNG validate khớp đúng ID có tồn tại/Enabled ở đây —
+  // fanOutToStores() tự giao với danh sách đang Enabled=1 tại THỜI ĐIỂM ghi, id lạ/đã Tắt chỉ đơn giản
+  // không nhận được gì (an toàn, không ném lỗi).
+  const rawTargetStoreIds = req.body?.targetStoreIds;
+  const targetStoreIds = Array.isArray(rawTargetStoreIds) ? rawTargetStoreIds.map(Number).filter(Number.isFinite) : null;
   if (!rows.length) return res.status(400).json({ error: 'Không có dòng nào để ghi' });
   if (rows.length > 2000) return res.status(400).json({ error: 'Quá nhiều dòng trong 1 lượt ghi (tối đa 2000)' });
 
@@ -526,7 +553,7 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
           const now = new Date().toISOString();
           const entry = {
             id: Date.now() + Math.floor(Math.random() * 1000),
-            dsmartKey: null, custId, skuId, price, frDate, toDate, status: 'SCHEDULED',
+            dsmartKey: null, custId, skuId, price, frDate, toDate, status: 'SCHEDULED', targetStoreIds,
             createdBy: req.freshUser.username, createdAt: now, sourceFileName,
             history: [{ action: 'SCHEDULE', mode: sourceAction, actor: req.freshUser.username, at: now, price, frDate, toDate, sourceFileName }]
           };
@@ -547,7 +574,7 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
       // NGUYÊN cả bước ghi DSmart lẫn bước dọn mirror để 2 request đồng thời tự xếp hàng, request sau sẽ
       // thấy đúng entry MỚI của request trước là "cũ" khi tới lượt mình.
       const { entryId, overwritten, storeResults, storeFanOutError } = await withAppLock(`dsmartWholesalePrice:${custId}:${skuId}`, async () => {
-        const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({ custId, skuId, price, frDate, toDate });
+        const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({ custId, skuId, price, frDate, toDate }, targetStoreIds);
         const now = new Date().toISOString();
         // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
         // DSmart thay vì báo lỗi (xem Lần 5, lib/dsmartSqlClient.js). Đánh dấu DELETED MỌI entry mirror
@@ -574,7 +601,7 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
         }
         const entry = {
           id: Date.now() + Math.floor(Math.random() * 1000),
-          dsmartKey, custId, skuId, price, frDate, toDate, status: 'ACTIVE',
+          dsmartKey, custId, skuId, price, frDate, toDate, status: 'ACTIVE', targetStoreIds,
           createdBy: req.freshUser.username, createdAt: now, sourceFileName,
           history: [{ action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: sourceAction, actor: req.freshUser.username, at: now, price, frDate, toDate, sourceFileName, storeResults }]
         };
@@ -619,7 +646,11 @@ router.patch('/entries/:id', async (req, res) => {
       // Lần 5: khoá chính thật CHỈ gồm CUST_ID+SKU_ID (KHÔNG đổi khi FR_DATE/TO_DATE đổi như giả định Lần 2
       // sai trước đây) — lưu lại khoá trả về chỉ để nhất quán, không còn bắt buộc như trước (xem chú thích
       // đầy đủ tại updateWholesalePrice()/lib/dsmartSqlClient.js).
-      const { storeResults: sr, storeFanOutError: sfe, ...newDsmartKey } = await updateWholesalePrice({ dsmartKey: item.dsmartKey, price, frDate, toDate });
+      // targetStoreIds (12/2026): LUÔN tái dùng đúng danh sách siêu thị đã ĐÓNG BĂNG lúc "Thêm Giá Mới"
+      // (null = đã chọn "Tất Cả" lúc đó, vẫn linh động theo Enabled hiện tại) — KHÔNG có UI chọn lại ở
+      // bước Sửa, tránh "Sửa" vô tình fan-out sang 1 siêu thị CHƯA từng nhận dòng này lúc Thêm (báo lỗi
+      // rõ ràng, xem updatePriceOnPool()/lib/dsmartSqlClient.js).
+      const { storeResults: sr, storeFanOutError: sfe, ...newDsmartKey } = await updateWholesalePrice({ dsmartKey: item.dsmartKey, price, frDate, toDate }, item.targetStoreIds);
       storeResults = sr; storeFanOutError = sfe;
       const now = new Date().toISOString();
       return {
@@ -661,7 +692,8 @@ router.post('/entries/:id/delete', async (req, res) => {
     let storeResults, storeFanOutError;
     const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'ACTIVE') throw new HttpError(409, 'Dòng này đã được xoá trước đó rồi.');
-      const delResult = await deleteWholesalePrice({ dsmartKey: item.dsmartKey });
+      // targetStoreIds: tái dùng đúng danh sách đã chọn lúc Thêm (xem chú thích ở PATCH /entries/:id ở trên).
+      const delResult = await deleteWholesalePrice({ dsmartKey: item.dsmartKey }, item.targetStoreIds);
       storeResults = delResult.storeResults; storeFanOutError = delResult.storeFanOutError;
       const now = new Date().toISOString();
       return {

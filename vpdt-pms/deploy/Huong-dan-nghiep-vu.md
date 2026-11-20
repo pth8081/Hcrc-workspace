@@ -10503,3 +10503,58 @@ này nếu vẫn cần nhập hàng loạt qua Excel, chỉ có thể nhắc nh�
 **Thao tác deploy**: KHÔNG cần thêm gì ngoài copy code + `pm2 restart`
 (không đổi `schema.sql`/biến môi trường mới — dùng lại đúng bảng
 `dbo.DsmartStorePriceConnections` và route CRUD đã có ở mục A).
+
+### D. "🏬 Áp Dụng Cho Siêu Thị" — chọn "Tất Cả" hoặc chọn riêng từng siêu thị khi Thêm Giá (12/2026)
+
+Người dùng yêu cầu thêm, sau khi xem demo mục C: **"...khi áp giá cho phép tôi chọn ôn là tất cả siêu
+thị, hoặc cho tôi chọn từng siêu thị theo dạng dropdown cộng searchable và multi choice nhé. Việc chọn và
+áp giá siêu thị này sẽ lấy luôn từ cái phần mà cấu hình admin ấy. Phải hiển thị, phải cấu hình cái siêu
+thị nào sẽ sử dụng luôn, mà siêu thị nào chưa được cấu hình thì coi như là không hiện trong danh sách."**
+— trước đây mục A (fan-out) LUÔN tự động áp dụng cho TẤT CẢ siêu thị đang Enabled=1, không có cách chọn
+riêng cho từng lượt Thêm Giá.
+
+**Cơ chế**: ô chọn mới **"🏬 Áp Dụng Cho Siêu Thị"** (ô chọn nhiều — searchable, có nút "✅ Chọn Tất Cả",
+cùng widget `renderMultiSelectDropdown()` đã dùng cho ô chọn siêu thị ở Kiểm Kê) xuất hiện ở **CẢ 2 nơi**
+tạo dòng giá mới: **"1. Thêm Giá Mới"** (áp dụng chung cho cả lượt nộp file 1 dòng lẫn hàng loạt) và
+**"↩️ Dùng Lại"** (tạo lại dòng từ 1 dòng đã xoá). Nguồn danh sách: `GET /store-connections/options` —
+CHỈ liệt kê siêu thị ĐANG BẬT (Enabled=1) trong "🏬 Kết Nối Siêu Thị" (mục A) — siêu thị chưa cấu hình
+hoặc đang Tắt sẽ KHÔNG hiện ra để chọn, đúng yêu cầu. Route này KHÔNG gác riêng admin như
+`GET /store-connections` đầy đủ (chỉ trả về id/Mã/Tên siêu thị, không có host/user/port — thông tin hạ
+tầng chỉ admin mới cần) vì MỌI người được áp giá đều cần chọn được phạm vi, không chỉ admin.
+
+- **Mặc định**: chọn SẴN "✅ Tất cả" — GIỮ NGUYÊN hành vi cũ (fan-out xuống TOÀN BỘ siêu thị đang Enabled=1
+  tại thời điểm ghi, kể cả siêu thị MỚI được bật SAU NÀY — không cần sửa lại dòng giá cũ).
+- **Bỏ chọn "Tất cả" rồi tự chọn riêng 1 phần (kể cả 0 siêu thị)**: ĐÓNG BĂNG đúng danh sách đã chọn lúc
+  Thêm — CHỈ những siêu thị đó nhận được dòng giá này (siêu thị khác, kể cả Enabled=1, sẽ KHÔNG nhận gì).
+  Giá trị này lưu trên chính dòng giá (`targetStoreIds`, `null` = đã chọn "Tất Cả" lúc đó) để **"Sửa"/
+  "Xoá"/job tự động "📅 Lên Lịch Áp Giá" áp dụng SAU NÀY luôn tái dùng ĐÚNG phạm vi đã chọn lúc Thêm** —
+  không có ô chọn lại ở bước Sửa/Xoá (tránh vô tình fan-out sang 1 siêu thị CHƯA từng nhận dòng này, sẽ bị
+  `updatePriceOnPool()` báo lỗi rõ "siêu thị CHƯA từng có dòng giá đó").
+
+**Kỹ thuật**: `fanOutToStores(operation, targetStoreIds)` (`lib/dsmartSqlClient.js`) nhận thêm tham số thứ
+2 — `null`/thiếu = lấy TOÀN BỘ siêu thị Enabled=1 tại thời điểm gọi (linh động, hành vi cũ); mảng id = giao
+với danh sách Enabled=1 (siêu thị bị Tắt sau khi chọn vẫn KHÔNG nhận được, an toàn đúng ý nghĩa "Tắt").
+3 hàm `insertWholesalePrice()`/`updateWholesalePrice()`/`deleteWholesalePrice()` nhận thêm tham số này,
+truyền thẳng xuống `fanOutToStores()`. `routes/dsmartWholesalePrice.js`: `POST /apply` đọc
+`req.body.targetStoreIds`, lưu lại trên MỖI entry (cả ACTIVE lẫn SCHEDULED); `PATCH /entries/:id` và
+`POST /entries/:id/delete` tự đọc `item.targetStoreIds` đã lưu (không nhận input mới từ client);
+`jobs/dsmartAutoApplyScheduledPrices.js` cũng tự đọc `entry.targetStoreIds` khi tự động áp dụng.
+
+### Test (phần D)
+
+- `tests/test-dsmart-wholesale-price.js` — thêm 8 kịch bản: `GET /store-connections/options` không gác
+  admin (khác GET đầy đủ) + chỉ trả id/Mã/Tên + chỉ liệt kê Enabled=1; `POST /apply` không gửi
+  `targetStoreIds` → lưu `null` + truyền `null`; có gửi mảng → lưu + truyền ĐÚNG mảng đó (kể cả mảng rỗng
+  = không siêu thị nào, phân biệt rõ với `null` = "Tất Cả"); `PATCH /entries/:id` và
+  `POST /entries/:id/delete` tái dùng ĐÚNG `targetStoreIds` đã lưu (không có input mới); job tự động áp
+  dụng lịch cũng truyền đúng `targetStoreIds` đã đóng băng lúc đặt lịch. 73/73 pass (file này, cộng dồn
+  toàn bộ mục 6n).
+- CSP sweep (`on[a-z]+="`, ` style="` ngoài `data-style`, `javascript:`, `eval(`) trên
+  `itSupportSection.html` + `module-itsupport-dsmartprice.js` — không khớp gì.
+- Chạy lại đầy đủ `test-dsmart-store-fanout.js` (23/23), `test-dsmart-natural-key-matching.js` (19/19),
+  `test-dsmart-price-ui.js` (70/70, Playwright thật) — không regression.
+
+**Thao tác deploy**: KHÔNG cần thêm gì ngoài copy code + `pm2 restart` (không đổi `schema.sql`/biến môi
+trường mới — chỉ thêm 1 trường `targetStoreIds` vào bản ghi JSON hiện có của
+`dbo.DsmartWholesalePriceEntries`, entry CŨ trước khi có tính năng này tự hiểu là `undefined` → coi như
+`null`/"Tất Cả", KHÔNG cần script di trú dữ liệu).

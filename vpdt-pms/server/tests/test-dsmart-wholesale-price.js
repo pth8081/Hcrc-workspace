@@ -28,6 +28,12 @@ function stubModule(relPath, exportsObj) {
 // lỗi (xem insertWholesalePrice() mock bên dưới). =====
 let CSPRICE = [];
 let custIdExistsCallLog = [];
+// FANOUT_TARGET_LOG (12/2026, ô chọn "🏬 Áp Dụng Cho Siêu Thị") — ghi lại targetStoreIds (tham số thứ 2)
+// MỖI lần insert/update/deleteWholesalePrice() được gọi, để test xác nhận route truyền ĐÚNG giá trị (null
+// = "Tất Cả" lúc Thêm, hoặc mảng id đã ĐÓNG BĂNG — và Sửa/Xoá/job tự động TÁI DÙNG đúng giá trị đã lưu
+// trên entry, không tự ý đổi). Logic lọc TẬT SỰ theo targetStoreIds (giao với Enabled=1) đã test đầy đủ,
+// KHÔNG mock, ở tests/test-dsmart-store-fanout.js — ở ĐÂY chỉ test tầng route truyền tham số đúng.
+let FANOUT_TARGET_LOG = [];
 let forceConfigError = false;
 let forceTestConnError = false;
 let lastTestConnOverrideCfg = 'UNSET';
@@ -51,7 +57,8 @@ stubModule('lib/dsmartSqlClient', {
   DsmartConfigError, DsmartSqlError,
   // insertWholesalePrice() (Lần 5) — mô phỏng ĐÚNG hành vi upsert thật: trùng (CUST_ID, SKU_ID) -> GHI ĐÈ
   // (wasOverwrite=true), KHÔNG tạo dòng thứ 2 và KHÔNG ném lỗi.
-  insertWholesalePrice: async ({ custId, skuId, price, frDate, toDate }) => {
+  insertWholesalePrice: async ({ custId, skuId, price, frDate, toDate }, targetStoreIds) => {
+    FANOUT_TARGET_LOG.push({ op: 'insert', custId, skuId, targetStoreIds });
     if (forceConfigError) throw new DsmartConfigError('Chưa cấu hình kết nối (giả lập)');
     const existing = CSPRICE.find(r => r.CUST_ID === custId && r.SKU_ID === skuId);
     if (existing) {
@@ -63,7 +70,8 @@ stubModule('lib/dsmartSqlClient', {
     CSPRICE.push(row);
     return { custId, skuId, wasOverwrite: false };
   },
-  updateWholesalePrice: async ({ dsmartKey, price, frDate, toDate }) => {
+  updateWholesalePrice: async ({ dsmartKey, price, frDate, toDate }, targetStoreIds) => {
+    FANOUT_TARGET_LOG.push({ op: 'update', dsmartKey, targetStoreIds });
     const matches = findByNaturalKey(dsmartKey);
     if (matches.length === 0) throw new DsmartSqlError('Không tìm thấy dòng CSPRICE khớp đúng khoá tự nhiên đã lưu để sửa');
     if (matches.length > 1) throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${matches.length} dòng CSPRICE (không còn DUY NHẤT)`);
@@ -71,7 +79,8 @@ stubModule('lib/dsmartSqlClient', {
     row.WSPRICE = price; row.FR_DATE = frDate; row.TO_DATE = toDate;
     return naturalKeyOf(row);
   },
-  deleteWholesalePrice: async ({ dsmartKey }) => {
+  deleteWholesalePrice: async ({ dsmartKey }, targetStoreIds) => {
+    FANOUT_TARGET_LOG.push({ op: 'delete', dsmartKey, targetStoreIds });
     const matches = findByNaturalKey(dsmartKey);
     if (matches.length === 0) return { alreadyGone: true };
     if (matches.length > 1) throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${matches.length} dòng CSPRICE (không còn DUY NHẤT)`);
@@ -1003,6 +1012,84 @@ async function main() {
     assert.strictEqual(res.body.successCount, 0);
     assert.ok(/Mật Khẩu/.test(res.body.results[0].error));
     assert.strictEqual(STORE_CONNS.length, 0);
+  });
+
+  // ===== 🏬 "Áp Dụng Cho Siêu Thị" (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất cả
+  // siêu thị, hoặc cho tôi chọn từng siêu thị... lấy luôn từ cái phần cấu hình admin ấy") =====
+  await test('GET /store-connections/options: itSupportPriceWriteDsmart (KHÔNG phải admin) vẫn xem được (khác GET /store-connections đầy đủ chỉ admin)', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    STORE_CONNS = [
+      { id: 101, storeCode: 'OPT1', storeName: 'Siêu Thị Options 1', host: 'h1', port: 1433, database: 'd1', user: 'u1', passwordEnc: 'enc', enabled: true },
+      { id: 102, storeCode: 'OPT2', storeName: 'Siêu Thị Options 2', host: 'h2', port: 1433, database: 'd2', user: 'u2', passwordEnc: 'enc', enabled: false }
+    ];
+    const res = await apiGet('/store-connections/options');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.items.length, 1, 'CHỈ siêu thị Enabled=1 mới hiện (siêu thị Tắt KHÔNG hiện)');
+    assert.deepStrictEqual(Object.keys(res.body.items[0]).sort(), ['id', 'storeCode', 'storeName'], 'KHÔNG trả host/user/port (chỉ admin mới cần biết thông tin hạ tầng)');
+    assert.strictEqual(res.body.items[0].storeCode, 'OPT1');
+  });
+
+  await test('POST /apply KHÔNG gửi targetStoreIds (mặc định "Tất Cả") -> entry.targetStoreIds=null, truyền null cho insertWholesalePrice()', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    const res = await apiPost('/apply', { rows: [{ custId: 'TSI1', skuId: 'SK1', price: 1000, frDate: '2026-01-01', toDate: '2099-12-31' }] });
+    assert.strictEqual(res.body.successCount, 1);
+    const entry = ENTRIES.find(e => e.custId === 'TSI1');
+    assert.strictEqual(entry.targetStoreIds, null);
+    assert.strictEqual(FANOUT_TARGET_LOG[FANOUT_TARGET_LOG.length - 1].targetStoreIds, null);
+  });
+
+  await test('POST /apply CÓ targetStoreIds (chọn riêng 1 phần) -> entry lưu lại ĐÚNG mảng đã chọn, truyền ĐÚNG mảng đó cho insertWholesalePrice()', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    const res = await apiPost('/apply', { rows: [{ custId: 'TSI2', skuId: 'SK2', price: 2000, frDate: '2026-01-01', toDate: '2099-12-31' }], targetStoreIds: [101, 102] });
+    assert.strictEqual(res.body.successCount, 1);
+    const entry = ENTRIES.find(e => e.custId === 'TSI2');
+    assert.deepStrictEqual(entry.targetStoreIds, [101, 102]);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[FANOUT_TARGET_LOG.length - 1].targetStoreIds, [101, 102]);
+  });
+
+  await test('POST /apply targetStoreIds=[] (bỏ chọn hết) -> ĐÓNG BĂNG đúng ý "không siêu thị nào" (mảng rỗng, KHÁC null="Tất Cả")', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    await apiPost('/apply', { rows: [{ custId: 'TSI3', skuId: 'SK3', price: 3000, frDate: '2026-01-01', toDate: '2099-12-31' }], targetStoreIds: [] });
+    const entry = ENTRIES.find(e => e.custId === 'TSI3');
+    assert.deepStrictEqual(entry.targetStoreIds, []);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[FANOUT_TARGET_LOG.length - 1].targetStoreIds, []);
+  });
+
+  await test('PATCH /entries/:id (Sửa) TÁI DÙNG đúng targetStoreIds đã lưu lúc Thêm (KHÔNG có input riêng từ client)', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    await apiPost('/apply', { rows: [{ custId: 'TSI4', skuId: 'SK4', price: 4000, frDate: '2026-01-01', toDate: '2099-12-31' }], targetStoreIds: [101] });
+    const entry = ENTRIES.find(e => e.custId === 'TSI4');
+    FANOUT_TARGET_LOG = [];
+    const res = await apiPatch(`/entries/${entry.id}`, { price: 4500, frDate: '2026-02-01', toDate: '2099-12-31' });
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'update', dsmartKey: entry.dsmartKey, targetStoreIds: [101] });
+  });
+
+  await test('POST /entries/:id/delete (Xoá) TÁI DÙNG đúng targetStoreIds đã lưu lúc Thêm', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    await apiPost('/apply', { rows: [{ custId: 'TSI5', skuId: 'SK5', price: 5000, frDate: '2026-01-01', toDate: '2099-12-31' }], targetStoreIds: [102] });
+    const entry = ENTRIES.find(e => e.custId === 'TSI5');
+    FANOUT_TARGET_LOG = [];
+    const res = await apiPost(`/entries/${entry.id}/delete`, {});
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'delete', dsmartKey: entry.dsmartKey, targetStoreIds: [102] });
+  });
+
+  await test('jobs/dsmartAutoApplyScheduledPrices: entry SCHEDULED có targetStoreIds đã chọn -> job tự áp dụng TRUYỀN ĐÚNG mảng đó cho insertWholesalePrice()', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'TSI6', skuId: 'SK6', price: 6000, frDate: futureDate, toDate: '2099-12-31' }], schedule: true, targetStoreIds: [101] });
+    const scheduledEntry = ENTRIES.find(e => e.custId === 'TSI6');
+    assert.strictEqual(scheduledEntry.status, 'SCHEDULED');
+    assert.deepStrictEqual(scheduledEntry.targetStoreIds, [101]);
+    scheduledEntry.frDate = new Date().toISOString().slice(0, 10);
+    FANOUT_TARGET_LOG = [];
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 1);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'insert', custId: 'TSI6', skuId: 'SK6', targetStoreIds: [101] });
   });
 
   await stopServer();

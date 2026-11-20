@@ -433,6 +433,18 @@
             <input type="checkbox" id="dsmartPriceScheduleApply" class="w-4 h-4">
             📅 Đặt Lịch Áp Giá (dòng có Ngày Bắt Đầu ở TƯƠNG LAI sẽ tự áp từ 0h đúng ngày đó, không áp ngay — dòng Ngày Bắt Đầu hôm nay/đã qua vẫn áp ngay như thường)
           </label>
+          <!-- "🏬 Áp Dụng Cho Siêu Thị" (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất
+               cả siêu thị, hoặc cho tôi chọn từng siêu thị theo dạng dropdown searchable multi-choice...
+               lấy luôn từ cái phần cấu hình admin ấy") — ô chọn nhiều (renderMultiSelectDropdown(),
+               core.js, allToggle:true — ĐÚNG widget đã dùng cho ô chọn siêu thị Kiểm Kê, cùng khuôn "nút
+               all là tất cả siêu thị hoặc tự chọn từng siêu thị"), nguồn dữ liệu GET
+               /store-connections/options (chỉ liệt kê siêu thị ĐANG BẬT trong "🏬 Kết Nối Siêu Thị" ở
+               trên — siêu thị chưa cấu hình/đang Tắt KHÔNG hiện ở đây). Mặc định chọn SẴN tất cả (giữ
+               đúng hành vi fan-out "Tất Cả" như trước khi có tính năng này). -->
+          <div class="bg-sky-50 border border-sky-200 rounded p-2">
+            <div class="text-xs font-bold text-sky-800 mb-1">🏬 Áp Dụng Cho Siêu Thị</div>
+            <div id="dsmartPriceApplyStoreMultiSelect" class="w-full max-w-md"></div>
+          </div>
           <div class="flex items-center gap-3">
             <button type="button" data-op="applyDsmartPriceUpload" id="btnDsmartPriceApplyUpload" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">✅ Thêm Giá Mới Vào DSmart</button>
             <span class="text-[11px] text-gray-400">Cần quyền riêng: itSupportPriceWriteDsmart</span>

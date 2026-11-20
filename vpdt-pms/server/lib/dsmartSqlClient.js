@@ -121,14 +121,30 @@ async function getStorePool(store) {
 
 const STORE_FANOUT_CONCURRENCY = 5;
 
-// fanOutToStores(operation): operation(pool) thực hiện ĐÚNG 1 thao tác ghi/sửa/xoá trên 1 pool — gọi
-// LẶP LẠI cho từng siêu thị Enabled=1, chạy song song theo lô (không dồn quá nhiều kết nối cùng lúc).
-async function fanOutToStores(operation) {
+// fanOutToStores(operation, targetStoreIds): operation(pool) thực hiện ĐÚNG 1 thao tác ghi/sửa/xoá trên
+// 1 pool — gọi LẶP LẠI cho từng siêu thị Enabled=1, chạy song song theo lô (không dồn quá nhiều kết nối
+// cùng lúc).
+//
+// targetStoreIds (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất cả siêu thị, hoặc cho
+// tôi chọn từng siêu thị" ở màn "1. Thêm Giá Mới"/"↩️ Dùng Lại"): null/undefined (mặc định, GIỮ NGUYÊN
+// hành vi cũ trước khi có tính năng này) = fan-out xuống TOÀN BỘ siêu thị đang Enabled=1 tại THỜI ĐIỂM
+// gọi (linh động — thêm siêu thị mới sau này vẫn tự nhận các lượt Sửa/Xoá sau đó của MỌI dòng "Tất Cả").
+// Mảng id (kể cả rỗng = không siêu thị nào, chỉ ghi ở HO) = ĐÓNG BĂNG đúng danh sách đã chọn lúc "Thêm Giá
+// Mới" — route gọi hàm này LUÔN truyền lại ĐÚNG giá trị đã lưu trên entry (routes/dsmartWholesalePrice.js)
+// để "Sửa"/"Xoá" sau đó nhắm đúng những siêu thị đã từng nhận dòng này lúc Thêm, tránh báo lỗi "siêu thị
+// CHƯA từng có dòng giá đó" nếu sau này có thêm siêu thị mới Enabled nhưng chưa từng được chọn cho dòng cụ
+// thể này. LUÔN giao với danh sách đang Enabled=1 (siêu thị bị Tắt sau khi chọn thì vẫn KHÔNG nhận được,
+// an toàn đúng ý nghĩa "Tắt" hiện có).
+async function fanOutToStores(operation, targetStoreIds) {
   let stores;
   try {
     stores = await storeConnStore.listRaw({ onlyEnabled: true });
   } catch (err) {
     return { storeResults: [], storeFanOutError: `Không đọc được danh sách kết nối siêu thị: ${err.message}` };
+  }
+  if (Array.isArray(targetStoreIds)) {
+    const idSet = new Set(targetStoreIds.map(Number));
+    stores = stores.filter(s => idSet.has(s.id));
   }
   const storeResults = [];
   for (let i = 0; i < stores.length; i += STORE_FANOUT_CONCURRENCY) {
@@ -271,13 +287,13 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
   return { ...inserted, wasOverwrite: false };
 }
 
-async function insertWholesalePrice(params) {
+async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
   const pool = await getDsmartPool();
   const hoResult = await upsertPriceOnPool(pool, params);
-  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params));
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
 }
 
@@ -419,13 +435,13 @@ function buildNaturalKeyWhere(req, dsmartKey) {
 // SQL ở trên). Từ Lần 5: khoá CHỈ gồm CUST_ID+SKU_ID (không còn gồm FR_DATE/TO_DATE như giả định Lần 2 sai)
 // nên đổi Giá/Ngày KHÔNG làm khoá đổi theo nữa — vẫn trả về khoá (giờ luôn giống khoá cũ) để caller lưu đè
 // lại cho nhất quán, dù không còn bắt buộc như trước.
-async function updateWholesalePrice(params) {
+async function updateWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
   const pool = await getDsmartPool();
   const hoResult = await updatePriceOnPool(pool, params);
-  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => updatePriceOnPool(storePool, params));
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => updatePriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
 }
 
@@ -477,10 +493,10 @@ async function updatePriceOnPool(pool, { dsmartKey, price, frDate, toDate }) {
 // deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (khớp theo dsmartKey — khoá tự nhiên) khỏi CSPRICE — KHÔNG
 // hoàn tác được SAU KHI commit. Cùng cơ chế transaction + OUTUT như updateWholesalePrice() ở trên — khớp
 // >1 dòng thì ROLLBACK (không xoá gì cả), khớp 0 dòng thì coi như đã đạt mục tiêu (không ném lỗi).
-async function deleteWholesalePrice(params) {
+async function deleteWholesalePrice(params, targetStoreIds) {
   const pool = await getDsmartPool();
   const hoResult = await deletePriceOnPool(pool, params);
-  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => deletePriceOnPool(storePool, params));
+  const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => deletePriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
 }
 

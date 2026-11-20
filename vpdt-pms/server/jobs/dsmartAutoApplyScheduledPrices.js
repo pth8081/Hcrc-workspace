@@ -44,9 +44,12 @@ async function runDsmartAutoApplyScheduledPrices() {
       // cùng trỏ 1 dòng CSPRICE thật (audit chéo 12/2026 phát hiện: job cũ KHÔNG khoá/dọn stale entry như
       // /apply, có thể để sót entry ACTIVE cũ khi insertWholesalePrice() ghi đè — xem lịch sử ở trên).
       await withAppLock(`dsmartWholesalePrice:${e.custId}:${e.skuId}`, async () => {
+        // targetStoreIds (12/2026): tái dùng đúng danh sách siêu thị đã ĐÓNG BĂNG lúc "Thêm Giá Mới"/tick
+        // "Đặt Lịch Áp Giá" (null = đã chọn "Tất Cả" lúc đó) — xem chú thích tại fanOutToStores()/
+        // lib/dsmartSqlClient.js.
         const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({
           custId: e.custId, skuId: e.skuId, price: e.price, frDate: e.frDate, toDate: e.toDate
-        });
+        }, e.targetStoreIds);
         const now = new Date().toISOString();
         // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
         // DSmart. Đánh dấu DELETED MỌI entry mirror ACTIVE khác cho đúng cặp này (cùng logic routes/
