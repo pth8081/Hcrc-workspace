@@ -1,7 +1,8 @@
 // public/js/module-itsupport-dsmartprice.js — Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn" (12/2026), client
-// cho routes/dsmartWholesalePrice.js. Xem chú thích mô hình dữ liệu đầy đủ ở route đó — tóm tắt: CSPRICE
-// (DSmart16 Trung Tâm) là bảng lịch sử giá theo thời gian, "Thêm Giá Mới" = INSERT dòng mới, "Sửa" =
-// UPDATE đúng dòng CHƯA xoá, "Xoá" = DELETE thật, "Dùng Lại" (từ dòng đã xoá) = INSERT dòng mới.
+// cho routes/dsmartWholesalePrice.js. Xem chú thích mô hình dữ liệu đầy đủ ở route đó — tóm tắt (ĐÃ SỬA
+// LẦN 5): CSPRICE chỉ cho phép 1 dòng/1 cặp (CUST_ID, SKU_ID), "Thêm Giá Mới" = INSERT nếu CHƯA có dòng,
+// tự GHI ĐÈ nếu ĐÃ có dòng (không báo lỗi trùng khoá), "Sửa" = UPDATE đúng dòng CHƯA xoá, "Xoá" = DELETE
+// thật, "Dùng Lại" (từ dòng đã xoá) = INSERT (hoặc tự ghi đè nếu lúc này đã có dòng khác).
 let _dsmartPriceEntries = [];
 let _dsmartPriceUploadRows = null;
 let _dsmartPriceUploadFileName = null;
@@ -81,11 +82,11 @@ function renderDsmartPriceUploadPreview() {
   const validCount = _dsmartPriceUploadRows.filter(r => !r.errors.length).length;
   const overlapCount = _dsmartPriceUploadRows.filter(r => r.hasOverlap).length;
   document.getElementById('dsmartPriceUploadStats').innerText =
-    `${_dsmartPriceUploadRows.length} dòng trong file — ${validCount} hợp lệ` + (overlapCount ? `, ${overlapCount} trùng khoảng ngày với dòng đã có` : '');
+    `${_dsmartPriceUploadRows.length} dòng trong file — ${validCount} hợp lệ` + (overlapCount ? `, ${overlapCount} dòng SẼ GHI ĐÈ giá đang có (trùng Mã Khách B2B + Mã Sản Phẩm)` : '');
   document.getElementById('dsmartPriceUploadPreviewBody').innerHTML = filtered.map((r, i) => {
     let statusHtml;
     if (r.errors.length) statusHtml = `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⛔ ${escapeHtml(r.errors.join('; '))}</span>`;
-    else if (r.hasOverlap) statusHtml = `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⚠️ Đã có dòng cùng khoảng ngày</span>`;
+    else if (r.hasOverlap) statusHtml = `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⚠️ Sẽ GHI ĐÈ giá đang có</span>`;
     else statusHtml = `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✅ Sẽ thêm mới</span>`;
     return `<tr class="${r.errors.length ? 'bg-red-50' : r.hasOverlap ? 'bg-amber-50' : ''}">
       <td class="p-1.5 text-gray-400">${i + 1}</td>
@@ -120,14 +121,16 @@ async function applyDsmartPriceUpload() {
     // thành công" mà không biết VÌ SAO). Nay hiện THẲNG nội dung lỗi thật của từng dòng ngay trong alert
     // (tối đa 5 dòng đầu, đủ cho hầu hết lượt upload thực tế — ít khi upload hàng trăm dòng lỗi cùng lúc)
     // — vẫn console.error() đầy đủ cho ai có DevTools, nhưng KHÔNG còn là cách DUY NHẤT để biết lý do.
+    const overwrittenCount = data.results.filter(r => r.success && r.overwritten).length;
+    const overwriteNote = overwrittenCount ? ` (trong đó ${overwrittenCount} dòng GHI ĐÈ giá đã có)` : '';
     if (data.failCount) {
       const failedRows = data.results.filter(r => !r.success);
       const errLines = failedRows.slice(0, 5).map(r => `• ${r.custId}/${r.skuId}: ${r.error}`).join('\n');
       const moreNote = failedRows.length > 5 ? `\n... và ${failedRows.length - 5} dòng lỗi khác (xem console để biết đầy đủ)` : '';
-      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
       console.error('Dòng lỗi khi thêm giá DSmart:', failedRows);
     } else {
-      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công`);
+      alert(`✅ Đã thêm ${data.successCount}/${validRows.length} dòng thành công${overwriteNote}`);
     }
     _dsmartPriceUploadRows = null;
     document.getElementById('dsmartPriceUploadPreviewWrap').classList.add('hidden');
@@ -298,7 +301,7 @@ async function saveDsmartPriceReuse() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     if (!data.successCount) throw new Error(data.results?.[0]?.error || 'Ghi thất bại');
-    alert('✅ Đã thêm giá mới thành công');
+    alert(data.results?.[0]?.overwritten ? '✅ Đã GHI ĐÈ giá hiện có thành công (đã có dòng khác cho đúng Mã Khách B2B/Mã Sản Phẩm này)' : '✅ Đã thêm giá mới thành công');
     cancelDsmartPriceReuse();
     await Promise.all([renderDsmartPriceEntries(), renderDsmartPriceHistory()]);
   } catch (err) { alert('⛔ ' + err.message); }

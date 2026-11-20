@@ -3,13 +3,17 @@
 // BÊN NGOÀI (DSmart16 Trung Tâm, bảng CSPRICE) thay vì chỉ gọi API/đồng bộ đọc như các tích hợp DSmart
 // khác (lib/dsmartApiClient.js, jobs/inventorySync.js...).
 //
-// MÔ HÌNH DỮ LIỆU (người dùng xác nhận rõ, KHÔNG phải suy đoán): CSPRICE là bảng LỊCH SỬ GIÁ THEO THỜI
-// GIAN — nhiều dòng/1 cặp (CUST_ID, SKU_ID), phân biệt bởi (FR_DATE, TO_DATE). Mỗi lần "Thêm Giá Mới" là
-// INSERT 1 dòng MỚI (không UPDATE đè dòng cũ). "Sửa" chỉ áp dụng cho dòng CHƯA xoá (UPDATE đúng dòng đó
-// theo "khoá tự nhiên" dsmartKey — CSPRICE KHÔNG có cột ID tự tăng, xem chú thích đầy đủ tại
+// MÔ HÌNH DỮ LIỆU — ĐÃ SỬA LẦN 5 (12/2026, lỗi thật production: PK_CSPRICE xác nhận qua SSMS CHỈ gồm
+// (CUST_ID, SKU_ID), KHÔNG phải "lịch sử giá nhiều dòng phân biệt bởi FR_DATE/TO_DATE" như hiểu nhầm trước
+// đây — xem chú thích đầy đủ tại lib/dsmartSqlClient.js). Mỗi cặp (CUST_ID, SKU_ID) CHỈ CÓ ĐÚNG 1 DÒNG trên
+// CSPRICE tại một thời điểm. "Thêm Giá Mới" cho 1 cặp CHƯA có dòng là INSERT; cho 1 cặp ĐÃ có dòng là GHI
+// ĐÈ tự động (insertWholesalePrice() tự phát hiện lỗi trùng khoá chính và chuyển sang UPDATE, KHÔNG báo
+// lỗi) — xem xử lý "wasOverwrite" ở route POST /apply bên dưới (tự đánh dấu DELETED entry mirror cũ nếu
+// có, tránh 2 entry ACTIVE cùng trỏ 1 dòng CSPRICE thật). "Sửa" chỉ áp dụng cho dòng CHƯA xoá (UPDATE đúng
+// dòng đó theo khoá CUST_ID+SKU_ID — CSPRICE KHÔNG có cột ID tự tăng, xem chú thích đầy đủ tại
 // lib/dsmartSqlClient.js). "Xoá" (tay hoặc tự động theo giờ đặt) là DELETE THẬT khỏi CSPRICE, không hoàn
-// tác được qua hệ thống này. "Dùng Lại" (từ 1 dòng đã xoá) là INSERT dòng MỚI (vì dòng cũ không còn tồn
-// tại trên DSmart để update) — KHÔNG đụng gì tới dòng đã xoá.
+// tác được qua hệ thống này. "Dùng Lại" (từ 1 dòng đã xoá) là INSERT dòng MỚI — nếu lúc này đã có dòng khác
+// (hiếm, ai đó tạo lại ngoài hệ thống) thì cũng tự ghi đè theo đúng cơ chế trên, không báo lỗi.
 //
 // PHẠM VI QUẢN LÝ (người dùng xác nhận rõ): CHỈ dữ liệu TỰ NỘP qua chính tính năng này (bảng mirror nội
 // bộ dbo.DsmartWholesalePriceEntries) — KHÔNG quét/hiển thị dữ liệu có sẵn trong CSPRICE từ trước.
@@ -224,9 +228,12 @@ router.get('/history', async (req, res) => {
 // overlapsExisting(): dòng MỚI (frDate/toDate) có trùng khoảng ngày với 1 dòng ACTIVE đã có (CÙNG
 // custId+skuId) không — chỉ để CẢNH BÁO MỀM ở bước xem trước, KHÔNG chặn cứng (người dùng tự quyết định,
 // CSPRICE vẫn chấp nhận nhiều dòng trùng — DSmart tự chọn dòng nào áp dụng theo logic riêng của nó).
-function overlapsExisting(existingActive, custId, skuId, frDate, toDate) {
-  return existingActive.some(e => e.custId === custId && e.skuId === skuId && e.status === 'ACTIVE'
-    && frDate <= e.toDate && toDate >= e.frDate);
+// overlapsExisting() (Lần 5, 12/2026 — SỬA theo đúng khoá chính thật CSPRICE xác nhận qua SSMS): KHÔNG còn
+// so khoảng ngày (FR_DATE/TO_DATE KHÔNG phải 1 phần khoá — xem chú thích đầy đủ ở lib/dsmartSqlClient.js)
+// — CHỈ cần trùng (CUST_ID, SKU_ID) với 1 entry ACTIVE trong mirror là SẼ bị GHI ĐÈ khi Thêm, bất kể ngày
+// hiệu lực có chồng nhau hay không (CSPRICE chỉ cho phép 1 dòng/cặp khách+SP tại một thời điểm).
+function overlapsExisting(existingActive, custId, skuId) {
+  return existingActive.some(e => e.custId === custId && e.skuId === skuId && e.status === 'ACTIVE');
 }
 
 // ===================== 1. Thêm Giá Mới: xem trước (đọc file, KHÔNG ghi gì) =====================
@@ -253,7 +260,7 @@ router.post('/preview', uploadRateLimiter, (req, res) => {
       const existingActive = await getAllForCollection('dsmartWholesalePriceEntries');
       const withOverlap = rows.map(r => ({
         ...r,
-        hasOverlap: r.errors.length === 0 && overlapsExisting(existingActive, r.custId, r.skuId, r.frDate, r.toDate)
+        hasOverlap: r.errors.length === 0 && overlapsExisting(existingActive, r.custId, r.skuId)
       }));
       res.json({ ok: true, fileName: req.file.originalname, rows: withOverlap });
     } catch (err2) { sendCatchError(res, err2, 'POST /api/dsmart-price/preview'); }
@@ -283,16 +290,37 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
       continue;
     }
     try {
-      const dsmartKey = await insertWholesalePrice({ custId, skuId, price, frDate, toDate });
+      const { wasOverwrite, ...dsmartKey } = await insertWholesalePrice({ custId, skuId, price, frDate, toDate });
       const now = new Date().toISOString();
+      // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
+      // DSmart thay vì báo lỗi (xem Lần 5, lib/dsmartSqlClient.js). Nếu mirror nội bộ đang có 1 entry
+      // ACTIVE khác cho đúng cặp này, đánh dấu nó DELETED (dữ liệu giá/ngày CỦA ENTRY ĐÓ không còn đúng với
+      // dòng thật trên DSmart nữa — đã bị entry MỚI này ghi đè) để tránh 2 entry ACTIVE cùng trỏ 1 dòng
+      // CSPRICE thật, đồng thời tự dọn luôn dòng dữ liệu cũ lỗi (thiếu cột) từ sự cố Lần 3 nếu có.
+      if (wasOverwrite) {
+        const existingActive = await getAllForCollection('dsmartWholesalePriceEntries');
+        const stale = existingActive.find(e => e.custId === custId && e.skuId === skuId && e.status === 'ACTIVE');
+        if (stale) {
+          await withLockedRecordForCollection('dsmartWholesalePriceEntries', stale.id, async (item) => {
+            if (item.status !== 'ACTIVE') return item;
+            return {
+              ...item, status: 'DELETED', deletedBy: req.freshUser.username, deletedAt: now,
+              history: [...(item.history || []), {
+                action: 'DELETE', mode: 'AUTO_OVERWRITTEN', actor: req.freshUser.username, at: now,
+                note: 'Bị ghi đè tự động bởi 1 lượt "Thêm Giá Mới" khác cho cùng Mã Khách B2B/Mã Sản Phẩm (CSPRICE chỉ cho phép 1 dòng/cặp)'
+              }]
+            };
+          });
+        }
+      }
       const entry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         dsmartKey, custId, skuId, price, frDate, toDate, status: 'ACTIVE',
         createdBy: req.freshUser.username, createdAt: now, sourceFileName,
-        history: [{ action: 'INSERT', mode: sourceAction, actor: req.freshUser.username, at: now, price, frDate, toDate, sourceFileName }]
+        history: [{ action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: sourceAction, actor: req.freshUser.username, at: now, price, frDate, toDate, sourceFileName }]
       };
       await createForCollection('dsmartWholesalePriceEntries', () => entry);
-      results.push({ custId, skuId, success: true, entryId: entry.id });
+      results.push({ custId, skuId, success: true, entryId: entry.id, overwritten: wasOverwrite });
     } catch (err) {
       results.push({ custId, skuId, success: false, error: err instanceof DsmartConfigError ? err.message : (err.message || 'Lỗi không xác định') });
       // Lỗi kết nối/cấu hình (DsmartConfigError) sẽ LẶP LẠI y hệt cho mọi dòng còn lại — dừng sớm thay vì
@@ -306,7 +334,8 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
     }
   }
   const successCount = results.filter(r => r.success).length;
-  logDsmartPrice(req, 'INSERT_DSMART_PRICE', sourceFileName || 'reuse', `Thêm giá bán buôn: ${successCount}/${rows.length} dòng thành công (${sourceAction})`);
+  const overwriteCount = results.filter(r => r.success && r.overwritten).length;
+  logDsmartPrice(req, 'INSERT_DSMART_PRICE', sourceFileName || 'reuse', `Thêm giá bán buôn: ${successCount}/${rows.length} dòng thành công (${sourceAction})${overwriteCount ? `, trong đó ${overwriteCount} dòng GHI ĐÈ giá đã có` : ''}`);
   res.json({ ok: true, results, successCount, failCount: results.length - successCount });
 });
 

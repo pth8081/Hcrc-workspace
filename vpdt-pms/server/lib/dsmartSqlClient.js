@@ -13,12 +13,24 @@
 // identity_columns` trả về RỖNG — không phải lỗi dò tên cột sai như lần trước, mà bảng này THỰC SỰ dùng
 // KHOÁ TỰ NHIÊN (composite key) nhiều cột, không có surrogate key riêng.
 //
-// Vì vậy insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() bên dưới KHÔNG còn dựa vào
-// 1 cột ID duy nhất — thay vào đó dùng tổ hợp CUST_ID + TYPE + STK_ID + SKU_ID + WS_ID + FR_DATE + TO_DATE
-// (suy luận từ cấu trúc bảng thật: khách hàng + loại giá + kho/quầy + sản phẩm + bảng giá + khoảng ngày
-// hiệu lực — đúng mô hình "giá đặc biệt theo khách hàng" phổ biến ở ERP; KHÔNG gồm WSPRICE vì đó là giá
-// trị SẼ bị đổi khi Sửa, và KHÔNG gồm các cột sổ sách như OPEN_DATE/MODI_DATE/MODIFY/USER_ID vì có thể bị
-// hệ thống khác đụng tới ngoài tầm kiểm soát).
+// KHOÁ CHÍNH THẬT CHỈ 2 CỘT (12/2026, LỖI THẬT PRODUCTION LẦN 5 — SỬA LẠI GIẢ ĐỊNH LẦN 2 Ở TRÊN): người
+// dùng thử "Thêm Giá Mới" lại cho CUST_ID/SKU_ID đã từng ghi (dòng lỗi Lần 3 để lại) và gặp lỗi THẬT: "
+// Violation of PRIMARY KEY constraint 'PK_CSPRICE'. Cannot insert duplicate key... The duplicate key value
+// is (240000000001, 296019310000)." — chỉ 2 giá trị, đúng 2 cột. Người dùng tự chạy câu truy vấn
+// `sys.indexes`/`sys.index_columns` đối chiếu PK_CSPRICE qua SSMS (ảnh chụp thật) xác nhận: PK_CSPRICE =
+// (CUST_ID, SKU_ID) — CHỈ 2 CỘT, không phải tổ hợp 7 cột suy luận ở Lần 2 (suy luận đó SAI — may mắn KHÔNG
+// gây sửa/xoá nhầm dòng khác nhờ lớp an toàn "khớp >1 dòng -> rollback", nhưng khiến INSERT 1 dòng ĐÃ CÓ
+// báo lỗi thay vì ghi đè đúng ý).
+//
+// Ý NGHĨA NGHIỆP VỤ QUAN TRỌNG (sửa lại hiểu nhầm trước đây): CSPRICE KHÔNG PHẢI bảng "lịch sử giá nhiều
+// dòng/1 cặp khách+SP phân biệt bởi FR_DATE/TO_DATE" — mỗi cặp (CUST_ID, SKU_ID) CHỈ CÓ ĐÚNG 1 DÒNG DUY
+// NHẤT tại một thời điểm (PK ép buộc). "Thêm Giá Mới" cho 1 cặp ĐÃ CÓ dòng thực chất là THAY THẾ/GHI ĐÈ giá
+// hiện có, không phải thêm 1 dòng lịch sử mới — xem overwriteWholesalePrice() bên dưới (tự động kích hoạt
+// khi INSERT gặp lỗi trùng khoá chính, KHÔNG cần người dùng tự xoá dòng cũ qua SSMS trước).
+//
+// insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() bên dưới dùng KHOÁ TỰ NHIÊN THẬT
+// NATURAL_KEY_COLUMNS = (CUST_ID, SKU_ID) — ĐÃ SỬA từ tổ hợp 7 cột sai ở Lần 2 xuống đúng 2 cột theo PK
+// thật xác nhận ở trên.
 //
 // KHÔNG DÙNG CÂU SELECT NÀO TRÊN DỮ LIỆU CSPRICE (12/2026, LỖI THẬT PRODUCTION LẦN 3 — người dùng thử lại
 // gặp đúng lỗi "The SELECT permission was denied on the object 'CSPRICE'..."): tài khoản SQL dùng cho
@@ -51,10 +63,11 @@ const { HttpError } = require('./httpErrors');
 let cachedPool = null;
 let cachedSignature = null;
 
-// NATURAL_KEY_COLUMNS: 7 cột tạo thành "khoá tự nhiên" dùng để khớp CHÍNH XÁC 1 dòng CSPRICE khi Sửa/Xoá
-// (xem chú thích đầy đủ ở đầu file) — thứ tự liệt kê ở đây chỉ để tham chiếu, KHÔNG ảnh hưởng câu lệnh SQL
-// (mỗi câu lệnh tự liệt kê tường minh, không loop động, để dễ đọc/dễ rà soát khi audit).
-const NATURAL_KEY_COLUMNS = ['CUST_ID', 'TYPE', 'STK_ID', 'SKU_ID', 'WS_ID', 'FR_DATE', 'TO_DATE'];
+// NATURAL_KEY_COLUMNS: khoá tự nhiên (= PRIMARY KEY THẬT của CSPRICE, xác nhận Lần 5 qua sys.indexes) dùng
+// để khớp CHÍNH XÁC 1 dòng CSPRICE khi Sửa/Xoá/phát hiện trùng khoá lúc Thêm — thứ tự liệt kê ở đây chỉ để
+// tham chiếu, KHÔNG ảnh hưởng câu lệnh SQL (mỗi câu lệnh tự liệt kê tường minh, không loop động, để dễ đọc/
+// dễ rà soát khi audit).
+const NATURAL_KEY_COLUMNS = ['CUST_ID', 'SKU_ID'];
 
 function configSignature(cfg) {
   return [cfg.host, cfg.port, cfg.database, cfg.user, cfg.passwordEnc].join('|');
@@ -170,17 +183,70 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
   try {
     result = await req.query(`
       INSERT INTO dbo.CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV, WSPRICE, VAT_INCL, TAX_CODE, OPEN_DATE, MODI_DATE, STATUS, FR_DATE, TO_DATE)
-      OUTPUT INSERTED.CUST_ID, INSERTED.TYPE, INSERTED.STK_ID, INSERTED.SKU_ID, INSERTED.WS_ID, INSERTED.FR_DATE, INSERTED.TO_DATE
+      OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
       VALUES (@custId, '04', @skuId, @unit, @unit, @unitConv, @price, 1, @taxCode, GETDATE(), GETDATE(), 1, @frDate, @toDate);
     `);
   } catch (err) {
+    // Trùng khoá chính (CUST_ID, SKU_ID) -> KHÔNG phải lỗi thật, mà là "Thêm Giá Mới" cho 1 cặp ĐÃ CÓ dòng
+    // (xem chú thích Lần 5 ở đầu file) -> ghi đè thay vì báo lỗi, không cần người dùng tự xoá dòng cũ.
+    if (isPrimaryKeyViolation(err)) {
+      return overwriteWholesalePrice({ custId, skuId, unit, unitConv, price, taxCode, frDate, toDate });
+    }
     throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
   }
   const rows = result.recordset || [];
   if (!rows.length) {
     throw new DsmartSqlError('DSmart không trả lại dòng vừa thêm (OUTPUT INSERTED rỗng) — kiểm tra thủ công trên DSmart xem dòng đã được ghi chưa.');
   }
-  return naturalKeyFromRow(rows[0]);
+  return { ...naturalKeyFromRow(rows[0]), wasOverwrite: false };
+}
+
+// isPrimaryKeyViolation(err): nhận diện đúng lỗi "trùng khoá chính PK_CSPRICE" (SQL Server error 2627) để
+// phân biệt với MỌI lỗi khác (mất kết nối, thiếu cột NOT NULL khác...) — CHỈ lỗi này mới tự chuyển sang ghi
+// đè, các lỗi khác vẫn ném ra như cũ. Kiểm tra cả `err.number` (chuẩn, mssql luôn gán đúng mã lỗi SQL
+// Server gốc) lẫn nội dung message chứa tên ràng buộc (dự phòng nếu driver không gán `number` vì lý do nào
+// đó) — không dựa DUY NHẤT vào 1 cách nhận diện.
+function isPrimaryKeyViolation(err) {
+  if (err && (err.number === 2627 || err.number === 2601)) return true;
+  const msg = String(err?.message || '');
+  return /PRIMARY KEY/i.test(msg) && /PK_CSPRICE/i.test(msg);
+}
+
+// overwriteWholesalePrice(): kích hoạt khi INSERT ở trên gặp đúng lỗi trùng khoá chính — GHI ĐÈ ĐỦ LẠI toàn
+// bộ các cột bắt buộc (TYPE/UNIT_SYMB/BASE_UNIT/UNITCONV/WSPRICE/VAT_INCL/TAX_CODE/STATUS/FR_DATE/TO_DATE/
+// MODI_DATE) theo đúng công thức Lần 4, KHÔNG chỉ sửa Giá/Ngày — mục đích kép: (1) đúng ý "Thêm Giá Mới"
+// nghĩa là thay giá hiện có khi đã tồn tại dòng, (2) TỰ khắc phục luôn dòng cũ bị ghi thiếu cột do lỗi Lần
+// 3 (TYPE/UNIT_SYMB/... rỗng) mà không cần người dùng tự sửa tay qua SSMS. OPEN_DATE CHỈ set nếu đang NULL
+// (giữ nguyên ngày mở giá gốc nếu dòng đã đúng từ trước, chỉ backfill cho dòng cũ bị hỏng).
+async function overwriteWholesalePrice({ custId, skuId, unit, unitConv, price, taxCode, frDate, toDate }) {
+  const pool = await getDsmartPool();
+  const req = pool.request();
+  req.input('custId', sql.NVarChar(50), String(custId));
+  req.input('skuId', sql.NVarChar(50), String(skuId));
+  req.input('unit', sql.NVarChar(10), unit);
+  req.input('unitConv', sql.Int, unitConv);
+  req.input('price', sql.Decimal(18, 4), Number(price));
+  req.input('taxCode', sql.NVarChar(10), taxCode);
+  req.input('frDate', sql.DateTime, toDateOnly(frDate));
+  req.input('toDate', sql.DateTime, toDateOnly(toDate));
+  let result;
+  try {
+    result = await req.query(`
+      UPDATE dbo.CSPRICE
+      SET TYPE = '04', UNIT_SYMB = @unit, BASE_UNIT = @unit, UNITCONV = @unitConv, WSPRICE = @price,
+          VAT_INCL = 1, TAX_CODE = @taxCode, STATUS = 1, FR_DATE = @frDate, TO_DATE = @toDate,
+          MODI_DATE = GETDATE(), OPEN_DATE = ISNULL(OPEN_DATE, GETDATE())
+      OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
+      WHERE CUST_ID = @custId AND SKU_ID = @skuId;
+    `);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi ghi đè CSPRICE (TRÙNG KHOÁ, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
+  }
+  const rows = result.recordset || [];
+  if (!rows.length) {
+    throw new DsmartSqlError(`Phát hiện trùng khoá chính (CUST_ID=${custId}, SKU_ID=${skuId}) lúc Thêm nhưng không ghi đè được (dòng có thể vừa bị xoá bởi thao tác khác ngay lúc này) — thử lại.`);
+  }
+  return { ...naturalKeyFromRow(rows[0]), wasOverwrite: true };
 }
 
 // lookupSkuDefUnitInfo(pool, skuId): tra Đơn Vị Tính (PICEUNIT, dùng chung cho cả UNIT_SYMB lẫn BASE_UNIT
@@ -215,39 +281,30 @@ async function lookupSkuDefUnitInfo(pool, skuId) {
 // naturalKeyFromRow(row): chuyển 1 dòng kết quả OUTPUT (hoặc tương đương) thành object "khoá tự nhiên"
 // dsmartKey chuẩn — dùng chung cho insert/update.
 function naturalKeyFromRow(row) {
-  return {
-    custId: String(row.CUST_ID).trim(), type: String(row.TYPE).trim(), stkId: String(row.STK_ID),
-    skuId: String(row.SKU_ID).trim(), wsId: row.WS_ID, frDate: row.FR_DATE, toDate: row.TO_DATE
-  };
+  return { custId: String(row.CUST_ID).trim(), skuId: String(row.SKU_ID).trim() };
 }
 
-// buildNaturalKeyWhere(req, dsmartKey): gán tham số hoá đủ 7 cột khoá tự nhiên vào request SQL đã cho,
-// trả về mệnh đề WHERE tương ứng.
+// buildNaturalKeyWhere(req, dsmartKey): gán tham số hoá đúng 2 cột khoá chính thật (CUST_ID, SKU_ID) vào
+// request SQL đã cho, trả về mệnh đề WHERE tương ứng.
 function buildNaturalKeyWhere(req, dsmartKey) {
   if (!dsmartKey || typeof dsmartKey !== 'object') {
     throw new DsmartSqlError('Thiếu khoá tự nhiên (dsmartKey) của dòng CSPRICE cần sửa/xoá — dữ liệu nội bộ có thể bị hỏng, liên hệ đội phát triển.');
   }
-  const { custId, type, stkId, skuId, wsId, frDate, toDate } = dsmartKey;
-  if (custId == null || type == null || stkId == null || skuId == null || wsId == null || frDate == null || toDate == null) {
-    throw new DsmartSqlError(`Khoá tự nhiên (dsmartKey) thiếu 1 trong các trường ${NATURAL_KEY_COLUMNS.join('/')}  — không thể xác định đúng 1 dòng CSPRICE để sửa/xoá an toàn.`);
+  const { custId, skuId } = dsmartKey;
+  if (custId == null || skuId == null) {
+    throw new DsmartSqlError(`Khoá tự nhiên (dsmartKey) thiếu 1 trong các trường ${NATURAL_KEY_COLUMNS.join('/')} — không thể xác định đúng 1 dòng CSPRICE để sửa/xoá an toàn.`);
   }
   req.input('kCustId', sql.NVarChar(50), String(custId));
-  req.input('kType', sql.NVarChar(20), String(type));
-  req.input('kStkId', sql.NVarChar(50), String(stkId));
   req.input('kSkuId', sql.NVarChar(50), String(skuId));
-  req.input('kWsId', sql.Int, Number(wsId));
-  req.input('kFrDate', sql.DateTime, toDateOnly(frDate));
-  req.input('kToDate', sql.DateTime, toDateOnly(toDate));
-  return 'CUST_ID = @kCustId AND TYPE = @kType AND STK_ID = @kStkId AND SKU_ID = @kSkuId AND WS_ID = @kWsId AND FR_DATE = @kFrDate AND TO_DATE = @kToDate';
+  return 'CUST_ID = @kCustId AND SKU_ID = @kSkuId';
 }
 
-// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (khớp theo dsmartKey — khoá tự nhiên) — CHỈ sửa
-// Giá/Ngày, không đụng cột nào khác. Chạy trong 1 transaction, dùng OUTPUT để vừa biết số dòng bị ảnh
-// hưởng vừa lấy lại khoá tự nhiên MỚI, KHÔNG cần câu SELECT riêng nào (xem chú thích quyền SQL ở trên).
-// LƯU Ý QUAN TRỌNG: FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — sau khi UPDATE, khoá tự nhiên CŨ
-// (dsmartKey truyền vào) không còn khớp dòng này nữa nếu ngày bị đổi, nên hàm này LUÔN trả về khoá tự
-// nhiên MỚI (caller PHẢI lưu đè lại dsmartKey trong mirror nội bộ, nếu không lần Sửa/Xoá kế tiếp sẽ dùng
-// khoá cũ đã sai).
+// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (khớp theo dsmartKey — khoá chính thật CUST_ID+SKU_ID,
+// xem Lần 5 ở đầu file) — CHỈ sửa Giá/Ngày, không đụng cột nào khác. Chạy trong 1 transaction, dùng OUTPUT
+// để vừa biết số dòng bị ảnh hưởng vừa lấy lại khoá, KHÔNG cần câu SELECT riêng nào (xem chú thích quyền
+// SQL ở trên). Từ Lần 5: khoá CHỈ gồm CUST_ID+SKU_ID (không còn gồm FR_DATE/TO_DATE như giả định Lần 2 sai)
+// nên đổi Giá/Ngày KHÔNG làm khoá đổi theo nữa — vẫn trả về khoá (giờ luôn giống khoá cũ) để caller lưu đè
+// lại cho nhất quán, dù không còn bắt buộc như trước.
 async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
   if (!Number.isFinite(Number(price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
@@ -268,7 +325,7 @@ async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
     req.input('newToDate', sql.DateTime, toDateOnly(toDate));
     const result = await req.query(`
       UPDATE dbo.CSPRICE SET WSPRICE = @newPrice, FR_DATE = @newFrDate, TO_DATE = @newToDate
-      OUTPUT INSERTED.CUST_ID, INSERTED.TYPE, INSERTED.STK_ID, INSERTED.SKU_ID, INSERTED.WS_ID, INSERTED.FR_DATE, INSERTED.TO_DATE
+      OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
       WHERE ${whereClause};
     `);
     rows = result.recordset || [];

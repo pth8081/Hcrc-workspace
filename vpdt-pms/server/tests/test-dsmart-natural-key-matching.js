@@ -12,11 +12,23 @@
 //          `OUTPUT INSERTED.*`/`OUTPUT DELETED.*` NGAY TRÊN câu INSERT/UPDATE/DELETE (đọc trực tiếp từ
 //          thao tác ghi, không cần quyền SELECT riêng) — updateWholesalePrice()/deleteWholesalePrice()
 //          chạy trong 1 transaction, ROLLBACK nếu OUTPUT cho thấy khớp >1 dòng.
+//   Lần 4: dòng ghi "thành công" về kỹ thuật nhưng DSmart không áp dụng được giá vì thiếu cột (TYPE/
+//          UNIT_SYMB/BASE_UNIT/UNITCONV/VAT_INCL/TAX_CODE/STATUS) -> vá bằng công thức thật trích từ
+//          BRG_APP.sql + tra SKU_DEF.
+//   Lần 5: người dùng thử Thêm lại cho 1 cặp CUST_ID/SKU_ID ĐÃ CÓ dòng (dòng lỗi Lần 3 để lại), gặp lỗi
+//          THẬT "Violation of PRIMARY KEY constraint 'PK_CSPRICE'... duplicate key value is (CUST_ID,
+//          SKU_ID)" — người dùng tự đối chiếu qua SSMS (sys.indexes) xác nhận PK_CSPRICE CHỈ gồm 2 cột
+//          (CUST_ID, SKU_ID), KHÔNG phải tổ hợp 7 cột giả định SAI ở Lần 2. SỬA: NATURAL_KEY_COLUMNS rút
+//          về đúng 2 cột; insertWholesalePrice() bắt lỗi trùng khoá chính (SQL error 2627) và TỰ CHUYỂN
+//          sang UPDATE ghi đè đủ lại toàn bộ cột theo công thức Lần 4 (xem overwriteWholesalePrice()),
+//          KHÔNG còn báo lỗi cho người dùng khi trùng khoá.
 //
 // File test này mô phỏng THẬT gói `mssql` (require.cache) — bao gồm mô phỏng ĐÚNG hành vi ROLLBACK (hoàn
-// tác thay đổi dữ liệu thật, không chỉ log) để kiểm chứng đúng lớp an toàn chống sửa/xoá nhầm, VÀ mô
-// phỏng ĐÚNG việc tài khoản không có quyền SELECT trên CSPRICE (mọi câu SELECT dữ liệu thật trên CSPRICE
-// đều ném lỗi — nếu code LỠ thêm lại 1 câu SELECT như vậy, test này bắt được ngay).
+// tác thay đổi dữ liệu thật, không chỉ log) để kiểm chứng đúng lớp an toàn chống sửa/xoá nhầm, mô phỏng
+// ĐÚNG việc tài khoản không có quyền SELECT trên CSPRICE (mọi câu SELECT dữ liệu thật trên CSPRICE đều ném
+// lỗi — nếu code LỠ thêm lại 1 câu SELECT như vậy, test này bắt được ngay), VÀ mô phỏng ĐÚNG ràng buộc
+// PRIMARY KEY thật (CUST_ID, SKU_ID) trên CSPRICE — INSERT trùng cặp này ném đúng lỗi SQL Server 2627 như
+// thật, để kiểm chứng đúng cơ chế tự chuyển sang ghi đè ở Lần 5.
 //
 // tests/test-dsmart-wholesale-price.js stub NGUYÊN lib/dsmartSqlClient (không đi qua SQL thật), nên KHÔNG
 // phủ được logic bên trong file này — file test này bổ sung đúng phần đó.
@@ -49,12 +61,18 @@ let SKU_DEF_PERMISSION_DENIED = false; // mô phỏng trường hợp tài kho�
 function dateMs(v) { return v instanceof Date ? v.getTime() : new Date(v).getTime(); }
 function sameDate(a, b) { return dateMs(a) === dateMs(b); }
 
+// matchNaturalKeyInputs() — Lần 5: khớp ĐÚNG khoá chính thật (CUST_ID, SKU_ID) — rút từ 7 cột xuống 2 cột
+// theo xác nhận sys.indexes thật qua SSMS (xem chú thích đầu file).
 function matchNaturalKeyInputs(db, inputs) {
-  return db.filter(r => r.CUST_ID === inputs.kCustId && r.TYPE === inputs.kType && r.STK_ID === inputs.kStkId
-    && r.SKU_ID === inputs.kSkuId && r.WS_ID === inputs.kWsId && sameDate(r.FR_DATE, inputs.kFrDate) && sameDate(r.TO_DATE, inputs.kToDate));
+  return db.filter(r => r.CUST_ID === inputs.kCustId && r.SKU_ID === inputs.kSkuId);
 }
 function outputRow(r) {
-  return { CUST_ID: r.CUST_ID, TYPE: r.TYPE, STK_ID: r.STK_ID, SKU_ID: r.SKU_ID, WS_ID: r.WS_ID, FR_DATE: r.FR_DATE, TO_DATE: r.TO_DATE };
+  return { CUST_ID: r.CUST_ID, SKU_ID: r.SKU_ID };
+}
+// findByPrimaryKey() — mô phỏng tra cứu theo đúng PK thật (CUST_ID, SKU_ID), dùng để: (1) INSERT phát
+// hiện trùng khoá -> ném lỗi 2627 như SQL Server thật, (2) UPDATE ghi đè (overwrite path) tìm đúng dòng.
+function findByPrimaryKey(db, custId, skuId) {
+  return db.find(r => r.CUST_ID === custId && r.SKU_ID === skuId);
 }
 
 class FakeRequest {
@@ -107,6 +125,14 @@ class FakeRequest {
       return { recordset: first ? [{ SKU_ID: first, ...SKU_DEF_DB[first] }] : [] };
     }
     if (/^INSERT INTO dbo\.CSPRICE/.test(sql)) {
+      // Lần 5: mô phỏng ĐÚNG ràng buộc PRIMARY KEY thật (CUST_ID, SKU_ID) — trùng cặp này phải ném đúng lỗi
+      // SQL Server 2627 (không phải lỗi tự chế), để kiểm chứng isPrimaryKeyViolation()/overwriteWholesalePrice()
+      // nhận diện đúng và tự chuyển sang ghi đè thay vì để lỗi lọt ra người dùng.
+      if (findByPrimaryKey(this.db, this.inputs.custId, this.inputs.skuId)) {
+        const err = new Error(`Violation of PRIMARY KEY constraint 'PK_CSPRICE'. Cannot insert duplicate key in object 'dbo.CSPRICE'. The duplicate key value is (${this.inputs.custId}, ${this.inputs.skuId}).`);
+        err.number = 2627;
+        throw err;
+      }
       const now = ++seq;
       const row = {
         CUST_ID: this.inputs.custId, TYPE: DEFAULT_TYPE, SKU_ID: this.inputs.skuId,
@@ -117,6 +143,20 @@ class FakeRequest {
         OPEN_DATE: now, MODI_DATE: now
       };
       this.db.push(row);
+      return { rowsAffected: [1], recordset: [outputRow(row)] };
+    }
+    // overwriteWholesalePrice() (Lần 5) — câu UPDATE riêng kích hoạt khi INSERT gặp trùng khoá chính, nhận
+    // diện qua chữ ký "TYPE = '04'" chỉ xuất hiện ở câu lệnh này (khác hẳn câu UPDATE của luồng "Sửa" bên
+    // dưới, vốn chỉ đổi WSPRICE/FR_DATE/TO_DATE) — ghi đè ĐỦ LẠI toàn bộ cột theo đúng công thức Lần 4.
+    if (/^UPDATE dbo\.CSPRICE/.test(sql) && /TYPE = '04'/.test(sql)) {
+      const row = findByPrimaryKey(this.db, this.inputs.custId, this.inputs.skuId);
+      if (!row) return { rowsAffected: [0], recordset: [] };
+      const now = ++seq;
+      row.TYPE = '04'; row.UNIT_SYMB = this.inputs.unit; row.BASE_UNIT = this.inputs.unit;
+      row.UNITCONV = this.inputs.unitConv; row.WSPRICE = this.inputs.price; row.VAT_INCL = 1;
+      row.TAX_CODE = this.inputs.taxCode; row.STATUS = 1; row.FR_DATE = this.inputs.frDate; row.TO_DATE = this.inputs.toDate;
+      row.MODI_DATE = now;
+      if (row.OPEN_DATE == null) row.OPEN_DATE = now; // backfill CHỈ khi đang NULL (dòng cũ hỏng Lần 3), giữ nguyên nếu đã có
       return { rowsAffected: [1], recordset: [outputRow(row)] };
     }
     if (/^UPDATE dbo\.CSPRICE/.test(sql)) {
@@ -198,13 +238,15 @@ async function main() {
     assertEqual(key.custId, 'C1'); assertEqual(key.skuId, 'S1');
   });
 
-  await run.run('insertWholesalePrice(): khoá tự nhiên trả về đúng TYPE=\'04\' (hằng số ghi tường minh) + STK_ID/WS_ID do SQL Server tự áp DEFAULT (không ghi trực tiếp)', async () => {
+  await run.run('insertWholesalePrice(): dòng ghi vào CSPRICE có đúng TYPE=\'04\' (hằng số ghi tường minh) + STK_ID/WS_ID do SQL Server tự áp DEFAULT (không ghi trực tiếp); khoá trả về (Lần 5) CHỈ còn custId/skuId (đúng PK thật)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
-    assertEqual(key.type, DEFAULT_TYPE, 'phải ghi đúng TYPE=\'04\' (hằng số cố định, trích công thức BRG_APP.sql)');
-    assertEqual(key.wsId, DEFAULT_WS_ID, 'phải đọc lại đúng WS_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
-    assertEqual(key.stkId, DEFAULT_STK_ID, 'phải đọc lại đúng STK_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
+    assertEqual(CSPRICE_DB[0].TYPE, DEFAULT_TYPE, 'phải ghi đúng TYPE=\'04\' (hằng số cố định, trích công thức BRG_APP.sql)');
+    assertEqual(CSPRICE_DB[0].WS_ID, DEFAULT_WS_ID, 'phải đọc lại đúng WS_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
+    assertEqual(CSPRICE_DB[0].STK_ID, DEFAULT_STK_ID, 'phải đọc lại đúng STK_ID mặc định SQL Server tự áp (KHÔNG ghi trực tiếp)');
+    assertEqual(key.custId, 'C1'); assertEqual(key.skuId, 'S1'); assertEqual(key.wasOverwrite, false, 'INSERT lần đầu KHÔNG phải ghi đè');
+    assert(key.type === undefined && key.wsId === undefined && key.stkId === undefined, 'khoá trả về (Lần 5) KHÔNG còn mang type/wsId/stkId — PK thật chỉ 2 cột custId/skuId');
   });
 
   // Audit theo nguồn mã BRG_APP.sql thật (12/2026, người dùng gửi): UNIT_SYMB/BASE_UNIT/UNITCONV/TAX_CODE
@@ -225,6 +267,63 @@ async function main() {
     assertEqual(row.TAX_CODE.trim(), 'T5', 'TAX_CODE phải lấy từ SKU_DEF.TAX_CODE (đã trim)');
     assertEqual(row.VAT_INCL, 1, 'VAT_INCL phải là hằng số 1 (công thức BRG_APP.sql)');
     assertEqual(row.STATUS, 1, 'STATUS phải là hằng số 1 (công thức BRG_APP.sql — thiếu cột này có thể là lý do DSmart không áp dụng được giá)');
+  });
+
+  // ===== LẦN 5 (12/2026): trùng khoá chính PK_CSPRICE (CUST_ID, SKU_ID) lúc Thêm -> TỰ GHI ĐÈ, KHÔNG báo
+  // lỗi cho người dùng — đúng lỗi thật người dùng gặp khi thử Thêm lại cho dòng Lần 3 để lại. =====
+  await run.run('LẦN 5: insertWholesalePrice() trùng khoá chính (CUST_ID, SKU_ID) -> TỰ GHI ĐÈ (UPDATE), KHÔNG ném lỗi, wasOverwrite=true, ghi đủ lại toàn bộ cột theo công thức Lần 4', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
+    const { insertWholesalePrice } = freshClient();
+    await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    assertEqual(CSPRICE_DB.length, 1, 'sau lần Thêm đầu phải có đúng 1 dòng');
+    queryLog = [];
+    const key2 = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 999, frDate: '2026-03-01', toDate: '2026-03-31' });
+    assertEqual(CSPRICE_DB.length, 1, 'Thêm trùng khoá KHÔNG được tạo dòng thứ 2 — phải GHI ĐÈ đúng dòng cũ');
+    assertEqual(CSPRICE_DB[0].WSPRICE, 999, 'phải ghi đè đúng giá MỚI');
+    assert(sameDate(CSPRICE_DB[0].FR_DATE, '2026-03-01') && sameDate(CSPRICE_DB[0].TO_DATE, '2026-03-31'), 'phải ghi đè đúng ngày MỚI');
+    assertEqual(key2.wasOverwrite, true, 'phải báo wasOverwrite=true để route biết đây là ghi đè, không phải thêm mới');
+    assert(queryLog.some(q => /^INSERT INTO dbo\.CSPRICE/.test(q)), 'vẫn phải THỬ INSERT trước (không bỏ qua bước này)');
+    assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /TYPE = '04'/.test(q)), 'sau khi INSERT gặp trùng khoá phải TỰ chuyển sang UPDATE ghi đè đủ cột');
+  });
+
+  await run.run('LẦN 5: ghi đè do trùng khoá (dòng cũ hỏng Lần 3, OPEN_DATE NULL) -> TỰ backfill OPEN_DATE; dòng đã có OPEN_DATE hợp lệ -> GIỮ NGUYÊN (không đổi ngày mở giá gốc)', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
+    const { insertWholesalePrice } = freshClient();
+    // Mô phỏng ĐÚNG dòng lỗi Lần 3 để lại: thiếu cột, OPEN_DATE NULL (giống ảnh chụp SSMS thật người dùng gửi)
+    CSPRICE_DB.push({ CUST_ID: 'C1', TYPE: '', SKU_ID: 'S1', UNIT_SYMB: '', BASE_UNIT: '', UNITCONV: 0, WSPRICE: 1000000, VAT_INCL: 0, TAX_CODE: '', STK_ID: '', WS_ID: 0, STATUS: 0, FR_DATE: '2026-01-01', TO_DATE: '2026-01-31', OPEN_DATE: null, MODI_DATE: null });
+    const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-02-01', toDate: '2026-02-28' });
+    assertEqual(key.wasOverwrite, true);
+    const row = CSPRICE_DB[0];
+    assertEqual(row.TYPE, '04', 'phải tự fix lại TYPE đúng công thức (dòng cũ hỏng thiếu cột này)');
+    assertEqual(row.UNIT_SYMB.trim(), 'BO', 'phải tự fix lại UNIT_SYMB');
+    assertEqual(row.VAT_INCL, 1, 'phải tự fix lại VAT_INCL');
+    assert(row.OPEN_DATE != null, 'OPEN_DATE đang NULL (dòng hỏng) -> phải TỰ backfill, không được để NULL mãi');
+    const backfilledOpenDate = row.OPEN_DATE;
+    queryLog = [];
+    const key3 = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 200, frDate: '2026-04-01', toDate: '2026-04-30' });
+    assertEqual(key3.wasOverwrite, true);
+    assertEqual(row.OPEN_DATE, backfilledOpenDate, 'dòng đã có OPEN_DATE hợp lệ từ lần ghi đè trước -> lần ghi đè SAU PHẢI GIỮ NGUYÊN, không đổi lại ngày mở giá gốc');
+  });
+
+  await run.run('LẦN 5: lỗi SQL KHÁC lúc INSERT (không phải trùng khoá chính) -> VẪN ném DsmartSqlError bình thường, KHÔNG bị nhầm thành ghi đè', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    const origQuery = FakeRequest.prototype.query;
+    FakeRequest.prototype.query = async function (sqlText) {
+      if (/^INSERT INTO dbo\.CSPRICE/.test(sqlText.replace(/\s+/g, ' ').trim())) {
+        throw new Error('Cannot insert the value NULL into column \'SOME_OTHER_REQUIRED_COLUMN\', table \'dbo.CSPRICE\'; column does not allow nulls.');
+      }
+      return origQuery.call(this, sqlText);
+    };
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    FakeRequest.prototype.query = origQuery;
+    assert(threw instanceof DsmartSqlError, 'lỗi SQL khác (không phải trùng khoá chính) vẫn phải ném DsmartSqlError bình thường');
+    assertEqual(CSPRICE_DB.length, 0, 'không được ghi gì khi gặp lỗi SQL thật khác');
+    assert(!/GHI ĐÈ/i.test(threw.message) && !/TRÙNG KHOÁ/i.test(threw.message), 'KHÔNG được nhầm lỗi khác thành lỗi trùng khoá');
   });
 
   await run.run('insertWholesalePrice(): Mã Sản Phẩm KHÔNG có trong SKU_DEF -> báo lỗi rõ ràng, KHÔNG ghi gì vào CSPRICE', async () => {
@@ -266,7 +365,7 @@ async function main() {
     assert(/SKU_DEF/.test(threw.message), `thông báo phải nêu rõ bảng SKU_DEF — got: ${threw.message}`);
   });
 
-  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {
+  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá chính thật (CUST_ID, SKU_ID — 2 cột, Lần 5), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -274,7 +373,9 @@ async function main() {
     const newKey = await updateWholesalePrice({ dsmartKey: key, price: 150, frDate: '2026-01-01', toDate: '2026-02-28' });
     assertEqual(CSPRICE_DB[0].WSPRICE, 150, 'UPDATE phải đổi đúng giá');
     assert(sameDate(CSPRICE_DB[0].TO_DATE, '2026-02-28'), `UPDATE phải đổi đúng ngày hết hạn — got: ${CSPRICE_DB[0].TO_DATE}`);
-    assert(sameDate(newKey.toDate, '2026-02-28'), 'phải trả về khoá tự nhiên MỚI (TO_DATE đổi -> khoá cũ không còn khớp)');
+    // Lần 5: khoá thật CHỈ gồm custId/skuId (KHÔNG còn gồm FR_DATE/TO_DATE như giả định Lần 2 sai) -> đổi
+    // ngày KHÔNG làm khoá đổi theo nữa, khoá mới phải GIỐNG khoá cũ (vẫn cùng custId/skuId).
+    assertEqual(newKey.custId, key.custId); assertEqual(newKey.skuId, key.skuId);
     assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /OUTPUT INSERTED/.test(q)), 'câu UPDATE phải có OUTPUT INSERTED để biết số dòng bị ảnh hưởng + khoá mới, không cần SELECT COUNT riêng');
     assert(!queryLog.some(q => /^SELECT\b/.test(q)), 'KHÔNG được có câu SELECT nào (kể cả SELECT COUNT) trong luồng Sửa');
     assertEqual(transactionLog.join(','), 'BEGIN,COMMIT', 'phải mở transaction THẬT quanh UPDATE, rồi COMMIT khi khớp đúng 1 dòng');
@@ -285,7 +386,7 @@ async function main() {
     assert(queryLog.some(q => /^DELETE FROM dbo\.CSPRICE/.test(q) && /OUTPUT DELETED/.test(q)), 'câu DELETE phải có OUTPUT DELETED');
   });
 
-  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng (trùng hệt 7 cột) -> updateWholesalePrice() ROLLBACK, HOÀN TÁC thật (không để sót thay đổi)', async () => {
+  await run.run('AN TOÀN: khoá chính khớp 2 dòng (phòng thủ, bình thường PK thật đã ngăn tình huống này) -> updateWholesalePrice() ROLLBACK, HOÀN TÁC thật (không để sót thay đổi)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, DsmartSqlError } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -373,15 +474,15 @@ async function main() {
     assert(threw && /SELECT permission was denied/.test(threw.message), `mock phải tái hiện đúng lỗi thật đã gặp — got: ${threw && threw.message}`);
   });
 
-  await run.run('inspectCspriceColumns(): identityColumn=null (không có cột identity), naturalKeyColumns trả đủ 7 cột, keyIndexes rỗng (không có PK/unique index khai báo)', async () => {
+  await run.run('inspectCspriceColumns(): identityColumn=null (không có cột identity), naturalKeyColumns (Lần 5) trả đúng 2 cột CUST_ID+SKU_ID, keyIndexes rỗng (không có PK/unique index khai báo)', async () => {
     queryLog = [];
     const { inspectCspriceColumns } = freshClient();
     const result = await inspectCspriceColumns();
     assertEqual(result.identityColumn, null, 'phải trả null vì CSPRICE không có cột identity nào');
     assert(result.columns.length === 8, `phải trả đủ 8 cột giả lập, got: ${result.columns.length}`);
     assert(result.columns.some(c => c.name === 'CUST_ID'), 'phải có cột CUST_ID trong danh sách');
-    assertEqual(result.naturalKeyColumns.length, 7, 'naturalKeyColumns phải có đúng 7 cột');
-    assert(result.naturalKeyColumns.includes('WS_ID'), 'naturalKeyColumns phải gồm WS_ID');
+    assertEqual(result.naturalKeyColumns.length, 2, 'naturalKeyColumns (Lần 5) phải có đúng 2 cột (CUST_ID, SKU_ID — đúng PK thật)');
+    assert(result.naturalKeyColumns.includes('SKU_ID') && result.naturalKeyColumns.includes('CUST_ID'), 'naturalKeyColumns phải gồm đúng CUST_ID + SKU_ID');
     assertEqual(result.keyIndexes.length, 0, 'keyIndexes phải rỗng (giả lập CSPRICE không khai báo PK/unique index nào)');
   });
 

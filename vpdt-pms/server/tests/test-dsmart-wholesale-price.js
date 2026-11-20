@@ -23,7 +23,9 @@ function stubModule(relPath, exportsObj) {
 
 // ===== Giả lập CSPRICE (DSmart16 Trung Tâm) trong bộ nhớ — KHÔNG có cột ID tự tăng (đúng cấu trúc thật
 // người dùng xác nhận qua ảnh chụp "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE", 12/2026) — mỗi dòng khớp bởi
-// "khoá tự nhiên" CUST_ID+TYPE+STK_ID+SKU_ID+WS_ID+FR_DATE+TO_DATE, giống đúng lib/dsmartSqlClient.js =====
+// KHOÁ CHÍNH THẬT (Lần 5, xác nhận qua SSMS/sys.indexes) = (CUST_ID, SKU_ID), giống đúng
+// lib/dsmartSqlClient.js. Mô phỏng luôn hành vi UPSERT: INSERT trùng (CUST_ID, SKU_ID) -> GHI ĐÈ thay vì
+// lỗi (xem insertWholesalePrice() mock bên dưới). =====
 let CSPRICE = [];
 let forceConfigError = false;
 let forceTestConnError = false;
@@ -35,21 +37,29 @@ class FakeHttpError extends Error { constructor(status, message) { super(message
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
 class DsmartSqlError extends FakeHttpError { constructor(m) { super(502, m); } }
 
+// naturalKeyOf()/findByNaturalKey() (Lần 5) — khoá chính thật CHỈ 2 cột (CUST_ID, SKU_ID), không còn 7 cột.
 function naturalKeyOf(row) {
-  return { custId: row.CUST_ID, type: row.TYPE, stkId: row.STK_ID, skuId: row.SKU_ID, wsId: row.WS_ID, frDate: row.FR_DATE, toDate: row.TO_DATE };
+  return { custId: row.CUST_ID, skuId: row.SKU_ID };
 }
 function findByNaturalKey(k) {
-  return CSPRICE.filter(r => r.CUST_ID === k.custId && r.TYPE === k.type && r.STK_ID === k.stkId && r.SKU_ID === k.skuId && r.WS_ID === k.wsId && r.FR_DATE === k.frDate && r.TO_DATE === k.toDate);
+  return CSPRICE.filter(r => r.CUST_ID === k.custId && r.SKU_ID === k.skuId);
 }
 
 stubModule('lib/dsmartSqlClient', {
   DsmartConfigError, DsmartSqlError,
+  // insertWholesalePrice() (Lần 5) — mô phỏng ĐÚNG hành vi upsert thật: trùng (CUST_ID, SKU_ID) -> GHI ĐÈ
+  // (wasOverwrite=true), KHÔNG tạo dòng thứ 2 và KHÔNG ném lỗi.
   insertWholesalePrice: async ({ custId, skuId, price, frDate, toDate }) => {
     if (forceConfigError) throw new DsmartConfigError('Chưa cấu hình kết nối (giả lập)');
-    // TYPE/STK_ID/WS_ID KHÔNG do ứng dụng ghi — SQL Server tự áp DEFAULT (mô phỏng đúng thực tế thật).
+    const existing = CSPRICE.find(r => r.CUST_ID === custId && r.SKU_ID === skuId);
+    if (existing) {
+      existing.TYPE = '04'; existing.WSPRICE = price; existing.FR_DATE = frDate; existing.TO_DATE = toDate;
+      return { custId, skuId, wasOverwrite: true };
+    }
+    // TYPE/STK_ID/WS_ID KHÔNG do ứng dụng ghi trực tiếp — SQL Server tự áp DEFAULT (mô phỏng đúng thực tế thật).
     const row = { CUST_ID: custId, TYPE: '4', STK_ID: '', SKU_ID: skuId, WS_ID: 30, WSPRICE: price, FR_DATE: frDate, TO_DATE: toDate };
     CSPRICE.push(row);
-    return naturalKeyOf(row);
+    return { custId, skuId, wasOverwrite: false };
   },
   updateWholesalePrice: async ({ dsmartKey, price, frDate, toDate }) => {
     const matches = findByNaturalKey(dsmartKey);
@@ -321,10 +331,41 @@ async function main() {
     assert.strictEqual(ENTRIES.length, 1);
     assert.strictEqual(ENTRIES[0].dsmartKey.custId, '240000000001');
     assert.strictEqual(ENTRIES[0].dsmartKey.skuId, '2001326541');
-    assert.strictEqual(ENTRIES[0].dsmartKey.wsId, CSPRICE[0].WS_ID);
     assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
     assert.strictEqual(ENTRIES[0].history.length, 1);
     assert.strictEqual(ENTRIES[0].history[0].action, 'INSERT');
+    assert.strictEqual(res.body.results[0].overwritten, false, 'Thêm lần đầu KHÔNG phải ghi đè');
+  });
+
+  // ===== LẦN 5 (12/2026): trùng (CUST_ID, SKU_ID) lúc /apply -> TỰ GHI ĐÈ, đánh dấu entry mirror cũ DELETED =====
+  await test('POST /apply: trùng CUST_ID+SKU_ID với 1 entry ACTIVE đang có -> GHI ĐÈ CSPRICE (không tạo dòng 2), entry CŨ bị đánh dấu DELETED, entry MỚI ACTIVE với action INSERT_OVERWRITE', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    const oldEntryId = ENTRIES[0].id;
+    const res = await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 999, frDate: '2026-05-01', toDate: '2026-05-31' }] });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.successCount, 1);
+    assert.strictEqual(res.body.results[0].overwritten, true, 'phải báo overwritten=true');
+    assert.strictEqual(CSPRICE.length, 1, 'KHÔNG được tạo dòng CSPRICE thứ 2 — phải ghi đè đúng dòng cũ');
+    assert.strictEqual(CSPRICE[0].WSPRICE, 999);
+    assert.strictEqual(ENTRIES.length, 2, 'mirror nội bộ vẫn giữ CẢ 2 entry (lịch sử), chỉ đổi trạng thái entry cũ');
+    const oldEntry = ENTRIES.find(e => e.id === oldEntryId);
+    assert.strictEqual(oldEntry.status, 'DELETED', 'entry CŨ phải bị đánh dấu DELETED (dữ liệu của nó không còn đúng với CSPRICE thật nữa)');
+    assert.strictEqual(oldEntry.history[oldEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
+    const newEntry = ENTRIES.find(e => e.id !== oldEntryId);
+    assert.strictEqual(newEntry.status, 'ACTIVE');
+    assert.strictEqual(newEntry.price, 999);
+    assert.strictEqual(newEntry.history[0].action, 'INSERT_OVERWRITE');
+  });
+
+  await test('POST /apply: khác CUST_ID (cùng SKU_ID) hoặc khác SKU_ID (cùng CUST_ID) -> VẪN insert bình thường, KHÔNG ghi đè', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    const res2 = await apiPost('/apply', { rows: [{ custId: 'A2', skuId: 'S1', price: 200, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    assert.strictEqual(res2.body.results[0].overwritten, false, 'khác CUST_ID cùng SKU_ID -> KHÔNG phải ghi đè (đúng ý: nhiều khách có thể set cùng 1 mã)');
+    const res3 = await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S2', price: 300, frDate: '2026-01-01', toDate: '2026-01-31' }] });
+    assert.strictEqual(res3.body.results[0].overwritten, false, 'cùng CUST_ID khác SKU_ID -> KHÔNG phải ghi đè (đúng ý: 1 khách có thể set nhiều mã)');
+    assert.strictEqual(CSPRICE.length, 3, 'cả 3 dòng đều phải là insert riêng biệt, không dòng nào bị ghi đè nhầm');
   });
 
   await test('POST /apply: dữ liệu dòng không hợp lệ bị chặn server-side (không tin client)', async () => {
@@ -392,15 +433,15 @@ async function main() {
     assert.strictEqual(ENTRIES[0].history[1].action, 'UPDATE');
   });
 
-  // FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — Sửa xong PHẢI lưu đè khoá MỚI (dsmartKey.toDate đổi
-  // theo), nếu không lần Sửa/Xoá KẾ TIẾP sẽ dùng khoá CŨ đã sai -> lỗi "không tìm thấy dòng" dù dòng vẫn
-  // còn (xem chú thích đầy đủ tại updateWholesalePrice()/lib/dsmartSqlClient.js).
-  await test('PATCH /entries/:id: khoá tự nhiên (dsmartKey) được CẬP NHẬT sau khi đổi ngày -> Sửa LẦN 2 vẫn khớp đúng', async () => {
+  // Lần 5: khoá chính thật CHỈ gồm (CUST_ID, SKU_ID) — KHÔNG còn gồm FR_DATE/TO_DATE như giả định Lần 2
+  // sai (xem chú thích đầy đủ tại updateWholesalePrice()/lib/dsmartSqlClient.js). Đổi ngày lúc Sửa KHÔNG
+  // làm khoá đổi theo nữa -> dsmartKey giữ nguyên qua nhiều lần Sửa liên tiếp, vẫn khớp đúng mỗi lần.
+  await test('PATCH /entries/:id: khoá chính (dsmartKey) GIỮ NGUYÊN qua nhiều lần Sửa đổi ngày liên tiếp -> Sửa LẦN 2 vẫn khớp đúng 1 dòng CSPRICE cũ', async () => {
     CSPRICE = []; ENTRIES = [];
     await apiPost('/apply', { rows: [{ custId: 'A1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }] });
     const entryId = ENTRIES[0].id;
     await apiPatch(`/entries/${entryId}`, { price: 150, frDate: '2026-01-01', toDate: '2026-02-28' });
-    assert.strictEqual(ENTRIES[0].dsmartKey.toDate, '2026-02-28', 'LỖI: dsmartKey.toDate phải cập nhật theo ngày MỚI sau Sửa, không giữ ngày CŨ');
+    assert.strictEqual(ENTRIES[0].dsmartKey.custId, 'A1'); assert.strictEqual(ENTRIES[0].dsmartKey.skuId, 'S1');
     const res2 = await apiPatch(`/entries/${entryId}`, { price: 200, frDate: '2026-01-01', toDate: '2026-03-31' });
     assert.strictEqual(res2.status, 200, JSON.stringify(res2.body));
     assert.strictEqual(CSPRICE[0].WSPRICE, 200);
