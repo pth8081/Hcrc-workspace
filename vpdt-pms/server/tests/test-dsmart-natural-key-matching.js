@@ -145,18 +145,22 @@ class FakeRequest {
       this.db.push(row);
       return { rowsAffected: [1], recordset: [outputRow(row)] };
     }
-    // overwriteWholesalePrice() (Lần 5) — câu UPDATE riêng kích hoạt khi INSERT gặp trùng khoá chính, nhận
-    // diện qua chữ ký "TYPE = '04'" chỉ xuất hiện ở câu lệnh này (khác hẳn câu UPDATE của luồng "Sửa" bên
-    // dưới, vốn chỉ đổi WSPRICE/FR_DATE/TO_DATE) — ghi đè ĐỦ LẠI toàn bộ cột theo đúng công thức Lần 4.
+    // tryOverwriteExistingRow() (Lần 5, sửa SQL Lần 6) — câu UPDATE riêng kích hoạt khi khớp trùng khoá
+    // chính, nhận diện qua chữ ký "TYPE = '04'" chỉ xuất hiện ở câu lệnh này (khác hẳn câu UPDATE của luồng
+    // "Sửa" bên dưới, vốn chỉ đổi WSPRICE/FR_DATE/TO_DATE) — ghi đè ĐỦ LẠI toàn bộ cột theo đúng công thức
+    // Lần 4, CỘNG THÊM Lần 6: LASTWSPR lưu giá CŨ (đọc TRƯỚC khi ghi đè WSPRICE, mô phỏng đúng T-SQL SET
+    // đọc giá trị CŨ) + OPEN_DATE LUÔN reset (không còn điều kiện NULL như Lần 5) — khớp đúng nguyên văn
+    // `_job_sp_WEBAPP_Item_Price` (BRG_APP.sql, phần mềm áp giá cũ) người dùng tự đối chiếu phát hiện sai lệch.
     if (/^UPDATE dbo\.CSPRICE/.test(sql) && /TYPE = '04'/.test(sql)) {
       const row = findByPrimaryKey(this.db, this.inputs.custId, this.inputs.skuId);
       if (!row) return { rowsAffected: [0], recordset: [] };
       const now = ++seq;
+      row.LASTWSPR = row.WSPRICE; // Lần 6: lưu giá CŨ TRƯỚC khi ghi đè — khớp `SET T.LASTWSPR=T.WSPRICE, T.WSPRICE=...` bản gốc
       row.TYPE = '04'; row.UNIT_SYMB = this.inputs.unit; row.BASE_UNIT = this.inputs.unit;
       row.UNITCONV = this.inputs.unitConv; row.WSPRICE = this.inputs.price; row.VAT_INCL = 1;
       row.TAX_CODE = this.inputs.taxCode; row.STATUS = 1; row.FR_DATE = this.inputs.frDate; row.TO_DATE = this.inputs.toDate;
       row.MODI_DATE = now;
-      if (row.OPEN_DATE == null) row.OPEN_DATE = now; // backfill CHỈ khi đang NULL (dòng cũ hỏng Lần 3), giữ nguyên nếu đã có
+      row.OPEN_DATE = now; // Lần 6: LUÔN reset (không còn điều kiện NULL) — khớp `T.OPEN_DATE = GETDATE()` bản gốc
       return { rowsAffected: [1], recordset: [outputRow(row)] };
     }
     if (/^UPDATE dbo\.CSPRICE/.test(sql)) {
@@ -289,7 +293,10 @@ async function main() {
     assert(!queryLog.some(q => /^INSERT INTO dbo\.CSPRICE/.test(q)), 'KHÔNG được thử INSERT khi UPDATE đã khớp được dòng (tránh tự tạo lỗi ràng buộc PK thật không cần thiết)');
   });
 
-  await run.run('LẦN 5: ghi đè do trùng khoá (dòng cũ hỏng Lần 3, OPEN_DATE NULL) -> TỰ backfill OPEN_DATE; dòng đã có OPEN_DATE hợp lệ -> GIỮ NGUYÊN (không đổi ngày mở giá gốc)', async () => {
+  // LẦN 6 (12/2026, người dùng tự đối chiếu nguyên văn `_job_sp_WEBAPP_Item_Price` BRG_APP.sql, phát hiện
+  // Lần 5 tự sai lệch 2 điểm): OPEN_DATE bản gốc LUÔN reset GETDATE() mỗi lần ghi giá (không phải chỉ
+  // backfill khi NULL như Lần 5 làm) + LASTWSPR LUÔN lưu giá CŨ trước khi ghi đè.
+  await run.run('LẦN 6: ghi đè do trùng khoá -> OPEN_DATE LUÔN reset lại (không giữ nguyên như Lần 5), LASTWSPR lưu đúng giá CŨ trước khi ghi đè (khớp nguyên văn BRG_APP.sql)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
     const { insertWholesalePrice } = freshClient();
@@ -301,12 +308,14 @@ async function main() {
     assertEqual(row.TYPE, '04', 'phải tự fix lại TYPE đúng công thức (dòng cũ hỏng thiếu cột này)');
     assertEqual(row.UNIT_SYMB.trim(), 'BO', 'phải tự fix lại UNIT_SYMB');
     assertEqual(row.VAT_INCL, 1, 'phải tự fix lại VAT_INCL');
-    assert(row.OPEN_DATE != null, 'OPEN_DATE đang NULL (dòng hỏng) -> phải TỰ backfill, không được để NULL mãi');
-    const backfilledOpenDate = row.OPEN_DATE;
+    assertEqual(row.LASTWSPR, 1000000, 'LASTWSPR phải lưu đúng giá CŨ (1000000) trước khi ghi đè giá mới (100)');
+    assert(row.OPEN_DATE != null, 'OPEN_DATE đang NULL (dòng hỏng) -> phải TỰ set lại, không được để NULL mãi');
+    const firstOpenDate = row.OPEN_DATE;
     queryLog = [];
     const key3 = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 200, frDate: '2026-04-01', toDate: '2026-04-30' });
     assertEqual(key3.wasOverwrite, true);
-    assertEqual(row.OPEN_DATE, backfilledOpenDate, 'dòng đã có OPEN_DATE hợp lệ từ lần ghi đè trước -> lần ghi đè SAU PHẢI GIỮ NGUYÊN, không đổi lại ngày mở giá gốc');
+    assertEqual(row.LASTWSPR, 100, 'lần ghi đè THỨ 2 phải lưu đúng giá CŨ của chính lần đó (100), không phải giá gốc ban đầu');
+    assert(row.OPEN_DATE !== firstOpenDate, 'LẦN 6: OPEN_DATE phải LUÔN reset lại mỗi lần ghi đè (khớp đúng bản gốc GETDATE() không điều kiện), KHÔNG giữ nguyên như Lần 5 làm sai');
   });
 
   await run.run('LẦN 5: lỗi SQL KHÁC lúc INSERT (không phải trùng khoá chính) -> VẪN ném DsmartSqlError bình thường, KHÔNG bị nhầm thành ghi đè', async () => {

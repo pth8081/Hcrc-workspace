@@ -193,9 +193,25 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
 // LẠI toàn bộ các cột bắt buộc (TYPE/UNIT_SYMB/BASE_UNIT/UNITCONV/WSPRICE/VAT_INCL/TAX_CODE/STATUS/FR_DATE/
 // TO_DATE/MODI_DATE) theo đúng công thức Lần 4, KHÔNG chỉ sửa Giá/Ngày — mục đích kép: (1) đúng ý "Thêm Giá
 // Mới" nghĩa là thay giá hiện có khi đã tồn tại dòng, (2) TỰ khắc phục luôn dòng cũ bị ghi thiếu cột do lỗi
-// Lần 3 (TYPE/UNIT_SYMB/... rỗng) mà không cần người dùng tự sửa tay qua SSMS. OPEN_DATE CHỈ set nếu đang
-// NULL (giữ nguyên ngày mở giá gốc nếu dòng đã đúng từ trước, chỉ backfill cho dòng cũ bị hỏng). Trả về
-// `null` (KHÔNG ném lỗi) nếu UPDATE khớp 0 dòng — nghĩa là CHƯA có dòng nào, caller sẽ tự INSERT mới.
+// Lần 3 (TYPE/UNIT_SYMB/... rỗng) mà không cần người dùng tự sửa tay qua SSMS.
+//
+// LẦN 6 (12/2026, người dùng tự đối chiếu nguyên văn `_job_sp_WEBAPP_Item_Price` trong BRG_APP.sql — phần
+// mềm áp giá CŨ, nghi ngờ tool tự thêm sai lệch khi IT báo giá CHƯA đồng bộ xuống được siêu thị): soát lại
+// kỹ câu UPDATE gốc `SET T.LASTWSPR=T.WSPRICE, T.WSPRICE = S.WSPRICE, T.OPEN_DATE = GETDATE(), ...` phát
+// hiện ĐÚNG 2 điểm bản vá trước đây tự sai lệch so với bản gốc — sửa lại cho khớp 100%:
+//   (1) LASTWSPR: bản gốc LUÔN lưu giá CŨ vào cột này trước khi ghi đè — bản vá trước bỏ sót hoàn toàn, giá
+//       cũ bị mất không dấu vết. Nay thêm `LASTWSPR = WSPRICE` NGAY TRƯỚC `WSPRICE = @price` trong cùng 1
+//       mệnh đề SET — T-SQL đảm bảo mọi biểu thức trong SET đọc giá trị CŨ của dòng (trước khi cập nhật),
+//       nên LASTWSPR nhận đúng giá CŨ dù viết trên 1 dòng, khớp đúng ý `T.LASTWSPR=T.WSPRICE` của bản gốc.
+//   (2) OPEN_DATE: bản gốc LUÔN set lại `GETDATE()` mỗi lần ghi giá (kể cả ghi đè) — bản vá trước CHỈ set
+//       nếu đang NULL (lựa chọn tự thêm, không có trong bản gốc). Nay bỏ hẳn điều kiện ISNULL, LUÔN gán
+//       GETDATE() cho khớp đúng bản gốc.
+// (Chưa xác nhận được đây có phải nguyên nhân thật của lỗi "chưa đồng bộ xuống siêu thị" hay không — bước
+// CSPRICE (DSmart16 Trung Tâm) -> từng siêu thị KHÔNG xuất hiện ở đâu trong BRG_APP.sql, nằm ngoài phạm vi
+// mã nguồn đang có; người dùng sẽ hỏi lại đội DSmart/IT về cơ chế đồng bộ đó. Sửa 2 điểm trên vì ĐÃ xác
+// nhận chắc chắn là sai lệch thật so với bản gốc, không phụ thuộc kết quả tra cứu thêm.)
+//
+// Trả về `null` (KHÔNG ném lỗi) nếu UPDATE khớp 0 dòng — nghĩa là CHƯA có dòng nào, caller sẽ tự INSERT mới.
 async function tryOverwriteExistingRow(pool, { custId, skuId, unit, unitConv, price, taxCode, frDate, toDate }) {
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
@@ -210,9 +226,10 @@ async function tryOverwriteExistingRow(pool, { custId, skuId, unit, unitConv, pr
   try {
     result = await req.query(`
       UPDATE dbo.CSPRICE
-      SET TYPE = '04', UNIT_SYMB = @unit, BASE_UNIT = @unit, UNITCONV = @unitConv, WSPRICE = @price,
+      SET TYPE = '04', UNIT_SYMB = @unit, BASE_UNIT = @unit, UNITCONV = @unitConv,
+          LASTWSPR = WSPRICE, WSPRICE = @price,
           VAT_INCL = 1, TAX_CODE = @taxCode, STATUS = 1, FR_DATE = @frDate, TO_DATE = @toDate,
-          MODI_DATE = GETDATE(), OPEN_DATE = ISNULL(OPEN_DATE, GETDATE())
+          MODI_DATE = GETDATE(), OPEN_DATE = GETDATE()
       OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
       WHERE CUST_ID = @custId AND SKU_ID = @skuId;
     `);
