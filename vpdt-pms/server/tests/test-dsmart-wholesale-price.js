@@ -254,6 +254,29 @@ async function apiUploadPreview(buf, filename = 'test.xlsx') {
   return { status: res.status, body: await res.json() };
 }
 
+// buildStoreConnXlsxBuffer()/apiUploadStoreConnPreview()/apiGetStoreConnTemplate() (12/2026, Nhập Hàng
+// Loạt Kết Nối Siêu Thị) — cùng khuôn buildXlsxBuffer()/apiUploadPreview() ngay trên, cho 7 cột cố định
+// của lib/dsmartStoreConnectionFileParser.js.
+async function buildStoreConnXlsxBuffer(rows) {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  ws.addRow(['Mã Siêu Thị', 'Tên Siêu Thị', 'Host', 'Port', 'Tên CSDL', 'Tài Khoản', 'Mật Khẩu']);
+  rows.forEach(r => ws.addRow(r));
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+async function apiUploadStoreConnPreview(buf, filename = 'test.xlsx') {
+  const form = new FormData();
+  form.append('file', new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+  const res = await fetch(baseUrl + '/store-connections/preview', { method: 'POST', body: form });
+  return { status: res.status, body: await res.json() };
+}
+async function apiGetStoreConnTemplate() {
+  const res = await fetch(baseUrl + '/store-connections/template');
+  if (res.status !== 200) return { status: res.status, body: await res.json() };
+  return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) };
+}
+
 async function main() {
   await startServer();
 
@@ -869,6 +892,117 @@ async function main() {
     const staleEntry = ENTRIES.find(e => e.id === manualActiveEntry.id);
     assert.strictEqual(staleEntry.status, 'DELETED', 'entry ACTIVE CŨ (từ lượt Thêm tay) phải bị job tự đánh dấu DELETED');
     assert.strictEqual(staleEntry.history[staleEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
+  });
+
+  // ===== 🏬 Kết Nối Siêu Thị — Nhập Hàng Loạt (Excel), 12/2026 =====
+  // lib/dsmartStoreConnectionFileParser.js (xem require ngay dưới) test ĐỘC LẬP phần đọc file thuần;
+  // ở ĐÂY test TẦNG ROUTE (quyền hạn, phân loại CREATE/UPDATE theo Mã Siêu Thị đã có, validate server-
+  // side lại khi Nhập thật, cô lập lỗi từng dòng) — cùng khuôn các route /store-connections/* ở trên.
+  await test('GET /store-connections/template: không phải admin -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiGetStoreConnTemplate();
+    assert.strictEqual(res.status, 403);
+  });
+  await test('GET /store-connections/template: admin -> trả về file xlsx đúng 7 cột tiêu đề', async () => {
+    CURRENT_USER = ADMIN.username;
+    const res = await apiGetStoreConnTemplate();
+    assert.strictEqual(res.status, 200);
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buf);
+    const headerRow = wb.worksheets[0].getRow(1).values.slice(1).map(String);
+    assert.deepStrictEqual(headerRow, ['Mã Siêu Thị', 'Tên Siêu Thị', 'Host', 'Port', 'Tên CSDL', 'Tài Khoản', 'Mật Khẩu']);
+  });
+
+  await test('POST /store-connections/preview: không phải admin -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const buf = await buildStoreConnXlsxBuffer([['ST99', 'Siêu Thị 99', 'h', 1433, 'd', 'u', 'p']]);
+    const res = await apiUploadStoreConnPreview(buf);
+    assert.strictEqual(res.status, 403);
+  });
+
+  await test('POST /store-connections/preview: phân loại đúng CREATE (mã mới) / UPDATE (mã đã có) / lỗi dòng', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [{ id: 1, storeCode: 'STX1', storeName: 'Siêu Thị X1 (cũ)', host: 'old-host', port: 1433, database: 'old-db', user: 'old-user', passwordEnc: 'enc', enabled: true }];
+    const buf = await buildStoreConnXlsxBuffer([
+      ['STX1', 'Siêu Thị X1 (mới đổi tên)', 'new-host', 1433, 'new-db', 'new-user', 'new-pass'], // UPDATE (đã có mã)
+      ['STX2', 'Siêu Thị X2', 'h2', 1433, 'd2', 'u2', 'p2'], // CREATE (mã mới, có mật khẩu)
+      ['', 'Thiếu Mã', 'h3', 1433, 'd3', 'u3', 'p3'], // lỗi: thiếu Mã Siêu Thị
+    ]);
+    const res = await apiUploadStoreConnPreview(buf);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.rows.length, 3);
+    assert.strictEqual(res.body.rows[0].mode, 'UPDATE');
+    assert.strictEqual(res.body.rows[1].mode, 'CREATE');
+    assert.strictEqual(res.body.rows[1].password, 'p2', 'preview phải trả nguyên mật khẩu lại cho client (để Nhập không cần tải file 2 lần)');
+    assert.ok(res.body.rows[2].errors.length, 'dòng thiếu Mã Siêu Thị phải có lỗi');
+  });
+
+  await test('POST /store-connections/preview: file thiếu cột (sai khuôn mẫu) -> 400, nêu rõ cột thiếu', async () => {
+    CURRENT_USER = ADMIN.username;
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sheet1');
+    ws.addRow(['Mã Siêu Thị', 'Tên Siêu Thị', 'Host']); // thiếu Port/Tên CSDL/Tài Khoản/Mật Khẩu
+    ws.addRow(['ST1', 'Siêu Thị 1', 'h']);
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    const res = await apiUploadStoreConnPreview(buf);
+    assert.strictEqual(res.status, 400);
+    assert.ok(/thiếu cột/i.test(res.body.error));
+  });
+
+  await test('POST /store-connections/preview: mã MỚI nhưng thiếu Mật Khẩu -> báo lỗi dòng (không chặn cứng cả file)', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    const buf = await buildStoreConnXlsxBuffer([['ST_NOPASS', 'Siêu Thị Không Mật Khẩu', 'h', 1433, 'd', 'u', '']]);
+    const res = await apiUploadStoreConnPreview(buf);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.rows[0].mode, null);
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('Mật Khẩu')));
+  });
+
+  await test('POST /store-connections/import: không phải admin -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPost('/store-connections/import', { rows: [{ storeCode: 'STZ', storeName: 'Z', host: 'h', database: 'd', user: 'u', password: 'p' }] });
+    assert.strictEqual(res.status, 403);
+  });
+
+  await test('POST /store-connections/import: rows rỗng -> 400', async () => {
+    CURRENT_USER = ADMIN.username;
+    const res = await apiPost('/store-connections/import', { rows: [] });
+    assert.strictEqual(res.status, 400);
+  });
+
+  await test('POST /store-connections/import: ghi THẬT CREATE + UPDATE cùng lúc, cô lập lỗi 1 dòng không chặn các dòng còn lại', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [{ id: 1, storeCode: 'STY1', storeName: 'Siêu Thị Y1 (cũ)', host: 'old-host', port: 1433, database: 'old-db', user: 'old-user', passwordEnc: 'enc', enabled: true }];
+    const res = await apiPost('/store-connections/import', {
+      rows: [
+        { storeCode: 'STY1', storeName: 'Siêu Thị Y1 (đổi tên)', host: 'new-host', port: 1433, database: 'new-db', user: 'new-user', password: 'new-pass' },
+        { storeCode: 'STY2', storeName: 'Siêu Thị Y2', host: 'h2', port: 1433, database: 'd2', user: 'u2', password: 'p2' },
+        { storeCode: '', storeName: '', host: '', database: '', user: '', password: '' }, // dòng lỗi
+      ]
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.successCount, 2);
+    assert.strictEqual(res.body.failCount, 1);
+    assert.strictEqual(res.body.results[0].mode, 'UPDATE');
+    assert.strictEqual(res.body.results[1].mode, 'CREATE');
+    assert.strictEqual(res.body.results[2].success, false);
+    const listRes = await apiGet('/store-connections');
+    assert.strictEqual(listRes.body.items.length, 2);
+    assert.ok(listRes.body.items.find(s => s.storeCode === 'STY1' && s.storeName === 'Siêu Thị Y1 (đổi tên)'));
+    assert.ok(listRes.body.items.find(s => s.storeCode === 'STY2'));
+  });
+
+  await test('POST /store-connections/import: mã MỚI thiếu Mật Khẩu -> lỗi dòng đó, không ghi', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    const res = await apiPost('/store-connections/import', { rows: [{ storeCode: 'ST_NOPASS2', storeName: 'N', host: 'h', database: 'd', user: 'u', password: '' }] });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.successCount, 0);
+    assert.ok(/Mật Khẩu/.test(res.body.results[0].error));
+    assert.strictEqual(STORE_CONNS.length, 0);
   });
 
   await stopServer();

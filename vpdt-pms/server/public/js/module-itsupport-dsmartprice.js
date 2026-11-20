@@ -15,6 +15,8 @@ let _dsmartPriceReusingEntry = null;
 let _dsmartStoreConnSectionCollapsed = true;
 let _dsmartStoreConnList = [];
 let _dsmartStoreConnEditingId = null; // null = đang Thêm mới, có giá trị = đang Sửa
+let _dsmartStoreConnImportRows = null;
+let _dsmartStoreConnImportFileName = null;
 
 async function initDsmartPriceTab() {
   const isAdmin = !!currentUser?.perms?.admin;
@@ -169,6 +171,108 @@ async function testDsmartStoreConn(id) {
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     alert(`✅ Kết nối thành công (${data.ms}ms)`);
   } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// toggleDsmartStoreConnImportForm()/onDsmartStoreConnImportFileChange()/applyDsmartStoreConnImport()
+// (12/2026, theo yêu cầu người dùng: "vì nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu
+// và upload file mẫu được không") — cùng khuôn "1. Thêm Giá Mới" (file mẫu cố định cột, xem trước
+// THÊM MỚI/SỬA trước khi ghi thật) ngay dưới, qua lib/dsmartStoreConnectionFileParser.js + 3 route
+// /store-connections/template|preview|import ở routes/dsmartWholesalePrice.js.
+function toggleDsmartStoreConnImportForm() {
+  const wrap = document.getElementById('dsmartStoreConnImportFormWrap');
+  const willShow = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', !willShow);
+  if (willShow) return;
+  // Đóng lại: dọn trạng thái xem trước cũ, không để sót dữ liệu (kể cả mật khẩu chữ thường) trong biến JS.
+  _dsmartStoreConnImportRows = null;
+  _dsmartStoreConnImportFileName = null;
+  document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+  clearSingleFileInput('dsmartStoreConnImportFileInput', 'dsmartStoreConnImportFileName');
+}
+
+function clickDsmartStoreConnImportFileInput() { document.getElementById('dsmartStoreConnImportFileInput').click(); }
+
+async function onDsmartStoreConnImportFileChange(event) {
+  onSingleFileChosen(event.target, 'dsmartStoreConnImportFileName');
+  const file = event.target.files[0];
+  _dsmartStoreConnImportRows = null;
+  _dsmartStoreConnImportFileName = null;
+  document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/preview', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _dsmartStoreConnImportRows = data.rows;
+    _dsmartStoreConnImportFileName = data.fileName;
+    document.getElementById('dsmartStoreConnImportPreviewWrap').classList.remove('hidden');
+    renderDsmartStoreConnImportPreview();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+function dsmartStoreConnImportModeBadge(r) {
+  if (r.errors.length) return `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⛔ ${escapeHtml(r.errors.join('; '))}</span>`;
+  if (r.mode === 'UPDATE') return `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✏️ Sẽ SỬA (đã có Mã Siêu Thị)</span>`;
+  return `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✅ Sẽ thêm mới</span>`;
+}
+
+function renderDsmartStoreConnImportPreview() {
+  if (!_dsmartStoreConnImportRows) return;
+  const validCount = _dsmartStoreConnImportRows.filter(r => !r.errors.length).length;
+  const createCount = _dsmartStoreConnImportRows.filter(r => r.mode === 'CREATE').length;
+  const updateCount = _dsmartStoreConnImportRows.filter(r => r.mode === 'UPDATE').length;
+  document.getElementById('dsmartStoreConnImportStats').innerText =
+    `${_dsmartStoreConnImportRows.length} dòng trong file — ${validCount} hợp lệ (${createCount} thêm mới, ${updateCount} sửa)`;
+  document.getElementById('dsmartStoreConnImportPreviewBody').innerHTML = _dsmartStoreConnImportRows.map((r, i) => `
+    <tr class="${r.errors.length ? 'bg-red-50' : r.mode === 'UPDATE' ? 'bg-amber-50' : ''}">
+      <td class="p-1.5 text-gray-400">${i + 1}</td>
+      <td class="p-1.5 font-semibold">${escapeHtml(r.storeCode)}</td>
+      <td class="p-1.5">${escapeHtml(r.storeName)}</td>
+      <td class="p-1.5 text-gray-500">${escapeHtml(r.host)}:${r.port}/${escapeHtml(r.database)}</td>
+      <td class="p-1.5">${escapeHtml(r.user)}</td>
+      <td class="p-1.5">${dsmartStoreConnImportModeBadge(r)}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Không có dòng nào</td></tr>`;
+}
+
+async function applyDsmartStoreConnImport() {
+  if (!_dsmartStoreConnImportRows) return;
+  const validRows = _dsmartStoreConnImportRows.filter(r => !r.errors.length);
+  if (!validRows.length) return alert('⛔ Không có dòng hợp lệ nào để nhập');
+  const createCount = validRows.filter(r => r.mode === 'CREATE').length;
+  const updateCount = validRows.filter(r => r.mode === 'UPDATE').length;
+  if (!confirm(`Xác nhận NHẬP ${validRows.length} dòng kết nối siêu thị (${createCount} thêm mới, ${updateCount} sửa)? Mật khẩu từng dòng sẽ được mã hoá ngay khi lưu vào hệ thống.`)) return;
+  const btn = document.getElementById('btnDsmartStoreConnApplyImport');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/store-connections/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: validRows, sourceFileName: _dsmartStoreConnImportFileName })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (data.failCount) {
+      const failedRows = data.results.filter(r => !r.success);
+      const errLines = failedRows.slice(0, 5).map(r => `• ${r.storeCode}: ${r.error}`).join('\n');
+      const moreNote = failedRows.length > 5 ? `\n... và ${failedRows.length - 5} dòng lỗi khác (xem console)` : '';
+      alert(`✅ Đã nhập ${data.successCount}/${validRows.length} dòng thành công, ${data.failCount} dòng lỗi:\n${errLines}${moreNote}`);
+      console.error('Dòng lỗi khi nhập kết nối siêu thị:', failedRows);
+    } else {
+      alert(`✅ Đã nhập ${data.successCount}/${validRows.length} dòng thành công`);
+    }
+    _dsmartStoreConnImportRows = null;
+    _dsmartStoreConnImportFileName = null;
+    document.getElementById('dsmartStoreConnImportPreviewWrap').classList.add('hidden');
+    clearSingleFileInput('dsmartStoreConnImportFileInput', 'dsmartStoreConnImportFileName');
+    await renderDsmartStoreConnList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ===================== 1. Thêm Giá Mới =====================

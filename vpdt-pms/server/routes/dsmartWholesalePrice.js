@@ -31,6 +31,7 @@ const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfi
 const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
+const { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook } = require('../lib/dsmartStoreConnectionFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -246,6 +247,112 @@ router.post('/store-connections/:id/test-connection', async (req, res) => {
     logDsmartPrice(req, 'TEST_DSMART_STORE_CONNECTION', existing.storeCode, `Kiểm tra kết nối siêu thị "${existing.storeName}" (${existing.storeCode}) thành công (${result.ms}ms)`);
     res.json({ ok: true, ms: result.ms });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/store-connections/:id/test-connection'); }
+});
+
+// ===================== Nhập hàng loạt kết nối siêu thị qua file Excel (12/2026, theo yêu cầu người
+// dùng: "vì nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu và upload file mẫu được
+// không") — CHỈ admin, cùng mức nhạy cảm mọi route /store-connections khác (chứa mật khẩu hạ tầng).
+// RỦI RO ĐÃ NÊU RÕ VỚI NGƯỜI DÙNG, NGƯỜI DÙNG CHẤP NHẬN: cột Mật Khẩu trong file là CHỮ THƯỜNG — file
+// KHÔNG được lưu lại trên server (chỉ đọc buffer trong request). ===================
+
+router.get('/store-connections/template', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới tải được file mẫu kết nối siêu thị' });
+  try {
+    const wb = await buildStoreConnectionTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Ket_Noi_Sieu_Thi.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/dsmart-price/store-connections/template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /store-connections/preview — đọc file, KHÔNG ghi gì, đánh dấu từng dòng sẽ THÊM MỚI hay SỬA (so
+// khớp Mã Siêu Thị với danh sách đã có) để admin xem trước trước khi bấm Nhập thật.
+router.post('/store-connections/preview', uploadRateLimiter, (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới nhập được file kết nối siêu thị' });
+  priceFileUpload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/dsmart-price/store-connections/preview');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    try {
+      const { rows } = await parseStoreConnectionFile(req.file.buffer);
+      const existing = await storeConnStore.listSanitized();
+      const existingByCode = new Map(existing.map(s => [s.storeCode, s]));
+      const seenInFile = new Set();
+      const withMode = rows.map(r => {
+        if (r.errors.length) return { ...r, mode: null };
+        const found = existingByCode.get(r.storeCode) || null;
+        if (found || seenInFile.has(r.storeCode)) {
+          seenInFile.add(r.storeCode);
+          return { ...r, mode: 'UPDATE' };
+        }
+        seenInFile.add(r.storeCode);
+        if (!r.password) {
+          return { ...r, errors: [...r.errors, 'Thiếu Mật Khẩu (bắt buộc khi thêm Mã Siêu Thị mới)'], mode: null };
+        }
+        return { ...r, mode: 'CREATE' };
+      });
+      // Trả NGUYÊN mật khẩu lại cho client (cùng khuôn preview giá bán buôn trả nguyên dữ liệu dòng) —
+      // client giữ lại đúng các dòng này để gửi thẳng cho /import khi admin bấm Nhập, không yêu cầu
+      // admin tải file lên 2 lần. Chỉ cùng 1 trình duyệt của ĐÚNG admin vừa tải file lên thấy lại được
+      // (response của chính request họ gửi) — không phải lộ cho người khác.
+      res.json({ ok: true, fileName: req.file.originalname, rows: withMode });
+    } catch (err2) { sendCatchError(res, err2, 'POST /api/dsmart-price/store-connections/preview'); }
+  });
+});
+
+// POST /store-connections/import — ghi THẬT (CREATE/UPDATE từng dòng) — client gửi lại NGUYÊN VẸN các
+// dòng hợp lệ đã preview (bao gồm mật khẩu, do /preview đã trả về nguyên — xem
+// module-itsupport-dsmartprice.js::applyDsmartStoreConnImport()), KHÔNG tin dữ liệu client gửi lên dù
+// đã qua /preview trước đó (validate lại toàn bộ server-side ở đây).
+router.post('/store-connections/import', uploadRateLimiter, async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới nhập được file kết nối siêu thị' });
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (!rows.length) return res.status(400).json({ error: 'Không có dòng nào để nhập' });
+  if (rows.length > 500) return res.status(400).json({ error: 'Quá nhiều dòng trong 1 lượt nhập (tối đa 500)' });
+
+  const existingList = await storeConnStore.listRaw();
+  const byCode = new Map(existingList.map(s => [s.storeCode, s]));
+  const results = [];
+  for (const r of rows) {
+    const storeCode = String(r.storeCode || '').trim();
+    const storeName = String(r.storeName || '').trim();
+    const host = String(r.host || '').trim();
+    const port = Number(r.port) || 1433;
+    const database = String(r.database || '').trim();
+    const user = String(r.user || '').trim();
+    const password = r.password ? String(r.password) : null;
+    if (!storeCode || !storeName || !host || !database || !user) {
+      results.push({ storeCode, success: false, error: 'Dữ liệu dòng không hợp lệ (đã kiểm tra lại server-side)' });
+      continue;
+    }
+    try {
+      const found = byCode.get(storeCode);
+      if (found) {
+        const updated = await storeConnStore.updateStore(found.id, { storeCode, storeName, host, port, database, user, password, enabled: found.enabled }, req.freshUser.username);
+        byCode.set(storeCode, { ...found, storeName, host, port, database, user });
+        results.push({ storeCode, success: true, mode: 'UPDATE', item: updated });
+      } else {
+        if (!password) { results.push({ storeCode, success: false, error: 'Thiếu Mật Khẩu (bắt buộc khi thêm Mã Siêu Thị mới)' }); continue; }
+        const created = await storeConnStore.createStore({ storeCode, storeName, host, port, database, user, password }, req.freshUser.username);
+        byCode.set(storeCode, { id: created.id, storeCode, storeName, host, port, database, user, enabled: true });
+        results.push({ storeCode, success: true, mode: 'CREATE', item: created });
+      }
+    } catch (err) {
+      results.push({ storeCode, success: false, error: err.message || 'Lỗi không xác định' });
+    }
+  }
+  const successCount = results.filter(r => r.success).length;
+  const createCount = results.filter(r => r.success && r.mode === 'CREATE').length;
+  const updateCount = results.filter(r => r.success && r.mode === 'UPDATE').length;
+  logDsmartPrice(req, 'IMPORT_DSMART_STORE_CONNECTIONS', req.body?.sourceFileName || 'import', `Nhập hàng loạt kết nối siêu thị: ${successCount}/${rows.length} dòng thành công (${createCount} thêm mới, ${updateCount} sửa)`);
+  res.json({ ok: true, results, successCount, failCount: results.length - successCount });
 });
 
 // ===================== Tự Động Xoá Khi Hết Hạn (itSupportPriceWriteDsmart — KHÔNG cần admin, khác hẳn

@@ -10445,3 +10445,61 @@ audit song song trước khi merge, tìm được 4 vấn đề thật:
 
 Sau khi vá: 170/170 test pass (5 file test, gồm 1 kịch bản MỚI tái
 hiện đúng lỗi #1 để xác nhận đã vá đúng).
+
+### C. "🏬 Kết Nối Siêu Thị" — Nhập Hàng Loạt qua Excel (12/2026)
+
+Người dùng hỏi tiếp, sau khi được giải thích sự khác nhau giữa "⚙️ Cấu
+Hình Kết Nối" (1 kết nối NGUỒN duy nhất — DSmart16 Trung Tâm) và "🏬 Kết
+Nối Siêu Thị" (NHIỀU kết nối ĐÍCH nhận bản sao fan-out, mục A/B ở trên):
+**"...vì là nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu
+và upload file mẫu được không?"** — xác nhận thêm dù biết rõ rủi ro cột
+Mật Khẩu trong file Excel là CHỮ THƯỜNG (chưa mã hoá): **"Ok, bạn nốt
+vào để làm cái job này nhé."**
+
+**Cơ chế**: thêm 1 nút **"📂 Nhập Hàng Loạt (Excel)"** cạnh nút "➕ Thêm
+Siêu Thị" trong màn "🏬 Kết Nối Siêu Thị" (CHỈ admin, giống mục A), mở ra
+cùng khuôn "1. Thêm Giá Mới" đã có (tải file mẫu → chọn file → xem
+trước → bấm Nhập thật):
+
+1. **"📥 Tải File Mẫu"** — `GET /api/dsmart-price/store-connections/
+   template`, trả file `.xlsx` 7 cột cố định: Mã Siêu Thị, Tên Siêu Thị,
+   Host, Port, Tên CSDL, Tài Khoản, **Mật Khẩu**.
+2. **"📂 Chọn File Excel"** → `POST /store-connections/preview` đọc file
+   (qua `lib/dsmartStoreConnectionFileParser.js`, cùng khuôn an toàn
+   zip-bomb `lib/xlsxSafeRead.js` như "Thêm Giá Mới"), so khớp Mã Siêu
+   Thị với danh sách đã có để đánh dấu từng dòng **CREATE** (mã mới,
+   BẮT BUỘC có Mật Khẩu) hay **UPDATE** (mã đã có — Mật Khẩu để trống =
+   giữ nguyên mật khẩu cũ), hiện bảng xem trước (không ghi gì).
+3. **"✅ Nhập Vào Hệ Thống"** → `POST /store-connections/import` ghi
+   THẬT từng dòng hợp lệ (validate lại server-side, không tin dữ liệu
+   client gửi dù đã qua `/preview`) — lỗi 1 dòng (thiếu trường, trùng
+   Mã Siêu Thị theo cách khác...) **không chặn** các dòng còn lại (cùng
+   nguyên tắc cô lập lỗi như "Thêm Giá Mới" hàng loạt). Mật khẩu được
+   **MÃ HOÁ ngay khi lưu** (gọi đúng `createStore()`/`updateStore()` có
+   sẵn ở mục A, không có đường ghi plaintext xuống DB).
+
+**⚠️ Rủi ro ĐÃ NÊU RÕ với người dùng, người dùng CHẤP NHẬN**: file Excel
+tải mẫu/tải lên chứa Mật Khẩu DẠNG CHỮ THƯỜNG (chỉ mã hoá SAU KHI nhập
+vào hệ thống) — nếu file này bị lưu/gửi nhầm cho người không liên quan
+sẽ lộ mật khẩu SQL Server của siêu thị đó. Để giảm rủi ro trong phạm vi
+có thể: server **KHÔNG lưu file lên đĩa** (chỉ đọc buffer trong request,
+y hệt "Thêm Giá Mới"); `/preview` trả nguyên mật khẩu lại CHO ĐÚNG trình
+duyệt/request vừa tải file lên (để `/import` không bắt tải file lần 2),
+không phải lộ cho ai khác. UI có dòng cảnh báo đỏ nhắc admin tự xoá file
+khỏi máy sau khi dùng xong — không có cách nào loại bỏ hoàn toàn rủi ro
+này nếu vẫn cần nhập hàng loạt qua Excel, chỉ có thể nhắc nhở thao tác.
+
+### Test (phần C)
+
+- `tests/test-dsmart-wholesale-price.js` — thêm 11 kịch bản: quyền admin
+  cho cả 3 route, phân loại đúng CREATE/UPDATE/lỗi dòng, file sai khuôn
+  mẫu (thiếu cột), mã mới thiếu Mật Khẩu (preview + import), ghi thật
+  CREATE+UPDATE cùng lúc kèm cô lập lỗi 1 dòng, rows rỗng → 400. 66/66
+  pass (file này, cộng dồn toàn bộ mục 6n).
+- CSP sweep (`on[a-z]+="`, ` style="` ngoài `data-style`, `javascript:`,
+  `eval(`) trên `itSupportSection.html` + `module-itsupport-dsmartprice.js`
+  — không khớp gì.
+
+**Thao tác deploy**: KHÔNG cần thêm gì ngoài copy code + `pm2 restart`
+(không đổi `schema.sql`/biến môi trường mới — dùng lại đúng bảng
+`dbo.DsmartStorePriceConnections` và route CRUD đã có ở mục A).
