@@ -1,13 +1,22 @@
-// tests/test-dsmart-natural-key-matching.js — LỖI THẬT PRODUCTION đã vá LẦN 2 (12/2026, người dùng gửi
-// ảnh chụp thật kết quả bấm "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE": sys.identity_columns trả RỖNG — CSPRICE
-// HOÀN TOÀN KHÔNG CÓ cột ID tự tăng nào, khác hẳn giả định "có cột identity, chỉ sai TÊN cột" của lần vá
-// trước — file test-dsmart-identity-column-discovery.js đã test đúng lần vá trước giờ THAY bằng file này).
+// tests/test-dsmart-natural-key-matching.js — LỖI THẬT PRODUCTION đã vá QUA 3 LẦN LIÊN TIẾP trên CÙNG 1
+// tính năng (12/2026, nêu đủ lịch sử để không lặp lại bất kỳ giả định nào đã sai):
+//   Lần 1: giả định "CSPRICE có cột ID tự tăng tên ID" -> lỗi "Invalid column name 'ID'." -> vá bằng tự
+//          tra sys.identity_columns thay vì hard-code "ID".
+//   Lần 2: người dùng gửi ảnh chụp thật "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" — sys.identity_columns trả
+//          RỖNG, CSPRICE HOÀN TOÀN KHÔNG CÓ cột identity nào -> vá bằng "khoá tự nhiên" 7 cột
+//          (NATURAL_KEY_COLUMNS = CUST_ID+TYPE+STK_ID+SKU_ID+WS_ID+FR_DATE+TO_DATE), đọc lại khoá sau khi
+//          ghi bằng 1 câu SELECT riêng.
+//   Lần 3: người dùng thử lại, gặp lỗi THẬT "The SELECT permission was denied on the object 'CSPRICE'..."
+//          — tài khoản SQL dùng cho tính năng này CHỈ được GRANT INSERT/UPDATE/DELETE, KHÔNG có SELECT
+//          trên CSPRICE -> vá bằng cách bỏ HẲN mọi câu SELECT trên dữ liệu CSPRICE, dùng
+//          `OUTPUT INSERTED.*`/`OUTPUT DELETED.*` NGAY TRÊN câu INSERT/UPDATE/DELETE (đọc trực tiếp từ
+//          thao tác ghi, không cần quyền SELECT riêng) — updateWholesalePrice()/deleteWholesalePrice()
+//          chạy trong 1 transaction, ROLLBACK nếu OUTPUT cho thấy khớp >1 dòng.
 //
-// lib/dsmartSqlClient.js giờ dùng "khoá tự nhiên" (NATURAL_KEY_COLUMNS = CUST_ID+TYPE+STK_ID+SKU_ID+WS_ID+
-// FR_DATE+TO_DATE) thay cho 1 cột ID duy nhất — test này mô phỏng THẬT gói `mssql` (require.cache, cùng kỹ
-// thuật test-dsmart-identity-column-discovery.js cũ) để kiểm tra đúng cơ chế: insert không cần cột identity
-// nào, đọc lại khoá tự nhiên sau khi ghi, và các lớp AN TOÀN chặn Sửa/Xoá khi khoá suy luận khớp 0 hoặc
-// NHIỀU HƠN 1 dòng (rủi ro sửa/xoá nhầm — xem chú thích đầy đủ ở đầu lib/dsmartSqlClient.js).
+// File test này mô phỏng THẬT gói `mssql` (require.cache) — bao gồm mô phỏng ĐÚNG hành vi ROLLBACK (hoàn
+// tác thay đổi dữ liệu thật, không chỉ log) để kiểm chứng đúng lớp an toàn chống sửa/xoá nhầm, VÀ mô
+// phỏng ĐÚNG việc tài khoản không có quyền SELECT trên CSPRICE (mọi câu SELECT dữ liệu thật trên CSPRICE
+// đều ném lỗi — nếu code LỠ thêm lại 1 câu SELECT như vậy, test này bắt được ngay).
 //
 // tests/test-dsmart-wholesale-price.js stub NGUYÊN lib/dsmartSqlClient (không đi qua SQL thật), nên KHÔNG
 // phủ được logic bên trong file này — file test này bổ sung đúng phần đó.
@@ -28,7 +37,7 @@ function stubModule(relPath, exportsObj) {
 // coi là rỗng), DEFAULT_WS_ID=30, khớp đúng mẫu dữ liệu thật người dùng gửi). =====
 let CSPRICE_DB = [];
 let queryLog = [];
-let seq = 0; // dùng làm OPEN_DATE/MODI_DATE giả (số tăng dần đóng vai trò mốc thời gian) để ORDER BY ... DESC xác định đúng
+let seq = 0; // dùng làm OPEN_DATE/MODI_DATE giả (số tăng dần đóng vai trò mốc thời gian)
 const DEFAULT_TYPE = '4', DEFAULT_STK_ID = '', DEFAULT_WS_ID = 30;
 
 function dateMs(v) { return v instanceof Date ? v.getTime() : new Date(v).getTime(); }
@@ -37,6 +46,9 @@ function sameDate(a, b) { return dateMs(a) === dateMs(b); }
 function matchNaturalKeyInputs(db, inputs) {
   return db.filter(r => r.CUST_ID === inputs.kCustId && r.TYPE === inputs.kType && r.STK_ID === inputs.kStkId
     && r.SKU_ID === inputs.kSkuId && r.WS_ID === inputs.kWsId && sameDate(r.FR_DATE, inputs.kFrDate) && sameDate(r.TO_DATE, inputs.kToDate));
+}
+function outputRow(r) {
+  return { CUST_ID: r.CUST_ID, TYPE: r.TYPE, STK_ID: r.STK_ID, SKU_ID: r.SKU_ID, WS_ID: r.WS_ID, FR_DATE: r.FR_DATE, TO_DATE: r.TO_DATE };
 }
 
 class FakeRequest {
@@ -65,6 +77,12 @@ class FakeRequest {
       // ERP cũ — ràng buộc duy nhất chỉ nằm ở tầng ứng dụng DSmart, không khai báo trên CSDL).
       return { recordset: [] };
     }
+    // QUY TẮC BẮT BUỘC (12/2026, lỗi thật production LẦN 3): tài khoản SQL thật KHÔNG có quyền SELECT trên
+    // dữ liệu CSPRICE — nếu code LỠ thêm lại 1 câu SELECT dữ liệu thật (không phải metadata ở trên), mock
+    // này mô phỏng ĐÚNG lỗi thật sẽ gặp, để bắt được ngay ở test thay vì đợi production báo lại lần nữa.
+    if (/^SELECT\b/.test(sql) && /\bdbo\.CSPRICE\b/.test(sql)) {
+      throw new Error("The SELECT permission was denied on the object 'CSPRICE', database 'DSMART16', schema 'dbo'.");
+    }
     if (/^INSERT INTO dbo\.CSPRICE/.test(sql)) {
       const now = ++seq;
       const row = {
@@ -74,30 +92,18 @@ class FakeRequest {
         OPEN_DATE: now, MODI_DATE: now
       };
       this.db.push(row);
-      return { rowsAffected: [1] };
-    }
-    if (/^SELECT CUST_ID, TYPE, STK_ID, SKU_ID, WS_ID, FR_DATE, TO_DATE FROM dbo\.CSPRICE/.test(sql)) {
-      // captureCspriceNaturalKey() KHÔNG còn khớp theo WSPRICE nữa (audit chéo 12/2026 — tránh rủi ro
-      // precision/scale khác nhau giữa app và CSDL thật khiến so sánh = bị trật) — chỉ khớp 4 cột định
-      // danh nghiệp vụ CUST_ID/SKU_ID/FR_DATE/TO_DATE.
-      const matches = this.db.filter(r => r.CUST_ID === this.inputs.custId && r.SKU_ID === this.inputs.skuId
-        && sameDate(r.FR_DATE, this.inputs.frDate) && sameDate(r.TO_DATE, this.inputs.toDate));
-      matches.sort((a, b) => (b.OPEN_DATE - a.OPEN_DATE) || (b.MODI_DATE - a.MODI_DATE));
-      return { recordset: matches.map(r => ({ CUST_ID: r.CUST_ID, TYPE: r.TYPE, STK_ID: r.STK_ID, SKU_ID: r.SKU_ID, WS_ID: r.WS_ID, FR_DATE: r.FR_DATE, TO_DATE: r.TO_DATE })) };
-    }
-    if (/^SELECT COUNT\(\*\) AS Cnt FROM dbo\.CSPRICE/.test(sql)) {
-      return { recordset: [{ Cnt: matchNaturalKeyInputs(this.db, this.inputs).length }] };
+      return { rowsAffected: [1], recordset: [outputRow(row)] };
     }
     if (/^UPDATE dbo\.CSPRICE/.test(sql)) {
       const matches = matchNaturalKeyInputs(this.db, this.inputs);
       const now = ++seq;
       for (const r of matches) { r.WSPRICE = this.inputs.newPrice; r.FR_DATE = this.inputs.newFrDate; r.TO_DATE = this.inputs.newToDate; r.MODI_DATE = now; }
-      return { rowsAffected: [matches.length] };
+      return { rowsAffected: [matches.length], recordset: matches.map(outputRow) };
     }
     if (/^DELETE FROM dbo\.CSPRICE/.test(sql)) {
       const matches = matchNaturalKeyInputs(this.db, this.inputs);
       for (const r of matches) { const idx = this.db.indexOf(r); this.db.splice(idx, 1); }
-      return { rowsAffected: [matches.length] };
+      return { rowsAffected: [matches.length], recordset: matches.map(r => ({ CUST_ID: r.CUST_ID })) };
     }
     return { recordset: [] };
   }
@@ -108,18 +114,27 @@ class FakeConnectionPool {
   request() { return new FakeRequest(CSPRICE_DB); }
   async close() { this._closed = true; }
 }
-// FakeTransaction — audit chéo (12/2026) phát hiện ĐẾM + GHI tách rời 2 round-trip không transaction có
-// rủi ro TOCTOU thật — lib/dsmartSqlClient.js đã vá bằng `new sql.Transaction(pool)` THẬT (gộp đếm+ghi
-// trong 1 giao dịch, khoá bằng UPDLOCK/HOLDLOCK) — mock này KHÔNG mô phỏng khoá/isolation thật (không cần
-// thiết cho test logic SQL-text/mutation thuần, chạy tuần tự trong 1 tiến trình Node.js), chỉ cần đúng bề
-// mặt API (`begin()`/`request()`/`commit()`/`rollback()`) để code thật chạy được qua mock.
+// FakeTransaction — mô phỏng ĐÚNG hành vi ROLLBACK thật của SQL Server: snapshot dữ liệu lúc begin(), nếu
+// rollback() thì HOÀN TÁC lại dữ liệu CSPRICE_DB về đúng snapshot đó (không chỉ log suông) — bắt buộc phải
+// mô phỏng đúng vì updateWholesalePrice()/deleteWholesalePrice() dựa vào rollback THẬT để đảm bảo không
+// sót thay đổi khi phát hiện khoá tự nhiên khớp >1 dòng (xem lib/dsmartSqlClient.js).
 let transactionLog = [];
 class FakeTransaction {
-  constructor(pool) { this.pool = pool; }
-  async begin() { transactionLog.push('BEGIN'); return this; }
+  constructor(pool) { this.pool = pool; this.snapshot = null; }
+  async begin() {
+    transactionLog.push('BEGIN');
+    this.snapshot = CSPRICE_DB.map(r => ({ ...r }));
+    return this;
+  }
   request() { return new FakeRequest(CSPRICE_DB); }
-  async commit() { transactionLog.push('COMMIT'); }
-  async rollback() { transactionLog.push('ROLLBACK'); }
+  async commit() { transactionLog.push('COMMIT'); this.snapshot = null; }
+  async rollback() {
+    transactionLog.push('ROLLBACK');
+    if (this.snapshot) {
+      CSPRICE_DB.length = 0;
+      CSPRICE_DB.push(...this.snapshot);
+    }
+  }
 }
 const mssqlStubPath = require.resolve('mssql');
 require.cache[mssqlStubPath] = {
@@ -148,12 +163,13 @@ async function main() {
     return require(path.join(__dirname, '..', 'lib', 'dsmartSqlClient.js'));
   }
 
-  await run.run('insertWholesalePrice(): CSPRICE KHÔNG có cột identity nào -> VẪN ghi thành công (không còn throw "Không tìm thấy cột ID tự tăng")', async () => {
+  await run.run('insertWholesalePrice(): CSPRICE KHÔNG có cột identity nào -> VẪN ghi thành công, dùng OUTPUT INSERTED (không cần SELECT riêng)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
     assertEqual(CSPRICE_DB.length, 1, 'phải ghi được đúng 1 dòng vào CSPRICE');
-    assert(!queryLog.some(q => /OUTPUT INSERTED/.test(q)), 'KHÔNG được dùng OUTPUT INSERTED.<cột> nữa (CSPRICE không có cột identity)');
+    assert(queryLog.some(q => /^INSERT INTO dbo\.CSPRICE/.test(q) && /OUTPUT INSERTED/.test(q)), 'câu INSERT phải có OUTPUT INSERTED để đọc lại khoá, không dùng SELECT riêng');
+    assert(!queryLog.some(q => /^SELECT\b/.test(q) && /dbo\.CSPRICE\b/.test(q) && !/INFORMATION_SCHEMA/.test(q)), 'KHÔNG được có câu SELECT dữ liệu nào trên CSPRICE (tài khoản thật không có quyền SELECT)');
     assertEqual(key.custId, 'C1'); assertEqual(key.skuId, 'S1');
   });
 
@@ -163,10 +179,10 @@ async function main() {
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
     assertEqual(key.type, DEFAULT_TYPE, 'phải đọc lại đúng TYPE mặc định SQL Server tự áp');
     assertEqual(key.wsId, DEFAULT_WS_ID, 'phải đọc lại đúng WS_ID mặc định SQL Server tự áp');
-    assert(queryLog.some(q => q.includes('ORDER BY OPEN_DATE DESC, MODI_DATE DESC')), 'phải đọc lại dòng vừa ghi theo đúng 5 giá trị vừa INSERT');
+    assertEqual(key.stkId, DEFAULT_STK_ID, 'phải đọc lại đúng STK_ID mặc định SQL Server tự áp');
   });
 
-  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), không cần ID nào, chạy trong 1 TRANSACTION THẬT', async () => {
+  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -175,16 +191,17 @@ async function main() {
     assertEqual(CSPRICE_DB[0].WSPRICE, 150, 'UPDATE phải đổi đúng giá');
     assert(sameDate(CSPRICE_DB[0].TO_DATE, '2026-02-28'), `UPDATE phải đổi đúng ngày hết hạn — got: ${CSPRICE_DB[0].TO_DATE}`);
     assert(sameDate(newKey.toDate, '2026-02-28'), 'phải trả về khoá tự nhiên MỚI (TO_DATE đổi -> khoá cũ không còn khớp)');
-    assert(queryLog.some(q => q.startsWith('SELECT COUNT(*) AS Cnt FROM dbo.CSPRICE')), 'phải ĐẾM TRƯỚC khi UPDATE (an toàn chống sửa nhầm)');
-    assert(queryLog.some(q => /WITH \(UPDLOCK, HOLDLOCK\)/.test(q)), 'bước đếm phải khoá dòng (UPDLOCK/HOLDLOCK) để chặn race với lượt ghi khác chen vào giữa đếm và ghi thật');
-    assertEqual(transactionLog.join(','), 'BEGIN,COMMIT', 'phải mở transaction THẬT, đếm+ghi trong CÙNG giao dịch, rồi COMMIT (audit chéo 12/2026: 2 round-trip tách rời không transaction là lỗ hổng TOCTOU thật)');
+    assert(queryLog.some(q => /^UPDATE dbo\.CSPRICE/.test(q) && /OUTPUT INSERTED/.test(q)), 'câu UPDATE phải có OUTPUT INSERTED để biết số dòng bị ảnh hưởng + khoá mới, không cần SELECT COUNT riêng');
+    assert(!queryLog.some(q => /^SELECT\b/.test(q)), 'KHÔNG được có câu SELECT nào (kể cả SELECT COUNT) trong luồng Sửa');
+    assertEqual(transactionLog.join(','), 'BEGIN,COMMIT', 'phải mở transaction THẬT quanh UPDATE, rồi COMMIT khi khớp đúng 1 dòng');
     queryLog = [];
     const delResult = await deleteWholesalePrice({ dsmartKey: newKey });
     assertEqual(delResult.alreadyGone, false, 'phải xoá thành công đúng dòng (dùng khoá MỚI sau khi Sửa)');
     assertEqual(CSPRICE_DB.length, 0, 'CSPRICE phải rỗng sau khi xoá');
+    assert(queryLog.some(q => /^DELETE FROM dbo\.CSPRICE/.test(q) && /OUTPUT DELETED/.test(q)), 'câu DELETE phải có OUTPUT DELETED');
   });
 
-  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng (trùng hệt 7 cột) -> updateWholesalePrice() DỪNG LẠI (ROLLBACK), KHÔNG sửa mù', async () => {
+  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng (trùng hệt 7 cột) -> updateWholesalePrice() ROLLBACK, HOÀN TÁC thật (không để sót thay đổi)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, DsmartSqlError } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -196,12 +213,13 @@ async function main() {
     catch (err) { threw = err; }
     assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi khớp >1 dòng');
     assert(/không còn DUY NHẤT/.test(threw.message), `thông báo phải nêu rõ không còn duy nhất — got: ${threw.message}`);
-    assertEqual(CSPRICE_DB[0].WSPRICE, 100, 'KHÔNG được sửa dòng nào khi phát hiện trùng khoá (cả 2 dòng vẫn giữ giá cũ)');
-    assertEqual(CSPRICE_DB[1].WSPRICE, 100, 'KHÔNG được sửa dòng nào khi phát hiện trùng khoá (cả 2 dòng vẫn giữ giá cũ)');
-    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK ngay khi phát hiện khớp >1 dòng, KHÔNG BAO GIỜ chạy UPDATE (xác nhận writeFn không hề được gọi)');
+    assert(/HOÀN TÁC/.test(threw.message), `thông báo phải nêu rõ đã hoàn tác — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB[0].WSPRICE, 100, 'ROLLBACK phải HOÀN TÁC về giá cũ (mock mô phỏng rollback thật, không chỉ log)');
+    assertEqual(CSPRICE_DB[1].WSPRICE, 100, 'ROLLBACK phải HOÀN TÁC về giá cũ cho cả dòng trùng khoá');
+    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK khi phát hiện OUTPUT trả về >1 dòng');
   });
 
-  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng -> deleteWholesalePrice() cũng DỪNG LẠI (ROLLBACK), KHÔNG xoá mù', async () => {
+  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng -> deleteWholesalePrice() ROLLBACK, HOÀN TÁC thật (không xoá mất dữ liệu)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, deleteWholesalePrice, DsmartSqlError } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
@@ -210,13 +228,13 @@ async function main() {
     let threw = null;
     try { await deleteWholesalePrice({ dsmartKey: key }); } catch (err) { threw = err; }
     assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi khớp >1 dòng');
-    assertEqual(CSPRICE_DB.length, 2, 'KHÔNG được xoá dòng nào khi phát hiện trùng khoá');
-    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK ngay khi phát hiện khớp >1 dòng, KHÔNG BAO GIỜ chạy DELETE');
+    assertEqual(CSPRICE_DB.length, 2, 'ROLLBACK phải HOÀN TÁC — cả 2 dòng vẫn còn nguyên (mock mô phỏng rollback thật)');
+    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK khi phát hiện OUTPUT trả về >1 dòng');
   });
 
   // Audit chéo (12/2026) phát hiện: Number(price) không có Number.isFinite() guard như toDateOnly() đã có
   // cho ngày — giá trị không phải số (VD "abc" -> NaN) từng vẫn "ghi thành công" rồi mới lỗi mù mờ ở bước
-  // đọc lại khoá (NaN !== NaN). Vá bằng cách chặn NGAY TỪ ĐẦU insertWholesalePrice()/updateWholesalePrice().
+  // sau. Vá bằng cách chặn NGAY TỪ ĐẦU insertWholesalePrice()/updateWholesalePrice().
   await run.run('insertWholesalePrice()/updateWholesalePrice(): giá không phải số hợp lệ (NaN) -> chặn NGAY, KHÔNG ghi gì vào CSPRICE', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, DsmartSqlError } = freshClient();
@@ -255,14 +273,20 @@ async function main() {
     assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi không tìm thấy dòng để sửa');
   });
 
-  await run.run('ĐỐI CHỨNG lỗi thật LẦN 1 đã gặp (12/2026): nếu code LỠ quay lại dùng cứng OUTPUT INSERTED.ID trong khi CSPRICE không có cột này -> ném đúng "Invalid column name \'ID\'." (xác nhận HARNESS mô phỏng đúng triệu chứng)', async () => {
+  await run.run('ĐỐI CHỨNG lỗi thật LẦN 1 đã gặp (12/2026): CSPRICE không có cột tên "ID" (xác nhận HARNESS mô phỏng đúng cấu trúc thật)', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const req = new FakeRequest(CSPRICE_DB);
-    // Query giả định code LỠ quay lại khuôn cũ — harness KHÔNG xử lý OUTPUT INSERTED nên rơi vào nhánh mặc
-    // định (return rỗng) thay vì lỗi, nên ở đây ta assert trực tiếp bằng cách mô phỏng hành vi SQL Server
-    // thật: INFORMATION_SCHEMA xác nhận không có cột "ID" nào trong danh sách cột thật của CSPRICE.
     const colsResult = await req.query('SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = \'dbo\' AND TABLE_NAME = \'CSPRICE\' ORDER BY ORDINAL_POSITION;');
     assert(!colsResult.recordset.some(c => c.COLUMN_NAME === 'ID'), 'CSPRICE không có cột tên "ID" — đúng tình huống lỗi thật gặp phải lần đầu');
+  });
+
+  await run.run('ĐỐI CHỨNG lỗi thật LẦN 3 đã gặp (12/2026): bất kỳ câu SELECT dữ liệu nào trên CSPRICE đều bị DSmart từ chối (xác nhận HARNESS mô phỏng đúng quyền tài khoản thật)', async () => {
+    queryLog = []; CSPRICE_DB = [];
+    const req = new FakeRequest(CSPRICE_DB);
+    let threw = null;
+    try { await req.query('SELECT CUST_ID FROM dbo.CSPRICE WHERE CUST_ID = @custId;'); }
+    catch (err) { threw = err; }
+    assert(threw && /SELECT permission was denied/.test(threw.message), `mock phải tái hiện đúng lỗi thật đã gặp — got: ${threw && threw.message}`);
   });
 
   await run.run('inspectCspriceColumns(): identityColumn=null (không có cột identity), naturalKeyColumns trả đủ 7 cột, keyIndexes rỗng (không có PK/unique index khai báo)', async () => {
