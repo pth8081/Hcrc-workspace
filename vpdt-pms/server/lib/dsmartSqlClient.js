@@ -25,8 +25,8 @@
 // Ý NGHĨA NGHIỆP VỤ QUAN TRỌNG (sửa lại hiểu nhầm trước đây): CSPRICE KHÔNG PHẢI bảng "lịch sử giá nhiều
 // dòng/1 cặp khách+SP phân biệt bởi FR_DATE/TO_DATE" — mỗi cặp (CUST_ID, SKU_ID) CHỈ CÓ ĐÚNG 1 DÒNG DUY
 // NHẤT tại một thời điểm (PK ép buộc). "Thêm Giá Mới" cho 1 cặp ĐÃ CÓ dòng thực chất là THAY THẾ/GHI ĐÈ giá
-// hiện có, không phải thêm 1 dòng lịch sử mới — xem overwriteWholesalePrice() bên dưới (tự động kích hoạt
-// khi INSERT gặp lỗi trùng khoá chính, KHÔNG cần người dùng tự xoá dòng cũ qua SSMS trước).
+// hiện có, không phải thêm 1 dòng lịch sử mới — xem tryOverwriteExistingRow() bên dưới (thử GHI ĐÈ TRƯỚC
+// theo đúng khuôn upsert chuẩn, KHÔNG cần người dùng tự xoá dòng cũ qua SSMS trước).
 //
 // insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() bên dưới dùng KHOÁ TỰ NHIÊN THẬT
 // NATURAL_KEY_COLUMNS = (CUST_ID, SKU_ID) — ĐÃ SỬA từ tổ hợp 7 cột sai ở Lần 2 xuống đúng 2 cột theo PK
@@ -164,62 +164,39 @@ function toDateOnly(value) {
 // COMMIT (không có gì thay đổi, vô hại); nếu NHIỀU HƠN 1 dòng (khoá suy luận không còn duy nhất) ->
 // ROLLBACK NGAY để HOÀN TÁC thao tác đã lỡ áp dụng cho nhiều dòng, báo lỗi rõ ràng — không bao giờ để sót
 // lại thay đổi trên dòng của khách/sản phẩm khác.
+// LẦN 5 — KIẾN TRÚC UPSERT CHUẨN (audit chéo 4 agent phát hiện bản vá đầu tiên "INSERT rồi bắt lỗi trùng
+// khoá PK_CSPRICE để chuyển sang ghi đè" là cách vá KHÔNG triệt để — dựa vào exception-driven control flow
+// cho 1 tình huống BÌNH THƯỜNG (ghi đè giá đã có), tự tạo ra lỗi ràng buộc THẬT trên SQL Server mỗi lần ghi
+// đè (có thể làm nhiễu log/giám sát lỗi production), và cơ chế nhận diện lỗi trùng khoá (err.number/regex
+// tên ràng buộc) có thể nhầm 1 ràng buộc UNIQUE khác (nếu CSPRICE từng có thêm) thành trùng khoá chính):
+// SỬA lại theo đúng khuôn upsert chuẩn — **UPDATE TRƯỚC** (coi như đã có dòng, đúng PK thật CUST_ID+SKU_ID
+// xác nhận qua SSMS); nếu UPDATE không khớp dòng nào (OUTPUT rỗng = CHƯA có dòng) thì mới INSERT dòng MỚI.
+// Không còn cần phân biệt "lỗi trùng khoá" khỏi "lỗi SQL khác" nữa — loại bỏ hẳn hàm isPrimaryKeyViolation()
+// cũ. Rủi ro còn lại (chấp nhận được, hiếm xảy ra): 2 request THẬT đồng thời cùng thêm giá MỚI (chưa từng
+// có dòng) cho ĐÚNG cùng 1 cặp CUST_ID+SKU_ID — cả 2 đều thấy UPDATE khớp 0 dòng, 1 trong 2 INSERT trước sẽ
+// thành công, request còn lại gặp lỗi PK_CSPRICE THẬT từ SQL Server (ném thẳng ra, không cố bắt/chuyển đổi
+// nữa — trung thực hơn, người dùng thử lại là xong, khác hẳn case GHI ĐÈ vốn là tình huống thường xuyên).
 async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
   if (!Number.isFinite(Number(price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
   }
   const pool = await getDsmartPool();
   const { unit, unitConv, taxCode } = await lookupSkuDefUnitInfo(pool, skuId);
-  const req = pool.request();
-  req.input('custId', sql.NVarChar(50), String(custId));
-  req.input('skuId', sql.NVarChar(50), String(skuId));
-  req.input('unit', sql.NVarChar(10), unit);
-  req.input('unitConv', sql.Int, unitConv);
-  req.input('price', sql.Decimal(18, 4), Number(price));
-  req.input('taxCode', sql.NVarChar(10), taxCode);
-  req.input('frDate', sql.DateTime, toDateOnly(frDate));
-  req.input('toDate', sql.DateTime, toDateOnly(toDate));
-  let result;
-  try {
-    result = await req.query(`
-      INSERT INTO dbo.CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV, WSPRICE, VAT_INCL, TAX_CODE, OPEN_DATE, MODI_DATE, STATUS, FR_DATE, TO_DATE)
-      OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
-      VALUES (@custId, '04', @skuId, @unit, @unit, @unitConv, @price, 1, @taxCode, GETDATE(), GETDATE(), 1, @frDate, @toDate);
-    `);
-  } catch (err) {
-    // Trùng khoá chính (CUST_ID, SKU_ID) -> KHÔNG phải lỗi thật, mà là "Thêm Giá Mới" cho 1 cặp ĐÃ CÓ dòng
-    // (xem chú thích Lần 5 ở đầu file) -> ghi đè thay vì báo lỗi, không cần người dùng tự xoá dòng cũ.
-    if (isPrimaryKeyViolation(err)) {
-      return overwriteWholesalePrice({ custId, skuId, unit, unitConv, price, taxCode, frDate, toDate });
-    }
-    throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
-  }
-  const rows = result.recordset || [];
-  if (!rows.length) {
-    throw new DsmartSqlError('DSmart không trả lại dòng vừa thêm (OUTPUT INSERTED rỗng) — kiểm tra thủ công trên DSmart xem dòng đã được ghi chưa.');
-  }
-  return { ...naturalKeyFromRow(rows[0]), wasOverwrite: false };
+  const common = { custId, skuId, unit, unitConv, price, taxCode, frDate, toDate };
+  const overwritten = await tryOverwriteExistingRow(pool, common);
+  if (overwritten) return { ...overwritten, wasOverwrite: true };
+  const inserted = await insertNewRow(pool, common);
+  return { ...inserted, wasOverwrite: false };
 }
 
-// isPrimaryKeyViolation(err): nhận diện đúng lỗi "trùng khoá chính PK_CSPRICE" (SQL Server error 2627) để
-// phân biệt với MỌI lỗi khác (mất kết nối, thiếu cột NOT NULL khác...) — CHỈ lỗi này mới tự chuyển sang ghi
-// đè, các lỗi khác vẫn ném ra như cũ. Kiểm tra cả `err.number` (chuẩn, mssql luôn gán đúng mã lỗi SQL
-// Server gốc) lẫn nội dung message chứa tên ràng buộc (dự phòng nếu driver không gán `number` vì lý do nào
-// đó) — không dựa DUY NHẤT vào 1 cách nhận diện.
-function isPrimaryKeyViolation(err) {
-  if (err && (err.number === 2627 || err.number === 2601)) return true;
-  const msg = String(err?.message || '');
-  return /PRIMARY KEY/i.test(msg) && /PK_CSPRICE/i.test(msg);
-}
-
-// overwriteWholesalePrice(): kích hoạt khi INSERT ở trên gặp đúng lỗi trùng khoá chính — GHI ĐÈ ĐỦ LẠI toàn
-// bộ các cột bắt buộc (TYPE/UNIT_SYMB/BASE_UNIT/UNITCONV/WSPRICE/VAT_INCL/TAX_CODE/STATUS/FR_DATE/TO_DATE/
-// MODI_DATE) theo đúng công thức Lần 4, KHÔNG chỉ sửa Giá/Ngày — mục đích kép: (1) đúng ý "Thêm Giá Mới"
-// nghĩa là thay giá hiện có khi đã tồn tại dòng, (2) TỰ khắc phục luôn dòng cũ bị ghi thiếu cột do lỗi Lần
-// 3 (TYPE/UNIT_SYMB/... rỗng) mà không cần người dùng tự sửa tay qua SSMS. OPEN_DATE CHỈ set nếu đang NULL
-// (giữ nguyên ngày mở giá gốc nếu dòng đã đúng từ trước, chỉ backfill cho dòng cũ bị hỏng).
-async function overwriteWholesalePrice({ custId, skuId, unit, unitConv, price, taxCode, frDate, toDate }) {
-  const pool = await getDsmartPool();
+// tryOverwriteExistingRow(): thử UPDATE đúng dòng khớp khoá chính thật (CUST_ID, SKU_ID) TRƯỚC — ghi đè ĐỦ
+// LẠI toàn bộ các cột bắt buộc (TYPE/UNIT_SYMB/BASE_UNIT/UNITCONV/WSPRICE/VAT_INCL/TAX_CODE/STATUS/FR_DATE/
+// TO_DATE/MODI_DATE) theo đúng công thức Lần 4, KHÔNG chỉ sửa Giá/Ngày — mục đích kép: (1) đúng ý "Thêm Giá
+// Mới" nghĩa là thay giá hiện có khi đã tồn tại dòng, (2) TỰ khắc phục luôn dòng cũ bị ghi thiếu cột do lỗi
+// Lần 3 (TYPE/UNIT_SYMB/... rỗng) mà không cần người dùng tự sửa tay qua SSMS. OPEN_DATE CHỈ set nếu đang
+// NULL (giữ nguyên ngày mở giá gốc nếu dòng đã đúng từ trước, chỉ backfill cho dòng cũ bị hỏng). Trả về
+// `null` (KHÔNG ném lỗi) nếu UPDATE khớp 0 dòng — nghĩa là CHƯA có dòng nào, caller sẽ tự INSERT mới.
+async function tryOverwriteExistingRow(pool, { custId, skuId, unit, unitConv, price, taxCode, frDate, toDate }) {
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
   req.input('skuId', sql.NVarChar(50), String(skuId));
@@ -240,13 +217,41 @@ async function overwriteWholesalePrice({ custId, skuId, unit, unitConv, price, t
       WHERE CUST_ID = @custId AND SKU_ID = @skuId;
     `);
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi ghi đè CSPRICE (TRÙNG KHOÁ, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
+    throw new DsmartSqlError(`Lỗi ghi đè CSPRICE (CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
+  }
+  const rows = result.recordset || [];
+  if (!rows.length) return null; // chưa có dòng nào khớp -> caller tự INSERT mới
+  return naturalKeyFromRow(rows[0]);
+}
+
+// insertNewRow(): chỉ gọi khi tryOverwriteExistingRow() xác nhận CHƯA có dòng nào cho cặp (CUST_ID, SKU_ID)
+// — INSERT dòng THẬT SỰ mới theo đúng công thức Lần 4.
+async function insertNewRow(pool, { custId, skuId, unit, unitConv, price, taxCode, frDate, toDate }) {
+  const req = pool.request();
+  req.input('custId', sql.NVarChar(50), String(custId));
+  req.input('skuId', sql.NVarChar(50), String(skuId));
+  req.input('unit', sql.NVarChar(10), unit);
+  req.input('unitConv', sql.Int, unitConv);
+  req.input('price', sql.Decimal(18, 4), Number(price));
+  req.input('taxCode', sql.NVarChar(10), taxCode);
+  req.input('frDate', sql.DateTime, toDateOnly(frDate));
+  req.input('toDate', sql.DateTime, toDateOnly(toDate));
+  let result;
+  try {
+    result = await req.query(`
+      INSERT INTO dbo.CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV, WSPRICE, VAT_INCL, TAX_CODE, OPEN_DATE, MODI_DATE, STATUS, FR_DATE, TO_DATE)
+      OUTPUT INSERTED.CUST_ID, INSERTED.SKU_ID
+      VALUES (@custId, '04', @skuId, @unit, @unit, @unitConv, @price, 1, @taxCode, GETDATE(), GETDATE(), 1, @frDate, @toDate);
+    `);
+  } catch (err) {
+    // Hiếm gặp: 2 request đồng thời cùng thêm giá MỚI cho đúng 1 cặp — xem chú thích ở insertWholesalePrice().
+    throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
   }
   const rows = result.recordset || [];
   if (!rows.length) {
-    throw new DsmartSqlError(`Phát hiện trùng khoá chính (CUST_ID=${custId}, SKU_ID=${skuId}) lúc Thêm nhưng không ghi đè được (dòng có thể vừa bị xoá bởi thao tác khác ngay lúc này) — thử lại.`);
+    throw new DsmartSqlError('DSmart không trả lại dòng vừa thêm (OUTPUT INSERTED rỗng) — kiểm tra thủ công trên DSmart xem dòng đã được ghi chưa.');
   }
-  return { ...naturalKeyFromRow(rows[0]), wasOverwrite: true };
+  return naturalKeyFromRow(rows[0]);
 }
 
 // lookupSkuDefUnitInfo(pool, skuId): tra Đơn Vị Tính (PICEUNIT, dùng chung cho cả UNIT_SYMB lẫn BASE_UNIT

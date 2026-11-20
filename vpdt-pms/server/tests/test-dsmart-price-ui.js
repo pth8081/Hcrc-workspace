@@ -58,10 +58,12 @@ async function main() {
   const iso = (d) => d.toISOString().slice(0, 10);
   const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
 
+  // dsmartKey (Lần 5, 12/2026): PK thật CSPRICE chỉ 2 cột (custId, skuId) — fixture dùng đúng hình dạng mới
+  // (không còn type/stkId/wsId/frDate/toDate như khoá 7 cột giả định sai trước đây).
   const ENTRIES_FIXTURE = [
-    { id: 1, dsmartKey: { custId: '240000000001', type: '4', stkId: '', skuId: '2900381100', wsId: 30, frDate: addDays(-60), toDate: addDays(-10) }, custId: '240000000001', skuId: '2900381100', price: 25920, frDate: addDays(-60), toDate: addDays(-10), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-08-02T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-08-02T00:00:00.000Z' }] },
-    { id: 2, dsmartKey: { custId: '240000000005', type: '4', stkId: '', skuId: '2900555210', wsId: 30, frDate: addDays(-5), toDate: addDays(30) }, custId: '240000000005', skuId: '2900555210', price: 52000, frDate: addDays(-5), toDate: addDays(30), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-10-28T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-10-28T00:00:00.000Z' }] },
-    { id: 3, dsmartKey: { custId: '240000000001', type: '4', stkId: '', skuId: '2900022700', wsId: 30, frDate: addDays(-200), toDate: addDays(-150) }, custId: '240000000001', skuId: '2900022700', price: 38200, frDate: addDays(-200), toDate: addDays(-150), status: 'DELETED', createdBy: 'nguyenvana', createdAt: '2026-05-01T00:00:00.000Z', deletedBy: 'nguyenvana', deletedAt: '2026-10-10T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-05-01T00:00:00.000Z' }, { action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }] }
+    { id: 1, dsmartKey: { custId: '240000000001', skuId: '2900381100' }, custId: '240000000001', skuId: '2900381100', price: 25920, frDate: addDays(-60), toDate: addDays(-10), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-08-02T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-08-02T00:00:00.000Z' }] },
+    { id: 2, dsmartKey: { custId: '240000000005', skuId: '2900555210' }, custId: '240000000005', skuId: '2900555210', price: 52000, frDate: addDays(-5), toDate: addDays(30), status: 'ACTIVE', createdBy: 'nguyenvana', createdAt: '2026-10-28T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-10-28T00:00:00.000Z' }] },
+    { id: 3, dsmartKey: { custId: '240000000001', skuId: '2900022700' }, custId: '240000000001', skuId: '2900022700', price: 38200, frDate: addDays(-200), toDate: addDays(-150), status: 'DELETED', createdBy: 'nguyenvana', createdAt: '2026-05-01T00:00:00.000Z', deletedBy: 'nguyenvana', deletedAt: '2026-10-10T00:00:00.000Z', history: [{ action: 'INSERT', actor: 'nguyenvana', at: '2026-05-01T00:00:00.000Z' }, { action: 'DELETE', mode: 'MANUAL', actor: 'nguyenvana', at: '2026-10-10T00:00:00.000Z' }] }
   ];
   const HISTORY_FIXTURE = [
     { entryId: 1, custId: '240000000001', skuId: '2900381100', action: 'INSERT', actor: 'nguyenvana', at: '2026-08-02T00:00:00.000Z' },
@@ -86,18 +88,27 @@ async function main() {
       if (u === '/api/dsmart-price/preview') {
         window.__dsmartPricePreviewCalled = (window.__dsmartPricePreviewCalled || 0) + 1;
         return { ok: true, status: 200, json: async () => ({ ok: true, fileName: 'test-upload.xlsx', rows: [
-          { rowNumber: 2, custId: '240000000009', skuId: '2900999900', price: 12345, frDate: '2026-12-01', toDate: '2026-12-31', errors: [], hasOverlap: false }
+          { rowNumber: 2, custId: '240000000009', skuId: '2900999900', price: 12345, frDate: '2026-12-01', toDate: '2026-12-31', errors: [], hasOverlap: !!window.__mockPreviewHasOverlap }
         ] }) };
       }
       // /apply (12/2026, "LỖI THẬT đã vá" — người dùng báo "Team IT vừa up giá ghi vào dsmart nhưng
       // lỗi" kèm ảnh chụp MOBILE báo "0/1 dòng thành công, 1 dòng lỗi (xem console)" — trên điện thoại
       // KHÔNG mở được DevTools nên không ai thấy được lý do thật) — giả lập ĐÚNG 1 dòng lỗi với thông
       // điệp lỗi thật (giống hình dạng server trả về, routes/dsmartWholesalePrice.js) để xác nhận
-      // alert() MỚI hiện thẳng nội dung lỗi, không còn chỉ "xem console".
+      // alert() MỚI hiện thẳng nội dung lỗi, không còn chỉ "xem console". `window.__mockApplyOverwritten`
+      // (Lần 5, audit chéo — thao tác THẬT qua cảnh báo ghi đè mới) chuyển sang kết quả THÀNH CÔNG kèm
+      // overwritten:true khi bật, giống hình dạng server trả về khi trùng CUST_ID/SKU_ID.
       if (u === '/api/dsmart-price/apply' && method === 'POST') {
         window.__dsmartPriceApplyCalled = (window.__dsmartPriceApplyCalled || 0) + 1;
         const body = JSON.parse(opts.body);
         const r = body.rows[0];
+        if (window.__mockApplyOverwritten) {
+          return { ok: true, status: 200, json: async () => ({
+            ok: true,
+            results: [{ custId: r.custId, skuId: r.skuId, success: true, entryId: 777, overwritten: true }],
+            successCount: 1, failCount: 0
+          }) };
+        }
         return { ok: true, status: 200, json: async () => ({
           ok: true,
           results: [{ custId: r.custId, skuId: r.skuId, success: false, error: 'Khách hàng không tồn tại trong CSPRICE (giả lập lỗi thật từ DSmart16)' }],
@@ -283,6 +294,32 @@ async function main() {
     applyAlert.includes('Khách hàng không tồn tại trong CSPRICE') && applyAlert.includes('240000000009'), applyAlert);
   check('Alert vẫn báo đúng số dòng thành công/lỗi (0/1 thành công, 1 lỗi)',
     applyAlert.includes('0/1') && applyAlert.includes('1 dòng lỗi'), applyAlert);
+
+  // ===== LẦN 5 (12/2026, audit chéo yêu cầu thao tác THẬT qua cảnh báo ghi đè mới, không chỉ test
+  // logic/route) — bật cờ giả lập /preview trả hasOverlap=true + /apply trả overwritten=true, chọn file
+  // THẬT qua input (giống thao tác người dùng thật), bấm nút Thêm Giá Mới THẬT, xác nhận cả badge cảnh báo
+  // trong bảng xem trước LẪN alert kết quả cuối cùng đều hiện đúng chữ "GHI ĐÈ". =====
+  await page.evaluate(() => { window.__mockPreviewHasOverlap = true; window.__mockApplyOverwritten = true; window.__alerts = []; });
+  const realXlsxPath2 = path.join(require('os').tmpdir(), `dsmart-price-ui-test-overwrite-${Date.now()}.xlsx`);
+  const wbReal2 = new ExcelJS.Workbook();
+  const wsReal2 = wbReal2.addWorksheet('Sheet1');
+  wsReal2.addRow(['Mã Khách B2B', 'Mã sản phẩm', 'Giá sản phẩm', 'Ngày bắt đầu', 'Ngày kết thúc']);
+  wsReal2.addRow(['240000000009', '2900999900', 999999, '2026-12-01', '2026-12-31']);
+  await wbReal2.xlsx.writeFile(realXlsxPath2);
+  await page.setInputFiles('#dsmartPriceFileInput', realXlsxPath2);
+  await page.waitForTimeout(300);
+  fs.unlinkSync(realXlsxPath2);
+  const overlapPreviewText = await page.textContent('#dsmartPriceUploadPreviewWrap');
+  check('LẦN 5: preview có dòng trùng khoá -> bảng xem trước hiện ĐÚNG badge "Sẽ GHI ĐÈ giá đang có" (thao tác chọn file THẬT)',
+    overlapPreviewText.includes('Sẽ GHI ĐÈ giá đang có'), overlapPreviewText);
+  await page.click('#btnDsmartPriceApplyUpload');
+  await page.waitForTimeout(200);
+  const overwriteAlerts = await page.evaluate(() => window.__alerts.slice());
+  const overwriteAlert = overwriteAlerts[overwriteAlerts.length - 1] || '';
+  check('LẦN 5: bấm "✅ Thêm Giá Mới Vào DSmart" khi ghi đè thành công -> alert kết quả nêu rõ "GHI ĐÈ" (thao tác bấm nút THẬT)',
+    overwriteAlert.includes('GHI ĐÈ'), overwriteAlert);
+  check('LẦN 5: không có pageerror nào phát sinh trong cả luồng thao tác ghi đè THẬT', pageErrors.length === 0, pageErrors.join('\n'));
+  await page.evaluate(() => { window.__mockPreviewHasOverlap = false; window.__mockApplyOverwritten = false; });
 
   // ===== Lịch Sử Thao Tác =====
   await page.click('#btnToggleDsmartPriceHistoryFilter');

@@ -9968,21 +9968,30 @@ SKU_ID) **CHỈ CÓ ĐÚNG 1 DÒNG DUY NHẤT** trên CSPRICE tại một thời
 - `NATURAL_KEY_COLUMNS` (`lib/dsmartSqlClient.js`) rút từ 7 cột SAI xuống
   đúng 2 cột `(CUST_ID, SKU_ID)` theo PK thật — áp dụng cho cả khớp
   Sửa/Xoá lẫn phát hiện trùng khoá lúc Thêm.
-- `insertWholesalePrice()` giờ **THỬ INSERT TRƯỚC**; nếu SQL Server báo
-  lỗi trùng khoá chính (mã lỗi 2627/2601, hoặc nhận diện qua nội dung
-  thông báo), **TỰ CHUYỂN sang UPDATE** ghi đè ĐỦ LẠI toàn bộ cột theo
-  đúng công thức "6d" (`TYPE`/`UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/
-  `WSPRICE`/`VAT_INCL`/`TAX_CODE`/`STATUS`/`FR_DATE`/`TO_DATE`/
-  `MODI_DATE`) — **KHÔNG còn báo lỗi cho người dùng khi trùng khoá**.
-  `OPEN_DATE` CHỈ được backfill (gán `GETDATE()`) nếu đang NULL (dòng cũ
-  hỏng từ sự cố "6c"), GIỮ NGUYÊN nếu đã có giá trị hợp lệ (không đổi
-  lại ngày mở giá gốc của dòng đang hoạt động bình thường). Lợi ích phụ:
-  cơ chế này TỰ khắc phục luôn các dòng cũ bị ghi thiếu cột từ sự cố "6c"
-  mà không cần đội IT tự xoá/sửa tay qua SSMS.
-- `routes/dsmartWholesalePrice.js` (`POST /apply`): khi phát hiện ghi đè,
-  tự đánh dấu entry mirror nội bộ (`dbo.DsmartWholesalePriceEntries`) CŨ
-  — nếu có — sang trạng thái `DELETED` (lịch sử thao tác ghi rõ
-  `AUTO_OVERWRITTEN`), tránh 2 entry `ACTIVE` cùng trỏ vào 1 dòng CSPRICE
+- `insertWholesalePrice()` dùng đúng khuôn **upsert chuẩn** (sửa lại sau
+  audit chéo 4 agent — bản đầu "INSERT rồi bắt lỗi trùng khoá PK_CSPRICE
+  để chuyển sang ghi đè" là cách vá KHÔNG triệt để, dựa exception-driven
+  control flow cho 1 tình huống BÌNH THƯỜNG, dễ nhiễu log lỗi production
+  và có thể nhầm 1 ràng buộc UNIQUE khác thành trùng khoá chính): giờ
+  **THỬ UPDATE TRƯỚC** (ghi đè ĐỦ LẠI toàn bộ cột theo đúng công thức
+  "6d" — `TYPE`/`UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/`WSPRICE`/`VAT_INCL`/
+  `TAX_CODE`/`STATUS`/`FR_DATE`/`TO_DATE`/`MODI_DATE`); nếu UPDATE khớp 0
+  dòng (CHƯA có dòng nào) mới INSERT dòng MỚI — **KHÔNG còn báo lỗi cho
+  người dùng khi trùng khoá, và không còn cần phân biệt "lỗi trùng khoá"
+  khỏi lỗi SQL khác**. `OPEN_DATE` CHỈ được backfill (gán `GETDATE()`)
+  nếu đang NULL (dòng cũ hỏng từ sự cố "6c"), GIỮ NGUYÊN nếu đã có giá
+  trị hợp lệ (không đổi lại ngày mở giá gốc của dòng đang hoạt động bình
+  thường). Lợi ích phụ: cơ chế này TỰ khắc phục luôn các dòng cũ bị ghi
+  thiếu cột từ sự cố "6c" mà không cần đội IT tự xoá/sửa tay qua SSMS.
+- `routes/dsmartWholesalePrice.js` (`POST /apply`): mỗi dòng được xử lý
+  trong 1 khoá riêng theo đúng cặp `(CUST_ID, SKU_ID)` (`withAppLock`,
+  cùng cơ chế đã dùng cho StocktakeCounts) để 2 request THẬT đồng thời
+  cho cùng cặp tự xếp hàng, tránh mirror nội bộ bị lệch. Khi phát hiện
+  ghi đè, tự đánh dấu **TẤT CẢ** entry mirror nội bộ
+  (`dbo.DsmartWholesalePriceEntries`) đang `ACTIVE` cho đúng cặp này
+  (không chỉ entry đầu tiên khớp) sang trạng thái `DELETED` (lịch sử
+  thao tác ghi rõ `AUTO_OVERWRITTEN`, kèm snapshot giá/ngày CŨ để phục
+  vụ tra soát), tránh nhiều entry `ACTIVE` cùng trỏ vào 1 dòng CSPRICE
   thật; entry MỚI tạo ra với hành động `INSERT_OVERWRITE` trong lịch sử.
   `overlapsExisting()` (cảnh báo lúc xem trước file Excel) đổi từ so
   khoảng ngày chồng nhau sang chỉ cần trùng (CUST_ID, SKU_ID) — đúng với
@@ -9991,14 +10000,25 @@ SKU_ID) **CHỈ CÓ ĐÚNG 1 DÒNG DUY NHẤT** trên CSPRICE tại một thời
   từ "⚠️ Đã có dòng cùng khoảng ngày" sang "⚠️ Sẽ GHI ĐÈ giá đang có";
   thông báo kết quả sau khi ghi nêu rõ số dòng đã ghi đè.
 
-Test: `tests/test-dsmart-natural-key-matching.js` thêm 3 kịch bản Lần 5
-(ghi đè tự động, backfill `OPEN_DATE` có điều kiện, lỗi SQL khác không bị
-nhầm thành ghi đè — 19 kịch bản, từ 16), đồng thời sửa lại toàn bộ mock/
-assertion theo đúng khoá 2 cột. `tests/test-dsmart-wholesale-price.js`
-thêm 2 kịch bản route-level (ghi đè đánh dấu entry cũ DELETED; khác Mã
-Khách B2B hoặc khác Mã Sản Phẩm thì KHÔNG ghi đè — 34 kịch bản, từ 32).
-`test-dsmart-price-ui.js` (41 kịch bản, UI-mock thuần) chạy lại xác nhận
-không hồi quy. Tổng **94 kịch bản pass** (từ 89).
+**Quy trình**: thay đổi được audit chéo bởi **4 agent độc lập** (dò lỗi
+line-by-line/removed-behavior, dò theo caller/callee xuyên file, dò
+cleanup/hiệu năng, dò kiến trúc/CLAUDE.md) trước khi merge — đúng yêu
+cầu "QUY TẮC SỐNG CÒN" cho thay đổi production-critical. Audit phát hiện
+và đã sửa: (1) cách nhận diện lỗi trùng khoá quá rộng → bỏ hẳn, chuyển
+sang khuôn upsert chuẩn; (2) chỉ đánh dấu DELETED entry mirror đầu tiên
+khớp → sửa thành TẤT CẢ; (3) thiếu khoá chống race giữa các request đồng
+thời → thêm `withAppLock`; (4) thiếu kịch bản Playwright thao tác THẬT
+cho cảnh báo/kết quả ghi đè mới → đã bổ sung.
+
+Test: `tests/test-dsmart-natural-key-matching.js` 19 kịch bản (từ 16,
+Lần 5: ghi đè tự động, backfill `OPEN_DATE` có điều kiện, lỗi SQL khác
+không bị nhầm thành ghi đè), đồng thời sửa lại toàn bộ mock/assertion
+theo đúng khoá 2 cột + khuôn upsert mới. `tests/test-dsmart-wholesale-price.js`
+35 kịch bản (từ 32, gồm: ghi đè đánh dấu TẤT CẢ entry cũ DELETED kèm
+snapshot giá cũ; khác Mã Khách B2B hoặc khác Mã Sản Phẩm thì KHÔNG ghi
+đè; mirror tồn đọng >1 entry ACTIVE vẫn dọn sạch hết). `test-dsmart-price-ui.js`
+(Playwright THẬT) 44 kịch bản (từ 41, thêm thao tác chọn file + bấm nút
+THẬT qua cảnh báo/kết quả ghi đè mới). Tổng **98 kịch bản pass** (từ 89).
 
 **Lưu ý cho đội IT/vận hành**: từ bản vá này, thử lại "Thêm Giá Mới" cho
 dòng lỗi "6c" để lại (CUST_ID=240000000001/SKU_ID=296019310000) sẽ TỰ
