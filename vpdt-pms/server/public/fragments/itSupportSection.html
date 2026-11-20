@@ -386,17 +386,17 @@
             <button type="button" data-op="toggleDsmartPriceMgFilter" id="btnToggleDsmartPriceMgFilter" class="text-xs font-bold text-teal-700 hover:underline">🔍 Hiện Bộ Lọc</button>
           </div>
           <label class="flex items-center gap-1.5 text-xs text-gray-600">
-            <input type="checkbox" id="dsmartPriceMgOnlyExpired" checked data-op-change="renderDsmartPriceEntries"> Chỉ hiện Đã hết hạn
+            <input type="checkbox" id="dsmartPriceMgOnlyExpired" checked data-op-change="onDsmartPriceEntriesFilterChange"> Chỉ hiện Đã hết hạn
           </label>
         </div>
         <div id="dsmartPriceMgFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
           <div>
             <label class="block text-gray-500 mb-0.5">Tìm theo Mã Khách B2B</label>
-            <input id="dsmartPriceMgFilterCust" data-op-input="renderDsmartPriceEntries" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            <input id="dsmartPriceMgFilterCust" data-op-input="onDsmartPriceEntriesFilterChange" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Tìm theo Mã Sản Phẩm</label>
-            <input id="dsmartPriceMgFilterSku" data-op-input="renderDsmartPriceEntries" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            <input id="dsmartPriceMgFilterSku" data-op-input="onDsmartPriceEntriesFilterChange" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
           </div>
         </div>
 
@@ -424,6 +424,9 @@
             <tbody id="dsmartPriceEntriesBody"></tbody>
           </table>
         </div>
+        <!-- Phân trang (12/2026, theo yêu cầu người dùng) — dùng chung buildPaginationBoxHTML()/paginateList()
+             (core.js), cùng khuôn mọi danh sách khác trong hệ thống. -->
+        <div id="paginationContainer_dsmartPriceEntries"></div>
         <div id="dsmartPriceEditForm" class="hidden bg-sky-50 border border-sky-200 rounded p-3"></div>
         <div id="dsmartPriceReuseForm" class="hidden bg-indigo-50 border border-indigo-200 rounded p-3"></div>
 
@@ -442,11 +445,11 @@
         <div id="dsmartPriceHistoryFilterPanel" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 border rounded p-2 text-xs">
           <div>
             <label class="block text-gray-500 mb-0.5">Tìm theo Mã Khách B2B</label>
-            <input id="dsmartPriceHistoryFilterCust" data-op-input="renderDsmartPriceHistory" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            <input id="dsmartPriceHistoryFilterCust" data-op-input="onDsmartPriceHistoryFilterChange" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
           </div>
           <div>
             <label class="block text-gray-500 mb-0.5">Tìm theo Mã Sản Phẩm</label>
-            <input id="dsmartPriceHistoryFilterSku" data-op-input="renderDsmartPriceHistory" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
+            <input id="dsmartPriceHistoryFilterSku" data-op-input="onDsmartPriceHistoryFilterChange" placeholder="Gõ để tìm..." class="w-full border p-1 rounded" autocomplete="off">
           </div>
         </div>
         <div class="overflow-x-auto border rounded">
@@ -458,6 +461,8 @@
             <tbody id="dsmartPriceHistoryBody"></tbody>
           </table>
         </div>
+        <!-- Phân trang (12/2026, theo yêu cầu người dùng) — cùng khuôn mục "2. Quản Lý Giá Đã Hết Hạn" ở trên. -->
+        <div id="paginationContainer_dsmartPriceHistory"></div>
       </div>
     </div>
 

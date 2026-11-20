@@ -22,6 +22,17 @@ function hrcDaysUntilExpiry(endDate) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   return Math.round((end - today) / 86400000);
 }
+// "⏰ Chỉ hiện Quá Hạn" (12/2026, theo yêu cầu người dùng: "thêm bộ lọc Quá hạn, lọc những hợp đồng đã
+// quá hạn so với ngày hôm nay") — so TRỰC TIẾP endDate với hôm nay (cùng cách tính "đã qua hạn" đã dùng
+// cho hrcExpiryBadgeHtml() ngay dưới, qua hrcDaysUntilExpiry()), KHÔNG dựa vào status="EXPIRED" (HR tự
+// cập nhật, có thể CHƯA kịp chuyển dù ngày hết hạn thực tế đã qua — đúng tình huống thật nêu trong ảnh
+// chụp người dùng gửi: 1 hợp đồng vẫn đang "📝 Nháp" dù đã có Ngày Hết Hạn). Hợp đồng "Vô thời hạn"
+// (không có endDate) KHÔNG BAO GIỜ tính là quá hạn — dùng chung cho cả bảng lẫn Xuất Excel bên dưới.
+function hrcIsOverdue(c) {
+  if (!c.endDate) return false;
+  const days = hrcDaysUntilExpiry(c.endDate);
+  return days != null && days < 0;
+}
 function hrcExpiryBadgeHtml(c) {
   if (c.status !== 'ACTIVE' || !c.endDate) return '';
   const days = hrcDaysUntilExpiry(c.endDate);
@@ -103,6 +114,7 @@ function renderHrContractTable() {
   const kw = (kwInputEl?.value || '').trim();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
   const contractTypeFilter = document.getElementById('hrcFilterContractType')?.value || '';
+  const overdueOnly = !!document.getElementById('hrcFilterOverdue')?.checked;
   let list = getHrContractList();
   // Nạp danh bạ Hồ Sơ Nhân Sự nếu chưa có (10/2026 dùng để tìm kiếm theo Họ Tên; MỞ RỘNG 11/2026 để LUÔN
   // hiển thị Họ Tên/Chức Danh/Phòng Ban ở bảng, không chỉ khi đang gõ tìm kiếm) — laborContracts không tự
@@ -116,6 +128,7 @@ function renderHrContractTable() {
   }
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
   if (contractTypeFilter) list = list.filter(c => c.contractType === contractTypeFilter);
+  if (overdueOnly) list = list.filter(hrcIsOverdue);
 
   const tbody = document.getElementById('hrcTableBody');
   const empty = document.getElementById('hrcTableEmpty');
@@ -152,10 +165,12 @@ async function exportHrContractExcel() {
   const empCodeFilter = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim().toLowerCase();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
   const contractTypeFilter = document.getElementById('hrcFilterContractType')?.value || '';
+  const overdueOnly = !!document.getElementById('hrcFilterOverdue')?.checked;
   let list = getHrContractList();
   if (empCodeFilter) list = list.filter(c => (c.employeeCode || '').toLowerCase().includes(empCodeFilter));
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
   if (contractTypeFilter) list = list.filter(c => c.contractType === contractTypeFilter);
+  if (overdueOnly) list = list.filter(hrcIsOverdue);
   if (!list.length) return alert('Chưa có hợp đồng nào để xuất (theo bộ lọc đang chọn).');
 
   if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();
