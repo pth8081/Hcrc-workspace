@@ -21,7 +21,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
 const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, inspectCspriceColumns, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -104,6 +104,32 @@ router.post('/config/test-connection', async (req, res) => {
     logDsmartPrice(req, 'TEST_DSMART_PRICE_CONNECTION', 'dsmartPriceDbConfig', `Kiểm tra kết nối DSmart16 Trung Tâm thành công (${result.ms}ms)${overrideCfg ? ' — dùng giá trị đang gõ dở' : ' — dùng cấu hình đã lưu'}`);
     res.json({ ok: true, ms: result.ms });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/test-connection'); }
+});
+
+// POST /config/inspect-table — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT PRODUCTION đã
+// phát hiện: cột "ID" giả định trước đây hoá ra SAI trên CSDL thật — xem chú thích đầy đủ tại
+// resolveCspriceIdentityColumn()/lib/dsmartSqlClient.js). Cùng khuôn overrideCfg như test-connection ở
+// trên (admin xem được NGAY với giá trị đang gõ dở, không cần bấm Lưu trước) — CHỈ đọc metadata
+// (INFORMATION_SCHEMA.COLUMNS + sys.identity_columns), không đụng dữ liệu thật trong CSPRICE.
+router.post('/config/inspect-table', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được cấu trúc bảng' });
+  try {
+    const { host, port, database, user, password } = req.body || {};
+    let overrideCfg = null;
+    if (host || database || user) {
+      if (!host || !database || !user) throw new HttpError(400, 'Thiếu Host/Tên CSDL/Tài khoản để kiểm tra cấu trúc bảng');
+      let pass = password ? String(password) : null;
+      if (!pass) {
+        const raw = await getRawConfig();
+        if (!raw?.passwordEnc) throw new HttpError(400, 'Chưa có mật khẩu đã lưu trước đó — vui lòng nhập mật khẩu để kiểm tra.');
+        pass = decryptSecret(raw.passwordEnc);
+      }
+      overrideCfg = { host: String(host).trim(), port: Number(port) || 1433, database: String(database).trim(), user: String(user).trim(), password: pass };
+    }
+    const result = await inspectCspriceColumns(overrideCfg);
+    logDsmartPrice(req, 'INSPECT_DSMART_CSPRICE_TABLE', 'dsmartPriceDbConfig', `Kiểm tra cấu trúc bảng CSPRICE — ${result.columns.length} cột, cột ID tự tăng: ${result.identityColumn || '(không thấy)'}`);
+    res.json({ ok: true, ...result });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/inspect-table'); }
 });
 
 // ===================== Tự Động Xoá Khi Hết Hạn (itSupportPriceWriteDsmart — KHÔNG cần admin, khác hẳn

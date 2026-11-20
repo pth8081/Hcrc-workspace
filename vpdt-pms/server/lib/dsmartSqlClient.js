@@ -27,6 +27,10 @@ const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
 let cachedSignature = null;
+// cachedIdentityColumn (12/2026, xem resolveCspriceIdentityColumn() bên dưới) — PHẢI reset mỗi khi
+// cachedPool đổi (kết nối khác CSDL khác có thể có tên cột identity khác), nên gán/xoá LUÔN ĐI CÙNG
+// cachedPool ở mọi điểm trong file (không tách rời).
+let cachedIdentityColumn = null;
 
 function configSignature(cfg) {
   return [cfg.host, cfg.port, cfg.database, cfg.user, cfg.passwordEnc].join('|');
@@ -52,6 +56,7 @@ async function getDsmartPool() {
   if (cachedPool) {
     try { await cachedPool.close(); } catch (_) { /* phớt lờ lỗi đóng pool cũ, không chặn mở pool mới */ }
     cachedPool = null;
+    cachedIdentityColumn = null; // đổi pool -> có thể đổi CSDL -> xoá cache tên cột identity cũ (xem resolveCspriceIdentityColumn()).
   }
   let password;
   try {
@@ -88,10 +93,49 @@ function toDateOnly(value) {
   return d;
 }
 
+// resolveCspriceIdentityColumn(pool): TỰ TRA CỨU tên cột ID tự tăng (identity) THẬT của dbo.CSPRICE
+// ngay trên CSDL DSmart16 — KHÔNG còn đoán/hard-code "ID" như trước.
+//
+// LỖI THẬT PRODUCTION đã phát hiện (12/2026, người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart
+// nhưng lỗi" kèm ảnh chụp — SAU KHI đã vá cho hiện lỗi thật thay vì chỉ "xem console", lỗi THẬT hiện ra
+// là "Invalid column name 'ID'."): giả định "CSPRICE có cột ID tự tăng" (ghi ở đầu file, nói là người
+// dùng đã xác nhận qua trao đổi) hoá ra SAI trên CSDL thật — mọi lượt ghi/sửa/xoá đều lỗi ngay từ dòng
+// đầu tiên vì OUTPUT INSERTED.ID/WHERE ID=... dùng cứng tên cột không tồn tại. KHÔNG thể tự đoán lại tên
+// cột đúng (môi trường phát triển này không truy cập được CSDL DSmart thật) — thay vào đó TỰ TRA CỨU qua
+// sys.identity_columns (catalog view chuẩn của SQL Server, luôn đúng bất kể tên cột thật là gì) mỗi khi
+// mở pool mới, cache lại (cachedIdentityColumn, reset cùng lúc với cachedPool ở getDsmartPool()) để không
+// phải tra lại mỗi lượt ghi.
+//
+// AN TOÀN SQL INJECTION: tên cột không thể tham số hoá qua sql.Request().input() (chỉ tham số hoá được
+// GIÁ TRỊ, không tham số hoá được TÊN cột/bảng) — nhưng giá trị trả về ở đây đến từ chính catalog view
+// sys.identity_columns của SQL Server (không phải input người dùng), và CÒN được validate thêm bằng regex
+// allow-list /^[A-Za-z0-9_]+$/ trước khi nối thẳng vào câu lệnh — loại hẳn rủi ro dù tên cột là gì.
+async function resolveCspriceIdentityColumn(pool) {
+  if (cachedIdentityColumn) return cachedIdentityColumn;
+  let idResult;
+  try {
+    idResult = await pool.request().query(`
+      SELECT c.name AS ColumnName
+      FROM sys.identity_columns c
+      WHERE OBJECT_NAME(c.object_id) = 'CSPRICE';
+    `);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi tra cứu cột ID tự tăng của CSPRICE: ${err.message}`);
+  }
+  const colName = idResult.recordset?.[0]?.ColumnName;
+  if (!colName || !/^[A-Za-z0-9_]+$/.test(colName)) {
+    throw new DsmartSqlError('Không tìm thấy cột ID tự tăng (identity) nào trên bảng CSPRICE — dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" ở Cấu Hình Kết Nối để xem đầy đủ danh sách cột, rồi liên hệ đội phát triển xác nhận lại cột nào dùng làm khoá.');
+  }
+  cachedIdentityColumn = colName;
+  return colName;
+}
+
 // insertWholesalePrice(): THÊM 1 dòng MỚI vào CSPRICE — CHỈ 5 cột đã xác nhận, trả lại ID tự tăng CSPRICE
-// vừa tạo (OUTPUT INSERTED.ID) để lưu vào mirror nội bộ.
+// vừa tạo (OUTPUT INSERTED.<cột identity thật>, xem resolveCspriceIdentityColumn()) để lưu vào mirror
+// nội bộ.
 async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
   const pool = await getDsmartPool();
+  const idCol = await resolveCspriceIdentityColumn(pool);
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
   req.input('skuId', sql.NVarChar(50), String(skuId));
@@ -101,11 +145,11 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
   try {
     const result = await req.query(`
       INSERT INTO dbo.CSPRICE (CUST_ID, SKU_ID, WSPRICE, FR_DATE, TO_DATE)
-      OUTPUT INSERTED.ID
+      OUTPUT INSERTED.[${idCol}] AS Id
       VALUES (@custId, @skuId, @price, @frDate, @toDate);
     `);
-    const dsmartId = result.recordset?.[0]?.ID;
-    if (dsmartId == null) throw new DsmartSqlError('DSmart không trả lại ID của dòng vừa thêm (OUTPUT INSERTED.ID rỗng) — kiểm tra lại cột ID trên CSPRICE có đúng là tự tăng không.');
+    const dsmartId = result.recordset?.[0]?.Id;
+    if (dsmartId == null) throw new DsmartSqlError(`DSmart không trả lại ID của dòng vừa thêm (OUTPUT INSERTED.[${idCol}] rỗng) — kiểm tra lại cột ${idCol} trên CSPRICE có đúng là tự tăng không.`);
     return dsmartId;
   } catch (err) {
     if (err instanceof DsmartSqlError) throw err;
@@ -117,6 +161,7 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
 // nào khác (TYPE/UNIT_SYMB/MINPRICE/MAXPRICE/LASTWSPR... giữ nguyên nguyên trạng bên DSmart).
 async function updateWholesalePrice({ dsmartId, price, frDate, toDate }) {
   const pool = await getDsmartPool();
+  const idCol = await resolveCspriceIdentityColumn(pool);
   const req = pool.request();
   req.input('dsmartId', sql.BigInt, dsmartId);
   req.input('price', sql.Decimal(18, 4), Number(price));
@@ -126,26 +171,27 @@ async function updateWholesalePrice({ dsmartId, price, frDate, toDate }) {
   try {
     result = await req.query(`
       UPDATE dbo.CSPRICE SET WSPRICE = @price, FR_DATE = @frDate, TO_DATE = @toDate
-      WHERE ID = @dsmartId;
+      WHERE [${idCol}] = @dsmartId;
     `);
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, ID=${dsmartId}): ${err.message}`);
+    throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, ${idCol}=${dsmartId}): ${err.message}`);
   }
   if (!result.rowsAffected?.[0]) {
-    throw new DsmartSqlError(`Không tìm thấy dòng ID=${dsmartId} trong CSPRICE để sửa — có thể đã bị xoá thủ công ngoài hệ thống này.`);
+    throw new DsmartSqlError(`Không tìm thấy dòng ${idCol}=${dsmartId} trong CSPRICE để sửa — có thể đã bị xoá thủ công ngoài hệ thống này.`);
   }
 }
 
 // deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (theo dsmartId) khỏi CSPRICE — KHÔNG hoàn tác được.
 async function deleteWholesalePrice({ dsmartId }) {
   const pool = await getDsmartPool();
+  const idCol = await resolveCspriceIdentityColumn(pool);
   const req = pool.request();
   req.input('dsmartId', sql.BigInt, dsmartId);
   let result;
   try {
-    result = await req.query('DELETE FROM dbo.CSPRICE WHERE ID = @dsmartId;');
+    result = await req.query(`DELETE FROM dbo.CSPRICE WHERE [${idCol}] = @dsmartId;`);
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi xoá CSPRICE (ID=${dsmartId}): ${err.message}`);
+    throw new DsmartSqlError(`Lỗi xoá CSPRICE (${idCol}=${dsmartId}): ${err.message}`);
   }
   if (!result.rowsAffected?.[0]) {
     // Dòng không còn tồn tại (có thể đã bị xoá thủ công/lần trước) — KHÔNG ném lỗi (coi như đã đạt mục
@@ -198,16 +244,83 @@ async function testDsmartConnection(overrideCfg) {
   return { ms: Date.now() - started };
 }
 
+// inspectCspriceColumns(overrideCfg): LIỆT KÊ THẬT các cột của dbo.CSPRICE trên DSmart16 Trung Tâm +
+// cột nào là ID tự tăng (identity) — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026).
+//
+// LỖI THẬT PRODUCTION đã phát hiện (người dùng báo "Team IT của tôi vừa up giá ghi vào dsmart nhưng lỗi"
+// kèm ảnh chụp, SAU KHI đã vá cho hiện lỗi thật thay vì "xem console" — xem module-itsupport-dsmartprice.js):
+// lỗi thật là "Invalid column name 'ID'." — giả định "CSPRICE có cột ID tự tăng" (ghi ở đầu file này,
+// nói là NGƯỜI DÙNG đã xác nhận qua trao đổi) hoá ra SAI trên CSDL DSmart16 thật — insertWholesalePrice()/
+// updateWholesalePrice()/deleteWholesalePrice() đều dùng cứng tên cột "ID" (OUTPUT INSERTED.ID, WHERE
+// ID=...), nên MỌI lượt ghi/sửa/xoá đều lỗi ngay từ dòng đầu tiên. KHÔNG thể tự đoán tên cột thật đúng
+// (môi trường phát triển này không có quyền truy cập CSDL DSmart thật) — thay vào đó cung cấp công cụ để
+// CHÍNH đội IT tự tra cứu ngay trên UI (không cần nhờ DBA/mở SSMS), từ đó xác nhận lại tên cột thật rồi
+// mới sửa cứng insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() cho đúng.
+//
+// CHỈ ĐỌC METADATA (INFORMATION_SCHEMA.COLUMNS + sys.identity_columns) — KHÔNG đọc bất kỳ dữ liệu THẬT
+// nào trong CSPRICE, nên KHÔNG cần quyền SELECT trên dữ liệu bảng (cùng tinh thần testDsmartConnection()
+// "SELECT 1" ở trên — tài khoản chỉ GRANT INSERT/UPDATE/DELETE vẫn thấy được metadata của bảng mình có
+// ít nhất 1 quyền, đây là hành vi chuẩn của SQL Server, không phải giả định).
+async function inspectCspriceColumns(overrideCfg) {
+  let pool;
+  let shouldClose = false;
+  if (overrideCfg) {
+    const { host, port, database, user, password } = overrideCfg;
+    if (!host || !database || !user || !password) {
+      throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra cấu trúc bảng.');
+    }
+    pool = new sql.ConnectionPool({
+      server: host, port: port || 1433, database, user, password,
+      options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+      pool: { max: 1, min: 0, idleTimeoutMillis: 5000 },
+      requestTimeout: 10000, connectionTimeout: 10000
+    });
+    try {
+      await pool.connect();
+    } catch (err) {
+      throw new DsmartConfigError(`Không kết nối được tới DSmart16 Trung Tâm (${host}:${port || 1433}/${database}): ${err.message}`);
+    }
+    shouldClose = true;
+  } else {
+    pool = await getDsmartPool();
+  }
+  try {
+    const colsResult = await pool.request().query(`
+      SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'CSPRICE'
+      ORDER BY ORDINAL_POSITION;
+    `);
+    const idResult = await pool.request().query(`
+      SELECT c.name AS ColumnName
+      FROM sys.identity_columns c
+      WHERE OBJECT_NAME(c.object_id) = 'CSPRICE';
+    `);
+    const columns = (colsResult.recordset || []).map(r => ({ name: r.COLUMN_NAME, dataType: r.DATA_TYPE, nullable: r.IS_NULLABLE === 'YES' }));
+    if (!columns.length) {
+      throw new DsmartSqlError('Không thấy cột nào của dbo.CSPRICE — kiểm tra lại tên CSDL/quyền của tài khoản (cần ít nhất 1 quyền INSERT/UPDATE/DELETE/SELECT trên bảng CSPRICE để thấy được metadata).');
+    }
+    const identityColumn = idResult.recordset?.[0]?.ColumnName || null;
+    return { columns, identityColumn };
+  } catch (err) {
+    if (err instanceof DsmartSqlError || err instanceof DsmartConfigError) throw err;
+    throw new DsmartSqlError(`Lỗi đọc cấu trúc bảng CSPRICE: ${err.message}`);
+  } finally {
+    if (shouldClose) { try { await pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool tạm */ } }
+  }
+}
+
 // Chỉ dùng cho test/khi server tắt hẳn — đóng pool đang cache (nếu có).
 async function closeDsmartPool() {
   if (cachedPool) {
     try { await cachedPool.close(); } catch (_) { /* ignore */ }
     cachedPool = null;
     cachedSignature = null;
+    cachedIdentityColumn = null;
   }
 }
 
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  testDsmartConnection, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

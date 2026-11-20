@@ -9614,3 +9614,43 @@ quan đã chạy lại xác nhận không có hồi quy.
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 5y. LỖI THẬT PRODUCTION đã vá: Giá Bán Buôn — "Invalid column name 'ID'." khi Thêm/Sửa/Xoá CSPRICE (12/2026)
+
+Nhờ bản vá "hiện lỗi thật thay vì xem console" (mục "5x" ngay trên), người
+dùng gửi lại được ảnh chụp lỗi THẬT: *"Invalid column name 'ID'."*.
+
+**Nguyên nhân gốc**: giả định "CSPRICE có cột ID tự tăng (identity)" — ghi
+ở đầu `lib/dsmartSqlClient.js`, nói là người dùng đã xác nhận qua trao đổi
+— **SAI trên CSDL DSmart16 Trung Tâm thật**. `insertWholesalePrice()`/
+`updateWholesalePrice()`/`deleteWholesalePrice()` dùng CỨNG tên cột `ID`
+(`OUTPUT INSERTED.ID`, `WHERE ID = ...`), khiến **MỌI** lượt Thêm/Sửa/Xoá
+giá đều lỗi ngay từ dòng đầu tiên — không phải lỗi dữ liệu dòng cụ thể như
+nghi ngờ ban đầu, mà là lỗi tên cột sai cho TOÀN BỘ tính năng.
+
+**Cách vá (tự sửa, không cần ai tra tay tên cột đúng)**: hệ thống giờ
+**TỰ TRA CỨU** tên cột identity thật của `dbo.CSPRICE` qua catalog view
+chuẩn `sys.identity_columns` của SQL Server (luôn đúng bất kể tên cột thật
+là gì — không còn đoán/hard-code), cache lại cho các lượt ghi sau (chỉ tra
+1 lần/kết nối, tự xoá cache khi đổi cấu hình kết nối). An toàn SQL injection:
+tên cột lấy từ catalog view (không phải input người dùng) + còn validate
+thêm bằng regex allow-list trước khi dùng.
+
+**Công cụ chẩn đoán mới** (phòng khi CSPRICE không có cột identity nào, hoặc
+cần xem lại toàn bộ cấu trúc cột): nút **"🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE"**
+MỚI, cạnh "🔌 Kiểm Tra Kết Nối" (Cấu Hình Kết Nối, admin) — liệt kê đầy đủ
+cột thật (tên/kiểu dữ liệu/NULL hay không) + đánh dấu rõ cột nào là ID tự
+tăng. Chỉ đọc metadata (`INFORMATION_SCHEMA.COLUMNS`/`sys.identity_columns`),
+không đụng dữ liệu thật trong CSPRICE — không bắt buộc bấm trước khi dùng
+bình thường, chỉ để đội IT tự chẩn đoán thêm khi cần.
+
+Test mới: `tests/test-dsmart-identity-column-discovery.js` (7 kịch bản, mô
+phỏng THẬT gói `mssql` qua require.cache — khác hẳn
+`test-dsmart-wholesale-price.js` vốn stub nguyên `lib/dsmartSqlClient` nên
+không phủ được logic SQL thật) — xác nhận tự tra cứu đúng cột KHÁC "ID",
+dùng cache đúng ở lượt 2, UPDATE/DELETE dùng đúng cột, tái hiện đúng lỗi
+thật đã gặp làm đối chứng, báo lỗi rõ ràng khi không có cột identity nào.
+Toàn bộ test Giá Bán Buôn khác đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
