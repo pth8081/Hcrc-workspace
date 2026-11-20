@@ -224,6 +224,39 @@ async function main() {
   check('Bỏ tick "Chỉ hiện Đã hết hạn" -> hiện lại dòng còn hiệu lực lâu (240000000005)', mgText.includes('240000000005'));
   check('Dòng ACTIVE đang trong hiệu lực -> hiện "Đang áp dụng"', mgText.includes('Đang áp dụng'));
 
+  // ===== Nút "🗑️ Áp Dụng Xoá Đã Chọn": tự disable + đếm số dòng đã chọn khi KHÔNG có dòng nào hết hạn
+  // (12/2026, theo ảnh chụp người dùng gửi — bộ lọc ngày hiện tại khiến bảng không có dòng hết hạn nào
+  // nhưng nút bấm vẫn hiện bình thường/bấm được, dễ hiểu lầm là có thể bấm xoá hàng loạt) =====
+  // Danh sách hiện có đúng 1 checkbox (id=1, ACTIVE+đã hết hạn) — kiểm tra trạng thái "có 1 dòng" trước.
+  check('Nút Xoá Đã Chọn: có 1 dòng hết hạn -> nút KHÔNG disable, hiện "(1/1)"',
+    (await page.getAttribute('#btnDsmartPriceDeleteSelected', 'disabled')) === null
+    && (await page.textContent('#btnDsmartPriceDeleteSelected')).includes('(1/1)'));
+
+  // Gõ từ khoá Mã Khách B2B không khớp dòng nào -> bảng rỗng -> 0 checkbox -> nút phải tự disable + đổi
+  // chữ báo rõ lý do, không để "treo" trạng thái bấm được dù không có gì để chọn.
+  await page.fill('#dsmartPriceMgFilterCust', 'khong-khop-ma-nao-ca');
+  await page.waitForTimeout(100);
+  const zeroRowBtnDisabled = await page.getAttribute('#btnDsmartPriceDeleteSelected', 'disabled');
+  const zeroRowBtnText = await page.textContent('#btnDsmartPriceDeleteSelected');
+  check('Nút Xoá Đã Chọn: lọc ra 0 dòng hết hạn -> nút tự disable',
+    zeroRowBtnDisabled !== null, `disabled attr=${zeroRowBtnDisabled}`);
+  check('Nút Xoá Đã Chọn: lọc ra 0 dòng -> chữ báo "không có dòng nào đã hết hạn ở trang này"',
+    zeroRowBtnText.includes('không có dòng nào đã hết hạn ở trang này'), zeroRowBtnText);
+
+  // Bỏ từ khoá lọc -> dòng id=1 hiện lại, tích sẵn (checked) -> nút bật lại đúng (1/1); bỏ tick checkbox
+  // đó -> số đã chọn phải giảm xuống (0/1), kiểm tra bộ đếm cập nhật SỐNG theo đúng data-op-change đã gắn.
+  await page.fill('#dsmartPriceMgFilterCust', '');
+  await page.waitForTimeout(100);
+  check('Nút Xoá Đã Chọn: bỏ từ khoá lọc -> hiện lại (1/1)',
+    (await page.textContent('#btnDsmartPriceDeleteSelected')).includes('(1/1)'));
+  await page.uncheck('.dsmartPriceDeleteCheck');
+  await page.waitForTimeout(100);
+  const uncheckedBtnText = await page.textContent('#btnDsmartPriceDeleteSelected');
+  check('Nút Xoá Đã Chọn: bỏ tick checkbox duy nhất -> bộ đếm cập nhật sống thành (0/1), nút KHÔNG disable (còn dòng để chọn, chỉ đang chưa chọn)',
+    uncheckedBtnText.includes('(0/1)') && (await page.getAttribute('#btnDsmartPriceDeleteSelected', 'disabled')) === null,
+    uncheckedBtnText);
+  await page.check('.dsmartPriceDeleteCheck'); // tick lại để không ảnh hưởng các kiểm tra phía sau
+
   // ===== LẦN 6 (12/2026, theo yêu cầu người dùng — trước đây dòng ACTIVE chỉ có nút Sửa, không xoá sớm
   // được dù chưa hết hạn) — bấm THẬT nút "🗑️ Xoá" trên dòng id=2 (đang áp dụng tại quầy, frDate=-5/toDate=
   // +30 ngày), xác nhận gọi đúng route xoá với đúng id (window.confirm luôn trả true ở harness này — xem

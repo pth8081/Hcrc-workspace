@@ -10289,3 +10289,33 @@ gõ ghi chú — đúng tình huống lỗi thật đã gặp, xác nhận email
 Do Điều Chỉnh Giá, không rỗng). 26/26 pass.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 6m. Giá Bán Buôn: nút "🗑️ Áp Dụng Xoá Đã Chọn" tự disable khi không có dòng nào để chọn (12/2026)
+
+Người dùng gửi ảnh chụp bảng "2. Quản Lý Giá Đã Hết Hạn" — nút "🗑️ Áp
+Dụng Xoá Đã Chọn" vẫn hiện bình thường dù bảng đang không có dòng nào
+có checkbox (do bộ lọc/ngày hiện tại khiến chưa có dòng ACTIVE nào thật
+sự hết hạn) — dễ hiểu lầm là bấm được trong khi không có gì để xoá.
+
+**Cách vá** (`module-itsupport-dsmartprice.js`,
+`renderDsmartPriceEntries()`): thêm `updateDsmartPriceDeleteSelectedButtonState()`
+gọi lại mỗi lần bảng render lại (đổi bộ lọc, đổi trang, tick/bỏ tick 1
+checkbox qua `data-op-change`) — tự đếm tổng số checkbox hiện có trên
+trang (`total`) và số đang tick (`checked`):
+- `total === 0` → nút tự **disable** + đổi chữ thành "🗑️ Áp Dụng Xoá Đã
+  Chọn (không có dòng nào đã hết hạn ở trang này)".
+- `total > 0` → nút luôn bật, chữ hiện `(đã chọn/tổng)` cập nhật sống
+  theo từng lượt tick/bỏ tick.
+
+`applyDsmartPriceDeleteSelected()` (hàm xử lý khi bấm) đã tự xử lý tốt
+trường hợp 0 dòng được chọn từ trước (hiện `alert`) — bản vá này chỉ bổ
+sung lớp rõ ràng ở GIAO DIỆN, không đổi logic xoá.
+
+Test: thêm 5 kịch bản mới vào `test-dsmart-price-ui.js` (nút đúng trạng
+thái bật/tắt theo số dòng hết hạn thật từ fixture, lọc ra 0 dòng → tự
+disable + đúng chữ báo, bỏ lọc → bật lại đúng số, tick/bỏ tick 1
+checkbox → bộ đếm đổi sống). 54/54 pass (`test-dsmart-price-ui.js`) +
+40/40 pass (`test-dsmart-wholesale-price.js`, không có regression).
+
+Không cần thao tác deploy gì thêm ngoài copy code (thuần JS phía
+client, không đụng route/schema).

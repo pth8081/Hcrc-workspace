@@ -232,7 +232,7 @@ async function renderDsmartPriceEntries() {
         + (e.toDate >= today && e.frDate <= today ? `<span class="block text-[9.5px] text-red-600 mt-0.5">⚠️ Giá đang áp dụng tại quầy</span>` : '')
       : `<button type="button" data-op="startDsmartPriceReuse" data-arg0="${e.id}" class="bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10.5px] font-bold px-2 py-0.5 rounded">↩️ Dùng Lại</button>`;
     return `<tr class="${isActive ? '' : 'opacity-60'}">
-      <td class="p-1.5">${isExpiredNotDeleted ? `<input type="checkbox" class="dsmartPriceDeleteCheck" value="${e.id}" checked>` : ''}</td>
+      <td class="p-1.5">${isExpiredNotDeleted ? `<input type="checkbox" class="dsmartPriceDeleteCheck" value="${e.id}" data-op-change="updateDsmartPriceDeleteSelectedButtonState" checked>` : ''}</td>
       <td class="p-1.5">${escapeHtml(e.custId)}</td>
       <td class="p-1.5">${escapeHtml(e.skuId)}</td>
       <td class="p-1.5 text-right">${Number(e.price).toLocaleString('vi-VN')}</td>
@@ -244,6 +244,27 @@ async function renderDsmartPriceEntries() {
   }).join('') || `<tr><td colspan="8" class="p-3 text-center text-gray-400 italic">Không có dòng nào khớp</td></tr>`;
   document.getElementById('dsmartPriceEditForm').classList.add('hidden');
   _dsmartPriceEditingId = null;
+  updateDsmartPriceDeleteSelectedButtonState();
+}
+
+// updateDsmartPriceDeleteSelectedButtonState() (12/2026, theo phản hồi người dùng — nút "🗑️ Áp Dụng Xoá
+// Đã Chọn" lúc nào cũng hiện sẵn dù KHÔNG có ô tích nào trên trang (ô tích CHỈ hiện cho dòng Đang Active
+// nhưng ĐÃ QUA Ngày Kết Thúc — xem renderDsmartPriceEntries() — rất dễ gặp 0 dòng đủ điều kiện ở trang
+// hiện tại, VD lọc "Chỉ hiện Đã hết hạn" chưa bật hoặc mọi dòng đang hiện đều chưa hết hạn/đã xoá rồi),
+// gây cảm giác nút "trống", không rõ có thao tác được không. Giờ tự làm mờ + khoá nút khi KHÔNG có ô tích
+// nào, và luôn hiện rõ số dòng đang chọn/tổng số đủ điều kiện ngay trên nút — gọi lại mỗi lần render bảng
+// VÀ mỗi lần người dùng tự tích/bỏ tích 1 ô (qua data-op-change ở trên).
+function updateDsmartPriceDeleteSelectedButtonState() {
+  const btn = document.getElementById('btnDsmartPriceDeleteSelected');
+  if (!btn) return;
+  const total = document.querySelectorAll('.dsmartPriceDeleteCheck').length;
+  const checked = document.querySelectorAll('.dsmartPriceDeleteCheck:checked').length;
+  btn.disabled = total === 0;
+  btn.classList.toggle('opacity-50', total === 0);
+  btn.classList.toggle('cursor-not-allowed', total === 0);
+  btn.textContent = total === 0
+    ? '🗑️ Áp Dụng Xoá Đã Chọn (không có dòng nào đã hết hạn ở trang này)'
+    : `🗑️ Áp Dụng Xoá Đã Chọn (${checked}/${total})`;
 }
 
 // ----- Sửa (UPDATE dòng chưa xoá) -----
