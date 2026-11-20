@@ -6,7 +6,7 @@
 --   (A) DSmart16 Trung Tâm (HO) — tài khoản cấu hình ở "⚙️ Cấu Hình Kết Nối"
 --   (B) MỖI siêu thị (fan-out, 12/2026) — tài khoản cấu hình ở "🏬 Kết Nối
 --       Siêu Thị", chạy đúng script này trên CSDL DSmart RIÊNG của từng
---       siêu thị, đổi <TEN_LOGIN>/<MAT_KHAU> cho phù hợp (có thể dùng
+--       siêu thị, đổi b2b_price/<MAT_KHAU> cho phù hợp (có thể dùng
 --       CHUNG 1 tên đăng nhập cho mọi siêu thị, hoặc đặt riêng theo mã siêu
 --       thị — tuỳ quy ước nội bộ, không bắt buộc theo khuôn cụ thể).
 --
@@ -28,7 +28,7 @@
 --   - KHÔNG cấp thêm bất kỳ quyền nào khác (không sysadmin, không db_owner,
 --     không quyền trên bảng/view nào khác của CSDL DSmart).
 --
--- Trước khi chạy: đổi <TEN_LOGIN>, <MAT_KHAU>, <TEN_CSDL_DSMART> cho đúng
+-- Trước khi chạy: đổi b2b_price, <MAT_KHAU>, <TEN_CSDL_DSMART> cho đúng
 -- thực tế (CSDL DSmart Trung Tâm hoặc CSDL DSmart của từng siêu thị).
 -- ============================================================================
 
@@ -37,9 +37,9 @@ GO
 
 -- 1) Tạo SQL Login (bỏ qua bước này nếu Login đã có sẵn — VD dùng chung 1
 --    tên đăng nhập cho nhiều siêu thị, chỉ cần tạo 1 lần ở bước đầu).
-IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'<TEN_LOGIN>')
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'b2b_price')
 BEGIN
-    CREATE LOGIN [<TEN_LOGIN>]
+    CREATE LOGIN [b2b_price]
         WITH PASSWORD = N'<MAT_KHAU>',
         CHECK_POLICY = ON,      -- bật chính sách mật khẩu Windows (độ phức tạp, hết hạn...)
         CHECK_EXPIRATION = OFF; -- tắt BẮT ĐỔI mật khẩu định kỳ — tránh kết nối ứng dụng bị gãy đột ngột
@@ -53,30 +53,30 @@ GO
 USE [<TEN_CSDL_DSMART>];
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'<TEN_LOGIN>')
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'b2b_price')
 BEGIN
-    CREATE USER [<TEN_LOGIN>] FOR LOGIN [<TEN_LOGIN>];
+    CREATE USER [b2b_price] FOR LOGIN [b2b_price];
 END
 GO
 
 -- 3) CSPRICE: đọc + ghi (SELECT bổ sung theo yêu cầu 12/2026 — phục vụ DBA/
 --    IT tự tra cứu/đối chiếu trực tiếp, KHÔNG phải ứng dụng bắt buộc cần).
-GRANT SELECT, INSERT, UPDATE, DELETE ON [dbo].[CSPRICE] TO [<TEN_LOGIN>];
+GRANT SELECT, INSERT, UPDATE, DELETE ON [dbo].[CSPRICE] TO [b2b_price];
 GO
 
 -- 4) Cấp ĐÚNG quyền tối thiểu — SKU_DEF: CHỈ đọc (tra Đơn Vị Tính/Thuế).
-GRANT SELECT ON [dbo].[SKU_DEF] TO [<TEN_LOGIN>];
+GRANT SELECT ON [dbo].[SKU_DEF] TO [b2b_price];
 GO
 
 -- ============================================================================
 -- Kiểm tra lại sau khi chạy (tuỳ chọn, chạy dưới tài khoản sysadmin để xem
--- — KHÔNG phải câu lệnh tài khoản <TEN_LOGIN> tự chạy được, vì chính nó
+-- — KHÔNG phải câu lệnh tài khoản b2b_price tự chạy được, vì chính nó
 -- không có quyền SELECT trên các view hệ thống quyền theo mặc định):
 --
 -- SELECT dp.permission_name, dp.state_desc, obj.name AS table_name
 -- FROM sys.database_permissions dp
 -- JOIN sys.objects obj ON dp.major_id = obj.object_id
--- WHERE dp.grantee_principal_id = USER_ID('<TEN_LOGIN>')
+-- WHERE dp.grantee_principal_id = USER_ID('b2b_price')
 -- ORDER BY obj.name, dp.permission_name;
 --
 -- Kỳ vọng ĐÚNG 5 dòng: CSPRICE (SELECT/INSERT/UPDATE/DELETE) + SKU_DEF (SELECT).
@@ -84,7 +84,7 @@ GO
 
 -- ============================================================================
 -- Sau khi chạy xong trên ĐÚNG CSDL (Trung Tâm hoặc của 1 siêu thị), vào
--- HCRC Workspace nhập Host/Port/Tên CSDL/<TEN_LOGIN>/<MAT_KHAU> ở:
+-- HCRC Workspace nhập Host/Port/Tên CSDL/b2b_price/<MAT_KHAU> ở:
 --   - DSmart16 Trung Tâm  -> Hỗ Trợ IT > Cài Đặt Giá Bán Buôn > "⚙️ Cấu
 --     Hình Kết Nối" (admin), rồi bấm "🔌 Kiểm Tra Kết Nối" VÀ "🔍 Kiểm Tra
 --     Quyền Đọc SKU_DEF" để tự xác nhận quyền đã đủ TRƯỚC khi ghi giá thật.
