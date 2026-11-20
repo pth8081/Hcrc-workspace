@@ -9726,11 +9726,14 @@ nhiên" này (`dsmartKey`) vào mirror nội bộ `dbo.DsmartWholesalePriceEntri
 **An toàn chống sửa/xoá nhầm** (vì đây là khoá SUY LUẬN, không phải
 PRIMARY KEY khai báo chính thức — môi trường phát triển không truy cập
 được CSDL DSmart thật để xác nhận 100%): mọi lượt Sửa/Xoá đều **ĐẾM
-`COUNT(*)` theo khoá tự nhiên TRƯỚC** khi ghi thật — nếu khớp **0 dòng**
-(đã bị xoá/sửa thủ công ngoài hệ thống) hoặc khớp **HƠN 1 DÒNG** (khoá suy
-luận không còn duy nhất — rủi ro đụng nhầm dòng của khách/sản phẩm khác)
-thì **DỪNG LẠI NGAY**, báo lỗi rõ ràng, không bao giờ âm thầm Sửa/Xoá mù.
-Sau khi ghi còn double-check lại `rowsAffected` đúng bằng 1 lần nữa. Lưu ý
+`COUNT(*)` theo khoá tự nhiên TRƯỚC** khi ghi thật, cả bước đếm lẫn bước
+ghi chạy trong **CÙNG 1 TRANSACTION SQL THẬT** (`sql.Transaction`, đếm có
+`WITH (UPDLOCK, HOLDLOCK)` để khoá các dòng khớp lại tới khi commit/rollback
+— xem mục "Audit chéo" ngay dưới) — nếu khớp **0 dòng** (đã bị xoá/sửa thủ
+công ngoài hệ thống) hoặc khớp **HƠN 1 DÒNG** (khoá suy luận không còn duy
+nhất — rủi ro đụng nhầm dòng của khách/sản phẩm khác) thì **ROLLBACK NGAY**,
+báo lỗi rõ ràng, không bao giờ âm thầm Sửa/Xoá mù. Sau khi ghi còn
+double-check lại `rowsAffected` đúng bằng 1 lần nữa trước khi commit. Lưu ý
 kỹ thuật: Ngày Bắt Đầu/Kết Thúc là 1 PHẦN của khoá tự nhiên — sau khi Sửa
 đổi ngày, khoá cũ không còn khớp dòng đó nữa, nên `updateWholesalePrice()`
 luôn trả về khoá MỚI để hệ thống tự lưu đè lại (không cần thao tác gì
@@ -9746,25 +9749,62 @@ DSmart hay không — vẫn hoạt động đúng dù không tìm thấy khoá k
 triển khai diện rộng).
 
 Test: `tests/test-dsmart-identity-column-discovery.js` (lần vá trước) đã
-**thay bằng** `tests/test-dsmart-natural-key-matching.js` (10 kịch bản, mô
+**thay bằng** `tests/test-dsmart-natural-key-matching.js` (11 kịch bản, mô
 phỏng THẬT gói `mssql` qua require.cache, CSPRICE giả lập KHÔNG có cột
 identity nào — đúng thực tế thật) — xác nhận: ghi được dù không có cột
 identity, đọc lại đủ khoá tự nhiên gồm cột DEFAULT, Sửa/Xoá khớp đúng 1
-dòng, khoá MỚI sau Sửa vẫn dùng được cho lượt kế tiếp, **DỪNG LẠI** khi
-khoá khớp 0 hoặc >1 dòng (2 kịch bản an toàn riêng), `inspectCspriceColumns()`
-trả đúng `identityColumn=null`/`naturalKeyColumns`/`keyIndexes`. Toàn bộ
-test Giá Bán Buôn khác (`test-dsmart-wholesale-price.js` 29 kịch bản,
+dòng, khoá MỚI sau Sửa vẫn dùng được cho lượt kế tiếp, **DỪNG LẠI (ROLLBACK)**
+khi khoá khớp 0 hoặc >1 dòng (2 kịch bản an toàn riêng, xác nhận cả
+transaction BEGIN/COMMIT/ROLLBACK đúng tuần tự), chặn giá trị không hợp lệ
+(NaN) ngay từ đầu, `inspectCspriceColumns()` trả đúng
+`identityColumn=null`/`naturalKeyColumns`/`keyIndexes`. Toàn bộ test Giá
+Bán Buôn khác (`test-dsmart-wholesale-price.js` 29 kịch bản,
 `test-dsmart-price-ui.js` 41 kịch bản) đã chạy lại xác nhận không có hồi
 quy.
 
-**Rủi ro còn tồn đọng (nêu rõ, không giấu)**: khoá tự nhiên ở trên là suy
-luận từ cấu trúc cột thật, KHÔNG phải xác nhận chính thức từ đội DSmart —
-nếu suy luận không đúng 100% ý đồ thiết kế thật (VD Ngày Kết Thúc không
-thực sự là 1 phần khoá phân biệt), các lớp an toàn (đếm trước khi ghi,
-chặn khớp >1 dòng) sẽ TỰ CHẶN và báo lỗi rõ ràng thay vì âm thầm sửa/xoá
-sai — khuyến nghị đội IT dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" xác
-nhận lại với đội DSmart/DBA trước khi dùng thật diện rộng, và thử 1-2 dòng
-nhỏ (thêm/sửa/xoá) trước khi dùng hàng loạt.
+**Audit chéo 2 agent độc lập trước khi merge (bắt buộc theo CLAUDE.md, vì
+đụng ghi dữ liệu THẬT ngoài CSDL, không hoàn tác được)**: 1 agent rà
+soát bảo mật/logic (`lib/dsmartSqlClient.js`/`routes/dsmartWholesalePrice.js`/
+`jobs/dsmartAutoDeleteExpiredPrices.js`), 1 agent tự chạy lại toàn bộ test +
+dò thêm edge-case bằng script độc lập. SQL injection: xác nhận SẠCH (mọi
+giá trị đều tham số hoá qua `.input()`). Phát hiện 2 vấn đề THẬT đã vá
+ngay trong cùng đợt:
+1. **(Mức CAO)** Bản vá ban đầu đếm `COUNT(*)` và chạy UPDATE/DELETE qua 2
+   round-trip TÁCH RỜI (không transaction) — nếu có 1 lượt ghi KHÁC chen
+   đúng vào giữa 2 bước đó (VD 2 tab admin cùng sửa gần như đồng thời),
+   UPDATE/DELETE vẫn có thể CHẠM nhiều hơn 1 dòng trước khi code kịp phát
+   hiện. **Đã vá**: gộp đếm+ghi vào 1 `sql.Transaction` thật, đếm có
+   `WITH (UPDLOCK, HOLDLOCK)` để khoá các dòng khớp lại tới khi
+   commit/rollback — chặn hẳn lỗ hổng, không còn cửa sổ race.
+2. **(Mức TRUNG BÌNH)** Bước đọc lại khoá tự nhiên sau khi ghi có khớp
+   thêm theo `WSPRICE` — cột này khai báo kiểu `numeric` nhưng không xác
+   nhận được chính xác precision/scale thật, nếu CSDL làm tròn khác với
+   `sql.Decimal(18,4)` phía ứng dụng, so sánh `=` có thể trật dù ghi đã
+   THÀNH CÔNG, gây báo lỗi oan. **Đã vá**: bỏ `WSPRICE` khỏi điều kiện
+   khớp, chỉ dùng 4 cột định danh nghiệp vụ không có rủi ro làm tròn
+   (`CUST_ID`/`SKU_ID`/`FR_DATE`/`TO_DATE`).
+
+Tiện thể vá thêm 2 việc nhỏ agent phát hiện: thêm `Number.isFinite()` chặn
+giá trị Giá không hợp lệ NGAY trong `lib/dsmartSqlClient.js` (phòng vệ sâu,
+dù route đã chặn từ trước); job tự động xoá hết hạn giờ ghi thêm vài dòng
+lỗi THẬT (không chỉ số lượng) vào System Log để đội IT tự chẩn đoán ngay
+trên UI, không cần quyền xem console server.
+
+**Rủi ro còn tồn đọng (nêu rõ, không giấu, SAU khi đã vá 2 vấn đề audit
+chéo phát hiện ở trên)**: khoá tự nhiên vẫn là suy luận từ cấu trúc cột
+thật, KHÔNG phải xác nhận chính thức từ đội DSmart — nếu suy luận không
+đúng 100% ý đồ thiết kế thật (VD Ngày Kết Thúc không thực sự là 1 phần
+khoá phân biệt NGAY TỪ ĐẦU, tức có sẵn >1 dòng trùng khoá trước khi ứng
+dụng này động tới), lớp an toàn (đếm trong transaction, chặn khớp >1 dòng)
+sẽ TỰ CHẶN và báo lỗi rõ ràng thay vì âm thầm sửa/xoá sai — khuyến nghị
+đội IT dùng nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" xác nhận lại với đội
+DSmart/DBA trước khi dùng thật diện rộng, và thử 1-2 dòng nhỏ (thêm/sửa/xoá)
+trước khi dùng hàng loạt. Một rủi ro nhỏ khác không thể loại bỏ hoàn toàn
+bằng code (giới hạn kiến trúc, không phải lỗi mới): nếu tiến trình server
+dừng đột ngột NGAY SAU KHI ghi CSPRICE thành công nhưng TRƯỚC KHI kịp cập
+nhật mirror nội bộ `dbo.DsmartWholesalePriceEntries`, mirror có thể tạm
+thời không khớp CSPRICE thật — cần đối chiếu thủ công trong trường hợp
+hiếm gặp này (không có giao dịch phân tán giữa 2 CSDL khác nhau).
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.

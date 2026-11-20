@@ -111,20 +111,30 @@ function toDateOnly(value) {
   return d;
 }
 
-// captureCspriceNaturalKey(pool, {custId, skuId, price, frDate, toDate}): đọc lại NGAY dòng CSPRICE vừa
-// INSERT/UPDATE theo ĐÚNG 5 giá trị vừa ghi (CUST_ID/SKU_ID/WSPRICE/FR_DATE/TO_DATE — duy nhất ngay lúc
-// này vì vừa ghi xong), lấy đủ 7 cột tạo "khoá tự nhiên" NATURAL_KEY_COLUMNS (gồm cả TYPE/STK_ID/WS_ID do
-// SQL Server tự áp DEFAULT, ứng dụng không ghi trực tiếp) — xem chú thích đầy đủ ở đầu file.
+// captureCspriceNaturalKey(pool, {custId, skuId, frDate, toDate}): đọc lại NGAY dòng CSPRICE vừa
+// INSERT/UPDATE theo ĐÚNG 4 giá trị định danh nghiệp vụ (CUST_ID/SKU_ID/FR_DATE/TO_DATE — đúng mô hình
+// "1 dòng/cặp khách-sản phẩm, phân biệt bởi khoảng ngày hiệu lực" đã xác nhận ở đầu
+// routes/dsmartWholesalePrice.js), lấy đủ 7 cột tạo "khoá tự nhiên" NATURAL_KEY_COLUMNS (gồm cả
+// TYPE/STK_ID/WS_ID do SQL Server tự áp DEFAULT, ứng dụng không ghi trực tiếp) — xem chú thích đầy đủ ở
+// đầu file.
 //
-// Nếu khớp NHIỀU hơn 1 dòng (hiếm — trùng hệt cả 5 giá trị với 1 dòng có sẵn từ trước, VD nhập tay ngoài
-// hệ thống này): lấy dòng có OPEN_DATE/MODI_DATE MỚI NHẤT (gần như chắc chắn là dòng vừa ghi), đánh dấu
-// ambiguousMatch=true để caller biết mà cẩn trọng hơn khi Sửa/Xoá dòng này sau này (dù vẫn còn lớp an toàn
-// đếm COUNT(*) ở updateWholesalePrice()/deleteWholesalePrice() chặn thêm 1 lần nữa).
-async function captureCspriceNaturalKey(pool, { custId, skuId, price, frDate, toDate }) {
+// KHÔNG khớp thêm theo WSPRICE (audit chéo 12/2026 phát hiện): cột WSPRICE khai báo kiểu `numeric` nhưng
+// KHÔNG xác nhận được chính xác precision/scale thật trên CSDL DSmart (môi trường này không truy cập được
+// để kiểm chứng) — nếu cột thật làm tròn số thập phân khác với `sql.Decimal(18,4)` phía ứng dụng, so sánh
+// bằng `=` có thể trật dù INSERT/UPDATE vừa THÀNH CÔNG, khiến hệ thống báo lỗi "không đọc lại được" dù dữ
+// liệu đã ghi đúng. 4 cột CUST_ID/SKU_ID/FR_DATE/TO_DATE (kiểu char/datetime, không có rủi ro làm tròn) đã
+// đủ xác định đúng dòng vừa ghi trong mọi tình huống thực tế.
+//
+// Nếu khớp NHIỀU hơn 1 dòng (hiếm — trùng hệt cả 4 giá trị với 1 dòng có sẵn từ trước, VD nhập tay ngoài
+// hệ thống này, hoặc 2 dòng có giá khác nhau cho CÙNG khoảng ngày — vốn đã được cảnh báo mềm ở bước xem
+// trước "Thêm Giá Mới"): lấy dòng có OPEN_DATE/MODI_DATE MỚI NHẤT (gần như chắc chắn là dòng vừa ghi),
+// đánh dấu ambiguousMatch=true để caller biết mà cẩn trọng hơn khi Sửa/Xoá dòng này sau này (dù vẫn còn
+// lớp an toàn đếm COUNT(*) trong transaction ở updateWholesalePrice()/deleteWholesalePrice() chặn thêm 1
+// lần nữa, xem runGuardedNaturalKeyWrite()).
+async function captureCspriceNaturalKey(pool, { custId, skuId, frDate, toDate }) {
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
   req.input('skuId', sql.NVarChar(50), String(skuId));
-  req.input('price', sql.Decimal(18, 4), Number(price));
   req.input('frDate', sql.DateTime, toDateOnly(frDate));
   req.input('toDate', sql.DateTime, toDateOnly(toDate));
   let result;
@@ -132,7 +142,7 @@ async function captureCspriceNaturalKey(pool, { custId, skuId, price, frDate, to
     result = await req.query(`
       SELECT CUST_ID, TYPE, STK_ID, SKU_ID, WS_ID, FR_DATE, TO_DATE
       FROM dbo.CSPRICE
-      WHERE CUST_ID = @custId AND SKU_ID = @skuId AND WSPRICE = @price AND FR_DATE = @frDate AND TO_DATE = @toDate
+      WHERE CUST_ID = @custId AND SKU_ID = @skuId AND FR_DATE = @frDate AND TO_DATE = @toDate
       ORDER BY OPEN_DATE DESC, MODI_DATE DESC;
     `);
   } catch (err) {
@@ -171,31 +181,62 @@ function buildNaturalKeyWhere(req, dsmartKey) {
   return 'CUST_ID = @kCustId AND TYPE = @kType AND STK_ID = @kStkId AND SKU_ID = @kSkuId AND WS_ID = @kWsId AND FR_DATE = @kFrDate AND TO_DATE = @kToDate';
 }
 
-// assertExactlyOneMatch(pool, dsmartKey, action): đếm SELECT COUNT(*) theo khoá tự nhiên TRƯỚC khi
-// UPDATE/DELETE thật — DỪNG LẠI NGAY (ném lỗi rõ ràng) nếu khớp 0 dòng hoặc khớp HƠN 1 dòng, không bao
-// giờ để UPDATE/DELETE chạy mù theo khoá suy luận (xem chú thích RỦI RO ở đầu file). action chỉ dùng để
-// lời lỗi hiển thị đúng ngữ cảnh ("sửa"/"xoá").
-async function assertExactlyOneMatch(pool, dsmartKey, action) {
-  const req = pool.request();
-  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
-  let countResult;
+// runGuardedNaturalKeyWrite(pool, dsmartKey, action, writeFn): audit chéo (12/2026, 2 agent độc lập) phát
+// hiện RỦI RO THẬT trong bản vá đầu tiên (đếm COUNT(*) rồi UPDATE/DELETE qua 2 round-trip TÁCH RỜI, không
+// transaction) — nếu có 1 lượt ghi KHÁC chen đúng vào giữa 2 round-trip đó (VD 2 tab admin cùng sửa gần
+// như đồng thời), UPDATE/DELETE vẫn có thể CHẠM tới nhiều hơn 1 dòng TRƯỚC KHI code kịp phát hiện ở bước
+// kiểm tra rowsAffected sau đó — phát hiện ra thì dữ liệu đã bị ảnh hưởng rồi, không còn "dừng lại trước
+// khi ghi" như bình luận cũ khẳng định.
+//
+// VÁ: gộp ĐẾM + GHI vào 1 TRANSACTION SQL THẬT (sql.Transaction) — đếm bằng `WITH (UPDLOCK, HOLDLOCK)`
+// NGAY TRONG transaction đó để KHOÁ các dòng khớp lại tới khi commit/rollback, chặn mọi lượt ghi khác (kể
+// cả từ chính ứng dụng này ở 1 request song song khác) chen vào giữa bước đếm và bước ghi thật. Đếm khác 1
+// -> ROLLBACK ngay, KHÔNG BAO GIỜ chạy writeFn. Đếm đúng 1 -> chạy writeFn trong CÙNG transaction rồi mới
+// COMMIT. Bất kỳ lỗi nào giữa chừng đều ROLLBACK (không để transaction treo nửa chừng).
+async function runGuardedNaturalKeyWrite(pool, dsmartKey, action, writeFn) {
+  const transaction = new sql.Transaction(pool);
   try {
-    countResult = await req.query(`SELECT COUNT(*) AS Cnt FROM dbo.CSPRICE WHERE ${whereClause};`);
+    await transaction.begin();
   } catch (err) {
-    throw new DsmartSqlError(`Lỗi kiểm tra dòng CSPRICE trước khi ${action}: ${err.message}`);
+    throw new DsmartSqlError(`Lỗi mở giao dịch (transaction) CSPRICE trước khi ${action}: ${err.message}`);
   }
-  const cnt = countResult.recordset?.[0]?.Cnt ?? 0;
-  if (cnt === 0) return 0;
-  if (cnt > 1) {
-    throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${cnt} dòng CSPRICE (không còn DUY NHẤT) — DỪNG LẠI để tránh ${action} nhầm dòng của khách/sản phẩm khác, liên hệ đội phát triển kiểm tra thủ công trước khi thử lại.`);
+  try {
+    const countReq = transaction.request();
+    const whereClause = buildNaturalKeyWhere(countReq, dsmartKey);
+    let countResult;
+    try {
+      countResult = await countReq.query(`SELECT COUNT(*) AS Cnt FROM dbo.CSPRICE WITH (UPDLOCK, HOLDLOCK) WHERE ${whereClause};`);
+    } catch (err) {
+      throw new DsmartSqlError(`Lỗi kiểm tra dòng CSPRICE trước khi ${action}: ${err.message}`);
+    }
+    const cnt = countResult.recordset?.[0]?.Cnt ?? 0;
+    if (cnt === 0) {
+      await transaction.commit(); // không có gì cần khoá thêm — commit cho sạch (không có thay đổi nào để mất nếu rollback)
+      return { matchCount: 0, writeResult: null };
+    }
+    if (cnt > 1) {
+      // KHÔNG tự rollback ở đây — để DUY NHẤT khối catch bên dưới xử lý rollback (tránh gọi rollback() 2
+      // lần: throw ở đây rơi thẳng xuống catch, catch rollback xong rồi mới re-throw ra ngoài).
+      throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${cnt} dòng CSPRICE (không còn DUY NHẤT) — DỪNG LẠI để tránh ${action} nhầm dòng của khách/sản phẩm khác, liên hệ đội phát triển kiểm tra thủ công trước khi thử lại.`);
+    }
+    const writeReq = transaction.request();
+    const writeResult = await writeFn(writeReq);
+    await transaction.commit();
+    return { matchCount: 1, writeResult };
+  } catch (err) {
+    try { await transaction.rollback(); } catch (_) { /* transaction có thể đã tự đóng nếu lỗi kết nối giữa chừng — bỏ qua lỗi rollback */ }
+    if (err instanceof DsmartSqlError) throw err;
+    throw new DsmartSqlError(`Lỗi giao dịch CSPRICE khi ${action}: ${err.message}`);
   }
-  return 1;
 }
 
 // insertWholesalePrice(): THÊM 1 dòng MỚI vào CSPRICE — CHỈ 5 cột đã xác nhận (SQL Server tự áp DEFAULT
 // cho các cột còn lại, xem rủi ro nêu ở đầu file) — trả lại "khoá tự nhiên" (dsmartKey, xem
 // captureCspriceNaturalKey()) để lưu vào mirror nội bộ, dùng cho Sửa/Xoá sau này.
 async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
+  if (!Number.isFinite(Number(price))) {
+    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
+  }
   const pool = await getDsmartPool();
   const req = pool.request();
   req.input('custId', sql.NVarChar(50), String(custId));
@@ -211,60 +252,62 @@ async function insertWholesalePrice({ custId, skuId, price, frDate, toDate }) {
   } catch (err) {
     throw new DsmartSqlError(`Lỗi ghi CSPRICE (THÊM MỚI, CUST_ID=${custId}, SKU_ID=${skuId}): ${err.message}`);
   }
-  return captureCspriceNaturalKey(pool, { custId, skuId, price, frDate, toDate });
+  return captureCspriceNaturalKey(pool, { custId, skuId, frDate, toDate });
 }
 
-// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (khớp theo dsmartKey — khoá tự nhiên) — CHỈ sửa
-// Giá/Ngày, không đụng cột nào khác. LƯU Ý QUAN TRỌNG: FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — sau
-// khi UPDATE, khoá tự nhiên CŨ (dsmartKey truyền vào) không còn khớp dòng này nữa nếu ngày bị đổi, nên hàm
-// này LUÔN đọc lại + TRẢ VỀ khoá tự nhiên MỚI (caller PHẢI lưu đè lại dsmartKey trong mirror nội bộ, nếu
-// không lần Sửa/Xoá kế tiếp sẽ dùng khoá cũ đã sai).
+// updateWholesalePrice(): SỬA đúng 1 dòng đã có sẵn (khớp theo dsmartKey — khoá tự nhiên, đếm+ghi trong
+// CÙNG 1 transaction, xem runGuardedNaturalKeyWrite()) — CHỈ sửa Giá/Ngày, không đụng cột nào khác. LƯU Ý
+// QUAN TRỌNG: FR_DATE/TO_DATE là 1 PHẦN của khoá tự nhiên — sau khi UPDATE, khoá tự nhiên CŨ (dsmartKey
+// truyền vào) không còn khớp dòng này nữa nếu ngày bị đổi, nên hàm này LUÔN đọc lại + TRẢ VỀ khoá tự nhiên
+// MỚI (caller PHẢI lưu đè lại dsmartKey trong mirror nội bộ, nếu không lần Sửa/Xoá kế tiếp sẽ dùng khoá cũ
+// đã sai).
 async function updateWholesalePrice({ dsmartKey, price, frDate, toDate }) {
+  if (!Number.isFinite(Number(price))) {
+    throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${price}`);
+  }
   const pool = await getDsmartPool();
-  await assertExactlyOneMatch(pool, dsmartKey, 'sửa');
-  const req = pool.request();
-  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
-  req.input('newPrice', sql.Decimal(18, 4), Number(price));
-  req.input('newFrDate', sql.DateTime, toDateOnly(frDate));
-  req.input('newToDate', sql.DateTime, toDateOnly(toDate));
-  let result;
-  try {
-    result = await req.query(`
-      UPDATE dbo.CSPRICE SET WSPRICE = @newPrice, FR_DATE = @newFrDate, TO_DATE = @newToDate
-      WHERE ${whereClause};
-    `);
-  } catch (err) {
-    throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
+  const { matchCount, writeResult } = await runGuardedNaturalKeyWrite(pool, dsmartKey, 'sửa', async (req) => {
+    const whereClause = buildNaturalKeyWhere(req, dsmartKey);
+    req.input('newPrice', sql.Decimal(18, 4), Number(price));
+    req.input('newFrDate', sql.DateTime, toDateOnly(frDate));
+    req.input('newToDate', sql.DateTime, toDateOnly(toDate));
+    try {
+      return await req.query(`
+        UPDATE dbo.CSPRICE SET WSPRICE = @newPrice, FR_DATE = @newFrDate, TO_DATE = @newToDate
+        WHERE ${whereClause};
+      `);
+    } catch (err) {
+      throw new DsmartSqlError(`Lỗi ghi CSPRICE (SỬA, CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
+    }
+  });
+  if (matchCount === 0) {
+    throw new DsmartSqlError('Không tìm thấy dòng CSPRICE khớp đúng khoá tự nhiên đã lưu để sửa — có thể đã bị xoá/sửa thủ công ngoài hệ thống này.');
   }
-  const affected = result.rowsAffected?.[0] ?? 0;
-  if (affected === 0) {
-    throw new DsmartSqlError('Không tìm thấy dòng CSPRICE khớp đúng khoá tự nhiên đã lưu để sửa — có thể đã bị xoá/sửa thủ công ngoài hệ thống này (giữa lúc kiểm tra và lúc ghi thật).');
-  }
-  if (affected > 1) {
+  const affected = writeResult?.rowsAffected?.[0] ?? 0;
+  if (affected !== 1) {
     throw new DsmartSqlError(`UPDATE CSPRICE đã ảnh hưởng ${affected} dòng (kỳ vọng đúng 1) — liên hệ đội phát triển kiểm tra NGAY, dữ liệu CSPRICE có thể đã bị sửa ngoài ý muốn.`);
   }
-  return captureCspriceNaturalKey(pool, { custId: dsmartKey.custId, skuId: dsmartKey.skuId, price, frDate, toDate });
+  return captureCspriceNaturalKey(pool, { custId: dsmartKey.custId, skuId: dsmartKey.skuId, frDate, toDate });
 }
 
-// deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (khớp theo dsmartKey — khoá tự nhiên) khỏi CSPRICE — KHÔNG
-// hoàn tác được.
+// deleteWholesalePrice(): XOÁ THẬT đúng 1 dòng (khớp theo dsmartKey — khoá tự nhiên, đếm+xoá trong CÙNG 1
+// transaction, xem runGuardedNaturalKeyWrite()) khỏi CSPRICE — KHÔNG hoàn tác được.
 async function deleteWholesalePrice({ dsmartKey }) {
   const pool = await getDsmartPool();
-  const matchCount = await assertExactlyOneMatch(pool, dsmartKey, 'xoá');
+  const { matchCount, writeResult } = await runGuardedNaturalKeyWrite(pool, dsmartKey, 'xoá', async (req) => {
+    const whereClause = buildNaturalKeyWhere(req, dsmartKey);
+    try {
+      return await req.query(`DELETE FROM dbo.CSPRICE WHERE ${whereClause};`);
+    } catch (err) {
+      throw new DsmartSqlError(`Lỗi xoá CSPRICE (CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
+    }
+  });
   if (matchCount === 0) {
     // Dòng không còn tồn tại (có thể đã bị xoá thủ công/lần trước) — KHÔNG ném lỗi (coi như đã đạt mục
     // tiêu "dòng này không còn trong CSPRICE"), chỉ báo rõ cho caller để ghi chú lại lịch sử.
     return { alreadyGone: true };
   }
-  const req = pool.request();
-  const whereClause = buildNaturalKeyWhere(req, dsmartKey);
-  let result;
-  try {
-    result = await req.query(`DELETE FROM dbo.CSPRICE WHERE ${whereClause};`);
-  } catch (err) {
-    throw new DsmartSqlError(`Lỗi xoá CSPRICE (CUST_ID=${dsmartKey?.custId}/SKU_ID=${dsmartKey?.skuId}): ${err.message}`);
-  }
-  const affected = result.rowsAffected?.[0] ?? 0;
+  const affected = writeResult?.rowsAffected?.[0] ?? 0;
   if (affected === 0) return { alreadyGone: true };
   if (affected > 1) {
     throw new DsmartSqlError(`DELETE CSPRICE đã xoá ${affected} dòng (kỳ vọng đúng 1) — liên hệ đội phát triển kiểm tra NGAY, dữ liệu CSPRICE có thể đã bị ảnh hưởng ngoài ý muốn.`);
