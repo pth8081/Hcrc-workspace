@@ -9935,7 +9935,14 @@ Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới. **Riêng quyền SQL
 trên DSmart16 Trung Tâm (GRANT SELECT trên `dbo.SKU_DEF`) là thao tác 1
 lần CẦN LÀM trên hệ thống DSmart thật — không phải thay đổi trong code
-này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.**
+này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.** Script
+T-SQL mẫu (CREATE LOGIN + CREATE USER + GRANT INSERT/UPDATE/DELETE trên
+CSPRICE + GRANT SELECT trên SKU_DEF, dùng CHUNG được cho cả DSmart16 Trung
+Tâm lẫn CSDL DSmart của TỪNG siêu thị khi bật fan-out, mục 6n) — xem
+`deploy/Dsmart16-Cap-Quyen-Tai-Khoan-Gia-Ban-Buon.sql` (12/2026, tạo SAU khi
+có tính năng fan-out xuống siêu thị — trước đó quyền ở DSmart16 Trung Tâm
+do đội DBA khách hàng tự cấp tay theo mô tả yêu cầu, KHÔNG có script lưu
+sẵn trong repo).
 
 ## 6e. LỖI THẬT PRODUCTION đã vá LẦN 5: Giá Bán Buôn — sửa SAI mô hình dữ liệu, khoá chính thật CHỈ gồm (CUST_ID, SKU_ID) (12/2026)
 
