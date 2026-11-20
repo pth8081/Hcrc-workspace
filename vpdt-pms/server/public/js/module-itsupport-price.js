@@ -1523,12 +1523,21 @@ async function approveItPriceConfirmed(id, comment) {
     // LỖI ĐÃ VÁ (12/2026, người dùng báo email "Đã Duyệt" thiếu "Lý do" — hạ tầng chung buildReasonRowHtml()/
     // tham số `reason` thứ 7 của notifyUsersByEmail() đã có sẵn từ đợt "thêm lý do vào MỌI email trả về"
     // (11/2026, xem chú thích tại notifyUsersByEmail()/core.js) và luồng Từ chối ngay dưới ĐÃ dùng đúng, nhưng
-    // điểm gọi NÀY bị sót — biến `comment` (ghi chú tuỳ chọn người duyệt gõ lúc Phê Duyệt) đã có sẵn trong
-    // scope nhưng chưa truyền vào, khiến khối "📝 Lý do phê duyệt" không bao giờ hiện trong email hoàn tất.
+    // điểm gọi NÀY bị sót.
+    //
+    // SỬA LẠI LẦN 2 (12/2026, người dùng gửi ảnh email thật vẫn KHÔNG thấy "Lý do" — bản vá lần 1 chỉ
+    // truyền `comment`, ghi chú TUỲ CHỌN người duyệt gõ lúc bấm Phê Duyệt, nên hầu như luôn RỖNG trong thực
+    // tế vì không bắt buộc điền): người dùng xác nhận rõ ý muốn là trường "Lý Do Điều Chỉnh Giá"
+    // (`item.reason`, KHAI BÁO lúc TẠO đề xuất — xem `mhItPriceReason`/module-muahang.js) chứ không phải
+    // ghi chú của người duyệt. Giờ ưu tiên hiện `updated.reason` (luôn có từ lúc tạo đề xuất), NỐI THÊM ghi
+    // chú phê duyệt (nếu người duyệt CÓ gõ) thành 1 khối — không mất thông tin nào so với bản vá lần 1.
+    const approvalReasonParts = [];
+    if (updated.reason) approvalReasonParts.push(updated.reason);
+    if (comment) approvalReasonParts.push(`📝 Ghi chú phê duyệt: ${comment}`);
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
       `[VPDT] Đề xuất duyệt giá ${updated.code} đã được phê duyệt`,
       `Đề xuất duyệt giá (${updated.code}) của bạn đã được phê duyệt hoàn tất.`,
-      comment);
+      approvalReasonParts.join('\n\n'));
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {

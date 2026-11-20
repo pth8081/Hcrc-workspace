@@ -178,7 +178,7 @@ async function main() {
     // ===== 1c) LỖI ĐÃ VÁ (12/2026, người dùng báo email "Đã Duyệt" thiếu "Lý do") — ghi chú tuỳ chọn
     // người duyệt gõ lúc Phê Duyệt phải được truyền vào notifyUsersByEmail() làm tham số `reason` (thứ 7)
     // ở đúng điểm hoàn tất (transition COMPLETED), khớp đúng cách luồng Từ Chối đã làm từ trước.
-    await run.run('Phê Duyệt Giá: Lý do (ghi chú phê duyệt) phải được gửi vào email NOTIFY_APPROVED lúc hồ sơ hoàn tất', async () => {
+    await run.run('Phê Duyệt Giá: Lý Do Điều Chỉnh Giá (lúc tạo) + ghi chú phê duyệt (nếu có) phải được gửi vào email NOTIFY_APPROVED lúc hồ sơ hoàn tất', async () => {
       await loginAs(page, STAFF_KD);
       const newId = await page.evaluate(async () => {
         await switchTab('muaHang');
@@ -210,8 +210,48 @@ async function main() {
       assertEqual(result.status, 'APPROVED', 'Hồ sơ phải chuyển APPROVED (hoàn tất) sau bước duyệt duy nhất');
       const approvedCall = result.emailCalls.find(args => args[1] === 'NOTIFY_APPROVED');
       assert(approvedCall, 'Phải gọi notifyUsersByEmail với actionType NOTIFY_APPROVED khi hồ sơ hoàn tất');
-      assertEqual(approvedCall[6], 'Đã xác nhận với phòng kế toán, đồng ý áp giá mới',
-        `Tham số reason (thứ 7) phải đúng ghi chú người duyệt đã gõ — got: ${JSON.stringify(approvedCall[6])}`);
+      assertEqual(approvedCall[6], 'Cài giá nhập CP\n\n📝 Ghi chú phê duyệt: Đã xác nhận với phòng kế toán, đồng ý áp giá mới',
+        `Tham số reason (thứ 7) phải gộp ĐÚNG cả Lý Do Điều Chỉnh Giá lẫn ghi chú phê duyệt — got: ${JSON.stringify(approvedCall[6])}`);
+    });
+
+    // LỖI THẬT đã vá LẦN 2 (12/2026, người dùng gửi ảnh email thật VẪN không thấy "Lý do" sau bản vá lần 1
+    // — vì ô "Ghi chú phê duyệt" không bắt buộc, hầu như luôn bị bỏ trống thực tế): kịch bản này KHÔNG gõ
+    // ghi chú phê duyệt gì cả (comment rỗng) — vẫn phải thấy "Lý Do Điều Chỉnh Giá" đã khai báo lúc TẠO đề
+    // xuất trong email, không được rỗng hoàn toàn như lỗi thật đã gặp.
+    await run.run('Phê Duyệt Giá: KHÔNG gõ ghi chú phê duyệt (để trống, đúng thực tế thường gặp) -> email vẫn có Lý Do Điều Chỉnh Giá (không rỗng)', async () => {
+      await loginAs(page, STAFF_KD);
+      const newId = await page.evaluate(async () => {
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm();
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh theo mặt bằng thị trường';
+        mhItPricePendingFile = {
+          fileUrl: '/uploads/gia-de-xuat-3.xlsx', fileName: 'gia-de-xuat-3.xlsx',
+          items: [{ values: { code: 'SP003', name: 'Mì gói Hảo Hảo 3', oldPrice: '5000', newPrice: '5500' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return DB.itPriceApprovals[0].id;
+      });
+      await loginAs(page, APPROVER1);
+      const result = await page.evaluate(async (id) => {
+        window.__resetCapture();
+        window.__emailCalls = [];
+        window.notifyUsersByEmail = (...args) => { window.__emailCalls.push(args); };
+        await approveItPriceConfirmed(id, '');
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.status, emailCalls: window.__emailCalls };
+      }, newId);
+      assertEqual(result.status, 'APPROVED', 'Hồ sơ phải chuyển APPROVED (hoàn tất) sau bước duyệt duy nhất');
+      const approvedCall = result.emailCalls.find(args => args[1] === 'NOTIFY_APPROVED');
+      assert(approvedCall, 'Phải gọi notifyUsersByEmail với actionType NOTIFY_APPROVED khi hồ sơ hoàn tất');
+      assertEqual(approvedCall[6], 'Điều chỉnh theo mặt bằng thị trường',
+        `Tham số reason (thứ 7) phải là ĐÚNG Lý Do Điều Chỉnh Giá lúc tạo (không rỗng dù không gõ ghi chú phê duyệt) — got: ${JSON.stringify(approvedCall[6])}`);
     });
 
     // ===== 2) Validation: chưa chọn tệp bảng giá thì không gửi được =====
