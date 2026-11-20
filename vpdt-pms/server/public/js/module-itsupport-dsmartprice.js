@@ -159,6 +159,14 @@ function dsmartPriceEntryStatusBadge(e) {
   return `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🟢 Đang áp dụng</span>`;
 }
 
+// onDsmartPriceEntriesFilterChange() (12/2026, theo yêu cầu người dùng "nhớ phân trang ở hai mục Quản
+// Lý lịch sử và Lịch sử thao tác") — đổi bất kỳ bộ lọc nào ở mục "2. Quản Lý Giá Đã Hết Hạn" phải tự
+// lùi về trang 1 (nếu không, đang đứng trang 3 rồi gõ lọc còn 1 trang sẽ thấy bảng trống khó hiểu) —
+// cùng khuôn onUserFilterChange() (module-admin-userstaging.js).
+function onDsmartPriceEntriesFilterChange() {
+  resetListPage('dsmartPriceEntries');
+  renderDsmartPriceEntries();
+}
 async function renderDsmartPriceEntries() {
   try {
     const res = await fetch('/api/dsmart-price/entries');
@@ -177,6 +185,14 @@ async function renderDsmartPriceEntries() {
   if (onlyExpired) list = list.filter(e => e.status === 'DELETED' || e.toDate < today);
   if (custKw) list = list.filter(e => e.custId.toLowerCase().includes(custKw));
   if (skuKw) list = list.filter(e => e.skuId.toLowerCase().includes(skuKw));
+
+  // Phân trang (12/2026, theo yêu cầu người dùng) — dùng chung paginateList()/buildPaginationBoxHTML()
+  // (core.js). CHÚ Ý: checkbox chọn dòng để "🗑️ Áp Dụng Xoá Đã Chọn" chỉ còn tác dụng trên các dòng đang
+  // hiện ở TRANG hiện tại (đúng hành vi chuẩn mọi bảng phân trang khác trong hệ thống — không giữ lựa
+  // chọn xuyên trang, khác hẳn renderUserBulkPeoplePicker() vốn CHỦ Ý dùng ô chọn-nhiều-người riêng
+  // không phụ thuộc bảng, xem module-admin-permgroups.js).
+  document.getElementById('paginationContainer_dsmartPriceEntries').innerHTML = buildPaginationBoxHTML('dsmartPriceEntries', 'renderDsmartPriceEntries');
+  list = paginateList('dsmartPriceEntries', list, 'renderDsmartPriceEntries', 'dòng giá');
 
   document.getElementById('dsmartPriceEntriesBody').innerHTML = list.map(e => {
     const isActive = e.status === 'ACTIVE';
@@ -365,6 +381,12 @@ function dsmartPriceHistoryDetail(h) {
   return h.mode === 'AUTO' ? 'Tự động theo giờ đã đặt' : 'Tick tay';
 }
 
+// onDsmartPriceHistoryFilterChange() — cùng lý do/khuôn onDsmartPriceEntriesFilterChange() ở trên,
+// riêng cho mục "3. Lịch Sử Thao Tác".
+function onDsmartPriceHistoryFilterChange() {
+  resetListPage('dsmartPriceHistory');
+  renderDsmartPriceHistory();
+}
 async function renderDsmartPriceHistory() {
   let items;
   try {
@@ -381,6 +403,10 @@ async function renderDsmartPriceHistory() {
   let list = items;
   if (custKw) list = list.filter(h => h.custId.toLowerCase().includes(custKw));
   if (skuKw) list = list.filter(h => h.skuId.toLowerCase().includes(skuKw));
+
+  // Phân trang (12/2026, theo yêu cầu người dùng) — cùng khuôn renderDsmartPriceEntries() ở trên.
+  document.getElementById('paginationContainer_dsmartPriceHistory').innerHTML = buildPaginationBoxHTML('dsmartPriceHistory', 'renderDsmartPriceHistory');
+  list = paginateList('dsmartPriceHistory', list, 'renderDsmartPriceHistory', 'dòng lịch sử');
 
   document.getElementById('dsmartPriceHistoryBody').innerHTML = list.map(h => {
     const canReuse = h.action === 'DELETE';

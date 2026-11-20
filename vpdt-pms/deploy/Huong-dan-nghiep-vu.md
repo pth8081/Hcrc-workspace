@@ -9654,3 +9654,47 @@ Toàn bộ test Giá Bán Buôn khác đã chạy lại xác nhận không có h
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 5z. Giá Bán Buôn: thêm phân trang mục "2. Quản Lý Giá Đã Hết Hạn"/"3. Lịch Sử Thao Tác" (12/2026)
+
+Theo yêu cầu người dùng: *"nhớ phân trang ở hai mục Quản lý lịch sử và Lịch
+sử thao tác nhé"*. Dùng chung `buildPaginationBoxHTML()`/`paginateList()`
+(core.js, cùng bộ phân trang mọi danh sách khác trong hệ thống). Thêm 2 hàm
+`onDsmartPriceEntriesFilterChange()`/`onDsmartPriceHistoryFilterChange()` để
+đổi bộ lọc tự lùi về trang 1 (tránh đứng trang 3 rồi lọc còn 1 trang thấy
+bảng trống khó hiểu). Lưu ý: checkbox chọn dòng để "🗑️ Áp Dụng Xoá Đã Chọn"
+chỉ còn tác dụng trên các dòng đang hiện ở TRANG hiện tại — đúng hành vi
+chuẩn mọi bảng phân trang khác trong hệ thống.
+
+Test mới: `tests/test-dsmart-price-ui.js` thêm 4 kịch bản (thanh phân trang
+hiện đúng tổng số dòng, đổi bộ lọc tự lùi về trang 1). Toàn bộ test Giá Bán
+Buôn liên quan đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6a. Hợp Đồng Lao Động: thêm bộ lọc "⏰ Chỉ hiện Quá Hạn" (12/2026)
+
+Theo yêu cầu người dùng kèm ảnh chụp thật (1 hợp đồng vẫn đang trạng thái
+"📝 Nháp" dù đã có Ngày Hết Hạn cụ thể): *"Thêm bộ lọc Quá hạn, lọc những
+hợp đồng đã quá hạn so với ngày hôm nay nữa nhé"*.
+
+**Thiết kế mấu chốt**: checkbox mới `#hrcFilterOverdue` trong panel bộ lọc
+đã có — so **TRỰC TIẾP** Ngày Hết Hạn với hôm nay qua hàm MỚI `hrcIsOverdue()`
+(dùng lại `hrcDaysUntilExpiry()` đã có sẵn cho badge cảnh báo sắp/đã hết
+hạn), **KHÔNG** dựa vào Trạng Thái hợp đồng (`#hrcFilterStatus="EXPIRED"`)
+— vì Trạng Thái do HR tự cập nhật tay/qua luồng riêng, có thể CHƯA kịp
+chuyển sang "Hết hạn" dù ngày hết hạn thực tế đã qua (đúng tình huống thật
+trong ảnh người dùng gửi). Hợp đồng "Vô thời hạn" (không có Ngày Hết Hạn)
+KHÔNG BAO GIỜ tính là quá hạn. Áp dụng cho CẢ bảng lẫn "📊 Xuất Excel" (xuất
+đúng phần đang lọc, cùng quy ước các bộ lọc khác của màn này).
+
+Test mới: `tests/test-hrcontract-filter-panel.js` thêm 3 kịch bản (2 hợp
+đồng mẫu mới — 1 hợp đồng status ACTIVE nhưng Ngày Hết Hạn đã qua lâu, 1 hợp
+đồng status DRAFT nhưng Ngày Hết Hạn ở tương lai xa, đúng mô phỏng tình
+huống thật) — xác nhận lọc đúng theo NGÀY bất kể Trạng Thái, bỏ tick hiện
+lại đủ danh sách. Toàn bộ test Hợp Đồng Lao Động liên quan đã chạy lại xác
+nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.

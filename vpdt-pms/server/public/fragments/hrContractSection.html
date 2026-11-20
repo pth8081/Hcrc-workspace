@@ -31,6 +31,16 @@
           <option value="SUPERSEDED">Đã thay thế</option>
         </select>
         <select id="hrcFilterContractType" data-op-change="onHrContractFilterChange" class="border rounded px-2 py-1 text-xs"></select>
+        <!-- "⏰ Quá Hạn" (12/2026, theo yêu cầu người dùng: "thêm bộ lọc Quá hạn, lọc những hợp đồng đã
+             quá hạn so với ngày hôm nay") — so TRỰC TIẾP Ngày Hết Hạn với hôm nay, KHÔNG dựa vào
+             #hrcFilterStatus="EXPIRED" (status do HR tự cập nhật tay/qua luồng riêng, có thể CHƯA kịp
+             chuyển sang EXPIRED dù ngày hết hạn thực tế đã qua — xem hrcDaysUntilExpiry()/
+             hrcExpiryBadgeHtml() ngay trên, cùng cách tính "đã hết hạn" đã dùng cho badge cảnh báo). Hợp
+             đồng "Vô thời hạn" (không có endDate) KHÔNG BAO GIỜ tính là quá hạn. -->
+        <label class="flex items-center gap-1 text-xs font-semibold text-gray-700">
+          <input type="checkbox" id="hrcFilterOverdue" data-op-change="onHrContractFilterChange">
+          ⏰ Chỉ hiện Quá Hạn
+        </label>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">

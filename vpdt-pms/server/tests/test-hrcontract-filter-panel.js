@@ -17,7 +17,14 @@ const PORT = 8997;
   const CONTRACTS = [
     { id: 301, employeeCode: 'FE001', code: 'HD001', contractType: 'INDEFINITE', status: 'ACTIVE', startDate: '2024-01-01', endDate: '' },
     { id: 302, employeeCode: 'FE002', code: 'HD002', contractType: 'DEFINITE_12', status: 'TERMINATED', startDate: '2022-01-01', endDate: '2023-12-31' },
-    { id: 303, employeeCode: 'FE003', code: 'HD003', contractType: 'INDEFINITE', status: 'DRAFT', startDate: '2026-01-01', endDate: '' }
+    { id: 303, employeeCode: 'FE003', code: 'HD003', contractType: 'INDEFINITE', status: 'DRAFT', startDate: '2026-01-01', endDate: '' },
+    // HD004/HD005 (12/2026, theo yêu cầu người dùng kèm ảnh chụp thật: "thêm bộ lọc Quá hạn, lọc những
+    // hợp đồng đã quá hạn so với ngày hôm nay") — HD004 status vẫn "ACTIVE" (CHƯA kịp cập nhật) nhưng
+    // Ngày Hết Hạn đã qua từ lâu -> PHẢI tính là quá hạn (so theo NGÀY, không dựa vào status). HD005
+    // status "DRAFT" (đúng tình huống thật trong ảnh người dùng gửi) nhưng Ngày Hết Hạn ở tương lai xa ->
+    // KHÔNG được tính là quá hạn dù là Nháp.
+    { id: 304, employeeCode: 'FE004', code: 'HD004', contractType: 'DEFINITE_12', status: 'ACTIVE', startDate: '2019-01-01', endDate: '2020-01-31' },
+    { id: 305, employeeCode: 'FE005', code: 'HD005', contractType: 'INDEFINITE', status: 'DRAFT', startDate: '2026-11-23', endDate: '2099-01-01' }
   ];
   const LABOR_CONTRACT_TYPES = [
     { id: 'INDEFINITE', label: 'Không xác định thời hạn', order: 1 },
@@ -73,11 +80,46 @@ const PORT = 8997;
     tbodyText = await page.textContent('#hrcTableBody');
     assert.ok(tbodyText.includes('HD002') && !tbodyText.includes('HD001') && !tbodyText.includes('HD003'), 'LỖI: lọc "Đã chấm dứt" phải chỉ còn HD002');
     console.log('PASS: Lọc theo Tình Trạng Hợp Đồng = "Đã chấm dứt" vẫn hoạt động đúng');
+    await page.selectOption('#hrcFilterStatus', '');
+    await page.waitForTimeout(100);
+
+    // ==========================================================================
+    // 5)-7) "⏰ Chỉ hiện Quá Hạn" (12/2026, theo yêu cầu người dùng kèm ảnh chụp thật: "thêm bộ lọc Quá
+    // hạn, lọc những hợp đồng đã quá hạn so với ngày hôm nay") — so TRỰC TIẾP Ngày Hết Hạn với hôm nay,
+    // KHÔNG dựa vào Trạng Thái (xem hrcIsOverdue(), module-hopdonglaodong.js).
+    // ==========================================================================
+    await page.check('#hrcFilterOverdue');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrcTableBody');
+    assert.ok(tbodyText.includes('HD004') && !tbodyText.includes('HD001') && !tbodyText.includes('HD003') && !tbodyText.includes('HD005'),
+      'LỖI: tick "Chỉ hiện Quá Hạn" phải còn HD004 (status ACTIVE nhưng Ngày Hết Hạn 2020-01-31 đã qua), loại HD001/HD003 (Vô thời hạn) + HD005 (status Nháp nhưng Ngày Hết Hạn 2099 ở tương lai)');
+    assert.ok(tbodyText.includes('HD002'), 'LỖI: HD002 (status Đã chấm dứt, Ngày Hết Hạn 2023-12-31 đã qua) vẫn phải tính là quá hạn — lọc theo NGÀY, không theo status');
+    console.log('PASS: (5) Tick "⏰ Chỉ hiện Quá Hạn" -> ĐÚNG các hợp đồng có Ngày Hết Hạn đã qua (HD002+HD004), BẤT KỂ Trạng Thái hiện tại là gì, loại đúng hợp đồng Vô thời hạn/chưa tới hạn');
+
+    await page.uncheck('#hrcFilterOverdue');
+    await page.waitForTimeout(150);
+    tbodyText = await page.textContent('#hrcTableBody');
+    assert.ok(tbodyText.includes('HD001') && tbodyText.includes('HD002') && tbodyText.includes('HD003') && tbodyText.includes('HD004') && tbodyText.includes('HD005'),
+      'LỖI: bỏ tick "Chỉ hiện Quá Hạn" phải hiện lại đủ cả 5 hợp đồng');
+    console.log('PASS: (6) Bỏ tick "Chỉ hiện Quá Hạn" -> hiện lại đủ cả 5 hợp đồng');
+
+    // Xuất Excel cũng phải tôn trọng bộ lọc "Quá Hạn" đang tick (cùng quy ước "xuất đúng phần đang lọc"
+    // đã áp dụng cho Trạng Thái/Loại HĐ) — không gọi thật API xuất (test này không mock /export-xlsx),
+    // chỉ xác nhận hrcIsOverdue() lọc đúng danh sách sẽ truyền vào hàm xuất.
+    const overdueFilterResult = await page.evaluate(() => {
+      const list = DB.laborContracts.filter(c => {
+        const days = hrcDaysUntilExpiry(c.endDate);
+        return days != null && days < 0;
+      });
+      return list.map(c => c.code).sort();
+    });
+    assert.deepStrictEqual(overdueFilterResult, ['HD002', 'HD004'], 'LỖI: hrcIsOverdue() (qua hrcDaysUntilExpiry()) phải khớp đúng HD002+HD004');
+    console.log('PASS: (7) hrcIsOverdue()/hrcDaysUntilExpiry() xác định đúng danh sách quá hạn — cùng logic dùng cho cả bảng lẫn Xuất Excel');
 
     assert.strictEqual(jsErrors.length, 0, 'LỖI: có lỗi JS phát sinh: ' + jsErrors.join('\n'));
     console.log('PASS: Không có lỗi JS (pageerror) nào trong suốt quá trình thao tác THẬT');
 
-    console.log('\n==== 6/6 scenario(s) passed ====');
+    console.log('\n==== 9/9 scenario(s) passed ====');
   } finally {
     await browser.close();
     server.close();

@@ -212,6 +212,31 @@ async function main() {
   const reusePrice = reuseVisible ? await page.inputValue('#dsmartPriceReusePrice') : null;
   check('Bấm "↩️ Dùng Lại" -> mở form điền sẵn giá cũ (38200), ngày để trống', reuseVisible && reusePrice === '38200');
 
+  // ===== Phân trang mục "2. Quản Lý Giá Đã Hết Hạn"/"3. Lịch Sử Thao Tác" (12/2026, theo yêu cầu
+  // người dùng "nhớ phân trang ở hai mục Quản lý lịch sử và Lịch sử thao tác nhé") =====
+  const pagination = await page.evaluate(() => ({
+    entriesBoxHTML: document.getElementById('paginationContainer_dsmartPriceEntries')?.innerHTML || '',
+    entriesInfoText: document.getElementById('pageInfoText_dsmartPriceEntries')?.innerText || '',
+    historyBoxHTML: document.getElementById('paginationContainer_dsmartPriceHistory')?.innerHTML || '',
+    historyInfoText: document.getElementById('pageInfoText_dsmartPriceHistory')?.innerText || '',
+  }));
+  check('Mục "2. Quản Lý Giá Đã Hết Hạn" có thanh phân trang + đúng tổng số dòng (3, từ fixture)',
+    pagination.entriesBoxHTML.length > 0 && pagination.entriesInfoText.includes('Tổng 3 dòng giá'), JSON.stringify(pagination));
+  check('Mục "3. Lịch Sử Thao Tác" có thanh phân trang + đúng tổng số dòng (2, từ fixture)',
+    pagination.historyBoxHTML.length > 0 && pagination.historyInfoText.includes('Tổng 2 dòng lịch sử'), JSON.stringify(pagination));
+
+  // Gõ vào ô lọc sau khi tay đã đẩy page lên 2 -> phải tự lùi về trang 1 (onDsmartPriceEntriesFilterChange()/
+  // onDsmartPriceHistoryFilterChange() mới thêm) — không gõ lọc còn bảng trống khó hiểu vì đang kẹt ở trang cũ.
+  const resetAfterFilter = await page.evaluate(() => {
+    listPageState.dsmartPriceEntries.page = 2;
+    listPageState.dsmartPriceHistory.page = 2;
+    onDsmartPriceEntriesFilterChange();
+    onDsmartPriceHistoryFilterChange();
+    return { entriesPage: listPageState.dsmartPriceEntries.page, historyPage: listPageState.dsmartPriceHistory.page };
+  });
+  check('Đổi bộ lọc mục 2 -> tự lùi về trang 1 (onDsmartPriceEntriesFilterChange())', resetAfterFilter.entriesPage === 1, JSON.stringify(resetAfterFilter));
+  check('Đổi bộ lọc mục 3 -> tự lùi về trang 1 (onDsmartPriceHistoryFilterChange())', resetAfterFilter.historyPage === 1, JSON.stringify(resetAfterFilter));
+
   // ===== Tự Động Xoá: checkbox phản ánh đúng fixture (enabled=true) =====
   const autoDeleteChecked = await page.isChecked('#dsmartPriceAutoDeleteEnabled');
   check('Công tắc "Tự Động Xoá Khi Hết Hạn" phản ánh đúng cấu hình đã tải (BẬT)', autoDeleteChecked === true);
