@@ -470,6 +470,36 @@ async function testDsmartPriceConnection() {
   }
 }
 
+// testDsmartPriceSkuDefAccess() — nút "🔍 Kiểm Tra Quyền Đọc SKU_DEF" (12/2026, LỖI THẬT PRODUCTION LẦN 4:
+// người dùng gửi mã nguồn phần mềm áp giá CŨ cho thấy CSPRICE cần tra thêm Đơn Vị Tính/Hệ Số Quy Đổi/Mã
+// Thuế từ bảng dbo.SKU_DEF theo Mã Sản Phẩm — xem lib/dsmartSqlClient.js). SKU_DEF CÙNG CSDL DSmart16
+// nhưng KHÁC bảng CSPRICE, cần quyền SELECT RIÊNG — nút này để đội IT tự xác nhận quyền đã đủ TRƯỚC khi
+// thử ghi giá thật, dùng ĐÚNG giá trị đang gõ dở trên form, cùng khuôn testDsmartPriceConnection() ở trên.
+async function testDsmartPriceSkuDefAccess() {
+  const host = document.getElementById('dsmartPriceCfgHost').value.trim();
+  const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
+  const database = document.getElementById('dsmartPriceCfgDatabase').value.trim();
+  const user = document.getElementById('dsmartPriceCfgUser').value.trim();
+  const password = document.getElementById('dsmartPriceCfgPassword').value;
+  const statusEl = document.getElementById('dsmartPriceSkuDefAccessStatus');
+  const btn = document.getElementById('btnDsmartPriceTestSkuDefAccess');
+  if (statusEl) { statusEl.className = 'text-xs text-gray-500'; statusEl.innerText = '⏳ Đang kiểm tra quyền đọc SKU_DEF...'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/config/test-skudef-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port, database, user, password: password || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (statusEl) { statusEl.className = 'text-xs text-emerald-600 font-semibold'; statusEl.innerText = `✅ Đọc được SKU_DEF (${data.ms}ms) — tài khoản đã đủ quyền để áp giá.`; }
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'text-xs text-red-600 font-semibold'; statusEl.innerText = '⛔ ' + err.message; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // inspectDsmartPriceCspriceTable() — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT
 // PRODUCTION đã phát hiện 2 lần liên tiếp: lần 1 giả định "CSPRICE có cột ID tự tăng" SAI (lỗi "Invalid
 // column name 'ID'."); lần 2 (ảnh chụp thật kết quả bấm nút này) xác nhận CSPRICE KHÔNG CÓ cột identity

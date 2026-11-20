@@ -497,6 +497,15 @@
             <button type="button" id="btnDsmartPriceInspectTable" data-op="inspectDsmartPriceCspriceTable" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700">🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE</button>
           </div>
           <div id="dsmartPriceInspectTableResult" class="hidden text-xs bg-gray-50 border rounded p-2 max-h-48 overflow-y-auto"></div>
+          <!-- "🔍 Kiểm Tra Quyền Đọc SKU_DEF" (12/2026, LỖI THẬT PRODUCTION LẦN 4 — người dùng gửi mã nguồn
+               phần mềm áp giá CŨ cho thấy CSPRICE cần tra thêm Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế từ bảng
+               dbo.SKU_DEF theo Mã Sản Phẩm, xem routes/dsmartWholesalePrice.js). SKU_DEF CÙNG CSDL
+               DSmart16 nhưng KHÁC bảng CSPRICE, cần quyền SELECT RIÊNG — nút này để đội IT tự xác nhận
+               quyền đã đủ TRƯỚC khi thử ghi giá thật. -->
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnDsmartPriceTestSkuDefAccess" data-op="testDsmartPriceSkuDefAccess" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">🔍 Kiểm Tra Quyền Đọc SKU_DEF (Đơn Vị Tính)</button>
+            <span id="dsmartPriceSkuDefAccessStatus" class="text-xs"></span>
+          </div>
         </div>
         <div class="p-4 border-t flex justify-end gap-2">
           <button data-op="closeDsmartPriceConfigModal" class="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>

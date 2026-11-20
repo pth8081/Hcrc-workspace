@@ -9865,3 +9865,74 @@ hồ sơ mirror).
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6d. LỖI THẬT PRODUCTION đã vá LẦN 4: Giá Bán Buôn — ghi thiếu cột khiến DSmart KHÔNG áp dụng được giá (12/2026)
+
+Sau bản vá "6c" (ghi thành công kỹ thuật, không còn lỗi SQL), người dùng tự
+đối chiếu dòng vừa ghi với 1 dòng giá THẬT đang hoạt động bình thường (qua
+SSMS, `SELECT * FROM CSPRICE`) và phát hiện: dòng hệ thống này ghi thiếu
+`TYPE`/`UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/`VAT_INCL`/`TAX_CODE`/`STATUS` —
+ghi "thành công" về mặt kỹ thuật (không lỗi SQL) nhưng **DSmart không áp
+dụng được giá** vì thiếu dữ liệu nghiệp vụ.
+
+**Nguồn xác nhận công thức (KHÔNG phải suy đoán)**: người dùng gửi nguyên
+văn mã nguồn phần mềm áp giá CŨ (`BRG_APP.sql`, stored procedure
+`_job_sp_WEBAPP_Item_Price` — chính CSDL cầu nối DSmart từng dùng để đẩy
+giá bán buôn vào CSPRICE trước khi có tính năng này):
+
+```sql
+INSERT INTO CSPRICE (CUST_ID, TYPE, SKU_ID, UNIT_SYMB, BASE_UNIT, UNITCONV,
+                      WSPRICE, VAT_INCL, TAX_CODE, OPEN_DATE, MODI_DATE,
+                      STATUS, FR_DATE, TO_DATE)
+SELECT CUST_ID, '04', SKU_ID, PICEUNIT, PICEUNIT, UNITCONV, WSPRICE, 1,
+       TAX_CODE, GETDATE(), GETDATE(), 1, startDate, endDate
+FROM SKU_DEF ...
+```
+
+**Cách vá**: `insertWholesalePrice()` (`lib/dsmartSqlClient.js`) giờ ghi
+ĐỦ các cột theo đúng công thức trên:
+- `TYPE` = hằng số cố định `'04'`, `VAT_INCL` = hằng số `1`, `STATUS` =
+  hằng số `1` (rất có thể **thiếu `STATUS`** là nguyên nhân chính khiến
+  DSmart không áp dụng được giá).
+- `UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/`TAX_CODE` — **tra từ bảng
+  `dbo.SKU_DEF`** (CÙNG CSDL DSmart16, KHÁC bảng CSPRICE) theo đúng
+  `SKU_ID`, qua hàm mới `lookupSkuDefUnitInfo()`. `UNIT_SYMB`/`BASE_UNIT`
+  CÙNG lấy giá trị `PICEUNIT` (đúng công thức gốc — không phải 2 cột độc
+  lập). Không tìm thấy `SKU_ID` trong `SKU_DEF` → báo lỗi rõ ràng (cần bổ
+  sung danh mục sản phẩm trên DSmart), KHÔNG ghi gì vào CSPRICE.
+- `WS_ID`/`USER_ID`/`STK_ID` — script gốc KHÔNG set, giữ nguyên như hệ
+  thống này đã làm từ đầu (không cần sửa).
+
+**Quyền SQL MỚI cần xin thêm**: bảng `SKU_DEF` CÙNG CSDL DSmart16 nhưng
+KHÁC bảng CSPRICE, nên quyền SELECT bị chặn trên CSPRICE (vá "6c") KHÔNG
+áp dụng cho bảng này — **cần xin DBA cấp thêm quyền SELECT riêng trên
+`dbo.SKU_DEF`** cho đúng tài khoản SQL đang dùng. Nếu bị từ chối quyền, hệ
+thống báo lỗi rõ ràng ngay khi thử ghi (không bao giờ ghi dòng thiếu dữ
+liệu nữa) — **công cụ chẩn đoán mới**: nút **"🔍 Kiểm Tra Quyền Đọc
+SKU_DEF (Đơn Vị Tính)"** (cạnh "🔌 Kiểm Tra Kết Nối"/"🔍 Kiểm Tra Cấu Trúc
+Bảng CSPRICE" trong Cấu Hình Kết Nối, admin) để đội IT tự xác nhận quyền
+đã đủ TRƯỚC khi thử ghi giá thật, không cần đợi submit 1 dòng thật rồi
+mới biết lỗi quyền.
+
+Test: `tests/test-dsmart-natural-key-matching.js` thêm 6 kịch bản mới (16
+kịch bản, từ 12) — xác nhận tra đúng `SKU_DEF` + ghi đủ
+`TYPE`/`VAT_INCL`/`STATUS`/`UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/`TAX_CODE`,
+báo lỗi rõ ràng khi KHÔNG tìm thấy `SKU_ID` trong `SKU_DEF` (phân biệt với
+lỗi bị từ chối quyền SELECT), `testSkuDefAccess()` trả đúng kết quả/lỗi.
+`tests/test-dsmart-wholesale-price.js` thêm 3 kịch bản cho route MỚI
+`POST /config/test-skudef-access` (32 kịch bản, từ 29). Toàn bộ test Giá
+Bán Buôn khác (`test-dsmart-price-ui.js` 41 kịch bản) đã chạy lại xác nhận
+không có hồi quy — tổng 89 kịch bản pass.
+
+**Lưu ý cho đội IT/vận hành**: những lượt "Thêm Giá Mới" đã ghi THÀNH CÔNG
+(không lỗi SQL) ở bản vá "6c" (TRƯỚC bản vá này) đã ghi THIẾU các cột trên
+— DSmart KHÔNG áp dụng được giá dù dữ liệu đã có trong CSPRICE. Cần kiểm
+tra thủ công trên DSmart các dòng đã nộp trong khoảng thời gian đó, sửa
+bổ sung hoặc xoá/nộp lại qua tính năng này (SAU KHI đã xin quyền SELECT
+trên SKU_DEF) để đảm bảo giá thực sự được áp dụng.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới. **Riêng quyền SQL
+trên DSmart16 Trung Tâm (GRANT SELECT trên `dbo.SKU_DEF`) là thao tác 1
+lần CẦN LÀM trên hệ thống DSmart thật — không phải thay đổi trong code
+này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.**
