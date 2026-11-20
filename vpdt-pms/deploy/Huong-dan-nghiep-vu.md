@@ -10138,3 +10138,31 @@ AUTO_OVERWRITTEN) + 2 kịch bản xác nhận hiện đúng (49 kịch bản, t
 Tổng Giá Bán Buôn: 19+35+49 = **103 kịch bản pass** (từ 101).
 
 Không cần thao tác deploy gì thêm ngoài copy code.
+
+## 6i. LỖI THẬT đã vá: email "Đã Duyệt" (Phê Duyệt Giá Bán Lẻ/Bán Buôn) thiếu "Lý do" (12/2026)
+
+Người dùng gửi ảnh chụp 1 email "Đã Duyệt" thật nhận được, yêu cầu: khi
+hồ sơ Phê Duyệt Giá (Bán Lẻ/Bán Buôn, module `itPriceApprovals`) được
+duyệt HOÀN TẤT, email gửi người đề xuất phải kèm "Lý do" để họ biết vì
+sao được duyệt.
+
+Rà lại `approveItPriceConfirmed()` (`module-itsupport-price.js`): nhánh
+`transition.type === 'COMPLETED'` gọi `notifyUsersByEmail(...)` nhưng
+**thiếu tham số `reason` thứ 7** — hạ tầng chung (`buildReasonRowHtml()`/
+`EMAIL_REASON_ROW_LABEL`, đợt "thêm Lý do vào MỌI email trả về" trước đó)
+đã có sẵn, luồng Từ Chối ngay cạnh đã truyền đúng, riêng nhánh Duyệt
+HOÀN TẤT này bị sót. Biến `comment` (ô "📝 Ghi chú phê duyệt" người duyệt
+gõ tuỳ chọn lúc bấm Phê Duyệt) đã có sẵn trong scope, chỉ thiếu truyền
+vào.
+
+**Cách vá**: truyền `comment` làm tham số thứ 7 (`reason`) của lời gọi
+`notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVED', ...)` ở đúng nhánh
+`COMPLETED` — khớp đúng khuôn luồng Từ Chối đã dùng, không đổi gì khác.
+Nếu người duyệt để trống ô ghi chú thì khối "📝 Lý do phê duyệt" tự ẩn
+(hành vi sẵn có của `buildReasonRowHtml()`), không hiện khối rỗng.
+
+Test: thêm 1 kịch bản mới ở `test-it-support.js` — nộp đề xuất Bán Lẻ
+thật, duyệt kèm ghi chú, spy `notifyUsersByEmail()` xác nhận tham số thứ
+7 đúng nội dung ghi chú đã gõ. 25/25 kịch bản `test-it-support.js` pass.
+
+Không cần thao tác deploy gì thêm ngoài copy code.
