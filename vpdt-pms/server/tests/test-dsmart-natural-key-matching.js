@@ -77,8 +77,11 @@ class FakeRequest {
       return { rowsAffected: [1] };
     }
     if (/^SELECT CUST_ID, TYPE, STK_ID, SKU_ID, WS_ID, FR_DATE, TO_DATE FROM dbo\.CSPRICE/.test(sql)) {
+      // captureCspriceNaturalKey() KHÔNG còn khớp theo WSPRICE nữa (audit chéo 12/2026 — tránh rủi ro
+      // precision/scale khác nhau giữa app và CSDL thật khiến so sánh = bị trật) — chỉ khớp 4 cột định
+      // danh nghiệp vụ CUST_ID/SKU_ID/FR_DATE/TO_DATE.
       const matches = this.db.filter(r => r.CUST_ID === this.inputs.custId && r.SKU_ID === this.inputs.skuId
-        && r.WSPRICE === this.inputs.price && sameDate(r.FR_DATE, this.inputs.frDate) && sameDate(r.TO_DATE, this.inputs.toDate));
+        && sameDate(r.FR_DATE, this.inputs.frDate) && sameDate(r.TO_DATE, this.inputs.toDate));
       matches.sort((a, b) => (b.OPEN_DATE - a.OPEN_DATE) || (b.MODI_DATE - a.MODI_DATE));
       return { recordset: matches.map(r => ({ CUST_ID: r.CUST_ID, TYPE: r.TYPE, STK_ID: r.STK_ID, SKU_ID: r.SKU_ID, WS_ID: r.WS_ID, FR_DATE: r.FR_DATE, TO_DATE: r.TO_DATE })) };
     }
@@ -105,11 +108,25 @@ class FakeConnectionPool {
   request() { return new FakeRequest(CSPRICE_DB); }
   async close() { this._closed = true; }
 }
+// FakeTransaction — audit chéo (12/2026) phát hiện ĐẾM + GHI tách rời 2 round-trip không transaction có
+// rủi ro TOCTOU thật — lib/dsmartSqlClient.js đã vá bằng `new sql.Transaction(pool)` THẬT (gộp đếm+ghi
+// trong 1 giao dịch, khoá bằng UPDLOCK/HOLDLOCK) — mock này KHÔNG mô phỏng khoá/isolation thật (không cần
+// thiết cho test logic SQL-text/mutation thuần, chạy tuần tự trong 1 tiến trình Node.js), chỉ cần đúng bề
+// mặt API (`begin()`/`request()`/`commit()`/`rollback()`) để code thật chạy được qua mock.
+let transactionLog = [];
+class FakeTransaction {
+  constructor(pool) { this.pool = pool; }
+  async begin() { transactionLog.push('BEGIN'); return this; }
+  request() { return new FakeRequest(CSPRICE_DB); }
+  async commit() { transactionLog.push('COMMIT'); }
+  async rollback() { transactionLog.push('ROLLBACK'); }
+}
 const mssqlStubPath = require.resolve('mssql');
 require.cache[mssqlStubPath] = {
   id: mssqlStubPath, filename: mssqlStubPath, path: path.dirname(mssqlStubPath), loaded: true,
   exports: {
     ConnectionPool: FakeConnectionPool,
+    Transaction: FakeTransaction,
     NVarChar: () => ({}), Decimal: () => ({}), Int: {}, DateTime: {}, Date: {}, BigInt: {}
   },
   children: [], paths: []
@@ -149,28 +166,31 @@ async function main() {
     assert(queryLog.some(q => q.includes('ORDER BY OPEN_DATE DESC, MODI_DATE DESC')), 'phải đọc lại dòng vừa ghi theo đúng 5 giá trị vừa INSERT');
   });
 
-  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), không cần ID nào', async () => {
+  await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá tự nhiên (7 cột), không cần ID nào, chạy trong 1 TRANSACTION THẬT', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
-    queryLog = [];
+    queryLog = []; transactionLog = [];
     const newKey = await updateWholesalePrice({ dsmartKey: key, price: 150, frDate: '2026-01-01', toDate: '2026-02-28' });
     assertEqual(CSPRICE_DB[0].WSPRICE, 150, 'UPDATE phải đổi đúng giá');
     assert(sameDate(CSPRICE_DB[0].TO_DATE, '2026-02-28'), `UPDATE phải đổi đúng ngày hết hạn — got: ${CSPRICE_DB[0].TO_DATE}`);
     assert(sameDate(newKey.toDate, '2026-02-28'), 'phải trả về khoá tự nhiên MỚI (TO_DATE đổi -> khoá cũ không còn khớp)');
     assert(queryLog.some(q => q.startsWith('SELECT COUNT(*) AS Cnt FROM dbo.CSPRICE')), 'phải ĐẾM TRƯỚC khi UPDATE (an toàn chống sửa nhầm)');
+    assert(queryLog.some(q => /WITH \(UPDLOCK, HOLDLOCK\)/.test(q)), 'bước đếm phải khoá dòng (UPDLOCK/HOLDLOCK) để chặn race với lượt ghi khác chen vào giữa đếm và ghi thật');
+    assertEqual(transactionLog.join(','), 'BEGIN,COMMIT', 'phải mở transaction THẬT, đếm+ghi trong CÙNG giao dịch, rồi COMMIT (audit chéo 12/2026: 2 round-trip tách rời không transaction là lỗ hổng TOCTOU thật)');
     queryLog = [];
     const delResult = await deleteWholesalePrice({ dsmartKey: newKey });
     assertEqual(delResult.alreadyGone, false, 'phải xoá thành công đúng dòng (dùng khoá MỚI sau khi Sửa)');
     assertEqual(CSPRICE_DB.length, 0, 'CSPRICE phải rỗng sau khi xoá');
   });
 
-  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng (trùng hệt 7 cột) -> updateWholesalePrice() DỪNG LẠI, KHÔNG sửa mù', async () => {
+  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng (trùng hệt 7 cột) -> updateWholesalePrice() DỪNG LẠI (ROLLBACK), KHÔNG sửa mù', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, updateWholesalePrice, DsmartSqlError } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
     // Giả lập 1 dòng THỨ 2 trùng hệt khoá tự nhiên (VD nhập tay ngoài hệ thống này, hoặc dữ liệu cũ có sẵn)
     CSPRICE_DB.push({ ...CSPRICE_DB[0] });
+    transactionLog = [];
     let threw = null;
     try { await updateWholesalePrice({ dsmartKey: key, price: 999, frDate: '2026-01-01', toDate: '2026-01-31' }); }
     catch (err) { threw = err; }
@@ -178,17 +198,41 @@ async function main() {
     assert(/không còn DUY NHẤT/.test(threw.message), `thông báo phải nêu rõ không còn duy nhất — got: ${threw.message}`);
     assertEqual(CSPRICE_DB[0].WSPRICE, 100, 'KHÔNG được sửa dòng nào khi phát hiện trùng khoá (cả 2 dòng vẫn giữ giá cũ)');
     assertEqual(CSPRICE_DB[1].WSPRICE, 100, 'KHÔNG được sửa dòng nào khi phát hiện trùng khoá (cả 2 dòng vẫn giữ giá cũ)');
+    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK ngay khi phát hiện khớp >1 dòng, KHÔNG BAO GIỜ chạy UPDATE (xác nhận writeFn không hề được gọi)');
   });
 
-  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng -> deleteWholesalePrice() cũng DỪNG LẠI, KHÔNG xoá mù', async () => {
+  await run.run('AN TOÀN: khoá tự nhiên khớp 2 dòng -> deleteWholesalePrice() cũng DỪNG LẠI (ROLLBACK), KHÔNG xoá mù', async () => {
     queryLog = []; CSPRICE_DB = []; seq = 0;
     const { insertWholesalePrice, deleteWholesalePrice, DsmartSqlError } = freshClient();
     const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
     CSPRICE_DB.push({ ...CSPRICE_DB[0] });
+    transactionLog = [];
     let threw = null;
     try { await deleteWholesalePrice({ dsmartKey: key }); } catch (err) { threw = err; }
     assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi khớp >1 dòng');
     assertEqual(CSPRICE_DB.length, 2, 'KHÔNG được xoá dòng nào khi phát hiện trùng khoá');
+    assertEqual(transactionLog.join(','), 'BEGIN,ROLLBACK', 'phải ROLLBACK ngay khi phát hiện khớp >1 dòng, KHÔNG BAO GIỜ chạy DELETE');
+  });
+
+  // Audit chéo (12/2026) phát hiện: Number(price) không có Number.isFinite() guard như toDateOnly() đã có
+  // cho ngày — giá trị không phải số (VD "abc" -> NaN) từng vẫn "ghi thành công" rồi mới lỗi mù mờ ở bước
+  // đọc lại khoá (NaN !== NaN). Vá bằng cách chặn NGAY TỪ ĐẦU insertWholesalePrice()/updateWholesalePrice().
+  await run.run('insertWholesalePrice()/updateWholesalePrice(): giá không phải số hợp lệ (NaN) -> chặn NGAY, KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    const { insertWholesalePrice, updateWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 'abc', frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi giá không phải số hợp lệ');
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi giá không hợp lệ');
+    assertEqual(queryLog.length, 0, 'KHÔNG được gửi câu lệnh SQL nào khi chặn ngay từ đầu');
+
+    const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    threw = null;
+    try { await updateWholesalePrice({ dsmartKey: key, price: NaN, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi sửa với giá NaN');
+    assertEqual(CSPRICE_DB[0].WSPRICE, 100, 'KHÔNG được sửa giá khi giá mới không hợp lệ');
   });
 
   await run.run('deleteWholesalePrice(): khoá không còn khớp dòng nào (đã bị xoá thủ công trước đó) -> trả alreadyGone=true, KHÔNG ném lỗi', async () => {

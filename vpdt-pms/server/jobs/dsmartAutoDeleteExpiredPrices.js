@@ -52,6 +52,10 @@ async function runDsmartAutoDeleteExpiredPrices() {
 
   const due = entries.filter(e => e.status === 'ACTIVE' && dueForAutoDelete(e, now, cfg));
   let deletedCount = 0, errorCount = 0;
+  // errorDetails: audit chéo (12/2026) phát hiện trước đây hệ thống chỉ ghi SỐ LƯỢNG lỗi vào System Log,
+  // lý do thật chỉ ra console.error (đội vận hành xem được System Log trên UI nhưng KHÔNG có quyền truy
+  // cập console server) — lưu thêm vài dòng lỗi đầu tiên vào mô tả để đội IT tự chẩn đoán ngay trên UI.
+  const errorDetails = [];
   for (const e of due) {
     try {
       await deleteWholesalePrice({ dsmartKey: e.dsmartKey });
@@ -67,13 +71,17 @@ async function runDsmartAutoDeleteExpiredPrices() {
     } catch (err) {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);
+      if (errorDetails.length < 5) errorDetails.push(`${e.custId}/${e.skuId}: ${err.message}`);
     }
   }
   if (deletedCount || errorCount) {
+    const errorNote = errorDetails.length
+      ? ` — ${errorDetails.join(' | ')}${errorCount > errorDetails.length ? ` (và ${errorCount - errorDetails.length} lỗi khác, xem log server)` : ''}`
+      : '';
     insertSystemLog({
       username: 'SYSTEM', fullName: 'Hệ thống (tự động)', ipAddress: null, module: 'IT_SUPPORT',
       actionType: 'AUTO_DELETE_DSMART_PRICE', targetObject: 'dsmartWholesalePriceEntries',
-      description: `Tự động xoá giá bán buôn hết hạn: ${deletedCount} thành công, ${errorCount} lỗi`,
+      description: `Tự động xoá giá bán buôn hết hạn: ${deletedCount} thành công, ${errorCount} lỗi${errorNote}`,
       status: errorCount && !deletedCount ? 'FAILED' : 'SUCCESS'
     }).catch(() => {});
   }
