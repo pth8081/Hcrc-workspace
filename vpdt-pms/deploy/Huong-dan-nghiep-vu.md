@@ -9543,3 +9543,36 @@ từ chối. Toàn bộ test liên quan tới `users`/`permGroups`/Ma Trận Ph�
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 5w. Hồ Sơ Nhân Sự → Quản Lý Hồ Sơ: thêm bộ lọc "Chưa gán Chức Danh/Phòng Ban" (12/2026)
+
+Người dùng yêu cầu: *"Bộ phân nhân sự có nhiều vị trí chưa gán chức danh nên
+tôi muốn ô tìm kiếm sẽ có thêm lọc tìm hồ sơ chưa gán chức danh, phòng ban,
+để nhân sự cập nhật"* — kèm ảnh chụp Cơ Cấu Tổ Chức cho thấy nhiều vị trí
+"chưa có ai giữ".
+
+**Đã làm**: thêm 2 checkbox MỚI vào panel bộ lọc đã có của "📋 Quản Lý Hồ
+Sơ" (`hrpfMgFilterPanel` — cùng panel đã có Hình Thức Làm Việc/Căn Cước Công
+Dân/Khoảng Ngày Vào Làm Việc, xem mục trước), gộp kiểu OR (tick nhiều ô = hiện
+hồ sơ thiếu BẤT KỲ mục nào đã tick, cùng khuôn "🔍 Lọc hồ sơ thiếu thông
+tin" ở màn Quản Lý Người Dùng):
+
+- **💼 Chưa gán Chức Danh**
+- **🏢 Chưa gán Phòng Ban**
+
+So sánh dựa trên `idn.dept`/`idn.jobTitle` (`hrpfIdentitySnapshot()` — nguồn
+CHÂN LÝ là Cơ Cấu Tổ Chức qua `applyPositionAssignment()`, giống đúng cột
+"Phòng Ban / Chức Danh" đang hiển thị trên bảng), KHÔNG dùng field thô
+`DB.users.dept/jobTitle` (field đó chỉ phục vụ màn Quản Lý Người Dùng, có
+thể lệch với chức vụ thật đã gán qua Cơ Cấu Tổ Chức). Dòng nào khớp bộ lọc
+đang tick thì tự hiện thêm badge `⚠️ Thiếu Chức Danh`/`⚠️ Thiếu Phòng Ban`
+cạnh họ tên — CHỈ hiện đúng mục đang được tick lọc (không làm ồn bảng khi
+không ai lọc gì).
+
+Test mới: `tests/test-hrprofile-manage-filter-panel.js` thêm 4 kịch bản (2
+hồ sơ mẫu FE004/FE005 thiếu đúng 1 trong 2 trường) — xác nhận lọc riêng từng
+ô, gộp OR khi tick cả 2, badge hiện/ẩn đúng. Toàn bộ test Hồ Sơ Nhân Sự liên
+quan đã chạy lại xác nhận không có hồi quy.
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
