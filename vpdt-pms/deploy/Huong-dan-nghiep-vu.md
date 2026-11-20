@@ -10263,3 +10263,29 @@ xoá. 6/6 kịch bản pass.
 (tạo bảng `dbo.AppDataMigrations` mới — script tự bọc
 `IF OBJECT_ID(...) IS NULL`, an toàn chạy lại nhiều lần) trước khi
 `pm2 restart`.
+
+## 6l. LỖI THẬT đã vá LẦN 2: email "Đã Duyệt" vẫn thiếu "Lý do" sau bản vá mục 6i (12/2026)
+
+Người dùng gửi ảnh email thật (mã `HCRC-MHTPTS-ITPG-BL-104`) xác nhận
+bản vá mục 6i **CHƯA đủ**: email vẫn không hiện "Lý do" gì cả. Nguyên
+nhân: bản vá đó truyền `comment` — ô "📝 Ghi chú phê duyệt" người duyệt
+gõ **TUỲ CHỌN** lúc bấm Phê Duyệt — vào làm "Lý do". Trên thực tế ô này
+hầu như luôn bị bỏ trống (không bắt buộc), nên email vẫn trống y như cũ.
+Người dùng xác nhận trực tiếp: trường đúng ý muốn là **"Lý Do Điều
+Chỉnh Giá"** (`item.reason`, field `mhItPriceReason`/`itPriceReason` —
+**khai báo lúc TẠO đề xuất**, không phải lúc duyệt) — field này không
+bắt buộc ở form nhưng gần như luôn được điền (mô tả lý do đổi giá).
+
+**Cách vá**: `approveItPriceConfirmed()` (`module-itsupport-price.js`)
+nhánh `COMPLETED` giờ ưu tiên `updated.reason` (Lý Do Điều Chỉnh Giá,
+luôn có từ lúc tạo đề xuất) làm nội dung chính của khối "Lý do" trong
+email — nếu người duyệt **CÓ** gõ thêm ghi chú phê duyệt, nối thêm dòng
+`📝 Ghi chú phê duyệt: ...` phía dưới (gộp 1 khối, không mất thông tin
+so với bản vá lần 1).
+
+Test: `test-it-support.js` cập nhật kịch bản cũ (duyệt CÓ gõ ghi chú —
+xác nhận email gộp đúng cả 2 nguồn) + thêm 1 kịch bản mới (duyệt KHÔNG
+gõ ghi chú — đúng tình huống lỗi thật đã gặp, xác nhận email vẫn có Lý
+Do Điều Chỉnh Giá, không rỗng). 26/26 pass.
+
+Không cần thao tác deploy gì thêm ngoài copy code.
