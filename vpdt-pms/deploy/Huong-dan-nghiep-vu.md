@@ -9936,3 +9936,76 @@ Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 trên DSmart16 Trung Tâm (GRANT SELECT trên `dbo.SKU_DEF`) là thao tác 1
 lần CẦN LÀM trên hệ thống DSmart thật — không phải thay đổi trong code
 này, nhưng BẮT BUỘC phải có trước khi tính năng hoạt động đúng.**
+
+## 6e. LỖI THẬT PRODUCTION đã vá LẦN 5: Giá Bán Buôn — sửa SAI mô hình dữ liệu, khoá chính thật CHỈ gồm (CUST_ID, SKU_ID) (12/2026)
+
+Sau khi được cấp quyền SELECT trên `SKU_DEF` (vá "6d"), người dùng thử
+"Thêm Giá Mới" lại đúng cặp Mã Khách B2B/Mã Sản Phẩm đã bị ghi thiếu cột ở
+sự cố "6c" (chưa tự xoá qua SSMS) và gặp lỗi THẬT:
+
+```
+Violation of PRIMARY KEY constraint 'PK_CSPRICE'. Cannot insert duplicate
+key in object 'dbo.CSPRICE'. The duplicate key value is (240000000001,
+296019310000).
+```
+
+Người dùng tự đối chiếu qua SSMS (`sys.indexes`/`sys.index_columns`) xác
+nhận: **`PK_CSPRICE` CHỈ gồm đúng 2 cột `(CUST_ID, SKU_ID)`** — không phải
+tổ hợp 7 cột (`CUST_ID+TYPE+STK_ID+SKU_ID+WS_ID+FR_DATE+TO_DATE`) suy luận
+SAI ở bản vá "6b" (Lần 2). Người dùng xác nhận thêm đúng quy tắc nghiệp vụ
+thật: **1 Mã Khách B2B có thể set giá cho NHIỀU Mã Sản Phẩm khác nhau, và
+1 Mã Sản Phẩm cũng có thể được NHIỀU Mã Khách B2B khác nhau set giá riêng
+— chỉ khi TRÙNG CẢ 2 (đúng Mã Khách B2B + đúng Mã Sản Phẩm) mới cần GHI
+ĐÈ, còn lại là thêm dòng mới** — khớp đúng 100% với cấu trúc PK thật vừa
+xác nhận.
+
+**Ý nghĩa quan trọng (sửa lại hiểu nhầm trước đây)**: CSPRICE **KHÔNG
+PHẢI** bảng "lịch sử giá nhiều dòng/1 cặp khách+SP phân biệt bởi
+FR_DATE/TO_DATE" như đã hiểu ở các bản vá trước — mỗi cặp (CUST_ID,
+SKU_ID) **CHỈ CÓ ĐÚNG 1 DÒNG DUY NHẤT** trên CSPRICE tại một thời điểm.
+
+**Cách vá**:
+- `NATURAL_KEY_COLUMNS` (`lib/dsmartSqlClient.js`) rút từ 7 cột SAI xuống
+  đúng 2 cột `(CUST_ID, SKU_ID)` theo PK thật — áp dụng cho cả khớp
+  Sửa/Xoá lẫn phát hiện trùng khoá lúc Thêm.
+- `insertWholesalePrice()` giờ **THỬ INSERT TRƯỚC**; nếu SQL Server báo
+  lỗi trùng khoá chính (mã lỗi 2627/2601, hoặc nhận diện qua nội dung
+  thông báo), **TỰ CHUYỂN sang UPDATE** ghi đè ĐỦ LẠI toàn bộ cột theo
+  đúng công thức "6d" (`TYPE`/`UNIT_SYMB`/`BASE_UNIT`/`UNITCONV`/
+  `WSPRICE`/`VAT_INCL`/`TAX_CODE`/`STATUS`/`FR_DATE`/`TO_DATE`/
+  `MODI_DATE`) — **KHÔNG còn báo lỗi cho người dùng khi trùng khoá**.
+  `OPEN_DATE` CHỈ được backfill (gán `GETDATE()`) nếu đang NULL (dòng cũ
+  hỏng từ sự cố "6c"), GIỮ NGUYÊN nếu đã có giá trị hợp lệ (không đổi
+  lại ngày mở giá gốc của dòng đang hoạt động bình thường). Lợi ích phụ:
+  cơ chế này TỰ khắc phục luôn các dòng cũ bị ghi thiếu cột từ sự cố "6c"
+  mà không cần đội IT tự xoá/sửa tay qua SSMS.
+- `routes/dsmartWholesalePrice.js` (`POST /apply`): khi phát hiện ghi đè,
+  tự đánh dấu entry mirror nội bộ (`dbo.DsmartWholesalePriceEntries`) CŨ
+  — nếu có — sang trạng thái `DELETED` (lịch sử thao tác ghi rõ
+  `AUTO_OVERWRITTEN`), tránh 2 entry `ACTIVE` cùng trỏ vào 1 dòng CSPRICE
+  thật; entry MỚI tạo ra với hành động `INSERT_OVERWRITE` trong lịch sử.
+  `overlapsExisting()` (cảnh báo lúc xem trước file Excel) đổi từ so
+  khoảng ngày chồng nhau sang chỉ cần trùng (CUST_ID, SKU_ID) — đúng với
+  PK thật không phân biệt theo ngày hiệu lực nữa.
+- Giao diện (`module-itsupport-dsmartprice.js`): cảnh báo xem trước đổi
+  từ "⚠️ Đã có dòng cùng khoảng ngày" sang "⚠️ Sẽ GHI ĐÈ giá đang có";
+  thông báo kết quả sau khi ghi nêu rõ số dòng đã ghi đè.
+
+Test: `tests/test-dsmart-natural-key-matching.js` thêm 3 kịch bản Lần 5
+(ghi đè tự động, backfill `OPEN_DATE` có điều kiện, lỗi SQL khác không bị
+nhầm thành ghi đè — 19 kịch bản, từ 16), đồng thời sửa lại toàn bộ mock/
+assertion theo đúng khoá 2 cột. `tests/test-dsmart-wholesale-price.js`
+thêm 2 kịch bản route-level (ghi đè đánh dấu entry cũ DELETED; khác Mã
+Khách B2B hoặc khác Mã Sản Phẩm thì KHÔNG ghi đè — 34 kịch bản, từ 32).
+`test-dsmart-price-ui.js` (41 kịch bản, UI-mock thuần) chạy lại xác nhận
+không hồi quy. Tổng **94 kịch bản pass** (từ 89).
+
+**Lưu ý cho đội IT/vận hành**: từ bản vá này, thử lại "Thêm Giá Mới" cho
+dòng lỗi "6c" để lại (CUST_ID=240000000001/SKU_ID=296019310000) sẽ TỰ
+GHI ĐÈ đúng dữ liệu — KHÔNG cần tự xoá/sửa tay qua SSMS như hướng dẫn ở
+bản vá "6c" nữa (vẫn làm được qua SSMS nếu muốn, nhưng không còn bắt
+buộc).
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới/quyền SQL nào khác
+ngoài quyền đã xin ở bản vá "6d".
