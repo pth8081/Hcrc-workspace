@@ -398,15 +398,25 @@ const DSMART_PRICE_ACTION_LABELS = {
   INSERT: '➕ Thêm giá', UPDATE: '✏️ Sửa giá', DELETE: '🗑️ Xoá giá'
 };
 
+// LỖI THẬT đã vá (12/2026, người dùng báo cột "Chi Tiết" hiện nhầm "Tick tay" ở dòng "+ Thêm giá") — Lần 5
+// thêm 2 hành động/chế độ MỚI nhưng quên cập nhật 2 hàm dưới đây, khiến rơi vào nhánh mặc định dành cho
+// Xoá tay: (1) `INSERT_OVERWRITE` (ghi đè giá do trùng CUST_ID+SKU_ID khi Thêm) — coi CÙNG nhóm với
+// `INSERT` để Chi Tiết vẫn hiện đúng tên file/nguồn ghi, badge riêng "♻️ Ghi đè giá" để phân biệt Thêm mới
+// thật sự; (2) `mode: 'AUTO_OVERWRITTEN'` (entry mirror CŨ bị tự động đánh dấu Xoá vì có entry khác ghi đè
+// cùng cặp — xem routes/dsmartWholesalePrice.js) — ưu tiên hiện NGUYÊN VĂN `h.note` nếu có thay vì đoán
+// theo mode, đúng ý nghĩa nhất cho người đọc lịch sử.
 function dsmartPriceHistoryActionBadge(h) {
   if (h.action === 'DELETE' && h.mode === 'AUTO') return `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🔁 Tự động xoá hết hạn</span>`;
+  if (h.action === 'DELETE' && h.mode === 'AUTO_OVERWRITTEN') return `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">♻️ Bị ghi đè tự động</span>`;
   if (h.action === 'DELETE') return `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🗑️ Xoá giá hết hạn</span>`;
   if (h.action === 'UPDATE') return `<span class="bg-sky-50 text-sky-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✏️ Sửa giá</span>`;
+  if (h.action === 'INSERT_OVERWRITE') return `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">♻️ Ghi đè giá</span>`;
   return `<span class="bg-indigo-50 text-indigo-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">${h.mode === 'REUSE' ? '↩️ Dùng lại' : '➕ Thêm giá'}</span>`;
 }
 function dsmartPriceHistoryDetail(h) {
-  if (h.action === 'INSERT') return h.sourceFileName ? escapeHtml(h.sourceFileName) : 'Dùng lại từ dòng đã xoá';
+  if (h.action === 'INSERT' || h.action === 'INSERT_OVERWRITE') return h.sourceFileName ? escapeHtml(h.sourceFileName) : 'Dùng lại từ dòng đã xoá';
   if (h.action === 'UPDATE') return `${Number(h.oldPrice).toLocaleString('vi-VN')} → ${Number(h.newPrice).toLocaleString('vi-VN')}`;
+  if (h.note) return escapeHtml(h.note);
   return h.mode === 'AUTO' ? 'Tự động theo giờ đã đặt' : 'Tick tay';
 }
 
