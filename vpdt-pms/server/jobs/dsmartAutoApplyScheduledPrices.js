@@ -43,13 +43,24 @@ async function runDsmartAutoApplyScheduledPrices() {
       // lịch, ngay trước khi job này tới lượt) không xen vào giữa, tránh mirror nội bộ có >1 entry ACTIVE
       // cùng trỏ 1 dòng CSPRICE thật (audit chéo 12/2026 phát hiện: job cũ KHÔNG khoá/dọn stale entry như
       // /apply, có thể để sót entry ACTIVE cũ khi insertWholesalePrice() ghi đè — xem lịch sử ở trên).
-      await withAppLock(`dsmartWholesalePrice:${e.custId}:${e.skuId}`, async () => {
+      const acted = await withAppLock(`dsmartWholesalePrice:${e.custId}:${e.skuId}`, async () => {
+        // LỖI THẬT đã vá (audit chéo lần 2, 12/2026 — cùng loại race vừa vá ở jobs/dsmartAutoDeleteExpiredPrices.js):
+        // job này TRƯỚC ĐÂY ghi thẳng vào DSmart (insertWholesalePrice()) dựa trên snapshot `e` đọc TRƯỚC
+        // khi giành khoá, KHÔNG đọc lại trạng thái NGAY TRONG khoá như job Xoá sibling đã làm — trong lúc
+        // job đang CHỜ giành khoá (VD đang kẹt ở 1 dòng khác), route POST /entries/:id/cancel-schedule
+        // (KHÔNG giành khoá theo cặp, chỉ khoá theo record-id) có thể hủy lịch đúng dòng này. Nếu không
+        // đọc lại, job vẫn ghi giá XUỐNG THẬT CSPRICE/siêu thị dù lịch đã bị hủy — tạo ra 1 dòng giá "ma"
+        // trên CSPRICE mà mirror nội bộ KHÔNG theo dõi được (vẫn báo CANCELLED, dsmartKey không được lưu).
+        // Vá: đọc lại (fresh) TRONG khoá trước khi ghi DSmart, bỏ qua nếu KHÔNG còn SCHEDULED/chưa tới hạn.
+        const freshList = await getAllForCollection('dsmartWholesalePriceEntries');
+        const fresh = freshList.find(x => x.id === e.id);
+        if (!fresh || fresh.status !== 'SCHEDULED' || fresh.frDate > today) return false;
         // targetStoreIds (12/2026): tái dùng đúng danh sách siêu thị đã ĐÓNG BĂNG lúc "Thêm Giá Mới"/tick
         // "Đặt Lịch Áp Giá" (null = đã chọn "Tất Cả" lúc đó) — xem chú thích tại fanOutToStores()/
         // lib/dsmartSqlClient.js.
         const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({
-          custId: e.custId, skuId: e.skuId, price: e.price, frDate: e.frDate, toDate: e.toDate
-        }, e.targetStoreIds);
+          custId: fresh.custId, skuId: fresh.skuId, price: fresh.price, frDate: fresh.frDate, toDate: fresh.toDate
+        }, fresh.targetStoreIds);
         const now = new Date().toISOString();
         // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
         // DSmart. Đánh dấu DELETED MỌI entry mirror ACTIVE khác cho đúng cặp này (cùng logic routes/
@@ -57,7 +68,7 @@ async function runDsmartAutoApplyScheduledPrices() {
         // CSPRICE thật.
         if (wasOverwrite) {
           const existingActive = await getAllForCollection('dsmartWholesalePriceEntries');
-          const staleList = existingActive.filter(x => x.custId === e.custId && x.skuId === e.skuId && x.status === 'ACTIVE');
+          const staleList = existingActive.filter(x => x.custId === fresh.custId && x.skuId === fresh.skuId && x.status === 'ACTIVE');
           for (const stale of staleList) {
             await withLockedRecordForCollection('dsmartWholesalePriceEntries', stale.id, (item) => {
               if (item.status !== 'ACTIVE') return item;
@@ -72,7 +83,7 @@ async function runDsmartAutoApplyScheduledPrices() {
             });
           }
         }
-        await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
+        await withLockedRecordForCollection('dsmartWholesalePriceEntries', fresh.id, (item) => {
           if (item.status !== 'SCHEDULED') return item; // đã bị hủy/xử lý bởi thao tác khác trong lúc job đang chạy
           return {
             ...item, dsmartKey, status: 'ACTIVE', appliedAt: now, lastAutoApplyError: null, lastAutoApplyAt: null,
@@ -85,10 +96,11 @@ async function runDsmartAutoApplyScheduledPrices() {
         });
         if (storeFanOutError || (storeResults || []).some(r => !r.ok)) {
           const failCount = (storeResults || []).filter(r => !r.ok).length;
-          errorDetails.push(`${e.custId}/${e.skuId}: áp dụng HO thành công nhưng ${storeFanOutError ? 'không đọc được danh sách siêu thị' : `${failCount} siêu thị fan-out lỗi`}`);
+          errorDetails.push(`${fresh.custId}/${fresh.skuId}: áp dụng HO thành công nhưng ${storeFanOutError ? 'không đọc được danh sách siêu thị' : `${failCount} siêu thị fan-out lỗi`}`);
         }
+        return true;
       });
-      appliedCount++;
+      if (acted) appliedCount++;
     } catch (err) {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoApplyScheduledPrices: áp dụng thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);

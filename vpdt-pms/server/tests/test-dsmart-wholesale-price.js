@@ -1031,6 +1031,59 @@ async function main() {
     assert.strictEqual(staleEntry.history[staleEntry.history.length - 1].mode, 'AUTO_OVERWRITTEN');
   });
 
+  // LỖI THẬT đã vá (audit chéo LẦN 2, 12/2026 — phát hiện bởi agent kiểm tra độc lập sau khi thêm tính năng
+  // Giám Sát Kết Nối/cờ retry): job "Lên Lịch Áp Giá" TRƯỚC ĐÂY ghi thẳng vào DSmart dựa trên snapshot `e`
+  // đọc TRƯỚC khi giành khoá, KHÔNG đọc lại (fresh) trạng thái NGAY TRONG khoá như job "Tự Động Xoá" sibling
+  // đã làm — nếu người dùng bấm "❌ Hủy Lịch" (route KHÔNG giành khoá theo cặp CUST_ID/SKU_ID) ĐÚNG LÚC job
+  // đang cầm snapshot cũ (trước khi kịp giành khoá/đọc lại), job vẫn ghi giá THẬT vào CSPRICE dù lịch đã bị
+  // hủy — tạo 1 dòng giá "ma" mirror không theo dõi được. Vá CẢ 2 phía: job đọc lại (fresh) TRONG khoá
+  // trước khi ghi (giống job Xoá), và route cancel-schedule giành ĐÚNG khoá chung TRƯỚC khi hủy (giống
+  // PATCH/Xoá tay) — để job PHẢI CHỜ nếu route đang giữ khoá, hoặc route PHẢI CHỜ nếu job đang giữ khoá.
+  await test('jobs/dsmartAutoApplyScheduledPrices: RACE ĐÃ VÁ — dòng đang chờ áp dụng bị "❌ Hủy Lịch" ĐÚNG LÚC job đang chờ khoá -> KHÔNG ghi nhầm giá đã hủy vào CSPRICE', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'RACEAPL1', skuId: 'SKRA1', price: 500, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    const scheduledEntry = ENTRIES.find(e => e.custId === 'RACEAPL1' && e.status === 'SCHEDULED');
+    assert.ok(scheduledEntry, 'phải có 1 entry SCHEDULED');
+    scheduledEntry.frDate = today; // mô phỏng "đã tới Ngày Bắt Đầu" (cùng khuôn test "cặp đang chờ lên lịch" ở trên)
+
+    const recordStoreStub = require('../lib/recordStore');
+    const originalGetAll = recordStoreStub.getAllForCollection;
+    let callCount = 0;
+    recordStoreStub.getAllForCollection = async (c) => {
+      callCount++;
+      const snapshot = await originalGetAll(c);
+      if (c === 'dsmartWholesalePriceEntries' && callCount === 1) {
+        // Lần gọi ĐẦU TIÊN = snapshot `due` ban đầu của job — NGAY SAU khi job "cầm" snapshot này (nhưng
+        // TRƯỚC khi giành khoá/đọc lại), mô phỏng người dùng bấm "❌ Hủy Lịch" ĐÚNG dòng này.
+        await apiPost(`/entries/${scheduledEntry.id}/cancel-schedule`, {});
+      }
+      return snapshot;
+    };
+    try {
+      delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+      const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+      const result = await runDsmartAutoApplyScheduledPrices();
+      assert.strictEqual(result.appliedCount, 0, 'job PHẢI bỏ qua (không áp dụng) vì entry đã đổi trạng thái (CANCELLED) trong lúc chờ khoá — đọc lại (fresh) thấy KHÔNG còn SCHEDULED nữa');
+      assert.strictEqual(CSPRICE.length, 0, 'CSPRICE KHÔNG được ghi gì — lịch đã bị hủy trước khi job kịp ghi');
+      const fresh = ENTRIES.find(e => e.id === scheduledEntry.id);
+      assert.strictEqual(fresh.status, 'CANCELLED', 'entry vẫn giữ đúng CANCELLED, KHÔNG bị job ghi đè');
+    } finally {
+      recordStoreStub.getAllForCollection = originalGetAll;
+    }
+  });
+
+  await test('POST /entries/:id/cancel-schedule nay ĐÃ khoá theo cặp (CUST_ID, SKU_ID) — vá cùng loại race vừa phát hiện ở job Lên Lịch Áp Giá', async () => {
+    CSPRICE = []; ENTRIES = []; APP_LOCK_CALLS = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'LOCKCHK2', skuId: 'SKLC2', price: 100, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    const entry = ENTRIES.find(e => e.custId === 'LOCKCHK2' && e.status === 'SCHEDULED');
+    assert.ok(entry);
+    await apiPost(`/entries/${entry.id}/cancel-schedule`, {});
+    assert.ok(APP_LOCK_CALLS.includes('dsmartWholesalePrice:LOCKCHK2:SKLC2'), 'POST cancel-schedule phải giành khoá đúng cặp CUST_ID/SKU_ID trước khi huỷ');
+  });
+
   // LỖI THẬT đã vá (audit chéo TRƯỚC DEPLOY, 12/2026 — phát hiện bởi agent kiểm tra độc lập): job "Tự Động
   // Xoá Khi Hết Hạn" (jobs/dsmartAutoDeleteExpiredPrices.js) TRƯỚC ĐÂY gọi deleteWholesalePrice() THẲNG,
   // KHÔNG khoá theo withAppLock(`dsmartWholesalePrice:${custId}:${skuId}`) như job "Lên Lịch Áp Giá"/
