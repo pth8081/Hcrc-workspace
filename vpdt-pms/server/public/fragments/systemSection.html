@@ -870,6 +870,19 @@
         </div>
         <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = toàn bộ tài khoản đang có quyền Quản Trị Viên (có email), cộng thêm email CC cố định ở trên. Chỉ CẢNH BÁO qua email khi ổ đĩa chứa thư mục tải file lên vượt ngưỡng — hệ thống KHÔNG tự xoá bất kỳ file nào.</p>
 
+        <!-- dsmartPriceNotifyEmails (12/2026, theo yêu cầu người dùng: "nếu mà khi nào up giá thành công
+             thì nó sẽ gửi email... và khi xóa thành công thì nó cũng gửi email xóa tự động") — Hỗ Trợ IT
+             > "💰 Cài Đặt Giá Bán Buôn", xem lib/dsmartPriceNotify.js. Không có "số ngày" (sự kiện tức
+             thời, không phải nhắc trước hạn) — cùng khuôn Cảnh Báo Ổ Đĩa ở trên (1 ô duy nhất). Để trống
+             = TẮT tính năng (mặc định). -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email Nhận Thông Báo Áp Giá/Xoá Giá Bán Buôn DSmart (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgDsmartPriceNotifyEmails" placeholder="itsupport@company.com (để trống = tắt)" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Gửi NGAY 1 email mỗi khi Áp Giá Mới/Xoá giá bán buôn DSmart THÀNH CÔNG (tay hoặc tự động), báo rõ siêu thị nào đã đồng bộ xong/đang chờ tự động thử lại do mất mạng — KHÔNG tính thao tác "✏️ Sửa". Để trống = TẮT (mặc định).</p>
+
         <div class="border-t pt-2">
           <div class="font-bold text-gray-700 mb-1">⏰ Cảnh Báo Quá Hạn Xử Lý Phê Duyệt</div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -16,6 +16,11 @@
 const { insertWholesalePrice, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { getAllForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+// Email thông báo Áp Giá thành công + hàng đợi tự động thử lại (12/2026, theo yêu cầu người dùng — xem
+// chú thích đầy đủ ở lib/dsmartPriceNotify.js/lib/dsmartStoreFanOutRetryStore.js). GỘP 1 email DUY NHẤT
+// cho CẢ LƯỢT CHẠY (có thể nhiều dòng SCHEDULED cùng đến hạn 1 lúc) — không phải 1 email/dòng.
+const { notifyDsmartPriceApplyBatch } = require('../lib/dsmartPriceNotify');
+const retryQueueStore = require('../lib/dsmartStoreFanOutRetryStore');
 
 function todayDateOnlyIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -34,6 +39,10 @@ async function runDsmartAutoApplyScheduledPrices() {
   const due = entries.filter(e => e.status === 'SCHEDULED' && e.frDate <= today);
   let appliedCount = 0, errorCount = 0;
   const errorDetails = [];
+  // appliedItems (12/2026): gom lại TẤT CẢ dòng áp dụng thành công trong LƯỢT CHẠY này — gửi GỘP 1 email
+  // thông báo DUY NHẤT ở cuối job (xem lib/dsmartPriceNotify.js), không phải 1 email/dòng (tránh bão
+  // email nếu nhiều dòng SCHEDULED cùng đến hạn 1 lúc).
+  const appliedItems = [];
   let stoppedEarly = false;
   for (const e of due) {
     if (stoppedEarly) break;
@@ -98,6 +107,11 @@ async function runDsmartAutoApplyScheduledPrices() {
           const failCount = (storeResults || []).filter(r => !r.ok).length;
           errorDetails.push(`${fresh.custId}/${fresh.skuId}: áp dụng HO thành công nhưng ${storeFanOutError ? 'không đọc được danh sách siêu thị' : `${failCount} siêu thị fan-out lỗi`}`);
         }
+        appliedItems.push({ custId: fresh.custId, skuId: fresh.skuId, price: fresh.price, frDate: fresh.frDate, toDate: fresh.toDate, entryId: fresh.id, storeResults, storeFanOutError });
+        retryQueueStore.enqueueFailedStores({
+          storeResults, action: 'APPLY', entryId: fresh.id, custId: fresh.custId, skuId: fresh.skuId,
+          payload: { custId: fresh.custId, skuId: fresh.skuId, price: fresh.price, frDate: fresh.frDate, toDate: fresh.toDate }
+        }).catch(() => {});
         return true;
       });
       if (acted) appliedCount++;
@@ -132,6 +146,9 @@ async function runDsmartAutoApplyScheduledPrices() {
       description: `Tự động áp dụng giá bán buôn đã lên lịch: ${appliedCount} thành công, ${errorCount} lỗi${errorNote}`,
       status: errorCount && !appliedCount ? 'FAILED' : 'SUCCESS'
     }).catch(() => {});
+  }
+  if (appliedItems.length) {
+    notifyDsmartPriceApplyBatch({ mode: 'AUTO_SCHEDULED', actor: null, items: appliedItems }).catch(() => {});
   }
   return { skipped: false, appliedCount, errorCount, checked: due.length };
 }

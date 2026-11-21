@@ -102,6 +102,7 @@ const { checkShelfStockReconDigestAlerts } = require('./jobs/shelfStockReconDige
 const { syncSystemInventory } = require('./jobs/inventorySync');
 const { runDsmartAutoDeleteExpiredPrices } = require('./jobs/dsmartAutoDeleteExpiredPrices');
 const { runDsmartAutoApplyScheduledPrices } = require('./jobs/dsmartAutoApplyScheduledPrices');
+const { runDsmartRetryStoreFanOutQueue } = require('./jobs/dsmartRetryStoreFanOutQueue');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkWorkStatusAutoRevert } = require('./jobs/workStatusAutoRevert');
@@ -590,6 +591,11 @@ async function start() {
       // luôn chạy, chỉ xử lý nếu có dòng SCHEDULED nào đến hạn.
       runDsmartAutoApplyScheduledPrices().catch(err => console.error('⛔ dsmartAutoApplyScheduledPrices lỗi:', err.message));
       setInterval(() => { runDsmartAutoApplyScheduledPrices().catch(err => console.error('⛔ dsmartAutoApplyScheduledPrices lỗi:', err.message)); }, 10 * 60 * 1000);
+      // Hàng đợi tự động thử lại fan-out xuống siêu thị lỗi mạng (12/2026, theo yêu cầu người dùng: "có
+      // bao giờ là bạn sẽ xử lý khi nó có kết nối trở lại") — cùng cadence 2 job ở trên (xem jobs/
+      // dsmartRetryStoreFanOutQueue.js).
+      runDsmartRetryStoreFanOutQueue().catch(err => console.error('⛔ dsmartRetryStoreFanOutQueue lỗi:', err.message));
+      setInterval(() => { runDsmartRetryStoreFanOutQueue().catch(err => console.error('⛔ dsmartRetryStoreFanOutQueue lỗi:', err.message)); }, 10 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

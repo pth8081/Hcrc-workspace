@@ -1808,6 +1808,37 @@ BEGIN
 END
 GO
 
+/* DsmartStoreFanOutRetryQueue (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026, theo yêu cầu người dùng:
+   "trong quá trình xử lý xóa... hoặc là áp giá, thì có thể lỗi do mạng... có bao giờ là bạn sẽ xử lý khi
+   nó có kết nối trở lại") — hàng đợi TỰ ĐỘNG THỬ LẠI khi fan-out xuống 1 SIÊU THỊ CỤ THỂ bị lỗi (mất
+   mạng tạm thời) lúc Áp Giá Mới/Xoá (tay hoặc tự động) — xem jobs/dsmartRetryStoreFanOutQueue.js (chạy
+   nền 10 phút/lần) + lib/dsmartStoreFanOutRetryStore.js. KHÔNG liên quan DSmart16 Trung Tâm (đã ghi xong
+   từ trước) — chỉ ghi lại ĐÚNG phần đồng bộ xuống siêu thị bị lỡ, để thử lại ĐÚNG siêu thị đó khi kết nối
+   phục hồi, không giới hạn số lần thử (giống cách 2 job tự động Áp Giá/Xoá Giá đang tự thử lại). Mỗi
+   dòng khớp ĐÚNG 1 siêu thị + 1 cặp (CustId, SkuId) + 1 loại thao tác (UNIQUE INDEX bên dưới) — nếu cùng
+   1 tổ hợp lỗi lại trước khi job thử lại kịp xử lý, CẬP NHẬT ĐÈ dòng cũ thay vì tạo thêm dòng trùng. */
+IF OBJECT_ID('dbo.DsmartStoreFanOutRetryQueue', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DsmartStoreFanOutRetryQueue (
+        Id          BIGINT         NOT NULL CONSTRAINT PK_DsmartStoreFanOutRetryQueue PRIMARY KEY,
+        StoreId     BIGINT         NOT NULL,
+        StoreCode   NVARCHAR(50)   NOT NULL,
+        StoreName   NVARCHAR(200)  NOT NULL,
+        Action      NVARCHAR(10)   NOT NULL, -- 'APPLY' | 'DELETE'
+        CustId      NVARCHAR(50)   NOT NULL,
+        SkuId       NVARCHAR(50)   NOT NULL,
+        EntryId     BIGINT         NULL,
+        PayloadJson NVARCHAR(MAX)  NOT NULL,
+        Attempts    INT            NOT NULL DEFAULT 0,
+        LastError   NVARCHAR(MAX)  NULL,
+        CreatedAt   DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        LastTriedAt DATETIME2(3)   NULL,
+        UpdatedAt   DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+    CREATE UNIQUE INDEX UX_DsmartStoreFanOutRetryQueue_Key ON dbo.DsmartStoreFanOutRetryQueue (StoreId, CustId, SkuId, Action);
+END
+GO
+
 /* AppDataMigrations — LỖI THẬT PRODUCTION đã vá (12/2026, người dùng báo "đã xoá hết Kỳ Kiểm Kê mà mỗi
    lần lên code mới lại xuất hiện lại"): migrateLegacyAppDataCollection() (lib/recordStore.js) trước đây
    coi "bảng đích hiện ĐANG RỖNG" là dấu hiệu CHƯA di trú — nhưng bảng rỗng cũng xảy ra khi người dùng đã

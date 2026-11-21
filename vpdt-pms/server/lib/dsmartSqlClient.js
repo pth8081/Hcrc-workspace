@@ -797,8 +797,26 @@ async function testStoreConnection({ host, port, database, user, password }) {
   return { ms: Date.now() - started };
 }
 
+// retryStoreFanOut(storeId, action, payload) (12/2026, theo yêu cầu người dùng: "có bao giờ là bạn sẽ xử
+// lý khi nó có kết nối trở lại") — thử lại ĐÚNG 1 thao tác fan-out đã lỗi trước đó trên ĐÚNG 1 siêu thị
+// cụ thể, dùng cho jobs/dsmartRetryStoreFanOutQueue.js (hàng đợi tự động — xem lib/
+// dsmartStoreFanOutRetryStore.js). KHÔNG đụng DSmart16 Trung Tâm (đã ghi xong từ trước, caller chỉ gọi
+// hàm này SAU KHI xác nhận HO đã thành công) — CHỈ lặp lại đúng phần đồng bộ xuống siêu thị bị lỡ, tái
+// dùng NGUYÊN các hàm pool-agnostic *OnPool() đã có (upsertPriceOnPool/deletePriceOnPool), không viết
+// công thức ghi khác (tránh lệch công thức như các lỗi Lần 1-6 đã gặp ở HO).
+async function retryStoreFanOut(storeId, action, payload) {
+  const store = await storeConnStore.getRawById(storeId);
+  if (!store) return { skipped: true, reason: 'store-deleted' };
+  if (!store.enabled) return { skipped: true, reason: 'store-disabled' };
+  const pool = await getStorePool(store);
+  if (action === 'APPLY') await upsertPriceOnPool(pool, payload);
+  else if (action === 'DELETE') await deletePriceOnPool(pool, payload);
+  else throw new DsmartSqlError(`retryStoreFanOut: action không hợp lệ: ${action}`);
+  return { skipped: false, storeCode: store.storeCode, storeName: store.storeName };
+}
+
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
-  closeAllStorePools, closeStorePool, testStoreConnection,
+  closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
   testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
 };
