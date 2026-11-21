@@ -80,7 +80,7 @@ async function runDsmartAutoDeleteExpiredPrices() {
           if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
           const nowIso = now.toISOString();
           return {
-            ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso,
+            ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso, lastAutoDeleteError: null, lastAutoDeleteAt: null,
             history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso }]
           };
         });
@@ -91,6 +91,16 @@ async function runDsmartAutoDeleteExpiredPrices() {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoDeleteExpiredPrices: xoá thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);
       if (errorDetails.length < 5) errorDetails.push(`${e.custId}/${e.skuId}: ${err.message}`);
+      // lastAutoDeleteError/At (12/2026, theo yêu cầu người dùng — cờ trạng thái "đã xoá hay chưa", xem
+      // chú thích đầy đủ tại dsmartAutoApplyScheduledPrices.js) — ghi lại lần thử gần nhất lỗi gì ngay
+      // trên entry, để UI "2. Quản Lý Giá Đã Hết Hạn" hiện rõ dòng nào đang kẹt lỗi tự động xoá. Job vẫn
+      // tự thử lại ở lượt chạy kế tiếp (entry giữ nguyên ACTIVE) — không cần cơ chế retry riêng.
+      try {
+        await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
+          if (item.status !== 'ACTIVE') return item;
+          return { ...item, lastAutoDeleteError: err.message || 'Lỗi không xác định', lastAutoDeleteAt: new Date().toISOString() };
+        });
+      } catch (_) { /* phớt lờ lỗi ghi lại trạng thái, không chặn các dòng khác */ }
     }
   }
   if (deletedCount || errorCount) {

@@ -17,6 +17,8 @@ let _dsmartStoreConnList = [];
 let _dsmartStoreConnEditingId = null; // null = đang Thêm mới, có giá trị = đang Sửa
 let _dsmartStoreConnImportRows = null;
 let _dsmartStoreConnImportFileName = null;
+let _dsmartConnStatusSectionCollapsed = true;
+let _dsmartConnStatusLoaded = false; // chỉ tự gọi GET /connections/status LẦN ĐẦU mở khung, các lần mở lại sau không tự gọi lại (dùng nút "🔄 Kiểm Tra Lại Tất Cả")
 // _dsmartPriceStoreOptions (12/2026, ô chọn "🏬 Áp Dụng Cho Siêu Thị") — danh sách RÚT GỌN (chỉ
 // id/storeCode/storeName) các siêu thị ĐANG BẬT, nạp qua GET /store-connections/options (KHÔNG cần
 // quyền admin, khác GET /store-connections đầy đủ chỉ admin xem được) — dùng cho CẢ 2 ô chọn: "1. Thêm
@@ -27,6 +29,7 @@ async function initDsmartPriceTab() {
   const isAdmin = !!currentUser?.perms?.admin;
   document.getElementById('btnDsmartPriceConfig').classList.toggle('hidden', !isAdmin);
   document.getElementById('btnDsmartStoreConnToggle').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btnDsmartConnStatusToggle').classList.toggle('hidden', !isAdmin);
   document.getElementById('dsmartPriceConnStatus').innerText = 'Xem "⚙️ Cấu Hình Kết Nối" (Admin) để kiểm tra/đổi thông tin kết nối DSmart16 Trung Tâm.';
   applyDsmartPriceAddFormState();
   applyDsmartPriceUploadFilterState();
@@ -79,6 +82,66 @@ function resolveDsmartPriceTargetStoreIds(containerId) {
 function toggleDsmartStoreConnSection() {
   _dsmartStoreConnSectionCollapsed = !_dsmartStoreConnSectionCollapsed;
   document.getElementById('dsmartStoreConnSection').classList.toggle('hidden', _dsmartStoreConnSectionCollapsed);
+}
+
+// ===================== 📡 Giám Sát Kết Nối (HO + Siêu Thị) — CHỈ admin =====================
+// toggleDsmartConnStatusSection()/refreshDsmartConnStatus() (12/2026, theo yêu cầu người dùng: "theo dõi
+// việc kết nối đến các máy siêu thị và máy HO... để tôi vào tôi mở ra tôi xem là cái trạng thái nó đang
+// kết nối hoặc không kết nối") — gọi GET /api/dsmart-price/connections/status (HO + TỪNG siêu thị đã
+// khai báo ở "🏬 Kết Nối Siêu Thị", song song). Tự tải đúng 1 LẦN khi mở khung lần đầu (_dsmartConnStatusLoaded),
+// các lần mở lại sau đó không tự gọi lại — người dùng tự bấm "🔄 Kiểm Tra Lại Tất Cả" khi muốn làm mới.
+function toggleDsmartConnStatusSection() {
+  _dsmartConnStatusSectionCollapsed = !_dsmartConnStatusSectionCollapsed;
+  document.getElementById('dsmartConnStatusSection').classList.toggle('hidden', _dsmartConnStatusSectionCollapsed);
+  if (!_dsmartConnStatusSectionCollapsed && !_dsmartConnStatusLoaded) {
+    _dsmartConnStatusLoaded = true;
+    refreshDsmartConnStatus();
+  }
+}
+
+function dsmartConnStatusRowHtml(label, hostInfo, row) {
+  let statusBadge, detail;
+  if (row.disabled) {
+    statusBadge = `<span class="bg-gray-100 text-gray-500 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⏸️ Đang Tắt</span>`;
+    detail = '—';
+  } else if (row.ok === true) {
+    statusBadge = `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🟢 Đang kết nối</span>`;
+    detail = '—';
+  } else {
+    const isNoPw = /mật khẩu/i.test(row.error || '');
+    statusBadge = isNoPw
+      ? `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⚠️ Thiếu Mật Khẩu</span>`
+      : `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🔴 Không kết nối</span>`;
+    detail = escapeHtml(row.error || 'Lỗi không xác định');
+  }
+  return `<tr>
+    <td class="p-1.5 font-semibold">${escapeHtml(label)}</td>
+    <td class="p-1.5 text-gray-500">${escapeHtml(hostInfo)}</td>
+    <td class="p-1.5">${statusBadge}</td>
+    <td class="p-1.5 text-right">${row.ms != null ? `${row.ms} ms` : '—'}</td>
+    <td class="p-1.5 text-red-600">${detail}</td>
+  </tr>`;
+}
+
+async function refreshDsmartConnStatus() {
+  const btn = document.getElementById('btnDsmartConnStatusRefresh');
+  const body = document.getElementById('dsmartConnStatusBody');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kiểm tra...'; }
+  body.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Đang kiểm tra...</td></tr>`;
+  try {
+    const res = await fetch('/api/dsmart-price/connections/status');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    const rows = [dsmartConnStatusRowHtml('🏢 HO (DSmart16 Trung Tâm)', '—', data.ho)]
+      .concat((data.stores || []).map(s => dsmartConnStatusRowHtml(`🏬 ${s.storeCode} - ${s.storeName}`, `${s.host}:${s.port}/${s.database}`, s)));
+    body.innerHTML = rows.join('');
+    const checkedAtEl = document.getElementById('dsmartConnStatusCheckedAt');
+    if (checkedAtEl) checkedAtEl.textContent = data.checkedAt ? `Kiểm tra lúc ${new Date(data.checkedAt).toLocaleString('vi-VN')}` : '';
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">⛔ ${escapeHtml(err.message)}</td></tr>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Kiểm Tra Lại Tất Cả'; }
+  }
 }
 
 async function renderDsmartStoreConnList() {
@@ -366,6 +429,18 @@ function dsmartPriceFmtDate(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// dsmartPriceFmtDateTime(iso) (12/2026, cờ retry lastAutoDeleteAt/lastAutoApplyAt) — khác dsmartPriceFmtDate()
+// ở trên (chỉ nhận chuỗi NGÀY "yyyy-mm-dd" thuần), hàm này nhận TIMESTAMP ISO đầy đủ (new Date().toISOString())
+// và hiện kèm giờ:phút theo giờ máy người xem (đủ để biết "lần thử gần nhất" cách đây bao lâu).
+function dsmartPriceFmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // dsmartPriceStoreResultsSummary()/dsmartPriceAggregateStoreSummary() (12/2026, FAN-OUT) — tóm tắt kết
 // quả đồng bộ xuống TỪNG siêu thị để nối thêm vào alert sau Thêm/Sửa/Xoá giá — xem fanOutToStores()/
 // lib/dsmartSqlClient.js. storeResults rỗng (không phải undefined) nghĩa là ĐÃ fan-out nhưng chưa cấu
@@ -504,6 +579,17 @@ function applyDsmartPriceMgFilterState() {
 }
 function toggleDsmartPriceMgFilter() { _dsmartPriceMgFilterCollapsed = !_dsmartPriceMgFilterCollapsed; applyDsmartPriceMgFilterState(); }
 
+// dsmartPriceRetryErrorBadge(error, at) (12/2026, theo yêu cầu người dùng: "nếu bị lỗi mạng ấy, thì cho
+// phép chạy lại, try to set lại đến lúc nào xong thì thôi... có cái cờ kiểm tra trạng thái") — hiện rõ
+// lần thử tự động gần nhất bị lỗi gì (job vẫn tự thử lại ở lượt chạy kế tiếp, 10 phút sau, không cần thao
+// tác gì thêm) — dùng chung cho cả "2. Quản Lý Giá Đã Hết Hạn" (lastAutoDeleteError/At) và "2b. Giá Đã
+// Lên Lịch" (lastAutoApplyError/At).
+function dsmartPriceRetryErrorBadge(error, at) {
+  if (!error) return '';
+  const atText = at ? dsmartPriceFmtDateTime(at) : '';
+  return `<div class="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠️ Lần thử gần nhất lỗi${atText ? ` lúc ${atText}` : ''}: ${escapeHtml(error)} — đang tự động thử lại</div>`;
+}
+
 function dsmartPriceEntryStatusBadge(e) {
   if (e.status === 'DELETED') return `<span class="bg-gray-100 text-gray-600 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🗑️ Đã xoá ${dsmartPriceFmtDate((e.deletedAt || '').slice(0, 10))}</span>`;
   const today = new Date().toISOString().slice(0, 10);
@@ -578,7 +664,7 @@ async function renderDsmartPriceEntries() {
       <td class="p-1.5 text-right">${Number(e.price).toLocaleString('vi-VN')}</td>
       <td class="p-1.5">${dsmartPriceFmtDate(e.frDate)} → ${dsmartPriceFmtDate(e.toDate)}</td>
       <td class="p-1.5">${dsmartPriceEntryStatusBadge(e)}</td>
-      <td class="p-1.5 text-gray-400">${note}</td>
+      <td class="p-1.5 text-gray-400">${note}${dsmartPriceRetryErrorBadge(e.lastAutoDeleteError, e.lastAutoDeleteAt)}</td>
       <td class="p-1.5">${actions}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="8" class="p-3 text-center text-gray-400 italic">Không có dòng nào khớp</td></tr>`;
@@ -621,7 +707,7 @@ function renderDsmartPriceScheduled() {
       <td class="p-1.5">${escapeHtml(e.skuId)}</td>
       <td class="p-1.5 text-right">${Number(e.price).toLocaleString('vi-VN')}</td>
       <td class="p-1.5">${dsmartPriceFmtDate(e.frDate)} → ${dsmartPriceFmtDate(e.toDate)}</td>
-      <td class="p-1.5 text-gray-400">Tạo ${dsmartPriceFmtDate((e.createdAt || '').slice(0, 10))} bởi ${escapeHtml(e.createdBy || '—')}</td>
+      <td class="p-1.5 text-gray-400">Tạo ${dsmartPriceFmtDate((e.createdAt || '').slice(0, 10))} bởi ${escapeHtml(e.createdBy || '—')}${dsmartPriceRetryErrorBadge(e.lastAutoApplyError, e.lastAutoApplyAt)}</td>
       <td class="p-1.5"><button type="button" data-op="cancelDsmartPriceSchedule" data-arg0="${e.id}" class="bg-red-50 border border-red-300 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded">❌ Hủy Lịch</button></td>
     </tr>`).join('') || `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Không có dòng nào đang chờ áp dụng</td></tr>`;
 }

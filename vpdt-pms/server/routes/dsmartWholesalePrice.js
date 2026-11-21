@@ -266,6 +266,44 @@ router.post('/store-connections/:id/test-connection', async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/store-connections/:id/test-connection'); }
 });
 
+// GET /connections/status (12/2026, theo yêu cầu người dùng: "theo dõi việc kết nối đến các máy siêu thị
+// và máy HO... để tôi mở ra tôi xem trạng thái đang kết nối hoặc không kết nối") — kiểm tra kết nối THẬT
+// tới DSmart16 Trung Tâm + TỪNG siêu thị đã cấu hình (song song, không giới hạn lô như fan-out ghi dữ
+// liệu — đây chỉ là 1 câu SELECT 1 nhẹ/siêu thị, không phải thao tác ghi) NGAY khi được gọi — KHÔNG lưu
+// cache, luôn kiểm tra MỚI mỗi lần mở màn này, đúng ý "mở ra xem trạng thái hiện tại". CHỈ admin — cùng
+// mức nhạy cảm "🏬 Kết Nối Siêu Thị"/"⚙️ Cấu Hình Kết Nối" (hiện đủ Host/Tên CSDL của từng siêu thị, dù
+// không lộ mật khẩu).
+router.get('/connections/status', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới xem được trạng thái kết nối' });
+  try {
+    const hoPromise = (async () => {
+      try {
+        const result = await testDsmartConnection();
+        return { ok: true, ms: result.ms, error: null };
+      } catch (err) {
+        return { ok: false, ms: null, error: err.message || 'Lỗi không xác định' };
+      }
+    })();
+
+    const stores = await storeConnStore.listRaw();
+    const storesPromise = Promise.all(stores.map(async (s) => {
+      const base = { id: s.id, storeCode: s.storeCode, storeName: s.storeName, host: s.host, port: s.port, database: s.database };
+      if (!s.enabled) return { ...base, disabled: true, ok: null, ms: null, error: null };
+      if (!s.passwordEnc) return { ...base, disabled: false, ok: false, ms: null, error: 'Chưa có mật khẩu đã lưu' };
+      try {
+        const password = storeConnStore.decryptSecret(s.passwordEnc);
+        const result = await testStoreConnection({ host: s.host, port: s.port, database: s.database, user: s.user, password });
+        return { ...base, disabled: false, ok: true, ms: result.ms, error: null };
+      } catch (err) {
+        return { ...base, disabled: false, ok: false, ms: null, error: err.message || 'Lỗi không xác định' };
+      }
+    }));
+
+    const [ho, storeResults] = await Promise.all([hoPromise, storesPromise]);
+    res.json({ ok: true, ho, stores: storeResults, checkedAt: new Date().toISOString() });
+  } catch (err) { sendCatchError(res, err, 'GET /api/dsmart-price/connections/status'); }
+});
+
 // ===================== Nhập hàng loạt kết nối siêu thị qua file Excel (12/2026, theo yêu cầu người
 // dùng: "vì nó sẽ có rất nhiều siêu thị thì cho phép tôi có tải file mẫu và upload file mẫu được
 // không") — CHỈ admin, cùng mức nhạy cảm mọi route /store-connections khác (chứa mật khẩu hạ tầng).
@@ -678,14 +716,23 @@ router.post('/entries/:id/cancel-schedule', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const updated = await withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
+    // LỖI THẬT đã vá (audit chéo lần 2, 12/2026 — cùng loại race vừa vá ở jobs/dsmartAutoApplyScheduledPrices.js):
+    // route này TRƯỚC ĐÂY chỉ khoá theo record-id nội bộ, KHÔNG giành khoá chung theo cặp (CUST_ID, SKU_ID)
+    // như job "Lên Lịch Áp Giá" đang dùng — nếu hủy lịch ĐÚNG LÚC job đang chờ giành khoá để ghi giá dòng
+    // này vào DSmart, job vẫn có thể ghi giá THẬT vào CSPRICE dù lịch đã bị hủy (job đã vá đọc lại trạng
+    // thái NGAY TRONG khoá trước khi ghi, nhưng vẫn cần route này giành ĐÚNG khoá đó để job phải CHỜ, không
+    // xen vào giữa job đang xử lý). Vá: đọc trước CUST_ID/SKU_ID để giành ĐÚNG khoá chung, rồi mới khoá
+    // record-id — cùng khuôn PATCH /entries/:id và POST /entries/:id/delete ở trên.
+    const peek = (await getAllForCollection('dsmartWholesalePriceEntries')).find(x => x.id === id);
+    if (!peek) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const updated = await withAppLock(`dsmartWholesalePrice:${peek.custId}:${peek.skuId}`, () => withLockedRecordForCollection('dsmartWholesalePriceEntries', id, async (item) => {
       if (item.status !== 'SCHEDULED') throw new HttpError(409, 'Dòng này không còn ở trạng thái "Đã Lên Lịch" (có thể đã được áp dụng hoặc đã hủy trước đó).');
       const now = new Date().toISOString();
       return {
         ...item, status: 'CANCELLED', cancelledBy: req.freshUser.username, cancelledAt: now,
         history: [...(item.history || []), { action: 'CANCEL_SCHEDULE', actor: req.freshUser.username, at: now }]
       };
-    });
+    }));
     logDsmartPrice(req, 'CANCEL_DSMART_PRICE_SCHEDULE', String(id), `Hủy lịch áp giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/entries/:id/cancel-schedule'); }

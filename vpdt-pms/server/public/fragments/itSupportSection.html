@@ -313,6 +313,33 @@
                tận máy chủ db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả
                các siêu thị"). CHỈ admin, cùng khuôn ẩn/hiện #btnDsmartPriceConfig. -->
           <button type="button" data-op="toggleDsmartStoreConnSection" id="btnDsmartStoreConnToggle" class="hidden bg-purple-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-purple-800">🏬 Kết Nối Siêu Thị (Admin)</button>
+          <!-- "📡 Giám Sát Kết Nối" (12/2026, theo yêu cầu người dùng: "theo dõi việc kết nối đến các máy
+               siêu thị và máy HO trong cấu hình... để tôi vào tôi mở ra tôi xem là cái trạng thái nó đang
+               kết nối hoặc không kết nối"). CHỈ admin, cùng khuôn ẩn/hiện #btnDsmartStoreConnToggle. -->
+          <button type="button" data-op="toggleDsmartConnStatusSection" id="btnDsmartConnStatusToggle" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800">📡 Giám Sát Kết Nối (Admin)</button>
+        </div>
+      </div>
+
+      <!-- "📡 Giám Sát Kết Nối" — bảng trạng thái kết nối THẬT (gọi GET /connections/status) tới DSmart16
+           Trung Tâm (HO) + TỪNG kết nối siêu thị đã khai báo ở "🏬 Kết Nối Siêu Thị" trên — phân biệt rõ
+           Đang Bật/Tắt/Thiếu Mật Khẩu/Lỗi/OK kèm thời gian phản hồi. Thu gọn mặc định, tự tải lần đầu mở,
+           có nút tự kiểm tra lại (cùng khuôn #dsmartStoreConnSection). -->
+      <div id="dsmartConnStatusSection" class="hidden bg-white border rounded-lg p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div class="font-bold text-sm text-gray-800">📡 Giám Sát Kết Nối DSmart16 Trung Tâm & Siêu Thị</div>
+            <div id="dsmartConnStatusCheckedAt" class="text-[11px] text-gray-400"></div>
+          </div>
+          <button type="button" data-op="refreshDsmartConnStatus" id="btnDsmartConnStatusRefresh" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🔄 Kiểm Tra Lại Tất Cả</button>
+        </div>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left"><tr>
+              <th class="p-1.5">Máy Chủ</th><th class="p-1.5">Host:Port/CSDL</th><th class="p-1.5">Trạng Thái</th>
+              <th class="p-1.5 text-right">Phản Hồi</th><th class="p-1.5">Chi Tiết</th>
+            </tr></thead>
+            <tbody id="dsmartConnStatusBody"><tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Bấm "📡 Giám Sát Kết Nối" để kiểm tra</td></tr></tbody>
+          </table>
         </div>
       </div>
 

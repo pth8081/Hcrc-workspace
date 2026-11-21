@@ -10613,3 +10613,71 @@ pass (file này) — không regression ở `test-dsmart-store-fanout.js` (23/23)
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6p. "📡 Giám Sát Kết Nối" + cờ retry tự động xoá/áp giá + vá race lần 2 (12/2026)
+
+Theo yêu cầu người dùng: "theo dõi việc kết nối đến các máy siêu thị và máy
+HO... để tôi vào tôi mở ra tôi xem là cái trạng thái nó đang kết nối hoặc
+không kết nối" + "khi đặt lịch, nếu setup giá bị lỗi mạng thì cho phép chạy
+lại tự động... có cờ kiểm tra trạng thái, xóa cũng vậy — yes là đã xóa, n là
+chưa xóa được cho đến khi xong".
+
+### A. "📡 Giám Sát Kết Nối (Admin)"
+
+Nút MỚI đặt cạnh "⚙️ Cấu Hình Kết Nối"/"🏬 Kết Nối Siêu Thị" (tab "💰 Cài Đặt
+Giá Bán Buôn", CHỈ admin xem được), mở khung thu gọn hiện bảng trạng thái
+kết nối **song song** tới HO (DSmart16 Trung Tâm) + TỪNG kết nối siêu thị đã
+khai báo (`GET /api/dsmart-price/connections/status`): 🟢 Đang kết nối (kèm
+ms phản hồi) / 🔴 Không kết nối (kèm lỗi thật) / ⏸️ Đang Tắt (không kiểm tra)
+/ ⚠️ Thiếu Mật Khẩu (chưa cấu hình, không kiểm tra). Tự tải lần đầu mở khung,
+có nút "🔄 Kiểm Tra Lại Tất Cả" để làm mới thủ công. Response KHÔNG BAO GIỜ
+trả `password`/`passwordEnc` (whitelist tường minh field an toàn).
+
+### B. Cờ retry `lastAutoDeleteError/At` + `lastAutoApplyError/At`
+
+2 job nền "🔁 Tự Động Xoá Khi Hết Hạn" và "📅 Lên Lịch Áp Giá" vốn ĐÃ tự thử
+lại ở lượt chạy kế tiếp (10 phút/lần) khi 1 dòng lỗi (VD mất mạng) — không
+cần thêm cơ chế retry mới, chỉ cần GHI LẠI lần thử gần nhất lỗi gì để người
+dùng xem được trên UI thay vì phải tra System Log. Khi 1 lượt chạy lỗi: job
+ghi `lastAutoDeleteError`/`lastAutoDeleteAt` (dòng ACTIVE, mục "2. Quản Lý
+Giá Đã Hết Hạn") hoặc `lastAutoApplyError`/`lastAutoApplyAt` (dòng SCHEDULED,
+mục "2b. Giá Đã Lên Lịch") NGAY trên entry — dòng VẪN giữ nguyên trạng thái
+cũ (chưa xoá/chưa áp dụng) để lượt sau tự thử lại đúng dòng đó. Khi thử lại
+SAU ĐÓ thành công, cờ TỰ XOÁ (set về `null`) — đúng ý "yes là xong, n là
+chưa xong cho đến khi bật cờ yes" người dùng yêu cầu (ở đây thể hiện qua có/
+không có cờ lỗi, thay vì 1 field Y/N riêng — ý nghĩa tương đương: không có
+cờ lỗi = đã xong, có cờ lỗi = chưa xong, đang tự thử lại). UI hiện badge
+⚠️ ngay dưới dòng ghi chú khi có cờ, ghi rõ giờ lỗi gần nhất + nội dung lỗi.
+
+### C. LỖI THẬT đã vá (audit chéo LẦN 2, trước deploy): race giữa job "Lên Lịch Áp Giá" và "❌ Hủy Lịch"
+
+Trước khi merge mục A/B, cho 3 agent audit độc lập chạy song song (code/
+nghiệp vụ, Playwright lái qua route THẬT không mock, bảo mật/phá quyền).
+Agent soát code phát hiện 1 lỗi race **tiền tồn tại** (không do mục A/B gây
+ra, nhưng cùng file vừa sửa): job "📅 Lên Lịch Áp Giá"
+(`dsmartAutoApplyScheduledPrices.js`) ghi thẳng giá vào CSPRICE dựa trên
+snapshot đọc TRƯỚC khi giành khoá `withAppLock`, KHÔNG đọc lại (fresh) trạng
+thái NGAY TRONG khoá như job "🔁 Tự Động Xoá" sibling đã làm (xem mục 6o).
+Nếu `POST /entries/:id/cancel-schedule` (route "❌ Hủy Lịch", KHÔNG giành
+khoá theo cặp CUST_ID/SKU_ID) chạy ĐÚNG LÚC job đang chờ giành khoá, job vẫn
+ghi giá THẬT vào CSPRICE dù lịch đã bị hủy — tạo 1 dòng giá "ma" trên
+CSPRICE mà mirror nội bộ KHÔNG theo dõi được (vẫn báo CANCELLED).
+
+**Cách vá**: cả 2 phía — job đọc lại (fresh) trạng thái entry NGAY TRONG
+khoá trước khi gọi `insertWholesalePrice()`, bỏ qua nếu KHÔNG còn SCHEDULED/
+chưa tới hạn (cùng khuôn job Xoá); route Hủy Lịch nay giành ĐÚNG khoá
+`dsmartWholesalePrice:${custId}:${skuId}` trước khi hủy (cùng khuôn PATCH
+Sửa/Xoá tay).
+
+**Test**: thêm 2 kịch bản mới — (1) mô phỏng ĐÚNG race (tạm thay
+`getAllForCollection()` để giả lập "❌ Hủy Lịch" chạy ĐÚNG lúc job đang cầm
+snapshot cũ) — xác nhận job BỎ QUA (không ghi gì vào CSPRICE), entry vẫn
+giữ CANCELLED; đã tự kiểm chứng kịch bản này THẬT SỰ FAIL trên code cũ (qua
+`git stash`) trước khi xác nhận PASS sau khi vá; (2) xác nhận route Hủy
+Lịch nay giành đúng khoá cặp CUST_ID/SKU_ID. 82/82 pass (file
+`test-dsmart-wholesale-price.js`), CSP sweep sạch, không lộ mật khẩu qua
+response/thông báo lỗi (đã thử XSS thật qua DOM Playwright — escapeHtml
+chặn đúng).
+
+Không cần thao tác deploy gì thêm ngoài copy code — không đổi
+`schema.sql`/biến môi trường/`dependencies` npm mới.
