@@ -10681,3 +10681,36 @@ chặn đúng).
 
 Không cần thao tác deploy gì thêm ngoài copy code — không đổi
 `schema.sql`/biến môi trường/`dependencies` npm mới.
+
+## 6q. LỖI THẬT đã vá: Nhập Hàng Loạt Kết Nối Siêu Thị có thể làm SẬP CẢ SERVER nếu CSDL hiccup (12/2026)
+
+Người dùng báo lỗi thật khi nhập hàng loạt 34 siêu thị lần đầu (file thật, đầy đủ host/mật khẩu): màn
+"🏬 Kết Nối Siêu Thị" lẫn "📡 Giám Sát Kết Nối" đều hiện "⛔ Đã có lỗi xảy ra, vui lòng thử lại sau" (thông
+báo CHUNG, ẩn chi tiết thật khi `NODE_ENV=production` — xem `lib/errorResponse.js`).
+
+**Nguyên nhân thật**: route `POST /store-connections/import` (Nhập Hàng Loạt Excel) đọc danh sách kết nối
+đã có (`storeConnStore.listRaw()`) để phân loại CREATE/UPDATE — dòng này nằm **NGOÀI** mọi `try/catch`
+trong route. Express 4.x (khác Express 5) KHÔNG tự bắt lỗi ném ra từ 1 route handler `async` — nếu
+`listRaw()` gặp sự cố đọc CSDL (hiccup/timeout mạng, thường gặp nhất ở LẦN GHI HÀNG LOẠT ĐẦU TIÊN sau khi
+mới khởi động server, pool kết nối chưa "ấm"), lỗi này trở thành 1 Promise bị reject mà KHÔNG ai `.catch()`
+— rơi thẳng vào `process.on('unhandledRejection')` (`lib/errorLogCapture.js`), vốn CHỦ Ý cho tiến trình
+Node **THOÁT HẲN** để PM2 tự khởi động lại (đúng thiết kế cho lỗi thật sự không lường trước, nhưng route
+này lẽ ra phải trả lỗi rõ ràng cho client thay vì làm sập cả server giữa 1 lượt nhập nhiều dòng). Vì sự cố
+xảy ra NGAY TRƯỚC vòng lặp (chưa ghi dòng nào), KHÔNG có siêu thị nào bị tạo dở dang — nhập lại bình
+thường sau khi deploy bản vá, không cần dọn dữ liệu gì.
+
+**Cách vá**: bọc `try/catch` quanh TOÀN BỘ thân route `POST /store-connections/import` (cùng khuôn mọi
+route khác trong file) — đã rà soát lại toàn bộ 24 route trong `routes/dsmartWholesalePrice.js`, xác nhận
+đây là route DUY NHẤT thiếu `try/catch` bao ngoài (các route khác, kể cả `POST /apply` dùng vòng lặp
+tương tự, đều đã bọc đúng từ đầu).
+
+**Test**: thêm 1 kịch bản mới — ép `storeConnStore.listRaw()` ném lỗi (mô phỏng hiccup CSDL thật) ngay
+trước vòng lặp, xác nhận route trả JSON lỗi 500 rõ ràng thay vì làm sập tiến trình; đã tự kiểm chứng kịch
+bản này THẬT SỰ làm sập tiến trình Node trên code cũ (qua `git stash`, log xác nhận `unhandledRejection`
+thật) trước khi xác nhận route trả lỗi gọn gàng sau khi vá. 83/83 pass, CSP sweep sạch.
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`/biến môi
+trường/`dependencies` npm mới. **Quan trọng**: nếu "📡 Giám Sát Kết Nối" vẫn báo lỗi SAU KHI đã deploy bản
+vá này, đó là dấu hiệu 1 vấn đề THẬT khác (không còn do route Nhập Hàng Loạt crash gây ảnh hưởng dây
+chuyền nữa) — xem log server thật (`pm2 logs vpdt --lines 100 --nostream`, tìm dòng bắt đầu bằng "⛔ GET
+/api/dsmart-price/connections/status lỗi:") để biết chính xác lỗi gì.
