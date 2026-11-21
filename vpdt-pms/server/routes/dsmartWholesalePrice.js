@@ -36,6 +36,12 @@ const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
+// Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại fan-out siêu thị lỗi mạng
+// (12/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở lib/dsmartPriceNotify.js/
+// lib/dsmartStoreFanOutRetryStore.js). CHỈ Áp Giá Mới (ghi THẬT, không phải nhánh tạo lịch SCHEDULED) +
+// Xoá — KHÔNG tính "✏️ Sửa" (người dùng xác nhận rõ phạm vi).
+const { notifyDsmartPriceApplyBatch, notifyDsmartPriceDeleteBatch } = require('../lib/dsmartPriceNotify');
+const retryQueueStore = require('../lib/dsmartStoreFanOutRetryStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -235,6 +241,9 @@ router.delete('/store-connections/:id', async (req, res) => {
     // Đóng luôn pool kết nối đang cache (nếu có) theo đúng id này — audit chéo 12/2026 phát hiện xoá
     // kết nối trước đây không dọn storePoolCache, treo pool lơ lửng tới khi server restart.
     await closeStorePool(id);
+    // Dọn luôn hàng đợi tự động thử lại (nếu có) cho đúng siêu thị vừa xoá — không còn kết nối nào để
+    // thử lại nữa (12/2026, xem lib/dsmartStoreFanOutRetryStore.js).
+    await retryQueueStore.removeByStoreId(id).catch(() => {});
     logDsmartPrice(req, 'DELETE_DSMART_STORE_CONNECTION', existing?.storeCode || String(id), `Xoá kết nối siêu thị "${existing?.storeName || ''}" (${existing?.storeCode || id})`);
     res.json({ ok: true });
   } catch (err) { sendCatchError(res, err, 'DELETE /api/dsmart-price/store-connections/:id'); }
@@ -691,7 +700,7 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
         await createForCollection('dsmartWholesalePriceEntries', () => entry);
         return { entryId: entry.id, overwritten: wasOverwrite, storeResults, storeFanOutError };
       });
-      results.push({ custId, skuId, success: true, entryId, overwritten, storeResults, storeFanOutError });
+      results.push({ custId, skuId, success: true, entryId, overwritten, price, frDate, toDate, storeResults, storeFanOutError });
     } catch (err) {
       results.push({ custId, skuId, success: false, error: err instanceof DsmartConfigError ? err.message : (err.message || 'Lỗi không xác định') });
       // Lỗi kết nối/cấu hình (DsmartConfigError) sẽ LẶP LẠI y hệt cho mọi dòng còn lại — dừng sớm thay vì
@@ -708,6 +717,22 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
   const overwriteCount = results.filter(r => r.success && r.overwritten).length;
   const scheduledCount = results.filter(r => r.success && r.scheduled).length;
   logDsmartPrice(req, 'INSERT_DSMART_PRICE', sourceFileName || 'reuse', `Thêm giá bán buôn: ${successCount}/${rows.length} dòng thành công (${sourceAction})${overwriteCount ? `, trong đó ${overwriteCount} dòng GHI ĐÈ giá đã có` : ''}${scheduledCount ? `, trong đó ${scheduledCount} dòng ĐÃ LÊN LỊCH (chưa áp dụng ngay)` : ''}`);
+
+  // Email thông báo Áp Giá thành công + hàng đợi tự động thử lại (12/2026) — CHỈ các dòng ĐÃ GHI THẬT
+  // ngay (không tính dòng chỉ tạo lịch SCHEDULED, vì CHƯA ghi gì vào CSPRICE). KHÔNG await (không chặn
+  // response trả về người dùng bằng thời gian gửi SMTP thật) — lỗi gửi mail tự log cảnh báo bên trong,
+  // không ảnh hưởng gì tới việc Áp Giá đã ghi CSPRICE thành công ở trên.
+  const appliedItems = results.filter(r => r.success && !r.scheduled);
+  if (appliedItems.length) {
+    for (const it of appliedItems) {
+      retryQueueStore.enqueueFailedStores({
+        storeResults: it.storeResults, action: 'APPLY', entryId: it.entryId, custId: it.custId, skuId: it.skuId,
+        payload: { custId: it.custId, skuId: it.skuId, price: it.price, frDate: it.frDate, toDate: it.toDate }
+      }).catch(() => {});
+    }
+    notifyDsmartPriceApplyBatch({ mode: 'MANUAL', actor: req.freshUser.username, items: appliedItems }).catch(() => {});
+  }
+
   res.json({ ok: true, results, successCount, failCount: results.length - successCount, scheduledCount });
 });
 
@@ -806,6 +831,15 @@ router.post('/entries/:id/delete', async (req, res) => {
       };
     }));
     logDsmartPrice(req, 'DELETE_DSMART_PRICE', String(id), `Xoá giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
+
+    // Email thông báo Xoá thành công + hàng đợi tự động thử lại (12/2026) — KHÔNG await (không chặn
+    // response bằng thời gian gửi SMTP thật).
+    retryQueueStore.enqueueFailedStores({
+      storeResults, action: 'DELETE', entryId: updated.id, custId: updated.custId, skuId: updated.skuId,
+      payload: { dsmartKey: updated.dsmartKey }
+    }).catch(() => {});
+    notifyDsmartPriceDeleteBatch({ mode: 'MANUAL', actor: req.freshUser.username, items: [{ custId: updated.custId, skuId: updated.skuId, storeResults, storeFanOutError }] }).catch(() => {});
+
     res.json({ ok: true, item: updated, storeResults, storeFanOutError });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/entries/:id/delete'); }
 });

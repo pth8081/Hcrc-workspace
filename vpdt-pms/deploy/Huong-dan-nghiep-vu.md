@@ -10792,3 +10792,75 @@ name..."), xác nhận `ho.ok=true` (không bị kéo theo), `stores=[]`, `store
 Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — **nhưng bắt buộc phải chạy thêm
 script SQL tạo bảng ở trên (1 lần duy nhất) thì tính năng mới thật sự hoạt động được**, khác các lần
 trước chỉ cần copy code.
+
+## 6s. Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại khi mất kết nối siêu thị (12/2026)
+
+Người dùng yêu cầu: **"Tôi muốn làm là hệ thống gửi email tự động. Nếu mà khi nào up giá thành công thì
+nó sẽ gửi email... và khi xóa thành công thì nó cũng gửi email xóa tự động"** — xác nhận phạm vi qua
+trao đổi: CHỈ Áp Giá Mới (ghi THẬT, không tính nhánh chỉ tạo lịch SCHEDULED) + Xoá, **KHÔNG tính thao
+tác "✏️ Sửa"**; áp dụng cho CẢ thao tác tay (routes/dsmartWholesalePrice.js) lẫn 2 job tự động (Lên Lịch
+Áp Giá/Tự Xoá Khi Hết Hạn); người nhận = **1 danh sách email CỐ ĐỊNH do admin tự cấu hình** (không phải
+email người tạo/người thao tác); gửi **NGAY 1 email/lượt** (không gộp theo ngày) — nhưng "1 lượt" = 1
+LẦN GỌI route/job (có thể gồm nhiều dòng/mục cùng lúc, VD nhập file Excel hàng trăm dòng, hoặc job tự
+động áp/xoá nhiều dòng đến hạn cùng lúc) **GỘP thành 1 email DUY NHẤT**, không spam theo từng dòng.
+
+Người dùng hỏi thêm 2 việc, xác nhận cả 2 làm luôn trong đợt này:
+1. **"...có thông báo là siêu thị nào đã được áp giá, siêu thị nào đã được xóa giá nhé"** — email liệt
+   kê RÕ TÊN từng siêu thị (Mã Siêu Thị) đã đồng bộ thành công, không chỉ số lượng.
+2. **"...trong quá trình xử lý xóa thì hoặc là áp giá ấy, thì có thể lỗi do mạng ấy, thì có bao giờ là
+   bạn sẽ xử lý khi nó có kết nối trở lại"** — xác nhận hệ thống **CHƯA CÓ** cơ chế này trước đó (comment
+   trong `lib/dsmartSqlClient.js` ghi rõ "v1... chưa có hàng đợi/tự động thử lại") — xây mới hàng đợi tự
+   động thử lại theo TỪNG siêu thị.
+
+**Cơ chế**:
+
+1. **`lib/dsmartPriceNotify.js`** — `notifyDsmartPriceApplyBatch({mode, actor, items})`/
+   `notifyDsmartPriceDeleteBatch({mode, actor, items})`/`notifyDsmartPriceRetryBatch({items})`. Đọc
+   `emailConfig.dsmartPriceNotifyEmails` (AppData, màn Cấu Hình Email) — **danh sách rỗng = TẮT tính
+   năng** (mặc định, không gửi gì, không ghi log). Có cấu hình: gửi qua `lib/mailer.js::sendMail()` +
+   `lib/emailTemplate.js::buildNotificationEmailHtml()` (cùng khuôn `jobs/licenseExpiryReminder.js`),
+   liệt kê từng mục kèm `formatStoreBreakdown()` (tên siêu thị đã OK + tên siêu thị đang chờ thử lại,
+   chặn trần 20 tên/mục và 50 mục/email tránh email quá dài). Lỗi gửi mail CHỈ ghi System Log WARNING,
+   KHÔNG BAO GIỜ chặn/làm hỏng thao tác Áp Giá/Xoá đã ghi CSPRICE xong — gọi theo kiểu "fire-and-forget"
+   (không `await`) ngay tại route để không làm chậm phản hồi HTTP bằng thời gian gửi SMTP thật.
+
+2. **`lib/dsmartStoreFanOutRetryStore.js`** (bảng mới `dbo.DsmartStoreFanOutRetryQueue`, xem
+   `sql/schema.sql`) — khi 1 siêu thị lỗi lúc fan-out (storeResults có `ok:false`), `enqueueFailedStores()`
+   ghi lại ĐÚNG siêu thị + thao tác (APPLY/DELETE) + dữ liệu cần thiết để thử lại, UPSERT theo khoá
+   (StoreId, CustId, SkuId, Action) — lỗi lặp lại cùng tổ hợp CHỈ cập nhật đè (tăng Attempts), không tạo
+   dòng trùng.
+
+3. **`lib/dsmartSqlClient.js::retryStoreFanOut(storeId, action, payload)`** (hàm mới, không đụng logic
+   fan-out cũ) — thử lại ĐÚNG 1 thao tác trên ĐÚNG 1 siêu thị, tái dùng nguyên `upsertPriceOnPool()`/
+   `deletePriceOnPool()` đã có. Siêu thị đã bị xoá/tắt -> trả `skipped:true`, không ném lỗi.
+
+4. **`jobs/dsmartRetryStoreFanOutQueue.js`** (job mới, đăng ký trong `server.js`, cùng nhịp 10 phút/lần
+   như 2 job tự động Áp Giá/Xoá Giá) — đọc toàn bộ hàng đợi, thử lại từng dòng: thành công -> xoá khỏi
+   hàng đợi + gộp vào 1 email "đã đồng bộ bổ sung thành công" DUY NHẤT/lượt chạy; siêu thị đã xoá/tắt ->
+   tự dọn hàng đợi; vẫn lỗi -> GIỮ NGUYÊN, ghi lại lỗi gần nhất, tự thử lại lượt sau — KHÔNG giới hạn số
+   lần thử (giống 2 job tự động Áp Giá/Xoá Giá hiện có).
+
+5. **Màn "📧 Cấu Hình Email"** (Hệ Thống > Quản Trị) — thêm 1 ô **"Email Nhận Thông Báo Áp Giá/Xoá Giá
+   Bán Buôn DSmart"** (cách nhau dấu phẩy, để trống = tắt), đặt cạnh khối "Cảnh Báo Ổ Đĩa Máy Chủ" (cùng
+   khuôn 1 ô duy nhất, không có "số ngày" vì đây là sự kiện tức thời, không phải nhắc trước hạn).
+
+**Điểm nối vào hệ thống hiện có (4 chỗ)**: `POST /apply` (chỉ nhánh ghi THẬT ngay, không tính nhánh
+`schedule=true` + Ngày Bắt Đầu tương lai — nhánh đó CHƯA ghi gì vào CSPRICE nên không báo "thành công"),
+`POST /entries/:id/delete`, `jobs/dsmartAutoApplyScheduledPrices.js` (khi entry SCHEDULED chuyển ACTIVE),
+`jobs/dsmartAutoDeleteExpiredPrices.js` (khi tự động xoá hết hạn) — cả 2 job GỘP mọi entry xử lý trong
+CÙNG 1 lượt chạy thành 1 email duy nhất, không phải 1 email/entry.
+
+**DB_ENCRYPT/kết nối SQL Server tới DSmart16/siêu thị**: người dùng hỏi riêng về việc có nên bật mã hoá
+kết nối (`encrypt: true`) hay không — xác nhận hệ thống ĐÃ chạy qua VPN có IPsec + ACL, nên **giữ nguyên
+`encrypt: false` như hiện tại**, không đổi gì ở đợt này (quyết định hoãn, không phải quên).
+
+**Test**: `tests/test-dsmart-price-notify-retry.js` (mới, 24 kịch bản — chạy mã nguồn THẬT của cả 4 lib/
+job trên qua 1 "đa máy chủ" SQL ảo trong bộ nhớ, không stub) + 10 kịch bản mới thêm vào
+`tests/test-dsmart-wholesale-price.js` (test tầng route/job gọi đúng hàm/đúng dữ liệu, 2 lib trên được
+stub). Tổng 94/94 + 24/24 pass, CSP sweep sạch.
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — **nhưng bắt buộc phải chạy thêm
+`sql/schema.sql` (1 lần, script tự bọc `IF OBJECT_ID(...) IS NULL`, an toàn chạy nhiều lần) để tạo bảng
+`dbo.DsmartStoreFanOutRetryQueue` mới thì hàng đợi tự động thử lại mới hoạt động được** — phần email vẫn
+hoạt động bình thường dù chưa chạy script này (chỉ riêng tính năng tự động thử lại sẽ không ghi được gì
+cho tới khi bảng được tạo).

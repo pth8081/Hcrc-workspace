@@ -15,6 +15,11 @@ const { getRawConfig } = require('../lib/dsmartPriceConfigStore');
 const { deleteWholesalePrice } = require('../lib/dsmartSqlClient');
 const { getAllForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+// Email thông báo Xoá thành công + hàng đợi tự động thử lại (12/2026, theo yêu cầu người dùng — xem chú
+// thích đầy đủ ở lib/dsmartPriceNotify.js/lib/dsmartStoreFanOutRetryStore.js). GỘP 1 email DUY NHẤT cho
+// CẢ LƯỢT CHẠY, không phải 1 email/dòng.
+const { notifyDsmartPriceDeleteBatch } = require('../lib/dsmartPriceNotify');
+const retryQueueStore = require('../lib/dsmartStoreFanOutRetryStore');
 
 function todayDateOnlyIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -56,6 +61,9 @@ async function runDsmartAutoDeleteExpiredPrices() {
   // lý do thật chỉ ra console.error (đội vận hành xem được System Log trên UI nhưng KHÔNG có quyền truy
   // cập console server) — lưu thêm vài dòng lỗi đầu tiên vào mô tả để đội IT tự chẩn đoán ngay trên UI.
   const errorDetails = [];
+  // deletedItems (12/2026): gom lại TẤT CẢ dòng xoá thành công trong LƯỢT CHẠY này — gửi GỘP 1 email
+  // thông báo DUY NHẤT ở cuối job, không phải 1 email/dòng.
+  const deletedItems = [];
   for (const e of due) {
     try {
       // LỖI THẬT đã vá (audit chéo trước deploy, 12/2026): job này TRƯỚC ĐÂY gọi deleteWholesalePrice()
@@ -75,15 +83,20 @@ async function runDsmartAutoDeleteExpiredPrices() {
         const freshList = await getAllForCollection('dsmartWholesalePriceEntries');
         const fresh = freshList.find(x => x.id === e.id);
         if (!fresh || fresh.status !== 'ACTIVE' || !dueForAutoDelete(fresh, now, cfg)) return false;
-        await deleteWholesalePrice({ dsmartKey: fresh.dsmartKey });
+        const { storeResults, storeFanOutError } = await deleteWholesalePrice({ dsmartKey: fresh.dsmartKey });
         await withLockedRecordForCollection('dsmartWholesalePriceEntries', fresh.id, (item) => {
           if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
           const nowIso = now.toISOString();
           return {
             ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso, lastAutoDeleteError: null, lastAutoDeleteAt: null,
-            history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso }]
+            history: [...(item.history || []), { action: 'DELETE', mode: 'AUTO', actor: null, at: nowIso, storeResults }]
           };
         });
+        deletedItems.push({ custId: fresh.custId, skuId: fresh.skuId, entryId: fresh.id, storeResults, storeFanOutError });
+        retryQueueStore.enqueueFailedStores({
+          storeResults, action: 'DELETE', entryId: fresh.id, custId: fresh.custId, skuId: fresh.skuId,
+          payload: { dsmartKey: fresh.dsmartKey }
+        }).catch(() => {});
         return true;
       });
       if (acted) deletedCount++;
@@ -113,6 +126,9 @@ async function runDsmartAutoDeleteExpiredPrices() {
       description: `Tự động xoá giá bán buôn hết hạn: ${deletedCount} thành công, ${errorCount} lỗi${errorNote}`,
       status: errorCount && !deletedCount ? 'FAILED' : 'SUCCESS'
     }).catch(() => {});
+  }
+  if (deletedItems.length) {
+    notifyDsmartPriceDeleteBatch({ mode: 'AUTO', actor: null, items: deletedItems }).catch(() => {});
   }
   return { skipped: false, deletedCount, errorCount, checked: due.length };
 }

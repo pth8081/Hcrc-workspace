@@ -9603,7 +9603,10 @@ async function saveEmailConfig(e) {
     submissionOverdueDays: parseDaysListInput(document.getElementById('cfgSubmissionOverdueDays').value),
     submissionOverdueCcEmails: parseEmailListInput(document.getElementById('cfgSubmissionOverdueCc').value),
     contractOverdueDays: parseDaysListInput(document.getElementById('cfgContractOverdueDays').value),
-    contractOverdueCcEmails: parseEmailListInput(document.getElementById('cfgContractOverdueCc').value)
+    contractOverdueCcEmails: parseEmailListInput(document.getElementById('cfgContractOverdueCc').value),
+    // dsmartPriceNotifyEmails (12/2026, Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn" — xem lib/dsmartPriceNotify.js)
+    // — để trống = TẮT tính năng gửi email thông báo Áp Giá/Xoá Giá (mặc định).
+    dsmartPriceNotifyEmails: parseEmailListInput(document.getElementById('cfgDsmartPriceNotifyEmails').value)
   };
   const saved = await syncStorage('emailConfig', { baseline: prevEmailConfig });
   if (!saved) { DB.emailConfig = prevEmailConfig; return; }
@@ -9667,6 +9670,7 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgSubmissionOverdueCc').value = (DB.emailConfig.submissionOverdueCcEmails || []).join(', ');
   document.getElementById('cfgContractOverdueDays').value = (DB.emailConfig.contractOverdueDays || []).join(', ');
   document.getElementById('cfgContractOverdueCc').value = (DB.emailConfig.contractOverdueCcEmails || []).join(', ');
+  document.getElementById('cfgDsmartPriceNotifyEmails').value = (DB.emailConfig.dsmartPriceNotifyEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));

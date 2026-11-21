@@ -200,6 +200,26 @@ stubModule('lib/dsmartStorePriceConnectionsStore', {
 const SYSTEM_LOGS = [];
 stubModule('lib/systemLogStore', { insertSystemLog: async (entry) => { SYSTEM_LOGS.push(entry); return entry; } });
 
+// ===== Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại (12/2026) — logic THẬT của
+// lib/dsmartPriceNotify.js (nội dung email, gộp/giới hạn...) đã test riêng + đầy đủ ở
+// tests/test-dsmart-price-notify-retry.js — ở ĐÂY chỉ cần mock ĐỦ hành vi để test TẦNG ROUTE/JOB gọi
+// ĐÚNG hàm với ĐÚNG dữ liệu (chỉ Áp Giá Mới ghi THẬT + Xoá, KHÔNG tính "✏️ Sửa"; GỘP đúng 1 lần/lượt
+// gọi, không phải 1 lần/dòng). =====
+let NOTIFY_APPLY_CALLS = [];
+let NOTIFY_DELETE_CALLS = [];
+let NOTIFY_RETRY_CALLS = [];
+stubModule('lib/dsmartPriceNotify', {
+  notifyDsmartPriceApplyBatch: async (args) => { NOTIFY_APPLY_CALLS.push(args); },
+  notifyDsmartPriceDeleteBatch: async (args) => { NOTIFY_DELETE_CALLS.push(args); },
+  notifyDsmartPriceRetryBatch: async (args) => { NOTIFY_RETRY_CALLS.push(args); }
+});
+let RETRY_QUEUE_ENQUEUE_CALLS = [];
+let RETRY_QUEUE_REMOVE_BY_STORE_CALLS = [];
+stubModule('lib/dsmartStoreFanOutRetryStore', {
+  enqueueFailedStores: async (args) => { RETRY_QUEUE_ENQUEUE_CALLS.push(args); },
+  removeByStoreId: async (storeId) => { RETRY_QUEUE_REMOVE_BY_STORE_CALLS.push(storeId); }
+});
+
 const ADMIN = { username: 'admin1', name: 'Quản Trị', perms: { admin: true }, active: true };
 const IT_PRICE_WRITER = { username: 'itw1', name: 'IT Giá Bán Buôn', perms: { itSupportPriceWriteDsmart: true }, active: true };
 const IT_NO_PERM = { username: 'itn1', name: 'IT Không Quyền', perms: { itManage: true }, active: true };
@@ -1422,6 +1442,111 @@ async function main() {
     const result = await runDsmartAutoApplyScheduledPrices();
     assert.strictEqual(result.appliedCount, 1);
     assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'insert', custId: 'TSI6', skuId: 'SK6', targetStoreIds: [101] });
+  });
+
+  // ===== Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại (12/2026) — xem chú thích
+  // ở khối stub lib/dsmartPriceNotify/lib/dsmartStoreFanOutRetryStore đầu file. Ở ĐÂY chỉ test ĐÚNG ĐIỂM
+  // GỌI (route/job gọi đúng hàm, đúng số lần, đúng dữ liệu) — nội dung email thật đã test riêng ở
+  // tests/test-dsmart-price-notify-retry.js. =====
+  await test('POST /apply (tay, áp dụng NGAY): gọi notifyDsmartPriceApplyBatch() ĐÚNG 1 LẦN kèm đủ dữ liệu, enqueueFailedStores() cho dòng vừa áp', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = []; NOTIFY_APPLY_CALLS = []; RETRY_QUEUE_ENQUEUE_CALLS = [];
+    const res = await apiPost('/apply', { rows: [{ custId: 'NOTI1', skuId: 'SKN1', price: 111, frDate: '2026-01-01', toDate: '2026-12-31' }] });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(NOTIFY_APPLY_CALLS.length, 1, 'phải gọi đúng 1 lần/lượt request');
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].mode, 'MANUAL');
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].actor, ADMIN.username);
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].items.length, 1);
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].items[0].custId, 'NOTI1');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS.length, 1, 'phải gọi enqueueFailedStores() cho dòng vừa áp (dù storeResults rỗng/không lỗi)');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].action, 'APPLY');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].custId, 'NOTI1');
+  });
+
+  await test('POST /apply (tay, NHIỀU dòng 1 lượt): GỘP đúng 1 email DUY NHẤT (không phải 1 email/dòng)', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = []; NOTIFY_APPLY_CALLS = [];
+    const res = await apiPost('/apply', { rows: [
+      { custId: 'NOTIB1', skuId: 'SK1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' },
+      { custId: 'NOTIB2', skuId: 'SK2', price: 2, frDate: '2026-01-01', toDate: '2026-12-31' }
+    ] });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(NOTIFY_APPLY_CALLS.length, 1, 'NHIỀU dòng trong 1 request CHỈ gửi 1 email, không spam theo từng dòng');
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].items.length, 2);
+  });
+
+  await test('POST /apply schedule=true + Ngày Bắt Đầu TƯƠNG LAI: KHÔNG gọi notify (chưa ghi gì vào CSPRICE)', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = []; NOTIFY_APPLY_CALLS = [];
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const res = await apiPost('/apply', { rows: [{ custId: 'NOTISCHED', skuId: 'SKS', price: 1, frDate: futureDate, toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(NOTIFY_APPLY_CALLS.length, 0, 'dòng chỉ tạo lịch SCHEDULED chưa ghi CSPRICE -> không báo "áp giá thành công"');
+  });
+
+  await test('POST /entries/:id/delete: gọi notifyDsmartPriceDeleteBatch() ĐÚNG 1 LẦN + enqueueFailedStores()', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'NOTIDEL1', skuId: 'SKD1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }] });
+    const entry = ENTRIES.find(e => e.custId === 'NOTIDEL1');
+    NOTIFY_DELETE_CALLS = []; RETRY_QUEUE_ENQUEUE_CALLS = []; // reset SAU khi setup (apply ở trên cũng tự gọi enqueue/notify riêng, không tính vào đây)
+    const res = await apiPost(`/entries/${entry.id}/delete`, {});
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(NOTIFY_DELETE_CALLS.length, 1);
+    assert.strictEqual(NOTIFY_DELETE_CALLS[0].mode, 'MANUAL');
+    assert.strictEqual(NOTIFY_DELETE_CALLS[0].items.length, 1);
+    assert.strictEqual(NOTIFY_DELETE_CALLS[0].items[0].custId, 'NOTIDEL1');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS.length, 1);
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].action, 'DELETE');
+  });
+
+  await test('jobs/dsmartAutoApplyScheduledPrices: NHIỀU entry SCHEDULED cùng đến hạn 1 lượt chạy -> GỘP đúng 1 email DUY NHẤT', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    ENTRIES.push(
+      { id: 90001, custId: 'NOTIJOB1', skuId: 'SKJ1', price: 1, frDate: today, toDate: '2099-12-31', status: 'SCHEDULED', targetStoreIds: null, history: [] },
+      { id: 90002, custId: 'NOTIJOB2', skuId: 'SKJ2', price: 2, frDate: today, toDate: '2099-12-31', status: 'SCHEDULED', targetStoreIds: null, history: [] }
+    );
+    NOTIFY_APPLY_CALLS = []; RETRY_QUEUE_ENQUEUE_CALLS = []; // reset SAU khi chuẩn bị dữ liệu (không tính lời gọi nào khác)
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 2);
+    assert.strictEqual(NOTIFY_APPLY_CALLS.length, 1, '2 entry cùng đến hạn 1 lượt chạy CHỈ gửi 1 email, không spam theo từng dòng');
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].mode, 'AUTO_SCHEDULED');
+    assert.strictEqual(NOTIFY_APPLY_CALLS[0].items.length, 2);
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS.length, 2, 'enqueueFailedStores() gọi riêng cho TỪNG entry (không gộp)');
+  });
+
+  await test('jobs/dsmartAutoDeleteExpiredPrices: NHIỀU entry hết hạn cùng lượt chạy -> GỘP đúng 1 email DUY NHẤT', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = [];
+    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: 0, autoDeleteMinute: 0 };
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [
+      { custId: 'NOTIDJ1', skuId: 'SKDJ1', price: 1, frDate: '2020-01-01', toDate: yesterday },
+      { custId: 'NOTIDJ2', skuId: 'SKDJ2', price: 2, frDate: '2020-01-01', toDate: yesterday }
+    ] });
+    NOTIFY_DELETE_CALLS = []; RETRY_QUEUE_ENQUEUE_CALLS = []; // reset SAU khi setup (apply ở trên cũng tự gọi enqueue/notify riêng, không tính vào đây)
+    delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
+    const { runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices');
+    const result = await runDsmartAutoDeleteExpiredPrices();
+    assert.strictEqual(result.deletedCount, 2);
+    assert.strictEqual(NOTIFY_DELETE_CALLS.length, 1, '2 entry cùng hết hạn 1 lượt chạy CHỈ gửi 1 email, không spam theo từng dòng');
+    assert.strictEqual(NOTIFY_DELETE_CALLS[0].mode, 'AUTO');
+    assert.strictEqual(NOTIFY_DELETE_CALLS[0].items.length, 2);
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS.length, 2, 'enqueueFailedStores() gọi riêng cho TỪNG entry (không gộp)');
+    AUTO_DELETE_CFG = { autoDeleteEnabled: false, autoDeleteHour: 23, autoDeleteMinute: 0 };
+  });
+
+  await test('DELETE /store-connections/:id: dọn luôn hàng đợi tự động thử lại của ĐÚNG siêu thị vừa xoá', async () => {
+    CURRENT_USER = ADMIN.username;
+    RETRY_QUEUE_REMOVE_BY_STORE_CALLS = [];
+    STORE_CONNS = [{ id: 501, storeCode: 'DELCONN1', storeName: 'Siêu Thị Xoá', host: 'h', port: 1433, database: 'd', user: 'u', passwordEnc: 'enc', enabled: true }];
+    const res = await apiDelete('/store-connections/501');
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(RETRY_QUEUE_REMOVE_BY_STORE_CALLS, [501]);
   });
 
   await stopServer();
