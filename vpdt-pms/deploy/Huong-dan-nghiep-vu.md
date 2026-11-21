@@ -10496,6 +10496,28 @@ không phải lộ cho ai khác. UI có dòng cảnh báo đỏ nhắc admin t�
 khỏi máy sau khi dùng xong — không có cách nào loại bỏ hoàn toàn rủi ro
 này nếu vẫn cần nhập hàng loạt qua Excel, chỉ có thể nhắc nhở thao tác.
 
+### C2. "🏬 Kết Nối Siêu Thị" — Xuất Excel (12/2026)
+
+Người dùng yêu cầu thêm: **"xuất file Excel bằng đúng thông tin, đúng
+file nhập ấy"** — thêm nút **"📤 Xuất Excel (Danh Sách Hiện Có)"** cạnh
+2 nút "➕ Thêm Siêu Thị"/"📂 Nhập Hàng Loạt (Excel)" ở mục C, CHỈ admin.
+Bấm vào tải ngay `GET /api/dsmart-price/store-connections/export` — file
+`.xlsx` ĐÚNG khuôn 7 cột của file nhập (Mã Siêu Thị, Tên Siêu Thị, Host,
+Port, Tên CSDL, Tài Khoản, Mật Khẩu), liệt kê TOÀN BỘ kết nối siêu thị
+đang có (cả đang Bật lẫn đang Tắt).
+
+**Mật Khẩu LUÔN BỎ TRỐNG trong file xuất** (khác bản đầu tiên — ban đầu
+tôi để giải mã về chữ thường cho tự nhập lại được ngay, nhưng sau khi
+tôi nêu rủi ro lộ mật khẩu hạ tầng, người dùng xác nhận lại: **"xuất
+file mật khẩu phải mã hoá nhé. Còn nếu không mã hoá thì clear dòng mật
+khẩu luôn"** — chọn phương án bỏ trống, đơn giản và an toàn hơn hẳn so
+với mã hoá-rồi-phải-giải-mã-lúc-nhập). Nhờ cơ chế ĐÃ CÓ SẴN ở "📂 Nhập
+Hàng Loạt" (Mật Khẩu để trống ở dòng UPDATE = giữ nguyên mật khẩu cũ),
+nhập lại ĐÚNG file xuất này cho các Mã Siêu Thị ĐÃ CÓ vẫn tự giữ nguyên
+mật khẩu hiện tại — KHÔNG mất kết nối; chỉ dòng Mã Siêu Thị MỚI (chưa
+từng có trong hệ thống) mới cần tự gõ thêm Mật Khẩu trước khi nhập. File
+vẫn không lưu lại trên server (chỉ ghi thẳng vào response).
+
 ### Test (phần C)
 
 - `tests/test-dsmart-wholesale-price.js` — thêm 11 kịch bản: quyền admin

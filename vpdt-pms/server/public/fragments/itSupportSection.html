@@ -352,7 +352,14 @@
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" data-op="toggleDsmartStoreConnAddForm" id="btnDsmartStoreConnAddToggle" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">➕ Thêm Siêu Thị</button>
           <button type="button" data-op="toggleDsmartStoreConnImportForm" id="btnDsmartStoreConnImportToggle" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📂 Nhập Hàng Loạt (Excel)</button>
+          <!-- "📤 Xuất Excel" (12/2026, theo yêu cầu người dùng: "xuất file Excel bằng đúng thông tin, đúng
+               file nhập ấy") — tải NGUYÊN danh sách kết nối hiện có, ĐÚNG khuôn file nhập — Mật Khẩu LUÔN
+               BỎ TRỐNG (người dùng xác nhận lại: "xuất file mật khẩu phải mã hoá nhé. Còn nếu không mã
+               hoá thì clear dòng mật khẩu luôn") — xem chú thích đầy đủ tại
+               buildStoreConnectionExportWorkbook(), lib/dsmartStoreConnectionFileParser.js. -->
+          <a href="/api/dsmart-price/store-connections/export" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">📤 Xuất Excel (Danh Sách Hiện Có)</a>
         </div>
+        <div class="text-[11px] text-gray-500">ℹ️ File xuất ở trên KHÔNG chứa Mật Khẩu (bỏ trống vì lý do an toàn). Nhập lại đúng file này: Mã Siêu Thị ĐÃ CÓ sẽ tự giữ nguyên mật khẩu hiện tại (không mất kết nối); Mã Siêu Thị MỚI cần tự gõ thêm Mật Khẩu.</div>
         <div id="dsmartStoreConnFormWrap" class="hidden bg-gray-50 border rounded p-3"></div>
 
         <!-- "📂 Nhập Hàng Loạt" (12/2026, theo yêu cầu người dùng — vài chục siêu thị, nhập tay từng dòng

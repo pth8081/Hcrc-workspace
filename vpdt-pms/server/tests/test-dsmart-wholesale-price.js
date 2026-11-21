@@ -293,6 +293,11 @@ async function apiGetStoreConnTemplate() {
   if (res.status !== 200) return { status: res.status, body: await res.json() };
   return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) };
 }
+async function apiGetStoreConnExport() {
+  const res = await fetch(baseUrl + '/store-connections/export');
+  if (res.status !== 200) return { status: res.status, body: await res.json() };
+  return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) };
+}
 
 async function main() {
   await startServer();
@@ -1185,6 +1190,47 @@ async function main() {
     await wb.xlsx.load(res.buf);
     const headerRow = wb.worksheets[0].getRow(1).values.slice(1).map(String);
     assert.deepStrictEqual(headerRow, ['Mã Siêu Thị', 'Tên Siêu Thị', 'Host', 'Port', 'Tên CSDL', 'Tài Khoản', 'Mật Khẩu']);
+  });
+
+  // "📤 Xuất Excel (Danh Sách Hiện Có)" (12/2026, theo yêu cầu người dùng: "xuất file Excel bằng đúng
+  // thông tin, đúng file nhập ấy" — sau đó xác nhận lại: "xuất file mật khẩu phải mã hoá nhé. Còn nếu
+  // không mã hoá thì clear dòng mật khẩu luôn") — ĐÚNG khuôn 7 cột file nhập, Mật Khẩu LUÔN BỎ TRỐNG
+  // (kể cả dòng ĐÃ CÓ mật khẩu lưu sẵn) — không bao giờ xuất mật khẩu ra file.
+  await test('GET /store-connections/export: không phải admin -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiGetStoreConnExport();
+    assert.strictEqual(res.status, 403);
+  });
+  await test('GET /store-connections/export: admin -> file xlsx đúng 7 cột, đúng dữ liệu kết nối hiện có, Mật Khẩu LUÔN BỎ TRỐNG (kể cả dòng ĐÃ có mật khẩu lưu sẵn)', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [
+      { id: 301, storeCode: 'EXP1', storeName: 'Siêu Thị Xuất 1', host: 'h1', port: 1433, database: 'd1', user: 'u1', passwordEnc: 'mat-khau-1', enabled: true },
+      { id: 302, storeCode: 'EXP2', storeName: 'Siêu Thị Xuất 2', host: 'h2', port: 1434, database: 'd2', user: 'u2', passwordEnc: null, enabled: false }
+    ];
+    const res = await apiGetStoreConnExport();
+    assert.strictEqual(res.status, 200);
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buf);
+    const ws = wb.worksheets[0];
+    const headerRow = ws.getRow(1).values.slice(1).map(String);
+    assert.deepStrictEqual(headerRow, ['Mã Siêu Thị', 'Tên Siêu Thị', 'Host', 'Port', 'Tên CSDL', 'Tài Khoản', 'Mật Khẩu']);
+    const row1 = ws.getRow(2).values.slice(1);
+    assert.strictEqual(row1[0], 'EXP1');
+    assert.strictEqual(row1[6] || '', '', 'dòng CÓ mật khẩu lưu sẵn vẫn phải BỎ TRỐNG cột Mật Khẩu khi xuất');
+    const row2 = ws.getRow(3).values.slice(1);
+    assert.strictEqual(row2[0], 'EXP2');
+    assert.strictEqual(row2[6] || '', '');
+  });
+  await test('GET /store-connections/export: danh sách rỗng -> vẫn trả file xlsx chỉ có dòng tiêu đề (không lỗi)', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    const res = await apiGetStoreConnExport();
+    assert.strictEqual(res.status, 200);
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buf);
+    assert.strictEqual(wb.worksheets[0].rowCount, 1);
   });
 
   await test('POST /store-connections/preview: không phải admin -> 403', async () => {

@@ -98,4 +98,33 @@ async function buildStoreConnectionTemplateWorkbook() {
   return wb;
 }
 
-module.exports = { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, EXPECTED_HEADERS, MAX_ROWS };
+// buildStoreConnectionExportWorkbook(items): XUẤT danh sách kết nối siêu thị ĐANG CÓ, ĐÚNG khuôn 7 cột của
+// file nhập (EXPECTED_HEADERS) — theo yêu cầu người dùng: "xuất file Excel bằng đúng thông tin, đúng file
+// nhập ấy" — để backup/di chuyển dữ liệu mà không cần gõ tay lại hàng loạt siêu thị.
+//
+// Mật Khẩu LUÔN BỎ TRỐNG (12/2026, người dùng xác nhận lại sau khi tôi nêu rủi ro: "xuất file mật khẩu
+// phải mã hoá nhé. Còn nếu không mã hoá thì clear dòng mật khẩu luôn") — KHÔNG xuất mật khẩu dạng chữ
+// thường (khác hẳn file NHẬP, nơi rủi ro này được chấp nhận vì người dùng BẮT BUỘC phải gõ mật khẩu thật
+// để tạo kết nối mới). "Mã hoá" theo đúng nghĩa 2 chiều dùng lại được (decrypt lúc nhập) sẽ đổi hẳn khuôn
+// file nhập/mất tính tương thích — bỏ trống đơn giản và AN TOÀN HƠN, mà vẫn tự nhập lại ĐÚNG các cột
+// khác được: nhờ cơ chế ĐÃ CÓ SẴN ở /store-connections/import ("Mật Khẩu để trống ở dòng UPDATE = giữ
+// nguyên mật khẩu cũ", xem parseStoreConnectionFile()) — nhập lại chính file xuất này cho các Mã Siêu
+// Thị ĐÃ CÓ sẽ tự giữ nguyên mật khẩu hiện tại, KHÔNG mất kết nối; chỉ dòng Mã Siêu Thị MỚI (CREATE) mới
+// cần gõ tay thêm Mật Khẩu (hợp lý — siêu thị mới thì vốn chưa từng có mật khẩu nào để mang theo).
+async function buildStoreConnectionExportWorkbook(items) {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  ws.addRow(EXPECTED_HEADERS);
+  for (const it of items) {
+    ws.addRow([it.storeCode, it.storeName, it.host, it.port || 1433, it.database, it.user, '']);
+  }
+  ws.getColumn(1).width = 14; ws.getColumn(2).width = 24; ws.getColumn(3).width = 18;
+  ws.getColumn(4).width = 10; ws.getColumn(5).width = 16; ws.getColumn(6).width = 16; ws.getColumn(7).width = 20;
+  return wb;
+}
+
+module.exports = {
+  parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, buildStoreConnectionExportWorkbook,
+  EXPECTED_HEADERS, MAX_ROWS
+};

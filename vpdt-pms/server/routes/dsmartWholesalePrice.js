@@ -31,7 +31,7 @@ const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfi
 const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
-const { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook } = require('../lib/dsmartStoreConnectionFileParser');
+const { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, buildStoreConnectionExportWorkbook } = require('../lib/dsmartStoreConnectionFileParser');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -334,6 +334,28 @@ router.get('/store-connections/template', async (req, res) => {
   } catch (err) {
     console.error('GET /api/dsmart-price/store-connections/template lỗi:', err.message);
     res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// GET /store-connections/export (12/2026, theo yêu cầu người dùng: "xuất file Excel bằng đúng thông tin,
+// đúng file nhập ấy") — xuất TOÀN BỘ kết nối siêu thị ĐANG CÓ, ĐÚNG khuôn 7 cột file nhập. Mật Khẩu LUÔN
+// BỎ TRỐNG trong file xuất (người dùng xác nhận lại sau khi tôi nêu rủi ro: "xuất file mật khẩu phải mã
+// hoá nhé. Còn nếu không mã hoá thì clear dòng mật khẩu luôn" — xem chú thích đầy đủ ở
+// buildStoreConnectionExportWorkbook(), lib/dsmartStoreConnectionFileParser.js) — KHÔNG cần giải mã mật
+// khẩu ở đây nữa. File KHÔNG lưu lại trên server, chỉ ghi thẳng vào response.
+router.get('/store-connections/export', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới xuất được danh sách kết nối siêu thị' });
+  try {
+    const items = await storeConnStore.listRaw();
+    const wb = await buildStoreConnectionExportWorkbook(items);
+    logDsmartPrice(req, 'EXPORT_DSMART_STORE_CONNECTIONS', 'all', `Xuất danh sách kết nối siêu thị ra Excel (${items.length} dòng)`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Ket_Noi_Sieu_Thi_Xuat.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/dsmart-price/store-connections/export lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xuất file Excel' });
   }
 });
 
