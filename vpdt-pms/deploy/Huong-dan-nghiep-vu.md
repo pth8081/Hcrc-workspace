@@ -10850,6 +10850,35 @@ Người dùng hỏi thêm 2 việc, xác nhận cả 2 làm luôn trong đợt 
 `jobs/dsmartAutoDeleteExpiredPrices.js` (khi tự động xoá hết hạn) — cả 2 job GỘP mọi entry xử lý trong
 CÙNG 1 lượt chạy thành 1 email duy nhất, không phải 1 email/entry.
 
+**Kiểm tra lại đủ điều kiện TRƯỚC khi thử lại** (bổ sung sau khi người dùng xem lại thiết kế, nhắc rõ:
+"Bạn cần kiểm tra lại trước khi xóa đủ điều kiện... mã hàng, mã nhà cung cấp đúng thì mới xóa, cũng như
+là update giá mới mất mạng vậy. Mình phải kiểm tra... nếu mà nó chưa có cái giá mà đã add xuống rồi thì
+mới add"): dữ liệu ghi vào hàng đợi chỉ là 1 ẢNH CHỤP tại thời điểm lỗi — nếu người dùng tiếp tục thao
+tác (Sửa/Xoá/Thêm lại) cho ĐÚNG cặp đó TRƯỚC KHI job kịp thử lại, ảnh chụp cũ có thể đã LỖI THỜI. Vá:
+
+- **"✏️ Sửa" (`PATCH /entries/:id`) giờ CŨNG enqueue hàng đợi** (dùng chung `action='APPLY'`, KHÔNG gửi
+  email — vẫn đúng phạm vi email đã chốt) — nếu không, siêu thị mất mạng đúng lúc Sửa sẽ giữ MÃI giá cũ,
+  không bao giờ được đồng bộ lại ("cũng như là update giá mới mất mạng vậy").
+- **`jobs/dsmartRetryStoreFanOutQueue.js` đọc lại mirror MỚI NHẤT ngay trước khi thử mỗi dòng**
+  (`revalidateQueueItem()`):
+  - `APPLY`: entry tham chiếu (lưu `entryId` lúc enqueue) phải còn `ACTIVE` — nếu đã bị xoá/thay thế, BỎ
+    lượt thử này (không ghi đè dữ liệu cũ xuống siêu thị); nếu còn ACTIVE, LUÔN dùng giá/ngày MỚI NHẤT
+    của entry (không dùng ảnh chụp payload cũ) — tự bắt kịp nếu entry bị Sửa nhiều lần liên tiếp trong
+    lúc siêu thị còn mất mạng.
+  - `DELETE`: nếu ĐÃ CÓ 1 dòng khác đang `ACTIVE` cho ĐÚNG cặp Mã Khách B2B/Mã Sản Phẩm này (người dùng
+    "Thêm Giá Mới"/"Dùng Lại" tạo lại dòng SAU KHI lượt xoá bị lỗi mạng) -> BỎ lượt xoá lỗi thời này,
+    tránh xoá NHẦM dòng giá MỚI hợp lệ khỏi siêu thị — đúng yêu cầu "mã hàng, mã nhà cung cấp đúng thì
+    mới xóa".
+  - Không đọc được mirror để kiểm tra lại (lỗi CSDL app) -> DỪNG CẢ LƯỢT CHẠY (an toàn hơn thử mù theo
+    ảnh chụp cũ có thể sai), tự thử lại ở lượt kế tiếp — KHÔNG xử lý dở dang 1 phần.
+  - Lượt thử bị BỎ (lỗi thời) được đếm riêng (`staleCount`) và nêu rõ trong System Log, không lẫn với
+    "thành công"/"vẫn lỗi".
+
+Ghi chú: ý "kiểm tra SELECT trước khi add" (nếu chưa có giá thì mới add) **đã được đáp ứng sẵn** từ đầu
+— `upsertPriceOnPool()` (dùng chung cho mọi đường ghi, kể cả thử lại) luôn thử UPDATE TRƯỚC, chỉ INSERT
+nếu UPDATE không khớp dòng nào (xem Lần 5, `lib/dsmartSqlClient.js`) — không cần thêm câu SELECT riêng
+(tài khoản SQL của siêu thị nhiều khả năng cũng không được cấp quyền SELECT, cùng mức hạn chế như HO).
+
 **DB_ENCRYPT/kết nối SQL Server tới DSmart16/siêu thị**: người dùng hỏi riêng về việc có nên bật mã hoá
 kết nối (`encrypt: true`) hay không — xác nhận hệ thống ĐÃ chạy qua VPN có IPsec + ACL, nên **giữ nguyên
 `encrypt: false` như hiện tại**, không đổi gì ở đợt này (quyết định hoãn, không phải quên).

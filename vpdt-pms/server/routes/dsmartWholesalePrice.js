@@ -38,8 +38,11 @@ const { insertSystemLog } = require('../lib/systemLogStore');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 // Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại fan-out siêu thị lỗi mạng
 // (12/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở lib/dsmartPriceNotify.js/
-// lib/dsmartStoreFanOutRetryStore.js). CHỈ Áp Giá Mới (ghi THẬT, không phải nhánh tạo lịch SCHEDULED) +
-// Xoá — KHÔNG tính "✏️ Sửa" (người dùng xác nhận rõ phạm vi).
+// lib/dsmartStoreFanOutRetryStore.js). EMAIL chỉ Áp Giá Mới (ghi THẬT, không phải nhánh tạo lịch
+// SCHEDULED) + Xoá — KHÔNG tính "✏️ Sửa" (người dùng xác nhận rõ phạm vi). Riêng HÀNG ĐỢI TỰ ĐỘNG THỬ
+// LẠI thì CÓ tính cả "✏️ Sửa" (dùng chung action='APPLY', xem PATCH /entries/:id bên dưới) — người dùng
+// nhắc lại: "cũng như là update giá mới mất mạng vậy" — nếu không, siêu thị mất mạng đúng lúc Sửa sẽ
+// giữ MÃI giá CŨ không bao giờ được đồng bộ lại.
 const { notifyDsmartPriceApplyBatch, notifyDsmartPriceDeleteBatch } = require('../lib/dsmartPriceNotify');
 const retryQueueStore = require('../lib/dsmartStoreFanOutRetryStore');
 
@@ -774,6 +777,18 @@ router.patch('/entries/:id', async (req, res) => {
       };
     }));
     logDsmartPrice(req, 'UPDATE_DSMART_PRICE', String(id), `Sửa giá bán buôn DSmart (${updated.custId}/${updated.skuId})`);
+
+    // Hàng đợi tự động thử lại (12/2026, người dùng nhắc lại: "cũng như là update giá mới mất mạng vậy")
+    // — "✏️ Sửa" KHÔNG gửi email thông báo (phạm vi đã chốt chỉ Áp Giá Mới + Xoá), nhưng VẪN cần tự động
+    // thử lại khi 1 siêu thị lỗi mạng lúc Sửa, nếu không siêu thị đó sẽ giữ MÃI giá CŨ không bao giờ được
+    // đồng bộ lại. Dùng chung action='APPLY' (Sửa thực chất là upsert đúng dòng CSPRICE, giống Áp Giá) —
+    // nhờ đó nếu cùng 1 cặp bị Sửa nhiều lần liên tiếp trong lúc siêu thị còn mất mạng, UNIQUE INDEX
+    // (StoreId, CustId, SkuId, Action) tự ĐÈ lên dòng hàng đợi cũ bằng giá MỚI NHẤT, không tồn đọng giá cũ.
+    retryQueueStore.enqueueFailedStores({
+      storeResults, action: 'APPLY', entryId: updated.id, custId: updated.custId, skuId: updated.skuId,
+      payload: { custId: updated.custId, skuId: updated.skuId, price: updated.price, frDate: updated.frDate, toDate: updated.toDate }
+    }).catch(() => {});
+
     res.json({ ok: true, item: updated, storeResults, storeFanOutError });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/entries/:id'); }
 });

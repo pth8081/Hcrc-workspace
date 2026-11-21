@@ -201,6 +201,19 @@ stubModule('lib/mailer', {
 let SYSTEM_LOGS = [];
 stubModule('lib/systemLogStore', { insertSystemLog: async (entry) => { SYSTEM_LOGS.push(entry); return entry; } });
 
+// ===== lib/recordStore.js — mirror nội bộ dbo.DsmartWholesalePriceEntries (12/2026, kiểm tra lại đủ
+// điều kiện trước khi thử lại — xem revalidateQueueItem(), jobs/dsmartRetryStoreFanOutQueue.js). Stub
+// đơn giản bằng mảng trong bộ nhớ (đúng khuôn tests/test-dsmart-wholesale-price.js) — KHÔNG phải trọng
+// tâm test ở file này (logic mirror thật đã test riêng ở test-dsmart-wholesale-price.js). =====
+let ENTRIES = [];
+let forceEntriesReadError = false;
+stubModule('lib/recordStore', {
+  getAllForCollection: async (c) => {
+    if (forceEntriesReadError) throw new Error('Mô phỏng lỗi đọc mirror (giả lập)');
+    return c === 'dsmartWholesalePriceEntries' ? ENTRIES.slice() : [];
+  }
+});
+
 async function main() {
   freshRequire('db');
   const dsmartPriceConfigStore = freshRequire('lib/dsmartPriceConfigStore');
@@ -272,6 +285,12 @@ async function main() {
     const { runDsmartRetryStoreFanOutQueue } = freshRequire('jobs/dsmartRetryStoreFanOutQueue');
     getOrCreateDb(dbKey({ server: 'app-db-host', port: 1433, database: 'VPDT_DMS_TEST', user: 'app_user' })).appData.set('emailConfig', JSON.stringify({ enabled: true, dsmartPriceNotifyEmails: ['it@hcrc.vn'] }));
     SENT_MAILS = []; SYSTEM_LOGS = [];
+    // Mirror ENTRIES (12/2026, kiểm tra lại đủ điều kiện trước khi thử) — CJOB1/CJOB3 phải còn ACTIVE để
+    // job chịu thử (xem revalidateQueueItem()); CJOB2 (DELETE) không cần entry nào trong mirror.
+    ENTRIES = [
+      { id: 1, custId: 'CJOB1', skuId: 'SKU01', price: 100, frDate: '2026-01-01', toDate: '2026-12-31', status: 'ACTIVE' },
+      { id: 3, custId: 'CJOB3', skuId: 'SKU01', price: 1, frDate: '2026-01-01', toDate: '2026-12-31', status: 'ACTIVE' }
+    ];
 
     // Dòng 1: sẽ THÀNH CÔNG (siêu thị ST01 đang bật, kết nối tốt).
     await retryQueueStore.enqueue({ storeId: store1.id, storeCode: 'ST01', storeName: 'Siêu Thị 1', action: 'APPLY', custId: 'CJOB1', skuId: 'SKU01', entryId: 1, payload: { custId: 'CJOB1', skuId: 'SKU01', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, error: 'Mất mạng (giả lập lần đầu)' });
@@ -302,6 +321,55 @@ async function main() {
     check('job: ghi System Log đúng nội dung thành công/lỗi/bỏ qua', SYSTEM_LOGS.some(l => l.actionType === 'RETRY_DSMART_STORE_FANOUT' && /1 thành công/.test(l.description) && /1 vẫn lỗi/.test(l.description) && /1 bỏ qua/.test(l.description)), SYSTEM_LOGS);
 
     await retryQueueStore.removeById(afterItems[0].id); // dọn sạch cho khối test sau
+    ENTRIES = [];
+  }
+
+  // ===================== 4b. Kiểm tra lại đủ điều kiện TRƯỚC khi thử lại (12/2026, người dùng: "Bạn cần
+  // kiểm tra lại trước khi xóa đủ điều kiện... mã hàng, mã nhà cung cấp đúng thì mới xóa, cũng như là
+  // update giá mới mất mạng vậy") =====================
+  {
+    const { runDsmartRetryStoreFanOutQueue } = freshRequire('jobs/dsmartRetryStoreFanOutQueue');
+    getOrCreateDb(dbKey({ server: 'app-db-host', port: 1433, database: 'VPDT_DMS_TEST', user: 'app_user' })).appData.set('emailConfig', JSON.stringify({ enabled: true, dsmartPriceNotifyEmails: ['it@hcrc.vn'] }));
+    const stDb = getOrCreateDb(dbKey({ server: 'st01-host', port: 1433, database: 'ST01DB', user: 'st01user' }));
+
+    // --- Kịch bản 1: APPLY lỗi thời (entry tham chiếu ĐÃ BỊ XOÁ trong lúc chờ) -> job phải BỎ, KHÔNG ghi
+    // giá cũ xuống siêu thị. ---
+    SENT_MAILS = []; SYSTEM_LOGS = []; stDb.csprice.clear();
+    ENTRIES = [{ id: 501, custId: 'STALE1', skuId: 'SKU01', price: 999, frDate: '2026-01-01', toDate: '2026-12-31', status: 'DELETED' }];
+    await retryQueueStore.enqueue({ storeId: store1.id, storeCode: 'ST01', storeName: 'Siêu Thị 1', action: 'APPLY', custId: 'STALE1', skuId: 'SKU01', entryId: 501, payload: { custId: 'STALE1', skuId: 'SKU01', price: 999, frDate: '2026-01-01', toDate: '2026-12-31' }, error: 'Mất mạng' });
+    let result = await runDsmartRetryStoreFanOutQueue();
+    check('APPLY lỗi thời (entry đã bị xoá) -> job BỎ, không ghi gì xuống siêu thị', result.staleCount === 1 && result.succeededCount === 0, result);
+    check('APPLY lỗi thời -> CSPRICE siêu thị KHÔNG có dòng giá cũ', !stDb.csprice.has('STALE1|SKU01'));
+    check('APPLY lỗi thời -> hàng đợi đã được dọn sạch', (await retryQueueStore.listAll()).length === 0);
+
+    // --- Kịch bản 2: APPLY entry CÒN ACTIVE nhưng giá đã bị SỬA (cao hơn) từ lúc enqueue -> job phải ghi
+    // giá MỚI NHẤT, không phải giá cũ đông cứng trong payload lúc đầu. ---
+    SENT_MAILS = []; SYSTEM_LOGS = []; stDb.csprice.clear();
+    ENTRIES = [{ id: 502, custId: 'FRESH1', skuId: 'SKU01', price: 500, frDate: '2026-02-01', toDate: '2026-11-30', status: 'ACTIVE' }];
+    await retryQueueStore.enqueue({ storeId: store1.id, storeCode: 'ST01', storeName: 'Siêu Thị 1', action: 'APPLY', custId: 'FRESH1', skuId: 'SKU01', entryId: 502, payload: { custId: 'FRESH1', skuId: 'SKU01', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, error: 'Mất mạng' });
+    result = await runDsmartRetryStoreFanOutQueue();
+    check('APPLY entry còn ACTIVE (giá đã Sửa) -> thành công, dùng giá MỚI NHẤT (500) chứ không phải giá đông cứng (100)', result.succeededCount === 1 && stDb.csprice.get('FRESH1|SKU01')?.WSPRICE === 500, stDb.csprice.get('FRESH1|SKU01'));
+
+    // --- Kịch bản 3: DELETE lỗi thời (đã có 1 dòng giá MỚI đang ACTIVE cho ĐÚNG cặp này, VD người dùng
+    // "Thêm Giá Mới" lại sau khi lượt xoá bị lỗi mạng) -> job phải BỎ, KHÔNG xoá nhầm dòng giá mới. ---
+    SENT_MAILS = []; SYSTEM_LOGS = []; stDb.csprice.clear();
+    stDb.csprice.set('REUSED1|SKU01', { CUST_ID: 'REUSED1', SKU_ID: 'SKU01', WSPRICE: 777, FR_DATE: '2026-03-01', TO_DATE: '2026-09-30' }); // dòng giá MỚI đã có thật tại siêu thị
+    ENTRIES = [{ id: 504, custId: 'REUSED1', skuId: 'SKU01', price: 777, frDate: '2026-03-01', toDate: '2026-09-30', status: 'ACTIVE' }]; // entry MỚI (khác entryId) đang ACTIVE cho đúng cặp
+    await retryQueueStore.enqueue({ storeId: store1.id, storeCode: 'ST01', storeName: 'Siêu Thị 1', action: 'DELETE', custId: 'REUSED1', skuId: 'SKU01', entryId: 503, payload: { dsmartKey: { custId: 'REUSED1', skuId: 'SKU01' } }, error: 'Mất mạng' });
+    result = await runDsmartRetryStoreFanOutQueue();
+    check('DELETE lỗi thời (đã có dòng giá MỚI ACTIVE cho cùng cặp) -> job BỎ, KHÔNG xoá nhầm dữ liệu mới', result.staleCount === 1 && result.succeededCount === 0, result);
+    check('DELETE lỗi thời -> dòng giá MỚI tại siêu thị VẪN CÒN NGUYÊN (không bị xoá nhầm)', stDb.csprice.has('REUSED1|SKU01') && stDb.csprice.get('REUSED1|SKU01').WSPRICE === 777);
+
+    // --- Kịch bản 4: không đọc được mirror để kiểm tra lại -> DỪNG CẢ LƯỢT, không thử mù theo payload cũ. ---
+    SENT_MAILS = []; SYSTEM_LOGS = [];
+    await retryQueueStore.enqueue({ storeId: store1.id, storeCode: 'ST01', storeName: 'Siêu Thị 1', action: 'APPLY', custId: 'READERR1', skuId: 'SKU01', entryId: 505, payload: { custId: 'READERR1', skuId: 'SKU01', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, error: 'x' });
+    forceEntriesReadError = true;
+    result = await runDsmartRetryStoreFanOutQueue();
+    forceEntriesReadError = false;
+    check('Không đọc được mirror -> job DỪNG cả lượt (skipped=true), KHÔNG thử mù', result.skipped === true && result.reason === 'entries-read-error', result);
+    check('Không đọc được mirror -> hàng đợi GIỮ NGUYÊN (chưa xử lý gì)', (await retryQueueStore.listAll()).length === 1);
+    await retryQueueStore.removeById((await retryQueueStore.listAll())[0].id);
+    ENTRIES = [];
   }
 
   // ===================== 5. lib/dsmartPriceNotify.js — gửi email thông báo Áp Giá/Xoá Giá =====================

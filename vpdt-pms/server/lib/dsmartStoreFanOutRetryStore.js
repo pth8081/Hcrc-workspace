@@ -1,6 +1,7 @@
 // lib/dsmartStoreFanOutRetryStore.js — đọc/ghi dbo.DsmartStoreFanOutRetryQueue (hàng đợi tự động thử lại
-// fan-out xuống TỪNG siêu thị khi lỗi mạng lúc Áp Giá Mới/Xoá, 12/2026 — theo yêu cầu người dùng: "có
-// bao giờ là bạn sẽ xử lý khi nó có kết nối trở lại") — xem chú thích đầy đủ ở schema.sql ngay trên
+// fan-out xuống TỪNG siêu thị khi lỗi mạng lúc Áp Giá Mới/Sửa/Xoá, 12/2026 — theo yêu cầu người dùng: "có
+// bao giờ là bạn sẽ xử lý khi nó có kết nối trở lại... cũng như là update giá mới mất mạng vậy") — xem
+// chú thích đầy đủ ở schema.sql ngay trên
 // CREATE TABLE dbo.DsmartStoreFanOutRetryQueue. CHỈ routes/dsmartWholesalePrice.js, jobs/
 // dsmartAutoApplyScheduledPrices.js, jobs/dsmartAutoDeleteExpiredPrices.js (ghi vào hàng đợi khi 1 siêu
 // thị lỗi) và jobs/dsmartRetryStoreFanOutQueue.js (đọc + xử lý hàng đợi) được gọi tới file này.

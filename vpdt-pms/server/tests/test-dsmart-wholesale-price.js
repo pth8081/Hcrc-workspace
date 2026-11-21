@@ -1549,6 +1549,24 @@ async function main() {
     assert.deepStrictEqual(RETRY_QUEUE_REMOVE_BY_STORE_CALLS, [501]);
   });
 
+  // "✏️ Sửa" KHÔNG gửi email (phạm vi đã chốt) nhưng VẪN enqueue hàng đợi tự động thử lại (12/2026, người
+  // dùng nhắc lại: "cũng như là update giá mới mất mạng vậy") — dùng chung action='APPLY'.
+  await test('PATCH /entries/:id (Sửa): KHÔNG gọi notify nào, nhưng VẪN gọi enqueueFailedStores() với action=APPLY', async () => {
+    CURRENT_USER = ADMIN.username;
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'NOTISUA1', skuId: 'SKU1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }] });
+    const entry = ENTRIES.find(e => e.custId === 'NOTISUA1');
+    NOTIFY_APPLY_CALLS = []; NOTIFY_DELETE_CALLS = []; RETRY_QUEUE_ENQUEUE_CALLS = [];
+    const res = await apiPatch(`/entries/${entry.id}`, { price: 200, frDate: '2026-01-01', toDate: '2026-12-31' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(NOTIFY_APPLY_CALLS.length, 0, '"Sửa" không nằm trong phạm vi email đã chốt');
+    assert.strictEqual(NOTIFY_DELETE_CALLS.length, 0);
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS.length, 1, '"Sửa" vẫn phải enqueue hàng đợi tự động thử lại, nếu không siêu thị mất mạng lúc Sửa sẽ giữ mãi giá cũ');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].action, 'APPLY');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].custId, 'NOTISUA1');
+    assert.strictEqual(RETRY_QUEUE_ENQUEUE_CALLS[0].payload.price, 200, 'enqueue phải dùng giá MỚI (sau khi Sửa), không phải giá cũ');
+  });
+
   await stopServer();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
