@@ -134,6 +134,11 @@ async function refreshDsmartConnStatus() {
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     const rows = [dsmartConnStatusRowHtml('🏢 HO (DSmart16 Trung Tâm)', '—', data.ho)]
       .concat((data.stores || []).map(s => dsmartConnStatusRowHtml(`🏬 ${s.storeCode} - ${s.storeName}`, `${s.host}:${s.port}/${s.database}`, s)));
+    // storesError (12/2026, vá lỗi THẬT): lỗi đọc danh sách siêu thị (VD thiếu bảng CSDL) KHÔNG còn làm
+    // mất luôn dòng HO ở trên — hiện thêm 1 dòng cảnh báo riêng, HO vẫn hiện đúng kết quả của nó.
+    if (data.storesError) {
+      rows.push(`<tr><td colspan="5" class="p-3 text-center text-red-500">⛔ Không đọc được danh sách siêu thị: ${escapeHtml(data.storesError)}</td></tr>`);
+    }
     body.innerHTML = rows.join('');
     const checkedAtEl = document.getElementById('dsmartConnStatusCheckedAt');
     if (checkedAtEl) checkedAtEl.textContent = data.checkedAt ? `Kiểm tra lúc ${new Date(data.checkedAt).toLocaleString('vi-VN')}` : '';

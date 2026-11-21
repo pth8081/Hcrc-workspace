@@ -285,22 +285,35 @@ router.get('/connections/status', async (req, res) => {
       }
     })();
 
-    const stores = await storeConnStore.listRaw();
-    const storesPromise = Promise.all(stores.map(async (s) => {
-      const base = { id: s.id, storeCode: s.storeCode, storeName: s.storeName, host: s.host, port: s.port, database: s.database };
-      if (!s.enabled) return { ...base, disabled: true, ok: null, ms: null, error: null };
-      if (!s.passwordEnc) return { ...base, disabled: false, ok: false, ms: null, error: 'Chưa có mật khẩu đã lưu' };
+    // LỖI THẬT đã vá (12/2026, người dùng báo lỗi thật — log server cho thấy bảng
+    // dbo.DsmartStorePriceConnections chưa tồn tại trên CSDL production, do chưa chạy schema.sql của đợt
+    // tính năng Fan-Out): TRƯỚC ĐÂY lỗi đọc danh sách siêu thị (storeConnStore.listRaw()) làm SẬP LUÔN cả
+    // phần HO — dù HO vẫn kết nối tốt, người dùng vẫn thấy TRỐNG TRƠN cả bảng (kể cả dòng HO) vì toàn bộ
+    // route coi là 1 khối, lỗi 1 phần làm hỏng phần còn lại. Vá: tách riêng — lỗi đọc danh sách siêu thị
+    // CHỈ làm rỗng mảng `stores` kèm `storesError` mô tả rõ, KHÔNG còn kéo theo cả HO.
+    const storesPromise = (async () => {
       try {
-        const password = storeConnStore.decryptSecret(s.passwordEnc);
-        const result = await testStoreConnection({ host: s.host, port: s.port, database: s.database, user: s.user, password });
-        return { ...base, disabled: false, ok: true, ms: result.ms, error: null };
+        const stores = await storeConnStore.listRaw();
+        const results = await Promise.all(stores.map(async (s) => {
+          const base = { id: s.id, storeCode: s.storeCode, storeName: s.storeName, host: s.host, port: s.port, database: s.database };
+          if (!s.enabled) return { ...base, disabled: true, ok: null, ms: null, error: null };
+          if (!s.passwordEnc) return { ...base, disabled: false, ok: false, ms: null, error: 'Chưa có mật khẩu đã lưu' };
+          try {
+            const password = storeConnStore.decryptSecret(s.passwordEnc);
+            const result = await testStoreConnection({ host: s.host, port: s.port, database: s.database, user: s.user, password });
+            return { ...base, disabled: false, ok: true, ms: result.ms, error: null };
+          } catch (err) {
+            return { ...base, disabled: false, ok: false, ms: null, error: err.message || 'Lỗi không xác định' };
+          }
+        }));
+        return { stores: results, storesError: null };
       } catch (err) {
-        return { ...base, disabled: false, ok: false, ms: null, error: err.message || 'Lỗi không xác định' };
+        return { stores: [], storesError: err.message || 'Lỗi không xác định' };
       }
-    }));
+    })();
 
-    const [ho, storeResults] = await Promise.all([hoPromise, storesPromise]);
-    res.json({ ok: true, ho, stores: storeResults, checkedAt: new Date().toISOString() });
+    const [ho, { stores, storesError }] = await Promise.all([hoPromise, storesPromise]);
+    res.json({ ok: true, ho, stores, storesError, checkedAt: new Date().toISOString() });
   } catch (err) { sendCatchError(res, err, 'GET /api/dsmart-price/connections/status'); }
 });
 

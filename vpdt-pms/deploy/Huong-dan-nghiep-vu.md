@@ -10714,3 +10714,59 @@ trường/`dependencies` npm mới. **Quan trọng**: nếu "📡 Giám Sát K�
 vá này, đó là dấu hiệu 1 vấn đề THẬT khác (không còn do route Nhập Hàng Loạt crash gây ảnh hưởng dây
 chuyền nữa) — xem log server thật (`pm2 logs vpdt --lines 100 --nostream`, tìm dòng bắt đầu bằng "⛔ GET
 /api/dsmart-price/connections/status lỗi:") để biết chính xác lỗi gì.
+
+## 6r. LỖI THẬT phát hiện qua log server thật: thiếu bảng `dbo.DsmartStorePriceConnections` trên production + sửa "📡 Giám Sát Kết Nối" không còn kéo HO theo lỗi của siêu thị (12/2026)
+
+Sau khi deploy bản vá mục 6q, người dùng vẫn báo lỗi — lần này gửi kèm log server thật
+(`pm2 logs ... --err`), lộ rõ nguyên nhân THẬT SỰ:
+
+```
+⛔ GET /api/dsmart-price/connections/status lỗi: Invalid object name 'dbo.DsmartStorePriceConnections'.
+⛔ GET /api/dsmart-price/store-connections lỗi: Invalid object name 'dbo.DsmartStorePriceConnections'.
+```
+
+**Đây KHÔNG phải lỗi code** — bảng `dbo.DsmartStorePriceConnections` (lưu danh sách kết nối siêu thị,
+thêm từ đợt tính năng Fan-Out mục 6n) **chưa từng được tạo** trên CSDL SQL Server production của người
+dùng — bước chạy lại `sql/schema.sql` của đợt đó đã bị bỏ sót. Toàn bộ "🏬 Kết Nối Siêu Thị"/"📂 Nhập Hàng
+Loạt"/"📡 Giám Sát Kết Nối" đều phụ thuộc bảng này nên đều lỗi giống nhau.
+
+**Cách khắc phục cho người dùng**: chạy script SQL sau trên production (an toàn, chỉ tạo bảng nếu chưa
+có, không đụng tới dữ liệu khác) — cùng nguyên văn đoạn `CREATE TABLE dbo.DsmartStorePriceConnections`
+trong `sql/schema.sql`:
+```sql
+IF OBJECT_ID('dbo.DsmartStorePriceConnections', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DsmartStorePriceConnections (
+        Id           BIGINT         NOT NULL CONSTRAINT PK_DsmartStorePriceConnections PRIMARY KEY,
+        StoreCode    NVARCHAR(50)   NOT NULL,
+        StoreName    NVARCHAR(200)  NOT NULL,
+        Host         NVARCHAR(255)  NOT NULL,
+        Port         INT            NOT NULL DEFAULT 1433,
+        DatabaseName NVARCHAR(100)  NOT NULL,
+        DbUser       NVARCHAR(100)  NOT NULL,
+        PasswordEnc  NVARCHAR(500)  NOT NULL,
+        Enabled      BIT            NOT NULL DEFAULT 1,
+        CreatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedBy    NVARCHAR(100)  NULL
+    );
+    CREATE UNIQUE INDEX UX_DsmartStorePriceConnections_StoreCode ON dbo.DsmartStorePriceConnections (StoreCode);
+END
+```
+(Hoặc đơn giản nhất: chạy lại nguyên `sql/schema.sql` — script tự bọc `IF OBJECT_ID(...) IS NULL`, an
+toàn chạy nhiều lần, không tạo lại/xoá bảng đã có.)
+
+**Phát hiện phụ trong lúc rà log**: route `GET /connections/status` gộp chung HO + danh sách siêu thị
+thành 1 khối — lỗi đọc danh sách siêu thị (như trường hợp thiếu bảng này) làm **mất luôn cả dòng HO**
+trên UI dù HO vẫn kết nối tốt (xác nhận riêng qua "⚙️ Cấu Hình Kết Nối" > "🔌 Kiểm Tra Kết Nối"), gây hiểu
+lầm "bật chân/giám sát hỏng cả HO". Đã vá: tách promise HO ra độc lập hẳn khỏi promise đọc danh sách
+siêu thị — lỗi đọc siêu thị giờ chỉ làm mảng `stores` rỗng kèm `storesError` mô tả rõ, HO vẫn luôn hiện
+đúng kết quả của nó bất kể phần siêu thị có lỗi hay không.
+
+**Test**: thêm 1 kịch bản mới — ép `storeConnStore.listRaw()` ném đúng lỗi thật đã gặp ("Invalid object
+name..."), xác nhận `ho.ok=true` (không bị kéo theo), `stores=[]`, `storesError` có nội dung rõ ràng.
+84/84 pass, CSP sweep sạch. Bump version 31.44.
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — **nhưng bắt buộc phải chạy thêm
+script SQL tạo bảng ở trên (1 lần duy nhất) thì tính năng mới thật sự hoạt động được**, khác các lần
+trước chỉ cần copy code.
