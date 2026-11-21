@@ -35,6 +35,7 @@ let custIdExistsCallLog = [];
 // KHÔNG mock, ở tests/test-dsmart-store-fanout.js — ở ĐÂY chỉ test tầng route truyền tham số đúng.
 let FANOUT_TARGET_LOG = [];
 let forceConfigError = false;
+let forceDeleteError = false;
 let forceTestConnError = false;
 let lastTestConnOverrideCfg = 'UNSET';
 let forceSkuDefAccessError = false;
@@ -81,6 +82,7 @@ stubModule('lib/dsmartSqlClient', {
   },
   deleteWholesalePrice: async ({ dsmartKey }, targetStoreIds) => {
     FANOUT_TARGET_LOG.push({ op: 'delete', dsmartKey, targetStoreIds });
+    if (forceDeleteError) throw new DsmartSqlError('Mất kết nối khi xoá (giả lập)');
     const matches = findByNaturalKey(dsmartKey);
     if (matches.length === 0) return { alreadyGone: true };
     if (matches.length > 1) throw new DsmartSqlError(`Khoá tự nhiên đã lưu khớp ${matches.length} dòng CSPRICE (không còn DUY NHẤT)`);
@@ -720,6 +722,45 @@ async function main() {
     assert.strictEqual(CSPRICE.length, 1);
   });
 
+  // lastAutoDeleteError/At (12/2026, theo yêu cầu người dùng: "cái phần xóa cũng vậy, kiểm tra trạng
+  // thái... lúc nào mà yes tức là đã xóa... nếu chạy bị lỗi ấy thì ghi là n... cho đến khi bật cờ là yes")
+  // — job tự ghi lại lỗi lần thử gần nhất lên entry, VẪN giữ nguyên ACTIVE để lượt sau tự thử lại, và xoá
+  // cờ ngay khi SAU ĐÓ xoá thành công (entry chuyển DELETED, không còn hiện ở mục "2").
+  await test('jobs/dsmartAutoDeleteExpiredPrices: xoá lỗi (mạng) -> ghi cờ lastAutoDeleteError/At, VẪN giữ ACTIVE để tự thử lại; thử lại thành công -> xoá cờ + chuyển DELETED', async () => {
+    CSPRICE = []; ENTRIES = [];
+    await apiPost('/apply', { rows: [{ custId: 'RETRYDEL1', skuId: 'SKRD1', price: 100, frDate: '2020-01-01', toDate: '2020-01-31' }] });
+    const entryId = ENTRIES.find(e => e.custId === 'RETRYDEL1').id;
+    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: 0, autoDeleteMinute: 0 };
+
+    try {
+      forceDeleteError = true;
+      delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
+      let { runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices');
+      let result = await runDsmartAutoDeleteExpiredPrices();
+      // entry bị withLockedRecordForCollection THAY HẲN object trong ENTRIES (không sửa tại chỗ) -> phải
+      // tìm lại theo id SAU MỖI lượt chạy job, không giữ 1 biến `entry` bắt trước khi job chạy.
+      let entry = ENTRIES.find(e => e.id === entryId);
+      assert.strictEqual(result.errorCount, 1);
+      assert.strictEqual(entry.status, 'ACTIVE', 'vẫn giữ nguyên ACTIVE để lượt sau tự thử lại');
+      assert.ok(entry.lastAutoDeleteError, 'phải ghi lại lỗi lần thử gần nhất');
+      assert.ok(entry.lastAutoDeleteAt, 'phải ghi lại thời gian lần thử gần nhất');
+      assert.strictEqual(CSPRICE.length, 1, 'chưa xoá được gì trên CSPRICE');
+
+      forceDeleteError = false;
+      delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
+      ({ runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices'));
+      result = await runDsmartAutoDeleteExpiredPrices();
+      entry = ENTRIES.find(e => e.id === entryId);
+      assert.strictEqual(result.deletedCount, 1);
+      assert.strictEqual(entry.status, 'DELETED');
+      assert.strictEqual(CSPRICE.length, 0);
+      assert.strictEqual(entry.lastAutoDeleteError, null, 'cờ lỗi phải được xoá sau khi xoá thành công');
+      assert.strictEqual(entry.lastAutoDeleteAt, null);
+    } finally {
+      forceDeleteError = false;
+    }
+  });
+
   // ===== "📅 Lên Lịch Áp Giá" (12/2026, theo yêu cầu người dùng "giá sẽ theo ngày bắt đầu trong file
   // excel và lịch tự động bắt ngày bắt đầu và áp giá từ 0 giờ, nếu người tạo chọn đặt lịch, còn không
   // đặt lịch thì sẽ là áp giá luôn") =====
@@ -831,6 +872,49 @@ async function main() {
     assert.strictEqual(listRes.body.items.length, 0);
   });
 
+  // ===== GET /connections/status (12/2026, theo yêu cầu người dùng: "theo dõi việc kết nối đến các máy
+  // siêu thị và máy HO... xem trạng thái đang kết nối hoặc không kết nối") =====
+  await test('GET /connections/status: itSupportPriceWriteDsmart (KHÔNG phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiGet('/connections/status');
+    assert.strictEqual(res.status, 403);
+  });
+
+  await test('GET /connections/status: admin -> kiểm tra ĐÚNG HO + từng siêu thị, phân biệt rõ Đang Bật/Tắt/Thiếu Mật Khẩu/Lỗi/OK', async () => {
+    CURRENT_USER = ADMIN.username;
+    forceTestConnError = false;
+    STORE_CONNS = [
+      { id: 201, storeCode: 'OK1', storeName: 'Siêu Thị OK', host: 'h1', port: 1433, database: 'd1', user: 'u1', passwordEnc: 'enc', enabled: true },
+      { id: 202, storeCode: 'ERR1', storeName: 'Siêu Thị Lỗi Kết Nối', host: '', port: 1433, database: 'd2', user: 'u2', passwordEnc: 'enc', enabled: true },
+      { id: 203, storeCode: 'OFF1', storeName: 'Siêu Thị Đã Tắt', host: 'h3', port: 1433, database: 'd3', user: 'u3', passwordEnc: 'enc', enabled: false },
+      { id: 204, storeCode: 'NOPW1', storeName: 'Siêu Thị Thiếu Mật Khẩu', host: 'h4', port: 1433, database: 'd4', user: 'u4', passwordEnc: null, enabled: true }
+    ];
+    const res = await apiGet('/connections/status');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.ho.ok, true);
+    assert.strictEqual(res.body.ho.ms, 7);
+    const byCode = Object.fromEntries(res.body.stores.map(s => [s.storeCode, s]));
+    assert.strictEqual(byCode.OK1.ok, true, 'siêu thị kết nối tốt -> ok=true');
+    assert.strictEqual(byCode.OK1.disabled, false);
+    assert.strictEqual(byCode.ERR1.ok, false, 'siêu thị lỗi kết nối -> ok=false');
+    assert.ok(byCode.ERR1.error, 'phải có nội dung lỗi thật');
+    assert.strictEqual(byCode.OFF1.disabled, true, 'siêu thị đang Tắt -> disabled=true, KHÔNG kiểm tra kết nối');
+    assert.strictEqual(byCode.OFF1.ok, null);
+    assert.strictEqual(byCode.NOPW1.ok, false, 'siêu thị thiếu mật khẩu -> ok=false, không gọi testStoreConnection');
+    assert.ok(/mật khẩu/i.test(byCode.NOPW1.error));
+  });
+
+  await test('GET /connections/status: admin -> HO mất kết nối báo rõ ho.ok=false kèm lỗi thật', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    forceTestConnError = true;
+    const res = await apiGet('/connections/status');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.ho.ok, false);
+    assert.ok(res.body.ho.error);
+    forceTestConnError = false;
+  });
+
   // ===== jobs/dsmartAutoApplyScheduledPrices (12/2026, "Lên Lịch Áp Giá") =====
   await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu ĐÃ ĐẾN -> tự áp dụng, ghi vào CSPRICE, chuyển ACTIVE', async () => {
     CSPRICE = []; ENTRIES = [];
@@ -875,6 +959,44 @@ async function main() {
     assert.strictEqual(result.appliedCount, 0);
     assert.strictEqual(CSPRICE.length, 0);
     assert.strictEqual(ENTRIES[0].status, 'CANCELLED');
+  });
+
+  // lastAutoApplyError/At (12/2026, theo yêu cầu người dùng: "nếu bị lỗi mạng ấy, thì cho phép chạy lại,
+  // try to set lại đến lúc nào xong thì thôi... có cái cờ kiểm tra trạng thái") — job tự ghi lại lỗi lần
+  // thử gần nhất lên entry, VẪN giữ nguyên SCHEDULED để lượt chạy kế tiếp (10 phút sau) tự thử lại, và XOÁ
+  // cờ ngay khi SAU ĐÓ áp dụng thành công.
+  await test('jobs/dsmartAutoApplyScheduledPrices: áp dụng lỗi (mạng) -> ghi cờ lastAutoApplyError/At, VẪN giữ SCHEDULED để tự thử lại; thử lại thành công -> xoá cờ', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'RETRY1', skuId: 'SKRT1', price: 100, frDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), toDate: '2099-12-31' }], schedule: true });
+    const entryId = ENTRIES.find(e => e.custId === 'RETRY1').id;
+    ENTRIES.find(e => e.id === entryId).frDate = today;
+
+    try {
+      forceConfigError = true;
+      delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+      let { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+      let result = await runDsmartAutoApplyScheduledPrices();
+      // entry bị withLockedRecordForCollection THAY HẲN object trong ENTRIES (không sửa tại chỗ) -> phải
+      // tìm lại theo id SAU MỖI lượt chạy job, không giữ 1 biến `entry` bắt trước khi job chạy.
+      let entry = ENTRIES.find(e => e.id === entryId);
+      assert.strictEqual(result.errorCount, 1);
+      assert.strictEqual(entry.status, 'SCHEDULED', 'vẫn giữ nguyên SCHEDULED để lượt sau tự thử lại — KHÔNG cần cơ chế retry riêng');
+      assert.ok(entry.lastAutoApplyError, 'phải ghi lại lỗi lần thử gần nhất');
+      assert.ok(entry.lastAutoApplyAt, 'phải ghi lại thời gian lần thử gần nhất');
+
+      forceConfigError = false;
+      delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+      ({ runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices'));
+      result = await runDsmartAutoApplyScheduledPrices();
+      entry = ENTRIES.find(e => e.id === entryId);
+      assert.strictEqual(result.appliedCount, 1);
+      assert.strictEqual(entry.status, 'ACTIVE');
+      assert.strictEqual(entry.lastAutoApplyError, null, 'cờ lỗi phải được xoá sau khi áp dụng thành công');
+      assert.strictEqual(entry.lastAutoApplyAt, null);
+    } finally {
+      forceConfigError = false;
+    }
   });
 
   // LỖI THẬT đã vá (audit chéo 12/2026 — xem lịch sử ở jobs/dsmartAutoApplyScheduledPrices.js): job cũ

@@ -75,7 +75,7 @@ async function runDsmartAutoApplyScheduledPrices() {
         await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
           if (item.status !== 'SCHEDULED') return item; // đã bị hủy/xử lý bởi thao tác khác trong lúc job đang chạy
           return {
-            ...item, dsmartKey, status: 'ACTIVE', appliedAt: now,
+            ...item, dsmartKey, status: 'ACTIVE', appliedAt: now, lastAutoApplyError: null, lastAutoApplyAt: null,
             history: [...(item.history || []), {
               action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: 'AUTO_SCHEDULED', actor: null, at: now,
               price: item.price, frDate: item.frDate, toDate: item.toDate, storeResults,
@@ -93,6 +93,18 @@ async function runDsmartAutoApplyScheduledPrices() {
       errorCount++;
       console.error(`⛔ jobs/dsmartAutoApplyScheduledPrices: áp dụng thất bại ID nội bộ=${e.id} (CustId=${e.custId}/SkuId=${e.skuId}) —`, err.message);
       if (errorDetails.length < 5) errorDetails.push(`${e.custId}/${e.skuId}: ${err.message}`);
+      // lastAutoApplyError/At (12/2026, theo yêu cầu người dùng: "nếu bị lỗi mạng thì cho phép chạy lại,
+      // có cờ kiểm tra trạng thái") — ghi lại NGAY trên entry để UI "2b. Giá Đã Lên Lịch" hiện rõ lần thử
+      // gần nhất lỗi gì, không cần đợi tra riêng System Log. Job VẪN tự động thử lại ở lượt chạy kế tiếp
+      // (10 phút sau) như trước — entry giữ nguyên SCHEDULED nên lần sau lại khớp điều kiện `due`, KHÔNG
+      // cần thêm cơ chế retry/đếm số lần riêng. Bọc try/catch riêng — lỗi ghi lại trạng thái (hiếm, VD mất
+      // kết nối CSDL app) không được làm hỏng việc xử lý các dòng SCHEDULED khác trong cùng lượt chạy.
+      try {
+        await withLockedRecordForCollection('dsmartWholesalePriceEntries', e.id, (item) => {
+          if (item.status !== 'SCHEDULED') return item;
+          return { ...item, lastAutoApplyError: err.message || 'Lỗi không xác định', lastAutoApplyAt: new Date().toISOString() };
+        });
+      } catch (_) { /* phớt lờ lỗi ghi lại trạng thái, không chặn các dòng khác */ }
       // Lỗi kết nối/cấu hình sẽ LẶP LẠI y hệt cho mọi dòng còn lại trong lượt này — dừng sớm, thử lại ở
       // lượt chạy kế tiếp (10 phút sau), tránh spam lỗi kết nối hàng chục/trăm lần trong 1 lượt.
       if (err instanceof DsmartConfigError) stoppedEarly = true;
