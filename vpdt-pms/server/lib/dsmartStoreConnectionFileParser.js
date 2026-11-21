@@ -98,4 +98,28 @@ async function buildStoreConnectionTemplateWorkbook() {
   return wb;
 }
 
-module.exports = { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, EXPECTED_HEADERS, MAX_ROWS };
+// buildStoreConnectionExportWorkbook(items): XUẤT danh sách kết nối siêu thị ĐANG CÓ, ĐÚNG khuôn 7 cột của
+// file nhập (EXPECTED_HEADERS) — theo yêu cầu người dùng: "xuất file Excel bằng đúng thông tin, đúng file
+// nhập ấy" — để tự nhập lại được ngay (backup/di chuyển dữ liệu) mà không cần gõ tay lại hàng loạt siêu thị.
+// `items` LUÔN là kết quả storeConnStore.listRaw() (có passwordEnc) — Mật Khẩu được GIẢI MÃ về chữ thường
+// để khớp đúng khuôn file nhập — CÙNG mức rủi ro đã nêu rõ với người dùng và được chấp nhận ở file nhập
+// (routes/dsmartWholesalePrice.js::GET /store-connections/export tự gọi decryptSecret() trước khi truyền
+// vào đây, hàm này KHÔNG tự giải mã để giữ đúng ranh giới — chỉ lib/dsmartStorePriceConnectionsStore.js
+// mới có decryptSecret).
+async function buildStoreConnectionExportWorkbook(items) {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  ws.addRow(EXPECTED_HEADERS);
+  for (const it of items) {
+    ws.addRow([it.storeCode, it.storeName, it.host, it.port || 1433, it.database, it.user, it.password || '']);
+  }
+  ws.getColumn(1).width = 14; ws.getColumn(2).width = 24; ws.getColumn(3).width = 18;
+  ws.getColumn(4).width = 10; ws.getColumn(5).width = 16; ws.getColumn(6).width = 16; ws.getColumn(7).width = 20;
+  return wb;
+}
+
+module.exports = {
+  parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, buildStoreConnectionExportWorkbook,
+  EXPECTED_HEADERS, MAX_ROWS
+};

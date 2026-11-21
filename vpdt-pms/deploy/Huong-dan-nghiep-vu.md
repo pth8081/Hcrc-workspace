@@ -10496,6 +10496,20 @@ không phải lộ cho ai khác. UI có dòng cảnh báo đỏ nhắc admin t�
 khỏi máy sau khi dùng xong — không có cách nào loại bỏ hoàn toàn rủi ro
 này nếu vẫn cần nhập hàng loạt qua Excel, chỉ có thể nhắc nhở thao tác.
 
+### C2. "🏬 Kết Nối Siêu Thị" — Xuất Excel (12/2026)
+
+Người dùng yêu cầu thêm: **"xuất file Excel bằng đúng thông tin, đúng
+file nhập ấy"** — thêm nút **"📤 Xuất Excel (Danh Sách Hiện Có)"** cạnh
+2 nút "➕ Thêm Siêu Thị"/"📂 Nhập Hàng Loạt (Excel)" ở mục C, CHỈ admin.
+Bấm vào tải ngay `GET /api/dsmart-price/store-connections/export` — file
+`.xlsx` ĐÚNG khuôn 7 cột của file nhập (Mã Siêu Thị, Tên Siêu Thị, Host,
+Port, Tên CSDL, Tài Khoản, Mật Khẩu), liệt kê TOÀN BỘ kết nối siêu thị
+đang có (cả đang Bật lẫn đang Tắt) — Mật Khẩu được **GIẢI MÃ về chữ
+thường** để file xuất ra tự nhập lại được ngay qua "📂 Nhập Hàng Loạt"
+(dùng để backup/di chuyển cấu hình sang môi trường khác). Cùng mức rủi
+ro đã nêu ở mục C (Mật Khẩu dạng chữ thường) — UI có dòng cảnh báo đỏ
+giống hệt, file không lưu lại trên server.
+
 ### Test (phần C)
 
 - `tests/test-dsmart-wholesale-price.js` — thêm 11 kịch bản: quyền admin
