@@ -338,17 +338,15 @@ router.get('/store-connections/template', async (req, res) => {
 });
 
 // GET /store-connections/export (12/2026, theo yêu cầu người dùng: "xuất file Excel bằng đúng thông tin,
-// đúng file nhập ấy") — xuất TOÀN BỘ kết nối siêu thị ĐANG CÓ, ĐÚNG khuôn 7 cột file nhập (kể cả Mật Khẩu
-// đã GIẢI MÃ về chữ thường) để tự nhập lại được ngay qua "📂 Nhập Hàng Loạt" — dùng để backup/di chuyển
-// cấu hình. CÙNG mức rủi ro đã nêu rõ với người dùng ở file nhập (cột Mật Khẩu là chữ thường) — file KHÔNG
-// lưu lại trên server, chỉ ghi thẳng vào response.
+// đúng file nhập ấy") — xuất TOÀN BỘ kết nối siêu thị ĐANG CÓ, ĐÚNG khuôn 7 cột file nhập. Mật Khẩu LUÔN
+// BỎ TRỐNG trong file xuất (người dùng xác nhận lại sau khi tôi nêu rủi ro: "xuất file mật khẩu phải mã
+// hoá nhé. Còn nếu không mã hoá thì clear dòng mật khẩu luôn" — xem chú thích đầy đủ ở
+// buildStoreConnectionExportWorkbook(), lib/dsmartStoreConnectionFileParser.js) — KHÔNG cần giải mã mật
+// khẩu ở đây nữa. File KHÔNG lưu lại trên server, chỉ ghi thẳng vào response.
 router.get('/store-connections/export', async (req, res) => {
   if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới xuất được danh sách kết nối siêu thị' });
   try {
-    const rawItems = await storeConnStore.listRaw();
-    const items = rawItems.map(it => ({
-      ...it, password: it.passwordEnc ? storeConnStore.decryptSecret(it.passwordEnc) : ''
-    }));
+    const items = await storeConnStore.listRaw();
     const wb = await buildStoreConnectionExportWorkbook(items);
     logDsmartPrice(req, 'EXPORT_DSMART_STORE_CONNECTIONS', 'all', `Xuất danh sách kết nối siêu thị ra Excel (${items.length} dòng)`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
