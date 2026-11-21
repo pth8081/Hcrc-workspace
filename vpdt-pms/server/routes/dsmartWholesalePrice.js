@@ -372,42 +372,52 @@ router.post('/store-connections/import', uploadRateLimiter, async (req, res) => 
   if (!rows.length) return res.status(400).json({ error: 'Không có dòng nào để nhập' });
   if (rows.length > 500) return res.status(400).json({ error: 'Quá nhiều dòng trong 1 lượt nhập (tối đa 500)' });
 
-  const existingList = await storeConnStore.listRaw();
-  const byCode = new Map(existingList.map(s => [s.storeCode, s]));
-  const results = [];
-  for (const r of rows) {
-    const storeCode = String(r.storeCode || '').trim();
-    const storeName = String(r.storeName || '').trim();
-    const host = String(r.host || '').trim();
-    const port = Number(r.port) || 1433;
-    const database = String(r.database || '').trim();
-    const user = String(r.user || '').trim();
-    const password = r.password ? String(r.password) : null;
-    if (!storeCode || !storeName || !host || !database || !user) {
-      results.push({ storeCode, success: false, error: 'Dữ liệu dòng không hợp lệ (đã kiểm tra lại server-side)' });
-      continue;
-    }
-    try {
-      const found = byCode.get(storeCode);
-      if (found) {
-        const updated = await storeConnStore.updateStore(found.id, { storeCode, storeName, host, port, database, user, password, enabled: found.enabled }, req.freshUser.username);
-        byCode.set(storeCode, { ...found, storeName, host, port, database, user });
-        results.push({ storeCode, success: true, mode: 'UPDATE', item: updated });
-      } else {
-        if (!password) { results.push({ storeCode, success: false, error: 'Thiếu Mật Khẩu (bắt buộc khi thêm Mã Siêu Thị mới)' }); continue; }
-        const created = await storeConnStore.createStore({ storeCode, storeName, host, port, database, user, password }, req.freshUser.username);
-        byCode.set(storeCode, { id: created.id, storeCode, storeName, host, port, database, user, enabled: true });
-        results.push({ storeCode, success: true, mode: 'CREATE', item: created });
+  // LỖI THẬT đã vá (phát hiện 12/2026, người dùng báo lỗi thật lúc nhập 34 siêu thị): toàn bộ phần thân
+  // route này TRƯỚC ĐÂY KHÔNG có try/catch bao ngoài — nếu storeConnStore.listRaw() (đọc trước khi vào
+  // vòng lặp) hoặc bất kỳ bước nào NGOÀI vòng lặp ném lỗi, đây là 1 promise bị reject KHÔNG ai .catch()
+  // trong 1 route handler async của Express 4.x (Express 4 KHÔNG tự bắt lỗi từ async handler như Express
+  // 5) — rơi thẳng vào process.on('unhandledRejection') ở lib/errorLogCapture.js, vốn CHỦ Ý thoát hẳn
+  // tiến trình Node để PM2 tự khởi động lại (đúng thiết kế cho lỗi THẬT SỰ không lường trước được, nhưng
+  // route này lẽ ra phải trả lỗi rõ ràng cho client thay vì làm sập cả server giữa 1 lượt nhập hàng loạt
+  // nhiều dòng). Vá: bọc try/catch quanh TOÀN BỘ thân route, cùng khuôn mọi route khác trong file.
+  try {
+    const existingList = await storeConnStore.listRaw();
+    const byCode = new Map(existingList.map(s => [s.storeCode, s]));
+    const results = [];
+    for (const r of rows) {
+      const storeCode = String(r.storeCode || '').trim();
+      const storeName = String(r.storeName || '').trim();
+      const host = String(r.host || '').trim();
+      const port = Number(r.port) || 1433;
+      const database = String(r.database || '').trim();
+      const user = String(r.user || '').trim();
+      const password = r.password ? String(r.password) : null;
+      if (!storeCode || !storeName || !host || !database || !user) {
+        results.push({ storeCode, success: false, error: 'Dữ liệu dòng không hợp lệ (đã kiểm tra lại server-side)' });
+        continue;
       }
-    } catch (err) {
-      results.push({ storeCode, success: false, error: err.message || 'Lỗi không xác định' });
+      try {
+        const found = byCode.get(storeCode);
+        if (found) {
+          const updated = await storeConnStore.updateStore(found.id, { storeCode, storeName, host, port, database, user, password, enabled: found.enabled }, req.freshUser.username);
+          byCode.set(storeCode, { ...found, storeName, host, port, database, user });
+          results.push({ storeCode, success: true, mode: 'UPDATE', item: updated });
+        } else {
+          if (!password) { results.push({ storeCode, success: false, error: 'Thiếu Mật Khẩu (bắt buộc khi thêm Mã Siêu Thị mới)' }); continue; }
+          const created = await storeConnStore.createStore({ storeCode, storeName, host, port, database, user, password }, req.freshUser.username);
+          byCode.set(storeCode, { id: created.id, storeCode, storeName, host, port, database, user, enabled: true });
+          results.push({ storeCode, success: true, mode: 'CREATE', item: created });
+        }
+      } catch (err) {
+        results.push({ storeCode, success: false, error: err.message || 'Lỗi không xác định' });
+      }
     }
-  }
-  const successCount = results.filter(r => r.success).length;
-  const createCount = results.filter(r => r.success && r.mode === 'CREATE').length;
-  const updateCount = results.filter(r => r.success && r.mode === 'UPDATE').length;
-  logDsmartPrice(req, 'IMPORT_DSMART_STORE_CONNECTIONS', req.body?.sourceFileName || 'import', `Nhập hàng loạt kết nối siêu thị: ${successCount}/${rows.length} dòng thành công (${createCount} thêm mới, ${updateCount} sửa)`);
-  res.json({ ok: true, results, successCount, failCount: results.length - successCount });
+    const successCount = results.filter(r => r.success).length;
+    const createCount = results.filter(r => r.success && r.mode === 'CREATE').length;
+    const updateCount = results.filter(r => r.success && r.mode === 'UPDATE').length;
+    logDsmartPrice(req, 'IMPORT_DSMART_STORE_CONNECTIONS', req.body?.sourceFileName || 'import', `Nhập hàng loạt kết nối siêu thị: ${successCount}/${rows.length} dòng thành công (${createCount} thêm mới, ${updateCount} sửa)`);
+    res.json({ ok: true, results, successCount, failCount: results.length - successCount });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/store-connections/import'); }
 });
 
 // ===================== Tự Động Xoá Khi Hết Hạn (itSupportPriceWriteDsmart — KHÔNG cần admin, khác hẳn

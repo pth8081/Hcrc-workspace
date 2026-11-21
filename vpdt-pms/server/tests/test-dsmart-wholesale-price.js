@@ -1255,6 +1255,28 @@ async function main() {
     assert.strictEqual(STORE_CONNS.length, 0);
   });
 
+  // LỖI THẬT đã vá (12/2026, người dùng báo lỗi thật khi nhập 34 siêu thị): toàn bộ thân route KHÔNG có
+  // try/catch bao ngoài — nếu listRaw() (đọc TRƯỚC vòng lặp, ngoài try/catch isolate-lỗi-từng-dòng) ném
+  // lỗi, đây là 1 promise reject không ai .catch() trong route handler async của Express 4.x — rơi vào
+  // process.on('unhandledRejection') (lib/errorLogCapture.js), CHỦ Ý thoát hẳn tiến trình Node để PM2 tự
+  // khởi động lại. Test: ép listRaw() ném lỗi (mô phỏng DB hiccup/timeout thật) ngay LẦN GỌI ĐẦU TIÊN
+  // (trước vòng lặp từng dòng) — route PHẢI trả JSON lỗi rõ ràng (500), KHÔNG được throw ra ngoài khiến
+  // awaiting Promise bị reject (supertest-style apiPost() sẽ tự ném nếu route thực sự unhandled-reject).
+  await test('POST /store-connections/import: listRaw() lỗi (DB hiccup) TRƯỚC vòng lặp -> route trả JSON lỗi rõ ràng, KHÔNG làm sập tiến trình (unhandledRejection)', async () => {
+    CURRENT_USER = ADMIN.username;
+    STORE_CONNS = [];
+    const storeConnStoreStub = require('../lib/dsmartStorePriceConnectionsStore');
+    const originalListRaw = storeConnStoreStub.listRaw;
+    storeConnStoreStub.listRaw = async () => { throw new Error('Mô phỏng DB hiccup/timeout thật (listRaw)'); };
+    try {
+      const res = await apiPost('/store-connections/import', { rows: [{ storeCode: 'ST_CRASH1', storeName: 'N', host: 'h', database: 'd', user: 'u', password: 'p' }] });
+      assert.strictEqual(res.status, 500, 'route phải trả 500 rõ ràng, không được để lỗi rơi ra ngoài thành unhandledRejection');
+      assert.ok(res.body.error, 'phải có nội dung lỗi (dù NODE_ENV=production sẽ ẩn err.message thật, chỉ còn thông báo chung)');
+    } finally {
+      storeConnStoreStub.listRaw = originalListRaw;
+    }
+  });
+
   // ===== 🏬 "Áp Dụng Cho Siêu Thị" (12/2026, theo yêu cầu người dùng: "cho phép tôi chọn hoặc là tất cả
   // siêu thị, hoặc cho tôi chọn từng siêu thị... lấy luôn từ cái phần cấu hình admin ấy") =====
   await test('GET /store-connections/options: itSupportPriceWriteDsmart (KHÔNG phải admin) vẫn xem được (khác GET /store-connections đầy đủ chỉ admin)', async () => {
