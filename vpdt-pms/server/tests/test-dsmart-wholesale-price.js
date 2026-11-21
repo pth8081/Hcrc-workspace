@@ -915,6 +915,29 @@ async function main() {
     forceTestConnError = false;
   });
 
+  // LỖI THẬT đã vá (12/2026, người dùng báo lỗi thật — log server thật cho thấy bảng
+  // dbo.DsmartStorePriceConnections chưa tồn tại trên CSDL production vì chưa chạy schema.sql của đợt
+  // Fan-Out): TRƯỚC ĐÂY lỗi đọc danh sách kết nối siêu thị (storeConnStore.listRaw()) làm SẬP LUÔN cả
+  // phần HO trong cùng response — dù HO vẫn kết nối tốt, UI vẫn hiện TRỐNG TRƠN (không có cả dòng HO) vì
+  // route coi `Promise.all([hoPromise, storesPromise])` là 1 khối, 1 phần lỗi làm cả 2 phần đều hỏng.
+  await test('GET /connections/status: admin -> HO vẫn kết nối tốt NHƯNG storeConnStore.listRaw() lỗi (VD thiếu bảng CSDL) -> HO vẫn hiện đúng, chỉ "stores" rỗng kèm storesError rõ ràng', async () => {
+    CURRENT_USER = ADMIN.username;
+    forceTestConnError = false;
+    const storeConnStoreStub = require('../lib/dsmartStorePriceConnectionsStore');
+    const originalListRaw = storeConnStoreStub.listRaw;
+    storeConnStoreStub.listRaw = async () => { throw new Error("Invalid object name 'dbo.DsmartStorePriceConnections'."); };
+    try {
+      const res = await apiGet('/connections/status');
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.ho.ok, true, 'HO vẫn phải hiện đúng kết quả, KHÔNG bị kéo theo lỗi của phần siêu thị');
+      assert.strictEqual(res.body.ho.ms, 7);
+      assert.deepStrictEqual(res.body.stores, []);
+      assert.ok(/DsmartStorePriceConnections/.test(res.body.storesError), 'phải có storesError rõ ràng để người dùng/IT tự chẩn đoán được (thiếu bảng CSDL)');
+    } finally {
+      storeConnStoreStub.listRaw = originalListRaw;
+    }
+  });
+
   // ===== jobs/dsmartAutoApplyScheduledPrices (12/2026, "Lên Lịch Áp Giá") =====
   await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu ĐÃ ĐẾN -> tự áp dụng, ghi vào CSPRICE, chuyển ACTIVE', async () => {
     CSPRICE = []; ENTRIES = [];
