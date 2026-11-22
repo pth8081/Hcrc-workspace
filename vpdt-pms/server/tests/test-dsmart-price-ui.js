@@ -93,6 +93,15 @@ async function main() {
         if (method === 'GET') return { ok: true, status: 200, json: async () => ({ ok: true, config: { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 } }) };
         return { ok: true, status: 200, json: async () => ({ ok: true, config: { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 } }) };
       }
+      // "📅 Lên Lịch Áp Giá" — ô chỉnh giờ áp dụng (12/2026, theo yêu cầu người dùng "cho cái ô điều
+      // chỉnh, tự điều chỉnh bắt đầu từ giờ nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn
+      // auto-delete-config ở trên, không có field "enabled" (job luôn chạy, chỉ chỉnh giờ được).
+      if (u === '/api/dsmart-price/auto-apply-config') {
+        if (method === 'GET') return { ok: true, status: 200, json: async () => ({ ok: true, config: { autoApplyHour: window.__mockAutoApplyHour ?? 0, autoApplyMinute: window.__mockAutoApplyMinute ?? 0 } }) };
+        window.__dsmartPriceSaveAutoApplyCalled = (window.__dsmartPriceSaveAutoApplyCalled || 0) + 1;
+        window.__dsmartPriceLastSaveAutoApplyBody = JSON.parse(opts.body);
+        return { ok: true, status: 200, json: async () => ({ ok: true, config: JSON.parse(opts.body) }) };
+      }
       if (u === '/api/dsmart-price/preview') {
         window.__dsmartPricePreviewCalled = (window.__dsmartPricePreviewCalled || 0) + 1;
         return { ok: true, status: 200, json: async () => ({ ok: true, fileName: 'test-upload.xlsx', rows: [

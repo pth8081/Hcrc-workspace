@@ -491,6 +491,19 @@
       <div class="bg-white border rounded-lg p-4 space-y-3">
         <div class="font-bold text-sm text-gray-800">2b. Giá Đã Lên Lịch <span id="dsmartPriceScheduledCount"></span></div>
         <div class="text-[11px] text-gray-500">Các dòng đã tick "📅 Đặt Lịch Áp Giá" với Ngày Bắt Đầu ở tương lai — CHƯA ghi gì vào CSPRICE, hệ thống tự áp dụng (kèm đồng bộ mọi siêu thị) ngay khi tới Ngày Bắt Đầu.</div>
+        <!-- Giờ Lên Lịch Áp Giá (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh bắt
+             đầu từ giờ nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn công tắc "🔁 Tự động xoá khi
+             hết hạn" ở mục 2 bên dưới, KHÔNG có checkbox bật/tắt (job luôn chạy), chỉ có giờ:phút. -->
+        <div class="bg-sky-50 border rounded p-3 flex flex-wrap items-center gap-3">
+          <span class="text-xs font-bold text-sky-800">📅 Giờ tự động áp dụng</span>
+          <div class="flex items-center gap-1.5 text-xs text-sky-800">
+            <span>Áp dụng lúc</span>
+            <input type="number" id="dsmartPriceAutoApplyHour" min="0" max="23" value="0" data-op-change="saveDsmartPriceAutoApplyConfig" class="w-12 border rounded p-1 text-center">
+            <span>:</span>
+            <input type="number" id="dsmartPriceAutoApplyMinute" min="0" max="59" value="0" data-op-change="saveDsmartPriceAutoApplyConfig" class="w-12 border rounded p-1 text-center">
+            <span>cùng Ngày Bắt Đầu</span>
+          </div>
+        </div>
         <div class="overflow-x-auto border rounded">
           <table class="w-full text-xs">
             <thead class="bg-gray-100 text-left"><tr>

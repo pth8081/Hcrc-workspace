@@ -159,13 +159,19 @@ stubModule('lib/httpErrors', { HttpError: FakeHttpError });
 stubModule('lib/uploadRateLimiter', (req, res, next) => next());
 
 let AUTO_DELETE_CFG = { autoDeleteEnabled: false, autoDeleteHour: 23, autoDeleteMinute: 0 };
+// AUTO_APPLY_CFG (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh bắt đầu từ giờ
+// nào, giống xóa để cho chủ động") — mặc định 0:0 GIỮ NGUYÊN hành vi cũ "áp giá từ 0 giờ" cho MỌI test
+// đã có từ trước (không đặt lại biến này) vẫn pass không cần sửa gì.
+let AUTO_APPLY_CFG = { autoApplyHour: 0, autoApplyMinute: 0 };
 let RAW_CFG_HAS_PASSWORD = true;
 stubModule('lib/dsmartPriceConfigStore', {
-  getRawConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: RAW_CFG_HAS_PASSWORD ? 'enc' : null, ...AUTO_DELETE_CFG }),
-  getSanitizedConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', hasPassword: true, ...AUTO_DELETE_CFG }),
+  getRawConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: RAW_CFG_HAS_PASSWORD ? 'enc' : null, ...AUTO_DELETE_CFG, ...AUTO_APPLY_CFG }),
+  getSanitizedConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', hasPassword: true, ...AUTO_DELETE_CFG, ...AUTO_APPLY_CFG }),
   saveConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...cfg, hasPassword: true }; },
   getAutoDeleteConfig: async () => ({ ...AUTO_DELETE_CFG }),
   saveAutoDeleteConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...AUTO_DELETE_CFG }; },
+  getAutoApplyConfig: async () => ({ ...AUTO_APPLY_CFG }),
+  saveAutoApplyConfig: async (cfg) => { AUTO_APPLY_CFG = { autoApplyHour: cfg.autoApplyHour, autoApplyMinute: cfg.autoApplyMinute }; return { ...AUTO_APPLY_CFG }; },
   decryptSecret: (v) => v
 });
 
@@ -354,6 +360,26 @@ async function main() {
     CURRENT_USER = IT_PRICE_WRITER.username;
     const res = await apiGet('/auto-delete-config');
     assert.strictEqual(res.status, 200);
+  });
+  // auto-apply-config (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh bắt đầu từ
+  // giờ nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn test auto-delete-config ở trên.
+  await test('auto-apply-config KHÔNG cần admin (itSupportPriceWriteDsmart đủ)', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiGet('/auto-apply-config');
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body.config, { autoApplyHour: 0, autoApplyMinute: 0 });
+  });
+  await test('PATCH /auto-apply-config: lưu đúng giờ:phút mới, không cần field "enabled" nào', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPatch('/auto-apply-config', { autoApplyHour: 6, autoApplyMinute: 30 });
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body.config, { autoApplyHour: 6, autoApplyMinute: 30 });
+    AUTO_APPLY_CFG = { autoApplyHour: 0, autoApplyMinute: 0 }; // reset cho các test sau
+  });
+  await test('PATCH /auto-apply-config: giờ/phút ngoài phạm vi hợp lệ -> 400', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPatch('/auto-apply-config', { autoApplyHour: 24, autoApplyMinute: 0 });
+    assert.strictEqual(res.status, 400);
   });
 
   // ===== Kiểm Tra Kết Nối (nút "🔌 Kiểm Tra Kết Nối", 12/2026) =====
@@ -980,6 +1006,47 @@ async function main() {
     assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
     assert.ok(ENTRIES[0].dsmartKey, 'Đã có dsmartKey sau khi tự áp dụng');
     assert.strictEqual(ENTRIES[0].history[ENTRIES[0].history.length - 1].mode, 'AUTO_SCHEDULED');
+  });
+
+  // Giờ Lên Lịch Áp Giá (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh bắt đầu từ
+  // giờ nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn 2 test giờ của jobs/dsmartAutoDeleteExpiredPrices
+  // ở trên (dùng cùng kỹ thuật chặn trần 23:59 cùng ngày để không bao giờ vòng qua ngày hôm sau, tránh
+  // test flaky lúc chạy gần nửa đêm).
+  await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu = hôm nay nhưng CHƯA tới giờ đã đặt -> chưa áp dụng', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    // schedule=true chỉ thật sự chuyển SCHEDULED khi frDate > hôm nay (routes/dsmartWholesalePrice.js) —
+    // dùng ngày tương lai để lên lịch, rồi tự sửa frDate -> hôm nay (giống test ĐÃ ĐẾN ở trên) để mô
+    // phỏng đúng lúc Ngày Bắt Đầu vừa chạm tới, không nhờ route tự áp ngay.
+    await apiPost('/apply', { rows: [{ custId: 'AUTOHOUR1', skuId: 'SKAH1', price: 9000, frDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+    ENTRIES[0].frDate = today;
+    const now = new Date();
+    const nowMinutesOfDay = now.getHours() * 60 + now.getMinutes();
+    const dueMinutesOfDay = Math.min(nowMinutesOfDay + 120, 23 * 60 + 59);
+    AUTO_APPLY_CFG = { autoApplyHour: Math.floor(dueMinutesOfDay / 60), autoApplyMinute: dueMinutesOfDay % 60 };
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 0);
+    assert.strictEqual(CSPRICE.length, 0);
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+    AUTO_APPLY_CFG = { autoApplyHour: 0, autoApplyMinute: 0 }; // reset cho các test sau
+  });
+
+  await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu = hôm nay, ĐÃ qua giờ đã đặt -> tự áp dụng', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const today = new Date().toISOString().slice(0, 10);
+    await apiPost('/apply', { rows: [{ custId: 'AUTOHOUR2', skuId: 'SKAH2', price: 9500, frDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), toDate: '2099-12-31' }], schedule: true });
+    assert.strictEqual(ENTRIES[0].status, 'SCHEDULED');
+    ENTRIES[0].frDate = today;
+    AUTO_APPLY_CFG = { autoApplyHour: 0, autoApplyMinute: 0 }; // 0:0 -> mọi giờ trong ngày đều đã qua
+    delete require.cache[require.resolve('../jobs/dsmartAutoApplyScheduledPrices')];
+    const { runDsmartAutoApplyScheduledPrices } = require('../jobs/dsmartAutoApplyScheduledPrices');
+    const result = await runDsmartAutoApplyScheduledPrices();
+    assert.strictEqual(result.appliedCount, 1);
+    assert.strictEqual(CSPRICE.length, 1);
+    assert.strictEqual(ENTRIES[0].status, 'ACTIVE');
   });
 
   await test('jobs/dsmartAutoApplyScheduledPrices: Ngày Bắt Đầu CHƯA ĐẾN -> chưa áp dụng gì', async () => {

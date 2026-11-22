@@ -1752,6 +1752,24 @@ BEGIN
 END
 GO
 
+/* AutoApplyHour/AutoApplyMinute (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh
+   bắt đầu từ giờ nào, giống xóa để cho chủ động") — "📅 Lên Lịch Áp Giá" (jobs/dsmartAutoApplyScheduledPrices.js)
+   trước đây CỐ ĐỊNH áp giá ngay sau 0 giờ ngày Ngày Bắt Đầu (không có ô chỉnh), KHÔNG đối xứng với
+   "🔁 Tự Động Xoá Khi Hết Hạn" đã có AutoDeleteHour/AutoDeleteMinute từ trước — thêm 2 cột mới, mặc định
+   0:0 để GIỮ NGUYÊN hành vi cũ (áp từ 0 giờ) cho tới khi admin tự đổi. KHÔNG có cột "AutoApplyEnabled"
+   tương ứng — "Lên Lịch" là lựa chọn TỪNG LƯỢT của người tạo (tick "Đặt Lịch" lúc Thêm Giá Mới), không
+   phải công tắc bật/tắt cả module như Tự Động Xoá. */
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartPriceDbConfig', 'AutoApplyHour') IS NULL
+BEGIN
+    ALTER TABLE dbo.DsmartPriceDbConfig ADD AutoApplyHour INT NOT NULL DEFAULT 0;
+END
+GO
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartPriceDbConfig', 'AutoApplyMinute') IS NULL
+BEGIN
+    ALTER TABLE dbo.DsmartPriceDbConfig ADD AutoApplyMinute INT NOT NULL DEFAULT 0;
+END
+GO
+
 /* DsmartStorePriceConnections (12/2026, theo yêu cầu người dùng "tôi muốn cài đặt giá đến tận máy chủ
    db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả các siêu thị") — danh
    sách kết nối SQL Server RIÊNG của TỪNG siêu thị (đã xác nhận: server HWS có VPN/kết nối sẵn tới SQL

@@ -14,6 +14,7 @@
 // AN TOÀN: lỗi ghi 1 dòng (VD mất kết nối DSmart) KHÔNG làm hỏng các dòng khác trong cùng lượt chạy — log
 // cảnh báo rõ ràng, tự thử lại ở lượt chạy kế tiếp (dòng vẫn giữ nguyên SCHEDULED nếu áp thất bại).
 const { insertWholesalePrice, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { getAutoApplyConfig } = require('../lib/dsmartPriceConfigStore');
 const { getAllForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 // Email thông báo Áp Giá thành công + hàng đợi tự động thử lại (12/2026, theo yêu cầu người dùng — xem
@@ -26,8 +27,29 @@ function todayDateOnlyIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// dueForAutoApply() (12/2026, theo yêu cầu người dùng "cho cái ô điều chỉnh, tự điều chỉnh bắt đầu từ giờ
+// nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn dueForAutoDelete() (jobs/dsmartAutoDeleteExpiredPrices.js):
+// FrDate đã qua hẳn (< hôm nay) -> áp ngay không chờ gì thêm (đã trễ lịch, không có lý do giữ thêm);
+// FrDate = hôm nay -> chỉ áp khi đã qua đúng giờ:phút đã cấu hình (mặc định 0:0 = giữ nguyên hành vi cũ
+// "áp giá từ 0 giờ" cho tới khi admin tự chỉnh).
+function dueForAutoApply(entry, now, cfg) {
+  const today = todayDateOnlyIso(now);
+  if (entry.frDate < today) return true;
+  if (entry.frDate > today) return false;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const dueMinutes = (cfg.autoApplyHour || 0) * 60 + (cfg.autoApplyMinute || 0);
+  return nowMinutes >= dueMinutes;
+}
+
 async function runDsmartAutoApplyScheduledPrices() {
-  const today = todayDateOnlyIso();
+  const now = new Date();
+  let cfg;
+  try {
+    cfg = await getAutoApplyConfig();
+  } catch (err) {
+    console.error('⛔ jobs/dsmartAutoApplyScheduledPrices: không đọc được cấu hình giờ áp dụng —', err.message);
+    return { skipped: true, reason: 'config-read-error' };
+  }
   let entries;
   try {
     entries = await getAllForCollection('dsmartWholesalePriceEntries');
@@ -36,7 +58,7 @@ async function runDsmartAutoApplyScheduledPrices() {
     return { skipped: true, reason: 'entries-read-error' };
   }
 
-  const due = entries.filter(e => e.status === 'SCHEDULED' && e.frDate <= today);
+  const due = entries.filter(e => e.status === 'SCHEDULED' && dueForAutoApply(e, now, cfg));
   let appliedCount = 0, errorCount = 0;
   const errorDetails = [];
   // appliedItems (12/2026): gom lại TẤT CẢ dòng áp dụng thành công trong LƯỢT CHẠY này — gửi GỘP 1 email
@@ -63,14 +85,14 @@ async function runDsmartAutoApplyScheduledPrices() {
         // Vá: đọc lại (fresh) TRONG khoá trước khi ghi DSmart, bỏ qua nếu KHÔNG còn SCHEDULED/chưa tới hạn.
         const freshList = await getAllForCollection('dsmartWholesalePriceEntries');
         const fresh = freshList.find(x => x.id === e.id);
-        if (!fresh || fresh.status !== 'SCHEDULED' || fresh.frDate > today) return false;
+        if (!fresh || fresh.status !== 'SCHEDULED' || !dueForAutoApply(fresh, now, cfg)) return false;
         // targetStoreIds (12/2026): tái dùng đúng danh sách siêu thị đã ĐÓNG BĂNG lúc "Thêm Giá Mới"/tick
         // "Đặt Lịch Áp Giá" (null = đã chọn "Tất Cả" lúc đó) — xem chú thích tại fanOutToStores()/
         // lib/dsmartSqlClient.js.
         const { wasOverwrite, storeResults, storeFanOutError, ...dsmartKey } = await insertWholesalePrice({
           custId: fresh.custId, skuId: fresh.skuId, price: fresh.price, frDate: fresh.frDate, toDate: fresh.toDate
         }, fresh.targetStoreIds);
-        const now = new Date().toISOString();
+        const nowIso = new Date().toISOString();
         // Trùng khoá chính CSPRICE (CUST_ID, SKU_ID) -> insertWholesalePrice() đã TỰ GHI ĐÈ dòng cũ trên
         // DSmart. Đánh dấu DELETED MỌI entry mirror ACTIVE khác cho đúng cặp này (cùng logic routes/
         // dsmartWholesalePrice.js::POST /apply) — tránh mirror có nhiều entry ACTIVE cùng trỏ 1 dòng
@@ -82,9 +104,9 @@ async function runDsmartAutoApplyScheduledPrices() {
             await withLockedRecordForCollection('dsmartWholesalePriceEntries', stale.id, (item) => {
               if (item.status !== 'ACTIVE') return item;
               return {
-                ...item, status: 'DELETED', deletedBy: null, deletedAt: now,
+                ...item, status: 'DELETED', deletedBy: null, deletedAt: nowIso,
                 history: [...(item.history || []), {
-                  action: 'DELETE', mode: 'AUTO_OVERWRITTEN', actor: null, at: now,
+                  action: 'DELETE', mode: 'AUTO_OVERWRITTEN', actor: null, at: nowIso,
                   oldPrice: item.price, oldFrDate: item.frDate, oldToDate: item.toDate,
                   note: 'Bị ghi đè tự động bởi 1 dòng khác (Lên Lịch Áp Giá hoặc Thêm Giá Mới) cho cùng Mã Khách B2B/Mã Sản Phẩm (CSPRICE chỉ cho phép 1 dòng/cặp)'
                 }]
@@ -95,9 +117,9 @@ async function runDsmartAutoApplyScheduledPrices() {
         await withLockedRecordForCollection('dsmartWholesalePriceEntries', fresh.id, (item) => {
           if (item.status !== 'SCHEDULED') return item; // đã bị hủy/xử lý bởi thao tác khác trong lúc job đang chạy
           return {
-            ...item, dsmartKey, status: 'ACTIVE', appliedAt: now, lastAutoApplyError: null, lastAutoApplyAt: null,
+            ...item, dsmartKey, status: 'ACTIVE', appliedAt: nowIso, lastAutoApplyError: null, lastAutoApplyAt: null,
             history: [...(item.history || []), {
-              action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: 'AUTO_SCHEDULED', actor: null, at: now,
+              action: wasOverwrite ? 'INSERT_OVERWRITE' : 'INSERT', mode: 'AUTO_SCHEDULED', actor: null, at: nowIso,
               price: item.price, frDate: item.frDate, toDate: item.toDate, storeResults,
               note: 'Tự động áp dụng đúng Ngày Bắt Đầu đã lên lịch'
             }]

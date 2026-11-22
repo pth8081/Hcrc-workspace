@@ -35,7 +35,7 @@ async function initDsmartPriceTab() {
   applyDsmartPriceUploadFilterState();
   applyDsmartPriceMgFilterState();
   applyDsmartPriceHistoryFilterState();
-  await loadDsmartPriceAutoDeleteConfig();
+  await Promise.all([loadDsmartPriceAutoDeleteConfig(), loadDsmartPriceAutoApplyConfig()]);
   const tasks = [renderDsmartPriceEntries(), renderDsmartPriceHistory(), loadDsmartPriceStoreOptions()];
   if (isAdmin) tasks.push(renderDsmartStoreConnList());
   await Promise.all(tasks);
@@ -914,6 +914,32 @@ async function saveDsmartPriceAutoDeleteConfig() {
     const res = await fetch('/api/dsmart-price/auto-delete-config', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ autoDeleteEnabled, autoDeleteHour, autoDeleteMinute })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ===================== Lên Lịch Áp Giá — giờ áp dụng (12/2026, theo yêu cầu người dùng "cho cái ô điều
+// chỉnh, tự điều chỉnh bắt đầu từ giờ nào, giống xóa để cho chủ động") — mirror ĐÚNG khuôn load/save Tự
+// Động Xoá ở trên, không có checkbox bật/tắt (job luôn chạy, chỉ chỉnh được giờ). =====================
+async function loadDsmartPriceAutoApplyConfig() {
+  try {
+    const res = await fetch('/api/dsmart-price/auto-apply-config');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    document.getElementById('dsmartPriceAutoApplyHour').value = data.config.autoApplyHour;
+    document.getElementById('dsmartPriceAutoApplyMinute').value = data.config.autoApplyMinute;
+  } catch (err) { console.error('Không tải được Cấu Hình Giờ Lên Lịch Áp Giá:', err.message); }
+}
+
+async function saveDsmartPriceAutoApplyConfig() {
+  const autoApplyHour = Number(document.getElementById('dsmartPriceAutoApplyHour').value);
+  const autoApplyMinute = Number(document.getElementById('dsmartPriceAutoApplyMinute').value);
+  try {
+    const res = await fetch('/api/dsmart-price/auto-apply-config', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoApplyHour, autoApplyMinute })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);

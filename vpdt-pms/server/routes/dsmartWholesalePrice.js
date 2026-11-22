@@ -27,7 +27,7 @@ const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
-const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
+const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
 const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
@@ -490,6 +490,30 @@ router.patch('/auto-delete-config', async (req, res) => {
       `${saved.autoDeleteEnabled ? 'Bật' : 'Tắt'} Tự Động Xoá Khi Hết Hạn${saved.autoDeleteEnabled ? ` lúc ${String(saved.autoDeleteHour).padStart(2, '0')}:${String(saved.autoDeleteMinute).padStart(2, '0')}` : ''}`);
     res.json({ ok: true, config: saved });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/auto-delete-config'); }
+});
+
+// ===================== Lên Lịch Áp Giá — giờ áp dụng (12/2026, theo yêu cầu người dùng "cho cái ô điều
+// chỉnh, tự điều chỉnh bắt đầu từ giờ nào, giống xóa để cho chủ động") — KHÔNG có công tắc bật/tắt (job
+// "Lên Lịch Áp Giá" LUÔN chạy, khác Tự Động Xoá ở trên), chỉ chỉnh được GIỜ áp dụng. =====================
+router.get('/auto-apply-config', async (req, res) => {
+  try {
+    res.json({ ok: true, config: await getAutoApplyConfig() });
+  } catch (err) { sendCatchError(res, err, 'GET /api/dsmart-price/auto-apply-config'); }
+});
+
+router.patch('/auto-apply-config', async (req, res) => {
+  try {
+    const { autoApplyHour, autoApplyMinute } = req.body || {};
+    const hour = Number(autoApplyHour);
+    const minute = Number(autoApplyMinute);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+      throw new HttpError(400, 'Giờ/phút Lên Lịch Áp Giá không hợp lệ (giờ 0-23, phút 0-59)');
+    }
+    const saved = await saveAutoApplyConfig({ autoApplyHour: hour, autoApplyMinute: minute }, req.freshUser.username);
+    logDsmartPrice(req, 'UPDATE_DSMART_PRICE_AUTOAPPLY', 'dsmartPriceDbConfig',
+      `Đổi giờ Lên Lịch Áp Giá (theo Ngày Bắt Đầu) thành ${String(saved.autoApplyHour).padStart(2, '0')}:${String(saved.autoApplyMinute).padStart(2, '0')}`);
+    res.json({ ok: true, config: saved });
+  } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/auto-apply-config'); }
 });
 
 // ===================== File mẫu =====================
