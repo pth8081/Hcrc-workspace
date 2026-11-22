@@ -32,7 +32,6 @@ function rowToRaw(row) {
     user: row.DbUser,
     passwordEnc: row.PasswordEnc,
     enabled: !!row.Enabled,
-    catalogStoreName: row.CatalogStoreName || null,
     createdAt: row.CreatedAt,
     updatedAt: row.UpdatedAt,
     updatedBy: row.UpdatedBy || null
@@ -129,32 +128,9 @@ async function updateStore(id, { storeCode, storeName, host, port, database, use
   return sanitize(await getRawById(id));
 }
 
-// setCatalogMapping(id, catalogStoreName, actor): gán/xoá ánh xạ "siêu thị tương ứng trong Danh Mục Siêu
-// Thị" (DB.stores) cho 1 dòng kết nối — route gọi hàm này đã tự validate catalogStoreName có thật trong
-// DB.stores (hoặc null để xoá ánh xạ), hàm này KHÔNG validate lại (đơn giản hoá, tránh phụ thuộc vòng
-// vào lib/data.js). Dùng NVARCHAR(200) rỗng chuỗi coi như null (xoá ánh xạ).
-async function setCatalogMapping(id, catalogStoreName, actor) {
-  const existing = await getRawById(id);
-  if (!existing) throw new HttpError(404, 'Không tìm thấy kết nối siêu thị này — có thể đã bị xoá.');
-  const value = catalogStoreName ? String(catalogStoreName).trim() : null;
-  if (value && value.length > 200) {
-    throw new HttpError(400, 'Tên siêu thị trong Danh Mục vượt quá 200 ký tự cho phép.');
-  }
-  const pool = await getPool();
-  await pool.request()
-    .input('id', sql.BigInt, id)
-    .input('catalogStoreName', sql.NVarChar(200), value)
-    .input('updatedBy', sql.NVarChar(100), actor || null)
-    .query(`
-      UPDATE dbo.DsmartStorePriceConnections SET
-        CatalogStoreName = @catalogStoreName, UpdatedAt = SYSUTCDATETIME(), UpdatedBy = @updatedBy
-      WHERE Id = @id`);
-  return sanitize(await getRawById(id));
-}
-
 async function deleteStore(id) {
   const pool = await getPool();
   await pool.request().input('id', sql.BigInt, id).query('DELETE FROM dbo.DsmartStorePriceConnections WHERE Id = @id');
 }
 
-module.exports = { listRaw, listSanitized, getRawById, createStore, updateStore, setCatalogMapping, deleteStore, decryptSecret };
+module.exports = { listRaw, listSanitized, getRawById, createStore, updateStore, deleteStore, decryptSecret };

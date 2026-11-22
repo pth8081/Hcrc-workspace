@@ -27,7 +27,6 @@ const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
-const { getAppDataValue } = require('../lib/appData');
 const {
   getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig,
   getRawConfig, decryptSecret, getExternalApiConfig, savePriceOperationMode, saveExternalApiConfig
@@ -237,32 +236,6 @@ router.put('/store-connections/:id', async (req, res) => {
     logDsmartPrice(req, 'UPDATE_DSMART_STORE_CONNECTION', updated.storeCode, `Sửa kết nối siêu thị "${updated.storeName}" (${updated.storeCode})${updated.enabled ? '' : ' — ĐÃ TẮT'}`);
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, 'PUT /api/dsmart-price/store-connections/:id'); }
-});
-
-// PATCH /store-connections/:id/catalog-mapping (12/2026, theo yêu cầu người dùng: "Mã Siêu Thị" gửi cho
-// đối tác API phải lấy từ "Danh Mục Siêu Thị" (DB.stores + "Mã Điểm" — DB.storeExternalCodes), KHÔNG lấy
-// StoreCode ở bảng Cấu Hình Kết Nối này nữa, vì bảng này có thể bị bỏ dùng sau này khi chuyển hẳn sang
-// API). Tên gọi giữa 2 nơi KHÔNG khớp 100% (VD "BRGMart 5 Hàm Tử Quan" vs "Cửa hàng 5 Hàm Tử Quan") nên
-// KHÔNG tự suy đoán ngầm lúc gọi API — admin phải TỰ XÁC NHẬN đúng 1 tên trong Danh Mục cho từng dòng kết
-// nối (client tự gợi ý khớp gần đúng để đỡ phải gõ tay, nhưng route này chỉ lưu đúng cái admin đã chọn/
-// xác nhận). CHỈ admin, cùng mức nhạy cảm các route /store-connections khác.
-router.patch('/store-connections/:id/catalog-mapping', async (req, res) => {
-  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới sửa được Ánh Xạ Danh Mục' });
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const raw = req.body?.catalogStoreName;
-    const catalogStoreName = raw ? String(raw).trim() : null;
-    if (catalogStoreName) {
-      const allStores = await getAppDataValue('stores') || [];
-      if (!allStores.includes(catalogStoreName)) {
-        return res.status(400).json({ error: `"${catalogStoreName}" không có trong Danh Mục Siêu Thị — chọn đúng 1 tên có sẵn trong danh mục.` });
-      }
-    }
-    const updated = await storeConnStore.setCatalogMapping(id, catalogStoreName, req.freshUser.username);
-    logDsmartPrice(req, 'UPDATE_DSMART_STORE_CONNECTION', updated.storeCode, `Ánh xạ kết nối siêu thị "${updated.storeName}" (${updated.storeCode}) với Danh Mục: ${catalogStoreName || '(xoá ánh xạ)'}`);
-    res.json({ ok: true, item: updated });
-  } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/store-connections/:id/catalog-mapping'); }
 });
 
 router.delete('/store-connections/:id', async (req, res) => {

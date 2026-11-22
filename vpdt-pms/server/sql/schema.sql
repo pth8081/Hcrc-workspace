@@ -1823,17 +1823,6 @@ BEGIN
     CREATE UNIQUE INDEX UX_DsmartStorePriceConnections_StoreCode ON dbo.DsmartStorePriceConnections (StoreCode);
 END
 GO
--- CatalogStoreName (12/2026, theo yêu cầu người dùng: "Mã Siêu Thị" gửi cho đối tác API phải lấy từ
--- "Danh Mục Siêu Thị" (DB.stores/storeExternalCodes — "Mã Điểm"), KHÔNG lấy StoreCode ở bảng này nữa, vì
--- bảng kết nối CSDL này có thể bị bỏ dùng sau này khi chuyển hẳn sang API). Lưu đúng 1 TÊN trong
--- DB.stores mà admin đã TỰ XÁC NHẬN khớp với dòng kết nối này (không tự suy đoán ngầm lúc chạy — xem
--- lib/dsmartSqlClient.js buildStoreScope()); NULL = CHƯA ánh xạ, chặn hẳn gọi EXTERNAL_API cho tới khi
--- admin xác nhận xong (không gửi mã rỗng/sai cho đối tác).
-IF OBJECT_ID('dbo.DsmartStorePriceConnections', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartStorePriceConnections', 'CatalogStoreName') IS NULL
-BEGIN
-    ALTER TABLE dbo.DsmartStorePriceConnections ADD CatalogStoreName NVARCHAR(200) NULL;
-END
-GO
 
 /* DsmartWholesalePriceEntries (Hỗ Trợ IT > "💰 Cài Đặt Giá Bán Buôn", 12/2026) — bảng MIRROR nội bộ,
    theo dõi các dòng giá bán buôn ĐÃ GHI qua tính năng này vào bảng CSPRICE của hệ thống DSmart16 Trung

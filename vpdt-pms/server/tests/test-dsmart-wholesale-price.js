@@ -225,23 +225,8 @@ stubModule('lib/dsmartStorePriceConnectionsStore', {
     return { ...rest, hasPassword: !!passwordEnc };
   },
   deleteStore: async (id) => { STORE_CONNS = STORE_CONNS.filter(s => s.id !== id); },
-  // setCatalogMapping() (12/2026) — gán/xoá catalogStoreName (tên trong Danh Mục Siêu Thị) cho 1 dòng kết
-  // nối; route tự validate catalogStoreName có thật trong DB.stores (getAppDataValue('stores'), xem stub
-  // lib/appData ngay dưới) TRƯỚC khi gọi tới đây.
-  setCatalogMapping: async (id, catalogStoreName, actor) => {
-    const row = STORE_CONNS.find(s => s.id === id);
-    if (!row) throw new Error('Không tìm thấy kết nối siêu thị này');
-    row.catalogStoreName = catalogStoreName;
-    row.updatedBy = actor;
-    const { passwordEnc, ...rest } = row;
-    return { ...rest, hasPassword: !!passwordEnc };
-  },
   decryptSecret: (v) => v
 });
-
-// DB.stores (Danh Mục Siêu Thị) — chỉ cần cho route PATCH /store-connections/:id/catalog-mapping tự
-// validate catalogStoreName có thật trong danh mục hay không.
-stubModule('lib/appData', { getAppDataValue: async (key) => key === 'stores' ? ['Cửa hàng 5 Hàm Tử Quan', 'Siêu thị số 7'] : null });
 
 const SYSTEM_LOGS = [];
 stubModule('lib/systemLogStore', { insertSystemLog: async (entry) => { SYSTEM_LOGS.push(entry); return entry; } });
@@ -997,36 +982,6 @@ async function main() {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.item.storeName, 'Siêu Thị 01 (đổi tên)');
     assert.strictEqual(res.body.item.enabled, false);
-  });
-
-  await test('PATCH /store-connections/:id/catalog-mapping: không phải admin -> 403', async () => {
-    CURRENT_USER = IT_PRICE_WRITER.username;
-    const id = STORE_CONNS[0].id;
-    const res = await apiPatch(`/store-connections/${id}/catalog-mapping`, { catalogStoreName: 'Cửa hàng 5 Hàm Tử Quan' });
-    assert.strictEqual(res.status, 403);
-    CURRENT_USER = ADMIN.username;
-  });
-
-  await test('PATCH /store-connections/:id/catalog-mapping: admin, tên KHÔNG có trong Danh Mục -> 400, nêu rõ tên sai', async () => {
-    const id = STORE_CONNS[0].id;
-    const res = await apiPatch(`/store-connections/${id}/catalog-mapping`, { catalogStoreName: 'Tên Không Tồn Tại' });
-    assert.strictEqual(res.status, 400);
-    assert.ok(res.body.error.includes('Tên Không Tồn Tại'), res.body);
-  });
-
-  await test('PATCH /store-connections/:id/catalog-mapping: admin, tên CÓ trong Danh Mục -> 200, lưu đúng ánh xạ', async () => {
-    const id = STORE_CONNS[0].id;
-    const res = await apiPatch(`/store-connections/${id}/catalog-mapping`, { catalogStoreName: 'Cửa hàng 5 Hàm Tử Quan' });
-    assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.item.catalogStoreName, 'Cửa hàng 5 Hàm Tử Quan');
-    assert.strictEqual(STORE_CONNS.find(s => s.id === id).catalogStoreName, 'Cửa hàng 5 Hàm Tử Quan');
-  });
-
-  await test('PATCH /store-connections/:id/catalog-mapping: catalogStoreName rỗng -> xoá ánh xạ (null)', async () => {
-    const id = STORE_CONNS[0].id;
-    const res = await apiPatch(`/store-connections/${id}/catalog-mapping`, { catalogStoreName: '' });
-    assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.item.catalogStoreName, null);
   });
 
   await test('POST /store-connections/:id/test-connection: admin -> gọi testStoreConnection(), trả ms', async () => {

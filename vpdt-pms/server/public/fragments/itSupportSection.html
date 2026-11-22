@@ -409,24 +409,11 @@
           </div>
         </div>
 
-        <!-- "📇 Ánh Xạ Danh Mục" (12/2026, theo yêu cầu người dùng: "Mã Siêu Thị gửi đối tác API phải lấy
-             trong Danh Mục Siêu Thị mới chuẩn, vì sau này bảng Cấu Hình Kết Nối CSDL có thể bị bỏ dùng")
-             — chỉ ảnh hưởng tới Mã Siêu Thị (storeScope) gửi cho đối tác ở chế độ "🌐 Theo API"; chế độ
-             "🖥️ Theo Phần Mềm" (ghi SQL trực tiếp) KHÔNG đụng gì tới cột này.
-             ĐƠN GIẢN HOÁ (theo yêu cầu người dùng: "import lại Tên Siêu Thị cho khớp Danh Mục, dùng 1 tên
-             cho cả CSDL lẫn API, không cần ghép gì cả"): nếu "Tên Siêu Thị" của dòng kết nối (cột bên
-             trái) ĐÃ TRÙNG KHỚP CHÍNH XÁC với 1 tên trong Danh Mục Siêu Thị, hệ thống TỰ tra ra Mã Điểm,
-             KHÔNG cần thao tác gì ở đây cả — khuyến khích sửa lại "Tên Siêu Thị" (nút "✏️ Sửa") cho khớp
-             Danh Mục 1 lần là xong lâu dài. Ô ánh xạ riêng dưới đây CHỈ cần dùng khi 2 tên lỡ khác nhau mà
-             chưa kịp đồng bộ lại — xem dsmartStoreConnSuggestCatalogMatch(), module-itsupport-
-             dsmartprice.js. -->
-        <div class="text-[11px] text-gray-500">📇 <b>Ánh Xạ Danh Mục</b>: nếu "Tên Siêu Thị" ở cột bên trái ĐÃ khớp đúng tên trong "Danh Mục Siêu Thị", hệ thống tự lấy "Mã Điểm" — không cần làm gì thêm. Chỉ cần tự chọn/xác nhận ở đây khi 2 tên khác nhau. Mã Điểm này dùng làm Mã Siêu Thị gửi đối tác khi dùng chế độ "🌐 Theo API" (xem thanh "Chế Độ Áp Dụng Giá" phía trên) — KHÔNG ảnh hưởng chế độ "🖥️ Theo Phần Mềm".</div>
-        <div id="dsmartStoreConnCatalogDatalist" class="hidden" data-sdd-dropdown></div>
         <div class="overflow-x-auto border rounded">
           <table class="w-full text-xs">
             <thead class="bg-gray-100 text-left"><tr>
               <th class="p-1.5">Mã Siêu Thị</th><th class="p-1.5">Tên Siêu Thị</th><th class="p-1.5">Host:Port/CSDL</th>
-              <th class="p-1.5">Bật</th><th class="p-1.5">📇 Ánh Xạ Danh Mục (gửi API)</th><th class="p-1.5">Thao Tác</th>
+              <th class="p-1.5">Bật</th><th class="p-1.5">Thao Tác</th>
             </tr></thead>
             <tbody id="dsmartStoreConnBody"></tbody>
           </table>

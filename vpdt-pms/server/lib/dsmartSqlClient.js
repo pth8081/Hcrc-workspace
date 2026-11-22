@@ -60,7 +60,6 @@ const sql = require('mssql');
 const { getRawConfig, decryptSecret, getPriceOperationMode, getExternalApiConfig } = require('./dsmartPriceConfigStore');
 const storeConnStore = require('./dsmartStorePriceConnectionsStore');
 const { applyPriceViaApi, deletePriceViaApi } = require('./dsmartPriceExternalApiClient');
-const { getAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
@@ -296,63 +295,30 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
 // tác (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
 // lo đồng bộ xuống mọi siêu thị qua hạ tầng của họ, không phải việc của hệ thống này nữa ở chế độ này).
 //
-// DsmartApiStoreMappingError: ném ra khi buildStoreScope() KHÔNG tự giải quyết được Mã Siêu Thị thật cho
-// 1 hay nhiều siêu thị trong phạm vi — CHẶN HẲN thao tác Áp/Xoá giá ở chế độ EXTERNAL_API thay vì gửi mã
-// rỗng/sai cho đối tác (xem chú thích buildStoreScope() ngay dưới).
-class DsmartApiStoreMappingError extends HttpError {
-  constructor(message) { super(409, message); this.name = 'DsmartApiStoreMappingError'; }
-}
-
 // buildStoreScope(targetStoreIds): dù KHÔNG tự fan-out ở chế độ API, vẫn PHẢI báo đúng phạm vi siêu thị cho
 // đối tác biết (field `storeScope`, ĐÚNG khuôn đã thống nhất ở tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart",
 // mục "Phạm Vi Siêu Thị") — thiếu bước này đối tác không biết áp/xoá giá cho đúng phạm vi đã chọn lúc "Thêm
-// Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn).
+// Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn). Đổi ID nội bộ
+// (`targetStoreIds`) sang Mã Siêu Thị thật (`storeCodes`) — đối tác không có ý nghĩa gì với ID nội bộ của hệ
+// thống này — và LUÔN giao với danh sách đang Enabled=1 (cùng ngữ nghĩa fanOutToStores() ở trên).
 //
 // Theo yêu cầu người dùng (12/2026): kể cả khi chọn "Tất Cả" (mode ALL), vẫn phải gửi kèm ĐẦY ĐỦ danh sách
 // Mã Siêu Thị (`storeCodes`) cho đối tác — không chỉ gửi mỗi `{mode:"ALL"}` — để đối tác biết CHẮC CHẮN
-// đẩy giá xuống đúng những siêu thị nào. `mode` vẫn giữ lại cho đối tác biết đây là phạm vi "toàn bộ hiện
-// có" hay "chỉ 1 vài siêu thị cụ thể", nhưng `storeCodes` luôn có giá trị ở cả 2 mode.
-//
-// NGUỒN Mã Siêu Thị (sửa lại 12/2026, theo yêu cầu người dùng "mã siêu thị gửi đối tác phải lấy trong
-// Danh Mục Siêu Thị mới chuẩn, vì sau này bảng Cấu Hình Kết Nối CSDL có thể bị bỏ dùng"): KHÔNG còn lấy
-// `storeCode` (mã chữ, VD "BRGMART120HANGTRONG") từ chính dòng Cấu Hình Kết Nối
-// (DsmartStorePriceConnections) nữa — mà tra "Mã Điểm" ở `storeExternalCodes` (DB.storeExternalCodes —
-// vốn dùng cho tích hợp BRGMART Tồn Kho, nay tái dùng luôn cho Giá Bán Buôn vì người dùng xác nhận đây
-// CHÍNH LÀ Mã Siêu Thị cần gửi) theo TÊN SIÊU THỊ.
-//
-// ƯU TIÊN 2 BƯỚC khi tra tên (đơn giản hoá 12/2026, theo yêu cầu người dùng "lấy danh sách siêu thị từ
-// danh mục siêu thị, import lại vào cái phần danh sách kết nối cho nó chuẩn... dùng cho cả cơ sở dữ liệu
-// hoặc API đều đúng với 1 tên siêu thị, không cần phải ghép cái gì cả"):
-//   1. `catalogStoreName` (ánh xạ riêng, nếu admin đã xác nhận qua PATCH /store-connections/:id/catalog-
-//      mapping) — DÙNG TRƯỚC nếu có, cho trường hợp 2 bên lỡ đặt tên khác nhau mà chưa kịp đồng bộ lại.
-//   2. Nếu KHÔNG có ánh xạ riêng, TỰ dùng luôn `storeName` của chính dòng Cấu Hình Kết Nối — khi admin đã
-//      đặt "Tên Siêu Thị" ở Cấu Hình Kết Nối TRÙNG KHỚP CHÍNH XÁC với "Tên Siêu Thị" trong Danh Mục Siêu
-//      Thị (VD re-import lại cho khớp), hệ thống tự tra ra Mã Điểm ĐÚNG mà KHÔNG cần ánh xạ riêng gì cả.
-// Bảng Cấu Hình Kết Nối CHỈ còn dùng để: (1) chọn phạm vi siêu thị (targetStoreIds) — không đổi, (2) mở
-// kết nối SQL thật ở chế độ DIRECT_DB — không đổi.
-//
-// AN TOÀN: 1 siêu thị trong phạm vi (ALL hoặc SPECIFIC đã chọn) mà CẢ 2 bước trên đều KHÔNG tra ra được
-// Mã Điểm (tên không khớp Danh Mục, chưa ánh xạ riêng, hoặc Danh Mục thiếu Mã Điểm cho tên đó) -> NÉM LỖI
-// (DsmartApiStoreMappingError), CHẶN hẳn thao tác — không bao giờ gửi storeCodes rỗng/thiếu cho đối tác
-// mà không ai biết.
+// đẩy giá xuống đúng những siêu thị nào, không phải tự suy luận "ALL" theo danh sách siêu thị riêng của họ
+// (có thể lệch với danh sách đang Enabled=1 của hệ thống này). `mode` vẫn giữ lại cho đối tác biết đây là
+// phạm vi "toàn bộ hiện có" hay "chỉ 1 vài siêu thị cụ thể", nhưng `storeCodes` luôn có giá trị ở cả 2 mode.
 async function buildStoreScope(targetStoreIds) {
-  const stores = await storeConnStore.listRaw({ onlyEnabled: true });
-  const scopedStores = Array.isArray(targetStoreIds)
-    ? stores.filter(s => new Set(targetStoreIds.map(Number)).has(s.id))
-    : stores;
-  const externalCodes = (await getAppDataValue('storeExternalCodes')) || {};
-  const unmapped = [];
-  const storeCodes = [];
-  for (const s of scopedStores) {
-    const effectiveName = s.catalogStoreName || s.storeName;
-    const code = effectiveName ? externalCodes[effectiveName] : null;
-    if (!code) unmapped.push(s.storeName || s.storeCode);
-    else storeCodes.push(String(code));
+  let stores;
+  try {
+    stores = await storeConnStore.listRaw({ onlyEnabled: true });
+  } catch (err) {
+    return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes: [] };
   }
-  if (unmapped.length) {
-    throw new DsmartApiStoreMappingError(`Chưa tra ra "Mã Siêu Thị" (Danh Mục Siêu Thị) cho: ${unmapped.join(', ')} — hoặc sửa lại "Tên Siêu Thị" ở "⚙️ Cấu Hình Kết Nối" cho TRÙNG KHỚP với Danh Mục Siêu Thị, hoặc xác nhận Ánh Xạ Danh Mục riêng cho (các) siêu thị này trước khi dùng chế độ "Theo API".`);
+  if (!Array.isArray(targetStoreIds)) {
+    return { mode: 'ALL', storeCodes: stores.map(s => s.storeCode) };
   }
-  return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes };
+  const idSet = new Set(targetStoreIds.map(Number));
+  return { mode: 'SPECIFIC', storeCodes: stores.filter(s => idSet.has(s.id)).map(s => s.storeCode) };
 }
 async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
@@ -904,6 +870,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError,
-  DsmartApiStoreMappingError
+  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
 };

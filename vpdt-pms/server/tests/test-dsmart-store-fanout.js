@@ -129,14 +129,6 @@ function dispatchQuery(db, rawText, params) {
     });
     return { recordset: [] };
   }
-  // setCatalogMapping() (12/2026) — UPDATE CHỈ riêng CatalogStoreName, PHẢI khớp TRƯỚC nhánh UPDATE chung
-  // ngay dưới (cùng tiền tố "UPDATE dbo.DsmartStorePriceConnections SET"), nếu không sẽ bị nhánh chung
-  // nuốt mất và ghi đè nhầm StoreCode/StoreName/... thành undefined (params không có các field đó).
-  if (/UPDATE dbo\.DsmartStorePriceConnections SET\s+CatalogStoreName/i.test(t)) {
-    const row = db.storeConnections.get(params.id);
-    row.CatalogStoreName = params.catalogStoreName;
-    return { recordset: [] };
-  }
   if (/UPDATE dbo\.DsmartStorePriceConnections SET/i.test(t)) {
     const row = db.storeConnections.get(params.id);
     Object.assign(row, {
@@ -319,23 +311,6 @@ async function main() {
     const after = await storeConnStore.getRawById(st01.id);
     check('updateStore() để trống mật khẩu -> PasswordEnc GIỮ NGUYÊN', after.passwordEnc === before.passwordEnc);
     check('updateStore() vẫn đổi được StoreName dù không đổi mật khẩu', after.storeName === 'Siêu Thị 01 (đổi tên)');
-  }
-
-  // ===== setCatalogMapping() (12/2026, theo yêu cầu người dùng: Mã Siêu Thị gửi đối tác API phải lấy từ
-  // Danh Mục Siêu Thị, không lấy StoreCode ở bảng này nữa) =====
-  {
-    const before = await storeConnStore.getRawById(st01.id);
-    check('getRawById(): mặc định catalogStoreName = null (chưa ánh xạ)', before.catalogStoreName === null, before);
-    const mapped = await storeConnStore.setCatalogMapping(st01.id, 'Cửa hàng 5 Hàm Tử Quan', 'tester');
-    check('setCatalogMapping(): trả đúng catalogStoreName vừa gán', mapped.catalogStoreName === 'Cửa hàng 5 Hàm Tử Quan', mapped);
-    const after = await storeConnStore.getRawById(st01.id);
-    check('setCatalogMapping(): đọc lại đúng catalogStoreName đã lưu', after.catalogStoreName === 'Cửa hàng 5 Hàm Tử Quan');
-    check('setCatalogMapping(): KHÔNG đụng tới StoreCode/StoreName/Host/... khác của dòng này', after.storeCode === before.storeCode && after.storeName === before.storeName && after.host === before.host);
-    const cleared = await storeConnStore.setCatalogMapping(st01.id, null, 'tester');
-    check('setCatalogMapping(null): xoá được ánh xạ, trả về catalogStoreName = null', cleared.catalogStoreName === null, cleared);
-    let threwNotFound = false;
-    try { await storeConnStore.setCatalogMapping(9999999, 'Bất Kỳ', 'tester'); } catch (err) { threwNotFound = true; }
-    check('setCatalogMapping(): id không tồn tại -> ném lỗi rõ ràng (404)', threwNotFound);
   }
 
   await dsmartSqlClient.closeDsmartPool();

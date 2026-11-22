@@ -270,17 +270,8 @@ async function main() {
       deletePriceViaApi: async (params) => { deleteCalls.push(params); return { alreadyGone: false }; }
     });
     let listRawCalls = 0;
-    // catalogStoreName (12/2026, theo yêu cầu người dùng: Mã Siêu Thị gửi đối tác phải lấy từ Danh Mục
-    // Siêu Thị + storeExternalCodes "Mã Điểm", KHÔNG phải storeCode ở bảng Cấu Hình Kết Nối nữa) — mỗi
-    // FAKE_STORE có 1 catalogStoreName ĐÃ ÁNH XẠ, tra ra đúng Mã Điểm số trong FAKE_EXTERNAL_CODES.
-    const FAKE_STORES = [
-      { id: 5, storeCode: 'ST05', storeName: 'BRGMart Store 5', catalogStoreName: 'Cửa hàng 5 Hàm Tử Quan' },
-      { id: 7, storeCode: 'ST07', storeName: 'BRGMart Store 7', catalogStoreName: 'Siêu thị số 7' },
-      { id: 9, storeCode: 'ST09', storeName: 'BRGMart Store 9', catalogStoreName: 'Siêu thị số 9' }
-    ];
-    const FAKE_EXTERNAL_CODES = { 'Cửa hàng 5 Hàm Tử Quan': '217', 'Siêu thị số 7': '248', 'Siêu thị số 9': '304' };
+    const FAKE_STORES = [{ id: 5, storeCode: 'ST05' }, { id: 7, storeCode: 'ST07' }, { id: 9, storeCode: 'ST09' }];
     stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES; } });
-    stubModule('lib/appData', { getAppDataValue: async (key) => key === 'storeExternalCodes' ? FAKE_EXTERNAL_CODES : null });
 
     const dsmartSqlClient = freshRequire('lib/dsmartSqlClient');
 
@@ -288,16 +279,16 @@ async function main() {
     check('EXTERNAL_API: insertWholesalePrice() gọi applyPriceViaApi() ĐÚNG 1 lần, custId/skuId đúng', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1', applyCalls);
     check('EXTERNAL_API: insertWholesalePrice() KHÔNG tự fan-out ghi SQL xuống siêu thị (chỉ TRA listRaw() 1 lần để lấy đủ Mã Siêu Thị cho storeScope ALL, không ghi dữ liệu)', listRawCalls === 1);
     check('EXTERNAL_API: insertWholesalePrice() trả storeResults rỗng + wasOverwrite đúng theo API trả về', JSON.stringify(insResult.storeResults) === '[]' && insResult.storeFanOutError === null && insResult.wasOverwrite === true, insResult);
-    check('EXTERNAL_API: targetStoreIds=null -> storeScope={mode:"ALL", storeCodes:[Mã Điểm của cả 3, KHÔNG phải storeCode ST05/ST07/ST09]} (Mã Siêu Thị lấy từ Danh Mục qua catalogStoreName+storeExternalCodes)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217', '248', '304'] }), applyCalls[0].storeScope);
+    check('EXTERNAL_API: targetStoreIds=null -> storeScope={mode:"ALL", storeCodes:[đủ cả 3]} truyền cho applyPriceViaApi() (theo yêu cầu người dùng: ALL vẫn phải gửi đủ Mã Siêu Thị, không chỉ mỗi mode)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), applyCalls[0].storeScope);
     listRawCalls = 0;
 
     // targetStoreIds=[5,7] (đã chọn riêng 1 vài siêu thị lúc Thêm Giá Mới) -> storeScope SPECIFIC, đổi ĐÚNG
-    // sang Mã Điểm (Danh Mục) của 2 siêu thị đó — id=9 KHÔNG nằm trong targetStoreIds nên KHÔNG được đưa
-    // vào storeCodes dù vẫn Enabled.
+    // từ ID nội bộ sang Mã Siêu Thị thật (đối tác không hiểu ID nội bộ) — id=9 KHÔNG nằm trong targetStoreIds
+    // nên KHÔNG được đưa vào storeCodes dù vẫn Enabled.
     applyCalls = [];
     await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI2', skuId: 'SAPI2', price: 1500, frDate: '2026-01-01', toDate: '2026-12-31' }, [5, 7]);
     check('EXTERNAL_API: targetStoreIds=[5,7] -> CÓ tra listRaw() để đổi sang Mã Siêu Thị (không phải fan-out ghi SQL, chỉ tra cứu)', listRawCalls === 1);
-    check('EXTERNAL_API: targetStoreIds=[5,7] -> storeScope SPECIFIC đúng 2 Mã Điểm 217/248, KHÔNG lẫn 304 (của store 9)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'SPECIFIC', storeCodes: ['217', '248'] }), applyCalls[0].storeScope);
+    check('EXTERNAL_API: targetStoreIds=[5,7] -> storeScope SPECIFIC đúng 2 Mã Siêu Thị ST05/ST07, KHÔNG lẫn ST09', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'SPECIFIC', storeCodes: ['ST05', 'ST07'] }), applyCalls[0].storeScope);
     listRawCalls = 0;
 
     applyCalls = [];
@@ -306,58 +297,13 @@ async function main() {
     check('EXTERNAL_API: updateWholesalePrice() cũng gọi applyPriceViaApi() (cùng semantics upsert), lấy custId/skuId từ dsmartKey', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1' && applyCalls[0].price === 2000, applyCalls);
     check('EXTERNAL_API: updateWholesalePrice() KHÔNG tự fan-out ghi SQL (chỉ tra listRaw() 1 lần để lấy đủ Mã Siêu Thị cho storeScope ALL)', listRawCalls === 1);
     check('EXTERNAL_API: updateWholesalePrice() trả đúng custId/skuId', updResult.custId === 'CAPI1' && updResult.skuId === 'SAPI1', updResult);
-    check('EXTERNAL_API: updateWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217', '248', '304'] }), applyCalls[0].storeScope);
+    check('EXTERNAL_API: updateWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), applyCalls[0].storeScope);
 
     listRawCalls = 0;
     const delResult2 = await dsmartSqlClient.deleteWholesalePrice({ dsmartKey: { custId: 'CAPI1', skuId: 'SAPI1' } }, null);
     check('EXTERNAL_API: deleteWholesalePrice() gọi deletePriceViaApi() ĐÚNG 1 lần', deleteCalls.length === 1 && deleteCalls[0].custId === 'CAPI1' && deleteCalls[0].skuId === 'SAPI1', deleteCalls);
     check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out ghi SQL, trả alreadyGone đúng theo API', listRawCalls === 1 && delResult2.alreadyGone === false, delResult2);
-    check('EXTERNAL_API: deleteWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(deleteCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217', '248', '304'] }), deleteCalls[0].storeScope);
-
-    // ĐƠN GIẢN HOÁ (12/2026, theo yêu cầu người dùng: "import lại Tên Siêu Thị cho khớp Danh Mục... dùng
-    // 1 tên cho cả CSDL lẫn API, không cần ghép gì cả") — storeName TỰ khớp thẳng với 1 key trong
-    // storeExternalCodes (KHÔNG cần catalogStoreName) -> vẫn tra ra đúng Mã Điểm, không bị chặn.
-    const FAKE_STORES_AUTO_MATCH = [
-      { id: 21, storeCode: 'ST21', storeName: 'Cửa hàng 5 Hàm Tử Quan', catalogStoreName: null } // storeName TRÙNG KHỚP thẳng key trong FAKE_EXTERNAL_CODES
-    ];
-    stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES_AUTO_MATCH; } });
-    const dsmartSqlClientAutoMatch = freshRequire('lib/dsmartSqlClient');
-    applyCalls = [];
-    const insAutoMatch = await dsmartSqlClientAutoMatch.insertWholesalePrice({ custId: 'CAPI5', skuId: 'SAPI5', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
-    check('EXTERNAL_API: storeName TỰ khớp thẳng key trong storeExternalCodes (không cần catalogStoreName) -> KHÔNG bị chặn, tra ra đúng Mã Điểm 217', applyCalls.length === 1 && JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217'] }), applyCalls[0]?.storeScope);
-    check('EXTERNAL_API: insertWholesalePrice() (storeName tự khớp) trả thành công bình thường', insAutoMatch.wasOverwrite === true, insAutoMatch);
-
-    // AN TOÀN (12/2026, theo yêu cầu người dùng): 1 siêu thị CHƯA ánh xạ Danh Mục (catalogStoreName=null)
-    // hoặc đã ánh xạ nhưng Danh Mục KHÔNG có Mã Điểm cho tên đó -> PHẢI NÉM LỖI, CHẶN HẲN thao tác, KHÔNG
-    // được gọi applyPriceViaApi()/deletePriceViaApi() với storeCodes rỗng/thiếu.
-    const FAKE_STORES_UNMAPPED = [
-      ...FAKE_STORES,
-      { id: 11, storeCode: 'ST11', storeName: 'BRGMart Store 11', catalogStoreName: null }, // chưa ánh xạ
-      { id: 13, storeCode: 'ST13', storeName: 'BRGMart Store 13', catalogStoreName: 'Siêu thị không có Mã Điểm' } // đã ánh xạ nhưng thiếu Mã Điểm
-    ];
-    stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES_UNMAPPED; } });
-    const dsmartSqlClientUnmapped = freshRequire('lib/dsmartSqlClient');
-    applyCalls = [];
-    let unmappedAllErr = null;
-    try { await dsmartSqlClientUnmapped.insertWholesalePrice({ custId: 'CAPI3', skuId: 'SAPI3', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null); } catch (err) { unmappedAllErr = err; }
-    check('EXTERNAL_API: mode ALL, có siêu thị CHƯA ánh xạ (id=11) -> ném DsmartApiStoreMappingError, CHẶN thao tác (KHÔNG gọi applyPriceViaApi với storeCodes thiếu)', unmappedAllErr && unmappedAllErr.name === 'DsmartApiStoreMappingError' && applyCalls.length === 0, unmappedAllErr && unmappedAllErr.message);
-    check('EXTERNAL_API: thông điệp lỗi nêu rõ TÊN siêu thị chưa ánh xạ (BRGMart Store 11) để IT biết sửa ở đâu', unmappedAllErr && unmappedAllErr.message.includes('BRGMart Store 11'), unmappedAllErr && unmappedAllErr.message);
-    check('EXTERNAL_API: thông điệp lỗi CŨNG nêu siêu thị đã ánh xạ nhưng thiếu Mã Điểm (BRGMart Store 13)', unmappedAllErr && unmappedAllErr.message.includes('BRGMart Store 13'), unmappedAllErr && unmappedAllErr.message);
-
-    // targetStoreIds=[5,7] (KHÔNG đụng tới store 11/13 chưa ánh xạ) -> vẫn chạy BÌNH THƯỜNG, không bị
-    // chặn oan bởi siêu thị KHÁC chưa ánh xạ nằm ngoài phạm vi đã chọn.
-    applyCalls = [];
-    const insScoped = await dsmartSqlClientUnmapped.insertWholesalePrice({ custId: 'CAPI4', skuId: 'SAPI4', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, [5, 7]);
-    check('EXTERNAL_API: targetStoreIds=[5,7] (không đụng store chưa ánh xạ) -> KHÔNG bị chặn oan, vẫn gửi đúng storeCodes 217/248', applyCalls.length === 1 && JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'SPECIFIC', storeCodes: ['217', '248'] }), applyCalls[0]?.storeScope);
-
-    // targetStoreIds=[11] (CHỈ chọn đúng siêu thị chưa ánh xạ) -> vẫn bị chặn.
-    let unmappedSpecificErr = null;
-    try { await dsmartSqlClientUnmapped.deleteWholesalePrice({ dsmartKey: { custId: 'CAPI4', skuId: 'SAPI4' } }, [11]); } catch (err) { unmappedSpecificErr = err; }
-    check('EXTERNAL_API: targetStoreIds=[11] (đúng siêu thị chưa ánh xạ) -> deleteWholesalePrice() cũng bị chặn', unmappedSpecificErr && unmappedSpecificErr.name === 'DsmartApiStoreMappingError', unmappedSpecificErr && unmappedSpecificErr.message);
-
-    // Khôi phục lại FAKE_STORES đã ánh xạ đủ cho các bước sau (DIRECT_DB smoke check không liên quan tới
-    // ánh xạ, nhưng giữ listRaw() trả dữ liệu hợp lệ cho nhất quán).
-    stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES; } });
+    check('EXTERNAL_API: deleteWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(deleteCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), deleteCalls[0].storeScope);
 
     // Chuyển về DIRECT_DB — smoke check: fan-out ĐƯỢC gọi (listRaw), applyPriceViaApi/deletePriceViaApi
     // KHÔNG được gọi nữa, ghi SQL CSPRICE thật thành công (dùng fake mssql module-level ở trên).
