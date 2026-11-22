@@ -315,16 +315,26 @@ class DsmartApiStoreMappingError extends HttpError {
 //
 // NGUỒN Mã Siêu Thị (sửa lại 12/2026, theo yêu cầu người dùng "mã siêu thị gửi đối tác phải lấy trong
 // Danh Mục Siêu Thị mới chuẩn, vì sau này bảng Cấu Hình Kết Nối CSDL có thể bị bỏ dùng"): KHÔNG còn lấy
-// `storeCode` (mã chữ, VD "BRGMART120HANGTRONG") từ chính dòng Cấu Hình Kết Nối (DsmartStorePriceConnections)
-// nữa — mà tra qua `catalogStoreName` (tên siêu thị trong "Danh Mục Siêu Thị", admin TỰ XÁC NHẬN ánh xạ,
-// xem PATCH /store-connections/:id/catalog-mapping) rồi lấy "Mã Điểm" tương ứng ở `storeExternalCodes`
-// (DB.storeExternalCodes — vốn dùng cho tích hợp BRGMART Tồn Kho, nay tái dùng luôn cho Giá Bán Buôn vì
-// người dùng xác nhận đây CHÍNH LÀ Mã Siêu Thị cần gửi). Bảng Cấu Hình Kết Nối CHỈ còn dùng để: (1) chọn
-// phạm vi siêu thị (targetStoreIds) — không đổi, (2) mở kết nối SQL thật ở chế độ DIRECT_DB — không đổi.
+// `storeCode` (mã chữ, VD "BRGMART120HANGTRONG") từ chính dòng Cấu Hình Kết Nối
+// (DsmartStorePriceConnections) nữa — mà tra "Mã Điểm" ở `storeExternalCodes` (DB.storeExternalCodes —
+// vốn dùng cho tích hợp BRGMART Tồn Kho, nay tái dùng luôn cho Giá Bán Buôn vì người dùng xác nhận đây
+// CHÍNH LÀ Mã Siêu Thị cần gửi) theo TÊN SIÊU THỊ.
 //
-// AN TOÀN: 1 siêu thị trong phạm vi (ALL hoặc SPECIFIC đã chọn) CHƯA được ánh xạ (catalogStoreName rỗng)
-// hoặc đã ánh xạ nhưng Danh Mục KHÔNG có Mã Điểm cho tên đó -> NÉM LỖI (DsmartApiStoreMappingError), CHẶN
-// hẳn thao tác — không bao giờ gửi storeCodes rỗng/thiếu cho đối tác mà không ai biết.
+// ƯU TIÊN 2 BƯỚC khi tra tên (đơn giản hoá 12/2026, theo yêu cầu người dùng "lấy danh sách siêu thị từ
+// danh mục siêu thị, import lại vào cái phần danh sách kết nối cho nó chuẩn... dùng cho cả cơ sở dữ liệu
+// hoặc API đều đúng với 1 tên siêu thị, không cần phải ghép cái gì cả"):
+//   1. `catalogStoreName` (ánh xạ riêng, nếu admin đã xác nhận qua PATCH /store-connections/:id/catalog-
+//      mapping) — DÙNG TRƯỚC nếu có, cho trường hợp 2 bên lỡ đặt tên khác nhau mà chưa kịp đồng bộ lại.
+//   2. Nếu KHÔNG có ánh xạ riêng, TỰ dùng luôn `storeName` của chính dòng Cấu Hình Kết Nối — khi admin đã
+//      đặt "Tên Siêu Thị" ở Cấu Hình Kết Nối TRÙNG KHỚP CHÍNH XÁC với "Tên Siêu Thị" trong Danh Mục Siêu
+//      Thị (VD re-import lại cho khớp), hệ thống tự tra ra Mã Điểm ĐÚNG mà KHÔNG cần ánh xạ riêng gì cả.
+// Bảng Cấu Hình Kết Nối CHỈ còn dùng để: (1) chọn phạm vi siêu thị (targetStoreIds) — không đổi, (2) mở
+// kết nối SQL thật ở chế độ DIRECT_DB — không đổi.
+//
+// AN TOÀN: 1 siêu thị trong phạm vi (ALL hoặc SPECIFIC đã chọn) mà CẢ 2 bước trên đều KHÔNG tra ra được
+// Mã Điểm (tên không khớp Danh Mục, chưa ánh xạ riêng, hoặc Danh Mục thiếu Mã Điểm cho tên đó) -> NÉM LỖI
+// (DsmartApiStoreMappingError), CHẶN hẳn thao tác — không bao giờ gửi storeCodes rỗng/thiếu cho đối tác
+// mà không ai biết.
 async function buildStoreScope(targetStoreIds) {
   const stores = await storeConnStore.listRaw({ onlyEnabled: true });
   const scopedStores = Array.isArray(targetStoreIds)
@@ -334,12 +344,13 @@ async function buildStoreScope(targetStoreIds) {
   const unmapped = [];
   const storeCodes = [];
   for (const s of scopedStores) {
-    const code = s.catalogStoreName ? externalCodes[s.catalogStoreName] : null;
+    const effectiveName = s.catalogStoreName || s.storeName;
+    const code = effectiveName ? externalCodes[effectiveName] : null;
     if (!code) unmapped.push(s.storeName || s.storeCode);
     else storeCodes.push(String(code));
   }
   if (unmapped.length) {
-    throw new DsmartApiStoreMappingError(`Chưa ánh xạ "Mã Siêu Thị" (Danh Mục Siêu Thị) cho: ${unmapped.join(', ')} — vào "⚙️ Cấu Hình Kết Nối" để xác nhận Ánh Xạ Danh Mục cho (các) siêu thị này trước khi dùng chế độ "Theo API".`);
+    throw new DsmartApiStoreMappingError(`Chưa tra ra "Mã Siêu Thị" (Danh Mục Siêu Thị) cho: ${unmapped.join(', ')} — hoặc sửa lại "Tên Siêu Thị" ở "⚙️ Cấu Hình Kết Nối" cho TRÙNG KHỚP với Danh Mục Siêu Thị, hoặc xác nhận Ánh Xạ Danh Mục riêng cho (các) siêu thị này trước khi dùng chế độ "Theo API".`);
   }
   return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes };
 }

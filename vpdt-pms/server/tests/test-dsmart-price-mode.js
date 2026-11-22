@@ -314,6 +314,19 @@ async function main() {
     check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out ghi SQL, trả alreadyGone đúng theo API', listRawCalls === 1 && delResult2.alreadyGone === false, delResult2);
     check('EXTERNAL_API: deleteWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(deleteCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217', '248', '304'] }), deleteCalls[0].storeScope);
 
+    // ĐƠN GIẢN HOÁ (12/2026, theo yêu cầu người dùng: "import lại Tên Siêu Thị cho khớp Danh Mục... dùng
+    // 1 tên cho cả CSDL lẫn API, không cần ghép gì cả") — storeName TỰ khớp thẳng với 1 key trong
+    // storeExternalCodes (KHÔNG cần catalogStoreName) -> vẫn tra ra đúng Mã Điểm, không bị chặn.
+    const FAKE_STORES_AUTO_MATCH = [
+      { id: 21, storeCode: 'ST21', storeName: 'Cửa hàng 5 Hàm Tử Quan', catalogStoreName: null } // storeName TRÙNG KHỚP thẳng key trong FAKE_EXTERNAL_CODES
+    ];
+    stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES_AUTO_MATCH; } });
+    const dsmartSqlClientAutoMatch = freshRequire('lib/dsmartSqlClient');
+    applyCalls = [];
+    const insAutoMatch = await dsmartSqlClientAutoMatch.insertWholesalePrice({ custId: 'CAPI5', skuId: 'SAPI5', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
+    check('EXTERNAL_API: storeName TỰ khớp thẳng key trong storeExternalCodes (không cần catalogStoreName) -> KHÔNG bị chặn, tra ra đúng Mã Điểm 217', applyCalls.length === 1 && JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['217'] }), applyCalls[0]?.storeScope);
+    check('EXTERNAL_API: insertWholesalePrice() (storeName tự khớp) trả thành công bình thường', insAutoMatch.wasOverwrite === true, insAutoMatch);
+
     // AN TOÀN (12/2026, theo yêu cầu người dùng): 1 siêu thị CHƯA ánh xạ Danh Mục (catalogStoreName=null)
     // hoặc đã ánh xạ nhưng Danh Mục KHÔNG có Mã Điểm cho tên đó -> PHẢI NÉM LỖI, CHẶN HẲN thao tác, KHÔNG
     // được gọi applyPriceViaApi()/deletePriceViaApi() với storeCodes rỗng/thiếu.

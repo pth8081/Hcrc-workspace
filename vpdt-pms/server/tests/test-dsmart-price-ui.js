@@ -572,7 +572,27 @@ async function main() {
   await page.evaluate(() => renderDsmartStoreConnList());
   await page.waitForTimeout(100);
   storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
-  check('"📇 Ánh Xạ Danh Mục": tên không khớp tự động -> hiện badge "Chưa ánh xạ"', storeConnBodyText.includes('Chưa ánh xạ'), storeConnBodyText);
+  check('"📇 Ánh Xạ Danh Mục": tên không khớp tự động -> hiện badge "không khớp Danh Mục"', storeConnBodyText.includes('không khớp Danh Mục'), storeConnBodyText);
+
+  // Đơn giản hoá (12/2026, theo yêu cầu người dùng): nếu "Tên Siêu Thị" của dòng kết nối ĐÃ TRÙNG KHỚP
+  // CHÍNH XÁC 1 key trong storeExternalCodes -> TỰ hiện Mã Điểm, KHÔNG cần ô ánh xạ/nút Lưu gì cả.
+  await page.click('#btnDsmartStoreConnAddToggle');
+  await page.waitForTimeout(100);
+  await page.fill('#dsmartStoreConnCode', 'ST02');
+  await page.fill('#dsmartStoreConnName', 'Cửa hàng 5 Hàm Tử Quan');
+  await page.fill('#dsmartStoreConnHost', 'store02-test-host');
+  await page.fill('#dsmartStoreConnDatabase', 'CSDL_ST02');
+  await page.fill('#dsmartStoreConnUser', 'st02_user');
+  await page.fill('#dsmartStoreConnPassword', 'st02-pass');
+  await page.click('[data-op="saveDsmartStoreConn"]');
+  await page.waitForTimeout(150);
+  storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('"📇 Ánh Xạ Danh Mục": Tên Siêu Thị TRÙNG KHỚP Danh Mục -> TỰ hiện Mã Điểm 217, không cần ánh xạ/Lưu gì', storeConnBodyText.includes('khớp theo Tên Siêu Thị') && storeConnBodyText.includes('217'), storeConnBodyText);
+  // Dọn dòng ST02 vừa thêm (chỉ để test auto-match) — các bước sau chỉ còn lại ST01, tránh selector
+  // [data-op="deleteDsmartStoreConn"]/[id^="dsmartStoreConnCatalog_"] bị khớp nhiều hơn 1 phần tử.
+  await page.click('tr:has-text("ST02") [data-op="deleteDsmartStoreConn"]');
+  await page.waitForTimeout(150);
+
   await page.fill('[id^="dsmartStoreConnCatalog_"]', 'Cửa hàng 5 Hàm Tử Quan');
   await page.click('[data-op="saveDsmartStoreConnCatalogMapping"]');
   await page.waitForTimeout(150);

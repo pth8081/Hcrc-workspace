@@ -198,19 +198,29 @@ function dsmartStoreConnSuggestCatalogMatch(storeName) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// dsmartStoreConnCatalogCellHtml() (đơn giản hoá 12/2026, theo yêu cầu người dùng "lấy danh sách siêu
+// thị từ danh mục siêu thị, import lại vào kết nối cho nó chuẩn... dùng 1 tên siêu thị, không cần ghép gì
+// cả"): nếu CHÍNH "Tên Siêu Thị" của dòng kết nối đã TRÙNG KHỚP CHÍNH XÁC với 1 tên trong Danh Mục (và
+// Danh Mục có Mã Điểm cho tên đó) -> coi là ĐÃ KHỚP TỰ ĐỘNG, không cần admin thao tác gì (khuyến khích
+// cách này: sửa lại "Tên Siêu Thị" ở "✏️ Sửa" cho khớp Danh Mục 1 lần). Ô ánh xạ riêng CHỈ cần dùng khi
+// 2 tên lỡ khác nhau mà chưa kịp đồng bộ lại — xem buildStoreScope(), lib/dsmartSqlClient.js.
 function dsmartStoreConnCatalogCellHtml(s) {
+  const autoCode = (DB.storeExternalCodes || {})[s.storeName];
+  if (!s.catalogStoreName && autoCode) {
+    return `<span class="text-green-700 text-[10.5px]">✅ Mã Điểm: <code class="font-bold">${escapeHtml(autoCode)}</code> <span class="text-gray-400">(khớp theo Tên Siêu Thị)</span></span>`;
+  }
   const current = s.catalogStoreName || dsmartStoreConnSuggestCatalogMatch(s.storeName) || '';
   const isSuggestedNotConfirmed = !s.catalogStoreName && !!current;
-  const code = current ? (DB.storeExternalCodes || {})[current] : null;
+  const code = s.catalogStoreName ? (DB.storeExternalCodes || {})[s.catalogStoreName] : null;
   let badge;
   if (!s.catalogStoreName) {
     badge = isSuggestedNotConfirmed
       ? `<span class="text-amber-600">⚠️ Gợi ý — bấm Lưu để xác nhận</span>`
-      : `<span class="text-red-600">⛔ Chưa ánh xạ</span>`;
+      : `<span class="text-red-600">⛔ Tên Siêu Thị không khớp Danh Mục — sửa lại tên cho khớp, hoặc ánh xạ riêng</span>`;
   } else if (!code) {
     badge = `<span class="text-red-600">⛔ Danh Mục thiếu Mã Điểm cho tên này</span>`;
   } else {
-    badge = `<span class="text-green-700">✅ Mã Điểm: <code class="font-bold">${escapeHtml(code)}</code></span>`;
+    badge = `<span class="text-green-700">✅ Mã Điểm: <code class="font-bold">${escapeHtml(code)}</code> (ánh xạ riêng)</span>`;
   }
   return `
     <div class="flex items-center gap-1 flex-wrap">
