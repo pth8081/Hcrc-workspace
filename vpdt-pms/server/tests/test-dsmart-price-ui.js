@@ -182,6 +182,21 @@ async function main() {
         if (idx !== -1) storeConns.splice(idx, 1);
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
       }
+      // PATCH .../catalog-mapping (12/2026, "📇 Ánh Xạ Danh Mục") — gán/xoá catalogStoreName, validate
+      // nguyên văn như route thật (chặn tên không có trong DB.stores).
+      const storeConnCatalogMatch = /^\/api\/dsmart-price\/store-connections\/(\d+)\/catalog-mapping$/.exec(u);
+      if (storeConnCatalogMatch && method === 'PATCH') {
+        window.__dsmartStoreConnCatalogSaveCalled = (window.__dsmartStoreConnCatalogSaveCalled || 0) + 1;
+        const body = JSON.parse(opts.body);
+        const catalogStoreName = body.catalogStoreName ? String(body.catalogStoreName).trim() : null;
+        if (catalogStoreName && !(DB.stores || []).includes(catalogStoreName)) {
+          return { ok: false, status: 400, json: async () => ({ error: `"${catalogStoreName}" không có trong Danh Mục Siêu Thị` }) };
+        }
+        const row = storeConns.find(s => s.id === Number(storeConnCatalogMatch[1]));
+        if (row) row.catalogStoreName = catalogStoreName;
+        const { passwordEnc, ...rest } = row || {};
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: { ...rest, hasPassword: !!passwordEnc } }) };
+      }
       const storeConnTestMatch = /^\/api\/dsmart-price\/store-connections\/(\d+)\/test-connection$/.exec(u);
       if (storeConnTestMatch && method === 'POST') {
         window.__dsmartStoreConnTestCalled = (window.__dsmartStoreConnTestCalled || 0) + 1;
@@ -202,7 +217,7 @@ async function main() {
     };
 
     Object.assign(DB, {
-      depts: [], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
+      depts: [], stores: ['Cửa hàng 5 Hàm Tử Quan', 'Siêu thị số 7'], storeExternalCodes: { 'Cửa hàng 5 Hàm Tử Quan': '217' }, cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
       jobTitles: [], storeJobTitles: [], positionTypes: [],
       users: [{ id: 1, username: 'itw1', name: 'IT Giá Bán Buôn', dept: 'Hỗ Trợ IT', jobTitle: 'NV', email: 'a@test.local', phone: '0900000000', perms: { itSupportPriceWriteDsmart: true }, active: true, groupIds: [], permOverrides: null }],
       workflows: [], quickApplyConfigs: [], deptWorkflows: {},
@@ -546,6 +561,34 @@ async function main() {
   await page.waitForTimeout(150);
   const storeConnTestCalledCount = await page.evaluate(() => window.__dsmartStoreConnTestCalled || 0);
   check('Bấm "🔌 Kiểm Tra" trên dòng siêu thị -> gọi đúng route test-connection', storeConnTestCalledCount === 1, 'count=' + storeConnTestCalledCount);
+  // "📇 Ánh Xạ Danh Mục" (12/2026) — DB.stores/DB.storeExternalCodes bị initDatabase() (GET /api/data,
+  // rơi vào catch-all mock trả về []) ghi đè mất giá trị seed ban đầu sau khi login — gán lại TRỰC TIẾP
+  // ngay trước khi test phần này, đúng dữ liệu Danh Mục cần cho các assertion dưới (tên "Siêu Thị Test
+  // 01" KHÔNG khớp tự động được với Danh Mục ['Cửa hàng 5 Hàm Tử Quan', 'Siêu thị số 7']).
+  await page.evaluate(() => {
+    DB.stores = ['Cửa hàng 5 Hàm Tử Quan', 'Siêu thị số 7'];
+    DB.storeExternalCodes = { 'Cửa hàng 5 Hàm Tử Quan': '217' };
+  });
+  await page.evaluate(() => renderDsmartStoreConnList());
+  await page.waitForTimeout(100);
+  storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('"📇 Ánh Xạ Danh Mục": tên không khớp tự động -> hiện badge "Chưa ánh xạ"', storeConnBodyText.includes('Chưa ánh xạ'), storeConnBodyText);
+  await page.fill('[id^="dsmartStoreConnCatalog_"]', 'Cửa hàng 5 Hàm Tử Quan');
+  await page.click('[data-op="saveDsmartStoreConnCatalogMapping"]');
+  await page.waitForTimeout(150);
+  const catalogSaveCalledCount = await page.evaluate(() => window.__dsmartStoreConnCatalogSaveCalled || 0);
+  check('"📇 Ánh Xạ Danh Mục": bấm Lưu -> gọi đúng 1 lần PATCH catalog-mapping', catalogSaveCalledCount === 1, 'count=' + catalogSaveCalledCount);
+  storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('"📇 Ánh Xạ Danh Mục": sau khi Lưu -> hiện đúng Mã Điểm (217) đã tra từ Danh Mục', storeConnBodyText.includes('217') && storeConnBodyText.includes('Mã Điểm'), storeConnBodyText);
+  check('"📇 Ánh Xạ Danh Mục": không còn badge "Chưa ánh xạ" sau khi lưu thành công', !storeConnBodyText.includes('Chưa ánh xạ'), storeConnBodyText);
+
+  await page.fill('[id^="dsmartStoreConnCatalog_"]', 'Tên Không Có Trong Danh Mục');
+  page.once('dialog', d => d.accept());
+  await page.click('[data-op="saveDsmartStoreConnCatalogMapping"]');
+  await page.waitForTimeout(150);
+  storeConnBodyText = await page.textContent('#dsmartStoreConnBody');
+  check('"📇 Ánh Xạ Danh Mục": lưu tên KHÔNG có trong Danh Mục -> bị chặn (báo lỗi, KHÔNG ghi đè ánh xạ cũ, vẫn còn Mã Điểm 217)', storeConnBodyText.includes('217'), storeConnBodyText);
+
   await page.click('[data-op="deleteDsmartStoreConn"]');
   await page.waitForTimeout(150);
   storeConnBodyText = await page.textContent('#dsmartStoreConnBody');

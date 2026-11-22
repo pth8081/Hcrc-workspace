@@ -60,6 +60,7 @@ const sql = require('mssql');
 const { getRawConfig, decryptSecret, getPriceOperationMode, getExternalApiConfig } = require('./dsmartPriceConfigStore');
 const storeConnStore = require('./dsmartStorePriceConnectionsStore');
 const { applyPriceViaApi, deletePriceViaApi } = require('./dsmartPriceExternalApiClient');
+const { getAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
@@ -295,30 +296,52 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
 // tác (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
 // lo đồng bộ xuống mọi siêu thị qua hạ tầng của họ, không phải việc của hệ thống này nữa ở chế độ này).
 //
+// DsmartApiStoreMappingError: ném ra khi buildStoreScope() KHÔNG tự giải quyết được Mã Siêu Thị thật cho
+// 1 hay nhiều siêu thị trong phạm vi — CHẶN HẲN thao tác Áp/Xoá giá ở chế độ EXTERNAL_API thay vì gửi mã
+// rỗng/sai cho đối tác (xem chú thích buildStoreScope() ngay dưới).
+class DsmartApiStoreMappingError extends HttpError {
+  constructor(message) { super(409, message); this.name = 'DsmartApiStoreMappingError'; }
+}
+
 // buildStoreScope(targetStoreIds): dù KHÔNG tự fan-out ở chế độ API, vẫn PHẢI báo đúng phạm vi siêu thị cho
 // đối tác biết (field `storeScope`, ĐÚNG khuôn đã thống nhất ở tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart",
 // mục "Phạm Vi Siêu Thị") — thiếu bước này đối tác không biết áp/xoá giá cho đúng phạm vi đã chọn lúc "Thêm
-// Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn). Đổi ID nội bộ
-// (`targetStoreIds`) sang Mã Siêu Thị thật (`storeCodes`) — đối tác không có ý nghĩa gì với ID nội bộ của hệ
-// thống này — và LUÔN giao với danh sách đang Enabled=1 (cùng ngữ nghĩa fanOutToStores() ở trên).
+// Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn).
 //
 // Theo yêu cầu người dùng (12/2026): kể cả khi chọn "Tất Cả" (mode ALL), vẫn phải gửi kèm ĐẦY ĐỦ danh sách
 // Mã Siêu Thị (`storeCodes`) cho đối tác — không chỉ gửi mỗi `{mode:"ALL"}` — để đối tác biết CHẮC CHẮN
-// đẩy giá xuống đúng những siêu thị nào, không phải tự suy luận "ALL" theo danh sách siêu thị riêng của họ
-// (có thể lệch với danh sách đang Enabled=1 của hệ thống này). `mode` vẫn giữ lại cho đối tác biết đây là
-// phạm vi "toàn bộ hiện có" hay "chỉ 1 vài siêu thị cụ thể", nhưng `storeCodes` luôn có giá trị ở cả 2 mode.
+// đẩy giá xuống đúng những siêu thị nào. `mode` vẫn giữ lại cho đối tác biết đây là phạm vi "toàn bộ hiện
+// có" hay "chỉ 1 vài siêu thị cụ thể", nhưng `storeCodes` luôn có giá trị ở cả 2 mode.
+//
+// NGUỒN Mã Siêu Thị (sửa lại 12/2026, theo yêu cầu người dùng "mã siêu thị gửi đối tác phải lấy trong
+// Danh Mục Siêu Thị mới chuẩn, vì sau này bảng Cấu Hình Kết Nối CSDL có thể bị bỏ dùng"): KHÔNG còn lấy
+// `storeCode` (mã chữ, VD "BRGMART120HANGTRONG") từ chính dòng Cấu Hình Kết Nối (DsmartStorePriceConnections)
+// nữa — mà tra qua `catalogStoreName` (tên siêu thị trong "Danh Mục Siêu Thị", admin TỰ XÁC NHẬN ánh xạ,
+// xem PATCH /store-connections/:id/catalog-mapping) rồi lấy "Mã Điểm" tương ứng ở `storeExternalCodes`
+// (DB.storeExternalCodes — vốn dùng cho tích hợp BRGMART Tồn Kho, nay tái dùng luôn cho Giá Bán Buôn vì
+// người dùng xác nhận đây CHÍNH LÀ Mã Siêu Thị cần gửi). Bảng Cấu Hình Kết Nối CHỈ còn dùng để: (1) chọn
+// phạm vi siêu thị (targetStoreIds) — không đổi, (2) mở kết nối SQL thật ở chế độ DIRECT_DB — không đổi.
+//
+// AN TOÀN: 1 siêu thị trong phạm vi (ALL hoặc SPECIFIC đã chọn) CHƯA được ánh xạ (catalogStoreName rỗng)
+// hoặc đã ánh xạ nhưng Danh Mục KHÔNG có Mã Điểm cho tên đó -> NÉM LỖI (DsmartApiStoreMappingError), CHẶN
+// hẳn thao tác — không bao giờ gửi storeCodes rỗng/thiếu cho đối tác mà không ai biết.
 async function buildStoreScope(targetStoreIds) {
-  let stores;
-  try {
-    stores = await storeConnStore.listRaw({ onlyEnabled: true });
-  } catch (err) {
-    return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes: [] };
+  const stores = await storeConnStore.listRaw({ onlyEnabled: true });
+  const scopedStores = Array.isArray(targetStoreIds)
+    ? stores.filter(s => new Set(targetStoreIds.map(Number)).has(s.id))
+    : stores;
+  const externalCodes = (await getAppDataValue('storeExternalCodes')) || {};
+  const unmapped = [];
+  const storeCodes = [];
+  for (const s of scopedStores) {
+    const code = s.catalogStoreName ? externalCodes[s.catalogStoreName] : null;
+    if (!code) unmapped.push(s.storeName || s.storeCode);
+    else storeCodes.push(String(code));
   }
-  if (!Array.isArray(targetStoreIds)) {
-    return { mode: 'ALL', storeCodes: stores.map(s => s.storeCode) };
+  if (unmapped.length) {
+    throw new DsmartApiStoreMappingError(`Chưa ánh xạ "Mã Siêu Thị" (Danh Mục Siêu Thị) cho: ${unmapped.join(', ')} — vào "⚙️ Cấu Hình Kết Nối" để xác nhận Ánh Xạ Danh Mục cho (các) siêu thị này trước khi dùng chế độ "Theo API".`);
   }
-  const idSet = new Set(targetStoreIds.map(Number));
-  return { mode: 'SPECIFIC', storeCodes: stores.filter(s => idSet.has(s.id)).map(s => s.storeCode) };
+  return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes };
 }
 async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
@@ -870,5 +893,6 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError,
+  DsmartApiStoreMappingError
 };

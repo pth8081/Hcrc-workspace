@@ -409,11 +409,20 @@
           </div>
         </div>
 
+        <!-- "📇 Ánh Xạ Danh Mục" (12/2026, theo yêu cầu người dùng: "Mã Siêu Thị gửi đối tác API phải lấy
+             trong Danh Mục Siêu Thị mới chuẩn, vì sau này bảng Cấu Hình Kết Nối CSDL có thể bị bỏ dùng")
+             — chỉ ảnh hưởng tới Mã Siêu Thị (storeScope) gửi cho đối tác ở chế độ "🌐 Theo API"; chế độ
+             "🖥️ Theo Phần Mềm" (ghi SQL trực tiếp) KHÔNG đụng gì tới cột này. Tên 2 nơi không khớp 100%
+             chữ (VD "BRGMart 5 Hàm Tử Quan" vs "Cửa hàng 5 Hàm Tử Quan") nên admin PHẢI tự xác nhận/sửa,
+             hệ thống chỉ tự gợi ý khi khớp CHẮC CHẮN (sau khi bỏ tiền tố/số 0 đầu) — xem
+             dsmartStoreConnSuggestCatalogMatch(), module-itsupport-dsmartprice.js. -->
+        <div class="text-[11px] text-gray-500">📇 <b>Ánh Xạ Danh Mục</b>: chọn đúng tên siêu thị trong "Danh Mục Siêu Thị" cho từng dòng — hệ thống lấy "Mã Điểm" của tên đó làm Mã Siêu Thị gửi cho đối tác khi dùng chế độ "🌐 Theo API" (xem thanh "Chế Độ Áp Dụng Giá" phía trên). KHÔNG ảnh hưởng chế độ "🖥️ Theo Phần Mềm".</div>
+        <div id="dsmartStoreConnCatalogDatalist" class="hidden" data-sdd-dropdown></div>
         <div class="overflow-x-auto border rounded">
           <table class="w-full text-xs">
             <thead class="bg-gray-100 text-left"><tr>
               <th class="p-1.5">Mã Siêu Thị</th><th class="p-1.5">Tên Siêu Thị</th><th class="p-1.5">Host:Port/CSDL</th>
-              <th class="p-1.5">Bật</th><th class="p-1.5">Thao Tác</th>
+              <th class="p-1.5">Bật</th><th class="p-1.5">📇 Ánh Xạ Danh Mục (gửi API)</th><th class="p-1.5">Thao Tác</th>
             </tr></thead>
             <tbody id="dsmartStoreConnBody"></tbody>
           </table>

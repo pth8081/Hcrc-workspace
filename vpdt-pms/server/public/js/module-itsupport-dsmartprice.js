@@ -158,7 +158,7 @@ async function renderDsmartStoreConnList() {
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     _dsmartStoreConnList = data.items || [];
   } catch (err) {
-    document.getElementById('dsmartStoreConnBody').innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">⛔ ${escapeHtml(err.message)}</td></tr>`;
+    document.getElementById('dsmartStoreConnBody').innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500">⛔ ${escapeHtml(err.message)}</td></tr>`;
     return;
   }
   document.getElementById('dsmartStoreConnBody').innerHTML = _dsmartStoreConnList.map(s => `
@@ -167,12 +167,75 @@ async function renderDsmartStoreConnList() {
       <td class="p-1.5">${escapeHtml(s.storeName)}</td>
       <td class="p-1.5 text-gray-500">${escapeHtml(s.host)}:${s.port}/${escapeHtml(s.database)}</td>
       <td class="p-1.5"><input type="checkbox" ${s.enabled ? 'checked' : ''} data-op-change="toggleDsmartStoreConnEnabled" data-arg0="${s.id}" data-arg-el="1"></td>
+      <td class="p-1.5">${dsmartStoreConnCatalogCellHtml(s)}</td>
       <td class="p-1.5 space-x-1 whitespace-nowrap">
         <button type="button" data-op="testDsmartStoreConn" data-arg0="${s.id}" class="bg-teal-50 border border-teal-300 text-teal-700 text-[10.5px] font-bold px-2 py-0.5 rounded">🔌 Kiểm Tra</button>
         <button type="button" data-op="startDsmartStoreConnEdit" data-arg0="${s.id}" class="bg-white border text-gray-700 text-[10.5px] font-bold px-2 py-0.5 rounded">✏️ Sửa</button>
         <button type="button" data-op="deleteDsmartStoreConn" data-arg0="${s.id}" class="bg-red-50 border border-red-300 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded">🗑️ Xoá</button>
       </td>
-    </tr>`).join('') || `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Chưa cấu hình kết nối siêu thị nào — Thêm/Sửa/Xoá giá sẽ chỉ áp dụng ở DSmart16 Trung Tâm.</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Chưa cấu hình kết nối siêu thị nào — Thêm/Sửa/Xoá giá sẽ chỉ áp dụng ở DSmart16 Trung Tâm.</td></tr>`;
+  sddSetOptions('dsmartStoreConnCatalogDatalist', DB.stores || []);
+}
+
+// dsmartStoreConnNormalizeForCatalogMatch()/dsmartStoreConnSuggestCatalogMatch() (12/2026) — gợi ý tự
+// động ghép tên giữa "Cấu Hình Kết Nối" (VD "BRGMart 5 Hàm Tử Quan") và "Danh Mục Siêu Thị" (VD "Cửa hàng
+// 5 Hàm Tử Quan") bằng cách bỏ tiền tố thường gặp (BRGMart/Siêu thị (số)/Cửa hàng (số)) + chuẩn hoá số 0
+// đứng đầu ("01" -> "1") + bỏ dấu/hoa-thường — CHỈ tự điền gợi ý khi khớp CHẮC CHẮN ĐÚNG 1 tên trong Danh
+// Mục (0 hoặc >1 khớp -> để trống, admin tự chọn tay) — không bao giờ tự LƯU, chỉ điền sẵn vào ô để admin
+// tự xem lại + bấm Lưu xác nhận (an toàn: không gửi nhầm mã cho đối tác do ghép tên tự động sai).
+function dsmartStoreConnNormalizeForCatalogMatch(name) {
+  return stripVnDiacritics(String(name || ''))
+    .toLowerCase()
+    .replace(/^(brgmart|sieu thi so|sieu thi|cua hang so|cua hang)\s*/i, '')
+    .replace(/\b0+(\d)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function dsmartStoreConnSuggestCatalogMatch(storeName) {
+  const target = dsmartStoreConnNormalizeForCatalogMatch(storeName);
+  if (!target) return null;
+  const matches = (DB.stores || []).filter(name => dsmartStoreConnNormalizeForCatalogMatch(name) === target);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function dsmartStoreConnCatalogCellHtml(s) {
+  const current = s.catalogStoreName || dsmartStoreConnSuggestCatalogMatch(s.storeName) || '';
+  const isSuggestedNotConfirmed = !s.catalogStoreName && !!current;
+  const code = current ? (DB.storeExternalCodes || {})[current] : null;
+  let badge;
+  if (!s.catalogStoreName) {
+    badge = isSuggestedNotConfirmed
+      ? `<span class="text-amber-600">⚠️ Gợi ý — bấm Lưu để xác nhận</span>`
+      : `<span class="text-red-600">⛔ Chưa ánh xạ</span>`;
+  } else if (!code) {
+    badge = `<span class="text-red-600">⛔ Danh Mục thiếu Mã Điểm cho tên này</span>`;
+  } else {
+    badge = `<span class="text-green-700">✅ Mã Điểm: <code class="font-bold">${escapeHtml(code)}</code></span>`;
+  }
+  return `
+    <div class="flex items-center gap-1 flex-wrap">
+      <input data-sdd-list="dsmartStoreConnCatalogDatalist" id="dsmartStoreConnCatalog_${s.id}" value="${escapeHtml(current)}"
+             placeholder="Tìm siêu thị trong Danh Mục..." class="w-40 border rounded p-1 text-[10.5px]">
+      <button type="button" data-op="saveDsmartStoreConnCatalogMapping" data-arg0="${s.id}"
+              class="bg-blue-50 border border-blue-300 text-blue-700 text-[10.5px] font-bold px-2 py-0.5 rounded">💾 Lưu</button>
+    </div>
+    <div class="text-[10px] mt-0.5">${badge}</div>`;
+}
+
+async function saveDsmartStoreConnCatalogMapping(id) {
+  id = Number(id);
+  const input = document.getElementById(`dsmartStoreConnCatalog_${id}`);
+  const catalogStoreName = input ? input.value.trim() : '';
+  try {
+    const res = await fetch(`/api/dsmart-price/store-connections/${id}/catalog-mapping`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalogStoreName })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    await renderDsmartStoreConnList();
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
 }
 
 function dsmartStoreConnFormHtml(existing) {
