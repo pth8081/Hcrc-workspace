@@ -277,9 +277,10 @@ async function main() {
 
     const insResult = await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI1', skuId: 'SAPI1', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
     check('EXTERNAL_API: insertWholesalePrice() gọi applyPriceViaApi() ĐÚNG 1 lần, custId/skuId đúng', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1', applyCalls);
-    check('EXTERNAL_API: insertWholesalePrice() KHÔNG tự fan-out xuống siêu thị (listRaw không được gọi, targetStoreIds=null -> storeScope ALL không cần tra)', listRawCalls === 0);
+    check('EXTERNAL_API: insertWholesalePrice() KHÔNG tự fan-out ghi SQL xuống siêu thị (chỉ TRA listRaw() 1 lần để lấy đủ Mã Siêu Thị cho storeScope ALL, không ghi dữ liệu)', listRawCalls === 1);
     check('EXTERNAL_API: insertWholesalePrice() trả storeResults rỗng + wasOverwrite đúng theo API trả về', JSON.stringify(insResult.storeResults) === '[]' && insResult.storeFanOutError === null && insResult.wasOverwrite === true, insResult);
-    check('EXTERNAL_API: targetStoreIds=null -> storeScope={mode:"ALL"} truyền cho applyPriceViaApi() (đúng khuôn tài liệu API đã gửi đối tác)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL' }), applyCalls[0].storeScope);
+    check('EXTERNAL_API: targetStoreIds=null -> storeScope={mode:"ALL", storeCodes:[đủ cả 3]} truyền cho applyPriceViaApi() (theo yêu cầu người dùng: ALL vẫn phải gửi đủ Mã Siêu Thị, không chỉ mỗi mode)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), applyCalls[0].storeScope);
+    listRawCalls = 0;
 
     // targetStoreIds=[5,7] (đã chọn riêng 1 vài siêu thị lúc Thêm Giá Mới) -> storeScope SPECIFIC, đổi ĐÚNG
     // từ ID nội bộ sang Mã Siêu Thị thật (đối tác không hiểu ID nội bộ) — id=9 KHÔNG nằm trong targetStoreIds
@@ -291,14 +292,18 @@ async function main() {
     listRawCalls = 0;
 
     applyCalls = [];
+    listRawCalls = 0;
     const updResult = await dsmartSqlClient.updateWholesalePrice({ dsmartKey: { custId: 'CAPI1', skuId: 'SAPI1' }, price: 2000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
     check('EXTERNAL_API: updateWholesalePrice() cũng gọi applyPriceViaApi() (cùng semantics upsert), lấy custId/skuId từ dsmartKey', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1' && applyCalls[0].price === 2000, applyCalls);
-    check('EXTERNAL_API: updateWholesalePrice() KHÔNG tự fan-out', listRawCalls === 0);
+    check('EXTERNAL_API: updateWholesalePrice() KHÔNG tự fan-out ghi SQL (chỉ tra listRaw() 1 lần để lấy đủ Mã Siêu Thị cho storeScope ALL)', listRawCalls === 1);
     check('EXTERNAL_API: updateWholesalePrice() trả đúng custId/skuId', updResult.custId === 'CAPI1' && updResult.skuId === 'SAPI1', updResult);
+    check('EXTERNAL_API: updateWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), applyCalls[0].storeScope);
 
+    listRawCalls = 0;
     const delResult2 = await dsmartSqlClient.deleteWholesalePrice({ dsmartKey: { custId: 'CAPI1', skuId: 'SAPI1' } }, null);
     check('EXTERNAL_API: deleteWholesalePrice() gọi deletePriceViaApi() ĐÚNG 1 lần', deleteCalls.length === 1 && deleteCalls[0].custId === 'CAPI1' && deleteCalls[0].skuId === 'SAPI1', deleteCalls);
-    check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out, trả alreadyGone đúng theo API', listRawCalls === 0 && delResult2.alreadyGone === false, delResult2);
+    check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out ghi SQL, trả alreadyGone đúng theo API', listRawCalls === 1 && delResult2.alreadyGone === false, delResult2);
+    check('EXTERNAL_API: deleteWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(deleteCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), deleteCalls[0].storeScope);
 
     // Chuyển về DIRECT_DB — smoke check: fan-out ĐƯỢC gọi (listRaw), applyPriceViaApi/deletePriceViaApi
     // KHÔNG được gọi nữa, ghi SQL CSPRICE thật thành công (dùng fake mssql module-level ở trên).

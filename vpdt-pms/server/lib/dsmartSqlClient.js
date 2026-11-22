@@ -301,13 +301,21 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
 // Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn). Đổi ID nội bộ
 // (`targetStoreIds`) sang Mã Siêu Thị thật (`storeCodes`) — đối tác không có ý nghĩa gì với ID nội bộ của hệ
 // thống này — và LUÔN giao với danh sách đang Enabled=1 (cùng ngữ nghĩa fanOutToStores() ở trên).
+//
+// Theo yêu cầu người dùng (12/2026): kể cả khi chọn "Tất Cả" (mode ALL), vẫn phải gửi kèm ĐẦY ĐỦ danh sách
+// Mã Siêu Thị (`storeCodes`) cho đối tác — không chỉ gửi mỗi `{mode:"ALL"}` — để đối tác biết CHẮC CHẮN
+// đẩy giá xuống đúng những siêu thị nào, không phải tự suy luận "ALL" theo danh sách siêu thị riêng của họ
+// (có thể lệch với danh sách đang Enabled=1 của hệ thống này). `mode` vẫn giữ lại cho đối tác biết đây là
+// phạm vi "toàn bộ hiện có" hay "chỉ 1 vài siêu thị cụ thể", nhưng `storeCodes` luôn có giá trị ở cả 2 mode.
 async function buildStoreScope(targetStoreIds) {
-  if (!Array.isArray(targetStoreIds)) return { mode: 'ALL' };
   let stores;
   try {
     stores = await storeConnStore.listRaw({ onlyEnabled: true });
   } catch (err) {
-    return { mode: 'SPECIFIC', storeCodes: [] };
+    return { mode: Array.isArray(targetStoreIds) ? 'SPECIFIC' : 'ALL', storeCodes: [] };
+  }
+  if (!Array.isArray(targetStoreIds)) {
+    return { mode: 'ALL', storeCodes: stores.map(s => s.storeCode) };
   }
   const idSet = new Set(targetStoreIds.map(Number));
   return { mode: 'SPECIFIC', storeCodes: stores.filter(s => idSet.has(s.id)).map(s => s.storeCode) };
