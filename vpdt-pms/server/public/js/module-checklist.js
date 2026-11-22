@@ -940,8 +940,8 @@ function applyChecklistReportFilter() {
     <tbody>${rows.map(r => `<tr class="border-b">
       <td class="p-1.5">${escapeHtml(r.templateName)}</td><td class="p-1.5">${escapeHtml(r.storeCode)}</td><td class="p-1.5">${escapeHtml(r.submittedByName || '')}</td>
       <td class="p-1.5">${escapeHtml(r.submittedAt || '')}</td><td class="p-1.5">${formatChecklistAnswerBreakdown(r)}</td>
-      <td class="p-1.5">${r.scorePercent != null ? r.scorePercent.toFixed(1) + '%' : '—'}</td>
-      <td class="p-1.5">${r.hasCriticalFail ? '🔴 Lỗi nghiêm trọng' : (r.isPassed === false ? '🟡 Không đạt' : (r.isPassed === true ? '🟢 Đạt' : '—'))}</td>
+      <td class="p-1.5">${formatChecklistReportScoreCell(r)}</td>
+      <td class="p-1.5">${formatChecklistReportResultCell(r)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -952,6 +952,24 @@ function applyChecklistReportFilter() {
 function formatChecklistAnswerBreakdown(r) {
   if (r.answeredCount == null || r.totalVisibleCount == null) return '—';
   return `${r.answeredCount}/${r.totalVisibleCount} câu, ${r.passedCount} đạt`;
+}
+// Điểm/Kết Quả cho checklist PASS_FAIL_ONLY CHƯA cấu hình passThreshold (11/2026 ĐỢT 3, theo yêu cầu
+// người dùng — xem computeChecklistScoring() ở lib/checklist.js: mẫu này CỐ Ý để scorePercent/isPassed
+// = null khi admin chưa đặt ngưỡng, tránh hiện % bất ngờ). Người dùng muốn 2 cột này LUÔN có giá trị, suy
+// trực tiếp từ passedCount/totalVisibleCount (đã tính sẵn cho mọi chế độ) khi scorePercent/isPassed gốc
+// là null — KHÔNG đụng tới hiển thị khi 2 field gốc ĐÃ có giá trị thật (DEDUCTION hoặc SCORED/PASS_FAIL_
+// ONLY đã cấu hình ngưỡng vẫn giữ nguyên hành vi cũ).
+function formatChecklistReportScoreCell(r) {
+  if (r.scorePercent != null) return r.scorePercent.toFixed(1) + '%';
+  if (r.totalVisibleCount) return ((r.passedCount / r.totalVisibleCount) * 100).toFixed(1) + '%';
+  return '—';
+}
+function formatChecklistReportResultCell(r) {
+  if (r.hasCriticalFail) return '🔴 Lỗi nghiêm trọng';
+  if (r.isPassed === false) return '🟡 Không đạt';
+  if (r.isPassed === true) return '🟢 Đạt';
+  if (r.totalVisibleCount) return `${r.passedCount}/${r.totalVisibleCount} câu`;
+  return '—';
 }
 function exportChecklistReportExcel() {
   const columns = [
