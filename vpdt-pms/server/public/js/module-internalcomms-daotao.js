@@ -457,6 +457,7 @@ async function submitTrainingClass(e) {
       return alert('⛔ Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)!');
     }
   }
+  if (!confirmTrainingClassDurationIfAbnormal(payload.startTime, payload.endTime)) return;
   let newClass;
   try {
     const result = await callCreateAction('trainingClasses', payload);
@@ -976,6 +977,7 @@ async function submitEditTrainingClass(e) {
       return alert('⛔ Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)!');
     }
   }
+  if (!confirmTrainingClassDurationIfAbnormal(payload.startTime, payload.endTime)) return;
   let updated;
   try {
     const result = await callRecordAction('trainingClasses', classId, 'edit', payload);
@@ -1284,6 +1286,12 @@ async function submitTrainingPlan(e) {
     instructorRating: document.getElementById('tpInstructorRating').value,
     customData
   };
+  if (payload.actualParticipants) {
+    const liveStats = getTrainingPlanActualStats({
+      month: payload.month, courseId: payload.courseId ? Number(payload.courseId) : null, targetDept: payload.targetDept
+    });
+    if (!confirmActualParticipantsIfAbnormal(payload.actualParticipants, payload.plannedTrainees, liveStats.actualTrainees)) return;
+  }
   let saved;
   try {
     if (editingTrainingPlanId) {
@@ -1432,6 +1440,42 @@ function getTrainingPlanActualStats(plan) {
   const actualTrainees = new Set(regs.map(r => r.creator)).size; // distinct học viên, không đếm theo dòng đăng ký
   const actualHours = classes.reduce((sum, c) => sum + trainingClassDurationHours(c), 0);
   return { classes, regs, actualClasses, actualTrainees, actualHours };
+}
+
+// Cảnh báo KHÔNG CHẶN CỨNG (11/2026, theo phản ánh người dùng xem báo cáo "Theo Dõi Kế Hoạch Đào Tạo"
+// thấy "Giờ TT" 1 dòng ra tới 483 giờ) — "Giờ TT" ở báo cáo tính SỐNG bằng tổng trainingClassDurationHours()
+// của mọi lớp trong tháng/chương trình đó (xem getTrainingPlanActualStats() ở trên), nên 1 lớp nhập nhầm
+// Kết Thúc (chọn nhầm tháng/ngày) sẽ âm thầm kéo lệch cả báo cáo rất lớn mà không ai hay. 1 lớp trong hệ
+// thống luôn là 1 buổi/1 đợt liên tục (đào tạo nhiều ngày thực tế sẽ tách thành nhiều lớp riêng từng
+// ngày) nên vượt hẳn 24 giờ gần như luôn là do nhập sai, không phải khoá học dài thật — nhưng vẫn CHO
+// LƯU nếu người dùng xác nhận đúng ý (VD lớp online kéo dài qua đêm thật), chỉ hỏi lại cho chắc.
+const TRAINING_CLASS_DURATION_WARN_HOURS = 24;
+function confirmTrainingClassDurationIfAbnormal(startTime, endTime) {
+  if (!startTime || !endTime) return true;
+  const hours = trainingClassDurationHours({ startTime, endTime });
+  if (hours <= TRAINING_CLASS_DURATION_WARN_HOURS) return true;
+  return confirm(`⚠️ Khoảng thời gian Bắt Đầu → Kết Thúc đang tính ra ${hours.toFixed(1)} giờ — bất thường cho 1 lớp học (thường do chọn nhầm ngày/tháng ở ô Kết Thúc). Số giờ này sẽ cộng vào cột "Giờ TT" ở báo cáo Theo Dõi Kế Hoạch Đào Tạo.\n\nBạn có CHẮC CHẮN đã nhập đúng Bắt Đầu/Kết Thúc không?\n\nBấm OK để vẫn lưu, Hủy để sửa lại.`);
+}
+
+// Cảnh báo KHÔNG CHẶN CỨNG khi "SL Tham Gia Thực Tế" (actualParticipants, 1 trong 6 field "Ghi Nhận Thực
+// Tế" điền tay — KHÔNG đối chiếu/thay thế Học Viên TT tính sống, xem chú thích ở createValidation.js) nhập
+// vào lệch quá xa so với "Học Viên KH" đã đặt lúc lập kế hoạch — thường do gõ nhầm số (thiếu/thừa 1 chữ
+// số, VD "5" thay vì "54"). Neo theo plannedTrainees (con số người lập kế hoạch CHỦ ĐÍCH đặt ra) làm
+// tham chiếu chính, KHÔNG neo theo liveActualTrainees (số đăng ký qua hệ thống) — vì số đăng ký qua hệ
+// thống rất hay gần 0 với đào tạo có người tham gia không đăng ký qua app (xem getTrainingPlanActualStats()),
+// nếu lấy làm mốc dưới sẽ gần như không bao giờ cảnh báo được (mốc dưới ≈ 0 thì số nào nhập cũng "qua").
+// Chỉ dùng plannedTrainees khi >0; nếu kế hoạch không đặt số học viên nào thì không có gì để đối chiếu,
+// bỏ qua cảnh báo (không chặn, không áp dụng mù quáng khi thiếu dữ liệu tham chiếu).
+const TRAINING_PLAN_PARTICIPANTS_WARN_RATIO = 3;
+function confirmActualParticipantsIfAbnormal(actualParticipants, plannedTrainees, liveActualTrainees) {
+  const n = Number(actualParticipants);
+  if (!Number.isFinite(n) || n <= 0) return true;
+  const planned = Number(plannedTrainees) || 0;
+  if (!planned) return true;
+  const tooHigh = n > planned * TRAINING_PLAN_PARTICIPANTS_WARN_RATIO;
+  const tooLow = n < planned / TRAINING_PLAN_PARTICIPANTS_WARN_RATIO;
+  if (!tooHigh && !tooLow) return true;
+  return confirm(`⚠️ "SL Tham Gia Thực Tế" đang nhập là ${n}, chênh lệch khá xa so với "Học Viên KH" (${planned}) đã đặt lúc lập kế hoạch (Học Viên TT đăng ký qua hệ thống hiện là ${liveActualTrainees}). Bạn kiểm tra lại số liệu cho chắc trước khi lưu nhé?\n\nBấm OK để vẫn lưu, Hủy để sửa lại.`);
 }
 // % hoàn thành = trung bình 3 chiều (số lớp/số học viên/giờ), mỗi chiều chặn trần 100% (vượt kế hoạch ở
 // 1 chiều không kéo % chung lên bất thường) — null nếu kế hoạch không đặt số nào cả (không có gì đối chiếu).
