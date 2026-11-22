@@ -10986,10 +10986,13 @@ bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản**
   - Bật "🌐 Theo API" đòi hỏi đã nhập **Base URL** trước (chặn 400 nếu chưa có — không cho bật "mù").
   - Khối "🌐 Theo API" có thêm ô **Base URL** + **API Key** (mã hoá 2 chiều, cùng khuôn mật khẩu DB) + nút
     "🔌 Kiểm Tra Kết Nối API" (gọi `POST {baseUrl}/ping`).
-- `storeScope` (`{mode:"ALL"}` hoặc `{mode:"SPECIFIC", storeCodes:[...]}`) LUÔN gửi kèm cả 2 lời gọi Apply/
-  Delete ở chế độ API — đổi ĐÚNG từ `targetStoreIds` (ID nội bộ, xem mục 6n) sang Mã Siêu Thị thật (đối tác
-  không hiểu ID nội bộ của hệ thống này) — khớp đúng field `storeScope` đã thống nhất với đối tác ở tài
-  liệu API (mục "Phạm Vi Siêu Thị").
+- `storeScope` (`{mode:"ALL", storeCodes:[...]}` hoặc `{mode:"SPECIFIC", storeCodes:[...]}`) LUÔN gửi kèm
+  cả 2 lời gọi Apply/Delete ở chế độ API — **kể cả mode "Tất Cả"** vẫn gửi đủ danh sách `storeCodes`, không
+  chỉ mỗi `{mode:"ALL"}` (theo yêu cầu người dùng: đối tác phải biết CHẮC CHẮN đẩy giá xuống đúng những siêu
+  thị nào, không tự suy luận "ALL" theo danh sách riêng của họ). Mã Siêu Thị lấy **trực tiếp từ cột "Mã Siêu
+  Thị"** đang cấu hình ở "⚙️ Kết Nối Siêu Thị" (CHỈ siêu thị đang **Bật**, cùng điều kiện với fan-out DB ở
+  mục 6n) — không qua bất kỳ ánh xạ/nguồn dữ liệu nào khác (người dùng xác nhận rõ: siêu thị nào Tắt kết nối
+  thì cũng không xử lý/đẩy giá được, nên dùng chung đúng 1 nguồn duy nhất cho cả 2 chế độ).
 - Job nền "📅 Lên Lịch Áp Giá"/"🔁 Tự Động Xoá Khi Hết Hạn" (mục 6n/6o) KHÔNG cần sửa gì — cả 2 job vẫn gọi
   `insertWholesalePrice()`/`deleteWholesalePrice()` như cũ, bản thân 2 hàm này tự rẽ nhánh theo chế độ đang
   bật, job không cần biết đang ở chế độ nào.
@@ -11001,7 +11004,7 @@ bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản**
 
 ### Test
 
-- `server/tests/test-dsmart-price-mode.js` (MỚI, 41 kịch bản) — test THẬT (không stub `lib/dsmartSqlClient.js`):
+- `server/tests/test-dsmart-price-mode.js` (MỚI, 43 kịch bản) — test THẬT (không stub `lib/dsmartSqlClient.js`):
   (A) `lib/dsmartPriceConfigStore.js` — round-trip `priceOperationMode`/Cấu Hình API, mã hoá API Key, KHÔNG
   bị `saveConfig()` (host/port/mật khẩu DB) vô tình ghi đè mất, không lộ API Key qua `getSanitizedConfig()`.
   (B) `lib/dsmartPriceExternalApiClient.js` — mock `global.fetch`: thành công, lỗi HTTP, `ok:false`, JSON
@@ -11014,7 +11017,7 @@ bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản**
   test ở file đó FAIL ngay khi vừa thêm tính năng, đã tự phát hiện + vá trước khi báo cáo) và
   `tests/test-dsmart-wholesale-price.js` (thêm route test `PATCH /price-mode`/`PUT /external-api-config`/
   `POST /external-api-config/test-connection`, đều CHỈ admin).
-- Toàn bộ 6 file test Giá Bán Buôn DSmart chạy lại xác nhận PASS: 110+70+23+32+19+41 = 295/295.
+- Toàn bộ 6 file test Giá Bán Buôn DSmart chạy lại xác nhận PASS: 110+70+23+32+19+43 = 297/297.
 
 ### Deploy
 
