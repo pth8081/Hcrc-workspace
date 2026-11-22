@@ -10976,7 +10976,9 @@ bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản**
 
 ### Tính năng mới
 
-- Ô **"Chế Độ Áp Dụng Giá"** (CHỈ admin, trong modal "⚙️ Cấu Hình Kết Nối") — 2 nút loại trừ nhau:
+- Ô **"Chế Độ Áp Dụng Giá"** (CHỈ admin, 1 khối ĐỘC LẬP ngay trong tab — KHÔNG nằm trong modal "⚙️ Cấu Hình
+  Kết Nối" hay "🌐 Cấu Hình API Đối Tác" nào, theo phản hồi người dùng muốn tách riêng dễ thấy hơn) — 2 nút
+  loại trừ nhau:
   - **"🖥️ Theo Phần Mềm"** (mặc định, giữ nguyên 100% hành vi hiện tại — hệ thống tự nối thẳng SQL Server
     DSmart16 Trung Tâm + fan-out xuống từng siêu thị như mục 6n).
   - **"🌐 Theo API"** — hệ thống gọi API đối tác (`POST {baseUrl}/wholesale-price/apply` cho cả Thêm/Sửa,
