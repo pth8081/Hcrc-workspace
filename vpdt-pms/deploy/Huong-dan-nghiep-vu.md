@@ -10935,3 +10935,31 @@ truyền đúng 2 siêu thị đó cho fan-out) — đã tự xác nhận test F
 
 Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
 biến `.env`, không thêm package npm.
+
+## 6v. Giá Bán Buôn: thêm ô chỉnh giờ tự động áp dụng cho "📅 Lên Lịch Áp Giá" (12/2026)
+
+Người dùng hỏi lại cơ chế giờ của 2 job nền ("Xóa và cài đặt giá... Hai cái này cài đặt và xóa là mình
+xét được giờ. Xóa tôi biết là xét được giờ rồi, nhưng cài đặt thế như nào?") — phát hiện ra **không đối
+xứng**: job "🔁 Tự Động Xoá Khi Hết Hạn" (theo `TO_DATE`) đã có ô chỉnh giờ:phút từ trước (mục "2. Quản Lý
+Giá Đã Hết Hạn", mặc định 23:00), còn job "📅 Lên Lịch Áp Giá" (theo `FR_DATE`) trước đây CỐ ĐỊNH áp ngay
+sau 0 giờ của Ngày Bắt Đầu, không có ô chỉnh. Người dùng xác nhận muốn thêm đối xứng: **"Có bạn cho cái ô
+điều chỉnh, tự điều chỉnh bắt đầu từ giờ nào nhé, giống xóa để cho chủ động."**
+
+**Thêm mới**: ô "📅 Giờ tự động áp dụng" (giờ : phút) ngay trong mục **"2b. Giá Đã Lên Lịch"** — admin tự
+đổi, lưu vào 2 cột MỚI `AutoApplyHour`/`AutoApplyMinute` (`dbo.DsmartPriceDbConfig`, mặc định `0:0` — GIỮ
+NGUYÊN hành vi cũ "áp từ 0 giờ" cho tới khi admin tự chỉnh). Job `jobs/dsmartAutoApplyScheduledPrices.js`
+chỉ áp dụng 1 dòng SCHEDULED khi: Ngày Bắt Đầu đã qua hẳn (áp ngay, không chờ gì thêm — đã trễ lịch), HOẶC
+Ngày Bắt Đầu = hôm nay VÀ giờ hiện tại đã qua đúng giờ:phút đã cấu hình (`dueForAutoApply()`, mirror đúng
+khuôn `dueForAutoDelete()` của job Xoá). **Khác với "Tự Động Xoá"**: KHÔNG có công tắc bật/tắt riêng (job
+"Lên Lịch Áp Giá" luôn chạy — việc có đặt lịch hay không là lựa chọn TỪNG LƯỢT của người tạo lúc "Thêm Giá
+Mới", không phải cấu hình module-wide), chỉ chỉnh được giờ áp dụng.
+
+Route mới: `GET`/`PATCH /api/dsmart-price/auto-apply-config` (cùng quyền `itSupportPriceWriteDsmart` hoặc
+admin như route Xoá, không cần thêm quyền riêng).
+
+### Deploy
+
+- `server/sql/schema.sql` có thêm 2 cột `AutoApplyHour`/`AutoApplyMinute` — chạy lại script (an toàn, tự
+  bọc `IF OBJECT_ID(...) IS NULL`, mặc định `0` nên không đổi hành vi đang chạy cho tới khi admin tự vào
+  đổi giờ).
+- Không thêm biến `.env`, không thêm package npm.
