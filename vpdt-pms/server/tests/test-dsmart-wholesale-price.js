@@ -164,15 +164,40 @@ let AUTO_DELETE_CFG = { autoDeleteEnabled: false, autoDeleteHour: 23, autoDelete
 // đã có từ trước (không đặt lại biến này) vẫn pass không cần sửa gì.
 let AUTO_APPLY_CFG = { autoApplyHour: 0, autoApplyMinute: 0 };
 let RAW_CFG_HAS_PASSWORD = true;
+// PRICE_MODE_CFG (12/2026, "🖥️ Theo Phần Mềm"/"🌐 Theo API", theo yêu cầu người dùng "thêm có hai cái nút
+// để mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt sử dụng giá theo API. Chỉ
+// chọn được một trong hai") — mặc định DIRECT_DB (giữ nguyên hành vi cũ) cho tới khi admin tự đổi.
+let PRICE_MODE_CFG = { priceOperationMode: 'DIRECT_DB' };
+let EXTERNAL_API_CFG = { externalApiBaseUrl: '', externalApiKeyEnc: null };
 stubModule('lib/dsmartPriceConfigStore', {
   getRawConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: RAW_CFG_HAS_PASSWORD ? 'enc' : null, ...AUTO_DELETE_CFG, ...AUTO_APPLY_CFG }),
-  getSanitizedConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', hasPassword: true, ...AUTO_DELETE_CFG, ...AUTO_APPLY_CFG }),
+  getSanitizedConfig: async () => ({ host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', hasPassword: true, ...AUTO_DELETE_CFG, ...AUTO_APPLY_CFG, ...PRICE_MODE_CFG, externalApiBaseUrl: EXTERNAL_API_CFG.externalApiBaseUrl, hasExternalApiKey: !!EXTERNAL_API_CFG.externalApiKeyEnc }),
   saveConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...cfg, hasPassword: true }; },
   getAutoDeleteConfig: async () => ({ ...AUTO_DELETE_CFG }),
   saveAutoDeleteConfig: async (cfg) => { AUTO_DELETE_CFG = { autoDeleteEnabled: !!cfg.autoDeleteEnabled, autoDeleteHour: cfg.autoDeleteHour, autoDeleteMinute: cfg.autoDeleteMinute }; return { ...AUTO_DELETE_CFG }; },
   getAutoApplyConfig: async () => ({ ...AUTO_APPLY_CFG }),
   saveAutoApplyConfig: async (cfg) => { AUTO_APPLY_CFG = { autoApplyHour: cfg.autoApplyHour, autoApplyMinute: cfg.autoApplyMinute }; return { ...AUTO_APPLY_CFG }; },
+  // priceOperationMode/externalApiConfig (12/2026, "🖥️ Theo Phần Mềm"/"🌐 Theo API") — mirror khuôn
+  // autoApply/autoDelete ở trên, tách riêng getExternalApiConfig() (trả externalApiKey ĐÃ GIẢI MÃ, chỉ
+  // dùng nội bộ route test-connection) khỏi getSanitizedConfig() (không lộ key, chỉ hasExternalApiKey).
+  getExternalApiConfig: async () => ({ externalApiBaseUrl: EXTERNAL_API_CFG.externalApiBaseUrl, externalApiKey: EXTERNAL_API_CFG.externalApiKeyEnc }),
+  savePriceOperationMode: async (cfg) => { PRICE_MODE_CFG = { priceOperationMode: cfg.priceOperationMode === 'EXTERNAL_API' ? 'EXTERNAL_API' : 'DIRECT_DB' }; return PRICE_MODE_CFG.priceOperationMode; },
+  saveExternalApiConfig: async (cfg) => {
+    EXTERNAL_API_CFG = { externalApiBaseUrl: cfg.externalApiBaseUrl || '', externalApiKeyEnc: cfg.externalApiKey ? cfg.externalApiKey : EXTERNAL_API_CFG.externalApiKeyEnc };
+    return { externalApiBaseUrl: EXTERNAL_API_CFG.externalApiBaseUrl, hasExternalApiKey: !!EXTERNAL_API_CFG.externalApiKeyEnc };
+  },
   decryptSecret: (v) => v
+});
+
+// testExternalApiConnection() (12/2026) — mock riêng cho route test-connection, KHÔNG gọi fetch thật.
+let extApiTestCalls = 0, extApiTestShouldFail = false;
+stubModule('lib/dsmartPriceExternalApiClient', {
+  testExternalApiConnection: async (cfg) => {
+    extApiTestCalls++;
+    if (extApiTestShouldFail) throw new Error('Không kết nối được API đối tác (giả lập)');
+    if (!cfg || !cfg.externalApiBaseUrl) throw new Error('Chưa cấu hình Base URL (giả lập)');
+    return { ms: 7 };
+  }
 });
 
 // ===== Giả lập dbo.DsmartStorePriceConnections (12/2026, FAN-OUT) — logic THẬT của store này đã test
@@ -380,6 +405,66 @@ async function main() {
     CURRENT_USER = IT_PRICE_WRITER.username;
     const res = await apiPatch('/auto-apply-config', { autoApplyHour: 24, autoApplyMinute: 0 });
     assert.strictEqual(res.status, 400);
+  });
+
+  // ===== "🖥️ Theo Phần Mềm" / "🌐 Theo API" (12/2026, theo yêu cầu người dùng: "thêm có hai cái nút để
+  // mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt sử dụng giá theo API. Chỉ
+  // chọn được một trong hai... tự cái kia sẽ vô hiệu") — CHỈ admin (cùng mức Cấu Hình Kết Nối). =====
+  await test('PATCH /price-mode: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPatch('/price-mode', { priceOperationMode: 'EXTERNAL_API' });
+    assert.strictEqual(res.status, 403);
+  });
+  await test('PATCH /price-mode: giá trị không hợp lệ -> 400', async () => {
+    CURRENT_USER = ADMIN.username;
+    const res = await apiPatch('/price-mode', { priceOperationMode: 'KHONG_HOP_LE' });
+    assert.strictEqual(res.status, 400);
+  });
+  await test('PATCH /price-mode: bật EXTERNAL_API khi CHƯA có Base URL -> 400 (không cho bật "mù")', async () => {
+    EXTERNAL_API_CFG = { externalApiBaseUrl: '', externalApiKeyEnc: null };
+    CURRENT_USER = ADMIN.username;
+    const res = await apiPatch('/price-mode', { priceOperationMode: 'EXTERNAL_API' });
+    assert.strictEqual(res.status, 400);
+  });
+  await test('PUT /external-api-config: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPut('/external-api-config', { externalApiBaseUrl: 'https://api.doitac.vn', externalApiKey: 'key1' });
+    assert.strictEqual(res.status, 403);
+  });
+  await test('PUT /external-api-config: admin lưu được Base URL + API Key', async () => {
+    CURRENT_USER = ADMIN.username;
+    const res = await apiPut('/external-api-config', { externalApiBaseUrl: 'https://api.doitac.vn', externalApiKey: 'key1' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.config.externalApiBaseUrl, 'https://api.doitac.vn');
+    assert.strictEqual(res.body.config.hasExternalApiKey, true);
+  });
+  await test('PATCH /price-mode: SAU KHI đã có Base URL -> bật EXTERNAL_API thành công, PATCH lại DIRECT_DB cũng OK (đổi qua lại tự do)', async () => {
+    CURRENT_USER = ADMIN.username;
+    const resApi = await apiPatch('/price-mode', { priceOperationMode: 'EXTERNAL_API' });
+    assert.strictEqual(resApi.status, 200);
+    assert.strictEqual(resApi.body.priceOperationMode, 'EXTERNAL_API');
+    const resDb = await apiPatch('/price-mode', { priceOperationMode: 'DIRECT_DB' });
+    assert.strictEqual(resDb.status, 200);
+    assert.strictEqual(resDb.body.priceOperationMode, 'DIRECT_DB');
+  });
+  await test('POST /external-api-config/test-connection: itSupportPriceWriteDsmart (không phải admin) -> 403', async () => {
+    CURRENT_USER = IT_PRICE_WRITER.username;
+    const res = await apiPost('/external-api-config/test-connection', {});
+    assert.strictEqual(res.status, 403);
+  });
+  await test('POST /external-api-config/test-connection: admin, thành công -> gọi testExternalApiConnection() đúng 1 lần', async () => {
+    CURRENT_USER = ADMIN.username;
+    extApiTestCalls = 0; extApiTestShouldFail = false;
+    const res = await apiPost('/external-api-config/test-connection', {});
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(extApiTestCalls, 1);
+  });
+  await test('POST /external-api-config/test-connection: lỗi kết nối -> trả lỗi rõ ràng, không phải 200', async () => {
+    CURRENT_USER = ADMIN.username;
+    extApiTestShouldFail = true;
+    const res = await apiPost('/external-api-config/test-connection', {});
+    assert.notStrictEqual(res.status, 200);
+    extApiTestShouldFail = false;
   });
 
   // ===== Kiểm Tra Kết Nối (nút "🔌 Kiểm Tra Kết Nối", 12/2026) =====

@@ -1770,6 +1770,30 @@ BEGIN
 END
 GO
 
+/* PriceOperationMode/ExternalApiBaseUrl/ExternalApiKeyEnc (12/2026, theo yêu cầu người dùng: "Mình sẽ
+   thêm có hai cái nút để mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt sử dụng
+   giá theo API. Chỉ chọn được một trong hai... tự cái kia sẽ vô hiệu") — admin chọn 1 trong 2 CÁCH ghi
+   giá: 'DIRECT_DB' (mặc định, GIỮ NGUYÊN hành vi hiện tại — hệ thống tự nối thẳng SQL Server DSmart16
+   Trung Tâm + fan-out xuống từng siêu thị, xem lib/dsmartSqlClient.js) hoặc 'EXTERNAL_API' (MỚI — gọi
+   API do đối tác DSmart tự xây theo đúng tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart" đã gửi, đối tác tự
+   lo việc đồng bộ xuống mọi siêu thị, hệ thống này KHÔNG tự fan-out nữa khi ở chế độ này — xem
+   lib/dsmartPriceExternalApiClient.js). ExternalApiKeyEnc mã hoá 2 chiều CÙNG khuôn PasswordEnc ở trên. */
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartPriceDbConfig', 'PriceOperationMode') IS NULL
+BEGIN
+    ALTER TABLE dbo.DsmartPriceDbConfig ADD PriceOperationMode NVARCHAR(20) NOT NULL DEFAULT 'DIRECT_DB';
+END
+GO
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartPriceDbConfig', 'ExternalApiBaseUrl') IS NULL
+BEGIN
+    ALTER TABLE dbo.DsmartPriceDbConfig ADD ExternalApiBaseUrl NVARCHAR(500) NULL;
+END
+GO
+IF OBJECT_ID('dbo.DsmartPriceDbConfig', 'U') IS NOT NULL AND COL_LENGTH('dbo.DsmartPriceDbConfig', 'ExternalApiKeyEnc') IS NULL
+BEGIN
+    ALTER TABLE dbo.DsmartPriceDbConfig ADD ExternalApiKeyEnc NVARCHAR(500) NULL;
+END
+GO
+
 /* DsmartStorePriceConnections (12/2026, theo yêu cầu người dùng "tôi muốn cài đặt giá đến tận máy chủ
    db của siêu thị... khi tôi thay đổi như xóa, sửa nó cũng truyền xuống tất cả các siêu thị") — danh
    sách kết nối SQL Server RIÊNG của TỪNG siêu thị (đã xác nhận: server HWS có VPN/kết nối sẵn tới SQL

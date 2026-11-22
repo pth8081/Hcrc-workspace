@@ -507,6 +507,13 @@ async function main() {
     alertsAfterSchedule.some(a => a.includes('LÊN LỊCH')), alertsAfterSchedule.slice(-1));
   await page.evaluate(() => { window.__mockApplyScheduled = false; });
 
+  // Đóng modal "⚙️ Cấu Hình Kết Nối" (12/2026, khối "🖥️ Kết Nối CSDL"/"🌐 Kết Nối API Đối Tác" giờ LUÔN
+  // hiện đầy đủ cùng lúc theo phản hồi người dùng — modal đóng trước khi thao tác tiếp ở các mục khác,
+  // đúng hành vi thật: admin bấm "Huỷ"/"×" trước khi rời khỏi màn Cấu Hình, không để modal che khuất
+  // phần còn lại của trang).
+  await page.click('[data-op="closeDsmartPriceConfigModal"] >> nth=0');
+  await page.waitForTimeout(100);
+
   // ===== 🏬 Kết Nối Siêu Thị (12/2026, FAN-OUT, CHỈ admin) =====
   // currentUser.perms.admin được set true ở phần "Cấu Hình Kết Nối" phía trên, nhưng initDsmartPriceTab()
   // chỉ tự ẩn/hiện nút admin đúng 1 lần LÚC VÀO TAB (trước khi admin=true) — gọi lại NGAY ĐÂY để nút
