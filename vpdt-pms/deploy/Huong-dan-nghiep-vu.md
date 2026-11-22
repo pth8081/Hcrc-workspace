@@ -10918,3 +10918,20 @@ Cả 2 cảnh báo dùng `window.confirm()` (bấm OK vẫn lưu, Hủy để s�
 
 Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
 biến `.env`, không thêm package npm.
+
+## 6u. LỖI THẬT đã vá: job "Tự Động Xoá Khi Hết Hạn" (Giá Bán Buôn DSmart) không giữ đúng phạm vi siêu thị (12/2026)
+
+Người dùng tự phát hiện qua câu hỏi "áp giá 1 vài siêu thị thì xoá có đúng xoá đúng 1 vài siêu thị đó
+không?" — `jobs/dsmartAutoDeleteExpiredPrices.js` trước đây gọi `deleteWholesalePrice({ dsmartKey })`
+KHÔNG truyền `fresh.targetStoreIds` (phạm vi siêu thị đã ĐÓNG BĂNG lúc "Thêm Giá Mới"/"🏬 Áp Dụng Cho Siêu
+Thị"), khác hẳn job "Lên Lịch Áp Giá" (`dsmartAutoApplyScheduledPrices.js`) và route xoá thủ công (`POST
+/entries/:id/delete`) — cả 2 đã truyền đúng từ trước. Hậu quả: 1 dòng giá chỉ áp cho vài siêu thị cụ thể
+(không phải "Tất Cả"), khi tự động xoá vì hết hạn (`TO_DATE` đã qua), bị xoá nhầm ở TẤT CẢ siêu thị đang
+bật — kể cả siêu thị chưa từng nhận giá đó.
+
+**Vá**: truyền đúng `fresh.targetStoreIds` cho `deleteWholesalePrice()` (1 dòng), khớp đúng khuôn 2 nơi
+gọi kia. Thêm test tái hiện đúng kịch bản (entry chỉ áp cho 2 siêu thị cụ thể, hết hạn, xác nhận job chỉ
+truyền đúng 2 siêu thị đó cho fan-out) — đã tự xác nhận test FAIL nếu thiếu fix, PASS sau khi vá.
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
+biến `.env`, không thêm package npm.
