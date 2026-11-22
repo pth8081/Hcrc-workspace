@@ -11021,6 +11021,27 @@ bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản**
   `POST /external-api-config/test-connection`, đều CHỈ admin).
 - Toàn bộ 6 file test Giá Bán Buôn DSmart chạy lại xác nhận PASS: 110+70+23+32+19+43 = 297/297.
 
+### Cập nhật theo tài liệu CHÍNH THỨC đối tác gửi lại (22/11/2026)
+
+Đối tác (đội DSmart/Report) gửi lại tài liệu chính thức "Tài Liệu API: Giá Bán Buôn DSmart" xác nhận toàn bộ
+hợp đồng dữ liệu (endpoint, request/response, storeScope, idempotency, timeout 15s) khớp đúng 100% với những
+gì hệ thống đã code — **CHỈ 1 điểm khác biệt thật sự: cơ chế xác thực**. Đối tác dùng header tĩnh
+`X-API-Key: <key>`, **KHÔNG chấp nhận** `Authorization: Bearer <key>` như bản nháp ban đầu. Đã sửa:
+
+- `lib/dsmartPriceExternalApiClient.js`: đổi header gửi kèm mọi request từ `Authorization: Bearer <key>`
+  sang `X-API-Key: <key>` (hàm `callExternalApi()`).
+- `tests/test-dsmart-price-mode.js`: sửa assertion kiểm tra header + thêm assertion xác nhận KHÔNG còn gửi
+  `Authorization` — chạy lại xác nhận 44/44 PASS (toàn bộ 6 file liên quan: 297+1 = 298/298).
+- Build demo Playwright xác nhận luồng "🔌 Kiểm Tra Kết Nối API" vẫn hoạt động đúng sau khi đổi header
+  (không ảnh hưởng UI/trải nghiệm người dùng, chỉ đổi header nội bộ gửi sang đối tác).
+
+Các điểm khác tài liệu đối tác NÊU RÕ nhưng KHÔNG cần sửa code (đã đúng sẵn từ trước): 3 endpoint path, 2
+mode storeScope luôn gửi storeCodes, timeout 15s khớp `REQUEST_TIMEOUT_MS`, response shape `{ok, custId,
+skuId, overwritten}`/`{ok, alreadyGone}`/`{ok}`. Thông tin tham khảo thêm (không phải code, chỉ để lưu ý khi
+go-live): rate limit gợi ý 120 lượt/phút, chưa có môi trường sandbox riêng (2 bên tự thống nhất quy trình test
+tạm trước khi bật thật), và **HO (DSmart16 Trung Tâm) phía đối tác LUÔN được ghi/xoá ở MỌI request, không phụ
+thuộc storeScope** — storeScope chỉ chi phối phần fan-out xuống từng siêu thị phía đối tác.
+
 ### Deploy
 
 - `server/sql/schema.sql` có thêm 3 cột `PriceOperationMode`/`ExternalApiBaseUrl`/`ExternalApiKeyEnc` —

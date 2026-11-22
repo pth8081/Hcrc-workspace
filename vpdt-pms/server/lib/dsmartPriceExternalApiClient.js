@@ -15,9 +15,10 @@
 // lib/dsmartSqlClient.js) — người dùng xác nhận rõ: đối tác (DSmart) TỰ chịu trách nhiệm đồng bộ giá
 // xuống mọi siêu thị qua hạ tầng của họ, giống cách phần mềm DSmart desktop vẫn tự đồng bộ từ trước giờ.
 //
-// XÁC THỰC: API Key đơn giản (người dùng xác nhận) — gửi kèm mỗi request qua header
-// `Authorization: Bearer <key>`, admin tự nhập 1 lần qua Cấu Hình Kết Nối (mã hoá 2 chiều, cùng khuôn mật
-// khẩu DB — xem saveExternalApiConfig() ở lib/dsmartPriceConfigStore.js).
+// XÁC THỰC: API Key tĩnh — gửi kèm mỗi request qua header `X-API-Key: <key>` (12/2026, theo ĐÚNG tài liệu
+// chính thức đối tác gửi lại "Tài Liệu API: Giá Bán Buôn DSmart", mục 2 — đối tác KHÔNG chấp nhận
+// `Authorization: Bearer`, chỉ chấp nhận đúng header này). Admin tự nhập 1 lần qua Cấu Hình Kết Nối (mã hoá
+// 2 chiều, cùng khuôn mật khẩu DB — xem saveExternalApiConfig() ở lib/dsmartPriceConfigStore.js).
 const { HttpError } = require('./httpErrors');
 
 const REQUEST_TIMEOUT_MS = 15000;
@@ -41,7 +42,7 @@ async function callExternalApi(cfg, path, body) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(cfg.externalApiKey ? { Authorization: `Bearer ${cfg.externalApiKey}` } : {})
+        ...(cfg.externalApiKey ? { 'X-API-Key': cfg.externalApiKey } : {})
       },
       body: JSON.stringify(body || {}),
       signal: controller.signal
