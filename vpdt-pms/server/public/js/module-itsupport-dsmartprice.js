@@ -1058,15 +1058,17 @@ function applyDsmartPricePriceModeUI(mode) {
   const inactiveClass = ['bg-gray-200', 'text-gray-600'];
   if (btnDb) { btnDb.classList.remove(...activeClass, ...inactiveClass); btnDb.classList.add(...(isApi ? inactiveClass : activeClass)); }
   if (btnApi) { btnApi.classList.remove(...activeClass, ...inactiveClass); btnApi.classList.add(...(isApi ? activeClass : inactiveClass)); }
-  document.getElementById('dsmartPriceDirectDbFields').classList.toggle('hidden', isApi);
-  document.getElementById('dsmartPriceExternalApiFields').classList.toggle('hidden', !isApi);
-  const saveBtn = document.getElementById('btnDsmartPriceSaveConfig');
-  if (saveBtn) saveBtn.classList.toggle('hidden', isApi);
+  // LẦN 2 (12/2026, theo phản hồi người dùng — bản demo lần 1 ẨN hẳn khối CSDL khi chọn "Theo API", dễ
+  // hiểu lầm "mất cấu hình CSDL"): KHÔNG còn ẩn/hiện 2 khối cấu hình nữa — "🖥️ Kết Nối CSDL"/"🌐 Kết Nối
+  // API Đối Tác" LUÔN hiện đầy đủ, cho phép cấu hình ỔN ĐỊNH cả 2 cùng lúc, độc lập với nút chọn chế độ ở
+  // trên — chỉ đổi badge "✅ Đang dùng" sang đúng khối đang được chọn để dùng thật.
+  document.getElementById('dsmartPriceDirectDbActiveBadge').classList.toggle('hidden', isApi);
+  document.getElementById('dsmartPriceExternalApiActiveBadge').classList.toggle('hidden', !isApi);
   const hint = document.getElementById('dsmartPriceModeHint');
   if (hint) {
     hint.innerText = isApi
-      ? '🌐 Hệ thống gọi API đối tác để áp/xoá giá — đối tác tự lo đồng bộ xuống mọi siêu thị, hệ thống KHÔNG tự nối SQL Server siêu thị nữa.'
-      : '🖥️ Hệ thống tự nối thẳng SQL Server DSmart16 Trung Tâm + fan-out xuống từng siêu thị (hành vi mặc định từ trước giờ).';
+      ? '🌐 Đang dùng: hệ thống gọi API đối tác để áp/xoá giá — đối tác tự lo đồng bộ xuống mọi siêu thị, hệ thống KHÔNG tự nối SQL Server siêu thị nữa. Khối "🖥️ Kết Nối CSDL" vẫn cấu hình được bình thường, chỉ đang KHÔNG được dùng.'
+      : '🖥️ Đang dùng: hệ thống tự nối thẳng SQL Server DSmart16 Trung Tâm + fan-out xuống từng siêu thị (hành vi mặc định từ trước giờ). Khối "🌐 Kết Nối API Đối Tác" vẫn cấu hình được bình thường, chỉ đang KHÔNG được dùng.';
   }
 }
 

@@ -605,28 +605,42 @@
 
     <!-- Modal Cấu Hình Kết Nối DSmart16 Trung Tâm (CHỈ admin) -->
     <div id="dsmartPriceConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div class="p-4 border-b flex justify-between items-center">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex justify-between items-center shrink-0">
           <h3 class="font-bold text-base text-gray-800">⚙️ Cấu Hình Kết Nối DSmart16 Trung Tâm</h3>
           <button data-op="closeDsmartPriceConfigModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
-        <div class="p-4 space-y-3 text-sm">
+        <!-- overflow-y-auto + max-h-[90vh] trên khung ngoài (12/2026, LỖI THẬT đã phát hiện qua Playwright —
+             xem test-dsmart-price-ui.js): từ khi khối "🖥️ Kết Nối CSDL"/"🌐 Kết Nối API Đối Tác" LUÔN hiện
+             đầy đủ cùng lúc (không còn ẩn/hiện theo chế độ), nội dung modal DÀI HƠN chiều cao màn hình —
+             thiếu cuộn nội bộ khiến phần đầu modal (nút "×", tiêu đề) bị đẩy ra NGOÀI viewport phía trên
+             (modal dùng flex items-center để canh giữa, không co giãn/cuộn được) — admin không bấm được nút
+             đóng hay thấy đủ nội dung. Cuộn RIÊNG phần thân (không cuộn header/footer) để tiêu đề + nút Lưu/
+             Huỷ luôn cố định nhìn thấy được. -->
+        <div class="p-4 space-y-3 text-sm overflow-y-auto">
           <!-- "🖥️ Theo Phần Mềm" / "🌐 Theo API" (12/2026, theo yêu cầu người dùng: "thêm có hai cái nút
                để mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt sử dụng giá theo
                API. Chỉ chọn được một trong hai... tự cái kia sẽ vô hiệu") — bấm 1 nút LÀ LƯU NGAY (giống
                Tự Động Xoá/Lên Lịch Áp Giá ở mục 2/2b, không cần bấm "💾 Lưu Cấu Hình" riêng), nút đang chọn
                tô đậm, nút kia tự mờ đi — xem setDsmartPricePriceMode()/applyDsmartPricePriceModeUI() ở
-               module-itsupport-dsmartprice.js. -->
+               module-itsupport-dsmartprice.js.
+               LẦN 2 (12/2026, theo phản hồi người dùng — ảnh demo lần 1 ẨN hẳn khối CSDL khi chọn "Theo
+               API" gây hiểu lầm "mất cấu hình CSDL"): nút chọn chế độ CHỈ quyết định "đang DÙNG cái nào",
+               KHÔNG còn ẩn/hiện bất kỳ khối cấu hình nào nữa — 2 khối "🖥️ Kết Nối CSDL"/"🌐 Kết Nối API"
+               LUÔN hiện đầy đủ, cho phép cấu hình ỔN ĐỊNH cả 2 cùng lúc, độc lập với việc đang chọn dùng
+               cái nào — xem applyDsmartPricePriceModeUI() đã bỏ hẳn .classList.toggle('hidden', ...). -->
           <div class="bg-gray-50 border rounded p-2.5">
-            <div class="text-xs font-semibold text-gray-600 mb-1.5">Chế Độ Áp Dụng Giá</div>
+            <div class="text-xs font-semibold text-gray-600 mb-1.5">Chế Độ Áp Dụng Giá — chọn ĐANG DÙNG cấu hình nào bên dưới (không ảnh hưởng tới việc cấu hình cả 2)</div>
             <div class="flex gap-2">
               <button type="button" id="btnDsmartPriceModeDb" data-op="setDsmartPricePriceMode" data-arg0="DIRECT_DB" class="flex-1 px-2.5 py-1.5 rounded text-xs font-bold">🖥️ Theo Phần Mềm</button>
               <button type="button" id="btnDsmartPriceModeApi" data-op="setDsmartPricePriceMode" data-arg0="EXTERNAL_API" class="flex-1 px-2.5 py-1.5 rounded text-xs font-bold">🌐 Theo API</button>
             </div>
             <div id="dsmartPriceModeHint" class="text-[11px] text-gray-400 mt-1.5"></div>
           </div>
-          <!-- Khối "🖥️ Theo Phần Mềm": Host/Port/CSDL/Tài khoản/Mật khẩu (ẨN khi đang ở "🌐 Theo API"). -->
-          <div id="dsmartPriceDirectDbFields" class="space-y-3">
+          <!-- Khối "🖥️ Kết Nối CSDL": Host/Port/CSDL/Tài khoản/Mật khẩu — LUÔN hiện, cấu hình được bất kể
+               đang chọn chế độ nào ở trên (badge "✅ Đang dùng" chỉ để biết, KHÔNG ẩn nếu đang KHÔNG dùng). -->
+          <div id="dsmartPriceDirectDbFields" class="space-y-3 border-t pt-3">
+          <div class="flex items-center gap-2"><span class="text-xs font-bold text-gray-700">🖥️ Kết Nối CSDL (DSmart16 Trung Tâm)</span><span id="dsmartPriceDirectDbActiveBadge" class="hidden text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">✅ Đang dùng</span></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Host</label><input id="dsmartPriceCfgHost" class="w-full border p-2 rounded text-sm"></div>
           <div class="grid grid-cols-2 gap-2">
             <div><label class="block text-xs font-semibold text-gray-600 mb-1">Port</label><input id="dsmartPriceCfgPort" type="number" value="1433" class="w-full border p-2 rounded text-sm"></div>
@@ -660,10 +674,11 @@
             <span id="dsmartPriceSkuDefAccessStatus" class="text-xs"></span>
           </div>
           </div>
-          <!-- Khối "🌐 Theo API": Base URL + API Key của đối tác (ẨN khi đang ở "🖥️ Theo Phần Mềm") — đối
-               tác tự xây theo tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart" đã gửi (2 operation: Set/Upsert
-               Price + Delete Price, xem lib/dsmartPriceExternalApiClient.js). -->
-          <div id="dsmartPriceExternalApiFields" class="hidden space-y-3">
+          <!-- Khối "🌐 Kết Nối API Đối Tác": Base URL + API Key — LUÔN hiện, cấu hình độc lập với khối CSDL
+               ở trên (đối tác tự xây theo tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart" đã gửi: 2 operation
+               Set/Upsert Price + Delete Price, xem lib/dsmartPriceExternalApiClient.js). -->
+          <div id="dsmartPriceExternalApiFields" class="space-y-3 border-t pt-3">
+            <div class="flex items-center gap-2"><span class="text-xs font-bold text-gray-700">🌐 Kết Nối API Đối Tác</span><span id="dsmartPriceExternalApiActiveBadge" class="hidden text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">✅ Đang dùng</span></div>
             <div><label class="block text-xs font-semibold text-gray-600 mb-1">Base URL API đối tác</label><input id="dsmartPriceExtApiBaseUrl" placeholder="https://api.doitac.vn/dsmart" class="w-full border p-2 rounded text-sm"></div>
             <div><label class="block text-xs font-semibold text-gray-600 mb-1">API Key</label><input id="dsmartPriceExtApiKey" type="password" placeholder="Để trống = giữ nguyên API Key cũ" class="w-full border p-2 rounded text-sm"><div id="dsmartPriceExtApiKeyHint" class="text-[11px] text-gray-400 mt-1"></div></div>
             <div class="flex items-center gap-2">
@@ -673,7 +688,7 @@
             <button type="button" data-op="saveDsmartPriceExternalApiConfig" class="w-full px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">💾 Lưu Cấu Hình API</button>
           </div>
         </div>
-        <div class="p-4 border-t flex justify-end gap-2">
+        <div class="p-4 border-t flex justify-end gap-2 shrink-0">
           <button data-op="closeDsmartPriceConfigModal" class="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>
           <button id="btnDsmartPriceSaveConfig" data-op="saveDsmartPriceConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">💾 Lưu Cấu Hình</button>
         </div>
