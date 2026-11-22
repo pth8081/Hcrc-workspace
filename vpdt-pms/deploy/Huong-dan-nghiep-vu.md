@@ -10893,3 +10893,28 @@ Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — **n
 `dbo.DsmartStoreFanOutRetryQueue` mới thì hàng đợi tự động thử lại mới hoạt động được** — phần email vẫn
 hoạt động bình thường dù chưa chạy script này (chỉ riêng tính năng tự động thử lại sẽ không ghi được gì
 cho tới khi bảng được tạo).
+
+## 6t. Đào Tạo Nội Bộ: cảnh báo (không chặn) khi Lớp Học/Ghi Nhận Thực Tế nhập bất thường (12/2026)
+
+Người dùng gửi file Excel xuất từ "📊 Theo Dõi Kế Hoạch Đào Tạo" nhờ rà lại, phát hiện 1 dòng "Giờ TT"
+(tính SỐNG từ tổng thời lượng các Lớp Học thật — `getTrainingPlanActualStats()`, `public/js/module-
+internalcomms-daotao.js`) ra tới **483 giờ** cho 1 khoá "Đào Tạo Tân Binh" chỉ kéo dài hơn 1 ngày — do 1
+Lớp Học nào đó bị chọn nhầm ngày/tháng ở ô "Kết Thúc", không có cảnh báo nào chặn việc này. Thêm 2 xác
+nhận TRƯỚC KHI LƯU (chỉ hỏi lại, KHÔNG chặn cứng — người dùng vẫn lưu được nếu đúng là trường hợp bất
+thường thật):
+
+- **Tạo/Sửa Lớp Học** (`submitTrainingClass`/`submitEditTrainingClass`): nếu khoảng Bắt Đầu→Kết Thúc tính
+  ra quá 24 giờ (`TRAINING_CLASS_DURATION_WARN_HOURS`) — 1 lớp trong hệ thống luôn là 1 buổi/1 đợt liên
+  tục (đào tạo nhiều ngày thực tế tách thành nhiều lớp riêng từng ngày), nên vượt hẳn 1 ngày gần như luôn
+  là nhập sai, không phải khoá học dài thật.
+- **"Ghi Nhận Thực Tế"** (`submitTrainingPlan`): nếu "SL Tham Gia Thực Tế" (1 trong 6 field điền tay sau
+  buổi học — KHÔNG đối chiếu/thay thế "Học Viên TT" tính sống qua đăng ký hệ thống) lệch quá 3 lần
+  (`TRAINING_PLAN_PARTICIPANTS_WARN_RATIO`, cả 2 chiều) so với "Học Viên KH" đã đặt lúc lập kế hoạch —
+  neo theo Học Viên KH (số người lập kế hoạch CHỦ ĐÍCH đặt ra) chứ không neo theo Học Viên TT đăng ký hệ
+  thống, vì số đăng ký qua hệ thống rất hay gần 0 với đào tạo có người tham gia không đăng ký qua app
+  (lấy làm mốc dưới sẽ gần như không bao giờ cảnh báo được).
+
+Cả 2 cảnh báo dùng `window.confirm()` (bấm OK vẫn lưu, Hủy để sửa lại), không thêm bảng/API/quyền mới.
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
+biến `.env`, không thêm package npm.
