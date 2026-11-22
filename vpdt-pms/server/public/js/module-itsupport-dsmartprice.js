@@ -28,8 +28,10 @@ let _dsmartPriceStoreOptions = [];
 async function initDsmartPriceTab() {
   const isAdmin = !!currentUser?.perms?.admin;
   document.getElementById('btnDsmartPriceConfig').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btnDsmartPriceExternalApiConfig').classList.toggle('hidden', !isAdmin);
   document.getElementById('btnDsmartStoreConnToggle').classList.toggle('hidden', !isAdmin);
   document.getElementById('btnDsmartConnStatusToggle').classList.toggle('hidden', !isAdmin);
+  document.getElementById('dsmartPricePriceModeBar').classList.toggle('hidden', !isAdmin);
   document.getElementById('dsmartPriceConnStatus').innerText = 'Xem "⚙️ Cấu Hình Kết Nối" (Admin) để kiểm tra/đổi thông tin kết nối DSmart16 Trung Tâm.';
   applyDsmartPriceAddFormState();
   applyDsmartPriceUploadFilterState();
@@ -37,7 +39,7 @@ async function initDsmartPriceTab() {
   applyDsmartPriceHistoryFilterState();
   await Promise.all([loadDsmartPriceAutoDeleteConfig(), loadDsmartPriceAutoApplyConfig()]);
   const tasks = [renderDsmartPriceEntries(), renderDsmartPriceHistory(), loadDsmartPriceStoreOptions()];
-  if (isAdmin) tasks.push(renderDsmartStoreConnList());
+  if (isAdmin) { tasks.push(renderDsmartStoreConnList()); tasks.push(loadDsmartPricePriceMode()); }
   await Promise.all(tasks);
 }
 
@@ -1022,7 +1024,8 @@ async function renderDsmartPriceHistory() {
   }).join('') || `<tr><td colspan="7" class="p-3 text-center text-gray-400 italic">Không có lịch sử nào khớp</td></tr>`;
 }
 
-// ===================== Cấu Hình Kết Nối (Admin) =====================
+// ===================== Cấu Hình Kết Nối (Admin) — CHỈ CSDL DSmart16 Trung Tâm (12/2026, LẦN 3: tách hẳn
+// khỏi "🌐 Cấu Hình API Đối Tác" — xem comment ở #dsmartPriceExternalApiModal) =====================
 async function openDsmartPriceConfigModal() {
   try {
     const res = await fetch('/api/dsmart-price/config');
@@ -1036,20 +1039,43 @@ async function openDsmartPriceConfigModal() {
     document.getElementById('dsmartPriceCfgPasswordHint').innerText = data.config.hasPassword ? '✅ Đã có mật khẩu lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có mật khẩu nào được lưu.';
     const statusEl = document.getElementById('dsmartPriceCfgTestStatus');
     if (statusEl) { statusEl.className = 'text-xs'; statusEl.innerText = ''; }
-    document.getElementById('dsmartPriceExtApiBaseUrl').value = data.config.externalApiBaseUrl || '';
-    document.getElementById('dsmartPriceExtApiKey').value = '';
-    document.getElementById('dsmartPriceExtApiKeyHint').innerText = data.config.hasExternalApiKey ? '✅ Đã có API Key lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có API Key nào được lưu.';
-    const extApiStatusEl = document.getElementById('dsmartPriceExtApiTestStatus');
-    if (extApiStatusEl) { extApiStatusEl.className = 'text-xs'; extApiStatusEl.innerText = ''; }
-    applyDsmartPricePriceModeUI(data.config.priceOperationMode || 'DIRECT_DB');
     document.getElementById('dsmartPriceConfigModal').classList.remove('hidden');
   } catch (err) { alert('⛔ ' + err.message); }
 }
 function closeDsmartPriceConfigModal() { document.getElementById('dsmartPriceConfigModal').classList.add('hidden'); }
 
-// applyDsmartPricePriceModeUI(mode) — tô đậm nút đang chọn ("🖥️ Theo Phần Mềm" / "🌐 Theo API"), chỉ hiện
-// ĐÚNG khối field tương ứng (ẩn khối còn lại), và ẩn luôn nút "💾 Lưu Cấu Hình" (host/port/mật khẩu DB)
-// khi đang ở "🌐 Theo API" (lúc đó khối Host/Port/... đã ẩn, không còn gì để lưu qua nút đó).
+// ===================== "🌐 Cấu Hình API Đối Tác" (Admin) — modal RIÊNG (12/2026, LẦN 3) =====================
+async function openDsmartPriceExternalApiModal() {
+  try {
+    const res = await fetch('/api/dsmart-price/config');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    document.getElementById('dsmartPriceExtApiBaseUrl').value = data.config.externalApiBaseUrl || '';
+    document.getElementById('dsmartPriceExtApiKey').value = '';
+    document.getElementById('dsmartPriceExtApiKeyHint').innerText = data.config.hasExternalApiKey ? '✅ Đã có API Key lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có API Key nào được lưu.';
+    const extApiStatusEl = document.getElementById('dsmartPriceExtApiTestStatus');
+    if (extApiStatusEl) { extApiStatusEl.className = 'text-xs'; extApiStatusEl.innerText = ''; }
+    document.getElementById('dsmartPriceExternalApiModal').classList.remove('hidden');
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+function closeDsmartPriceExternalApiModal() { document.getElementById('dsmartPriceExternalApiModal').classList.add('hidden'); }
+
+// ===================== "Chế Độ Áp Dụng Giá" — ĐỘC LẬP (12/2026, LẦN 3: tách khỏi cả 2 modal, theo phản
+// hồi người dùng "phải có một cái nút nào đấy ở một cấu hình khác để cho phép là tôi kích hoạt chọn API
+// hoặc kích hoạt sử dụng cơ sở dữ liệu" — vì CSDL thật ra còn kéo theo cả màn "🏬 Kết Nối Siêu Thị" (~34
+// kết nối), không phải chỉ 1 ô cấu hình đơn giản, gộp chung 1 modal với API dễ gây hiểu lầm) =====================
+async function loadDsmartPricePriceMode() {
+  try {
+    const res = await fetch('/api/dsmart-price/config');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    applyDsmartPricePriceModeUI(data.config.priceOperationMode || 'DIRECT_DB');
+  } catch (err) { console.error('Không tải được Chế Độ Áp Dụng Giá:', err.message); }
+}
+
+// applyDsmartPricePriceModeUI(mode) — chỉ tô đậm nút đang chọn + đổi dòng chú thích, KHÔNG đụng tới bất kỳ
+// modal/khối cấu hình nào (2 modal "⚙️ Cấu Hình Kết Nối"/"🌐 Cấu Hình API Đối Tác" luôn cấu hình được bình
+// thường, độc lập với việc đang chọn dùng cái nào ở đây).
 function applyDsmartPricePriceModeUI(mode) {
   const isApi = mode === 'EXTERNAL_API';
   const btnDb = document.getElementById('btnDsmartPriceModeDb');
@@ -1058,17 +1084,11 @@ function applyDsmartPricePriceModeUI(mode) {
   const inactiveClass = ['bg-gray-200', 'text-gray-600'];
   if (btnDb) { btnDb.classList.remove(...activeClass, ...inactiveClass); btnDb.classList.add(...(isApi ? inactiveClass : activeClass)); }
   if (btnApi) { btnApi.classList.remove(...activeClass, ...inactiveClass); btnApi.classList.add(...(isApi ? activeClass : inactiveClass)); }
-  // LẦN 2 (12/2026, theo phản hồi người dùng — bản demo lần 1 ẨN hẳn khối CSDL khi chọn "Theo API", dễ
-  // hiểu lầm "mất cấu hình CSDL"): KHÔNG còn ẩn/hiện 2 khối cấu hình nữa — "🖥️ Kết Nối CSDL"/"🌐 Kết Nối
-  // API Đối Tác" LUÔN hiện đầy đủ, cho phép cấu hình ỔN ĐỊNH cả 2 cùng lúc, độc lập với nút chọn chế độ ở
-  // trên — chỉ đổi badge "✅ Đang dùng" sang đúng khối đang được chọn để dùng thật.
-  document.getElementById('dsmartPriceDirectDbActiveBadge').classList.toggle('hidden', isApi);
-  document.getElementById('dsmartPriceExternalApiActiveBadge').classList.toggle('hidden', !isApi);
   const hint = document.getElementById('dsmartPriceModeHint');
   if (hint) {
     hint.innerText = isApi
-      ? '🌐 Đang dùng: hệ thống gọi API đối tác để áp/xoá giá — đối tác tự lo đồng bộ xuống mọi siêu thị, hệ thống KHÔNG tự nối SQL Server siêu thị nữa. Khối "🖥️ Kết Nối CSDL" vẫn cấu hình được bình thường, chỉ đang KHÔNG được dùng.'
-      : '🖥️ Đang dùng: hệ thống tự nối thẳng SQL Server DSmart16 Trung Tâm + fan-out xuống từng siêu thị (hành vi mặc định từ trước giờ). Khối "🌐 Kết Nối API Đối Tác" vẫn cấu hình được bình thường, chỉ đang KHÔNG được dùng.';
+      ? '🌐 Đang dùng: hệ thống gọi API đối tác để áp/xoá giá — đối tác tự lo đồng bộ xuống mọi siêu thị.'
+      : '🖥️ Đang dùng: hệ thống tự nối thẳng SQL Server DSmart16 Trung Tâm + fan-out xuống từng siêu thị (mặc định từ trước giờ).';
   }
 }
 
@@ -1086,7 +1106,7 @@ async function setDsmartPricePriceMode(mode) {
   } catch (err) { alert('⛔ ' + err.message); }
 }
 
-// saveDsmartPriceExternalApiConfig() — nút "💾 Lưu Cấu Hình API" trong khối "🌐 Theo API".
+// saveDsmartPriceExternalApiConfig() — nút "💾 Lưu Cấu Hình API" trong modal "🌐 Cấu Hình API Đối Tác".
 async function saveDsmartPriceExternalApiConfig() {
   const externalApiBaseUrl = document.getElementById('dsmartPriceExtApiBaseUrl').value.trim();
   const externalApiKey = document.getElementById('dsmartPriceExtApiKey').value;
