@@ -57,8 +57,9 @@
 // chuỗi giá trị người dùng trực tiếp vào SQL) — chống SQL injection đúng chuẩn đã áp dụng xuyên suốt
 // toàn bộ hệ thống (xem db.js/lib/recordStore.js).
 const sql = require('mssql');
-const { getRawConfig, decryptSecret } = require('./dsmartPriceConfigStore');
+const { getRawConfig, decryptSecret, getPriceOperationMode, getExternalApiConfig } = require('./dsmartPriceConfigStore');
 const storeConnStore = require('./dsmartStorePriceConnectionsStore');
+const { applyPriceViaApi, deletePriceViaApi } = require('./dsmartPriceExternalApiClient');
 const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
@@ -287,9 +288,38 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
   return { ...inserted, wasOverwrite: false };
 }
 
+// CHẾ ĐỘ "🌐 Giá Theo API" (12/2026, theo yêu cầu người dùng: "hai cái lựa chọn, một là... kết nối trực
+// tiếp vào cơ sở dữ liệu, hai là có thể qua API. Chỉ chọn được một trong hai") — khi admin bật chế độ này
+// (PriceOperationMode = 'EXTERNAL_API'), insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice()
+// KHÔNG đụng SQL Server nào nữa (bỏ qua cả getDsmartPool() lẫn fanOutToStores() ở trên) — gọi THẲNG API đối
+// tác (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
+// lo đồng bộ xuống mọi siêu thị qua hạ tầng của họ, không phải việc của hệ thống này nữa ở chế độ này).
+//
+// buildStoreScope(targetStoreIds): dù KHÔNG tự fan-out ở chế độ API, vẫn PHẢI báo đúng phạm vi siêu thị cho
+// đối tác biết (field `storeScope`, ĐÚNG khuôn đã thống nhất ở tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart",
+// mục "Phạm Vi Siêu Thị") — thiếu bước này đối tác không biết áp/xoá giá cho đúng phạm vi đã chọn lúc "Thêm
+// Giá Mới" (`targetStoreIds`: null = "Tất Cả", mảng = ĐÓNG BĂNG đúng danh sách đã chọn). Đổi ID nội bộ
+// (`targetStoreIds`) sang Mã Siêu Thị thật (`storeCodes`) — đối tác không có ý nghĩa gì với ID nội bộ của hệ
+// thống này — và LUÔN giao với danh sách đang Enabled=1 (cùng ngữ nghĩa fanOutToStores() ở trên).
+async function buildStoreScope(targetStoreIds) {
+  if (!Array.isArray(targetStoreIds)) return { mode: 'ALL' };
+  let stores;
+  try {
+    stores = await storeConnStore.listRaw({ onlyEnabled: true });
+  } catch (err) {
+    return { mode: 'SPECIFIC', storeCodes: [] };
+  }
+  const idSet = new Set(targetStoreIds.map(Number));
+  return { mode: 'SPECIFIC', storeCodes: stores.filter(s => idSet.has(s.id)).map(s => s.storeCode) };
+}
 async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
+  }
+  if (await getPriceOperationMode() === 'EXTERNAL_API') {
+    const storeScope = await buildStoreScope(targetStoreIds);
+    const apiResult = await applyPriceViaApi({ ...params, storeScope }, await getExternalApiConfig());
+    return { ...apiResult, storeResults: [], storeFanOutError: null };
   }
   const pool = await getDsmartPool();
   const hoResult = await upsertPriceOnPool(pool, params);
@@ -439,6 +469,14 @@ async function updateWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
+  // Chế độ "🌐 Giá Theo API" (xem chú thích ở insertWholesalePrice()): "Sửa" cũng chỉ là gọi lại ĐÚNG 1
+  // operation "Set/Upsert Price" theo hợp đồng API — custId/skuId lấy từ dsmartKey (luôn = custId/skuId
+  // thật của dòng, xem naturalKeyFromRow()), KHÔNG cần phân biệt Thêm/Sửa ở phía đối tác.
+  if (await getPriceOperationMode() === 'EXTERNAL_API') {
+    const storeScope = await buildStoreScope(targetStoreIds);
+    const apiResult = await applyPriceViaApi({ custId: params.dsmartKey?.custId, skuId: params.dsmartKey?.skuId, price: params.price, frDate: params.frDate, toDate: params.toDate, storeScope }, await getExternalApiConfig());
+    return { custId: apiResult.custId, skuId: apiResult.skuId, storeResults: [], storeFanOutError: null };
+  }
   const pool = await getDsmartPool();
   const hoResult = await updatePriceOnPool(pool, params);
   const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => updatePriceOnPool(storePool, params), targetStoreIds);
@@ -494,6 +532,12 @@ async function updatePriceOnPool(pool, { dsmartKey, price, frDate, toDate }) {
 // hoàn tác được SAU KHI commit. Cùng cơ chế transaction + OUTUT như updateWholesalePrice() ở trên — khớp
 // >1 dòng thì ROLLBACK (không xoá gì cả), khớp 0 dòng thì coi như đã đạt mục tiêu (không ném lỗi).
 async function deleteWholesalePrice(params, targetStoreIds) {
+  // Chế độ "🌐 Giá Theo API" (xem chú thích ở insertWholesalePrice()).
+  if (await getPriceOperationMode() === 'EXTERNAL_API') {
+    const storeScope = await buildStoreScope(targetStoreIds);
+    const apiResult = await deletePriceViaApi({ custId: params.dsmartKey?.custId, skuId: params.dsmartKey?.skuId, storeScope }, await getExternalApiConfig());
+    return { ...apiResult, storeResults: [], storeFanOutError: null };
+  }
   const pool = await getDsmartPool();
   const hoResult = await deletePriceOnPool(pool, params);
   const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => deletePriceOnPool(storePool, params), targetStoreIds);

@@ -1,0 +1,325 @@
+// tests/test-dsmart-price-mode.js — "🖥️ Theo Phần Mềm" / "🌐 Theo API" (12/2026, theo yêu cầu người dùng:
+// "Mình sẽ thêm có hai cái nút để mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt
+// sử dụng giá theo API. Chỉ chọn được một trong hai... tự cái kia sẽ vô hiệu") — test THẬT (không stub
+// lib/dsmartSqlClient.js/lib/dsmartPriceConfigStore.js/lib/dsmartPriceExternalApiClient.js ở phần lõi, chỉ
+// stub tầng `mssql`/`global.fetch`/các lib phụ không liên quan trực tiếp — cùng khuôn
+// tests/test-dsmart-price-notify-retry.js).
+//
+// 3 phần:
+//   A. lib/dsmartPriceConfigStore.js — priceOperationMode/externalApiConfig (round-trip, mặc định,
+//      KHÔNG bị saveConfig() (host/port/mật khẩu) vô tình ghi đè mất, mật khẩu/API Key không lộ qua
+//      getSanitizedConfig()).
+//   B. lib/dsmartPriceExternalApiClient.js — gọi API đối tác (mock global.fetch): thành công, lỗi HTTP,
+//      ok:false, JSON hỏng, lỗi mạng/timeout, thiếu Base URL, có/không gửi header Authorization.
+//   C. lib/dsmartSqlClient.js — insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice() rẽ
+//      nhánh ĐÚNG theo priceOperationMode: EXTERNAL_API -> gọi API đối tác, KHÔNG fan-out xuống siêu thị,
+//      KHÔNG đụng SQL CSPRICE; DIRECT_DB (mặc định) -> vẫn ghi SQL + fan-out như cũ (smoke check, đã có
+//      test riêng đầy đủ ở tests/test-dsmart-natural-key-matching.js/test-dsmart-store-fanout.js).
+//
+// Chạy: node server/tests/test-dsmart-price-mode.js
+'use strict';
+const path = require('path');
+const assert = require('assert');
+
+process.env.EMAIL_ENCRYPTION_KEY = 'test-price-mode-key-khong-dung-production';
+process.env.DB_SERVER = 'app-db-host';
+process.env.DB_PORT = '1433';
+process.env.DB_NAME = 'VPDT_DMS_TEST';
+process.env.DB_USER = 'app_user';
+process.env.DB_PASSWORD = 'app_pass';
+
+let pass = 0, fail = 0;
+function check(name, cond, detail) {
+  if (cond) { pass++; console.log('PASS: ' + name); }
+  else { fail++; console.log('FAIL: ' + name + (detail ? '\n      ' + JSON.stringify(detail) : '')); }
+}
+function stubModule(relPath, exportsObj) {
+  const full = require.resolve(path.join(__dirname, '..', relPath));
+  require.cache[full] = { id: full, filename: full, path: path.dirname(full), loaded: true, exports: exportsObj, children: [], paths: [] };
+  return exportsObj;
+}
+function freshRequire(relPath) {
+  const full = require.resolve(path.join(__dirname, '..', relPath));
+  delete require.cache[full];
+  return require(full);
+}
+
+// ===== "Đa máy chủ" SQL Server ảo (đúng khuôn tests/test-dsmart-price-notify-retry.js) — CHỈ cần
+// DsmartPriceDbConfig (đầy đủ UPDATE lẫn INSERT, khác file kia chỉ có INSERT) + CSPRICE/SKU_DEF tối thiểu
+// cho phần C (smoke DIRECT_DB). =====
+const databases = new Map();
+function dbKey(cfg) { return `${cfg.server}:${cfg.port}/${cfg.database}/${cfg.user}`; }
+function getOrCreateDb(key) {
+  if (!databases.has(key)) databases.set(key, { csprice: new Map(), skuDef: new Map(), dsmartPriceDbConfig: null });
+  return databases.get(key);
+}
+
+function dispatchQuery(db, rawText, params) {
+  const t = rawText.replace(/\s+/g, ' ').trim();
+  if (/FROM dbo\.SKU_DEF WHERE SKU_ID/i.test(t)) {
+    const row = db.skuDef.get(params.skuId);
+    return { recordset: row ? [row] : [] };
+  }
+  if (/UPDATE dbo\.CSPRICE\s/i.test(t) && /SET TYPE = '04'/i.test(t)) {
+    const key = `${params.custId}|${params.skuId}`;
+    if (!db.csprice.has(key)) return { recordset: [] };
+    const row = db.csprice.get(key);
+    row.WSPRICE = params.price; row.FR_DATE = params.frDate; row.TO_DATE = params.toDate;
+    return { recordset: [{ CUST_ID: params.custId, SKU_ID: params.skuId }] };
+  }
+  if (/INSERT INTO dbo\.CSPRICE/i.test(t)) {
+    const key = `${params.custId}|${params.skuId}`;
+    db.csprice.set(key, { CUST_ID: params.custId, SKU_ID: params.skuId, WSPRICE: params.price, FR_DATE: params.frDate, TO_DATE: params.toDate });
+    return { recordset: [{ CUST_ID: params.custId, SKU_ID: params.skuId }] };
+  }
+  // ---- CSDL app (db.js): dbo.DsmartPriceDbConfig — ĐẦY ĐỦ cột (kể cả priceOperationMode/externalApi*
+  // MỚI), và CÓ CẢ UPDATE (file test-dsmart-price-notify-retry.js chỉ cần INSERT vì không gọi lại lần 2). ----
+  if (/FROM dbo\.DsmartPriceDbConfig WHERE Id/i.test(t)) return { recordset: db.dsmartPriceDbConfig ? [db.dsmartPriceDbConfig] : [] };
+  if (/INSERT INTO dbo\.DsmartPriceDbConfig/i.test(t)) {
+    db.dsmartPriceDbConfig = {
+      Id: params.id, Host: params.host || null, Port: params.port || null, DatabaseName: params.database || null,
+      DbUser: params.dbUser || null, PasswordEnc: params.passwordEnc || null,
+      AutoDeleteEnabled: !!params.autoDeleteEnabled, AutoDeleteHour: params.autoDeleteHour != null ? params.autoDeleteHour : 23,
+      AutoDeleteMinute: params.autoDeleteMinute != null ? params.autoDeleteMinute : 0,
+      AutoApplyHour: params.autoApplyHour != null ? params.autoApplyHour : 0, AutoApplyMinute: params.autoApplyMinute != null ? params.autoApplyMinute : 0,
+      PriceOperationMode: params.priceOperationMode || 'DIRECT_DB',
+      ExternalApiBaseUrl: params.externalApiBaseUrl || null, ExternalApiKeyEnc: params.externalApiKeyEnc || null,
+      UpdatedBy: params.updatedBy
+    };
+    return { recordset: [] };
+  }
+  if (/UPDATE dbo\.DsmartPriceDbConfig SET/i.test(t)) {
+    const row = db.dsmartPriceDbConfig;
+    if (!row) return { recordset: [] };
+    if ('host' in params) Object.assign(row, { Host: params.host, Port: params.port, DatabaseName: params.database, DbUser: params.dbUser, PasswordEnc: params.passwordEnc });
+    if ('autoDeleteEnabled' in params) Object.assign(row, { AutoDeleteEnabled: !!params.autoDeleteEnabled, AutoDeleteHour: params.autoDeleteHour, AutoDeleteMinute: params.autoDeleteMinute });
+    if ('autoApplyHour' in params) Object.assign(row, { AutoApplyHour: params.autoApplyHour, AutoApplyMinute: params.autoApplyMinute });
+    if ('priceOperationMode' in params) row.PriceOperationMode = params.priceOperationMode;
+    if ('externalApiBaseUrl' in params) Object.assign(row, { ExternalApiBaseUrl: params.externalApiBaseUrl, ExternalApiKeyEnc: params.externalApiKeyEnc });
+    return { recordset: [] };
+  }
+  throw new Error('Fake mssql (test-dsmart-price-mode): câu SQL không được hỗ trợ — ' + t.slice(0, 200));
+}
+
+class FakeRequest {
+  constructor(db) { this.db = db; this.params = {}; }
+  input(name, _type, value) { this.params[name] = value; return this; }
+  async query(text) { return dispatchQuery(this.db, text, this.params); }
+}
+class FakeTransaction {
+  constructor(pool) { this.pool = pool; }
+  async begin() {}
+  async commit() {}
+  async rollback() {}
+  request() { return new FakeRequest(this.pool.db); }
+}
+class FakeConnectionPool {
+  constructor(cfg) { this.cfg = cfg; this.key = dbKey(cfg); this.db = getOrCreateDb(this.key); }
+  async connect() { return this; }
+  request() { return new FakeRequest(this.db); }
+  async close() {}
+}
+const fakeMssql = {
+  ConnectionPool: FakeConnectionPool, Transaction: FakeTransaction,
+  NVarChar: (n) => `NVarChar(${n})`, Int: 'Int', BigInt: 'BigInt', Bit: 'Bit',
+  Decimal: (p, s) => `Decimal(${p},${s})`, DateTime: 'DateTime', MAX: -1
+};
+{
+  const mssqlRealPath = require.resolve('mssql');
+  require.cache[mssqlRealPath] = { id: mssqlRealPath, filename: mssqlRealPath, path: path.dirname(mssqlRealPath), loaded: true, exports: fakeMssql, children: [], paths: [] };
+}
+
+async function main() {
+  freshRequire('db');
+
+  // ===================== A. lib/dsmartPriceConfigStore.js =====================
+  {
+    const cfgStore = freshRequire('lib/dsmartPriceConfigStore');
+
+    check('getPriceOperationMode(): chưa có config -> mặc định DIRECT_DB', (await cfgStore.getPriceOperationMode()) === 'DIRECT_DB');
+    check('getExternalApiConfig(): chưa có config -> baseUrl rỗng, key null', JSON.stringify(await cfgStore.getExternalApiConfig()) === JSON.stringify({ externalApiBaseUrl: '', externalApiKey: null }));
+
+    const saved1 = await cfgStore.savePriceOperationMode({ priceOperationMode: 'EXTERNAL_API' }, 'tester');
+    check('savePriceOperationMode(EXTERNAL_API): trả đúng giá trị vừa lưu', saved1 === 'EXTERNAL_API');
+    check('getPriceOperationMode(): đọc lại đúng EXTERNAL_API', (await cfgStore.getPriceOperationMode()) === 'EXTERNAL_API');
+
+    const savedBogus = await cfgStore.savePriceOperationMode({ priceOperationMode: 'KHONG_HOP_LE' }, 'tester');
+    check('savePriceOperationMode(): giá trị không hợp lệ -> tự về mặc định DIRECT_DB (phòng vệ, validate thật ở route)', savedBogus === 'DIRECT_DB');
+    await cfgStore.savePriceOperationMode({ priceOperationMode: 'EXTERNAL_API' }, 'tester'); // set lại cho bước sau
+
+    const savedApi1 = await cfgStore.saveExternalApiConfig({ externalApiBaseUrl: 'https://api.doitac.vn/dsmart', externalApiKey: 'secret-key-1' }, 'tester');
+    check('saveExternalApiConfig(): trả đúng baseUrl + hasExternalApiKey=true', savedApi1.externalApiBaseUrl === 'https://api.doitac.vn/dsmart' && savedApi1.hasExternalApiKey === true, savedApi1);
+    const apiCfg1 = await cfgStore.getExternalApiConfig();
+    check('getExternalApiConfig(): giải mã đúng lại API Key vừa lưu (mã hoá 2 chiều)', apiCfg1.externalApiKey === 'secret-key-1', apiCfg1);
+
+    // externalApiKey trống (""/null) ở lần lưu sau -> GIỮ NGUYÊN key cũ (cùng ngữ nghĩa password ở saveConfig()).
+    const savedApi2 = await cfgStore.saveExternalApiConfig({ externalApiBaseUrl: 'https://api2.doitac.vn', externalApiKey: null }, 'tester');
+    check('saveExternalApiConfig(): externalApiKey=null -> GIỮ NGUYÊN key cũ, chỉ đổi baseUrl', savedApi2.externalApiBaseUrl === 'https://api2.doitac.vn' && savedApi2.hasExternalApiKey === true);
+    const apiCfg2 = await cfgStore.getExternalApiConfig();
+    check('getExternalApiConfig(): key cũ vẫn giải mã đúng sau khi đổi riêng baseUrl', apiCfg2.externalApiKey === 'secret-key-1', apiCfg2);
+
+    const sanitized = await cfgStore.getSanitizedConfig();
+    check('getSanitizedConfig(): KHÔNG lộ externalApiKeyEnc (chỉ hasExternalApiKey)', sanitized.externalApiKeyEnc === undefined && sanitized.hasExternalApiKey === true && sanitized.externalApiBaseUrl === 'https://api2.doitac.vn', sanitized);
+    check('getSanitizedConfig(): có đủ priceOperationMode trong response', sanitized.priceOperationMode === 'EXTERNAL_API');
+
+    // saveConfig() (host/port/mật khẩu DB) KHÔNG được vô tình xoá mất priceOperationMode/externalApi* đã lưu
+    // (cùng tinh thần autoApplyHour/autoApplyMinute đã vá trước đó — xem saveConfig() ở dsmartPriceConfigStore.js).
+    await cfgStore.saveConfig({ host: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price', password: 'ho-pass', autoDeleteEnabled: false, autoDeleteHour: 23, autoDeleteMinute: 0 }, 'tester');
+    check('saveConfig() (host/port/mật khẩu): KHÔNG reset priceOperationMode đã chọn trước đó', (await cfgStore.getPriceOperationMode()) === 'EXTERNAL_API');
+    const apiCfg3 = await cfgStore.getExternalApiConfig();
+    check('saveConfig() (host/port/mật khẩu): KHÔNG reset Cấu Hình API đã lưu trước đó', apiCfg3.externalApiBaseUrl === 'https://api2.doitac.vn' && apiCfg3.externalApiKey === 'secret-key-1', apiCfg3);
+
+    // Đổi lại DIRECT_DB cho các phần test sau không bị ảnh hưởng.
+    await cfgStore.savePriceOperationMode({ priceOperationMode: 'DIRECT_DB' }, 'tester');
+  }
+
+  // ===================== B. lib/dsmartPriceExternalApiClient.js =====================
+  {
+    const apiClient = freshRequire('lib/dsmartPriceExternalApiClient');
+    const originalFetch = global.fetch;
+    let lastFetchCall = null;
+    function mockFetch(responder) {
+      global.fetch = async (url, opts) => { lastFetchCall = { url, opts }; return responder(url, opts); };
+    }
+
+    // Thiếu Base URL -> DsmartApiConfigError, KHÔNG gọi fetch.
+    lastFetchCall = null;
+    global.fetch = async () => { throw new Error('KHÔNG được gọi fetch khi thiếu Base URL'); };
+    await assert.rejects(() => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: '', externalApiKey: null }), apiClient.DsmartApiConfigError);
+    check('applyPriceViaApi(): thiếu Base URL -> DsmartApiConfigError, KHÔNG gọi fetch', true);
+
+    // Thành công, có header Authorization khi có API Key.
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, custId: 'C1', skuId: 'S1', overwritten: true }) }));
+    const applyResult = await apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'key123' });
+    check('applyPriceViaApi(): thành công -> trả đúng custId/skuId/wasOverwrite', applyResult.custId === 'C1' && applyResult.skuId === 'S1' && applyResult.wasOverwrite === true, applyResult);
+    check('applyPriceViaApi(): gọi ĐÚNG path /wholesale-price/apply', lastFetchCall.url === 'https://api.test/dsmart/wholesale-price/apply', lastFetchCall);
+    check('applyPriceViaApi(): có API Key -> gửi header Authorization: Bearer <key>', lastFetchCall.opts.headers.Authorization === 'Bearer key123', lastFetchCall.opts.headers);
+    check('applyPriceViaApi(): KHÔNG truyền storeScope -> mặc định {mode:"ALL"} (an toàn, không bỏ sót phạm vi)', JSON.parse(lastFetchCall.opts.body).storeScope.mode === 'ALL', lastFetchCall.opts.body);
+
+    // storeScope SPECIFIC truyền đúng nguyên văn (field đã thống nhất với đối tác, tài liệu "Yêu Cầu API:
+    // Giá Bán Buôn DSmart" mục "Phạm Vi Siêu Thị").
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, custId: 'C1', skuId: 'S1', overwritten: false }) }));
+    await apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31', storeScope: { mode: 'SPECIFIC', storeCodes: ['ST01', 'ST02'] } }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+    const sentBody = JSON.parse(lastFetchCall.opts.body);
+    check('applyPriceViaApi(): storeScope SPECIFIC truyền đúng nguyên văn', sentBody.storeScope.mode === 'SPECIFIC' && JSON.stringify(sentBody.storeScope.storeCodes) === JSON.stringify(['ST01', 'ST02']), sentBody);
+
+    // Không có API Key -> KHÔNG gửi header Authorization.
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, alreadyGone: false }) }));
+    await apiClient.deletePriceViaApi({ custId: 'C1', skuId: 'S1' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: null });
+    check('deletePriceViaApi(): KHÔNG có API Key -> KHÔNG gửi header Authorization', !('Authorization' in lastFetchCall.opts.headers), lastFetchCall.opts.headers);
+    check('deletePriceViaApi(): gọi ĐÚNG path /wholesale-price/delete', lastFetchCall.url === 'https://api.test/dsmart/wholesale-price/delete');
+
+    // alreadyGone:true
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, alreadyGone: true }) }));
+    const delResult = await apiClient.deletePriceViaApi({ custId: 'C1', skuId: 'S1' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+    check('deletePriceViaApi(): alreadyGone=true truyền đúng qua', delResult.alreadyGone === true);
+
+    // Lỗi HTTP (status 500 + body.error).
+    mockFetch(async () => ({ ok: false, status: 500, json: async () => ({ ok: false, error: 'Lỗi nội bộ đối tác' }) }));
+    await assert.rejects(
+      () => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+      (err) => err instanceof apiClient.DsmartApiError && err.message.includes('Lỗi nội bộ đối tác')
+    );
+    check('applyPriceViaApi(): HTTP lỗi (status 500) -> DsmartApiError nêu đúng nội dung lỗi đối tác trả về', true);
+
+    // HTTP 200 nhưng body.ok=false (đối tác báo lỗi nghiệp vụ dù HTTP thành công).
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: false, error: 'SKU không tồn tại' }) }));
+    await assert.rejects(
+      () => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+      (err) => err instanceof apiClient.DsmartApiError && err.message.includes('SKU không tồn tại')
+    );
+    check('applyPriceViaApi(): HTTP 200 nhưng body.ok=false -> vẫn báo lỗi đúng (không coi là thành công)', true);
+
+    // JSON hỏng.
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => { throw new Error('Unexpected token'); } }));
+    await assert.rejects(() => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }), apiClient.DsmartApiError);
+    check('applyPriceViaApi(): API đối tác trả JSON hỏng -> DsmartApiError rõ ràng', true);
+
+    // Lỗi mạng (fetch reject thẳng).
+    global.fetch = async () => { throw new Error('ECONNREFUSED (giả lập)'); };
+    await assert.rejects(
+      () => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+      (err) => err instanceof apiClient.DsmartApiError && err.message.includes('ECONNREFUSED')
+    );
+    check('applyPriceViaApi(): lỗi mạng -> DsmartApiError kèm nguyên văn lỗi mạng', true);
+
+    // testExternalApiConnection() gọi đúng /ping.
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }));
+    const pingResult = await apiClient.testExternalApiConnection({ externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+    check('testExternalApiConnection(): gọi đúng /ping, trả về {ms}', typeof pingResult.ms === 'number' && lastFetchCall.url === 'https://api.test/dsmart/ping', { pingResult, url: lastFetchCall.url });
+
+    global.fetch = originalFetch;
+  }
+
+  // ===================== C. lib/dsmartSqlClient.js — rẽ nhánh theo priceOperationMode =====================
+  {
+    // Stub dsmartPriceConfigStore ĐƠN GIẢN (điều khiển mode bằng 1 biến), KHÔNG cần fake mssql/DB thật cho
+    // phần API — EXTERNAL_API mode không được đụng SQL/pool nào cả (xác nhận bằng cách KHÔNG cung cấp
+    // host/database/user hợp lệ trong getRawConfig(), nếu code lỡ gọi getDsmartPool() sẽ tự ném
+    // DsmartConfigError ngay — bắt được lỗi code "quên" rẽ nhánh).
+    let CURRENT_MODE = 'EXTERNAL_API';
+    stubModule('lib/dsmartPriceConfigStore', {
+      getRawConfig: async () => null, // KHÔNG có cấu hình DB hợp lệ -> getDsmartPool() sẽ ném lỗi nếu lỡ bị gọi
+      decryptSecret: (v) => v,
+      getPriceOperationMode: async () => CURRENT_MODE,
+      getExternalApiConfig: async () => ({ externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' })
+    });
+    let applyCalls = [], deleteCalls = [];
+    stubModule('lib/dsmartPriceExternalApiClient', {
+      applyPriceViaApi: async (params) => { applyCalls.push(params); return { custId: params.custId, skuId: params.skuId, wasOverwrite: true }; },
+      deletePriceViaApi: async (params) => { deleteCalls.push(params); return { alreadyGone: false }; }
+    });
+    let listRawCalls = 0;
+    const FAKE_STORES = [{ id: 5, storeCode: 'ST05' }, { id: 7, storeCode: 'ST07' }, { id: 9, storeCode: 'ST09' }];
+    stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES; } });
+
+    const dsmartSqlClient = freshRequire('lib/dsmartSqlClient');
+
+    const insResult = await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI1', skuId: 'SAPI1', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
+    check('EXTERNAL_API: insertWholesalePrice() gọi applyPriceViaApi() ĐÚNG 1 lần, custId/skuId đúng', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1', applyCalls);
+    check('EXTERNAL_API: insertWholesalePrice() KHÔNG tự fan-out xuống siêu thị (listRaw không được gọi, targetStoreIds=null -> storeScope ALL không cần tra)', listRawCalls === 0);
+    check('EXTERNAL_API: insertWholesalePrice() trả storeResults rỗng + wasOverwrite đúng theo API trả về', JSON.stringify(insResult.storeResults) === '[]' && insResult.storeFanOutError === null && insResult.wasOverwrite === true, insResult);
+    check('EXTERNAL_API: targetStoreIds=null -> storeScope={mode:"ALL"} truyền cho applyPriceViaApi() (đúng khuôn tài liệu API đã gửi đối tác)', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'ALL' }), applyCalls[0].storeScope);
+
+    // targetStoreIds=[5,7] (đã chọn riêng 1 vài siêu thị lúc Thêm Giá Mới) -> storeScope SPECIFIC, đổi ĐÚNG
+    // từ ID nội bộ sang Mã Siêu Thị thật (đối tác không hiểu ID nội bộ) — id=9 KHÔNG nằm trong targetStoreIds
+    // nên KHÔNG được đưa vào storeCodes dù vẫn Enabled.
+    applyCalls = [];
+    await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI2', skuId: 'SAPI2', price: 1500, frDate: '2026-01-01', toDate: '2026-12-31' }, [5, 7]);
+    check('EXTERNAL_API: targetStoreIds=[5,7] -> CÓ tra listRaw() để đổi sang Mã Siêu Thị (không phải fan-out ghi SQL, chỉ tra cứu)', listRawCalls === 1);
+    check('EXTERNAL_API: targetStoreIds=[5,7] -> storeScope SPECIFIC đúng 2 Mã Siêu Thị ST05/ST07, KHÔNG lẫn ST09', JSON.stringify(applyCalls[0].storeScope) === JSON.stringify({ mode: 'SPECIFIC', storeCodes: ['ST05', 'ST07'] }), applyCalls[0].storeScope);
+    listRawCalls = 0;
+
+    applyCalls = [];
+    const updResult = await dsmartSqlClient.updateWholesalePrice({ dsmartKey: { custId: 'CAPI1', skuId: 'SAPI1' }, price: 2000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
+    check('EXTERNAL_API: updateWholesalePrice() cũng gọi applyPriceViaApi() (cùng semantics upsert), lấy custId/skuId từ dsmartKey', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1' && applyCalls[0].price === 2000, applyCalls);
+    check('EXTERNAL_API: updateWholesalePrice() KHÔNG tự fan-out', listRawCalls === 0);
+    check('EXTERNAL_API: updateWholesalePrice() trả đúng custId/skuId', updResult.custId === 'CAPI1' && updResult.skuId === 'SAPI1', updResult);
+
+    const delResult2 = await dsmartSqlClient.deleteWholesalePrice({ dsmartKey: { custId: 'CAPI1', skuId: 'SAPI1' } }, null);
+    check('EXTERNAL_API: deleteWholesalePrice() gọi deletePriceViaApi() ĐÚNG 1 lần', deleteCalls.length === 1 && deleteCalls[0].custId === 'CAPI1' && deleteCalls[0].skuId === 'SAPI1', deleteCalls);
+    check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out, trả alreadyGone đúng theo API', listRawCalls === 0 && delResult2.alreadyGone === false, delResult2);
+
+    // Chuyển về DIRECT_DB — smoke check: fan-out ĐƯỢC gọi (listRaw), applyPriceViaApi/deletePriceViaApi
+    // KHÔNG được gọi nữa, ghi SQL CSPRICE thật thành công (dùng fake mssql module-level ở trên).
+    CURRENT_MODE = 'DIRECT_DB';
+    stubModule('lib/dsmartPriceConfigStore', {
+      getRawConfig: async () => ({ host: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price', passwordEnc: 'enc-pass' }),
+      decryptSecret: () => 'ho-pass',
+      getPriceOperationMode: async () => CURRENT_MODE,
+      getExternalApiConfig: async () => ({ externalApiBaseUrl: '', externalApiKey: null })
+    });
+    applyCalls = []; deleteCalls = []; listRawCalls = 0;
+    getOrCreateDb(dbKey({ server: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' })).skuDef.set('SDIRECT1', { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' });
+    const dsmartSqlClient2 = freshRequire('lib/dsmartSqlClient');
+    const insDirect = await dsmartSqlClient2.insertWholesalePrice({ custId: 'CDIRECT1', skuId: 'SDIRECT1', price: 5000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
+    check('DIRECT_DB: insertWholesalePrice() KHÔNG gọi applyPriceViaApi() (đi SQL thật)', applyCalls.length === 0);
+    check('DIRECT_DB: insertWholesalePrice() CÓ tự fan-out (listRaw được gọi)', listRawCalls === 1);
+    check('DIRECT_DB: insertWholesalePrice() vẫn ghi SQL CSPRICE thành công như trước (hành vi không đổi)', insDirect.custId === 'CDIRECT1' && insDirect.skuId === 'SDIRECT1', insDirect);
+  }
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+main().catch((err) => { console.error('Lỗi chạy test:', err); process.exit(1); });

@@ -27,8 +27,12 @@ const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { getAllForCollection, createForCollection, withLockedRecordForCollection, withAppLock } = require('../lib/recordStore');
-const { getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig, getRawConfig, decryptSecret } = require('../lib/dsmartPriceConfigStore');
+const {
+  getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig,
+  getRawConfig, decryptSecret, getExternalApiConfig, savePriceOperationMode, saveExternalApiConfig
+} = require('../lib/dsmartPriceConfigStore');
 const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { testExternalApiConnection } = require('../lib/dsmartPriceExternalApiClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
 const { parseStoreConnectionFile, buildStoreConnectionTemplateWorkbook, buildStoreConnectionExportWorkbook } = require('../lib/dsmartStoreConnectionFileParser');
@@ -514,6 +518,69 @@ router.patch('/auto-apply-config', async (req, res) => {
       `Đổi giờ Lên Lịch Áp Giá (theo Ngày Bắt Đầu) thành ${String(saved.autoApplyHour).padStart(2, '0')}:${String(saved.autoApplyMinute).padStart(2, '0')}`);
     res.json({ ok: true, config: saved });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/auto-apply-config'); }
+});
+
+// ===================== "🖥️ Theo Phần Mềm" / "🌐 Theo API" (12/2026, theo yêu cầu người dùng: "thêm có
+// hai cái nút để mình có thể là kích hoạt sử dụng cài đặt giá theo phần mềm và kích hoạt sử dụng giá theo
+// API. Chỉ chọn được một trong hai... tự cái kia sẽ vô hiệu") — CHỈ admin (cùng mức nhạy cảm Cấu Hình Kết
+// Nối ở trên: đổi chế độ này quyết định MỌI thao tác Thêm/Sửa/Xoá giá sau đó ghi vào đâu — SQL Server trực
+// tiếp hay API đối tác). GET /config (ở trên) đã trả kèm priceOperationMode/externalApiBaseUrl/
+// hasExternalApiKey trong cùng 1 response (getSanitizedConfig()), KHÔNG cần route GET riêng. =====================
+router.patch('/price-mode', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới đổi được Chế Độ Áp Dụng Giá' });
+  try {
+    const { priceOperationMode } = req.body || {};
+    if (priceOperationMode !== 'DIRECT_DB' && priceOperationMode !== 'EXTERNAL_API') {
+      throw new HttpError(400, 'Chế độ không hợp lệ (chỉ nhận "DIRECT_DB" hoặc "EXTERNAL_API")');
+    }
+    if (priceOperationMode === 'EXTERNAL_API') {
+      const apiCfg = await getExternalApiConfig();
+      if (!apiCfg.externalApiBaseUrl) {
+        throw new HttpError(400, 'Chưa nhập Base URL của API đối tác — nhập trước khi bật "🌐 Giá Theo API".');
+      }
+    }
+    const mode = await savePriceOperationMode({ priceOperationMode }, req.freshUser.username);
+    logDsmartPrice(req, 'UPDATE_DSMART_PRICE_MODE', 'dsmartPriceDbConfig',
+      `Đổi Chế Độ Áp Dụng Giá thành ${mode === 'EXTERNAL_API' ? '"🌐 Theo API" (đối tác tự lo đồng bộ xuống siêu thị)' : '"🖥️ Theo Phần Mềm" (hệ thống tự nối trực tiếp CSDL + fan-out siêu thị)'}`);
+    res.json({ ok: true, priceOperationMode: mode });
+  } catch (err) { sendCatchError(res, err, 'PATCH /api/dsmart-price/price-mode'); }
+});
+
+router.put('/external-api-config', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới sửa được Cấu Hình API Đối Tác' });
+  try {
+    const { externalApiBaseUrl, externalApiKey } = req.body || {};
+    const saved = await saveExternalApiConfig({
+      externalApiBaseUrl: externalApiBaseUrl ? String(externalApiBaseUrl).trim() : '',
+      externalApiKey: externalApiKey ? String(externalApiKey) : null
+    }, req.freshUser.username);
+    logDsmartPrice(req, 'UPDATE_DSMART_PRICE_EXTERNAL_API', 'dsmartPriceDbConfig', `Cập nhật Cấu Hình API Đối Tác (${saved.externalApiBaseUrl || '(chưa có Base URL)'})`);
+    res.json({ ok: true, config: saved });
+  } catch (err) { sendCatchError(res, err, 'PUT /api/dsmart-price/external-api-config'); }
+});
+
+// POST /external-api-config/test-connection — nút "🔌 Kiểm Tra Kết Nối API" — cùng tinh thần
+// /config/test-connection ở trên: nhận giá trị đang gõ dở (chưa bấm Lưu) để admin kiểm tra trước; body
+// rỗng -> test đúng cấu hình ĐÃ LƯU.
+router.post('/external-api-config/test-connection', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được kết nối API' });
+  try {
+    const { externalApiBaseUrl, externalApiKey } = req.body || {};
+    let cfg;
+    if (externalApiBaseUrl) {
+      let apiKey = externalApiKey ? String(externalApiKey) : null;
+      if (!apiKey) {
+        const saved = await getExternalApiConfig();
+        apiKey = saved.externalApiKey;
+      }
+      cfg = { externalApiBaseUrl: String(externalApiBaseUrl).trim(), externalApiKey: apiKey };
+    } else {
+      cfg = await getExternalApiConfig();
+    }
+    const result = await testExternalApiConnection(cfg);
+    logDsmartPrice(req, 'TEST_DSMART_PRICE_EXTERNAL_API', 'dsmartPriceDbConfig', `Kiểm tra kết nối API đối tác thành công (${result.ms}ms)`);
+    res.json({ ok: true, ms: result.ms });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/external-api-config/test-connection'); }
 });
 
 // ===================== File mẫu =====================

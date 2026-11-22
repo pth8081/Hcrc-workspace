@@ -10963,3 +10963,63 @@ admin như route Xoá, không cần thêm quyền riêng).
   bọc `IF OBJECT_ID(...) IS NULL`, mặc định `0` nên không đổi hành vi đang chạy cho tới khi admin tự vào
   đổi giờ).
 - Không thêm biến `.env`, không thêm package npm.
+
+## 6w. Giá Bán Buôn: thêm "🖥️ Theo Phần Mềm" / "🌐 Theo API" — chuyển đổi cách ghi giá + cập nhật tài liệu API cho đối tác (12/2026)
+
+Người dùng yêu cầu 2 việc cùng lúc: (1) cập nhật lại tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart" đã gửi đối
+tác trước đó cho khớp đúng tính năng mới; (2) **"Mình sẽ thêm có hai cái nút để mình có thể là kích hoạt sử
+dụng cài đặt giá theo phần mềm và kích hoạt sử dụng giá theo API. Chỉ chọn được một trong hai... tự cái kia
+sẽ vô hiệu. Để tôi có thể có hai cái lựa chọn, một là tôi có thể là xử lý ra trực tiếp bằng hệ thống đang
+kết nối trực tiếp vào cơ sở dữ liệu, hai là có thể qua API."** — xác nhận thêm qua `AskUserQuestion`: khi
+bật "🌐 Theo API", hệ thống **TẮT HẲN** fan-out trực tiếp xuống từng siêu thị (tin tưởng đối tác tự lo đồng
+bộ qua hạ tầng của họ), và xác thực dùng **API Key đơn giản** (header `Authorization: Bearer <key>`).
+
+### Tính năng mới
+
+- Ô **"Chế Độ Áp Dụng Giá"** (CHỈ admin, trong modal "⚙️ Cấu Hình Kết Nối") — 2 nút loại trừ nhau:
+  - **"🖥️ Theo Phần Mềm"** (mặc định, giữ nguyên 100% hành vi hiện tại — hệ thống tự nối thẳng SQL Server
+    DSmart16 Trung Tâm + fan-out xuống từng siêu thị như mục 6n).
+  - **"🌐 Theo API"** — hệ thống gọi API đối tác (`POST {baseUrl}/wholesale-price/apply` cho cả Thêm/Sửa,
+    `POST {baseUrl}/wholesale-price/delete` cho Xoá) thay vì ghi SQL trực tiếp — **KHÔNG tự fan-out xuống
+    siêu thị nữa** (đối tác tự đồng bộ qua hạ tầng của họ). Bấm nút là LƯU NGAY (không cần bấm "💾 Lưu Cấu
+    Hình" riêng), giống khuôn công tắc Tự Động Xoá/Lên Lịch Áp Giá đã có.
+  - Bật "🌐 Theo API" đòi hỏi đã nhập **Base URL** trước (chặn 400 nếu chưa có — không cho bật "mù").
+  - Khối "🌐 Theo API" có thêm ô **Base URL** + **API Key** (mã hoá 2 chiều, cùng khuôn mật khẩu DB) + nút
+    "🔌 Kiểm Tra Kết Nối API" (gọi `POST {baseUrl}/ping`).
+- `storeScope` (`{mode:"ALL"}` hoặc `{mode:"SPECIFIC", storeCodes:[...]}`) LUÔN gửi kèm cả 2 lời gọi Apply/
+  Delete ở chế độ API — đổi ĐÚNG từ `targetStoreIds` (ID nội bộ, xem mục 6n) sang Mã Siêu Thị thật (đối tác
+  không hiểu ID nội bộ của hệ thống này) — khớp đúng field `storeScope` đã thống nhất với đối tác ở tài
+  liệu API (mục "Phạm Vi Siêu Thị").
+- Job nền "📅 Lên Lịch Áp Giá"/"🔁 Tự Động Xoá Khi Hết Hạn" (mục 6n/6o) KHÔNG cần sửa gì — cả 2 job vẫn gọi
+  `insertWholesalePrice()`/`deleteWholesalePrice()` như cũ, bản thân 2 hàm này tự rẽ nhánh theo chế độ đang
+  bật, job không cần biết đang ở chế độ nào.
+- Tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart" (Claude Doc đã gửi đối tác) được cập nhật thêm mục mới "Chuyển
+  Đổi Theo Phần Mềm/Theo API" — nêu rõ 3 endpoint (`/wholesale-price/apply`, `/wholesale-price/delete`,
+  `/ping`), request/response mong đợi, cách xác thực (Bearer token), và nhấn mạnh **tính năng này KHÔNG ảnh
+  hưởng gì tới hiện trạng** cho tới khi đội IT chủ động bật — đối tác không cần làm xong API này mới triển
+  khai được các mục khác trong tài liệu.
+
+### Test
+
+- `server/tests/test-dsmart-price-mode.js` (MỚI, 41 kịch bản) — test THẬT (không stub `lib/dsmartSqlClient.js`):
+  (A) `lib/dsmartPriceConfigStore.js` — round-trip `priceOperationMode`/Cấu Hình API, mã hoá API Key, KHÔNG
+  bị `saveConfig()` (host/port/mật khẩu DB) vô tình ghi đè mất, không lộ API Key qua `getSanitizedConfig()`.
+  (B) `lib/dsmartPriceExternalApiClient.js` — mock `global.fetch`: thành công, lỗi HTTP, `ok:false`, JSON
+  hỏng, lỗi mạng/timeout, thiếu Base URL, có/không header Authorization, `storeScope` truyền đúng (ALL mặc
+  định/SPECIFIC nguyên văn). (C) `lib/dsmartSqlClient.js` rẽ nhánh đúng theo chế độ — EXTERNAL_API: gọi API
+  đối tác, KHÔNG fan-out, đổi đúng ID nội bộ sang Mã Siêu Thị cho `storeScope`; DIRECT_DB: vẫn ghi SQL +
+  fan-out như cũ (smoke check, không lặp lại test sâu đã có ở các file khác).
+- Cập nhật mock `lib/dsmartPriceConfigStore` ở `tests/test-dsmart-natural-key-matching.js` (thêm
+  `getPriceOperationMode`/`getExternalApiConfig` trả mặc định DIRECT_DB — thiếu 2 hàm này làm toàn bộ 15/19
+  test ở file đó FAIL ngay khi vừa thêm tính năng, đã tự phát hiện + vá trước khi báo cáo) và
+  `tests/test-dsmart-wholesale-price.js` (thêm route test `PATCH /price-mode`/`PUT /external-api-config`/
+  `POST /external-api-config/test-connection`, đều CHỈ admin).
+- Toàn bộ 6 file test Giá Bán Buôn DSmart chạy lại xác nhận PASS: 110+70+23+32+19+41 = 295/295.
+
+### Deploy
+
+- `server/sql/schema.sql` có thêm 3 cột `PriceOperationMode`/`ExternalApiBaseUrl`/`ExternalApiKeyEnc` —
+  chạy lại script (an toàn, tự bọc `IF OBJECT_ID(...) IS NULL`, mặc định `PriceOperationMode='DIRECT_DB'`
+  nên KHÔNG đổi hành vi đang chạy cho tới khi admin tự vào bật "🌐 Theo API").
+- Không thêm biến `.env`, không thêm package npm (gọi API đối tác dùng `fetch` có sẵn trong Node.js, không
+  cần cài thêm thư viện HTTP client nào).

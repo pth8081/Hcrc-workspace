@@ -219,7 +219,12 @@ require.cache[mssqlStubPath] = {
 let RAW_CFG = { host: 'fake-host', port: 1433, database: 'fakedb', user: 'fakeuser', passwordEnc: 'enc' };
 stubModule('lib/dsmartPriceConfigStore', {
   getRawConfig: async () => RAW_CFG,
-  decryptSecret: (v) => v
+  decryptSecret: (v) => v,
+  // priceOperationMode (12/2026, "🖥️ Theo Phần Mềm"/"🌐 Theo API") — file này test ĐÚNG đường SQL thật
+  // (DIRECT_DB), KHÔNG liên quan nhánh EXTERNAL_API (đã test riêng ở tests/test-dsmart-price-mode.js) —
+  // trả cố định DIRECT_DB để lib/dsmartSqlClient.js đi đúng nhánh SQL như trước khi có tính năng này.
+  getPriceOperationMode: async () => 'DIRECT_DB',
+  getExternalApiConfig: async () => ({ externalApiBaseUrl: '', externalApiKey: null })
 });
 
 const { createRunner, assert, assertEqual } = require('./testHarness');

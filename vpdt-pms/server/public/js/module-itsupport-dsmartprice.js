@@ -1036,10 +1036,94 @@ async function openDsmartPriceConfigModal() {
     document.getElementById('dsmartPriceCfgPasswordHint').innerText = data.config.hasPassword ? '✅ Đã có mật khẩu lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có mật khẩu nào được lưu.';
     const statusEl = document.getElementById('dsmartPriceCfgTestStatus');
     if (statusEl) { statusEl.className = 'text-xs'; statusEl.innerText = ''; }
+    document.getElementById('dsmartPriceExtApiBaseUrl').value = data.config.externalApiBaseUrl || '';
+    document.getElementById('dsmartPriceExtApiKey').value = '';
+    document.getElementById('dsmartPriceExtApiKeyHint').innerText = data.config.hasExternalApiKey ? '✅ Đã có API Key lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có API Key nào được lưu.';
+    const extApiStatusEl = document.getElementById('dsmartPriceExtApiTestStatus');
+    if (extApiStatusEl) { extApiStatusEl.className = 'text-xs'; extApiStatusEl.innerText = ''; }
+    applyDsmartPricePriceModeUI(data.config.priceOperationMode || 'DIRECT_DB');
     document.getElementById('dsmartPriceConfigModal').classList.remove('hidden');
   } catch (err) { alert('⛔ ' + err.message); }
 }
 function closeDsmartPriceConfigModal() { document.getElementById('dsmartPriceConfigModal').classList.add('hidden'); }
+
+// applyDsmartPricePriceModeUI(mode) — tô đậm nút đang chọn ("🖥️ Theo Phần Mềm" / "🌐 Theo API"), chỉ hiện
+// ĐÚNG khối field tương ứng (ẩn khối còn lại), và ẩn luôn nút "💾 Lưu Cấu Hình" (host/port/mật khẩu DB)
+// khi đang ở "🌐 Theo API" (lúc đó khối Host/Port/... đã ẩn, không còn gì để lưu qua nút đó).
+function applyDsmartPricePriceModeUI(mode) {
+  const isApi = mode === 'EXTERNAL_API';
+  const btnDb = document.getElementById('btnDsmartPriceModeDb');
+  const btnApi = document.getElementById('btnDsmartPriceModeApi');
+  const activeClass = ['bg-blue-600', 'text-white'];
+  const inactiveClass = ['bg-gray-200', 'text-gray-600'];
+  if (btnDb) { btnDb.classList.remove(...activeClass, ...inactiveClass); btnDb.classList.add(...(isApi ? inactiveClass : activeClass)); }
+  if (btnApi) { btnApi.classList.remove(...activeClass, ...inactiveClass); btnApi.classList.add(...(isApi ? activeClass : inactiveClass)); }
+  document.getElementById('dsmartPriceDirectDbFields').classList.toggle('hidden', isApi);
+  document.getElementById('dsmartPriceExternalApiFields').classList.toggle('hidden', !isApi);
+  const saveBtn = document.getElementById('btnDsmartPriceSaveConfig');
+  if (saveBtn) saveBtn.classList.toggle('hidden', isApi);
+  const hint = document.getElementById('dsmartPriceModeHint');
+  if (hint) {
+    hint.innerText = isApi
+      ? '🌐 Hệ thống gọi API đối tác để áp/xoá giá — đối tác tự lo đồng bộ xuống mọi siêu thị, hệ thống KHÔNG tự nối SQL Server siêu thị nữa.'
+      : '🖥️ Hệ thống tự nối thẳng SQL Server DSmart16 Trung Tâm + fan-out xuống từng siêu thị (hành vi mặc định từ trước giờ).';
+  }
+}
+
+// setDsmartPricePriceMode(mode) — bấm nút LÀ LƯU NGAY (12/2026, theo yêu cầu người dùng: "chỉ chọn được
+// một trong hai... tự cái kia sẽ vô hiệu"), không cần bấm "💾 Lưu Cấu Hình" riêng.
+async function setDsmartPricePriceMode(mode) {
+  try {
+    const res = await fetch('/api/dsmart-price/price-mode', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceOperationMode: mode })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    applyDsmartPricePriceModeUI(data.priceOperationMode);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// saveDsmartPriceExternalApiConfig() — nút "💾 Lưu Cấu Hình API" trong khối "🌐 Theo API".
+async function saveDsmartPriceExternalApiConfig() {
+  const externalApiBaseUrl = document.getElementById('dsmartPriceExtApiBaseUrl').value.trim();
+  const externalApiKey = document.getElementById('dsmartPriceExtApiKey').value;
+  try {
+    const res = await fetch('/api/dsmart-price/external-api-config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ externalApiBaseUrl, externalApiKey: externalApiKey || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    document.getElementById('dsmartPriceExtApiKey').value = '';
+    document.getElementById('dsmartPriceExtApiKeyHint').innerText = data.config.hasExternalApiKey ? '✅ Đã có API Key lưu sẵn — để trống ô trên nếu không đổi.' : '⚠️ Chưa có API Key nào được lưu.';
+    alert('✅ Đã lưu Cấu Hình API đối tác.');
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// testDsmartPriceExternalApiConnection() — nút "🔌 Kiểm Tra Kết Nối API", dùng ĐÚNG giá trị đang gõ dở
+// trên form (CHƯA cần bấm "💾 Lưu Cấu Hình API" trước), cùng khuôn testDsmartPriceConnection() ở trên.
+async function testDsmartPriceExternalApiConnection() {
+  const externalApiBaseUrl = document.getElementById('dsmartPriceExtApiBaseUrl').value.trim();
+  const externalApiKey = document.getElementById('dsmartPriceExtApiKey').value;
+  const statusEl = document.getElementById('dsmartPriceExtApiTestStatus');
+  const btn = document.getElementById('btnDsmartPriceTestExtApi');
+  if (statusEl) { statusEl.className = 'text-xs text-gray-500'; statusEl.innerText = '⏳ Đang kiểm tra kết nối API...'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/external-api-config/test-connection', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ externalApiBaseUrl, externalApiKey: externalApiKey || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (statusEl) { statusEl.className = 'text-xs text-emerald-600 font-semibold'; statusEl.innerText = `✅ Kết nối thành công (${data.ms}ms)`; }
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'text-xs text-red-600 font-semibold'; statusEl.innerText = '⛔ ' + err.message; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 // testDsmartPriceConnection() — nút "🔌 Kiểm Tra Kết Nối" (12/2026, theo yêu cầu người dùng): dùng ĐÚNG
 // giá trị đang gõ dở trên form (CHƯA cần bấm Lưu trước) để admin xác nhận kết nối được tới DSmart16
