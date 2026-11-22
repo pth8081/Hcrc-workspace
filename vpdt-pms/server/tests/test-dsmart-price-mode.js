@@ -188,12 +188,14 @@ async function main() {
     await assert.rejects(() => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: '', externalApiKey: null }), apiClient.DsmartApiConfigError);
     check('applyPriceViaApi(): thiếu Base URL -> DsmartApiConfigError, KHÔNG gọi fetch', true);
 
-    // Thành công, có header Authorization khi có API Key.
+    // Thành công, có header X-API-Key khi có API Key (đúng tài liệu chính thức đối tác gửi lại — KHÔNG
+    // dùng Authorization: Bearer).
     mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, custId: 'C1', skuId: 'S1', overwritten: true }) }));
     const applyResult = await apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'key123' });
     check('applyPriceViaApi(): thành công -> trả đúng custId/skuId/wasOverwrite', applyResult.custId === 'C1' && applyResult.skuId === 'S1' && applyResult.wasOverwrite === true, applyResult);
     check('applyPriceViaApi(): gọi ĐÚNG path /wholesale-price/apply', lastFetchCall.url === 'https://api.test/dsmart/wholesale-price/apply', lastFetchCall);
-    check('applyPriceViaApi(): có API Key -> gửi header Authorization: Bearer <key>', lastFetchCall.opts.headers.Authorization === 'Bearer key123', lastFetchCall.opts.headers);
+    check('applyPriceViaApi(): có API Key -> gửi header X-API-Key: <key>', lastFetchCall.opts.headers['X-API-Key'] === 'key123', lastFetchCall.opts.headers);
+    check('applyPriceViaApi(): KHÔNG còn gửi header Authorization: Bearer (đối tác không chấp nhận)', lastFetchCall.opts.headers.Authorization === undefined, lastFetchCall.opts.headers);
     check('applyPriceViaApi(): KHÔNG truyền storeScope -> mặc định {mode:"ALL"} (an toàn, không bỏ sót phạm vi)', JSON.parse(lastFetchCall.opts.body).storeScope.mode === 'ALL', lastFetchCall.opts.body);
 
     // storeScope SPECIFIC truyền đúng nguyên văn (field đã thống nhất với đối tác, tài liệu "Yêu Cầu API:
