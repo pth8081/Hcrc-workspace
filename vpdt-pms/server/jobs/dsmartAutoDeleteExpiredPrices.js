@@ -83,7 +83,14 @@ async function runDsmartAutoDeleteExpiredPrices() {
         const freshList = await getAllForCollection('dsmartWholesalePriceEntries');
         const fresh = freshList.find(x => x.id === e.id);
         if (!fresh || fresh.status !== 'ACTIVE' || !dueForAutoDelete(fresh, now, cfg)) return false;
-        const { storeResults, storeFanOutError } = await deleteWholesalePrice({ dsmartKey: fresh.dsmartKey });
+        // targetStoreIds (LỖI THẬT đã vá, 12/2026 — người dùng tự phát hiện qua câu hỏi "áp giá 1 vài siêu
+        // thị thì xoá có đúng xoá đúng 1 vài siêu thị đó không?"): job này TRƯỚC ĐÂY KHÔNG truyền
+        // `fresh.targetStoreIds` (phạm vi siêu thị đã ĐÓNG BĂNG lúc Thêm Giá Mới) cho deleteWholesalePrice()
+        // — khác hẳn job "Lên Lịch Áp Giá" (dsmartAutoApplyScheduledPrices.js) và route xoá thủ công (POST
+        // /entries/:id/delete), cả 2 đều đã truyền đúng. Hậu quả: 1 dòng giá CHỈ áp cho 1 vài siêu thị cụ
+        // thể, khi tự động xoá vì hết hạn, lại bị xoá nhầm ở TẤT CẢ siêu thị đang bật (kể cả siêu thị chưa
+        // từng nhận giá đó) — không khớp đúng phạm vi gốc đã chọn lúc Áp Giá.
+        const { storeResults, storeFanOutError } = await deleteWholesalePrice({ dsmartKey: fresh.dsmartKey }, fresh.targetStoreIds);
         await withLockedRecordForCollection('dsmartWholesalePriceEntries', fresh.id, (item) => {
           if (item.status !== 'ACTIVE') return item; // đã bị xoá bởi thao tác khác trong lúc job đang chạy
           const nowIso = now.toISOString();

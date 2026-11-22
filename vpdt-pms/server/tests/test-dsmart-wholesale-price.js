@@ -1444,6 +1444,26 @@ async function main() {
     assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'insert', custId: 'TSI6', skuId: 'SK6', targetStoreIds: [101] });
   });
 
+  // LỖI THẬT đã vá (12/2026, người dùng tự phát hiện qua câu hỏi "áp giá 1 vài siêu thị thì xoá có đúng
+  // xoá đúng 1 vài siêu thị đó không?"): job "Tự Động Xoá Khi Hết Hạn" TRƯỚC ĐÂY KHÔNG truyền
+  // fresh.targetStoreIds cho deleteWholesalePrice() — khác hẳn job "Lên Lịch Áp Giá" (test ngay trên) và
+  // route xoá thủ công (đã test ở trên), cả 2 đều ĐÃ truyền đúng từ trước. Test này mô phỏng ĐÚNG kịch
+  // bản: entry chỉ áp cho 1 vài siêu thị cụ thể (không phải "Tất Cả"), để quá hạn, job tự xoá chạy — PHẢI
+  // truyền đúng targetStoreIds đã lưu, KHÔNG được để lọt thành undefined/null (sẽ bị hiểu nhầm "Tất Cả").
+  await test('jobs/dsmartAutoDeleteExpiredPrices: entry CHỈ áp cho 1 vài siêu thị cụ thể, hết hạn -> job tự xoá TRUYỀN ĐÚNG đúng targetStoreIds đã lưu (không phải "Tất Cả")', async () => {
+    CSPRICE = []; ENTRIES = []; FANOUT_TARGET_LOG = [];
+    await apiPost('/apply', { rows: [{ custId: 'TSI7', skuId: 'SK7', price: 7000, frDate: '2020-01-01', toDate: '2020-01-31' }], targetStoreIds: [201, 202] });
+    const entry = ENTRIES.find(e => e.custId === 'TSI7');
+    assert.deepStrictEqual(entry.targetStoreIds, [201, 202]);
+    AUTO_DELETE_CFG = { autoDeleteEnabled: true, autoDeleteHour: 23, autoDeleteMinute: 0 };
+    FANOUT_TARGET_LOG = [];
+    delete require.cache[require.resolve('../jobs/dsmartAutoDeleteExpiredPrices')];
+    const { runDsmartAutoDeleteExpiredPrices } = require('../jobs/dsmartAutoDeleteExpiredPrices');
+    const result = await runDsmartAutoDeleteExpiredPrices();
+    assert.strictEqual(result.deletedCount, 1);
+    assert.deepStrictEqual(FANOUT_TARGET_LOG[0], { op: 'delete', dsmartKey: entry.dsmartKey, targetStoreIds: [201, 202] });
+  });
+
   // ===== Email thông báo Áp Giá/Xoá Giá thành công + hàng đợi tự động thử lại (12/2026) — xem chú thích
   // ở khối stub lib/dsmartPriceNotify/lib/dsmartStoreFanOutRetryStore đầu file. Ở ĐÂY chỉ test ĐÚNG ĐIỂM
   // GỌI (route/job gọi đúng hàm, đúng số lần, đúng dữ liệu) — nội dung email thật đã test riêng ở
