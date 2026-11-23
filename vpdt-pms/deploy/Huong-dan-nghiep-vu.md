@@ -10256,6 +10256,25 @@ không liên quan bị chặn giả — không phải lỗi logic.
 
 Không cần thao tác deploy gì thêm ngoài copy code.
 
+**ĐÃ GỠ HOÀN TOÀN (12/2026, theo yêu cầu người dùng)**: sau 1 lượt sửa
+`custIdExistsInCsprice()` từ mẹo UPDATE+OUTPUT sang SELECT thuần (vì
+báo sai "chưa từng xuất hiện" cho 1 mã khách đã có giá thật — xem chú
+thích tại hàm trước khi gỡ, `lib/dsmartSqlClient.js`), người dùng chỉ ra
+cảnh báo mềm này **không hề ảnh hưởng tới việc ghi dữ liệu**:
+`insertWholesalePrice()` đã tự UPSERT đúng theo khoá chính thật
+(`CUST_ID`, `SKU_ID`) mà không cần tra trước — mã khách mới tự INSERT,
+mã khách đã có (dù khác SKU) cũng INSERT dòng mới hoặc tự GHI ĐÈ nếu
+trùng cặp, giống hệt nhau có hay không có cảnh báo này. Cảnh báo chỉ
+phục vụ MỘT việc: nhắc người thao tác kiểm tra lại nếu nghi gõ nhầm mã
+khách — chấp nhận bỏ hẳn lớp cảnh báo này để không còn phụ thuộc quyền
+SELECT trên CSPRICE nữa (từng gây lỗi thật 2 lần: Lần 3 bị từ chối
+quyền, đợt sau báo sai do nghi vấn Row-Level Security). Đã xoá hẳn
+`custIdExistsInCsprice()` (`lib/dsmartSqlClient.js`),
+`annotateNewCustIds()`/cờ `custIdNeverSeen` (`routes/dsmartWholesalePrice.js`),
+badge tím + lớp xác nhận riêng ở giao diện
+(`module-itsupport-dsmartprice.js`) — không cần thao tác deploy gì thêm
+ngoài copy code.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần

@@ -494,23 +494,15 @@ function renderDsmartPriceUploadPreview() {
     (!custKw || r.custId.toLowerCase().includes(custKw)) && (!skuKw || r.skuId.toLowerCase().includes(skuKw)));
   const validCount = _dsmartPriceUploadRows.filter(r => !r.errors.length).length;
   const overlapCount = _dsmartPriceUploadRows.filter(r => r.hasOverlap).length;
-  // custIdNeverSeen (12/2026, LỖI THẬT PRODUCTION — xem routes/dsmartWholesalePrice.js::annotateNewCustIds()):
-  // cảnh báo MỀM nếu Mã Khách B2B CHƯA TỪNG có trong CSPRICE thật — dễ là nhập nhầm mã khách, khiến giá
-  // KHÔNG BAO GIỜ áp đúng chỗ (phiếu bán buôn tra giá khoá chặt theo CUST_ID, không liên quan gì tới mã
-  // khác). KHÔNG chặn cứng (khách hàng MỚI hoàn toàn vẫn hợp lệ) — chỉ nhắc kiểm tra kỹ + bắt xác nhận
-  // thêm 1 bước trước khi Ghi (applyDsmartPriceUpload()).
-  const newCustCount = _dsmartPriceUploadRows.filter(r => r.custIdNeverSeen).length;
   document.getElementById('dsmartPriceUploadStats').innerText =
     `${_dsmartPriceUploadRows.length} dòng trong file — ${validCount} hợp lệ`
-    + (overlapCount ? `, ${overlapCount} dòng SẼ GHI ĐÈ giá đang có (trùng Mã Khách B2B + Mã Sản Phẩm)` : '')
-    + (newCustCount ? `, ⚠️ ${newCustCount} dòng có Mã Khách B2B CHƯA TỪNG xuất hiện trong DSmart — kiểm tra kỹ trước khi Ghi!` : '');
+    + (overlapCount ? `, ${overlapCount} dòng SẼ GHI ĐÈ giá đang có (trùng Mã Khách B2B + Mã Sản Phẩm)` : '');
   document.getElementById('dsmartPriceUploadPreviewBody').innerHTML = filtered.map((r, i) => {
     let statusHtml;
     if (r.errors.length) statusHtml = `<span class="bg-red-50 text-red-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⛔ ${escapeHtml(r.errors.join('; '))}</span>`;
-    else if (r.custIdNeverSeen) statusHtml = `<span class="bg-purple-50 text-purple-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">🆕 Mã Khách B2B CHƯA từng có trong DSmart — kiểm tra lại!</span>`;
     else if (r.hasOverlap) statusHtml = `<span class="bg-amber-50 text-amber-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">⚠️ Sẽ GHI ĐÈ giá đang có</span>`;
     else statusHtml = `<span class="bg-emerald-50 text-emerald-700 text-[10.5px] font-bold px-2 py-0.5 rounded-full">✅ Sẽ thêm mới</span>`;
-    return `<tr class="${r.errors.length ? 'bg-red-50' : r.custIdNeverSeen ? 'bg-purple-50' : r.hasOverlap ? 'bg-amber-50' : ''}">
+    return `<tr class="${r.errors.length ? 'bg-red-50' : r.hasOverlap ? 'bg-amber-50' : ''}">
       <td class="p-1.5 text-gray-400">${i + 1}</td>
       <td class="p-1.5">${escapeHtml(r.custId)}</td>
       <td class="p-1.5">${escapeHtml(r.skuId)}</td>
@@ -526,16 +518,6 @@ async function applyDsmartPriceUpload() {
   if (!_dsmartPriceUploadRows) return;
   const validRows = _dsmartPriceUploadRows.filter(r => !r.errors.length);
   if (!validRows.length) return alert('⛔ Không có dòng hợp lệ nào để ghi');
-  // Cảnh báo RIÊNG, thêm 1 lớp xác nhận trước khi hỏi xác nhận chung (12/2026, LỖI THẬT PRODUCTION — xem
-  // chú thích đầy đủ tại routes/dsmartWholesalePrice.js::annotateNewCustIds()): nêu THẲNG danh sách Mã
-  // Khách B2B chưa từng có trong DSmart để người dùng tự soát lại trước khi ghi thật — chỉ cảnh báo, không
-  // chặn cứng (khách hàng MỚI hoàn toàn vẫn là tình huống hợp lệ, người dùng tự quyết định tiếp tục).
-  const newCustIds = [...new Set(validRows.filter(r => r.custIdNeverSeen).map(r => r.custId))];
-  if (newCustIds.length) {
-    const shown = newCustIds.slice(0, 10).join(', ');
-    const moreNote = newCustIds.length > 10 ? `, ... và ${newCustIds.length - 10} mã khác` : '';
-    if (!confirm(`⚠️ ${newCustIds.length} Mã Khách B2B sau CHƯA TỪNG xuất hiện trong CSPRICE (DSmart16 Trung Tâm) trước đây:\n${shown}${moreNote}\n\nNếu đây KHÔNG đúng là mã khách THẬT của siêu thị/khách hàng cần đổi giá, giá sẽ KHÔNG áp dụng đúng chỗ. Bạn có CHẮC CHẮN các mã khách trên là ĐÚNG không?`)) return;
-  }
   if (!confirm(`Xác nhận THÊM ${validRows.length} dòng giá MỚI vào CSPRICE (DSmart16 Trung Tâm)? Thao tác này ghi trực tiếp vào hệ thống bán hàng thật.`)) return;
   const schedule = !!document.getElementById('dsmartPriceScheduleApply')?.checked;
   const btn = document.getElementById('btnDsmartPriceApplyUpload');

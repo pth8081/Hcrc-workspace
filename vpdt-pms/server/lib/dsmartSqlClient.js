@@ -762,46 +762,17 @@ async function inspectCspriceColumns(overrideCfg) {
   }
 }
 
-// custIdExistsInCsprice(custId): kiểm tra Mã Khách B2B (CUST_ID) đã TỪNG xuất hiện trong CSPRICE (với BẤT
-// KỲ Mã Sản Phẩm nào) hay chưa — dùng ở bước xem trước (preview) "Thêm Giá Mới" để CẢNH BÁO MỀM nếu mã
-// khách hoàn toàn MỚI (12/2026, LỖI THẬT production: người dùng set giá cho 1 CUST_ID không phải mã khách
-// thật của siêu thị/khách hàng cần đổi giá — xác nhận qua plan cache DSmart16: lookup giá lúc lập phiếu
-// bán buôn khoá CHẶT theo CUST_ID (`SELECT * FROM CSPRICE WHERE STATUS=1 AND TYPE='04' AND CUST_ID=@P1 AND
-// SKU_ID=@P2`), 2 mã khách khác nhau hoàn toàn KHÔNG liên quan nhau — giá set nhầm mã sẽ KHÔNG BAO GIỜ áp
-// đúng chỗ, không phải lỗi đồng bộ/code).
-//
-// SỬA (12/2026, LỖI THẬT PRODUCTION — người dùng báo cảnh báo "CHƯA TỪNG xuất hiện" SAI cho 1 Mã Khách
-// B2B xác nhận ĐÃ có giá trong CSPRICE từ trước): hàm này TRƯỚC ĐÂY dùng mẹo `UPDATE TOP(1) ... SET
-// CUST_ID=CUST_ID OUTPUT INSERTED.*` (gán lại CHÍNH giá trị hiện có, không đổi gì) để né việc tài khoản
-// SQL không có quyền SELECT trên CSPRICE (xem lịch sử ở chú thích đầu file, Lần 3). Người dùng sau đó xác
-// nhận đã tự GRANT thêm quyền SELECT trên CSPRICE cho tài khoản này (cả kết nối Trung Tâm lẫn từng siêu
-// thị) — đổi hẳn sang 1 câu SELECT thuần, vì 2 lý do:
-//   1. AN TOÀN HƠN: không còn phải GHI (dù "vô hại") lên 1 bảng GIÁ đang chạy thật chỉ để kiểm tra tồn
-//      tại — tránh khoá dòng/làm chậm các giao dịch Thêm/Sửa/Xoá giá thật đang chạy song song, và tránh
-//      kích hoạt nhầm bất kỳ trigger AFTER UPDATE nào có thể đang gắn trên CSPRICE (nếu có, ngoài tầm
-//      kiểm soát của hệ thống này).
-//   2. NGHI VẤN NGUYÊN NHÂN LỖI THẬT: DSmart16 nhiều khả năng có cấu hình Row-Level Security (RLS) trên
-//      CSPRICE — SQL Server cho phép đặt predicate LỌC RIÊNG cho UPDATE/DELETE khác với predicate cho
-//      SELECT (VD chỉ cho sửa dòng thuộc đúng phạm vi/siêu thị gắn với tài khoản đang đăng nhập, trong
-//      khi SELECT được lọc lỏng hơn hoặc không lọc) — nếu đúng vậy, `UPDATE ... WHERE CUST_ID=@custId` có
-//      thể khớp ÍT dòng hơn thực tế (bị RLS chặn ở lớp UPDATE dù dòng đó CÓ tồn tại), khiến cảnh báo báo
-//      SAI "chưa từng có". Đổi sang SELECT (đọc thuần, không bị predicate UPDATE/DELETE chi phối) là cách
-//      vá đúng nếu giả thuyết này đúng; nếu SELECT permission sau này bị thu hồi lại, hàm này tự throw lỗi
-//      rõ ràng ("SELECT permission was denied...") — annotateNewCustIds() (routes/dsmartWholesalePrice.js)
-//      đã bọc try/catch coi lỗi này là KHÔNG kiểm tra được (fail-open, không cảnh báo gì), không làm hỏng
-//      cả bước xem trước.
-async function custIdExistsInCsprice(custId) {
-  const pool = await getDsmartPool();
-  const req = pool.request();
-  req.input('custId', sql.NVarChar(50), String(custId));
-  let result;
-  try {
-    result = await req.query(`SELECT TOP (1) CUST_ID FROM dbo.CSPRICE WHERE CUST_ID = @custId;`);
-  } catch (err) {
-    throw new DsmartSqlError(`Lỗi kiểm tra Mã Khách B2B "${custId}" đã từng có trong CSPRICE chưa: ${err.message}`);
-  }
-  return (result.recordset || []).length > 0;
-}
+// custIdExistsInCsprice() — ĐÃ GỠ (12/2026, theo yêu cầu người dùng). Hàm này trước đây chỉ phục vụ 1
+// CẢNH BÁO MỀM ở bước xem trước "Thêm Giá Mới" (báo "Mã Khách B2B CHƯA TỪNG xuất hiện" nếu nghi gõ nhầm
+// mã khách) — KHÔNG hề quyết định việc ghi INSERT hay UPDATE (insertWholesalePrice() đã tự UPSERT đúng
+// theo PK thật (CUST_ID, SKU_ID), không cần tra trước): mã khách CHƯA từng có dòng nào -> tự INSERT; mã
+// khách ĐÃ có dòng (dù khác Mã Sản Phẩm) -> cũng INSERT dòng mới bình thường cho đúng (CUST_ID, SKU_ID)
+// nếu cặp đó CHƯA có, hoặc tự GHI ĐÈ nếu cặp đó ĐÃ có — cả 2 trường hợp đều giống hệt nhau có hay không
+// có cảnh báo này. Người dùng xác nhận bỏ hẳn cảnh báo (chấp nhận mất lớp bắt lỗi gõ nhầm mã khách) để
+// không còn phụ thuộc quyền SELECT trên CSPRICE nữa — xem lịch sử lỗi thật ở phần đầu file (Lần 3: từng
+// bị từ chối quyền SELECT; đợt sau đó: cảnh báo báo SAI do nghi vấn Row-Level Security lọc khác nhau giữa
+// SELECT và UPDATE). annotateNewCustIds()/custIdNeverSeen đã bị gỡ tương ứng ở
+// routes/dsmartWholesalePrice.js + cảnh báo trên UI ở public/js/module-itsupport-dsmartprice.js.
 
 // Chỉ dùng cho test/khi server tắt hẳn — đóng pool đang cache (nếu có).
 async function closeDsmartPool() {
@@ -881,5 +852,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, custIdExistsInCsprice, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

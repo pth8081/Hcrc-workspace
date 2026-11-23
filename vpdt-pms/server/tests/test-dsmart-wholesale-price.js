@@ -27,7 +27,6 @@ function stubModule(relPath, exportsObj) {
 // lib/dsmartSqlClient.js. Mô phỏng luôn hành vi UPSERT: INSERT trùng (CUST_ID, SKU_ID) -> GHI ĐÈ thay vì
 // lỗi (xem insertWholesalePrice() mock bên dưới). =====
 let CSPRICE = [];
-let custIdExistsCallLog = [];
 // FANOUT_TARGET_LOG (12/2026, ô chọn "🏬 Áp Dụng Cho Siêu Thị") — ghi lại targetStoreIds (tham số thứ 2)
 // MỖI lần insert/update/deleteWholesalePrice() được gọi, để test xác nhận route truyền ĐÚNG giá trị (null
 // = "Tất Cả" lúc Thêm, hoặc mảng id đã ĐÓNG BĂNG — và Sửa/Xoá/job tự động TÁI DÙNG đúng giá trị đã lưu
@@ -100,16 +99,6 @@ stubModule('lib/dsmartSqlClient', {
     if (forceSkuDefAccessError) throw new DsmartConfigError('Không đọc được bảng dbo.SKU_DEF (giả lập)');
     return { ms: 5, sampleRow: { SKU_ID: 'S1', PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
   },
-  // custIdExistsInCsprice() (12/2026 — xem annotateNewCustIds()/routes/dsmartWholesalePrice.js): mô phỏng
-  // đúng hành vi thật — quét CSPRICE giả lập theo CUST_ID (BẤT KỲ SKU nào), KHÔNG dùng SELECT thật (test
-  // này chỉ cần đúng hành vi trả về, không cần mô phỏng lại mẹo UPDATE-OUTPUT). forceConfigError ném lỗi
-  // giống hệt insertWholesalePrice() ở trên để test được nhánh fail-open (annotateNewCustIds() nuốt lỗi).
-  // custIdExistsCallLog ghi lại MỌI custId đã gọi — dùng để test đúng ý "chỉ kiểm tra 1 lần / mã PHÂN BIỆT".
-  custIdExistsInCsprice: async (custId) => {
-    custIdExistsCallLog.push(custId);
-    if (forceConfigError) throw new DsmartConfigError('Chưa cấu hình kết nối (giả lập)');
-    return CSPRICE.some(r => r.CUST_ID === custId);
-  },
   // testStoreConnection() (12/2026, FAN-OUT) — nút "🔌 Kiểm Tra" trên TỪNG dòng siêu thị ở màn Cấu Hình
   // Kết Nối Siêu Thị — logic thật đã test đầy đủ ở test-dsmart-store-fanout.js, ở đây chỉ cần đúng hành
   // vi trả về để test tầng route.
@@ -149,7 +138,7 @@ stubModule('lib/recordStore', {
 
 stubModule('lib/httpErrors', { HttpError: FakeHttpError });
 
-// lib/uploadRateLimiter (12/2026, SAU khi thêm các kịch bản preview mới cho custIdNeverSeen): route
+// lib/uploadRateLimiter (12/2026): route
 // /preview VÀ /apply dùng CHUNG 1 bộ đếm rate-limit THẬT (30 lần/10 phút, xem chú thích đầy đủ tại
 // lib/uploadRateLimiter.js) — file test này gọi /preview RẤT NHIỀU lần (mỗi kịch bản 1 lần), đủ để chạm
 // trần 30 lần thật và khiến 1 kịch bản /apply KHÔNG LIÊN QUAN (dùng để test job tự động xoá) bị 429 giả
@@ -559,50 +548,6 @@ async function main() {
     assert.strictEqual(res.body.rows.length, 2);
     assert.strictEqual(res.body.rows[0].errors.length, 0);
     assert.ok(res.body.rows[1].errors.length > 0);
-  });
-
-  // ===== Preview: cảnh báo Mã Khách B2B CHƯA TỪNG có trong CSPRICE (12/2026, LỖI THẬT PRODUCTION — xem
-  // chú thích đầy đủ tại routes/dsmartWholesalePrice.js::annotateNewCustIds()) =====
-  await test('POST /preview: Mã Khách B2B ĐÃ từng có trong CSPRICE (khác SKU) -> custIdNeverSeen=false, không cảnh báo', async () => {
-    CSPRICE.push({ CUST_ID: '244000000309', TYPE: '04', SKU_ID: '111111110000', WSPRICE: 1000 });
-    const buf = await buildXlsxBuffer([['244000000309', '296019310000', 50000, '2026-11-20', '2026-11-21']]);
-    const res = await apiUploadPreview(buf);
-    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
-    assert.strictEqual(res.body.rows[0].custIdNeverSeen, false);
-  });
-  await test('POST /preview: Mã Khách B2B CHƯA TỪNG có trong CSPRICE -> custIdNeverSeen=true (cảnh báo mềm)', async () => {
-    const buf = await buildXlsxBuffer([['999000000999', '296019310000', 50000, '2026-11-20', '2026-11-21']]);
-    const res = await apiUploadPreview(buf);
-    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
-    assert.strictEqual(res.body.rows[0].custIdNeverSeen, true);
-  });
-  await test('POST /preview: dòng LỖI (thiếu dữ liệu) KHÔNG bị gắn custIdNeverSeen (bỏ qua, không gọi DSmart)', async () => {
-    custIdExistsCallLog = [];
-    const buf = await buildXlsxBuffer([['', '296019310000', 50000, '2026-11-20', '2026-11-21']]);
-    const res = await apiUploadPreview(buf);
-    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
-    assert.strictEqual(res.body.rows[0].custIdNeverSeen, false);
-    assert.strictEqual(custIdExistsCallLog.length, 0, 'Không được gọi DSmart cho dòng đã lỗi validate');
-  });
-  await test('POST /preview: nhiều dòng CÙNG Mã Khách B2B -> chỉ gọi DSmart kiểm tra ĐÚNG 1 lần (dedupe)', async () => {
-    custIdExistsCallLog = [];
-    const buf = await buildXlsxBuffer([
-      ['999000000888', '296019310000', 50000, '2026-11-20', '2026-11-21'],
-      ['999000000888', '111111110000', 60000, '2026-11-20', '2026-11-21']
-    ]);
-    const res = await apiUploadPreview(buf);
-    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
-    assert.strictEqual(res.body.rows[0].custIdNeverSeen, true);
-    assert.strictEqual(res.body.rows[1].custIdNeverSeen, true);
-    assert.strictEqual(custIdExistsCallLog.filter(c => c === '999000000888').length, 1);
-  });
-  await test('POST /preview: DSmart lỗi kết nối lúc kiểm tra Mã Khách B2B -> fail-open, KHÔNG chặn cả preview, custIdNeverSeen=false', async () => {
-    forceConfigError = true;
-    const buf = await buildXlsxBuffer([['999000000777', '296019310000', 50000, '2026-11-20', '2026-11-21']]);
-    const res = await apiUploadPreview(buf);
-    forceConfigError = false;
-    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
-    assert.strictEqual(res.body.rows[0].custIdNeverSeen, false);
   });
 
   // ===== Apply (INSERT thật) =====

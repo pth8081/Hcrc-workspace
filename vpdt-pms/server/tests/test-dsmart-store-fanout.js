@@ -79,14 +79,6 @@ function dispatchQuery(db, rawText, params) {
     db.csprice.delete(key);
     return { recordset: [{ CUST_ID: row.CUST_ID }] };
   }
-  // custIdExistsInCsprice() — từ UPDATE+OUTPUT đổi sang SELECT thuần (12/2026, xem lib/dsmartSqlClient.js
-  // + test-dsmart-natural-key-matching.js) sau khi tài khoản DSmart được GRANT thêm quyền SELECT trên
-  // CSPRICE ở cả Trung Tâm và từng siêu thị — giữ nhánh mock khớp đúng câu lệnh hiện hành cho đồng bộ,
-  // dù chưa có test nào trong file này gọi trực tiếp custIdExistsInCsprice() qua fan-out.
-  if (/^SELECT TOP \(1\) CUST_ID FROM dbo\.CSPRICE WHERE CUST_ID = @custId/i.test(t)) {
-    const match = [...db.csprice.values()].find(r => r.CUST_ID === params.custId);
-    return { recordset: match ? [{ CUST_ID: match.CUST_ID }] : [] };
-  }
   if (/SELECT 1 AS ok/i.test(t)) return { recordset: [{ ok: 1 }] };
 
   // ---- CSDL app (db.js): dbo.DsmartPriceDbConfig (Id=1 cố định) ----
