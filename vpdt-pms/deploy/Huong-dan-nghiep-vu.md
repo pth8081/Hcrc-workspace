@@ -1568,6 +1568,45 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đăng ký ĐÃ BỊ KHOÁ (`active:false`), **admin/Người Điều Hành Xe** cũng thấy
   nút "⭐ Đánh Giá (bắt buộc)" và đánh giá hộ được — người đăng ký còn hoạt
   động bình thường thì hành vi giữ NGUYÊN như cũ (chỉ chính họ mới đánh giá).
+  **"🔗 Ghép Xe Chung" (từ 11/2026)** — người dùng phát hiện qua lỗi thật
+  production ("Biển số đã được gán cho 1 chuyến khác trùng khung giờ"): trước
+  đây hệ thống KHÔNG có cách nào gán chủ ý CÙNG 1 xe cho 2+ phiếu khác nhau
+  (`findCarPlateConflict`/`findCarDriverConflict` luôn chặn cứng, coi mọi
+  trùng biển số/tài xế là trùng NHẦM), trong khi thực tế nhiều phòng ban hay
+  đăng ký cùng tuyến/khung giờ nhưng mỗi phiếu chỉ vài người — dồn chung 1 xe
+  tiết kiệm hơn. 2 việc đã làm:
+  - Form đăng ký thêm **"Số Lượng Người Đi (SL)"** — số đếm thuần, **bắt
+    buộc**, số nguyên ≥ 1 (khác hẳn ô "Số Người Sử Dụng" cũ, vốn là text tự do
+    không đáng tin để so sánh) — giúp Người Điều Hành Xe quyết định có nên
+    ghép hay không.
+  - Trong modal **"Xử Lý Đăng Ký Xe"**, **Người Điều Hành Xe (`carDispatch`)/
+    admin** điền xe/tài xế vào "Phần Dành Cho Phòng Hành Chính" như bình
+    thường, rồi bấm nút **"🔗 Ghép Xe Chung"** (thay vì Duyệt/Đổi Tài Xế-Xe) —
+    mở ra danh sách các phiếu KHÁC đang xử lý (PENDING/Đã duyệt/Đang thực
+    hiện), hiện rõ SL người đi/lộ trình/khung giờ để so sánh; chọn 1 phiếu rồi
+    xác nhận lần cuối → **TẤT CẢ** phiếu liên quan (gồm cả phiếu đã cùng nhóm
+    từ trước, nếu có) đều nhận CÙNG xe/tài xế, và được gắn chung 1 **mã nhóm**
+    — ghép được **nhiều hơn 2 phòng ban** vào cùng 1 chuyến (không giới hạn
+    2 phiếu/lượt), chỉ bỏ qua đúng xung đột GIỮA các phiếu đang ghép, vẫn
+    CHẶN trùng nếu 1 trong số đó đụng phải xe/tài xế của phiếu phòng ban THỨ
+    3 không liên quan. Áp dụng được cả lúc còn Chờ Duyệt lẫn sau khi đã duyệt
+    xong (không đổi bước duyệt, trạng thái mỗi phiếu giữ nguyên trừ phiếu
+    đang "Đang Thực Hiện" tự quay về "Đã Phê Duyệt" để xác nhận lại, mirror
+    đúng "🔁 Đổi Tài Xế-Xe").
+  - **In phiếu vẫn RIÊNG cho từng phòng ban** đã đăng ký (mỗi phiếu giữ
+    nguyên mã/người đăng ký/lộ trình của mình) — Phiếu Phê Duyệt in ra có
+    thêm mục **"Ghép Xe Chung"** liệt kê các phiếu khác cùng nhóm để biết
+    đang đi ghép với ai.
+  - **Báo Cáo → tab Đăng Ký Xe** thêm bảng **"🔗 Xe Ghép Chuyến"** — liệt kê
+    từng nhóm đã ghép (xe/tài xế dùng chung, khung giờ, số phòng ban đi cùng,
+    danh sách mã phiếu trong nhóm), chỉ hiện nhóm có ≥ 2 phiếu nằm trong
+    khoảng ngày đang lọc.
+  - **Lái xe chỉ cần "✅ Xác Nhận Đăng Ký" 1 LẦN** trên bất kỳ phiếu nào trong
+    nhóm (tab "🧑‍✈️ Lái Xe") — hệ thống tự xác nhận HỘ mọi phiếu khác cùng
+    nhóm + cùng tài xế (đang ở "Đã Phê Duyệt", chưa xác nhận) trong CÙNG 1
+    lượt, không cần mở từng phiếu xác nhận riêng lẻ (về bản chất đây là CÙNG
+    1 chuyến đi thật). 1 phiếu đồng hành có vấn đề (VD đã bị hủy riêng) không
+    chặn xác nhận của cả nhóm — chỉ bỏ qua êm đúng phiếu đó.
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
