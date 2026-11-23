@@ -10857,11 +10857,22 @@ Người dùng hỏi thêm 2 việc, xác nhận cả 2 làm luôn trong đợt 
    `notifyDsmartPriceDeleteBatch({mode, actor, items})`/`notifyDsmartPriceRetryBatch({items})`. Đọc
    `emailConfig.dsmartPriceNotifyEmails` (AppData, màn Cấu Hình Email) — **danh sách rỗng = TẮT tính
    năng** (mặc định, không gửi gì, không ghi log). Có cấu hình: gửi qua `lib/mailer.js::sendMail()` +
-   `lib/emailTemplate.js::buildNotificationEmailHtml()` (cùng khuôn `jobs/licenseExpiryReminder.js`),
-   liệt kê từng mục kèm `formatStoreBreakdown()` (tên siêu thị đã OK + tên siêu thị đang chờ thử lại,
-   chặn trần 20 tên/mục và 50 mục/email tránh email quá dài). Lỗi gửi mail CHỈ ghi System Log WARNING,
-   KHÔNG BAO GIỜ chặn/làm hỏng thao tác Áp Giá/Xoá đã ghi CSPRICE xong — gọi theo kiểu "fire-and-forget"
-   (không `await`) ngay tại route để không làm chậm phản hồi HTTP bằng thời gian gửi SMTP thật.
+   `lib/emailTemplate.js::buildNotificationEmailHtml()` (cùng khuôn `jobs/licenseExpiryReminder.js`).
+   Lỗi gửi mail CHỈ ghi System Log WARNING, KHÔNG BAO GIỜ chặn/làm hỏng thao tác Áp Giá/Xoá đã ghi
+   CSPRICE xong — gọi theo kiểu "fire-and-forget" (không `await`) ngay tại route để không làm chậm phản
+   hồi HTTP bằng thời gian gửi SMTP thật.
+
+   **Từ 12/2026 (theo yêu cầu người dùng kèm ảnh email thật: "Gửi ra body mail này nhiều lúc nó đến cả
+   vài trăm đến 1000 dòng... người đọc người ta không để ý được. Nên là riêng cái gửi email này... attach
+   file nhé")**: danh sách ĐẦY ĐỦ từng mục (kèm `formatStoreBreakdown()` — tên siêu thị đã OK/đang chờ
+   thử lại) chuyển sang **1 file Excel đính kèm** (`buildItemsXlsxAttachment()`, tái dùng
+   `buildGenericWorkbook()` dùng chung — `lib/adminExport.js`), KHÔNG còn liệt kê trực tiếp trong body —
+   file đính kèm KHÔNG giới hạn số dòng (dựng lỗi, hiếm gặp, mới fallback về liệt kê rút gọn trong body
+   như hành vi CŨ, chặn trần 50 mục/email). Body chỉ còn 1 câu tóm tắt + cảnh báo BẤT THƯỜNG (nếu có) nêu
+   thẳng NGAY trong body, không cần mở file mới thấy: (1) mục KHÔNG đồng bộ xuống bất kỳ siêu thị nào
+   (chỉ ghi ở DSmart16 Trung Tâm) — do người thao tác tự bỏ chọn hết ở ô "🏬 Áp Dụng Cho Siêu Thị" lúc
+   Thêm Giá Mới/Dùng Lại (không phải lỗi hệ thống, xem `module-itsupport-dsmartprice.js`); (2) mục không
+   đọc được danh sách siêu thị; (3) mục có siêu thị lỗi mạng đang tự động thử lại.
 
 2. **`lib/dsmartStoreFanOutRetryStore.js`** (bảng mới `dbo.DsmartStoreFanOutRetryQueue`, xem
    `sql/schema.sql`) — khi 1 siêu thị lỗi lúc fan-out (storeResults có `ok:false`), `enqueueFailedStores()`

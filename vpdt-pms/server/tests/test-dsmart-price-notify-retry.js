@@ -13,6 +13,21 @@
 'use strict';
 const path = require('path');
 const assert = require('assert');
+const ExcelJS = require('exceljs');
+
+// readXlsxAttachmentText(attachment) — (12/2026, cùng đợt gắn file Excel đính kèm thay vì liệt kê thẳng
+// trong body, xem lib/dsmartPriceNotify.js::buildItemsXlsxAttachment()) đọc lại buffer file Excel đã dựng
+// (ExcelJS thật, KHÔNG mock — buildGenericWorkbook() không phụ thuộc gì tới mssql/CSDL) thành 1 chuỗi
+// DUY NHẤT (mỗi dòng nối các ô bằng "|") để test có thể tiếp tục khẳng định bằng regex đơn giản như trước
+// khi có đính kèm, thay vì so khớp nội dung body (giờ chỉ còn tóm tắt ngắn gọn).
+async function readXlsxAttachmentText(attachment) {
+  if (!attachment) return '';
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(attachment.content);
+  const lines = [];
+  wb.worksheets[0].eachRow(row => { lines.push(row.values.slice(1).join('|')); });
+  return lines.join('\n');
+}
 
 process.env.EMAIL_ENCRYPTION_KEY = 'test-notify-retry-key-khong-dung-production';
 process.env.DB_SERVER = 'app-db-host';
@@ -190,9 +205,9 @@ const fakeMssql = {
 let SENT_MAILS = [];
 let forceSendMailError = false;
 stubModule('lib/mailer', {
-  sendMail: async ({ to, subject, text, html }) => {
+  sendMail: async ({ to, subject, text, html, attachments }) => {
     if (forceSendMailError) throw new Error('Mô phỏng gửi SMTP thất bại');
-    SENT_MAILS.push({ to, subject, text, html });
+    SENT_MAILS.push({ to, subject, text, html, attachments });
     return { sent: to, failed: [], simulated: false, host: 'fake-smtp' };
   },
   resolveEncryption: () => 'STARTTLS', resolveGraphOption: () => null, resolveEwsOption: () => null
@@ -317,7 +332,8 @@ async function main() {
     const afterItems = await retryQueueStore.listAll();
     check('job: chỉ CÒN LẠI đúng dòng vẫn lỗi (CJOB2) trong hàng đợi', afterItems.length === 1 && afterItems[0].custId === 'CJOB2' && afterItems[0].attempts >= 2, afterItems);
 
-    check('job: đã gửi email thông báo đồng bộ bổ sung thành công (CJOB1)', SENT_MAILS.length === 1 && /CJOB1/.test(SENT_MAILS[0].text) && /ST01/.test(SENT_MAILS[0].text), SENT_MAILS);
+    const attText4 = await readXlsxAttachmentText(SENT_MAILS[0]?.attachments?.[0]);
+    check('job: đã gửi email thông báo đồng bộ bổ sung thành công (CJOB1), kèm file Excel liệt kê đúng siêu thị/mã', SENT_MAILS.length === 1 && /CJOB1/.test(attText4) && /ST01/.test(attText4), { text: SENT_MAILS[0]?.text, attText4 });
     check('job: ghi System Log đúng nội dung thành công/lỗi/bỏ qua', SYSTEM_LOGS.some(l => l.actionType === 'RETRY_DSMART_STORE_FANOUT' && /1 thành công/.test(l.description) && /1 vẫn lỗi/.test(l.description) && /1 bỏ qua/.test(l.description)), SYSTEM_LOGS);
 
     await retryQueueStore.removeById(afterItems[0].id); // dọn sạch cho khối test sau
@@ -389,10 +405,28 @@ async function main() {
       ]
     });
     check('notifyDsmartPriceApplyBatch(): đã cấu hình email -> gửi tới ĐÚNG danh sách cấu hình', SENT_MAILS.length === 1 && JSON.stringify(SENT_MAILS[0].to) === JSON.stringify(['it@hcrc.vn', 'qldh@hcrc.vn']), SENT_MAILS);
-    check('notifyDsmartPriceApplyBatch(): nội dung nêu rõ siêu thị nào OK/siêu thị nào đang chờ thử lại', /ST01/.test(SENT_MAILS[0].text) && /ST02/.test(SENT_MAILS[0].text) && /chờ kết nối lại/.test(SENT_MAILS[0].text), SENT_MAILS[0].text);
-    // (ST01 OK + ST02 lỗi ở trên — cả 2 PHẢI xuất hiện rõ tên trong nội dung, không chỉ số lượng)
+    check('notifyDsmartPriceApplyBatch(): có đính kèm file Excel', SENT_MAILS[0].attachments?.length === 1 && /\.xlsx$/.test(SENT_MAILS[0].attachments[0].filename), SENT_MAILS[0].attachments);
+    const attText392 = await readXlsxAttachmentText(SENT_MAILS[0].attachments?.[0]);
+    check('notifyDsmartPriceApplyBatch(): file đính kèm nêu rõ siêu thị nào OK/siêu thị nào đang chờ thử lại', /ST01/.test(attText392) && /ST02/.test(attText392) && /chờ kết nối lại/.test(attText392), attText392);
+    check('notifyDsmartPriceApplyBatch(): body có cảnh báo tóm tắt "có siêu thị lỗi mạng, đang tự thử lại" (không cần mở file mới thấy)', /lỗi mạng/.test(SENT_MAILS[0].text) && /thử lại/.test(SENT_MAILS[0].text), SENT_MAILS[0].text);
+    // (ST01 OK + ST02 lỗi ở trên — cả 2 PHẢI xuất hiện rõ tên trong file đính kèm, không chỉ số lượng)
     check('notifyDsmartPriceApplyBatch(): subject nêu đúng Mã Khách B2B/Mã Sản Phẩm khi chỉ 1 mục', /C1\/S1/.test(SENT_MAILS[0].subject), SENT_MAILS[0].subject);
     check('notifyDsmartPriceApplyBatch(): ghi System Log SUCCESS', SYSTEM_LOGS.some(l => l.actionType === 'NOTIFY_DSMART_PRICE_APPLIED' && l.status === 'SUCCESS'), SYSTEM_LOGS);
+  }
+  {
+    // notifyDsmartPriceApplyBatch() CẢNH BÁO TÓM TẮT "không áp dụng cho siêu thị nào" NGAY TRONG BODY
+    // (12/2026, trả lời THẲNG câu hỏi người dùng thật đã hỏi kèm ảnh email: "tại sao nó lại không áp dụng
+    // ở các siêu thị nào, hay do người chọn à?" — xem buildStoreAnomalySummaryLines(),
+    // lib/dsmartPriceNotify.js) — không cần mở file đính kèm mới thấy có mục bất thường.
+    SENT_MAILS = []; SYSTEM_LOGS = [];
+    await dsmartPriceNotify.notifyDsmartPriceApplyBatch({
+      mode: 'MANUAL', actor: 'BL1646', items: [
+        { custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-12-31', storeResults: [], storeFanOutError: null },
+        { custId: 'C2', skuId: 'S2', price: 200, frDate: '2026-01-01', toDate: '2026-12-31', storeResults: [{ storeId: 1, storeCode: 'ST01', storeName: 'Siêu Thị 1', ok: true }], storeFanOutError: null }
+      ]
+    });
+    check('notifyDsmartPriceApplyBatch(): body cảnh báo RÕ "không đồng bộ xuống siêu thị nào" cho ĐÚNG mục bị (C1/S1), KHÔNG lẫn mục bình thường (C2/S2)', /KHÔNG đồng bộ xuống bất kỳ siêu thị nào/.test(SENT_MAILS[0].text) && /C1\/S1/.test(SENT_MAILS[0].text) && !/C2\/S2/.test(SENT_MAILS[0].text), SENT_MAILS[0].text);
+    check('notifyDsmartPriceApplyBatch(): body nêu rõ đây là do người thao tác tự bỏ chọn, không phải lỗi hệ thống', /BỎ CHỌN/.test(SENT_MAILS[0].text) && /không phải lỗi hệ thống/.test(SENT_MAILS[0].text), SENT_MAILS[0].text);
   }
   {
     SENT_MAILS = []; SYSTEM_LOGS = [];
@@ -408,16 +442,22 @@ async function main() {
     forceSendMailError = false;
   }
   {
-    // Nhiều mục (>MAX_ITEM_LINES=50) -> email vẫn gửi 1 lần, có dòng "... và X mục khác".
+    // Nhiều mục (>MAX_ITEM_LINES=50) -> email vẫn gửi 1 lần, file Excel đính kèm liệt kê ĐỦ cả 55 dòng
+    // (12/2026, KHÔNG còn cắt bớt — MAX_ITEM_LINES giờ chỉ áp dụng cho phần tóm tắt trong body/bản
+    // fallback, xem lib/dsmartPriceNotify.js).
     SENT_MAILS = [];
     const manyItems = Array.from({ length: 55 }, (_, i) => ({ custId: `C${i}`, skuId: `S${i}`, price: 1, frDate: '2026-01-01', toDate: '2026-12-31', storeResults: [], storeFanOutError: null }));
     await dsmartPriceNotify.notifyDsmartPriceApplyBatch({ mode: 'MANUAL', actor: 'it1', items: manyItems });
-    check('notifyDsmartPriceApplyBatch(): 55 mục -> GỘP 1 email duy nhất, có dòng "... và X mục khác"', SENT_MAILS.length === 1 && /và 5 mục khác/.test(SENT_MAILS[0].text), SENT_MAILS[0]?.text);
+    const wb55 = new ExcelJS.Workbook();
+    await wb55.xlsx.load(SENT_MAILS[0]?.attachments?.[0]?.content || Buffer.from(''));
+    const dataRowCount55 = (wb55.worksheets[0]?.rowCount || 0) - 1; // trừ dòng tiêu đề
+    check('notifyDsmartPriceApplyBatch(): 55 mục -> GỘP 1 email duy nhất, file đính kèm có ĐỦ 55 dòng (không cắt bớt)', SENT_MAILS.length === 1 && dataRowCount55 === 55, { dataRowCount55, mail: SENT_MAILS[0] });
   }
   {
     SENT_MAILS = [];
     await dsmartPriceNotify.notifyDsmartPriceRetryBatch({ items: [{ action: 'APPLY', storeCode: 'ST01', storeName: 'Siêu Thị 1', custId: 'CR1', skuId: 'SR1' }] });
-    check('notifyDsmartPriceRetryBatch(): gửi email đồng bộ bổ sung thành công', SENT_MAILS.length === 1 && /ST01/.test(SENT_MAILS[0].text) && /CR1\/SR1/.test(SENT_MAILS[0].text), SENT_MAILS);
+    const attText420 = await readXlsxAttachmentText(SENT_MAILS[0]?.attachments?.[0]);
+    check('notifyDsmartPriceRetryBatch(): gửi email đồng bộ bổ sung thành công, file đính kèm nêu đúng siêu thị/mã', SENT_MAILS.length === 1 && /ST01/.test(attText420) && /CR1/.test(attText420) && /SR1/.test(attText420), { text: SENT_MAILS[0]?.text, attText420 });
   }
   {
     SENT_MAILS = [];
