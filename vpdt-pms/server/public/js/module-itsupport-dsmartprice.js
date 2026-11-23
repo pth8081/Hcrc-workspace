@@ -163,7 +163,7 @@ async function renderDsmartStoreConnList() {
   }
   document.getElementById('dsmartStoreConnBody').innerHTML = _dsmartStoreConnList.map(s => `
     <tr>
-      <td class="p-1.5 font-semibold">${escapeHtml(s.storeCode)}</td>
+      <td class="p-1.5 font-semibold whitespace-nowrap">${escapeHtml(s.storeCode)}</td>
       <td class="p-1.5">${escapeHtml(s.storeName)}</td>
       <td class="p-1.5 text-gray-500">${escapeHtml(s.host)}:${s.port}/${escapeHtml(s.database)}</td>
       <td class="p-1.5"><input type="checkbox" ${s.enabled ? 'checked' : ''} data-op-change="toggleDsmartStoreConnEnabled" data-arg0="${s.id}" data-arg-el="1"></td>
