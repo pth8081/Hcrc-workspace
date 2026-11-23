@@ -682,6 +682,7 @@ async function main() {
     document.getElementById('carDept').value = 'Phòng Kinh Doanh';
     document.getElementById('carType').value = document.getElementById('carType').options[0].value;
     document.getElementById('carPassengers').value = '02 - Lê Thị Kinh Doanh, Khách hàng';
+    document.getElementById('carPassengerCount').value = '2';
     document.getElementById('carPurpose').value = 'Công tác';
     document.getElementById('carKm').value = '120';
     document.getElementById('carStartTime').value = '2026-09-05T08:00';
@@ -708,6 +709,7 @@ async function main() {
     document.getElementById('carDept').value = 'Phòng Kinh Doanh';
     document.getElementById('carType').value = document.getElementById('carType').options[0].value;
     document.getElementById('carPassengers').value = '01';
+    document.getElementById('carPassengerCount').value = '1';
     document.getElementById('carPurpose').value = 'Khác';
     document.getElementById('carKm').value = '80';
     document.getElementById('carStartTime').value = '2026-09-05T10:00'; // chồng lấn với phiếu C1 (08:00-12:00)
@@ -845,6 +847,7 @@ async function main() {
     document.getElementById('carDept').value = 'Phòng Kinh Doanh';
     document.getElementById('carType').value = document.getElementById('carType').options[0].value;
     document.getElementById('carPassengers').value = '01';
+    document.getElementById('carPassengerCount').value = '1';
     document.getElementById('carPurpose').value = 'Công tác';
     document.getElementById('carKm').value = '60';
     document.getElementById('carStartTime').value = '2026-09-06T08:00';
@@ -1261,6 +1264,7 @@ async function main() {
     document.getElementById('carDept').value = 'Phòng Kinh Doanh';
     document.getElementById('carType').value = document.getElementById('carType').options[0].value;
     document.getElementById('carPassengers').value = '01 - Lê Thị Kinh Doanh';
+    document.getElementById('carPassengerCount').value = '1';
     document.getElementById('carPurpose').value = 'Công tác';
     document.getElementById('carKm').value = '50';
     document.getElementById('carStartTime').value = '2026-09-10T08:00';

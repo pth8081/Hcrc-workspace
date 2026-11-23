@@ -584,7 +584,13 @@ function unpublishDoc(user, item) {
 }
 
 // ----- Đăng Ký Xe (carRegs) -----
-const CAR_REG_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'passengers', 'directUser', 'directUserPhone', 'purpose', 'km', 'reason', 'customData'];
+// passengerCount — LỖI THẬT phát hiện ở đợt rà soát chéo 11/2026 (cả agent audit logic lẫn demo Playwright
+// độc lập đều không chạm tới trường hợp này, agent audit đọc code phát hiện ra): field "Số Lượng Người Đi"
+// (bắt buộc lúc TẠO, xem CREATE_MODULE_CONFIGS.carRegs.extraValidate() ở lib/createValidation.js) trước
+// đây KHÔNG nằm trong danh sách sửa được ở luồng "Bổ Sung" (REQUEST_CHANGES -> DRAFT -> sửa lại -> gửi
+// lại, xem editCarRegDraft()/submitCarRegDraft() bên dưới) — người trình nhập sai số lúc tạo không có
+// cách nào sửa lại qua UI/API hiện có. Thêm vào đây cho nhất quán với mọi field bắt buộc khác.
+const CAR_REG_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'passengers', 'passengerCount', 'directUser', 'directUserPhone', 'purpose', 'km', 'reason', 'customData'];
 
 // appData (tuỳ chọn) — xem ghi chú ở editDocDraft().
 function editCarRegDraft(payload, user, item, appData) {
@@ -609,6 +615,11 @@ function editCarRegDraft(payload, user, item, appData) {
     if (payload[f] !== undefined) item[f] = payload[f];
   }
   if (payload.km !== undefined && Number(item.km) < 0) throw new HttpError(400, 'Số KM dự kiến không được là số âm');
+  if (payload.passengerCount !== undefined) {
+    const pc = Number(item.passengerCount);
+    if (!Number.isInteger(pc) || pc < 1) throw new HttpError(400, 'Vui lòng nhập Số Lượng Người Đi (số nguyên ≥ 1)');
+    item.passengerCount = pc;
+  }
   if (payload.startTime !== undefined || payload.endTime !== undefined) {
     if (payload.startTime !== undefined) item.startTime = payload.startTime;
     if (payload.endTime !== undefined) item.endTime = payload.endTime;
@@ -9056,6 +9067,32 @@ function confirmCarDriverAssignment(user, carReg) {
   return carReg;
 }
 
+// "Xác Nhận Đăng Ký" THEO NHÓM (yêu cầu nghiệp vụ 11/2026 — người dùng: "lái xe thì sẽ xác nhận trên
+// group phiếu đúng không?") — khi 1 phiếu thuộc 1 nhóm "Ghép Xe Chung" (tripGroupId, xem combineCarTrips()
+// ở trên), lái xe chỉ cần xác nhận 1 LẦN DUY NHẤT (trên phiếu bất kỳ của nhóm) thay vì phải mở lại từng
+// phiếu để xác nhận riêng lẻ — vì về bản chất đây là CÙNG 1 chuyến đi thật (1 xe, 1 tài xế, cùng khung
+// giờ), xác nhận riêng từng phiếu chỉ gây thao tác thừa. Hàm này nhận itemsById ĐÃ ĐƯỢC KHOÁ (toàn bộ
+// phiếu cùng tripGroupId + cùng assignedDriverUsername với phiếu chính, do caller routes/records.js tự
+// đọc+khoá) — phiếu CHÍNH (primaryId) PHẢI xác nhận được bình thường (throw nếu không, giữ nguyên hành
+// vi cũ của confirmCarDriverAssignment()); các phiếu ĐỒNG HÀNH khác trong nhóm được xác nhận HỘ theo
+// kiểu "cố gắng tốt nhất" (bỏ qua êm, KHÔNG throw) nếu chúng không đủ điều kiện (đã xác nhận trước đó,
+// hoặc không còn ở APPROVED, hoặc (phòng hờ dữ liệu lệch) lỡ khác tài xế) — 1 phiếu đồng hành có vấn đề
+// không được phép chặn xác nhận của CẢ NHÓM.
+function confirmCarDriverAssignmentGroup(user, primaryId, itemsById) {
+  const primary = itemsById.get(primaryId);
+  if (!primary) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+  confirmCarDriverAssignment(user, primary); // throw bình thường nếu phiếu chính không xác nhận được.
+  const confirmedIds = [primary.id];
+  for (const item of itemsById.values()) {
+    if (item.id === primary.id) continue;
+    if (item.status !== 'APPROVED' || item.driverConfirmed) continue; // đã xong/không còn đủ điều kiện — bỏ qua êm.
+    if (!canConfirmCarDriverAssignment(user, item)) continue; // phòng hờ dữ liệu lệch tài xế trong nhóm.
+    confirmCarDriverAssignment(user, item);
+    confirmedIds.push(item.id);
+  }
+  return { itemsById, confirmedIds };
+}
+
 // ===================== ĐĂNG KÝ XE > "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" (người đăng ký) =====
 // 2 bước MỚI sau khi lái xe đã "Xác Nhận Đăng Ký" (confirmCarDriverAssignment ở trên) — trước đây
 // APPROVED là trạng thái CUỐI với xe (chỉ Hủy Chuyến/Đổi Tài Xế-Xe), nay thêm luồng "hoàn thành thật":
@@ -9356,6 +9393,114 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   item.history = item.history || [];
   item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'REASSIGNED', comment: String(payload?.comment || '').trim(), time: nowVN(), ...extraSnapshot });
   return item;
+}
+
+// "Ghép Xe Chung" (yêu cầu nghiệp vụ 11/2026 — người dùng phát hiện qua lỗi thật production "Biển số đã
+// được gán cho 1 chuyến khác trùng khung giờ": "nếu đã xe đk trước rồi mình sẽ cần kt số người đi ... khi
+// người điều hành thấy ít có thể có nút ghép xe chung"). Người Điều Hành Xe CHỦ Ý gán CÙNG 1 xe/tài xế
+// cho NHIỀU phiếu carRegs KHÁC NHAU (vd nhiều chuyến cùng lộ trình/khung giờ nhưng mỗi phiếu đăng ký ít
+// người, dồn chung 1 xe tiết kiệm) — khác HẲN findCarPlateConflict()/findCarDriverConflict() (lib/
+// workflowEngine.js) vốn CHẶN CỨNG đúng tình huống trùng này vì mặc định đó là trùng NHẦM, không phải
+// chủ ý. Thiết kế thành 1 HÀNH ĐỘNG ĐỘC LẬP, hoàn toàn tách khỏi applyWorkflowAction()/
+// reassignCarDispatch() ở trên (KHÔNG sửa logic/điều kiện của 2 hàm đó) — chỉ làm phần GÁN xe/tài xế,
+// không đổi bước duyệt (status PENDING vẫn giữ PENDING, APPROVED/IN_PROGRESS giữ nguyên trừ việc đưa
+// IN_PROGRESS->APPROVED khi đổi tài xế, mirror đúng reassignCarDispatch()) — người dùng vẫn Duyệt/Từ chối
+// bình thường qua nút sẵn có sau khi đã ghép.
+//
+// MÔ HÌNH NHÓM (tripGroupId, thay cho combinedWithCarRegId 1-1 ban đầu — đổi theo yêu cầu người dùng
+// 11/2026 "vẫn cho in 2 phiếu với 2 phòng đăng ký 1 xe trong 1 group ghép" + "báo cáo thể hiện những
+// phòng nào đi cùng chuyến xe đó" + "lái xe xác nhận trên group phiếu" — cả 3 đều cần khái niệm NHÓM
+// thật (N phiếu dùng chung 1 xe), không chỉ liên kết từng cặp): mọi phiếu trong cùng 1 nhóm mang CÙNG
+// 1 `tripGroupId` = chuỗi id NHỎ NHẤT trong nhóm (tự tính lại mỗi lần ghép, KHÔNG cần sinh uuid riêng —
+// id là BIGINT identity tăng dần nên luôn ổn định/duy nhất). Ghép 1 phiếu MỚI vào 1 nhóm đã có coi như
+// HỢP NHẤT (union) nhóm cũ của phiếu A với nhóm cũ của phiếu B (nếu có) thành 1 nhóm lớn hơn, rồi gán
+// LẠI tripGroupId mới (= id nhỏ nhất của nhóm hợp nhất) cho MỌI thành viên — vá đúng lỗ hổng "rác liên
+// kết 1 chiều" mà đợt audit chéo 11/2026 phát hiện ở bản combinedWithCarRegId cũ (ghép lại A với C sau
+// khi A đã ghép với B thì B bị "bỏ lại" với link cũ trỏ sai) — ở mô hình nhóm, MỌI thành viên nhóm luôn
+// được ghi LẠI trong CÙNG 1 lệnh gọi (caller phải khoá+truyền đủ `itemsById` của TOÀN BỘ nhóm hợp nhất,
+// xem routes/records.js), không còn thành viên nào "mồ côi".
+//
+// idA/idB: 2 phiếu người dùng THẬT SỰ chọn ở picker (quyết định quyền/trạng thái/payload gán xe) —
+// itemsById: Map<id, record> của TOÀN BỘ nhóm hợp nhất ĐÃ ĐƯỢC KHOÁ (gồm A, B, và mọi thành viên nhóm cũ
+// của A/B nếu có), do caller (routes/records.js) tự đọc existingCarRegs + tính toán rồi khoá qua
+// withLockedDedicatedRecordsByIds('carRegs', [...idsHợpNhất], ...) TRƯỚC khi gọi hàm này — hàm này CHỈ
+// sửa các object bên trong itemsById, KHÔNG tự đọc/khoá DB, KHÔNG tự lưu.
+// Gọi findCarPlateConflict()/findCarDriverConflict() với DANH SÁCH ĐÃ LOẠI BỎ TOÀN BỘ thành viên nhóm
+// (không chỉ idA/idB) để vẫn chặn đè nhầm lên 1 phiếu THỨ 3 không liên quan — chỉ bỏ qua đúng xung đột
+// GIỮA các phiếu CÙNG nhóm đang ghép.
+function combineCarTrips(user, idA, idB, itemsById, payload, existingCarRegs, users, carVehicleTypes, carTaxiCompanies) {
+  if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
+    throw new HttpError(403, 'Bạn không có quyền ghép xe chung (cần quyền Người Điều Hành Xe)');
+  }
+  if (idA === idB) throw new HttpError(400, 'Không thể ghép 1 phiếu với chính nó');
+  const itemA = itemsById.get(idA);
+  const itemB = itemsById.get(idB);
+  if (!itemA || !itemB) throw new HttpError(404, 'Không tìm thấy 1 trong 2 hồ sơ');
+  const groupItems = [...itemsById.values()];
+  const groupIds = new Set(itemsById.keys());
+  const activeStatuses = ['PENDING', 'APPROVED', 'IN_PROGRESS'];
+  for (const it of groupItems) {
+    if (!activeStatuses.includes(it.status)) {
+      throw new HttpError(409, `Phiếu "${it.code || it.id}" không ở trạng thái đang xử lý (có thể đã hủy/kết thúc chuyến) — không thể ghép xe chung`);
+    }
+  }
+  const { findCarPlateConflict, findCarDriverConflict, assertValidCarAssignmentCatalogs } = require('./workflowEngine'); // require trễ, cùng lý do ở reassignCarDispatch() ngay trên.
+  assertValidCarAssignmentCatalogs(payload, carVehicleTypes, carTaxiCompanies, HttpError);
+  const assignedVehicleType = String(payload?.assignedVehicleType || '').trim();
+  if (!assignedVehicleType) throw new HttpError(400, 'Vui lòng chọn Loại Xe Cụ Thể');
+  const newPlate = String(payload?.assignedPlate || '').trim();
+  const assignedTaxiCompany = String(payload?.assignedTaxiCompany || '').trim();
+  const assignedDriverUsername = String(payload?.assignedDriverUsername || '').trim();
+  const matchedType = (carVehicleTypes || []).find(t => t.name === assignedVehicleType);
+  const isTaxi = !!matchedType?.isTaxi;
+  if (!isTaxi && !newPlate) throw new HttpError(400, 'Vui lòng nhập Biển Số Xe');
+  // Loại khỏi danh sách đối chiếu trùng TOÀN BỘ thành viên nhóm đang ghép — chỉ còn kiểm tra với các
+  // phiếu KHÁC nhóm.
+  const otherExisting = (existingCarRegs || []).filter(c => !groupIds.has(c.id));
+  let driverUser = null;
+  if (!isTaxi && newPlate) {
+    const conflict = groupItems.find(it => findCarPlateConflict(otherExisting, it.id, newPlate, it.startTime, it.endTime));
+    if (conflict) throw new HttpError(409, `Biển số "${newPlate}" đã được gán cho 1 chuyến khác trùng khung giờ này`);
+  }
+  if (!isTaxi && assignedDriverUsername) {
+    driverUser = (users || []).find(u => u.username === assignedDriverUsername && u.active !== false);
+    if (!driverUser) throw new HttpError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+    const driverConflict = groupItems.find(it => findCarDriverConflict(otherExisting, it.id, driverUser.username, it.startTime, it.endTime));
+    if (driverConflict) throw new HttpError(409, `Tài xế "${driverUser.name}" đã được phân công cho 1 chuyến khác trùng khung giờ này`);
+  }
+  const comment = String(payload?.comment || '').trim();
+  // Nhóm mới = id NHỎ NHẤT trong toàn bộ nhóm hợp nhất — ổn định (id chỉ tăng, không đổi lại nếu sau
+  // này ghép thêm thành viên có id lớn hơn), không cần sinh uuid riêng.
+  const newTripGroupId = String(Math.min(...groupIds));
+  const memberCodes = groupItems.map(it => it.code);
+  groupItems.forEach(item => {
+    item.assignedVehicleType = assignedVehicleType;
+    if (isTaxi) {
+      item.assignedPlate = '';
+      item.assignedTaxiCompany = assignedTaxiCompany;
+      item.assignedDriverUsername = '';
+      item.assignedDriver = '';
+    } else {
+      item.assignedPlate = newPlate;
+      item.assignedTaxiCompany = '';
+      if (driverUser) {
+        item.assignedDriverUsername = driverUser.username;
+        item.assignedDriver = driverUser.name;
+      }
+    }
+    if (item.driverConfirmed) { item.driverConfirmed = false; item.driverConfirmedAt = null; }
+    if (item.status === 'IN_PROGRESS') item.status = 'APPROVED';
+    item.tripGroupId = newTripGroupId;
+    item.history = item.history || [];
+    item.history.push({
+      step: item.currentStep || 0, approver: user.name, username: user.username, action: 'COMBINED',
+      comment, time: nowVN(), tripGroupId: newTripGroupId,
+      combinedWithCodes: memberCodes.filter(c => c !== item.code),
+      assignedPlate: item.assignedPlate, assignedDriverUsername: item.assignedDriverUsername,
+      assignedDriver: item.assignedDriver, assignedVehicleType: item.assignedVehicleType, assignedTaxiCompany: item.assignedTaxiCompany
+    });
+  });
+  return itemsById;
 }
 
 // "Đổi Lộ Trình" (yêu cầu nghiệp vụ 10/2026): CHÍNH người đăng ký (creator) hoặc admin chủ động đổi Lộ
@@ -9777,9 +9922,9 @@ module.exports = {
   updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
   recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,
   reopenBudgetLineAfterUsedParentDeleted,
-  canConfirmCarDriverAssignment, confirmCarDriverAssignment,
+  canConfirmCarDriverAssignment, confirmCarDriverAssignment, confirmCarDriverAssignmentGroup,
   canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip, isTaxiCarReg,
-  canCancelCarReg, cancelCarReg, reassignCarDispatch, canChangeCarRegRoute, changeCarRegRoute,
+  canCancelCarReg, cancelCarReg, reassignCarDispatch, combineCarTrips, canChangeCarRegRoute, changeCarRegRoute,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canCancelLicense, cancelLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,

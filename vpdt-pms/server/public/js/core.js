@@ -772,6 +772,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'carDept', label: 'Đơn Vị (Phòng/Ban/Bộ phận)', required: true },
     { id: 'carType', label: 'Đăng Ký Sử Dụng Loại Xe', required: true, optionsKey: 'carTypes' },
     { id: 'carPassengers', label: 'Số Người Sử Dụng', required: true },
+    { id: 'carPassengerCount', label: 'Số Lượng Người Đi (SL)', required: true },
     { id: 'carDirectUser', label: 'Người Sử Dụng Trực Tiếp', required: false },
     { id: 'carDirectUserPhone', label: 'SĐT Người Sử Dụng Trực Tiếp', required: false },
     // carPurpose: TRƯỚC ĐÂY <option> gõ cứng (mỗi lựa chọn kèm ghi chú "(đính kèm...)"), giờ optionsKey
@@ -7094,6 +7095,24 @@ async function callCreatePaymentRequestFromSource(payload) {
   return body; // { ok, item, paymentRequest }
 }
 
+// "Ghép Xe Chung" (Đăng Ký Xe, 11/2026) — gán CÙNG 1 xe/tài xế cho 2 phiếu carRegs (idA/idB) trong CÙNG
+// 1 request, khớp POST /api/records/carRegs/combine (combineCarTrips() ở lib/recordActions.js). Không
+// dùng callRecordAction() (khuôn module/id/action trên 1 bản ghi) vì route này ghi ĐỒNG THỜI 2 bản ghi.
+async function callCombineCarTrips(payload) {
+  const res = await fetch('/api/records/carRegs/combine', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, itemA, itemB }
+}
+
 // Bước 4: tạo mới Biên bản họp/Công việc — khác callRecordAction() (không thao tác trên 1 id có sẵn).
 async function callRecordCreate(module, payload) {
   const res = await fetch(`/api/records/${module}`, {
@@ -8985,6 +9004,7 @@ function openBosungEditModal(moduleKey, id) {
         <div><label class="block font-semibold mb-1">Kết thúc</label><input type="datetime-local" id="bsEndTime" class="w-full border p-2 rounded" value="${escapeHtml(item.endTime || '')}"></div>
       </div>
       <div><label class="block font-semibold mb-1">Số người sử dụng</label><input id="bsPassengers" class="w-full border p-2 rounded" value="${escapeHtml(item.passengers || '')}"></div>
+      <div><label class="block font-semibold mb-1">Số Lượng Người Đi (SL)</label><input type="number" min="1" step="1" id="bsPassengerCount" class="w-full border p-2 rounded" value="${Number.isFinite(item.passengerCount) ? item.passengerCount : ''}"></div>
       <div><label class="block font-semibold mb-1">Người sử dụng trực tiếp</label><input id="bsDirectUser" class="w-full border p-2 rounded" value="${escapeHtml(item.directUser || '')}"></div>
       <div><label class="block font-semibold mb-1">Mục đích sử dụng</label><input id="bsPurpose" class="w-full border p-2 rounded" value="${escapeHtml(item.purpose || '')}"></div>
       <div><label class="block font-semibold mb-1">Số KM dự kiến</label><input type="number" id="bsKm" class="w-full border p-2 rounded" value="${item.km || 0}"></div>
@@ -9071,6 +9091,10 @@ async function confirmBosungResubmit() {
         startTime: document.getElementById('bsStartTime').value,
         endTime: document.getElementById('bsEndTime').value,
         passengers: document.getElementById('bsPassengers').value.trim(),
+        // undefined (không phải NaN/null) khi để trống -> JSON.stringify tự bỏ field này, server coi là
+        // "không đổi" (editCarRegDraft() chỉ validate khi payload.passengerCount !== undefined) — tránh
+        // chặn oan việc Bổ Sung của phiếu CŨ (tạo trước khi có field này, ô trống sẵn trong modal).
+        passengerCount: document.getElementById('bsPassengerCount').value.trim() ? parseInt(document.getElementById('bsPassengerCount').value, 10) : undefined,
         directUser: document.getElementById('bsDirectUser').value.trim(),
         purpose: document.getElementById('bsPurpose').value.trim(),
         km: parseFloat(document.getElementById('bsKm').value) || 0,
@@ -13792,6 +13816,16 @@ function buildCarApprovalSlipHTML(car) {
       <tr><td class="as-label">Loại xe cụ thể:</td><td>${escapeHtml(car.assignedVehicleType || '')}</td></tr>
       ${car.assignedTaxiCompany ? `<tr><td class="as-label">Hãng Taxi:</td><td>${escapeHtml(car.assignedTaxiCompany)}</td></tr>` : `<tr><td class="as-label">Biển kiểm soát (BKS):</td><td>${escapeHtml(car.assignedPlate || car.plate || '')}</td></tr>`}
     </table>
+
+    ${car.tripGroupId ? (() => {
+      const siblings = (DB.carRegs || []).filter(x => x.id !== car.id && x.tripGroupId === car.tripGroupId);
+      if (!siblings.length) return '';
+      return `
+    <div class="as-section-title">Ghép Xe Chung</div>
+    <table class="as-field-table">
+      <tr><td class="as-label">Ghép chung chuyến với:</td><td>${siblings.map(x => `${escapeHtml(x.code)} — ${escapeHtml(x.dept)} (${escapeHtml(x.creatorName)})`).join('; ')}</td></tr>
+    </table>`;
+    })() : ''}
 
     ${car.tripEndedAt ? `
     <div class="as-section-title">Kết Thúc Chuyến / Đánh Giá</div>
