@@ -1319,14 +1319,24 @@ router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carR
 // Lái xe được phân công (assignedDriverUsername, gán lúc duyệt — xem routes/workflow.js) tự xác nhận
 // đúng chuyến của mình ở sub-tab "Lái Xe" — chỉ đúng tài khoản được gán mới gọi được (kiểm tra trong
 // confirmCarDriverAssignment()), không cần quyền admin/carView riêng gì thêm.
+// Xác nhận THEO NHÓM (11/2026, xem confirmCarDriverAssignmentGroup() ở lib/recordActions.js): nếu phiếu
+// thuộc 1 nhóm "Ghép Xe Chung" (tripGroupId), khoá+xác nhận LUÔN mọi phiếu khác cùng nhóm + cùng tài xế
+// trong CÙNG giao dịch — đọc existingCarRegs TRƯỚC chỉ để xác định TẬP id cần khoá (mọi kiểm tra thật
+// chạy lại dưới khoá, cùng khuôn route /carRegs/combine ngay trên).
 router.post('/carRegs/:id/confirm-driver', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.confirmCarDriverAssignment(freshUser, item));
-    res.json({ ok: true, item: result });
+    const existingCarRegs = await getAllForCollection('carRegs');
+    const peek = existingCarRegs.find(c => c.id === itemId);
+    if (!peek) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
+    const groupIds = peek.tripGroupId
+      ? existingCarRegs.filter(c => c.tripGroupId === peek.tripGroupId && c.assignedDriverUsername === peek.assignedDriverUsername).map(c => c.id)
+      : [itemId];
+    const resultById = await withLockedDedicatedRecordsByIds('carRegs', groupIds, (itemsById) =>
+      recordActions.confirmCarDriverAssignmentGroup(freshUser, itemId, itemsById).itemsById);
+    res.json({ ok: true, item: resultById.get(itemId), items: [...resultById.values()] });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/confirm-driver`, err);
   }
@@ -1434,12 +1444,15 @@ router.post('/carRegs/:id/reassign', async (req, res) => {
 });
 
 // "Ghép Xe Chung" (yêu cầu nghiệp vụ 11/2026 — xem combineCarTrips() ở lib/recordActions.js) — CHỈ Người
-// Điều Hành Xe (carDispatch)/admin, GÁN CÙNG 1 xe/tài xế cho 2 phiếu carRegs (idA/idB) KHÁC NHAU trong
-// CÙNG 1 request. Không dùng khuôn /carRegs/:id/<action> thường (1 bản ghi) vì cần ghi NHẤT QUÁN 2 bản
-// ghi cùng lúc — withLockedDedicatedRecordsByIds() (lib/recordStore.js) khoá+ghi CẢ 2 trong 1 transaction,
-// tránh half-commit nếu dòng sau lỗi giữa chừng. Khoá thêm theo GIÁ TRỊ biển số/tài xế SẮP GÁN (mirror
-// đúng khuôn race-condition đã vá ở /carRegs/:id/reassign ngay trên) vì đọc existingCarRegs để kiểm tra
-// trùng với phiếu THỨ 3 vẫn chạy TRƯỚC khi khoá 2 dòng đang ghép.
+// Điều Hành Xe (carDispatch)/admin, GÁN CÙNG 1 xe/tài xế cho phiếu carRegs idA + idB KHÁC NHAU trong
+// CÙNG 1 request. Mô hình NHÓM (tripGroupId, xem chú thích đầy đủ tại combineCarTrips()): nếu A hoặc B
+// ĐÃ thuộc 1 nhóm ghép khác từ trước, phải HỢP NHẤT (ghi lại) TOÀN BỘ thành viên của (các) nhóm cũ đó
+// trong CÙNG giao dịch này — không chỉ 2 bản ghi A/B — nếu không sẽ để sót thành viên "mồ côi" (đúng lỗ
+// hổng đợt audit chéo 11/2026 phát hiện ở bản 1-1 trước đây). Đọc existingCarRegs TRƯỚC (chỉ để xác định
+// TẬP id cần khoá — mọi kiểm tra nghiệp vụ thật chạy LẠI bên trong, dưới khoá, cùng khuôn mọi route
+// carRegs khác), rồi khoá+ghi ĐỒNG THỜI toàn bộ tập đó qua withLockedDedicatedRecordsByIds() (lib/
+// recordStore.js), tránh half-commit. Khoá thêm theo GIÁ TRỊ biển số/tài xế SẮP GÁN (mirror đúng khuôn
+// race-condition đã vá ở /carRegs/:id/reassign ngay trên).
 router.post('/carRegs/combine', async (req, res) => {
   const idA = Number(req.body?.idA);
   const idB = Number(req.body?.idB);
@@ -1453,18 +1466,23 @@ router.post('/carRegs/combine', async (req, res) => {
     if (newDriverUsername) lockKeys.push(`car_driver:${newDriverUsername}`);
     const runCombine = async () => {
       const existingCarRegs = await getAllForCollection('carRegs');
+      const peekA = existingCarRegs.find(c => c.id === idA);
+      const peekB = existingCarRegs.find(c => c.id === idB);
+      if (!peekA || !peekB) throw new HttpError(404, 'Không tìm thấy 1 trong 2 hồ sơ');
+      const groupIdsToLock = new Set([idA, idB]);
+      for (const c of existingCarRegs) {
+        if ((peekA.tripGroupId && c.tripGroupId === peekA.tripGroupId) || (peekB.tripGroupId && c.tripGroupId === peekB.tripGroupId)) {
+          groupIdsToLock.add(c.id);
+        }
+      }
       const [carVehicleTypes, carTaxiCompanies] = await Promise.all([
         getAppDataValue('carVehicleTypes'), getAppDataValue('carTaxiCompanies')
       ]);
-      return withLockedDedicatedRecordsByIds('carRegs', [idA, idB], (itemsById) => {
-        const itemA = itemsById.get(idA);
-        const itemB = itemsById.get(idB);
-        recordActions.combineCarTrips(freshUser, itemA, itemB, req.body || {}, existingCarRegs, users, carVehicleTypes, carTaxiCompanies);
-        return itemsById;
-      });
+      return withLockedDedicatedRecordsByIds('carRegs', [...groupIdsToLock], (itemsById) =>
+        recordActions.combineCarTrips(freshUser, idA, idB, itemsById, req.body || {}, existingCarRegs, users, carVehicleTypes, carTaxiCompanies));
     };
     const resultById = lockKeys.length ? await withAppLock(lockKeys, runCombine) : await runCombine();
-    res.json({ ok: true, itemA: resultById.get(idA), itemB: resultById.get(idB) });
+    res.json({ ok: true, items: [...resultById.values()] });
   } catch (err) {
     handleError(res, 'carRegs/combine', err);
   }

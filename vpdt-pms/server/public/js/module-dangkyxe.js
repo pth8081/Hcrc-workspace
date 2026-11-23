@@ -602,9 +602,16 @@ function confirmCarDriverAssignmentAction(carId) {
       try {
         result = await callRecordAction('carRegs', carId, 'confirm-driver', {});
       } catch (err) { return alert(`⛔ ${err.message}`); }
-      const idx = DB.carRegs.findIndex(x => x.id === carId);
-      if (idx !== -1) DB.carRegs[idx] = result.item;
-      logSystemAction('CAR', 'CONFIRM_DRIVER', `Lái xe xác nhận đăng ký [${result.item.code}]`, 'SUCCESS', result.item.code);
+      // Xác nhận THEO NHÓM (11/2026) — server có thể trả thêm "items" (mọi phiếu cùng tripGroupId +
+      // cùng tài xế được xác nhận HỘ trong cùng lượt, xem confirmCarDriverAssignmentGroup() ở lib/
+      // recordActions.js), không chỉ đúng 1 phiếu vừa bấm — cập nhật lại CẢ NHÓM trong DB.carRegs.
+      const updatedItems = Array.isArray(result.items) && result.items.length ? result.items : [result.item];
+      updatedItems.forEach(it => {
+        const idx = DB.carRegs.findIndex(x => x.id === it.id);
+        if (idx !== -1) DB.carRegs[idx] = it;
+      });
+      const groupNote = updatedItems.length > 1 ? ` (đã tự xác nhận luôn ${updatedItems.length - 1} phiếu khác cùng nhóm ghép xe)` : '';
+      logSystemAction('CAR', 'CONFIRM_DRIVER', `Lái xe xác nhận đăng ký [${result.item.code}]${groupNote}`, 'SUCCESS', result.item.code);
       renderCarDriverTab();
     }
   });
@@ -742,10 +749,20 @@ function confirmCarReassign() {
 // nhưng mỗi phiếu đăng ký ÍT NGƯỜI (xem #carPassengerCount), chủ động CHỌN 1 chuyến khác để gán CÙNG 1
 // xe/tài xế — khớp combineCarTrips() (lib/recordActions.js) qua POST /api/records/carRegs/combine.
 // KHÔNG lọc cứng theo lộ trình/khung giờ trùng nhau (dispatcher tự xem thực tế có hợp lý để ghép không,
-// VD 2 chuyến khác khung giờ nhưng đi cùng tuyến vẫn có thể muốn ghép) — chỉ loại chính phiếu đang xử lý
-// và các phiếu đã kết thúc/hủy (findCombinableCarTripCandidates()).
+// VD 2 chuyến khác khung giờ nhưng đi cùng tuyến vẫn có thể muốn ghép) — chỉ loại chính phiếu đang xử lý,
+// các phiếu ĐÃ cùng nhóm với nó (tripGroupId, không cần ghép lại) và các phiếu đã kết thúc/hủy.
 function findCombinableCarTripCandidates(carId) {
-  return (DB.carRegs || []).filter(x => x.id !== carId && ['PENDING', 'APPROVED', 'IN_PROGRESS'].includes(x.status));
+  const current = (DB.carRegs || []).find(x => x.id === carId);
+  return (DB.carRegs || []).filter(x => x.id !== carId
+    && ['PENDING', 'APPROVED', 'IN_PROGRESS'].includes(x.status)
+    && !(current?.tripGroupId && x.tripGroupId === current.tripGroupId));
+}
+
+// Danh sách phiếu khác CÙNG NHÓM (tripGroupId) với phiếu đang xem — dùng cho badge hiển thị ở
+// openCarProcessModal()/buildCarApprovalSlipHTML() (core.js).
+function findCarGroupSiblings(c) {
+  if (!c?.tripGroupId) return [];
+  return (DB.carRegs || []).filter(x => x.id !== c.id && x.tripGroupId === c.tripGroupId);
 }
 
 function openCombineCarModal() {
@@ -763,7 +780,7 @@ function openCombineCarModal() {
         <b>${escapeHtml(x.code)}</b> — ${escapeHtml(x.dept)} (${escapeHtml(x.creatorName)})<br>
         🧭 ${escapeHtml(x.destination)}<br>
         🕐 ${escapeHtml(x.startTime)} ➔ ${escapeHtml(x.endTime)} | 👥 SL: ${Number.isFinite(x.passengerCount) ? x.passengerCount : '?'} người
-        ${x.combinedWithCarRegId ? `<br><span class="text-amber-600">⚠️ Phiếu này đã đang ghép với 1 chuyến khác (#${escapeHtml(String(x.combinedWithCarRegId))}) — chọn vẫn được, sẽ ghép lại theo lựa chọn mới</span>` : ''}
+        ${x.tripGroupId ? `<br><span class="text-amber-600">⚠️ Phiếu này đang ở 1 nhóm ghép khác (${findCarGroupSiblings(x).length + 1} phiếu) — chọn vẫn được, CẢ NHÓM sẽ nhập chung với nhóm hiện tại</span>` : ''}
       </span>
     </label>
   `).join('');
@@ -797,21 +814,27 @@ function confirmCombineCarTrips(otherId) {
   const assignedTaxiCompany = document.getElementById('carAssignedTaxiCompany').value.trim();
   const comment = document.getElementById('txtCarComment').value.trim();
   if (!assignedVehicleType) return alert('Vui lòng chọn Loại Xe Cụ Thể trước khi ghép xe chung!');
+  // Nếu A hoặc B đã thuộc 1 nhóm ghép khác từ trước, server sẽ HỢP NHẤT toàn bộ nhóm đó — liệt kê rõ
+  // TOÀN BỘ phiếu sẽ bị ảnh hưởng (không chỉ 2 phiếu vừa chọn) để dispatcher biết trước khi xác nhận.
+  const groupPreview = [c, ...findCarGroupSiblings(c), other, ...findCarGroupSiblings(other)]
+    .filter((x, idx, arr) => arr.findIndex(y => y.id === x.id) === idx); // khử trùng (VD A/B đã cùng nhóm với nhau).
+  const previewListHTML = groupPreview.map(x => `<li><b>${escapeHtml(x.code)}</b> — ${escapeHtml(x.destination)}</li>`).join('');
   showConfirmModal({
     title: '🔗 Xác Nhận Ghép Xe Chung',
-    bodyHTML: `<p>Gán CÙNG 1 xe/tài xế cho <b>CẢ 2</b> chuyến:</p><ul class="list-disc pl-5 mt-1"><li><b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.destination)}</li><li><b>${escapeHtml(other.code)}</b> — ${escapeHtml(other.destination)}</li></ul><p class="mt-2 text-amber-700">Thao tác này sẽ GHI ĐÈ xe/tài xế hiện có (nếu có) của cả 2 chuyến.</p>`,
+    bodyHTML: `<p>Gán CÙNG 1 xe/tài xế cho <b>${groupPreview.length}</b> chuyến:</p><ul class="list-disc pl-5 mt-1">${previewListHTML}</ul><p class="mt-2 text-amber-700">Thao tác này sẽ GHI ĐÈ xe/tài xế hiện có (nếu có) của toàn bộ các chuyến trên.</p>`,
     confirmLabel: 'Ghép Xe Chung',
     onConfirm: async () => {
       let result;
       try {
         result = await callCombineCarTrips({ idA: c.id, idB: other.id, assignedDriverUsername, assignedVehicleType, assignedPlate, assignedTaxiCompany, comment });
       } catch (err) { return alert(`⛔ ${err.message}`); }
-      const idxA = DB.carRegs.findIndex(x => x.id === c.id);
-      if (idxA !== -1) DB.carRegs[idxA] = result.itemA;
-      const idxB = DB.carRegs.findIndex(x => x.id === other.id);
-      if (idxB !== -1) DB.carRegs[idxB] = result.itemB;
-      logSystemAction('CAR', 'COMBINE', `Ghép xe chung giữa phiếu [${result.itemA.code}] và [${result.itemB.code}]`, 'SUCCESS', result.itemA.code);
-      alert('✅ Đã ghép xe chung cho cả 2 chuyến!');
+      const items = Array.isArray(result.items) ? result.items : [];
+      items.forEach(it => {
+        const idx = DB.carRegs.findIndex(x => x.id === it.id);
+        if (idx !== -1) DB.carRegs[idx] = it;
+      });
+      logSystemAction('CAR', 'COMBINE', `Ghép xe chung ${items.length} phiếu (gồm [${c.code}] và [${other.code}])`, 'SUCCESS', c.code);
+      alert(`✅ Đã ghép xe chung cho ${items.length} chuyến!`);
       closeCarProcessModal();
       renderCarRegs();
     }
@@ -1491,10 +1514,7 @@ function openCarProcessModal(carId) {
       <div><b>Mục đích sử dụng:</b> ${escapeHtml(c.purpose || '')}</div>
       <div><b>Thời gian sử dụng:</b> ${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</div>
       <div class="col-span-2"><b>Nội dung chi tiết:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(c.reason)}</p></div>
-      ${c.combinedWithCarRegId ? (() => {
-        const combinedWith = DB.carRegs.find(x => x.id === c.combinedWithCarRegId);
-        return `<div class="col-span-2 text-indigo-700 bg-indigo-50 border border-indigo-200 rounded p-1.5">🔗 Đã ghép xe chung với phiếu <b>${escapeHtml(combinedWith ? combinedWith.code : ('#' + c.combinedWithCarRegId))}</b>${combinedWith ? ` — ${escapeHtml(combinedWith.destination)}` : ''}</div>`;
-      })() : ''}
+      ${c.tripGroupId && findCarGroupSiblings(c).length ? `<div class="col-span-2 text-indigo-700 bg-indigo-50 border border-indigo-200 rounded p-1.5">🔗 Đã ghép xe chung với ${findCarGroupSiblings(c).length} phiếu khác: ${findCarGroupSiblings(c).map(x => `<b>${escapeHtml(x.code)}</b> (${escapeHtml(x.dept)})`).join(', ')}</div>` : ''}
     </div>
   `;
   document.getElementById('carModalDetails').innerHTML = detailsHTML;
@@ -1713,6 +1733,45 @@ async function processCarReg(actionType) {
 // module-phonghop.js) — viết lại 1 bản thanh tỷ lệ ngang RIÊNG (buildCarReportBarHTML()) vì nhóm tải
 // module "dangkyxe" KHÔNG có dependency lên nhóm "phonghop" (xem MODULE_LOAD_GROUPS ở core.js).
 // ==========================================
+// "Xe Ghép Chuyến" (11/2026, yêu cầu nghiệp vụ — xem chú thích tại #carReportGroupTripsBody,
+// carSection.html): gom các phiếu ĐANG LỌC (theo ngày đi, cùng bộ lọc với mọi bảng khác ở tab Báo Cáo)
+// theo tripGroupId (gán lúc "Ghép Xe Chung", xem combineCarTrips() ở lib/recordActions.js) — mỗi nhóm
+// hiện xe/tài xế dùng chung + khung giờ + danh sách phòng ban/phiếu đi cùng chuyến đó. CHỈ hiện nhóm có
+// >= 2 phiếu NẰM TRONG khoảng lọc hiện tại (1 phiếu đơn lẻ dù có tripGroupId nhưng phiếu cùng nhóm bị
+// lọc ra ngoài khoảng ngày thì không còn ý nghĩa hiển thị "ghép chuyến" ở đúng bảng này).
+function renderCarReportGroupTripsTable(filteredCarRegs) {
+  const bodyEl = document.getElementById('carReportGroupTripsBody');
+  const emptyEl = document.getElementById('carReportGroupTripsEmpty');
+  if (!bodyEl) return;
+  const byGroup = {};
+  filteredCarRegs.forEach(c => {
+    if (!c.tripGroupId) return;
+    (byGroup[c.tripGroupId] = byGroup[c.tripGroupId] || []).push(c);
+  });
+  const groups = Object.entries(byGroup)
+    .filter(([, members]) => members.length >= 2)
+    .map(([groupId, members]) => ({ groupId, members: members.slice().sort((a, b) => (a.startTime || '').localeCompare(b.startTime || '')) }))
+    .sort((a, b) => (b.members[0]?.startTime || '').localeCompare(a.members[0]?.startTime || ''));
+  if (emptyEl) emptyEl.classList.toggle('hidden', groups.length > 0);
+  bodyEl.innerHTML = groups.map(({ members }) => {
+    const first = members[0];
+    const vehicleLabel = first.assignedTaxiCompany
+      ? `Taxi ${escapeHtml(first.assignedTaxiCompany)}`
+      : `${escapeHtml(first.assignedVehicleType || '')} — ${escapeHtml(first.assignedPlate || '(chưa gán biển số)')}`;
+    const driverLabel = first.assignedDriver ? ` | 🧑‍✈️ ${escapeHtml(first.assignedDriver)}` : '';
+    const depts = [...new Set(members.map(m => m.dept))];
+    const memberListHTML = members.map(m => `<b>${escapeHtml(m.code)}</b> (${escapeHtml(m.dept)} — ${escapeHtml(m.creatorName)})`).join('; ');
+    return `
+      <tr class="border-t align-top">
+        <td class="p-1.5 font-semibold">${vehicleLabel}${driverLabel}</td>
+        <td class="p-1.5 whitespace-nowrap">${escapeHtml(first.startTime)} ➔ ${escapeHtml(members[members.length - 1].endTime)}</td>
+        <td class="p-1.5 text-center font-bold">${depts.length}</td>
+        <td class="p-1.5">${memberListHTML}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function buildCarReportBarHTML(label, value, max, colorClass) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return `
@@ -1898,6 +1957,8 @@ function renderCarReportTab() {
   const trendBuckets = groupCarRegsByPeriod(approved, carReportGranularity);
   const trendEl = document.getElementById('carReportTrendChart');
   if (trendEl) trendEl.innerHTML = renderCarReportTrendStats(trendBuckets);
+
+  renderCarReportGroupTripsTable(filtered);
 
   // Lịch Sử Đánh Giá Chuyến — người ĐĂNG KÝ xác nhận sau khi lái xe kết thúc (evaluatedBy/evaluatedAt/
   // evaluationComment/actualKm, xem evaluateCarTrip() ở lib/recordActions.js) — dữ liệu đã có sẵn từ

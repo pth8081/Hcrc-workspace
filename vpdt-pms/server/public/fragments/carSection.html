@@ -243,6 +243,23 @@
         <div id="carReportTrendPills" class="flex flex-wrap gap-1.5"></div>
         <div id="carReportTrendChart" class="overflow-x-auto pt-2"></div>
       </div>
+      <!-- "Xe Ghép Chuyến" (11/2026, yêu cầu người dùng: "báo cáo sẽ có thêm báo cáo về xe ghép chuyến
+           và thể hiện những phòng nào đi cùng chuyến xe đó") — liệt kê từng NHÓM (tripGroupId, xem
+           combineCarTrips() ở lib/recordActions.js) + toàn bộ phiếu/phòng ban cùng đi chung xe đó, xem
+           renderCarReportGroupTripsTable() (module-dangkyxe.js). -->
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">🔗 Xe Ghép Chuyến (nhiều phòng ban dùng chung 1 xe)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="p-1.5">Xe / Tài Xế</th><th class="p-1.5">Khung Giờ</th>
+              <th class="p-1.5">Số Phòng Ban Đi Cùng</th><th class="p-1.5">Các Phiếu Trong Nhóm</th>
+            </tr></thead>
+            <tbody id="carReportGroupTripsBody"></tbody>
+          </table>
+          <div id="carReportGroupTripsEmpty" class="hidden text-gray-400 italic p-2">Chưa có nhóm ghép xe chung nào trong khoảng lọc này.</div>
+        </div>
+      </div>
       <div class="bg-white p-3 rounded border space-y-2">
         <h4 class="font-bold text-gray-700 text-xs">⭐ Lịch Sử Đánh Giá Chuyến (người đăng ký xác nhận sau khi lái xe kết thúc)</h4>
         <div class="overflow-x-auto">
