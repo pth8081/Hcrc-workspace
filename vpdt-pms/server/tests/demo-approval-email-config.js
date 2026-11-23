@@ -182,6 +182,9 @@ async function submitRealCarRegistration(page) {
   // "0 dòng log" sau khi gửi phiếu lần 1 (submitCarReq() chưa từng chạy tới dòng nào cả).
   await page.selectOption('#carPurpose', 'CONG_TAC');
   await page.fill('#carPassengers', '02 - Nguyễn Văn A, Trần Thị B');
+  // #carPassengerCount (Số Lượng Người Đi, 11/2026 "Ghép Xe Chung") — <input type="number" required>
+  // MỚI, cùng lớp lỗi "thiếu required -> trình duyệt chặn submit âm thầm" đã ghi chú ở #carPurpose trên.
+  await page.fill('#carPassengerCount', '2');
   await page.fill('#carKm', '120');
   await page.fill('#carStartTime', '2026-09-10T08:00');
   await page.fill('#carEndTime', '2026-09-10T17:00');

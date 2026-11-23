@@ -17,7 +17,7 @@ const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
-const { createForCollection, createForCollectionSerialized, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, getTrashItems, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized, insertRecord, withLockedRecordForCollection, withLockedRecordById, withLockedDedicatedRecordsByIds, deleteRecordForCollection, getAllForCollection, getTrashItems, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 // PDFDocument/fs/path/parseUploadsFileUrl/UPLOAD_DIR — CHỈ dùng cho 1 việc: tính lại SỐ TRANG THẬT của
@@ -1430,6 +1430,43 @@ router.post('/carRegs/:id/reassign', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/reassign`, err);
+  }
+});
+
+// "Ghép Xe Chung" (yêu cầu nghiệp vụ 11/2026 — xem combineCarTrips() ở lib/recordActions.js) — CHỈ Người
+// Điều Hành Xe (carDispatch)/admin, GÁN CÙNG 1 xe/tài xế cho 2 phiếu carRegs (idA/idB) KHÁC NHAU trong
+// CÙNG 1 request. Không dùng khuôn /carRegs/:id/<action> thường (1 bản ghi) vì cần ghi NHẤT QUÁN 2 bản
+// ghi cùng lúc — withLockedDedicatedRecordsByIds() (lib/recordStore.js) khoá+ghi CẢ 2 trong 1 transaction,
+// tránh half-commit nếu dòng sau lỗi giữa chừng. Khoá thêm theo GIÁ TRỊ biển số/tài xế SẮP GÁN (mirror
+// đúng khuôn race-condition đã vá ở /carRegs/:id/reassign ngay trên) vì đọc existingCarRegs để kiểm tra
+// trùng với phiếu THỨ 3 vẫn chạy TRƯỚC khi khoá 2 dòng đang ghép.
+router.post('/carRegs/combine', async (req, res) => {
+  const idA = Number(req.body?.idA);
+  const idB = Number(req.body?.idB);
+  if (!Number.isFinite(idA) || !Number.isFinite(idB)) return res.status(400).json({ error: 'idA/idB không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const newPlate = String(req.body?.assignedPlate || '').trim() || null;
+    const newDriverUsername = String(req.body?.assignedDriverUsername || '').trim() || null;
+    const lockKeys = [];
+    if (newPlate) lockKeys.push(`car_plate:${newPlate}`);
+    if (newDriverUsername) lockKeys.push(`car_driver:${newDriverUsername}`);
+    const runCombine = async () => {
+      const existingCarRegs = await getAllForCollection('carRegs');
+      const [carVehicleTypes, carTaxiCompanies] = await Promise.all([
+        getAppDataValue('carVehicleTypes'), getAppDataValue('carTaxiCompanies')
+      ]);
+      return withLockedDedicatedRecordsByIds('carRegs', [idA, idB], (itemsById) => {
+        const itemA = itemsById.get(idA);
+        const itemB = itemsById.get(idB);
+        recordActions.combineCarTrips(freshUser, itemA, itemB, req.body || {}, existingCarRegs, users, carVehicleTypes, carTaxiCompanies);
+        return itemsById;
+      });
+    };
+    const resultById = lockKeys.length ? await withAppLock(lockKeys, runCombine) : await runCombine();
+    res.json({ ok: true, itemA: resultById.get(idA), itemB: resultById.get(idB) });
+  } catch (err) {
+    handleError(res, 'carRegs/combine', err);
   }
 });
 

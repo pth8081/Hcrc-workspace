@@ -1692,6 +1692,16 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.km !== undefined && Number(payload.km) < 0) {
         throw new CreateError(400, 'Số KM dự kiến không được là số âm');
       }
+      // "Số Lượng Người Đi" (SL, yêu cầu nghiệp vụ 11/2026 "Ghép Xe Chung") — số đếm THẬT, bắt buộc, khác
+      // field passengers (text tự do, không đáng tin cho mục đích so sánh/tính toán — xem chú thích tại
+      // #carPassengerCount ở carSection.html). Người Điều Hành Xe cần số này để quyết định ghép 2 chuyến
+      // ít người vào chung 1 xe (combineCarTrips() ở lib/recordActions.js) — không tạo được phiếu thiếu
+      // số này, không cho điền tay số âm/0/không phải số.
+      const passengerCount = Number(payload.passengerCount);
+      if (!Number.isInteger(passengerCount) || passengerCount < 1) {
+        throw new CreateError(400, 'Vui lòng nhập Số Lượng Người Đi (số nguyên ≥ 1)');
+      }
+      payload.passengerCount = passengerCount;
       // Lộ trình nhiều điểm (Điểm xuất phát + N điểm tiếp theo) thay cho 1 ô text tự do trước đây — vẫn
       // tính lại payload.destination (nối các điểm bằng " → ") để KHÔNG phải sửa mọi chỗ đang đọc thẳng
       // c.destination để hiển thị (bảng danh sách, phiếu in, email thông báo...).

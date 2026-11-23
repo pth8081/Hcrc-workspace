@@ -21,6 +21,7 @@ async function submitCarReq(e) {
   const dept = document.getElementById('carDept').value;
   const type = document.getElementById('carType').value;
   const passengers = document.getElementById('carPassengers').value.trim();
+  const passengerCount = parseInt(document.getElementById('carPassengerCount').value, 10);
   const directUser = document.getElementById('carDirectUser').value.trim();
   const directUserPhone = document.getElementById('carDirectUserPhone').value.trim();
   const purpose = document.getElementById('carPurpose').value;
@@ -50,6 +51,7 @@ async function submitCarReq(e) {
     dept: dept,
     type: type,
     passengers: passengers,
+    passengerCount: passengerCount,
     // Người sử dụng trực tiếp có thể khác người đăng ký; để trống = chính người đăng ký.
     directUser: directUser || currentUser.name,
     directUserPhone: directUserPhone || currentUser.phone || '',
@@ -735,6 +737,87 @@ function confirmCarReassign() {
   });
 }
 
+// "Ghép Xe Chung" (yêu cầu nghiệp vụ 11/2026 — người dùng phát hiện qua lỗi thật production "Biển số đã
+// được gán cho 1 chuyến khác trùng khung giờ"): Người Điều Hành Xe thấy 2 chuyến cùng lộ trình/khung giờ
+// nhưng mỗi phiếu đăng ký ÍT NGƯỜI (xem #carPassengerCount), chủ động CHỌN 1 chuyến khác để gán CÙNG 1
+// xe/tài xế — khớp combineCarTrips() (lib/recordActions.js) qua POST /api/records/carRegs/combine.
+// KHÔNG lọc cứng theo lộ trình/khung giờ trùng nhau (dispatcher tự xem thực tế có hợp lý để ghép không,
+// VD 2 chuyến khác khung giờ nhưng đi cùng tuyến vẫn có thể muốn ghép) — chỉ loại chính phiếu đang xử lý
+// và các phiếu đã kết thúc/hủy (findCombinableCarTripCandidates()).
+function findCombinableCarTripCandidates(carId) {
+  return (DB.carRegs || []).filter(x => x.id !== carId && ['PENDING', 'APPROVED', 'IN_PROGRESS'].includes(x.status));
+}
+
+function openCombineCarModal() {
+  if (!currentProcessingCarId) return;
+  const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
+  if (!c) return;
+  const candidates = findCombinableCarTripCandidates(c.id);
+  if (!candidates.length) {
+    return alert('Không có phiếu đăng ký xe nào khác đang xử lý (PENDING/APPROVED/IN_PROGRESS) để ghép chung.');
+  }
+  const rowsHTML = candidates.map(x => `
+    <label class="flex items-start gap-2 border rounded p-2 hover:bg-purple-50 cursor-pointer text-xs">
+      <input type="radio" name="combineCarTargetId" value="${x.id}" class="mt-0.5">
+      <span>
+        <b>${escapeHtml(x.code)}</b> — ${escapeHtml(x.dept)} (${escapeHtml(x.creatorName)})<br>
+        🧭 ${escapeHtml(x.destination)}<br>
+        🕐 ${escapeHtml(x.startTime)} ➔ ${escapeHtml(x.endTime)} | 👥 SL: ${Number.isFinite(x.passengerCount) ? x.passengerCount : '?'} người
+        ${x.combinedWithCarRegId ? `<br><span class="text-amber-600">⚠️ Phiếu này đã đang ghép với 1 chuyến khác (#${escapeHtml(String(x.combinedWithCarRegId))}) — chọn vẫn được, sẽ ghép lại theo lựa chọn mới</span>` : ''}
+      </span>
+    </label>
+  `).join('');
+  showConfirmModal({
+    title: '🔗 Ghép Xe Chung',
+    bodyHTML: `
+      <p class="mb-2">Chọn 1 chuyến khác để <b>gán CÙNG 1 xe/tài xế</b> với phiếu <b>${escapeHtml(c.code)}</b> (👥 SL phiếu này: ${Number.isFinite(c.passengerCount) ? c.passengerCount : '?'} người). Xe/tài xế sẽ lấy đúng theo thông tin bạn đã điền ở mục "Phần Dành Cho Phòng Hành Chính".</p>
+      <div class="space-y-1.5 max-h-64 overflow-y-auto">${rowsHTML}</div>
+    `,
+    confirmLabel: 'Ghép Xe Chung',
+    onConfirm: () => {
+      const picked = document.querySelector('input[name="combineCarTargetId"]:checked');
+      if (!picked) return alert('Vui lòng chọn 1 chuyến để ghép!');
+      confirmCombineCarTrips(Number(picked.value));
+    }
+  });
+}
+
+function confirmCombineCarTrips(otherId) {
+  if (!currentProcessingCarId) return;
+  const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
+  const other = DB.carRegs.find(item => item.id === otherId);
+  if (!c || !other) return;
+  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+  const assignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+  if (carAssignedDriverText && !assignedDriverUsername) {
+    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
+  const assignedVehicleType = document.getElementById('carAssignedVehicleType').value.trim();
+  const assignedPlate = document.getElementById('carAssignedPlate').value.trim();
+  const assignedTaxiCompany = document.getElementById('carAssignedTaxiCompany').value.trim();
+  const comment = document.getElementById('txtCarComment').value.trim();
+  if (!assignedVehicleType) return alert('Vui lòng chọn Loại Xe Cụ Thể trước khi ghép xe chung!');
+  showConfirmModal({
+    title: '🔗 Xác Nhận Ghép Xe Chung',
+    bodyHTML: `<p>Gán CÙNG 1 xe/tài xế cho <b>CẢ 2</b> chuyến:</p><ul class="list-disc pl-5 mt-1"><li><b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.destination)}</li><li><b>${escapeHtml(other.code)}</b> — ${escapeHtml(other.destination)}</li></ul><p class="mt-2 text-amber-700">Thao tác này sẽ GHI ĐÈ xe/tài xế hiện có (nếu có) của cả 2 chuyến.</p>`,
+    confirmLabel: 'Ghép Xe Chung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callCombineCarTrips({ idA: c.id, idB: other.id, assignedDriverUsername, assignedVehicleType, assignedPlate, assignedTaxiCompany, comment });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idxA = DB.carRegs.findIndex(x => x.id === c.id);
+      if (idxA !== -1) DB.carRegs[idxA] = result.itemA;
+      const idxB = DB.carRegs.findIndex(x => x.id === other.id);
+      if (idxB !== -1) DB.carRegs[idxB] = result.itemB;
+      logSystemAction('CAR', 'COMBINE', `Ghép xe chung giữa phiếu [${result.itemA.code}] và [${result.itemB.code}]`, 'SUCCESS', result.itemA.code);
+      alert('✅ Đã ghép xe chung cho cả 2 chuyến!');
+      closeCarProcessModal();
+      renderCarRegs();
+    }
+  });
+}
+
 // ===== Danh Mục "Loại Xe Cụ Thể" (DB.carVehicleTypes) — Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính,
 // xem defaults.js. Mỗi mục thường (isTaxi:false) gắn 1 biển số cố định (bienSo) để tự động điền BKS khi
 // chọn (xem onCarAssignedVehicleTypeChange() ở trên); mục Taxi (isTaxi:true) không có biển số cố định,
@@ -1396,17 +1479,22 @@ function openCarProcessModal(carId) {
   const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
   document.getElementById('carModalTitle').innerText = `🚗 Xử Lý Đăng Ký Xe: ${c.code}`;
-  document.getElementById('carModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName} | Lộ trình: ${c.destination}`;
+  document.getElementById('carModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName} | SL người đi: ${Number.isFinite(c.passengerCount) ? c.passengerCount : '?'} | Lộ trình: ${c.destination}`;
 
   const detailsHTML = `
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div><b>Loại xe đăng ký:</b> ${escapeHtml(c.type)}</div>
       <div><b>Số KM dự kiến (2 chiều):</b> ${c.km} km</div>
       <div><b>Số người sử dụng:</b> ${escapeHtml(c.passengers || '')}</div>
+      <div><b>Số lượng người đi (SL):</b> ${Number.isFinite(c.passengerCount) ? `${c.passengerCount} người` : '<span class="text-gray-400 italic">(phiếu cũ, chưa có)</span>'}</div>
       <div><b>Người sử dụng trực tiếp:</b> ${escapeHtml(c.directUser || c.creatorName)} ${c.directUserPhone ? `(SĐT: ${escapeHtml(c.directUserPhone)})` : ''}</div>
       <div><b>Mục đích sử dụng:</b> ${escapeHtml(c.purpose || '')}</div>
       <div><b>Thời gian sử dụng:</b> ${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</div>
       <div class="col-span-2"><b>Nội dung chi tiết:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(c.reason)}</p></div>
+      ${c.combinedWithCarRegId ? (() => {
+        const combinedWith = DB.carRegs.find(x => x.id === c.combinedWithCarRegId);
+        return `<div class="col-span-2 text-indigo-700 bg-indigo-50 border border-indigo-200 rounded p-1.5">🔗 Đã ghép xe chung với phiếu <b>${escapeHtml(combinedWith ? combinedWith.code : ('#' + c.combinedWithCarRegId))}</b>${combinedWith ? ` — ${escapeHtml(combinedWith.destination)}` : ''}</div>`;
+      })() : ''}
     </div>
   `;
   document.getElementById('carModalDetails').innerHTML = detailsHTML;
@@ -1470,6 +1558,10 @@ function openCarProcessModal(carId) {
     // Người tạo có thể ĐỒNG THỜI là người duyệt bước 1 (đơn vị nhỏ) — vẫn cho rút lại phiếu thay vì
     // phải tự duyệt/từ chối phiếu của chính mình.
     if (canCancelAtStep1) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Đăng Ký</button>`);
+    // "Ghép Xe Chung" (11/2026) — Người Điều Hành Xe thấy ngay lúc còn PENDING (điền phân công ở bước
+    // duyệt) là 2 chuyến ít người cùng lộ trình/khung giờ, ghép CHUNG 1 xe luôn mà không cần đợi phiếu
+    // được duyệt xong rồi mới "Đổi Tài Xế-Xe" (xem combineCarTrips() ở lib/recordActions.js).
+    if (canDispatchCar) btns.push(`<button data-op="openCombineCarModal" class="bg-purple-600 text-white px-4 py-1.5 rounded font-bold hover:bg-purple-700 text-xs">🔗 Ghép Xe Chung</button>`);
     actionBtns.innerHTML = btns.join(' ');
   } else if ((c.status === 'APPROVED' || c.status === 'IN_PROGRESS') && (canDispatchCar || canCancelCarRegClient(c))) {
     // Fix 4 — phiếu đã APPROVED/IN_PROGRESS KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng
@@ -1480,6 +1572,9 @@ function openCarProcessModal(carId) {
     // IN_PROGRESS (mục 2) mirror đúng điều kiện đã nới ở reassignCarDispatch()/cancelCarReg().
     const btns = [];
     if (canDispatchCar) btns.push(`<button data-op="confirmCarReassign" class="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold hover:bg-indigo-700 text-xs">🔁 Đổi Tài Xế-Xe</button>`);
+    // "Ghép Xe Chung" (11/2026) — xem chú thích ở nhánh canApprove ngay trên, mirror cho phiếu đã
+    // APPROVED/IN_PROGRESS (vd phát hiện trùng lúc "Đổi Tài Xế-Xe" báo lỗi trùng biển số/tài xế thật).
+    if (canDispatchCar) btns.push(`<button data-op="openCombineCarModal" class="bg-purple-600 text-white px-4 py-1.5 rounded font-bold hover:bg-purple-700 text-xs">🔗 Ghép Xe Chung</button>`);
     if (canCancelCarRegClient(c)) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Chuyến</button>`);
     actionBtns.innerHTML = btns.join(' ');
   } else if (canCancelAtStep1) {

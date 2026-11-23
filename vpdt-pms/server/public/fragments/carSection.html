@@ -38,6 +38,14 @@
             <input id="carPassengers" placeholder="VD: 02 - Nguyễn Văn A, Trần Thị B" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
+            <!-- Số đếm thuần (khác #carPassengers ở trên vốn là text tự do, không đáng tin cho mục đích
+                 tính toán — yêu cầu nghiệp vụ 11/2026 "Ghép Xe Chung", xem findCombinableCarTripCandidates()
+                 ở module-dangkyxe.js: Người Điều Hành Xe cần so SỐ LƯỢNG người đi để quyết định ghép 2
+                 chuyến cùng lộ trình/khung giờ vào 1 xe, không parse được số từ text tự do ở trên. -->
+            <label class="block font-semibold text-gray-600 mb-1">Số Lượng Người Đi (SL)</label>
+            <input id="carPassengerCount" type="number" min="1" step="1" placeholder="VD: 2" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
             <label class="block font-semibold text-gray-600 mb-1">Người Sử Dụng Trực Tiếp</label>
             <input id="carDirectUser" placeholder="Để trống nếu là chính người đăng ký" class="w-full border p-1.5 rounded">
           </div>

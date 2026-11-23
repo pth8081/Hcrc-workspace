@@ -9358,6 +9358,90 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   return item;
 }
 
+// "Ghép Xe Chung" (yêu cầu nghiệp vụ 11/2026 — người dùng phát hiện qua lỗi thật production "Biển số đã
+// được gán cho 1 chuyến khác trùng khung giờ": "nếu đã xe đk trước rồi mình sẽ cần kt số người đi ... khi
+// người điều hành thấy ít có thể có nút ghép xe chung"). Người Điều Hành Xe CHỦ Ý gán CÙNG 1 xe/tài xế
+// cho 2 phiếu carRegs KHÁC NHAU (vd 2 chuyến cùng lộ trình/khung giờ nhưng mỗi phiếu đăng ký ít người,
+// dồn chung 1 xe tiết kiệm) — khác HẲN findCarPlateConflict()/findCarDriverConflict() (lib/
+// workflowEngine.js) vốn CHẶN CỨNG đúng tình huống trùng này vì mặc định đó là trùng NHẦM, không phải
+// chủ ý. Thiết kế thành 1 HÀNH ĐỘNG ĐỘC LẬP, hoàn toàn tách khỏi applyWorkflowAction()/
+// reassignCarDispatch() ở trên (KHÔNG sửa logic/điều kiện của 2 hàm đó) — chỉ làm phần GÁN xe/tài xế,
+// không đổi bước duyệt (status PENDING vẫn giữ PENDING, APPROVED/IN_PROGRESS giữ nguyên trừ việc đưa
+// IN_PROGRESS->APPROVED khi đổi tài xế, mirror đúng reassignCarDispatch()) — người dùng vẫn Duyệt/Từ chối
+// bình thường qua nút sẵn có sau khi đã ghép. Gọi findCarPlateConflict()/findCarDriverConflict() với
+// DANH SÁCH ĐÃ LOẠI BỎ cả itemA+itemB (không phải itemId đơn như 2 hàm kia) để vẫn chặn đè nhầm lên 1
+// phiếu THỨ 3 không liên quan — chỉ bỏ qua đúng xung đột GIỮA 2 phiếu đang ghép.
+// Caller (routes/records.js) PHẢI dùng withLockedDedicatedRecordsByIds('carRegs', [itemA.id, itemB.id],
+// ...) để ghi CẢ 2 bản ghi trong CÙNG 1 transaction — hàm này chỉ SỬA 2 object truyền vào (itemA/itemB),
+// KHÔNG tự lưu.
+function combineCarTrips(user, itemA, itemB, payload, existingCarRegs, users, carVehicleTypes, carTaxiCompanies) {
+  if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
+    throw new HttpError(403, 'Bạn không có quyền ghép xe chung (cần quyền Người Điều Hành Xe)');
+  }
+  if (itemA.id === itemB.id) throw new HttpError(400, 'Không thể ghép 1 phiếu với chính nó');
+  const activeStatuses = ['PENDING', 'APPROVED', 'IN_PROGRESS'];
+  for (const it of [itemA, itemB]) {
+    if (!activeStatuses.includes(it.status)) {
+      throw new HttpError(409, `Phiếu "${it.code || it.id}" không ở trạng thái đang xử lý (có thể đã hủy/kết thúc chuyến) — không thể ghép xe chung`);
+    }
+  }
+  const { findCarPlateConflict, findCarDriverConflict, assertValidCarAssignmentCatalogs } = require('./workflowEngine'); // require trễ, cùng lý do ở reassignCarDispatch() ngay trên.
+  assertValidCarAssignmentCatalogs(payload, carVehicleTypes, carTaxiCompanies, HttpError);
+  const assignedVehicleType = String(payload?.assignedVehicleType || '').trim();
+  if (!assignedVehicleType) throw new HttpError(400, 'Vui lòng chọn Loại Xe Cụ Thể');
+  const newPlate = String(payload?.assignedPlate || '').trim();
+  const assignedTaxiCompany = String(payload?.assignedTaxiCompany || '').trim();
+  const assignedDriverUsername = String(payload?.assignedDriverUsername || '').trim();
+  const matchedType = (carVehicleTypes || []).find(t => t.name === assignedVehicleType);
+  const isTaxi = !!matchedType?.isTaxi;
+  if (!isTaxi && !newPlate) throw new HttpError(400, 'Vui lòng nhập Biển Số Xe');
+  // Loại khỏi danh sách đối chiếu trùng CẢ 2 phiếu đang ghép — chỉ còn kiểm tra với các phiếu KHÁC.
+  const otherExisting = (existingCarRegs || []).filter(c => c.id !== itemA.id && c.id !== itemB.id);
+  let driverUser = null;
+  if (!isTaxi && newPlate) {
+    const conflict = findCarPlateConflict(otherExisting, itemA.id, newPlate, itemA.startTime, itemA.endTime)
+      || findCarPlateConflict(otherExisting, itemB.id, newPlate, itemB.startTime, itemB.endTime);
+    if (conflict) throw new HttpError(409, `Biển số "${newPlate}" đã được gán cho 1 chuyến khác trùng khung giờ này`);
+  }
+  if (!isTaxi && assignedDriverUsername) {
+    driverUser = (users || []).find(u => u.username === assignedDriverUsername && u.active !== false);
+    if (!driverUser) throw new HttpError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+    const driverConflict = findCarDriverConflict(otherExisting, itemA.id, driverUser.username, itemA.startTime, itemA.endTime)
+      || findCarDriverConflict(otherExisting, itemB.id, driverUser.username, itemB.startTime, itemB.endTime);
+    if (driverConflict) throw new HttpError(409, `Tài xế "${driverUser.name}" đã được phân công cho 1 chuyến khác trùng khung giờ này`);
+  }
+  const comment = String(payload?.comment || '').trim();
+  const applyAssignment = (item, otherItem) => {
+    item.assignedVehicleType = assignedVehicleType;
+    if (isTaxi) {
+      item.assignedPlate = '';
+      item.assignedTaxiCompany = assignedTaxiCompany;
+      item.assignedDriverUsername = '';
+      item.assignedDriver = '';
+    } else {
+      item.assignedPlate = newPlate;
+      item.assignedTaxiCompany = '';
+      if (driverUser) {
+        item.assignedDriverUsername = driverUser.username;
+        item.assignedDriver = driverUser.name;
+      }
+    }
+    if (item.driverConfirmed) { item.driverConfirmed = false; item.driverConfirmedAt = null; }
+    if (item.status === 'IN_PROGRESS') item.status = 'APPROVED';
+    item.combinedWithCarRegId = otherItem.id;
+    item.history = item.history || [];
+    item.history.push({
+      step: item.currentStep || 0, approver: user.name, username: user.username, action: 'COMBINED',
+      comment, time: nowVN(), combinedWithCarRegId: otherItem.id, combinedWithCarRegCode: otherItem.code,
+      assignedPlate: item.assignedPlate, assignedDriverUsername: item.assignedDriverUsername,
+      assignedDriver: item.assignedDriver, assignedVehicleType: item.assignedVehicleType, assignedTaxiCompany: item.assignedTaxiCompany
+    });
+  };
+  applyAssignment(itemA, itemB);
+  applyAssignment(itemB, itemA);
+  return { itemA, itemB };
+}
+
 // "Đổi Lộ Trình" (yêu cầu nghiệp vụ 10/2026): CHÍNH người đăng ký (creator) hoặc admin chủ động đổi Lộ
 // Trình (điểm xuất phát/điểm đến/thêm điểm) + Ngày Kết Thúc của 1 phiếu, áp dụng được CẢ TRƯỚC lẫn SAU
 // khi đã phê duyệt (PENDING/APPROVED/IN_PROGRESS) — khác REQUEST_CHANGES (lib/workflowEngine.js): đó là
@@ -9779,7 +9863,7 @@ module.exports = {
   reopenBudgetLineAfterUsedParentDeleted,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip, isTaxiCarReg,
-  canCancelCarReg, cancelCarReg, reassignCarDispatch, canChangeCarRegRoute, changeCarRegRoute,
+  canCancelCarReg, cancelCarReg, reassignCarDispatch, combineCarTrips, canChangeCarRegRoute, changeCarRegRoute,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canCancelLicense, cancelLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,

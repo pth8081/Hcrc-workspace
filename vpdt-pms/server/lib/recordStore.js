@@ -968,6 +968,60 @@ async function withLockedDedicatedRecordById(collection, id, mutatorFn, opts) {
   }
 }
 
+// withLockedDedicatedRecordsByIds() — mirror withLockedDedicatedRecordById() ngay trên nhưng khoá+ghi
+// NHIỀU dòng của CÙNG 1 collection trong CÙNG 1 transaction (yêu cầu nghiệp vụ 11/2026 "Ghép Xe Chung" —
+// gán cùng 1 biển số/tài xế cho 2 phiếu carRegs khác nhau, phải ghi CẢ 2 dòng NHẤT QUÁN, không qua 2 lượt
+// withLockedDedicatedRecordById() riêng rẽ dễ half-commit nếu dòng sau lỗi giữa chừng). ids khoá theo thứ
+// tự TĂNG DẦN (cùng quy ước sắp xếp khoá ở withAppLock()) để 2 yêu cầu đụng cùng 2 dòng theo thứ tự ngược
+// nhau luôn giành khoá theo ĐÚNG 1 thứ tự cố định, không deadlock chờ chéo nhau.
+// mutatorFn(itemsById: Map<id, record>) -> Map<id, record đã sửa> (hoặc throw HttpError để huỷ cả giao
+// dịch) — PHẢI trả đủ bản ghi cho MỌI id truyền vào, không bỏ sót id nào khỏi kết quả.
+async function withLockedDedicatedRecordsByIds(collection, ids, mutatorFn) {
+  const cfg = DEDICATED_TABLES[collection];
+  if (!cfg) throw new Error(`withLockedDedicatedRecordsByIds(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js)`);
+  const table = dedicatedTableName(collection);
+  const sortedIds = [...new Set(ids)].sort((a, b) => a - b);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const itemsById = new Map();
+    for (const id of sortedIds) {
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq
+        .input('id', sql.BigInt, id)
+        .query(`SELECT Payload FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE Id = @id`);
+      if (readResult.recordset.length === 0) {
+        throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      }
+      itemsById.set(id, toRecord(readResult.recordset[0]));
+    }
+    const updatedById = await mutatorFn(itemsById);
+    for (const id of sortedIds) {
+      const updated = updatedById.get(id);
+      if (!updated) throw new Error(`withLockedDedicatedRecordsByIds(): mutatorFn thiếu bản ghi id=${id}`);
+      const writeReq = new sql.Request(tx);
+      writeReq.input('id', sql.BigInt, id);
+      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated));
+      const setClauses = ['Payload = @payload'];
+      if (cfg.hasCode) {
+        writeReq.input('code', sql.NVarChar(100), updated.code || null);
+        setClauses.push('Code = @code');
+      }
+      for (const { col, param } of bindExtractedColumns(writeReq, cfg, updated)) {
+        setClauses.push(`${col} = @${param}`);
+      }
+      await writeReq.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE Id = @id`);
+    }
+    await tx.commit();
+    invalidateCollectionCache(collection);
+    return updatedById;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 // Nhật ký hệ thống SERVER-SIDE cho MỌI lượt xoá đi qua deleteRecordForCollection() — PHÁT HIỆN mức Thấp
 // (đợt rà soát chuyên sâu lần 2 trước go-live, Đợt 5): ~30 collection dùng chung điểm xoá này (xem
 // deleteRecordForCollection()/moveDedicatedRecordToTrash() bên dưới) trước đây KHÔNG có log chung nào —
@@ -1916,5 +1970,6 @@ module.exports = {
   moveRecordToTrash, getTrashItems, getTrashItemCollection, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads, sweepOrphanedUploads,
   DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords,
+  withLockedDedicatedRecordsByIds,
   migrateLegacyAppDataCollection, isLegacyMigrationDone, markLegacyMigrationDone
 };
