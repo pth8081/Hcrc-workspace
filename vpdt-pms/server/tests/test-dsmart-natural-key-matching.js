@@ -101,9 +101,21 @@ class FakeRequest {
       // ERP cũ — ràng buộc duy nhất chỉ nằm ở tầng ứng dụng DSmart, không khai báo trên CSDL).
       return { recordset: [] };
     }
+    // custIdExistsInCsprice() — SỬA (12/2026, LỖI THẬT PRODUCTION: cảnh báo "Mã Khách B2B CHƯA TỪNG xuất
+    // hiện" báo SAI cho 1 mã khách người dùng xác nhận ĐÃ có giá trong CSPRICE từ trước): người dùng tự
+    // GRANT thêm quyền SELECT trên CSPRICE cho tài khoản này (khác LẦN 3 dưới — lúc đó CHƯA có quyền) —
+    // hàm đổi hẳn từ mẹo UPDATE+OUTPUT sang 1 câu SELECT thuần (nghi vấn nguyên nhân lỗi: Row-Level
+    // Security trên DSmart16 có thể lọc UPDATE/DELETE khác SELECT, khiến bản UPDATE cũ khớp thiếu dòng).
+    // CHỈ cho phép ĐÚNG 1 câu SELECT cụ thể này — mọi câu SELECT CSPRICE khác vẫn rơi vào nhánh chặn LẦN 3
+    // ngay dưới (quyền SELECT mới chỉ xác nhận dùng được cho đúng câu này, chưa phải "mở toang" SELECT).
+    if (/^SELECT TOP \(1\) CUST_ID FROM dbo\.CSPRICE WHERE CUST_ID = @custId;?$/.test(sql)) {
+      const match = this.db.find(r => r.CUST_ID === this.inputs.custId);
+      return { recordset: match ? [{ CUST_ID: match.CUST_ID }] : [] };
+    }
     // QUY TẮC BẮT BUỘC (12/2026, lỗi thật production LẦN 3): tài khoản SQL thật KHÔNG có quyền SELECT trên
-    // dữ liệu CSPRICE — nếu code LỠ thêm lại 1 câu SELECT dữ liệu thật (không phải metadata ở trên), mock
-    // này mô phỏng ĐÚNG lỗi thật sẽ gặp, để bắt được ngay ở test thay vì đợi production báo lại lần nữa.
+    // dữ liệu CSPRICE — nếu code LỠ thêm lại 1 câu SELECT dữ liệu thật (không phải metadata/custIdExistsInCsprice()
+    // ở trên), mock này mô phỏng ĐÚNG lỗi thật sẽ gặp, để bắt được ngay ở test thay vì đợi production báo
+    // lại lần nữa.
     if (/^SELECT\b/.test(sql) && /\bdbo\.CSPRICE\b/.test(sql)) {
       throw new Error("The SELECT permission was denied on the object 'CSPRICE', database 'DSMART16', schema 'dbo'.");
     }
@@ -493,6 +505,38 @@ async function main() {
     try { await req.query('SELECT CUST_ID FROM dbo.CSPRICE WHERE CUST_ID = @custId;'); }
     catch (err) { threw = err; }
     assert(threw && /SELECT permission was denied/.test(threw.message), `mock phải tái hiện đúng lỗi thật đã gặp — got: ${threw && threw.message}`);
+  });
+
+  // custIdExistsInCsprice() — LỖI THẬT PRODUCTION (12/2026): cảnh báo "CHƯA TỪNG xuất hiện" báo SAI cho 1
+  // Mã Khách B2B đã xác nhận có giá trong CSPRICE. Người dùng GRANT thêm quyền SELECT, hàm đổi từ mẹo
+  // UPDATE+OUTPUT sang SELECT thuần (xem chú thích tại hàm, lib/dsmartSqlClient.js).
+  await run.run('custIdExistsInCsprice(): mã khách ĐÃ có dòng trong CSPRICE -> true, dùng SELECT (không còn UPDATE+OUTPUT)', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    const { insertWholesalePrice, custIdExistsInCsprice } = freshClient();
+    await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    queryLog = []; // chỉ xét câu lệnh của chính custIdExistsInCsprice(), không tính câu INSERT ở trên
+    const exists = await custIdExistsInCsprice('C1');
+    assertEqual(exists, true, 'mã khách đã có dòng trong CSPRICE phải trả về true');
+    assert(queryLog.some(q => /^SELECT TOP \(1\) CUST_ID FROM dbo\.CSPRICE WHERE CUST_ID = @custId;?$/.test(q)), `phải dùng SELECT thuần, không còn UPDATE TOP(1)/OUTPUT — queryLog: ${JSON.stringify(queryLog)}`);
+    assert(!queryLog.some(q => /^UPDATE TOP/.test(q)), 'KHÔNG được còn câu UPDATE nào (tránh ghi/khoá dòng CSPRICE chỉ để kiểm tra tồn tại)');
+  });
+
+  await run.run('custIdExistsInCsprice(): mã khách CHƯA từng có dòng nào -> false (đúng tình huống khách mới hợp lệ)', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    const { insertWholesalePrice, custIdExistsInCsprice } = freshClient();
+    await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    const exists = await custIdExistsInCsprice('C-HOAN-TOAN-MOI');
+    assertEqual(exists, false, 'mã khách chưa từng xuất hiện phải trả về false');
+  });
+
+  await run.run('custIdExistsInCsprice(): mã khách có dòng nhờ BẤT KỲ Mã Sản Phẩm nào (không riêng S1) -> vẫn true', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' }, 'S-KHAC-HAN': { PICEUNIT: 'CAI', UNITCONV: 1, TAX_CODE: 'T10' } };
+    const { insertWholesalePrice, custIdExistsInCsprice } = freshClient();
+    await insertWholesalePrice({ custId: 'C1', skuId: 'S-KHAC-HAN', price: 50, frDate: '2026-01-01', toDate: '2026-01-31' });
+    const exists = await custIdExistsInCsprice('C1');
+    assertEqual(exists, true, 'phải khớp theo CUST_ID bất kể SKU_ID nào — đúng ý nghĩa "đã từng có giá, bất kỳ sản phẩm nào"');
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } }; // khôi phục cho các test sau
   });
 
   await run.run('inspectCspriceColumns(): identityColumn=null (không có cột identity), naturalKeyColumns (Lần 5) trả đúng 2 cột CUST_ID+SKU_ID, keyIndexes rỗng (không có PK/unique index khai báo)', async () => {
