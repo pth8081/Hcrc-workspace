@@ -330,6 +330,11 @@ async function insertWholesalePrice(params, targetStoreIds) {
     return { ...apiResult, storeResults: [], storeFanOutError: null };
   }
   const pool = await getDsmartPool();
+  // validateDealerExists() (12/2026, theo yêu cầu người dùng, xem chú thích đầy đủ tại hàm): CHẶN CỨNG nếu
+  // Mã Khách B2B không có/đang bị khoá trong danh mục DEALER — chỉ kiểm tra 1 LẦN tại DSmart16 Trung Tâm
+  // (không lặp lại ở từng siêu thị, khác SKU_DEF — ở đây chỉ cần biết tồn tại/không bị khoá, không cần lấy
+  // thêm giá trị cột nào để ghi riêng cho từng siêu thị).
+  await validateDealerExists(pool, params.custId);
   const hoResult = await upsertPriceOnPool(pool, params);
   const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
@@ -444,6 +449,33 @@ async function lookupSkuDefUnitInfo(pool, skuId) {
     throw new DsmartSqlError(`Mã Sản Phẩm "${skuId}" thiếu dữ liệu Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế trong SKU_DEF (PICEUNIT="${unit}", UNITCONV=${row.UNITCONV}, TAX_CODE="${taxCode}") — cần đội DSmart bổ sung đầy đủ danh mục sản phẩm trước khi áp giá.`);
   }
   return { unit, unitConv: unitConvNum, taxCode };
+}
+
+// validateDealerExists(pool, custId) — CHẶN CỨNG Mã Khách B2B không hợp lệ TRƯỚC khi ghi giá (12/2026,
+// theo yêu cầu người dùng, sau khi gỡ hẳn cảnh báo MỀM custIdExistsInCsprice() cũ: "Nếu không có thì
+// không cho nhập nữa. Bạn phải kiểm tra chứ"). Người dùng gửi nguyên văn `BRG_APP.sql` (phần mềm áp giá
+// CŨ) — lộ ra bảng `dbo.DEALER` (CUST_ID/CUST_NAME/TYPE/BLOCK_CODE) qua `sp_BRG_WEBAPP_VendorExist`, sau
+// đó tự hỏi DBA và XÁC NHẬN đây chính là danh mục khách hàng B2B THẬT trên DSmart16 (gửi kèm dữ liệu thật
+// đối chiếu). Dùng ĐÚNG điều kiện `sp_BRG_WEBAPP_VendorExist` đã dùng: `BLOCK_CODE = 0` (khách đang bị
+// khoá cũng coi như KHÔNG hợp lệ, chặn luôn — nếu sai ý người dùng thì sửa lại điều kiện này sau).
+//
+// Cần GRANT SELECT RIÊNG trên `dbo.DEALER` (độc lập hoàn toàn với quyền trên CSPRICE/SKU_DEF, xem lịch sử
+// 2 lỗi thật về quyền SELECT ở phần đầu file) — xem testDealerAccess() để đội IT tự xác nhận quyền đã đủ.
+// CHỈ kiểm tra tồn tại/trạng thái khoá — KHÔNG đọc/trả về CUST_NAME (dữ liệu DSmart16 lưu tiếng Việt theo
+// bảng mã TCVN3 cũ — xem `fTCVNToUnicode()`/`Unicode2TCVN()` trong BRG_APP.sql — giải mã đúng cần bảng
+// chuyển đổi riêng, không cần thiết chỉ để xác nhận tồn tại).
+async function validateDealerExists(pool, custId) {
+  const req = pool.request();
+  req.input('custId', sql.NVarChar(50), String(custId));
+  let result;
+  try {
+    result = await req.query('SELECT CUST_ID FROM dbo.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;');
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi kiểm tra Mã Khách B2B "${custId}" trong danh mục DEALER: ${err.message} — kiểm tra tài khoản SQL đã được GRANT SELECT trên dbo.DEALER chưa (khác quyền trên CSPRICE/SKU_DEF).`);
+  }
+  if (!result.recordset?.length) {
+    throw new DsmartSqlError(`Không tìm thấy Mã Khách B2B "${custId}" trong danh mục DEALER trên DSmart (hoặc khách hàng đang bị khoá — BLOCK_CODE khác 0) — kiểm tra lại đúng mã, hoặc khách hàng chưa được tạo/đã bị khoá trên DSmart.`);
+  }
 }
 
 // naturalKeyFromRow(row): chuyển 1 dòng kết quả OUTPUT (hoặc tương đương) thành object "khoá tự nhiên"
@@ -679,6 +711,47 @@ async function testSkuDefAccess(overrideCfg) {
   }
 }
 
+// testDealerAccess(overrideCfg): kiểm tra tài khoản SQL có đọc được dbo.DEALER không — nút "🔍 Kiểm Tra
+// Quyền Đọc DEALER" (12/2026, sau khi insertWholesalePrice() bắt buộc tra DEALER để chặn cứng Mã Khách
+// B2B không hợp lệ, xem validateDealerExists()) — đúng khuôn testSkuDefAccess() ở trên, để đội IT tự xác
+// nhận quyền đã được cấp đủ TRƯỚC khi thử ghi giá thật.
+async function testDealerAccess(overrideCfg) {
+  async function runCheck(pool) {
+    const started = Date.now();
+    let result;
+    try {
+      result = await pool.request().query('SELECT TOP 1 CUST_ID FROM dbo.DEALER;');
+    } catch (err) {
+      throw new DsmartConfigError(`Không đọc được bảng dbo.DEALER (cần quyền SELECT riêng, khác quyền trên CSPRICE/SKU_DEF): ${err.message}`);
+    }
+    return { ms: Date.now() - started, sampleRow: result.recordset?.[0] || null };
+  }
+  if (!overrideCfg) {
+    const pool = await getDsmartPool();
+    return runCheck(pool);
+  }
+  const { host, port, database, user, password } = overrideCfg;
+  if (!host || !database || !user || !password) {
+    throw new DsmartConfigError('Thiếu Host/Tên CSDL/Tài khoản/Mật khẩu để kiểm tra quyền đọc DEALER.');
+  }
+  const pool = new sql.ConnectionPool({
+    server: host, port: port || 1433, database, user, password,
+    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
+    pool: { max: 1, min: 0, idleTimeoutMillis: 5000 },
+    requestTimeout: 10000, connectionTimeout: 10000
+  });
+  try {
+    await pool.connect();
+  } catch (err) {
+    throw new DsmartConfigError(`Không kết nối được tới DSmart16 Trung Tâm (${host}:${port || 1433}/${database}): ${err.message}`);
+  }
+  try {
+    return await runCheck(pool);
+  } finally {
+    try { await pool.close(); } catch (_) { /* phớt lờ lỗi đóng pool tạm */ }
+  }
+}
+
 // inspectCspriceColumns(overrideCfg): LIỆT KÊ THẬT các cột của dbo.CSPRICE trên DSmart16 Trung Tâm + mọi
 // PRIMARY KEY/UNIQUE INDEX khai báo thật (nếu có) — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026).
 //
@@ -852,5 +925,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, testDealerAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

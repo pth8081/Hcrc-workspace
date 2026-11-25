@@ -31,7 +31,7 @@ const {
   getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig,
   getRawConfig, decryptSecret, getExternalApiConfig, savePriceOperationMode, saveExternalApiConfig
 } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, testDealerAccess, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { testExternalApiConnection } = require('../lib/dsmartPriceExternalApiClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
@@ -178,6 +178,31 @@ router.post('/config/test-skudef-access', async (req, res) => {
     logDsmartPrice(req, 'TEST_DSMART_PRICE_SKUDEF_ACCESS', 'dsmartPriceDbConfig', `Kiểm tra quyền đọc SKU_DEF thành công (${result.ms}ms)${overrideCfg ? ' — dùng giá trị đang gõ dở' : ' — dùng cấu hình đã lưu'}`);
     res.json({ ok: true, ms: result.ms, sampleRow: result.sampleRow });
   } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/test-skudef-access'); }
+});
+
+// POST /config/test-dealer-access — nút "🔍 Kiểm Tra Quyền Đọc DEALER" (12/2026, theo yêu cầu người dùng:
+// "Nếu không có thì không cho nhập nữa. Bạn phải kiểm tra chứ" — insertWholesalePrice() giờ bắt buộc tra
+// dbo.DEALER để CHẶN CỨNG Mã Khách B2B không hợp lệ, xem validateDealerExists()/lib/dsmartSqlClient.js).
+// Cùng khuôn test-skudef-access ở trên — cần quyền SELECT RIÊNG trên DEALER (độc lập CSPRICE/SKU_DEF).
+router.post('/config/test-dealer-access', async (req, res) => {
+  if (!req.freshUser?.perms?.admin) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới kiểm tra được quyền đọc DEALER' });
+  try {
+    const { host, port, database, user, password } = req.body || {};
+    let overrideCfg = null;
+    if (host || database || user) {
+      if (!host || !database || !user) throw new HttpError(400, 'Thiếu Host/Tên CSDL/Tài khoản để kiểm tra quyền đọc DEALER');
+      let pass = password ? String(password) : null;
+      if (!pass) {
+        const raw = await getRawConfig();
+        if (!raw?.passwordEnc) throw new HttpError(400, 'Chưa có mật khẩu đã lưu trước đó — vui lòng nhập mật khẩu để kiểm tra.');
+        pass = decryptSecret(raw.passwordEnc);
+      }
+      overrideCfg = { host: String(host).trim(), port: Number(port) || 1433, database: String(database).trim(), user: String(user).trim(), password: pass };
+    }
+    const result = await testDealerAccess(overrideCfg);
+    logDsmartPrice(req, 'TEST_DSMART_PRICE_DEALER_ACCESS', 'dsmartPriceDbConfig', `Kiểm tra quyền đọc DEALER thành công (${result.ms}ms)${overrideCfg ? ' — dùng giá trị đang gõ dở' : ' — dùng cấu hình đã lưu'}`);
+    res.json({ ok: true, ms: result.ms, sampleRow: result.sampleRow });
+  } catch (err) { sendCatchError(res, err, 'POST /api/dsmart-price/config/test-dealer-access'); }
 });
 
 // ===================== Cấu Hình Kết Nối Siêu Thị (12/2026, FAN-OUT — theo yêu cầu người dùng "tôi muốn

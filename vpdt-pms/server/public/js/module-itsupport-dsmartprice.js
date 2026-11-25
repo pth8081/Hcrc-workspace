@@ -1187,6 +1187,36 @@ async function testDsmartPriceSkuDefAccess() {
   }
 }
 
+// testDsmartPriceDealerAccess() — nút "🔍 Kiểm Tra Quyền Đọc DEALER" (12/2026, theo yêu cầu người dùng:
+// "Nếu không có thì không cho nhập nữa. Bạn phải kiểm tra chứ" — insertWholesalePrice() giờ bắt buộc tra
+// dbo.DEALER để CHẶN CỨNG Mã Khách B2B không hợp lệ/đang bị khoá, xem lib/dsmartSqlClient.js). DEALER
+// CÙNG CSDL DSmart16 nhưng KHÁC CSPRICE/SKU_DEF, cần quyền SELECT RIÊNG — cùng khuôn
+// testDsmartPriceSkuDefAccess() ở trên.
+async function testDsmartPriceDealerAccess() {
+  const host = document.getElementById('dsmartPriceCfgHost').value.trim();
+  const port = Number(document.getElementById('dsmartPriceCfgPort').value) || 1433;
+  const database = document.getElementById('dsmartPriceCfgDatabase').value.trim();
+  const user = document.getElementById('dsmartPriceCfgUser').value.trim();
+  const password = document.getElementById('dsmartPriceCfgPassword').value;
+  const statusEl = document.getElementById('dsmartPriceDealerAccessStatus');
+  const btn = document.getElementById('btnDsmartPriceTestDealerAccess');
+  if (statusEl) { statusEl.className = 'text-xs text-gray-500'; statusEl.innerText = '⏳ Đang kiểm tra quyền đọc DEALER...'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/dsmart-price/config/test-dealer-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port, database, user, password: password || null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (statusEl) { statusEl.className = 'text-xs text-emerald-600 font-semibold'; statusEl.innerText = `✅ Đọc được DEALER (${data.ms}ms) — tài khoản đã đủ quyền để áp giá.`; }
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'text-xs text-red-600 font-semibold'; statusEl.innerText = '⛔ ' + err.message; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // inspectDsmartPriceCspriceTable() — nút "🔍 Kiểm Tra Cấu Trúc Bảng CSPRICE" (12/2026, LỖI THẬT
 // PRODUCTION đã phát hiện 2 lần liên tiếp: lần 1 giả định "CSPRICE có cột ID tự tăng" SAI (lỗi "Invalid
 // column name 'ID'."); lần 2 (ảnh chụp thật kết quả bấm nút này) xác nhận CSPRICE KHÔNG CÓ cột identity

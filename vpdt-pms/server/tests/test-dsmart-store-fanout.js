@@ -38,7 +38,7 @@ function dbKey(cfg) { return `${cfg.server}:${cfg.port}/${cfg.database}/${cfg.us
 function getOrCreateDb(key) {
   if (!databases.has(key)) {
     databases.set(key, {
-      csprice: new Map(), skuDef: new Map(),
+      csprice: new Map(), skuDef: new Map(), dealer: new Map(),
       dsmartPriceDbConfig: null,
       storeConnections: new Map()
     });
@@ -52,6 +52,12 @@ function dispatchQuery(db, rawText, params) {
   if (/FROM dbo\.SKU_DEF WHERE SKU_ID/i.test(t)) {
     const row = db.skuDef.get(params.skuId);
     return { recordset: row ? [row] : [] };
+  }
+  // validateDealerExists() (12/2026, theo yêu cầu người dùng — CHẶN CỨNG Mã Khách B2B không hợp lệ) — chỉ
+  // tra ở DSmart16 Trung Tâm (HO), không lặp lại ở từng siêu thị, xem lib/dsmartSqlClient.js.
+  if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;?$/i.test(t)) {
+    const row = db.dealer.get(params.custId);
+    return { recordset: (row && row.BLOCK_CODE === 0) ? [{ CUST_ID: params.custId }] : [] };
   }
   if (/UPDATE dbo\.CSPRICE\s/i.test(t) && /SET TYPE = '04'/i.test(t)) {
     const key = `${params.custId}|${params.skuId}`;
@@ -194,7 +200,13 @@ async function main() {
   // Seed SKU_DEF ở CẢ HO lẫn các siêu thị (mỗi CSDL độc lập, phải seed riêng từng nơi — đúng thực tế mỗi
   // siêu thị có catalog riêng, thường đã đồng bộ sẵn qua cơ chế khác của DSmart).
   const skuRow = { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' };
-  getOrCreateDb(dbKey({ server: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' })).skuDef.set('SKU01', skuRow);
+  const hoDbForSeed = getOrCreateDb(dbKey({ server: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' }));
+  hoDbForSeed.skuDef.set('SKU01', skuRow);
+  // Seed DEALER ở HO (validateDealerExists() chỉ tra 1 lần tại Trung Tâm, xem dispatchQuery() ở trên) —
+  // toàn bộ Mã Khách B2B dùng trong file test này (CUST01-CUST06) đều hợp lệ, không bị khoá.
+  for (const custId of ['CUST01', 'CUST02', 'CUST03', 'CUST04', 'CUST05', 'CUST06']) {
+    hoDbForSeed.dealer.set(custId, { BLOCK_CODE: 0 });
+  }
 
   // ===== Chưa cấu hình siêu thị nào -> fan-out trả storeResults rỗng, KHÔNG lỗi, KHÔNG chặn ghi HO =====
   {

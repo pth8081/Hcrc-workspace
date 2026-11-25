@@ -663,6 +663,16 @@
             <button type="button" id="btnDsmartPriceTestSkuDefAccess" data-op="testDsmartPriceSkuDefAccess" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">🔍 Kiểm Tra Quyền Đọc SKU_DEF (Đơn Vị Tính)</button>
             <span id="dsmartPriceSkuDefAccessStatus" class="text-xs"></span>
           </div>
+          <!-- "🔍 Kiểm Tra Quyền Đọc DEALER" (12/2026, theo yêu cầu người dùng: "Nếu không có thì không cho
+               nhập nữa. Bạn phải kiểm tra chứ" — insertWholesalePrice() giờ bắt buộc tra dbo.DEALER để
+               CHẶN CỨNG Mã Khách B2B không hợp lệ/đang bị khoá trước khi ghi, xem
+               validateDealerExists()/lib/dsmartSqlClient.js). DEALER CÙNG CSDL DSmart16 nhưng KHÁC
+               CSPRICE/SKU_DEF, cần quyền SELECT RIÊNG — nút này để đội IT tự xác nhận quyền đã đủ TRƯỚC
+               khi thử ghi giá thật. -->
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnDsmartPriceTestDealerAccess" data-op="testDsmartPriceDealerAccess" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">🔍 Kiểm Tra Quyền Đọc DEALER (Danh Mục Khách Hàng)</button>
+            <span id="dsmartPriceDealerAccessStatus" class="text-xs"></span>
+          </div>
         </div>
         <div class="p-4 border-t flex justify-end gap-2 shrink-0">
           <button data-op="closeDsmartPriceConfigModal" class="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>
