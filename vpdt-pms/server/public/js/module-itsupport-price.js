@@ -2899,7 +2899,20 @@ function renderItTickets() {
   });
 
   document.getElementById('paginationContainer_itTicket').innerHTML = buildPaginationBoxHTML('itTicket', 'renderItTickets');
-  const page = paginateList('itTicket', sortByCreatedAtDesc(visible), 'renderItTickets', 'yêu cầu');
+  // LỖI ĐÃ VÁ (11/2026, theo ảnh chụp thật người dùng gửi — ticket tự sinh từ Onboarding/Offboarding tạo
+  // TRƯỚC bản vá createItTicketForHrTask() [lib/recordActions.js] vẫn thiếu createdAt trên dữ liệu production
+  // ĐANG CÓ — sortByCreatedAtDesc() coi thiếu createdAt là "cũ nhất" (0) nên các ticket này luôn rơi
+  // xuống cuối dù vừa tạo, BẤT KỂ server đã sửa cho ticket MỚI). Bản vá hàm tạo chỉ áp dụng cho ticket
+  // tạo SAU NÀY — ticket CŨ đã thiếu field này vĩnh viễn trong Payload lưu sẵn. Vá NGAY TẠI ĐÂY (không
+  // cần sửa dữ liệu CSDL): ticket thiếu createdAt thì tạm dùng id (luôn là Date.now() lúc tạo — CÙNG quy
+  // ước field 2 đã dùng để hiển thị cột "Thời Gian Tạo" ngay bên dưới khi thiếu createdAt, xem
+  // `t.id ? new Date(t.id).toLocaleString(...)`) làm mốc sắp xếp, KHÔNG đụng gì tới dữ liệu gốc (chỉ bản
+  // sao tạm để sort, không ghi lại DB.itSupportTickets).
+  const sortableTickets = visible.map(t => t.createdAt ? t : {
+    ...t,
+    createdAt: t.id ? new Date(t.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : null
+  });
+  const page = paginateList('itTicket', sortByCreatedAtDesc(sortableTickets), 'renderItTickets', 'yêu cầu');
 
   if (page.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy yêu cầu phù hợp.</td></tr>`;

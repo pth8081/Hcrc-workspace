@@ -1163,6 +1163,41 @@ async function main() {
       assertIncludes(result.filterOptions, '🧪 Thử Nghiệm Mới', 'Dropdown Lọc Theo Danh Mục (#filterCategoryItTicket) phải đồng bộ theo, không còn gõ cứng 5 <option> gốc');
       assertEqual(result.dbCount, 6, 'DB.itTicketCategories phải có đúng 6 phần tử sau khi thêm (5 gốc + 1 mới)');
     });
+
+    // LỖI ĐÃ VÁ (11/2026, theo ảnh chụp thật người dùng gửi — "sắp xếp ticket mới nhất lên đầu" vẫn SAI
+    // sau khi đã vá createItTicketForHrTask() [lib/recordActions.js] tự gán createdAt cho ticket tạo
+    // MỚI): các ticket itSupportTickets tạo từ TRƯỚC bản vá đó (dữ liệu production thật, qua đường "Tạo
+    // Ticket IT" ở Chi Tiết Quy Trình Onboarding/Offboarding) vẫn thiếu createdAt VĨNH VIỄN trong Payload
+    // đã lưu — sortByCreatedAtDesc() (core.js) coi thiếu createdAt là "cũ nhất" (0), luôn đẩy các ticket
+    // này xuống CUỐI danh sách dù id (Date.now() lúc tạo) của chúng mới hơn nhiều ticket khác có
+    // createdAt. Vá renderItTickets() (module-itsupport-price.js) dùng `id` làm mốc sắp xếp dự phòng khi
+    // thiếu createdAt — kiểm tra ĐÚNG thứ tự hiển thị cuối cùng (không chỉ gọi hàm sort thuần), mô phỏng
+    // 3 ticket với id tăng dần nhưng ticket Ở GIỮA thiếu createdAt (giống hệt dữ liệu thật trong ảnh).
+    await run.run('LỖI ĐÃ VÁ: ticket CŨ thiếu createdAt (dữ liệu thật trước bản vá) vẫn được sắp đúng vị trí theo id, KHÔNG bị đẩy xuống cuối bất kể id mới hơn', async () => {
+      await loginAs(page, ADMIN);
+      const result = await page.evaluate(() => {
+        const baseId = 1700000000000; // mốc thời gian giả lập cố định, tránh phụ thuộc đồng hồ thật
+        const fmt = (id) => new Date(id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        const oldPrev = DB.itSupportTickets.slice();
+        DB.itSupportTickets = [
+          { id: baseId, code: 'TEST-OLD', title: '🧪TESTSORT🧪 Ticket Cũ Nhất (có createdAt)', dept: 'IT', creator: 'admin', creatorName: 'Admin', status: 'TODO', category: 'OTHER', createdAt: fmt(baseId), comments: [] },
+          // Ticket "Ở GIỮA" theo id (mới hơn TEST-OLD) nhưng THIẾU createdAt — mô phỏng ĐÚNG dữ liệu
+          // production thật tạo qua đường "Tạo Ticket IT" trước bản vá.
+          { id: baseId + 1000, code: '', title: '🧪TESTSORT🧪 Ticket Giữa (THIẾU createdAt, mô phỏng dữ liệu thật)', dept: 'IT', creator: 'admin', creatorName: 'Admin', status: 'TODO', category: 'OTHER', createdAt: null, comments: [] },
+          { id: baseId + 2000, code: 'TEST-NEW', title: '🧪TESTSORT🧪 Ticket Mới Nhất (có createdAt)', dept: 'IT', creator: 'admin', creatorName: 'Admin', status: 'TODO', category: 'OTHER', createdAt: fmt(baseId + 2000), comments: [] }
+        ];
+        switchTab('itSupport'); setItSupportSubTab('TICKET');
+        document.getElementById('filterKeywordItTicket').value = '🧪TESTSORT🧪';
+        onItTicketFilterChange();
+        const titles = Array.from(document.querySelectorAll('#itTicketTableBody tr td:nth-child(3)')).map(td => td.textContent.trim());
+        DB.itSupportTickets = oldPrev; // dọn lại state, không ảnh hưởng gì sau test này (cuối file)
+        return titles;
+      });
+      assertEqual(result.length, 3, `Phải lọc đúng 3 ticket vừa tạo, thực tế: ${JSON.stringify(result)}`);
+      assertEqual(result[0], '🧪TESTSORT🧪 Ticket Mới Nhất (có createdAt)', 'Ticket mới nhất (có createdAt) phải đứng ĐẦU');
+      assertEqual(result[1], '🧪TESTSORT🧪 Ticket Giữa (THIẾU createdAt, mô phỏng dữ liệu thật)', 'Ticket thiếu createdAt phải đứng GIỮA (theo đúng id, KHÔNG bị đẩy xuống cuối)');
+      assertEqual(result[2], '🧪TESTSORT🧪 Ticket Cũ Nhất (có createdAt)', 'Ticket cũ nhất phải đứng CUỐI');
+    });
   } finally {
     await browser.close();
     server.close();
