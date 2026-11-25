@@ -56,12 +56,26 @@ function getOrCreateDb(key) {
 
 function dispatchQuery(db, rawText, params) {
   const t = rawText.replace(/\s+/g, ' ').trim();
+  // checkDealerCustIds()/checkSkuDefExists() (12/2026, checkDealerAndSkuDef() ở chế độ DIRECT_DB) —
+  // IN-list tham số hoá (@c0, @c1, ... / @s0, @s1, ...) cho nhiều mã cùng lúc. PHẢI kiểm tra TRƯỚC 2 nhánh
+  // tra 1 mã đơn bên dưới — cả 2 nhánh IN-list đều chứa substring "FROM dbo.SKU_DEF WHERE SKU_ID"/
+  // "CUST_ID FROM dbo.DEALER" nên nếu đặt SAU sẽ bị nhánh không có anchor ^/$ bên dưới "nuốt" nhầm trước.
+  if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE BLOCK_CODE = 0 AND CUST_ID IN \(/i.test(t)) {
+    const askedCustIds = Object.values(params);
+    const valid = askedCustIds.filter(id => db.dealer.get(id)?.BLOCK_CODE === 0);
+    return { recordset: valid.map(id => ({ CUST_ID: id })) };
+  }
+  if (/^SELECT SKU_ID, PICEUNIT, UNITCONV, TAX_CODE FROM dbo\.SKU_DEF WHERE SKU_ID IN \(/i.test(t)) {
+    const askedSkuIds = Object.values(params);
+    const found = askedSkuIds.filter(id => db.skuDef.has(id));
+    return { recordset: found.map(id => ({ SKU_ID: id, ...db.skuDef.get(id) })) };
+  }
   if (/FROM dbo\.SKU_DEF WHERE SKU_ID/i.test(t)) {
     const row = db.skuDef.get(params.skuId);
     return { recordset: row ? [row] : [] };
   }
-  // validateDealerExists()/checkDealerCustIds() (12/2026) — insertWholesalePrice() NAY gọi ở CẢ 2 chế độ
-  // (DIRECT_DB lẫn EXTERNAL_API), xem lib/dsmartSqlClient.js.
+  // validateDealerExists() (12/2026) — insertWholesalePrice() NAY gọi ở CẢ 2 chế độ (DIRECT_DB lẫn
+  // EXTERNAL_API), xem lib/dsmartSqlClient.js.
   if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;?$/i.test(t)) {
     const info = db.dealer.get(params.custId);
     return { recordset: (info && info.BLOCK_CODE === 0) ? [{ CUST_ID: params.custId }] : [] };
@@ -256,48 +270,79 @@ async function main() {
     const pingResult = await apiClient.testExternalApiConnection({ externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
     check('testExternalApiConnection(): gọi đúng /ping, trả về {ms}', typeof pingResult.ms === 'number' && lastFetchCall.url === 'https://api.test/dsmart/ping', { pingResult, url: lastFetchCall.url });
 
+    // validateCustAndSkuViaApi() (12/2026, theo yêu cầu người dùng: "bạn sử dụng phương thức nào thì kiểm
+    // tra qua phương thức đó... sau này vì an toàn mình sẽ chặn kết nối sql trực tiếp") — endpoint MỚI
+    // `/wholesale-price/validate`, dùng để tra DEALER/SKU_DEF qua API đối tác thay vì tự mở SQL.
+    mockFetch(async () => ({
+      ok: true, status: 200, json: async () => ({
+        ok: true,
+        custResults: { C1: { valid: true }, C2: { valid: false, reason: 'Không tìm thấy trong DEALER' } },
+        skuResults: { S1: { valid: true }, S2: { valid: false, reason: 'Thiếu dữ liệu Đơn Vị Tính' } }
+      })
+    }));
+    const validateResult = await apiClient.validateCustAndSkuViaApi({ custIds: ['C1', 'C2'], skuIds: ['S1', 'S2'] }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+    check('validateCustAndSkuViaApi(): gọi ĐÚNG path /wholesale-price/validate', lastFetchCall.url === 'https://api.test/dsmart/wholesale-price/validate', lastFetchCall);
+    check('validateCustAndSkuViaApi(): gửi ĐÚNG custIds/skuIds trong body', JSON.stringify(JSON.parse(lastFetchCall.opts.body)) === JSON.stringify({ custIds: ['C1', 'C2'], skuIds: ['S1', 'S2'] }), lastFetchCall.opts.body);
+    check('validateCustAndSkuViaApi(): validCustIds chỉ gồm C1 (hợp lệ), KHÔNG có C2', validateResult.validCustIds instanceof Set && validateResult.validCustIds.has('C1') && !validateResult.validCustIds.has('C2'), [...validateResult.validCustIds]);
+    check('validateCustAndSkuViaApi(): skuDefErrors.get("S1")=null (hợp lệ), S2 nêu đúng lý do', validateResult.skuDefErrors.get('S1') === null && validateResult.skuDefErrors.get('S2') === 'Thiếu dữ liệu Đơn Vị Tính', [...validateResult.skuDefErrors]);
+
+    // Thiếu reason từ đối tác -> vẫn có 1 câu lỗi mặc định rõ ràng (không để trống/undefined).
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, custResults: {}, skuResults: { S9: { valid: false } } }) }));
+    const validateNoReason = await apiClient.validateCustAndSkuViaApi({ custIds: [], skuIds: ['S9'] }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+    check('validateCustAndSkuViaApi(): đối tác không gửi "reason" -> vẫn trả câu lỗi mặc định (không null/undefined)', typeof validateNoReason.skuDefErrors.get('S9') === 'string' && validateNoReason.skuDefErrors.get('S9').length > 0, validateNoReason.skuDefErrors.get('S9'));
+
+    // HTTP lỗi -> DsmartApiError (dùng chung callExternalApi() với applyPriceViaApi/deletePriceViaApi).
+    mockFetch(async () => ({ ok: false, status: 500, json: async () => ({ ok: false, error: 'Lỗi nội bộ đối tác khi kiểm tra DEALER' }) }));
+    await assert.rejects(
+      () => apiClient.validateCustAndSkuViaApi({ custIds: ['C1'], skuIds: [] }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+      (err) => err instanceof apiClient.DsmartApiError && err.message.includes('Lỗi nội bộ đối tác khi kiểm tra DEALER')
+    );
+    check('validateCustAndSkuViaApi(): API đối tác báo lỗi -> DsmartApiError nêu đúng nội dung', true);
+
     global.fetch = originalFetch;
   }
 
   // ===================== C. lib/dsmartSqlClient.js — rẽ nhánh theo priceOperationMode =====================
   {
-    // Stub dsmartPriceConfigStore (điều khiển mode bằng 1 biến) — KHÁC trước đây (12/2026, LỖI THẬT
-    // production): giờ PHẢI cung cấp 1 config DSmart16 Trung Tâm HỢP LỆ dù đang ở chế độ EXTERNAL_API, vì
-    // insertWholesalePrice() NAY gọi getDsmartPool()+validateDealerExists() ở CẢ 2 chế độ (xem chú thích
-    // đầy đủ tại hàm, lib/dsmartSqlClient.js) — updateWholesalePrice()/deleteWholesalePrice() ở chế độ API
-    // thì VẪN KHÔNG đụng SQL/pool nào (không đổi, chỉ riêng "Thêm Giá Mới" mới cần tra DEALER).
+    // Stub dsmartPriceConfigStore (điều khiển mode bằng 1 biến) — getRawConfig() KHÔNG cung cấp config
+    // DSmart16 Trung Tâm hợp lệ nào ở chế độ EXTERNAL_API (host/database/user đều null), CHỦ Ý để chứng
+    // minh insertWholesalePrice() ở chế độ này KHÔNG được đụng tới getDsmartPool()/SQL trực tiếp dù chỉ để
+    // tra DEALER — nếu code lỡ gọi, test sẽ thất bại ngay vì getDsmartPool() ném DsmartConfigError (xem yêu
+    // cầu người dùng: "bạn sử dụng phương thức nào thì kiểm tra qua phương thức đó... sau này vì an toàn
+    // mình sẽ chặn kết nối sql trực tiếp").
     let CURRENT_MODE = 'EXTERNAL_API';
-    // HO_CFG: khuôn getRawConfig() trả về (field `host`, khớp lib/dsmartPriceConfigStore.js) — getDsmartPool()
-    // tự đổi `host` -> `server` khi truyền cho `new sql.ConnectionPool()`, nên dbKey() (dùng `server`) phải
-    // tính theo field ĐÓ, không phải HO_CFG nguyên văn (khác tên field).
-    const HO_CFG = { host: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' };
-    const HO_KEY = dbKey({ server: HO_CFG.host, port: HO_CFG.port, database: HO_CFG.database, user: HO_CFG.user });
     stubModule('lib/dsmartPriceConfigStore', {
-      getRawConfig: async () => ({ ...HO_CFG, passwordEnc: 'enc-pass' }),
-      decryptSecret: () => 'ho-pass',
+      getRawConfig: async () => null,
+      decryptSecret: (v) => v,
       getPriceOperationMode: async () => CURRENT_MODE,
       getExternalApiConfig: async () => ({ externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' })
     });
-    let applyCalls = [], deleteCalls = [];
+    let applyCalls = [], deleteCalls = [], validateCalls = [];
+    // VALID_DEALER_CUST_IDS (giả lập API đối tác trả về cho /wholesale-price/validate) — CAPI1/CAPI2 hợp
+    // lệ, CAPI-KHONG-TON-TAI KHÔNG hợp lệ (dùng ở test tái hiện đúng lỗi thật production bên dưới).
+    const VALID_DEALER_CUST_IDS = new Set(['CAPI1', 'CAPI2']);
     stubModule('lib/dsmartPriceExternalApiClient', {
       applyPriceViaApi: async (params) => { applyCalls.push(params); return { custId: params.custId, skuId: params.skuId, wasOverwrite: true }; },
-      deletePriceViaApi: async (params) => { deleteCalls.push(params); return { alreadyGone: false }; }
+      deletePriceViaApi: async (params) => { deleteCalls.push(params); return { alreadyGone: false }; },
+      validateCustAndSkuViaApi: async ({ custIds, skuIds }) => {
+        validateCalls.push({ custIds, skuIds });
+        return {
+          validCustIds: new Set(custIds.filter(id => VALID_DEALER_CUST_IDS.has(id))),
+          skuDefErrors: new Map(skuIds.map(id => [id, null]))
+        };
+      }
     });
     let listRawCalls = 0;
     const FAKE_STORES = [{ id: 5, storeCode: 'ST05' }, { id: 7, storeCode: 'ST07' }, { id: 9, storeCode: 'ST09' }];
     stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES; } });
-    // Seed DEALER (dùng cho validateDealerExists() mới gọi ở CẢ 2 chế độ) — CAPI1/CAPI2 hợp lệ,
-    // CAPI-KHONG-TON-TAI KHÔNG có trong DEALER (dùng ở test tái hiện đúng lỗi thật production bên dưới).
-    const hoDb = getOrCreateDb(HO_KEY);
-    hoDb.dealer.set('CAPI1', { BLOCK_CODE: 0 });
-    hoDb.dealer.set('CAPI2', { BLOCK_CODE: 0 });
 
     const dsmartSqlClient = freshRequire('lib/dsmartSqlClient');
 
     // LỖI THẬT PRODUCTION (12/2026, người dùng phát hiện ngay sau khi merge bản chặn DEALER ban đầu): ở
     // chế độ "🌐 Theo API", "Thêm Giá Mới" với Mã Khách B2B KHÔNG có trong DEALER vẫn báo "✅ Đã thêm thành
     // công" — vì validateDealerExists() lúc đó đặt SAU nhánh rẽ EXTERNAL_API nên không bao giờ chạy tới.
-    // Tái hiện ĐÚNG kịch bản này + xác nhận đã vá: phải NÉM LỖI, KHÔNG được gọi applyPriceViaApi().
+    // Tái hiện ĐÚNG kịch bản này + xác nhận đã vá: phải NÉM LỖI, KHÔNG được gọi applyPriceViaApi(), và
+    // kiểm tra phải đi qua API đối tác (validateCustAndSkuViaApi()), KHÔNG qua SQL trực tiếp.
     {
       let threw = null;
       try {
@@ -305,7 +350,9 @@ async function main() {
       } catch (err) { threw = err; }
       check('LỖI THẬT ĐÃ VÁ — EXTERNAL_API: Mã Khách B2B KHÔNG có trong DEALER -> insertWholesalePrice() NÉM LỖI, KHÔNG báo thành công', threw && /DEALER/.test(threw.message), threw);
       check('LỖI THẬT ĐÃ VÁ — EXTERNAL_API: Mã Khách B2B sai -> KHÔNG được gọi applyPriceViaApi() (trước đây lỗi này vẫn gọi, API đối tác báo "thành công")', applyCalls.length === 0, applyCalls);
+      check('EXTERNAL_API: kiểm tra DEALER đi qua validateCustAndSkuViaApi() (API đối tác), KHÔNG qua SQL trực tiếp (getRawConfig() trả null, nếu lỡ gọi getDsmartPool() sẽ tự ném lỗi)', validateCalls.length === 1 && validateCalls[0].custIds.includes('CAPI-KHONG-TON-TAI'), validateCalls);
     }
+    validateCalls = [];
 
     const insResult = await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI1', skuId: 'SAPI1', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
     check('EXTERNAL_API: insertWholesalePrice() gọi applyPriceViaApi() ĐÚNG 1 lần, custId/skuId đúng', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1', applyCalls);
@@ -337,6 +384,13 @@ async function main() {
     check('EXTERNAL_API: deleteWholesalePrice() KHÔNG tự fan-out ghi SQL, trả alreadyGone đúng theo API', listRawCalls === 1 && delResult2.alreadyGone === false, delResult2);
     check('EXTERNAL_API: deleteWholesalePrice() targetStoreIds=null -> storeScope ALL vẫn gửi đủ Mã Siêu Thị', JSON.stringify(deleteCalls[0].storeScope) === JSON.stringify({ mode: 'ALL', storeCodes: ['ST05', 'ST07', 'ST09'] }), deleteCalls[0].storeScope);
 
+    // checkDealerAndSkuDef() (POST /preview, lib/dsmartSqlClient.js) — ở chế độ EXTERNAL_API phải đi qua
+    // API đối tác, KHÔNG được đụng SQL trực tiếp (getRawConfig() vẫn trả null ở nhánh test này).
+    validateCalls = [];
+    const previewCheck = await dsmartSqlClient.checkDealerAndSkuDef(['CAPI1', 'CAPI-KHONG-TON-TAI'], ['SAPI1']);
+    check('EXTERNAL_API: checkDealerAndSkuDef() gọi ĐÚNG validateCustAndSkuViaApi() (API đối tác), KHÔNG qua SQL', validateCalls.length === 1, validateCalls);
+    check('EXTERNAL_API: checkDealerAndSkuDef() trả đúng validCustIds (CAPI1 hợp lệ, CAPI-KHONG-TON-TAI không)', previewCheck.validCustIds.has('CAPI1') && !previewCheck.validCustIds.has('CAPI-KHONG-TON-TAI'), [...previewCheck.validCustIds]);
+
     // Chuyển về DIRECT_DB — smoke check: fan-out ĐƯỢC gọi (listRaw), applyPriceViaApi/deletePriceViaApi
     // KHÔNG được gọi nữa, ghi SQL CSPRICE thật thành công (dùng fake mssql module-level ở trên).
     CURRENT_MODE = 'DIRECT_DB';
@@ -355,6 +409,11 @@ async function main() {
     check('DIRECT_DB: insertWholesalePrice() KHÔNG gọi applyPriceViaApi() (đi SQL thật)', applyCalls.length === 0);
     check('DIRECT_DB: insertWholesalePrice() CÓ tự fan-out (listRaw được gọi)', listRawCalls === 1);
     check('DIRECT_DB: insertWholesalePrice() vẫn ghi SQL CSPRICE thành công như trước (hành vi không đổi)', insDirect.custId === 'CDIRECT1' && insDirect.skuId === 'SDIRECT1', insDirect);
+
+    // checkDealerAndSkuDef() ở chế độ DIRECT_DB — phải tự SELECT qua SQL (getDsmartPool()), KHÔNG gọi API
+    // đối tác (applyCalls/deleteCalls/validateCalls của mock API đều không bị động tới).
+    const previewCheckDirect = await dsmartSqlClient2.checkDealerAndSkuDef(['CDIRECT1'], ['SDIRECT1']);
+    check('DIRECT_DB: checkDealerAndSkuDef() tự SELECT qua SQL — CDIRECT1 hợp lệ, SDIRECT1 không lỗi', previewCheckDirect.validCustIds.has('CDIRECT1') && previewCheckDirect.skuDefErrors.get('SDIRECT1') === null, previewCheckDirect);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

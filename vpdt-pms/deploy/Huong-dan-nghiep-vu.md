@@ -10450,6 +10450,53 @@ CÙNG sai trên 1 dòng -> đủ cả 2 lỗi; mã hợp lệ -> chỉ tra 1 l�
 phân biệt; lỗi kết nối/quyền -> trả lỗi rõ cho cả preview) — 120/120
 pass. Không cần thao tác deploy gì thêm ngoài copy code.
 
+### 6j-5. Chuyển kiểm tra DEALER/SKU_DEF sang đi ĐÚNG đường ghi giá đang dùng — chuẩn bị cho việc chặn kết nối SQL trực tiếp (12/2026)
+
+Người dùng xác nhận tiếp tục dùng chế độ "🌐 Theo API" (đối tác đã cấp
+SELECT trên `dbo.DEALER` theo yêu cầu ở mục 6j-2), rồi yêu cầu: "Bạn sử
+dụng phương thức nào thì kiểm tra qua phương thức đó giúp mình nhé, có
+thể sau này vì an toàn mình sẽ chặn kết nối sql trực tiếp" — tức là bản
+vá 6j-4 tuy đã CHẶN ĐÚNG ở cả 2 chế độ, nhưng vẫn LUÔN tự mở kết nối SQL
+trực tiếp tới DSmart16 Trung Tâm (`getDsmartPool()`) để tra DEALER/
+SKU_DEF, BẤT KỂ đang ghi giá qua SQL trực tiếp hay qua API đối tác. Nếu
+sau này người dùng chặn hẳn kết nối SQL trực tiếp (dự định bảo mật dài
+hạn) trong khi vẫn dùng chế độ API, toàn bộ việc kiểm tra sẽ gãy ngay.
+
+**Cách vá**: kiểm tra DEALER/SKU_DEF giờ đi ĐÚNG con đường đang dùng để
+ghi giá:
+- **Chế độ "🖥️ Theo Phần Mềm" (DIRECT_DB)**: không đổi — vẫn tự SELECT
+  qua `getDsmartPool()` (`checkDealerCustIds()`/`checkSkuDefExists()`).
+- **Chế độ "🌐 Theo API" (EXTERNAL_API)**: tra qua endpoint MỚI
+  `POST {baseUrl}/wholesale-price/validate` (đã thống nhất với đối tác,
+  cập nhật vào tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart") —
+  `validateCustAndSkuViaApi({custIds, skuIds}, cfg)`,
+  `lib/dsmartPriceExternalApiClient.js` — **KHÔNG mở kết nối SQL trực
+  tiếp tới DSmart16 nữa, dù chỉ để tra cứu**.
+
+Thêm `checkDealerAndSkuDef(custIds, skuIds)` (`lib/dsmartSqlClient.js`)
+— hàm DÙNG CHUNG tự rẽ nhánh theo `PriceOperationMode`, để
+`POST /preview` KHÔNG tự quyết định gọi SQL hay API (route chỉ gọi ĐÚNG
+1 hàm này). `insertWholesalePrice()` ("Thêm Giá Mới") cũng rẽ nhánh
+TƯƠNG TỰ ngay đầu hàm, trước khi gọi `applyPriceViaApi()`/ghi SQL.
+
+Test: `tests/test-dsmart-price-mode.js` viết lại hoàn toàn phần C (rẽ
+nhánh theo chế độ) — `getRawConfig()` CHỦ Ý trả `null` ở chế độ
+EXTERNAL_API để CHỨNG MINH không còn đụng SQL (nếu code lỡ gọi
+`getDsmartPool()` sẽ tự ném lỗi ngay, bắt được regression); thêm bộ test
+riêng cho `validateCustAndSkuViaApi()` (thành công, thiếu `reason` từ
+đối tác, lỗi HTTP/JSON/mạng) — 56/56 pass. `tests/test-dsmart-wholesale-price.js`
+gộp `checkDealerCustIds()`/`checkSkuDefExists()` mock thành 1 hàm
+`checkDealerAndSkuDef()` (route gọi đúng 1 hàm) — 120/120 pass (không
+đổi hành vi preview, chỉ đổi cách route gọi nội bộ).
+`tests/test-dsmart-natural-key-matching.js` không đổi (vẫn test đúng
+nhánh DIRECT_DB) — 30/30 pass.
+
+Không cần thao tác deploy gì thêm ngoài copy code — đối tác cần triển
+khai thêm endpoint `/wholesale-price/validate` theo đúng tài liệu đã
+cập nhật (không bắt buộc phải xong ngay, nhưng PHẢI xong TRƯỚC khi
+chặn kết nối SQL trực tiếp, nếu không mọi lượt xem trước/"Thêm Giá Mới"
+ở chế độ API sẽ báo lỗi kết nối).
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần
