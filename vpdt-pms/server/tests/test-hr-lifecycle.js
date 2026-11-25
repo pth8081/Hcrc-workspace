@@ -564,6 +564,13 @@ async function main() {
       // là "cũ nhất" và rơi xuống cuối danh sách dù vừa mới tạo. Giờ createItTicketForHrTask() tự gán
       // createdAt (nowVN()) ngay trong draft.
       assert(!!result.ticket.createdAt, 'Ticket tự sinh từ task Onboarding/Offboarding phải có createdAt (để sắp xếp đúng mới nhất lên đầu)');
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng kèm ảnh thật — "mấy ticket này ấn gửi từ onboarding
+      // và offboarding sang thì cũng cần có mã yêu cầu nhé"): cùng lý do thiếu createdAt ở trên, ticket
+      // tự sinh từ task nhãn IT trước đây cũng KHÔNG CÓ code (cột "Mã Yêu Cầu" trống trên giao diện) —
+      // createItTicketForHrTask() giờ tự sinh qua recordCodeGen.generateHcrcCode(), cùng khuôn
+      // HCRC-<Phòng Ban>-ITHT-<số> như ticket tạo thường (generateItTicketCode(), module-tailieu.js).
+      assert(!!result.ticket.code, 'Ticket tự sinh từ task Onboarding/Offboarding phải có Mã Yêu Cầu (code)');
+      assertIncludes(result.ticket.code, '-ITHT-', 'Mã Yêu Cầu phải đúng khuôn HCRC-<Phòng Ban>-ITHT-<số>');
       itTicketId = result.ticket.id;
     });
 

@@ -5272,9 +5272,14 @@ router.post('/hrProcesses/:id/create-it-ticket', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const ticketId = Date.now();
+    // deptAbbrs/existingTickets (11/2026, theo yêu cầu người dùng — ticket tạo từ Onboarding/Offboarding
+    // cũng cần "Mã Yêu Cầu") — đọc TRƯỚC khi khoá hrProcesses, cùng chỉ cần đúng 1 phần dữ liệu nhỏ (không
+    // đọc nguyên appData), xem createItTicketForHrTask() (lib/recordActions.js) cho cách dùng.
+    const deptAbbrs = await getAppDataValue('deptAbbrs');
+    const existingTickets = await getAllForCollection('itSupportTickets');
     let draft = null;
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) => {
-      draft = recordActions.createItTicketForHrTask(freshUser, item, req.body, ticketId);
+      draft = recordActions.createItTicketForHrTask(freshUser, item, req.body, ticketId, { deptAbbrs }, existingTickets);
       return item;
     });
     const ticket = await createForCollection('itSupportTickets', () => ({ ...draft, id: ticketId }));

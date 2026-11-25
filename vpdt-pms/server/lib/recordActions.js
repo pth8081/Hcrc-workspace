@@ -7688,7 +7688,18 @@ function addHrProcessAttachment(user, item, body) {
 // 1 ticket" cứng nhắc như trước. sourceId trỏ ĐÚNG process (để withLockedRecordForCollection khoá được),
 // taskId cần khoá lại RIÊNG được lưu thêm ở sourceTaskId trên chính ticket — xem
 // applyItTicketCompletionToHrProcessTask() bên dưới.
-function createItTicketForHrTask(user, item, body, ticketId) {
+// appData/existingTickets (11/2026, theo yêu cầu người dùng — "mấy ticket này ấn gửi từ onboarding và
+// offboarding sang thì cũng cần có mã yêu cầu nhé", kèm ảnh thật 3 ticket cột "Mã Yêu Cầu" trống) — route
+// này tạo ticket đi TẮT qua createForCollection() thẳng (routes/records.js POST .../create-it-ticket),
+// KHÔNG qua validateAndPrepareCreate()/generateItTicketCode() phía client (module-tailieu.js) như đường
+// tạo ticket thường, nên trước đây KHÔNG CÓ code (cột "Mã Yêu Cầu" luôn trống). Tự sinh code NGAY TẠI
+// ĐÂY, tái dùng ĐÚNG recordCodeGen.generateHcrcCode() (lib/recordCodeGen.js — CÙNG thuật toán
+// HCRC-<viết tắt Phòng Ban>-<viết tắt module>-<số 3 chữ số> mà client generateItTicketCode() tính, đã
+// dùng cho 2 module khác qua đường validateAndPrepareCreate()), KHÔNG tự nghĩ ra công thức mới. Trùng mã
+// do race (2 request gần như đồng thời) vẫn được insertDedicatedRecord() (lib/recordStore.js) tự phát
+// hiện UNIQUE INDEX vi phạm + tự tính lại số thứ tự mới từ dữ liệu TƯƠI rồi ghi lại, không cần khoá thêm
+// ở đây (CÙNG cơ chế race-safety toàn hệ thống đã dùng cho mọi module có `hasCode: true` khác).
+function createItTicketForHrTask(user, item, body, ticketId, appData, existingTickets) {
   const task = findHrTask(item, body?.taskId);
   if (task.department !== 'IT') throw new HttpError(400, 'Chỉ việc thuộc nhãn Hỗ Trợ IT mới tạo được ticket');
   if (task.linkedTicketId != null) throw new HttpError(409, 'Việc này đã có ticket Hỗ Trợ IT liên kết rồi');
@@ -7705,6 +7716,7 @@ function createItTicketForHrTask(user, item, body, ticketId) {
   task.linkedTicketId = ticketId;
   item.history.push({ action: 'IT_TICKET_CREATED', detail: `Tạo ticket Hỗ Trợ IT cho việc: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
   return {
+    code: recordCodeGen.generateHcrcCode(existingTickets || [], appData, user.dept, 'ITHT'),
     title: `[${item.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'}] ${task.taskName} — ${employeeLabel}`,
     description: `${task.taskName}\n${lines.join('\n')}`,
     category: 'ACCOUNT',
