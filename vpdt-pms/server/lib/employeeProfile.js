@@ -1058,6 +1058,70 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   return { jobTitle, dept, posType };
 }
 
+// countCommittedProfilesForPositionKey() — đếm số hồ sơ ĐANG "giữ chỗ" 1 vị trí (positionKey) tại THỜI
+// ĐIỂM HIỆN TẠI, dùng để kiểm tra Định Biên TRƯỚC khi tự gán thêm người thứ N (xem
+// autoAssignOnboardingPosition() ngay dưới) — KHÁC computePositionStats() ở lib/headcountReport.js (chỉ
+// tính status ACTIVE/ON_LEAVE/offboarding cho báo cáo "Thực Tế" hiển thị): ở đây cần tính CẢ hồ sơ DRAFT
+// đang chờ Onboarding (status DRAFT, onboardingQueueStatus PENDING/CONFIRMED) vì bản thân nó ĐÃ giữ 1
+// positionKey — nếu bỏ qua sẽ cho phép gán vượt Định Biên khi nhiều Onboarding cùng dept+jobTitle được
+// tạo liên tiếp/gần như đồng thời (hồ sơ DRAFT chưa tính "Thực Tế" nhưng đã CHIẾM 1 suất). Loại trừ 2
+// trường hợp KHÔNG còn chiếm chỗ: status INACTIVE (đã nghỉ/không qua được thử việc, xem
+// terminateProbationProfile()) và onboardingQueueStatus CANCELLED (ứng viên không nhận việc, xem
+// cancelOnboardingQueueProfile() — hồ sơ này vẫn giữ nguyên positionKey đã gán nhưng KHÔNG còn ý nghĩa
+// chiếm Định Biên nữa).
+function countCommittedProfilesForPositionKey(employeeProfiles, positionKey) {
+  if (!positionKey) return 0;
+  return (employeeProfiles || []).filter(p =>
+    p && p.positionKey === positionKey && p.status !== 'INACTIVE' && p.onboardingQueueStatus !== 'CANCELLED'
+  ).length;
+}
+
+// autoAssignOnboardingPosition() (11/2026, theo yêu cầu người dùng: "Phòng Ban/Chức Danh ở Onboarding
+// phải thành Chức Vụ CHÍNH THỨC ngay, bộ phận tuyển dụng muốn nhập xong là hiệu quả ngay với hồ sơ,
+// không phải tự điền lại" — Phương án B, đã phân tích 2 phương án + rủi ro "nhiều vị trí cùng tên", người
+// dùng xác nhận chọn B) — tự gọi applyPositionAssignment() ngay lúc tạo Onboarding, dùng ĐÚNG cặp Phòng
+// Ban/Chức Danh đã chọn ở form (vốn đã BẮT BUỘC khớp 1 vị trí thật trong Cơ Cấu Tổ Chức — xem
+// extraValidate() hrProcesses ở lib/createValidation.js, nên candidates luôn có ít nhất 1 node, trừ khi
+// Cơ Cấu Tổ Chức đổi version giữa lúc submit form và lúc hàm này chạy — rất hiếm).
+//
+// Nhiều node CÙNG dept+jobTitle (VD 2 vị trí "Nhân Viên Bán Hàng" tách riêng ở 1 Siêu Thị, mỗi node 1
+// Định Biên riêng — xem phân tích đã trình người dùng trước khi code): chọn node ĐẦU TIÊN (theo thứ tự
+// nodeId cố định, xem findAllPositionNodesForDeptJobTitle()) còn CHỖ TRỐNG (committed < headcountQuota,
+// hoặc chưa cấu hình Định Biên = coi như không giới hạn). Nếu TẤT CẢ node khớp đã đủ/vượt Định Biên:
+// KHÔNG chặn tạo Onboarding (đúng yêu cầu người dùng "cảnh báo thay vì chặn cứng") — vẫn gán vào node
+// đầu tiên, nhưng trả về `warning` để caller hiện cảnh báo rõ cho Nhân Sự biết cần tăng Định Biên.
+//
+// Trả về { assigned, warning, node } — assigned=false nếu KHÔNG tìm được node nào khớp (lỗi dữ liệu bất
+// thường, không nên xảy ra do đã chặn ở extraValidate() nêu trên) — caller KHÔNG nên chặn tạo Onboarding
+// vì trường hợp này, chỉ bỏ qua tự gán (giữ nguyên hành vi cũ — positionKey=null, HR tự gán tay sau).
+// applyPositionAssignment() có thể throw (VD chưa áp dụng bản Cơ Cấu Tổ Chức nào) — ĐỂ NGUYÊN cho caller
+// tự bắt (không catch ở đây), vì caller (lib/hrProcessOnboardingCreate.js) mới là nơi quyết định có nên
+// chặn hẳn hay chỉ log rồi bỏ qua — hàm này CHỈ là lớp tính toán/chọn node + gán, không phải lớp xử lý lỗi.
+function autoAssignOnboardingPosition(profile, orgChartVersion, employeeProfiles, dept, jobTitle, actorUsername, actorName) {
+  const orgChart = require('./orgChart'); // require trễ — tránh vòng lặp require (cùng khuôn applyPositionAssignment())
+  const candidates = orgChart.findAllPositionNodesForDeptJobTitle(orgChartVersion, { dept, jobTitle });
+  if (!candidates.length) return { assigned: false, warning: null, node: null };
+  let chosen = null, chosenCommitted = 0;
+  for (const node of candidates) {
+    const committed = countCommittedProfilesForPositionKey(employeeProfiles, node.positionKey);
+    if (node.headcountQuota == null || committed < node.headcountQuota) { chosen = node; chosenCommitted = committed; break; }
+  }
+  let warning = null;
+  if (!chosen) {
+    chosen = candidates[0];
+    chosenCommitted = countCommittedProfilesForPositionKey(employeeProfiles, chosen.positionKey);
+    const label = orgChart.buildNodeDisplayName(orgChartVersion, chosen);
+    warning = candidates.length > 1
+      ? `Định Biên của ${candidates.length} vị trí "${jobTitle}" tại "${dept}" đều đã đủ/vượt (hiện ${chosenCommitted}/${chosen.headcountQuota}) — đã tạm gán vào "${label}", đề nghị Nhân Sự xem lại và tăng Định Biên cho đúng thực tế tuyển dụng.`
+      : `Định Biên vị trí "${label}" đã đủ/vượt (hiện ${chosenCommitted}/${chosen.headcountQuota}) — đề nghị Nhân Sự xem lại và tăng Định Biên cho đúng thực tế tuyển dụng.`;
+  }
+  const note = warning
+    ? 'Tự động gán khi tạo Onboarding (theo Phòng Ban/Chức Danh đã chọn) — CẢNH BÁO vượt Định Biên, xem chi tiết ở thông báo kèm theo.'
+    : 'Tự động gán khi tạo Onboarding (theo Phòng Ban/Chức Danh đã chọn)';
+  applyPositionAssignment(profile, orgChartVersion, chosen.positionKey, null, actorUsername, actorName, note, null, null);
+  return { assigned: true, warning, node: chosen };
+}
+
 // clearPositionAssignmentForce() (11/2026, theo yêu cầu người dùng: "buộc gỡ & xóa" 1 Vị Trí trong Cơ Cấu
 // Tổ Chức dù còn nhân viên đang giữ theo Hồ Sơ Nhân Sự) — NGƯỢC LẠI applyPositionAssignment() ở trên:
 // gỡ hẳn chức vụ CHÍNH THỨC của 1 hồ sơ (về rỗng), ghi 1 dòng positionHistory nêu rõ lý do (xoá vị trí),
@@ -2131,6 +2195,7 @@ module.exports = {
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, clearPositionAssignmentForce, assertValidManualStatusTransition, resolveProfileDisplayName,
+  countCommittedProfilesForPositionKey, autoAssignOnboardingPosition,
   computeHrReportSummary, computeTenureYears,
   AUTO_ON_LEAVE_WORK_STATUS_DETAILS, autoRevertExpiredWorkStatusLeaves
 };

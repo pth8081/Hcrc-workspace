@@ -446,7 +446,12 @@ async function submitHrpOnboarding(e) {
   resetHrpOnboardingForm();
   hideHrCreateForms();
   renderHrProcessList();
-  alert('✅ Đã tạo quy trình Onboarding — checklist đã được sinh sẵn!');
+  // positionAutoAssignWarning (11/2026 — tự gán Chức Vụ CHÍNH THỨC theo Phòng Ban/Chức Danh đã chọn,
+  // xem autoAssignOnboardingPosition()/lib/employeeProfile.js): server vẫn tự gán dù Định Biên đã đủ/
+  // vượt (không chặn tuyển), chỉ trả cảnh báo này để Nhân Sự biết cần tăng Định Biên cho đúng thực tế.
+  alert(newItem.positionAutoAssignWarning
+    ? `✅ Đã tạo quy trình Onboarding — checklist đã được sinh sẵn!\n\n⚠️ ${newItem.positionAutoAssignWarning}`
+    : '✅ Đã tạo quy trình Onboarding — checklist đã được sinh sẵn!');
 }
 function resetHrpOnboardingForm() {
   const formEl = document.getElementById('hrpOnboardingForm');

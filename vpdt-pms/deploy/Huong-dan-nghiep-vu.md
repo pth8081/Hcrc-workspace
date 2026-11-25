@@ -4699,6 +4699,36 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
     lưu không còn khớp cây hiện tại — chỉ bị chặn khi người dùng **chủ
     động đổi SANG** 1 Phòng Ban/Chức Danh/Vị Trí khác mà cặp mới đó không
     khớp vị trí thật nào.
+  - **Tự động gán "Chức Vụ CHÍNH THỨC" lên Hồ Sơ Nhân Sự ngay lúc tạo
+    Onboarding (11/2026, theo yêu cầu TRỰC TIẾP người dùng — "khi nhập
+    thông tin onboarding là hiệu quả ngay với hồ sơ", bộ phận tuyển dụng
+    phản ánh trước đó HR phải tự điền lại Phòng Ban/Chức Danh vào Hồ Sơ
+    Nhân Sự sau khi Onboarding đã tạo xong)**: cặp Phòng Ban/Chức Danh đã
+    chọn ở form không còn CHỈ là ghi chú tham khảo trên quy trình — hệ
+    thống tự tìm đúng vị trí đó trong Cơ Cấu Tổ Chức và **gán luôn vào Hồ
+    Sơ Nhân Sự** (`positionKey`/`jobTitle`/`dept`/`positionLabel`/`posType`
+    + 1 dòng Lịch Sử Chức Vụ "Tự động gán khi tạo Onboarding"), không cần
+    HR vào Hồ Sơ "Gán Chức Vụ" tay lại từ đầu như trước.
+    - **Có nhiều vị trí trùng tên (VD 2 "Nhân Viên Bán Hàng" tách riêng
+      cùng 1 Siêu Thị, mỗi vị trí 1 Định Biên riêng)**: hệ thống tự chọn
+      vị trí ĐẦU TIÊN (theo đúng thứ tự tạo trong Cơ Cấu Tổ Chức) còn
+      **Định Biên trống**; chỉ khi TẤT CẢ vị trí trùng tên đó đã đủ/vượt
+      Định Biên mới tạm gán vào vị trí đầu tiên kèm cảnh báo (xem ngay
+      dưới) — không chọn ngẫu nhiên, không bỏ sót vị trí còn trống.
+    - **Định Biên đã đủ/vượt → KHÔNG chặn tạo Onboarding** (đúng yêu cầu
+      người dùng "cảnh báo thay vì chặn cứng, không để ảnh hưởng tuyển
+      dụng") — vẫn tạo + gán bình thường, chỉ hiện thêm 1 dòng cảnh báo
+      ngay sau khi tạo thành công (VD *"Định Biên vị trí "Nhân Viên Bán
+      Hàng — Siêu Thị A" đã đủ/vượt (3/3) — đề nghị Nhân Sự xem lại và
+      tăng Định Biên cho đúng thực tế tuyển dụng."*) để Nhân Sự biết cần
+      vào Cơ Cấu Tổ Chức (4.9) tăng Định Biên (`headcountQuota`) cho
+      đúng.
+    - Vị trí chưa cấu hình Định Biên (`headcountQuota` để trống) coi như
+      **không giới hạn** — không bao giờ cảnh báo.
+    - Hồ sơ đang ở hàng đợi Onboarding nhưng đã bị **"Hủy"** (không tuyển)
+      hoặc đã **"Đã nghỉ"** (INACTIVE) KHÔNG tính vào số đang chiếm Định
+      Biên của vị trí đó nữa — tự động giải phóng lại suất cho người kế
+      tiếp, không cần HR tự tay gỡ gì thêm.
 - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
   tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày Nghỉ Việc
   (bắt buộc, validate cả server)**, tuỳ chọn tick "đang giữ vị trí quản lý" +

@@ -250,6 +250,31 @@ function findPositionNodeForUser(version, user) {
   }) || null;
 }
 
+// findAllPositionNodesForDeptJobTitle() (11/2026, phục vụ autoAssignOnboardingPosition() ở
+// lib/employeeProfile.js — tự gán Chức Vụ CHÍNH THỨC ngay lúc tạo Onboarding theo Phòng Ban/Chức Danh đã
+// chọn) — KHÁC findPositionNodeForUser() ở trên (chỉ trả 1 kết quả .find(), dùng cho khớp 1 user/1 dòng
+// Excel): trả về TẤT CẢ node POSITION khớp (CÙNG predicate khớp dept/jobTitle), vì 1 cặp dept+jobTitle có
+// thể ứng với NHIỀU node khác nhau trong Cơ Cấu Tổ Chức (VD 2 node "Nhân Viên Bán Hàng" tách riêng cùng 1
+// Siêu Thị, mỗi node 1 Định Biên riêng) — caller cần biết ĐỦ danh sách để tự chọn node còn chỗ, không chỉ
+// node đầu tiên tình cờ khớp. Sắp xếp theo nodeId tăng dần (nodeId sinh tuần tự qua nextNodeId() lúc tạo
+// node — thứ tự CỐ ĐỊNH, không đổi giữa các lần gọi) để việc "chọn node đầu tiên còn chỗ" luôn nhất quán,
+// không phụ thuộc thứ tự ngẫu nhiên trong version.nodes.
+function findAllPositionNodesForDeptJobTitle(version, { dept, jobTitle }) {
+  if (!jobTitle) return [];
+  const wantJobTitle = normalizeMatchText(jobTitle);
+  const wantDept = normalizeMatchText(dept);
+  return (version?.nodes || []).filter(n => {
+    if (n.nodeType !== 'POSITION') return false;
+    if (normalizeMatchText(n.jobTitle) !== wantJobTitle) return false;
+    if (n.requiresDept === false) return true;
+    const deptNode = findNearestDeptAncestor(version, n);
+    if (!deptNode) return false;
+    const deptRefMatches = !!deptNode.departmentRef && normalizeMatchText(deptNode.departmentRef) === wantDept;
+    const nodeNameMatches = !!deptNode.nodeName && normalizeMatchText(deptNode.nodeName) === wantDept;
+    return deptRefMatches || nodeNameMatches;
+  }).sort((a, b) => a.nodeId - b.nodeId);
+}
+
 // diagnosePositionMismatch() (12/2026, cùng đợt vá nodeName/departmentRef lệch nhau ở trên) — CHỈ dùng
 // để DỰNG THÔNG BÁO LỖI rõ ràng hơn cho hrProfilePositionAssignImport.js khi findPositionNodeForUser()
 // không khớp được dòng Excel nào — KHÔNG dùng để quyết định khớp/không khớp (đó vẫn là
@@ -890,7 +915,7 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
-  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, diagnosePositionMismatch, listOnboardingPositionOptions,
+  buildNodeDisplayName, buildNodeDisplayNameWithDept, findNearestDeptAncestor, resolvePositionOccupants, resolvePositionOccupantsDetailed, findPositionNodeForUser, findAllPositionNodesForDeptJobTitle, diagnosePositionMismatch, listOnboardingPositionOptions,
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade, collectCascadeNodeIds, planForceDeleteNodeCascade, planForceApplyUnassignOccupiedPositions,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
