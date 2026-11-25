@@ -2938,6 +2938,17 @@ function renderItTickets() {
       </td>
     </tr>
   `).join('');
+  moduleRefreshLastUpdatedLabel('itTicketLastUpdated', 'itSupport');
+}
+// Nút "🔄 Làm Mới" riêng cho màn "Hỗ Trợ Yêu Cầu" (11/2026, theo yêu cầu người dùng — "thêm nút làm mới
+// giống các tab khác để không phải F5 load cả trang") — dùng chung refreshModuleScreen()/
+// moduleRefreshLastUpdatedLabel() (core.js, ĐÃ TEST) với lazyGroup 'itSupport' (xem
+// assignLazyGroupField('itSupportTickets', data) ở core.js — itSupportTickets thuộc nhóm lazy này,
+// KHÔNG nằm trong payload chính của initDatabase() nên PHẢI truyền lazyGroup mới tải lại được dữ liệu
+// mới nhất, không chỉ vẽ lại DB cũ trong bộ nhớ). CHỈ vẽ lại đúng màn này, không ảnh hưởng tab khác.
+async function refreshItTickets() {
+  await refreshModuleScreen(document.getElementById('itTicketRefreshBtn'), renderItTickets, { lazyGroup: 'itSupport' });
+  moduleRefreshLastUpdatedLabel('itTicketLastUpdated', 'itSupport');
 }
 
 function runItTicketAction(id, action) {

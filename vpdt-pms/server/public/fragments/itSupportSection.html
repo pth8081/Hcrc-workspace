@@ -169,7 +169,16 @@
       </details>
 
       <div class="space-y-3">
-        <h3 class="font-bold text-gray-800">📋 Danh Sách Yêu Cầu Hỗ Trợ</h3>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Yêu Cầu Hỗ Trợ</h3>
+          <!-- Nút "🔄 Làm Mới" TAY (11/2026, theo yêu cầu người dùng — "thêm nút làm mới giống các tab
+               khác để không phải F5 load cả trang") — mirror ĐÚNG itPriceRefreshBtn ở trên, xem
+               refreshItTickets() (module-itsupport-price.js). -->
+          <div class="text-right">
+            <button id="itTicketRefreshBtn" type="button" data-op="refreshItTickets" class="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-700 whitespace-nowrap">🔄 Làm Mới</button>
+            <div id="itTicketLastUpdated" class="text-[11px] text-gray-400 mt-1"></div>
+          </div>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead>
