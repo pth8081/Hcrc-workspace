@@ -1898,6 +1898,10 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     thiếu "Thời Gian Tạo" (đi tắt khi tạo, không qua đường chung gán mốc
     thời gian), khiến các ticket này luôn rơi xuống cuối danh sách dù vừa
     mới tạo — nay đã gán đúng mốc thời gian, sắp xếp đúng vị trí mới nhất.
+    **Ticket CŨ đã tạo TRƯỚC bản vá này** (đã có sẵn trên hệ thống thật,
+    đang thiếu Thời Gian Tạo) **tự động sắp xếp đúng vị trí ngay khi tải
+    lại trang** — không cần thao tác gì thêm, không cần sửa dữ liệu: màn
+    hình tự suy luận lại mốc thời gian từ chính mã nội bộ của ticket đó.
   - **📐 Mẫu Giá tách riêng theo kênh (10/2026)** — mỗi Mẫu Giá (Hệ Thống →
     Hỗ Trợ IT → "📐 Mẫu Giá", khuôn cột đối chiếu tên cột với file bảng giá
     nộp lên) giờ gắn cố định với ĐÚNG 1 kênh (Bán Lẻ hoặc Bán Buôn) — màn
