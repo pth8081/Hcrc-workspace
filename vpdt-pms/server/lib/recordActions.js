@@ -7711,6 +7711,15 @@ function createItTicketForHrTask(user, item, body, ticketId) {
     status: 'TODO', assignee: null, assigneeName: null, resolutionNote: '', comments: [],
     approvalStatus: null, approvalApprover: null, approvalApproverName: null, approvalReason: '', approvalComment: '',
     dept: user.dept, creator: user.username, creatorName: user.name,
+    // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "sắp xếp ticket mới nhất lên đầu" ở tab Hỗ Trợ Yêu
+    // Cầu IT): route này tạo ticket đi TẮT qua createForCollection() thẳng (routes/records.js POST
+    // /hrProcesses/:id/create-it-ticket), KHÔNG qua validateAndPrepareCreate() (lib/createValidation.js
+    // — nơi DUY NHẤT tự gán createdAt cho ~45 module khác), nên ticket tự sinh từ 1 việc Onboarding/
+    // Offboarding nhãn IT trước đây KHÔNG CÓ createdAt — sortByCreatedAtDesc() (core.js, renderItTickets())
+    // coi thiếu createdAt là "cũ nhất" (toTime=0) nên các ticket này luôn rơi xuống cuối danh sách dù
+    // thời điểm tạo thật mới hơn nhiều ticket khác. Gán createdAt NGAY TẠI ĐÂY, cùng định dạng/nguồn
+    // (server, không tin client) như validateAndPrepareCreate() đang dùng cho mọi module khác.
+    createdAt: nowVN(),
     sourceType: 'HR_PROCESS_TASK', sourceId: item.id, sourceTaskId: task.taskId
   };
 }

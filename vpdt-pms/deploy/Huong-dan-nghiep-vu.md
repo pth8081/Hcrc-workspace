@@ -1889,6 +1889,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     ý kiến còn chờ xử lý quá 2 ngày sẽ tự động gửi email nhắc người được xin
     ý kiến (job chạy mỗi 24h) — không còn phải tự nhớ vào xem badge chờ trên
     giao diện.
+  - **Danh sách luôn sắp xếp "Mới nhất lên đầu" + nút "🔄 Làm Mới" (11/2026,
+    theo yêu cầu người dùng)** — bấm "🔄 Làm Mới" ở đầu danh sách chỉ tải lại
+    đúng dữ liệu ticket + vẽ lại đúng màn này, không cần F5 cả trang (mirror
+    nút Làm Mới ở các tab khác, VD "🏷️ Phê Duyệt Giá" ngay cạnh). **LỖI ĐÃ VÁ
+    cùng đợt**: ticket tự sinh từ 1 việc nhãn IT trong quy trình Onboarding/
+    Offboarding (nút "Tạo Ticket IT" trong Chi Tiết Quy Trình) trước đây
+    thiếu "Thời Gian Tạo" (đi tắt khi tạo, không qua đường chung gán mốc
+    thời gian), khiến các ticket này luôn rơi xuống cuối danh sách dù vừa
+    mới tạo — nay đã gán đúng mốc thời gian, sắp xếp đúng vị trí mới nhất.
   - **📐 Mẫu Giá tách riêng theo kênh (10/2026)** — mỗi Mẫu Giá (Hệ Thống →
     Hỗ Trợ IT → "📐 Mẫu Giá", khuôn cột đối chiếu tên cột với file bảng giá
     nộp lên) giờ gắn cố định với ĐÚNG 1 kênh (Bán Lẻ hoặc Bán Buôn) — màn

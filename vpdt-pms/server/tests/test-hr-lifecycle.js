@@ -557,6 +557,13 @@ async function main() {
       assertEqual(result.ticket.sourceId, offboardId, 'sourceId phải trỏ đúng về quy trình Offboarding');
       assertEqual(result.ticket.sourceTaskId, itOffTask.taskId, 'sourceTaskId phải trỏ đúng về task vừa tạo ticket (phân biệt với các task khác cùng quy trình)');
       assertEqual(result.ticket.status, 'TODO', 'Ticket mới sinh phải ở trạng thái TODO');
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "sắp xếp ticket mới nhất lên đầu" ở tab Hỗ Trợ Yêu
+      // Cầu IT): route này tạo ticket đi TẮT qua createForCollection() (routes/records.js), KHÔNG qua
+      // validateAndPrepareCreate() — nơi DUY NHẤT tự gán createdAt cho mọi module khác — nên ticket tự
+      // sinh từ task nhãn IT trước đây KHÔNG CÓ createdAt, khiến sortByCreatedAtDesc() (core.js) luôn coi
+      // là "cũ nhất" và rơi xuống cuối danh sách dù vừa mới tạo. Giờ createItTicketForHrTask() tự gán
+      // createdAt (nowVN()) ngay trong draft.
+      assert(!!result.ticket.createdAt, 'Ticket tự sinh từ task Onboarding/Offboarding phải có createdAt (để sắp xếp đúng mới nhất lên đầu)');
       itTicketId = result.ticket.id;
     });
 
