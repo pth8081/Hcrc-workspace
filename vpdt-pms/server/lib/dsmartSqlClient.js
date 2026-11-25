@@ -465,6 +465,51 @@ async function lookupSkuDefUnitInfo(pool, skuId) {
   return { unit, unitConv: unitConvNum, taxCode };
 }
 
+// checkSkuDefExists(pool, skuIds) — bản TRA HÀNG LOẠT của lookupSkuDefUnitInfo(), dùng riêng cho
+// POST /preview (12/2026, theo yêu cầu người dùng: "nên kt mã ncc và mã hàng trong review thay vì khi ấn
+// ghi" — SKU_DEF trước nay CHỈ được tra ở bước ghi thật, bên trong upsertPriceOnPool(), nên preview không
+// bắt được Mã Sản Phẩm sai cho tới khi bấm ghi). CHỈ tra tại DSmart16 Trung Tâm (cùng phạm vi
+// validateDealerExists()/checkDealerCustIds() ở dưới) — KHÔNG thể biết trước preview sẽ áp cho siêu thị
+// nào (chọn sau khi xem trước), nên nếu HO hợp lệ nhưng 1 siêu thị cụ thể lại thiếu đúng SKU_ID đó, lần
+// fan-out ĐẦU TIÊN xuống siêu thị đó vẫn sẽ tự báo lỗi rõ trong storeResults như từ trước tới nay — preview
+// chỉ giúp bắt lỗi SỚM cho trường hợp phổ biến hơn nhiều (gõ nhầm/chưa tạo Mã Sản Phẩm ở DSmart nói chung).
+// Trả về 1 `Map<skuId, lỗi|null>` — `null` nghĩa là HỢP LỆ; khác `null` là lý do không hợp lệ, phân biệt
+// rõ 2 nguyên nhân giống lookupSkuDefUnitInfo(): không tìm thấy, HOẶC thiếu dữ liệu Đơn Vị Tính/Thuế.
+async function checkSkuDefExists(pool, skuIds) {
+  const unique = [...new Set(skuIds)];
+  const resultMap = new Map();
+  if (!unique.length) return resultMap;
+  const req = pool.request();
+  const placeholders = unique.map((id, i) => {
+    const p = `s${i}`;
+    req.input(p, sql.NVarChar(50), String(id));
+    return `@${p}`;
+  });
+  let result;
+  try {
+    result = await req.query(`SELECT SKU_ID, PICEUNIT, UNITCONV, TAX_CODE FROM dbo.SKU_DEF WHERE SKU_ID IN (${placeholders.join(', ')});`);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi kiểm tra danh sách Mã Sản Phẩm trong danh mục SKU_DEF: ${err.message} — kiểm tra tài khoản SQL đã được GRANT SELECT trên dbo.SKU_DEF chưa (khác quyền trên CSPRICE).`);
+  }
+  const foundBySkuId = new Map((result.recordset || []).map(r => [String(r.SKU_ID).trim(), r]));
+  for (const skuId of unique) {
+    const row = foundBySkuId.get(skuId);
+    if (!row) {
+      resultMap.set(skuId, `Không tìm thấy Mã Sản Phẩm "${skuId}" trong danh mục SKU_DEF trên DSmart — kiểm tra lại đúng Mã Sản Phẩm, hoặc sản phẩm chưa được tạo trên DSmart`);
+      continue;
+    }
+    const unit = String(row.PICEUNIT || '').trim();
+    const taxCode = String(row.TAX_CODE || '').trim();
+    const unitConvNum = Number(row.UNITCONV);
+    if (!unit || !taxCode || !Number.isFinite(unitConvNum)) {
+      resultMap.set(skuId, `Mã Sản Phẩm "${skuId}" thiếu dữ liệu Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế trong SKU_DEF — cần đội DSmart bổ sung đầy đủ danh mục sản phẩm`);
+      continue;
+    }
+    resultMap.set(skuId, null);
+  }
+  return resultMap;
+}
+
 // validateDealerExists(pool, custId) — CHẶN CỨNG Mã Khách B2B không hợp lệ TRƯỚC khi ghi giá (12/2026,
 // theo yêu cầu người dùng, sau khi gỡ hẳn cảnh báo MỀM custIdExistsInCsprice() cũ: "Nếu không có thì
 // không cho nhập nữa. Bạn phải kiểm tra chứ"). Người dùng gửi nguyên văn `BRG_APP.sql` (phần mềm áp giá
@@ -966,5 +1011,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, checkSkuDefExists, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

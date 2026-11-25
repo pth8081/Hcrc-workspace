@@ -10424,6 +10424,32 @@ chế độ nào). `tests/test-dsmart-wholesale-price.js` thêm 5 kịch bản c
 `tests/test-dsmart-natural-key-matching.js` thêm 3 kịch bản đơn vị cho
 `checkDealerCustIds()` — 27/27 pass.
 
+**Bổ sung cùng đợt (người dùng nhắc lại ngay sau khi vá xong)**: "Phải
+chặn ngay nhé. Bạn xem nên kt mã ncc và mã hàng trong review thay vì
+khi ấn ghi nhé" — Mã Sản Phẩm (SKU_ID) trước đó CŨNG chỉ được tra ở
+bước ghi thật (`lookupSkuDefUnitInfo()` bên trong `upsertPriceOnPool()`),
+preview chưa bắt được mã hàng sai, giống hệt tình huống DEALER ở trên.
+Thêm `checkSkuDefExists(pool, skuIds)` (bản TRA HÀNG LOẠT của
+`lookupSkuDefUnitInfo()`, trả về `Map<skuId, lỗi|null>` — phân biệt rõ
+"không tìm thấy" và "thiếu dữ liệu Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế",
+giống 2 lý do `lookupSkuDefUnitInfo()` đã phân biệt) — gọi CÙNG lúc với
+`checkDealerCustIds()` ở `POST /preview`, 1 dòng có thể bị gắn ĐỦ CẢ 2
+lỗi nếu cả Mã Khách B2B lẫn Mã Sản Phẩm đều sai. **Chỉ tra tại DSmart16
+Trung Tâm** (cùng phạm vi DEALER) — preview chưa biết sẽ áp cho siêu
+thị nào (chọn SAU khi xem trước), nên nếu 1 siêu thị cụ thể thiếu đúng
+SKU_ID đó dù HO có, lần fan-out ĐẦU TIÊN xuống siêu thị đó vẫn tự báo
+lỗi rõ trong `storeResults` như từ trước tới nay (không đổi) — preview
+chỉ giúp bắt sớm trường hợp phổ biến hơn (gõ nhầm/chưa tạo Mã Sản Phẩm
+nói chung).
+
+Test: `test-dsmart-natural-key-matching.js` thêm 3 kịch bản đơn vị cho
+`checkSkuDefExists()` — 30/30 pass. `test-dsmart-wholesale-price.js`
+thêm 5 kịch bản cho `POST /preview` (Mã Sản Phẩm sai -> báo lỗi dòng;
+lặp lại nhiều dòng -> tất cả đều báo lỗi; Mã Khách B2B VÀ Mã Sản Phẩm
+CÙNG sai trên 1 dòng -> đủ cả 2 lỗi; mã hợp lệ -> chỉ tra 1 lần/mã
+phân biệt; lỗi kết nối/quyền -> trả lỗi rõ cho cả preview) — 120/120
+pass. Không cần thao tác deploy gì thêm ngoài copy code.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần

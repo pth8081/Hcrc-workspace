@@ -46,6 +46,12 @@ let lastSkuDefAccessOverrideCfg = 'UNSET';
 let INVALID_DEALER_CUST_IDS = new Set();
 let forceDealerCheckError = false;
 let lastCheckDealerCustIdsArg = null;
+// INVALID_SKUDEF_SKU_IDS/forceSkuDefCheckError (12/2026, kiểm SKU_DEF ngay ở POST /preview, theo yêu cầu
+// người dùng "kt mã ncc và mã hàng trong review") — mặc định RỖNG (mọi Mã Sản Phẩm coi như HỢP LỆ) để
+// KHÔNG ảnh hưởng các test /preview đã có từ trước. Map value = lý do lỗi (giả lập 'not_found'/'missing_data').
+let INVALID_SKUDEF_SKU_IDS = new Map();
+let forceSkuDefCheckError = false;
+let lastCheckSkuDefExistsArg = null;
 
 class FakeHttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
@@ -113,6 +119,16 @@ stubModule('lib/dsmartSqlClient', {
     lastCheckDealerCustIdsArg = custIds;
     if (forceDealerCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Khách B2B trong DEALER (giả lập)');
     return new Set(custIds.filter(id => !INVALID_DEALER_CUST_IDS.has(id)));
+  },
+  // checkSkuDefExists() (12/2026, POST /preview tra SKU_DEF) — mặc định mọi Mã Sản Phẩm HỢP LỆ (chỉ skuId
+  // có trong INVALID_SKUDEF_SKU_IDS mới bị coi là KHÔNG hợp lệ), giữ nguyên hành vi mọi test /preview đã
+  // có từ trước.
+  checkSkuDefExists: async (pool, skuIds) => {
+    lastCheckSkuDefExistsArg = skuIds;
+    if (forceSkuDefCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Sản Phẩm trong SKU_DEF (giả lập)');
+    const map = new Map();
+    for (const id of skuIds) map.set(id, INVALID_SKUDEF_SKU_IDS.get(id) || null);
+    return map;
   },
   // testStoreConnection() (12/2026, FAN-OUT) — nút "🔌 Kiểm Tra" trên TỪNG dòng siêu thị ở màn Cấu Hình
   // Kết Nối Siêu Thị — logic thật đã test đầy đủ ở test-dsmart-store-fanout.js, ở đây chỉ cần đúng hành
@@ -802,6 +818,74 @@ async function main() {
     forceDealerCheckError = false;
     assert.notStrictEqual(res.status, 200, JSON.stringify(res.body));
     assert.ok(res.body.error && res.body.error.includes('DEALER'), JSON.stringify(res.body));
+  });
+
+  // ===== Tra SKU_DEF NGAY ở bước xem trước (12/2026, theo yêu cầu người dùng: "nên kt mã ncc và mã hàng
+  // trong review thay vì khi ấn ghi") =====
+  await test('POST /preview: Mã Sản Phẩm KHÔNG có trong SKU_DEF -> báo lỗi dòng ngay ở preview (không đợi tới lúc ghi)', async () => {
+    INVALID_SKUDEF_SKU_IDS = new Map([['SKU-SAI', 'Không tìm thấy Mã Sản Phẩm "SKU-SAI" trong danh mục SKU_DEF trên DSmart']]);
+    const buf = await buildXlsxBuffer([
+      ['244000000001', 'SKU-SAI', 32076, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    INVALID_SKUDEF_SKU_IDS = new Map();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows.length, 1);
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('SKU_DEF')), JSON.stringify(res.body.rows[0].errors));
+    assert.strictEqual(res.body.rows[0].hasOverlap, false);
+  });
+
+  await test('POST /preview: Mã Sản Phẩm sai lặp lại ở NHIỀU dòng -> TẤT CẢ các dòng đó đều báo lỗi SKU_DEF, mã khác không ảnh hưởng', async () => {
+    INVALID_SKUDEF_SKU_IDS = new Map([['SKU-SAI', 'thiếu dữ liệu Đơn Vị Tính']]);
+    const buf = await buildXlsxBuffer([
+      ['244000000001', 'SKU-SAI', 10000, '2026-01-01', '2026-01-31'],
+      ['244000000002', 'SKU-SAI', 20000, '2026-01-01', '2026-01-31'],
+      ['244000000003', '2001326541', 30000, '2026-01-01', '2026-01-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    INVALID_SKUDEF_SKU_IDS = new Map();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('thiếu dữ liệu')), JSON.stringify(res.body.rows[0].errors));
+    assert.ok(res.body.rows[1].errors.some(e => e.includes('thiếu dữ liệu')), JSON.stringify(res.body.rows[1].errors));
+    assert.strictEqual(res.body.rows[2].errors.length, 0, 'Mã Sản Phẩm hợp lệ khác không bị ảnh hưởng');
+  });
+
+  await test('POST /preview: Mã Khách B2B VÀ Mã Sản Phẩm CÙNG sai trên 1 dòng -> báo ĐỦ CẢ 2 lỗi, không chỉ 1', async () => {
+    INVALID_DEALER_CUST_IDS = new Set(['244000000780']);
+    INVALID_SKUDEF_SKU_IDS = new Map([['SKU-SAI', 'Không tìm thấy']]);
+    const buf = await buildXlsxBuffer([
+      ['244000000780', 'SKU-SAI', 35532, '2026-11-23', '2026-11-30']
+    ]);
+    const res = await apiUploadPreview(buf);
+    INVALID_DEALER_CUST_IDS = new Set();
+    INVALID_SKUDEF_SKU_IDS = new Map();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('DEALER')), JSON.stringify(res.body.rows[0].errors));
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('SKU_DEF') || e.includes('Không tìm thấy')), JSON.stringify(res.body.rows[0].errors));
+  });
+
+  await test('POST /preview: Mã Sản Phẩm HỢP LỆ -> chỉ gọi tra ĐÚNG 1 lần/mã phân biệt, dù lặp lại nhiều dòng', async () => {
+    lastCheckSkuDefExistsArg = null;
+    const buf = await buildXlsxBuffer([
+      ['244000000001', '2001326541', 32076, '2026-10-08', '2026-10-31'],
+      ['244000000002', '2001326541', 18900, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows[0].errors.length, 0, JSON.stringify(res.body.rows[0].errors));
+    assert.strictEqual(res.body.rows[1].errors.length, 0, JSON.stringify(res.body.rows[1].errors));
+    assert.deepStrictEqual(lastCheckSkuDefExistsArg, ['2001326541'], 'chỉ tra 1 lần cho Mã Sản Phẩm phân biệt, dù lặp lại 2 dòng');
+  });
+
+  await test('POST /preview: lỗi kiểm tra SKU_DEF (mất kết nối/thiếu quyền) -> trả lỗi rõ ràng cho CẢ preview, không âm thầm coi như hợp lệ', async () => {
+    forceSkuDefCheckError = true;
+    const buf = await buildXlsxBuffer([
+      ['244000000001', '2001326541', 32076, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    forceSkuDefCheckError = false;
+    assert.notStrictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.error && res.body.error.includes('SKU_DEF'), JSON.stringify(res.body));
   });
 
   await test('POST /apply: lỗi DsmartConfigError dừng sớm, không thử tiếp các dòng còn lại', async () => {
