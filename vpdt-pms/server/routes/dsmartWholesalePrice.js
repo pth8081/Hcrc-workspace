@@ -31,7 +31,7 @@ const {
   getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig,
   getRawConfig, decryptSecret, getExternalApiConfig, savePriceOperationMode, saveExternalApiConfig
 } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, getDsmartPool, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, checkSkuDefExists, getDsmartPool, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { testExternalApiConnection } = require('../lib/dsmartPriceExternalApiClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
@@ -684,21 +684,29 @@ router.post('/preview', uploadRateLimiter, (req, res) => {
     try {
       const { rows } = await parseWholesalePriceFile(req.file.buffer);
       const existingActive = await getAllForCollection('dsmartWholesalePriceEntries');
-      // Tra DEALER NGAY ở bước xem trước (12/2026, theo phát hiện thực tế người dùng: màn preview vẫn báo
-      // "✅ Sẽ thêm mới" cho Mã Khách B2B CHƯA CÓ thật trên DEALER, vì validateDealerExists() trước nay chỉ
-      // chạy ở bước ghi thật insertWholesalePrice() — xem checkDealerCustIds(), lib/dsmartSqlClient.js).
-      // Chỉ tra các Mã Khách B2B PHÂN BIỆT của những dòng CHƯA lỗi gì khác (đỡ tốn 1 câu SELECT cho dòng
-      // chắc chắn không ghi được vì lý do khác rồi).
+      // Tra DEALER + SKU_DEF NGAY ở bước xem trước (12/2026, theo yêu cầu người dùng: "nên kt mã ncc và mã
+      // hàng trong review thay vì khi ấn ghi") — cả 2 trước nay CHỈ được tra ở bước ghi thật
+      // insertWholesalePrice() (Mã Khách B2B qua validateDealerExists(), Mã Sản Phẩm qua
+      // lookupSkuDefUnitInfo() bên trong upsertPriceOnPool()), preview thuần đọc file nên không bắt được
+      // lỗi cho tới khi bấm ghi — xem checkDealerCustIds()/checkSkuDefExists(), lib/dsmartSqlClient.js.
+      // Chỉ tra các mã PHÂN BIỆT của những dòng CHƯA lỗi gì khác (đỡ tốn SELECT cho dòng chắc chắn không
+      // ghi được vì lý do khác rồi).
       const custIdsToCheck = [...new Set(rows.filter(r => r.errors.length === 0).map(r => r.custId))];
+      const skuIdsToCheck = [...new Set(rows.filter(r => r.errors.length === 0).map(r => r.skuId))];
       let validDealerCustIds = null;
-      if (custIdsToCheck.length) {
+      let skuDefErrorsBySkuId = null;
+      if (custIdsToCheck.length || skuIdsToCheck.length) {
         const pool = await getDsmartPool();
-        validDealerCustIds = await checkDealerCustIds(pool, custIdsToCheck);
+        if (custIdsToCheck.length) validDealerCustIds = await checkDealerCustIds(pool, custIdsToCheck);
+        if (skuIdsToCheck.length) skuDefErrorsBySkuId = await checkSkuDefExists(pool, skuIdsToCheck);
       }
       const withOverlap = rows.map(r => {
         const errors = r.errors.slice();
         if (r.errors.length === 0 && validDealerCustIds && !validDealerCustIds.has(r.custId)) {
           errors.push(`Mã Khách B2B "${r.custId}" không có trong danh mục DEALER trên DSmart (hoặc đang bị khoá) — kiểm tra lại đúng mã`);
+        }
+        if (r.errors.length === 0 && skuDefErrorsBySkuId && skuDefErrorsBySkuId.get(r.skuId)) {
+          errors.push(skuDefErrorsBySkuId.get(r.skuId));
         }
         return { ...r, errors, hasOverlap: errors.length === 0 && overlapsExisting(existingActive, r.custId, r.skuId) };
       });

@@ -161,6 +161,16 @@ class FakeRequest {
       const first = Object.keys(SKU_DEF_DB)[0];
       return { recordset: first ? [{ SKU_ID: first, ...SKU_DEF_DB[first] }] : [] };
     }
+    // checkSkuDefExists() — bản TRA HÀNG LOẠT dùng riêng ở POST /preview (12/2026), IN-list tham số hoá
+    // (@s0, @s1, ...) thay vì 1 câu/1 Mã Sản Phẩm như lookupSkuDefUnitInfo().
+    if (/^SELECT SKU_ID, PICEUNIT, UNITCONV, TAX_CODE FROM dbo\.SKU_DEF WHERE SKU_ID IN \(/.test(sql)) {
+      if (SKU_DEF_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'SKU_DEF', database 'DSMART16', schema 'dbo'.");
+      }
+      const askedSkuIds = Object.values(this.inputs);
+      const found = askedSkuIds.filter(id => SKU_DEF_DB[id]);
+      return { recordset: found.map(id => ({ SKU_ID: id, ...SKU_DEF_DB[id] })) };
+    }
     if (/^INSERT INTO dbo\.CSPRICE/.test(sql)) {
       // Lần 5: mô phỏng ĐÚNG ràng buộc PRIMARY KEY thật (CUST_ID, SKU_ID) — trùng cặp này phải ném đúng lỗi
       // SQL Server 2627 (không phải lỗi tự chế), để kiểm chứng isPrimaryKeyViolation()/overwriteWholesalePrice()
@@ -510,6 +520,37 @@ async function main() {
     DEALER_PERMISSION_DENIED = false;
     assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi bị từ chối quyền');
     assert(/GRANT SELECT trên dbo\.DEALER/.test(threw.message), `thông báo phải hướng dẫn rõ cần GRANT SELECT trên DEALER — got: ${threw.message}`);
+  });
+
+  // checkSkuDefExists() (12/2026, POST /preview tra SKU_DEF NGAY ở bước xem trước — theo yêu cầu người
+  // dùng: "nên kt mã ncc và mã hàng trong review thay vì khi ấn ghi") — bản TRA HÀNG LOẠT của
+  // lookupSkuDefUnitInfo(), trả về Map<skuId, lỗi|null> thay vì ném lỗi ngay cho từng mã không hợp lệ.
+  await run.run('checkSkuDefExists(): trả về Map đúng — null cho mã hợp lệ, nêu đúng lý do cho mã không tìm thấy/thiếu dữ liệu', async () => {
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' }, S2: { PICEUNIT: '', UNITCONV: 1, TAX_CODE: 'T5' } };
+    const { getDsmartPool, checkSkuDefExists } = freshClient();
+    const map = await checkSkuDefExists(await getDsmartPool(), ['S1', 'S2', 'S-KHONG-TON-TAI']);
+    assertEqual(map.get('S1'), null, 'S1 đầy đủ dữ liệu -> hợp lệ (null)');
+    assert(/thiếu dữ liệu/.test(map.get('S2')), `S2 thiếu PICEUNIT -> phải nêu lý do thiếu dữ liệu — got: ${map.get('S2')}`);
+    assert(/Không tìm thấy/.test(map.get('S-KHONG-TON-TAI')), `S-KHONG-TON-TAI không có trong SKU_DEF -> phải nêu lý do không tìm thấy — got: ${map.get('S-KHONG-TON-TAI')}`);
+    SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } }; // khôi phục cho các test sau
+  });
+
+  await run.run('checkSkuDefExists(): danh sách rỗng -> trả Map rỗng NGAY, KHÔNG gọi SQL nào', async () => {
+    queryLog = [];
+    const { getDsmartPool, checkSkuDefExists } = freshClient();
+    const map = await checkSkuDefExists(await getDsmartPool(), []);
+    assertEqual(map.size, 0);
+    assert(!queryLog.some(q => /dbo\.SKU_DEF/.test(q)), 'không được tốn 1 câu SQL nào khi danh sách rỗng');
+  });
+
+  await run.run('checkSkuDefExists(): bị từ chối quyền SELECT trên SKU_DEF -> ném DsmartSqlError rõ ràng (KHÔNG âm thầm coi như hợp lệ hết)', async () => {
+    SKU_DEF_PERMISSION_DENIED = true;
+    const { getDsmartPool, checkSkuDefExists, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await checkSkuDefExists(await getDsmartPool(), ['S1']); } catch (err) { threw = err; }
+    SKU_DEF_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi bị từ chối quyền');
+    assert(/GRANT SELECT trên dbo\.SKU_DEF/.test(threw.message), `thông báo phải hướng dẫn rõ cần GRANT SELECT trên SKU_DEF — got: ${threw.message}`);
   });
 
   await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá chính thật (CUST_ID, SKU_ID — 2 cột, Lần 5), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {
