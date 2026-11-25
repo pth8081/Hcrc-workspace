@@ -135,6 +135,31 @@ async function createOnboardingProcessRecord(payload, freshUser, appData) {
         ['education'], freshUser.username, freshUser.name
       );
     }
+    // Tự gán Chức Vụ CHÍNH THỨC ngay lúc tạo Onboarding (11/2026, theo yêu cầu người dùng — xem
+    // autoAssignOnboardingPosition()/lib/employeeProfile.js cho toàn bộ lý do/thiết kế). Dùng
+    // appData.orgChartVersions (CÙNG snapshot đã dùng để chặn cứng employeeDept/employeeJobTitle ở
+    // extraValidate() — lib/createValidation.js — không đọc lại DB cho nhất quán + đỡ 1 round-trip), còn
+    // `arr` (danh sách employeeProfiles) LUÔN là bản MỚI NHẤT trong khoá withLockedAppDataValue này nên
+    // đếm Định Biên (countCommittedProfilesForPositionKey) không bị lệch do race condition giữa nhiều
+    // Onboarding tạo gần như đồng thời. KHÔNG được để lỗi ở đây làm hỏng cả việc tạo Onboarding (tính
+    // năng tiện ích, không phải điều kiện bắt buộc) — bắt lỗi, log, bỏ qua, giữ nguyên hành vi cũ
+    // (positionKey=null, HR tự gán tay sau) nếu có bất kỳ sự cố bất thường nào (VD Cơ Cấu Tổ Chức vừa bị
+    // đổi version khác giữa lúc submit form và lúc chạy tới đây).
+    if (idx !== -1) {
+      try {
+        const orgChart = require('./orgChart'); // require trễ — tránh vòng lặp require (cùng lý do createValidation.js đã nêu)
+        const appliedOrgChartVersion = orgChart.getAppliedVersion(appData?.orgChartVersions || []);
+        if (appliedOrgChartVersion) {
+          const { warning } = employeeProfile.autoAssignOnboardingPosition(
+            arr[idx], appliedOrgChartVersion, arr, record.employeeDept, record.employeeJobTitle,
+            freshUser.username, freshUser.name
+          );
+          if (warning) record.positionAutoAssignWarning = warning;
+        }
+      } catch (err) {
+        console.error('createOnboardingProcessRecord(): tự gán Chức Vụ lúc tạo Onboarding thất bại (bỏ qua, không chặn tạo Onboarding):', err.stack || err.message);
+      }
+    }
     return arr;
   });
 
