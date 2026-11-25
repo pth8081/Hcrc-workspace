@@ -96,7 +96,33 @@ async function testExternalApiConnection(cfg) {
   return { ms: Date.now() - started };
 }
 
+// validateCustAndSkuViaApi({ custIds, skuIds }, cfg) — tra Mã Khách B2B (DEALER) + Mã Sản Phẩm (SKU_DEF)
+// QUA API ĐỐI TÁC thay vì tự mở kết nối SQL trực tiếp tới DSmart16 (12/2026, theo yêu cầu người dùng:
+// "bạn sử dụng phương thức nào thì kiểm tra qua phương thức đó giúp mình nhé, có thể sau này vì an toàn
+// mình sẽ chặn kết nối sql trực tiếp" — sau khi đã CHẶN CỨNG được DEALER/SKU_DEF qua SQL riêng, nhưng
+// bước đó phụ thuộc kết nối SQL trực tiếp tới DSmart16 mà người dùng dự định CHẶN HẲN trong tương lai khi
+// đang dùng chế độ "🌐 Theo API" — nên việc kiểm tra cũng phải đi ĐÚNG đường ghi giá thật đang dùng: chế
+// độ API thì kiểm tra qua API, chế độ ghi SQL trực tiếp thì vẫn tự SELECT như cũ, xem checkDealerCustIds()/
+// checkSkuDefExists() ở lib/dsmartSqlClient.js).
+//
+// Endpoint MỚI `/wholesale-price/validate` (đã thống nhất với đối tác ở tài liệu "Yêu Cầu API: Giá Bán
+// Buôn DSmart") — body {custIds, skuIds} (mảng Mã PHÂN BIỆT, có thể rỗng), trả về
+// {ok, custResults: {<custId>: {valid, reason?}}, skuResults: {<skuId>: {valid, reason?}}}. Trả về ĐÚNG
+// shape checkDealerCustIds()/checkSkuDefExists() (Set các custId hợp lệ + Map<skuId, lỗi|null>) để code
+// gọi (POST /preview, insertWholesalePrice()) dùng chung logic, không cần phân biệt đang tra qua SQL hay
+// qua API.
+async function validateCustAndSkuViaApi({ custIds, skuIds }, cfg) {
+  const data = await callExternalApi(cfg, '/wholesale-price/validate', { custIds: custIds || [], skuIds: skuIds || [] });
+  const custResults = data.custResults || {};
+  const skuResults = data.skuResults || {};
+  const validCustIds = new Set(Object.keys(custResults).filter(id => custResults[id]?.valid === true));
+  const skuDefErrors = new Map(Object.entries(skuResults).map(([id, r]) => [
+    id, r?.valid === true ? null : (r?.reason || `Mã Sản Phẩm "${id}" không hợp lệ theo API đối tác`)
+  ]));
+  return { validCustIds, skuDefErrors };
+}
+
 module.exports = {
-  applyPriceViaApi, deletePriceViaApi, testExternalApiConnection,
+  applyPriceViaApi, deletePriceViaApi, testExternalApiConnection, validateCustAndSkuViaApi,
   DsmartApiConfigError, DsmartApiError
 };

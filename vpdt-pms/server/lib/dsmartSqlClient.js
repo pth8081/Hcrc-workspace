@@ -59,7 +59,7 @@
 const sql = require('mssql');
 const { getRawConfig, decryptSecret, getPriceOperationMode, getExternalApiConfig } = require('./dsmartPriceConfigStore');
 const storeConnStore = require('./dsmartStorePriceConnectionsStore');
-const { applyPriceViaApi, deletePriceViaApi } = require('./dsmartPriceExternalApiClient');
+const { applyPriceViaApi, deletePriceViaApi, validateCustAndSkuViaApi } = require('./dsmartPriceExternalApiClient');
 const { HttpError } = require('./httpErrors');
 
 let cachedPool = null;
@@ -294,10 +294,11 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
 // Server nào nữa (bỏ qua cả getDsmartPool() lẫn fanOutToStores() ở trên) — gọi THẲNG API đối tác
 // (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
 // lo đồng bộ xuống mọi siêu thị qua hạ tầng của họ, không phải việc của hệ thống này nữa ở chế độ này).
-// RIÊNG insertWholesalePrice() ("Thêm Giá Mới") VẪN gọi getDsmartPool() ở CẢ 2 chế độ — xem
-// validateDealerExists() ngay trong hàm đó: CHẶN CỨNG Mã Khách B2B không hợp lệ áp dụng cho cả 2 chế độ,
-// không riêng gì DIRECT_DB (lỗi thật production đã gặp: ban đầu chỉ đặt ở nhánh DIRECT_DB, chế độ API vẫn
-// lọt qua không chặn được gì).
+// RIÊNG insertWholesalePrice() ("Thêm Giá Mới") VẪN chặn cứng Mã Khách B2B không hợp lệ ở CẢ 2 chế độ,
+// nhưng tra ĐÚNG qua đường đang dùng để ghi: DIRECT_DB tự SELECT qua `getDsmartPool()` (như cũ); EXTERNAL_API
+// tra qua API đối tác (`validateCustAndSkuViaApi()`) — KHÔNG mở kết nối SQL trực tiếp nữa (theo yêu cầu
+// người dùng: "sử dụng phương thức nào thì kiểm tra qua phương thức đó... sau này vì an toàn mình sẽ chặn
+// kết nối sql trực tiếp" — xem chú thích đầy đủ tại insertWholesalePrice()).
 //
 // buildStoreScope(targetStoreIds): dù KHÔNG tự fan-out ở chế độ API, vẫn PHẢI báo đúng phạm vi siêu thị cho
 // đối tác biết (field `storeScope`, ĐÚNG khuôn đã thống nhất ở tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart",
@@ -328,27 +329,29 @@ async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
-  // validateDealerExists() (12/2026, theo yêu cầu người dùng, xem chú thích đầy đủ tại hàm): CHẶN CỨNG nếu
-  // Mã Khách B2B không có/đang bị khoá trong danh mục DEALER — chỉ kiểm tra 1 LẦN tại DSmart16 Trung Tâm
-  // (không lặp lại ở từng siêu thị, khác SKU_DEF — ở đây chỉ cần biết tồn tại/không bị khoá, không cần lấy
-  // thêm giá trị cột nào để ghi riêng cho từng siêu thị).
-  //
-  // BẮT BUỘC chạy TRƯỚC khi rẽ nhánh theo chế độ (12/2026, LỖI THẬT production phát hiện ngay sau khi
-  // merge bản chặn ban đầu): bản vá lúc đầu đặt bước này SAU nhánh rẽ "🌐 Theo API" (EXTERNAL_API) — người
-  // dùng đang dùng ĐÚNG chế độ này, nên lượt "Thêm Giá Mới" với Mã Khách B2B sai (244000000780, thực tế
-  // CHƯA có trên DEALER) vẫn báo "✅ Đã thêm thành công", vì validateDealerExists() chưa từng được gọi tới
-  // (code return sớm ở nhánh EXTERNAL_API, ngay phía trên dòng gọi hàm này). Nay kiểm tra NGAY ĐẦU HÀM,
-  // ÁP DỤNG CHO CẢ 2 CHẾ ĐỘ — kết nối DSmart16 Trung Tâm luôn cấu hình được độc lập với chế độ đang chọn
-  // (xem applyDsmartPricePriceModeUI(), public/js/module-itsupport-dsmartprice.js: "2 modal ... luôn cấu
-  // hình được bình thường, độc lập với việc đang chọn dùng cái nào"), nên gọi getDsmartPool() ở đây không
-  // phụ thuộc gì vào việc đang ghi giá qua SQL trực tiếp hay qua API đối tác.
-  const pool = await getDsmartPool();
-  await validateDealerExists(pool, params.custId);
-  if (await getPriceOperationMode() === 'EXTERNAL_API') {
+  // validateDealerExists()/validateCustAndSkuViaApi() — CHẶN CỨNG nếu Mã Khách B2B không có/đang bị khoá
+  // trong danh mục DEALER (12/2026, theo yêu cầu người dùng). LỖI THẬT production (phát hiện ngay sau khi
+  // merge bản chặn ban đầu): bước này từng đặt SAU nhánh rẽ "🌐 Theo API" nên không chạy tới ở chế độ đó —
+  // đã vá bằng cách chuyển lên đầu hàm, NHƯNG lúc đó LUÔN gọi getDsmartPool() (SQL trực tiếp) bất kể chế
+  // độ nào. Người dùng sau đó yêu cầu tiếp: "bạn sử dụng phương thức nào thì kiểm tra qua phương thức đó
+  // giúp mình nhé, có thể sau này vì an toàn mình sẽ chặn kết nối sql trực tiếp" — nghĩa là ở chế độ
+  // EXTERNAL_API, KHÔNG được phụ thuộc kết nối SQL trực tiếp tới DSmart16 nữa (kể cả chỉ để tra DEALER),
+  // vì người dùng dự định CHẶN HẲN kết nối đó khi đã chuyển hẳn sang dùng API. Nay rẽ nhánh theo chế độ
+  // NGAY TỪ ĐẦU: EXTERNAL_API tra qua API đối tác (`validateCustAndSkuViaApi()`,
+  // lib/dsmartPriceExternalApiClient.js, endpoint `/wholesale-price/validate` mới thống nhất); DIRECT_DB
+  // vẫn tự SELECT qua `getDsmartPool()` như trước (không đổi).
+  const mode = await getPriceOperationMode();
+  if (mode === 'EXTERNAL_API') {
+    const { validCustIds } = await validateCustAndSkuViaApi({ custIds: [params.custId], skuIds: [] }, await getExternalApiConfig());
+    if (!validCustIds.has(params.custId)) {
+      throw new DsmartSqlError(`Mã Khách B2B "${params.custId}" không hợp lệ theo kiểm tra của API đối tác (không có trong DEALER, hoặc đang bị khoá) — kiểm tra lại đúng mã.`);
+    }
     const storeScope = await buildStoreScope(targetStoreIds);
     const apiResult = await applyPriceViaApi({ ...params, storeScope }, await getExternalApiConfig());
     return { ...apiResult, storeResults: [], storeFanOutError: null };
   }
+  const pool = await getDsmartPool();
+  await validateDealerExists(pool, params.custId);
   const hoResult = await upsertPriceOnPool(pool, params);
   const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
@@ -562,6 +565,26 @@ async function checkDealerCustIds(pool, custIds) {
     throw new DsmartSqlError(`Lỗi kiểm tra danh sách Mã Khách B2B trong danh mục DEALER: ${err.message} — kiểm tra tài khoản SQL đã được GRANT SELECT trên dbo.DEALER chưa (khác quyền trên CSPRICE/SKU_DEF).`);
   }
   return new Set((result.recordset || []).map(r => String(r.CUST_ID).trim()));
+}
+
+// checkDealerAndSkuDef(custIds, skuIds) — bản DÙNG CHUNG cho POST /preview (12/2026), tự rẽ nhánh ĐÚNG
+// theo đường ghi giá đang dùng (PriceOperationMode), KHÔNG để route /preview tự quyết định gọi SQL hay
+// API — theo yêu cầu người dùng: "bạn sử dụng phương thức nào thì kiểm tra qua phương thức đó giúp mình
+// nhé, có thể sau này vì an toàn mình sẽ chặn kết nối sql trực tiếp". Chế độ EXTERNAL_API: gọi THẲNG API
+// đối tác (`validateCustAndSkuViaApi()`), KHÔNG mở kết nối SQL trực tiếp tới DSmart16 (dù chỉ để tra
+// DEALER/SKU_DEF). Chế độ DIRECT_DB (mặc định): vẫn tự SELECT qua `getDsmartPool()` như trước, chạy song
+// song 2 câu tra DEALER + SKU_DEF cho nhanh. Trả về ĐÚNG shape ở cả 2 nhánh:
+// `{ validCustIds: Set<string>, skuDefErrors: Map<string, string|null> }`.
+async function checkDealerAndSkuDef(custIds, skuIds) {
+  if (await getPriceOperationMode() === 'EXTERNAL_API') {
+    return validateCustAndSkuViaApi({ custIds, skuIds }, await getExternalApiConfig());
+  }
+  const pool = await getDsmartPool();
+  const [validCustIds, skuDefErrors] = await Promise.all([
+    checkDealerCustIds(pool, custIds),
+    checkSkuDefExists(pool, skuIds)
+  ]);
+  return { validCustIds, skuDefErrors };
 }
 
 // naturalKeyFromRow(row): chuyển 1 dòng kết quả OUTPUT (hoặc tương đương) thành object "khoá tự nhiên"
@@ -1011,5 +1034,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, checkSkuDefExists, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, checkSkuDefExists, checkDealerAndSkuDef, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };

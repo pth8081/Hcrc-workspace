@@ -112,23 +112,19 @@ stubModule('lib/dsmartSqlClient', {
     return { ms: 5, sampleRow: { SKU_ID: 'S1', PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
   },
   getDsmartPool: async () => ({ __fake: 'ho-pool' }),
-  // checkDealerCustIds() (12/2026, POST /preview tra DEALER) — mặc định mọi Mã Khách B2B HỢP LỆ (chỉ
-  // custId có trong INVALID_DEALER_CUST_IDS mới bị coi là KHÔNG hợp lệ), giữ nguyên hành vi mọi test
-  // /preview đã có từ trước (không khai báo gì ở biến này).
-  checkDealerCustIds: async (pool, custIds) => {
+  // checkDealerAndSkuDef() (12/2026, POST /preview tra DEALER + SKU_DEF — route KHÔNG tự quyết định gọi
+  // SQL hay API, luôn gọi ĐÚNG 1 hàm này, xem lib/dsmartSqlClient.js) — mặc định mọi Mã Khách B2B/Mã Sản
+  // Phẩm HỢP LỆ (chỉ mã có trong INVALID_DEALER_CUST_IDS/INVALID_SKUDEF_SKU_IDS mới coi là KHÔNG hợp lệ),
+  // giữ nguyên hành vi mọi test /preview đã có từ trước (không khai báo gì ở 2 biến này).
+  checkDealerAndSkuDef: async (custIds, skuIds) => {
     lastCheckDealerCustIdsArg = custIds;
-    if (forceDealerCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Khách B2B trong DEALER (giả lập)');
-    return new Set(custIds.filter(id => !INVALID_DEALER_CUST_IDS.has(id)));
-  },
-  // checkSkuDefExists() (12/2026, POST /preview tra SKU_DEF) — mặc định mọi Mã Sản Phẩm HỢP LỆ (chỉ skuId
-  // có trong INVALID_SKUDEF_SKU_IDS mới bị coi là KHÔNG hợp lệ), giữ nguyên hành vi mọi test /preview đã
-  // có từ trước.
-  checkSkuDefExists: async (pool, skuIds) => {
     lastCheckSkuDefExistsArg = skuIds;
+    if (forceDealerCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Khách B2B trong DEALER (giả lập)');
     if (forceSkuDefCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Sản Phẩm trong SKU_DEF (giả lập)');
-    const map = new Map();
-    for (const id of skuIds) map.set(id, INVALID_SKUDEF_SKU_IDS.get(id) || null);
-    return map;
+    const validCustIds = new Set(custIds.filter(id => !INVALID_DEALER_CUST_IDS.has(id)));
+    const skuDefErrors = new Map();
+    for (const id of skuIds) skuDefErrors.set(id, INVALID_SKUDEF_SKU_IDS.get(id) || null);
+    return { validCustIds, skuDefErrors };
   },
   // testStoreConnection() (12/2026, FAN-OUT) — nút "🔌 Kiểm Tra" trên TỪNG dòng siêu thị ở màn Cấu Hình
   // Kết Nối Siêu Thị — logic thật đã test đầy đủ ở test-dsmart-store-fanout.js, ở đây chỉ cần đúng hành

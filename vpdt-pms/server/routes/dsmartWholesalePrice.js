@@ -31,7 +31,7 @@ const {
   getSanitizedConfig, saveConfig, getAutoDeleteConfig, saveAutoDeleteConfig, getAutoApplyConfig, saveAutoApplyConfig,
   getRawConfig, decryptSecret, getExternalApiConfig, savePriceOperationMode, saveExternalApiConfig
 } = require('../lib/dsmartPriceConfigStore');
-const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, checkSkuDefExists, getDsmartPool, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
+const { insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerAndSkuDef, inspectCspriceColumns, testStoreConnection, closeStorePool, DsmartConfigError } = require('../lib/dsmartSqlClient');
 const { testExternalApiConnection } = require('../lib/dsmartPriceExternalApiClient');
 const storeConnStore = require('../lib/dsmartStorePriceConnectionsStore');
 const { parseWholesalePriceFile, buildWholesalePriceTemplateWorkbook } = require('../lib/dsmartWholesalePriceFileParser');
@@ -688,17 +688,20 @@ router.post('/preview', uploadRateLimiter, (req, res) => {
       // hàng trong review thay vì khi ấn ghi") — cả 2 trước nay CHỈ được tra ở bước ghi thật
       // insertWholesalePrice() (Mã Khách B2B qua validateDealerExists(), Mã Sản Phẩm qua
       // lookupSkuDefUnitInfo() bên trong upsertPriceOnPool()), preview thuần đọc file nên không bắt được
-      // lỗi cho tới khi bấm ghi — xem checkDealerCustIds()/checkSkuDefExists(), lib/dsmartSqlClient.js.
-      // Chỉ tra các mã PHÂN BIỆT của những dòng CHƯA lỗi gì khác (đỡ tốn SELECT cho dòng chắc chắn không
-      // ghi được vì lý do khác rồi).
+      // lỗi cho tới khi bấm ghi. Chỉ tra các mã PHÂN BIỆT của những dòng CHƯA lỗi gì khác (đỡ tốn SELECT
+      // cho dòng chắc chắn không ghi được vì lý do khác rồi).
+      //
+      // checkDealerAndSkuDef() (lib/dsmartSqlClient.js) tự rẽ nhánh ĐÚNG theo đường ghi giá đang dùng
+      // (PriceOperationMode) — route này KHÔNG tự quyết định gọi SQL hay API (theo yêu cầu người dùng:
+      // "bạn sử dụng phương thức nào thì kiểm tra qua phương thức đó giúp mình nhé, có thể sau này vì an
+      // toàn mình sẽ chặn kết nối sql trực tiếp" — chế độ "🌐 Theo API" tra qua API đối tác, KHÔNG mở kết
+      // nối SQL trực tiếp tới DSmart16 nữa dù chỉ để tra DEALER/SKU_DEF).
       const custIdsToCheck = [...new Set(rows.filter(r => r.errors.length === 0).map(r => r.custId))];
       const skuIdsToCheck = [...new Set(rows.filter(r => r.errors.length === 0).map(r => r.skuId))];
       let validDealerCustIds = null;
       let skuDefErrorsBySkuId = null;
       if (custIdsToCheck.length || skuIdsToCheck.length) {
-        const pool = await getDsmartPool();
-        if (custIdsToCheck.length) validDealerCustIds = await checkDealerCustIds(pool, custIdsToCheck);
-        if (skuIdsToCheck.length) skuDefErrorsBySkuId = await checkSkuDefExists(pool, skuIdsToCheck);
+        ({ validCustIds: validDealerCustIds, skuDefErrors: skuDefErrorsBySkuId } = await checkDealerAndSkuDef(custIdsToCheck, skuIdsToCheck));
       }
       const withOverlap = rows.map(r => {
         const errors = r.errors.slice();
