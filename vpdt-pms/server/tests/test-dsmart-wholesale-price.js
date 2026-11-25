@@ -40,6 +40,12 @@ let lastTestConnOverrideCfg = 'UNSET';
 let forceSkuDefAccessError = false;
 let forceStoreTestConnError = false;
 let lastSkuDefAccessOverrideCfg = 'UNSET';
+// INVALID_DEALER_CUST_IDS/forceDealerCheckError (12/2026, kiểm DEALER ngay ở POST /preview — xem
+// checkDealerCustIds() mock bên dưới) — mặc định RỖNG (mọi Mã Khách B2B coi như HỢP LỆ) để KHÔNG ảnh
+// hưởng các test /preview đã có từ trước (chỉ test riêng phần DEALER mới thêm vào Set này).
+let INVALID_DEALER_CUST_IDS = new Set();
+let forceDealerCheckError = false;
+let lastCheckDealerCustIdsArg = null;
 
 class FakeHttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class DsmartConfigError extends FakeHttpError { constructor(m) { super(400, m); } }
@@ -98,6 +104,15 @@ stubModule('lib/dsmartSqlClient', {
     lastSkuDefAccessOverrideCfg = overrideCfg;
     if (forceSkuDefAccessError) throw new DsmartConfigError('Không đọc được bảng dbo.SKU_DEF (giả lập)');
     return { ms: 5, sampleRow: { SKU_ID: 'S1', PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
+  },
+  getDsmartPool: async () => ({ __fake: 'ho-pool' }),
+  // checkDealerCustIds() (12/2026, POST /preview tra DEALER) — mặc định mọi Mã Khách B2B HỢP LỆ (chỉ
+  // custId có trong INVALID_DEALER_CUST_IDS mới bị coi là KHÔNG hợp lệ), giữ nguyên hành vi mọi test
+  // /preview đã có từ trước (không khai báo gì ở biến này).
+  checkDealerCustIds: async (pool, custIds) => {
+    lastCheckDealerCustIdsArg = custIds;
+    if (forceDealerCheckError) throw new DsmartSqlError('Lỗi kiểm tra danh sách Mã Khách B2B trong DEALER (giả lập)');
+    return new Set(custIds.filter(id => !INVALID_DEALER_CUST_IDS.has(id)));
   },
   // testStoreConnection() (12/2026, FAN-OUT) — nút "🔌 Kiểm Tra" trên TỪNG dòng siêu thị ở màn Cấu Hình
   // Kết Nối Siêu Thị — logic thật đã test đầy đủ ở test-dsmart-store-fanout.js, ở đây chỉ cần đúng hành
@@ -720,6 +735,73 @@ async function main() {
     assert.strictEqual(res.body.successCount, 1, JSON.stringify(res.body));
     assert.strictEqual(CSPRICE.length, 1);
     assert.strictEqual(CSPRICE[0].CUST_ID, '240000000905');
+  });
+
+  // ===== Tra DEALER NGAY ở bước xem trước (12/2026, phát hiện thực tế người dùng: màn preview vẫn báo
+  // "✅ Sẽ thêm mới" cho Mã Khách B2B CHƯA CÓ thật — validateDealerExists() trước nay CHỈ chạy lúc ghi
+  // thật insertWholesalePrice(), preview thuần đọc file không đụng DSmart nên không bắt được lỗi này) =====
+  await test('POST /preview: Mã Khách B2B KHÔNG có trong DEALER -> báo lỗi dòng ngay ở preview (không đợi tới lúc ghi)', async () => {
+    INVALID_DEALER_CUST_IDS = new Set(['244000000780']);
+    const buf = await buildXlsxBuffer([
+      ['244000000780', '2001326541', 35532, '2026-11-23', '2026-11-30']
+    ]);
+    const res = await apiUploadPreview(buf);
+    INVALID_DEALER_CUST_IDS = new Set();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows.length, 1);
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('DEALER')), JSON.stringify(res.body.rows[0].errors));
+    assert.strictEqual(res.body.rows[0].hasOverlap, false);
+  });
+
+  await test('POST /preview: 1 Mã Khách B2B sai lặp lại ở NHIỀU dòng -> TẤT CẢ các dòng đó đều báo lỗi DEALER', async () => {
+    INVALID_DEALER_CUST_IDS = new Set(['244000000780']);
+    const buf = await buildXlsxBuffer([
+      ['244000000780', '2001326541', 35532, '2026-11-23', '2026-11-30'],
+      ['244000000780', '2001326542', 18900, '2026-11-23', '2026-11-30'],
+      ['244000000001', '2001326541', 32076, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    INVALID_DEALER_CUST_IDS = new Set();
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('DEALER')), JSON.stringify(res.body.rows[0].errors));
+    assert.ok(res.body.rows[1].errors.some(e => e.includes('DEALER')), JSON.stringify(res.body.rows[1].errors));
+    assert.strictEqual(res.body.rows[2].errors.length, 0, 'Mã Khách B2B hợp lệ khác không bị ảnh hưởng');
+  });
+
+  await test('POST /preview: Mã Khách B2B HỢP LỆ trong DEALER -> KHÔNG báo lỗi gì, chỉ gọi tra ĐÚNG 1 lần/mã phân biệt', async () => {
+    lastCheckDealerCustIdsArg = null;
+    const buf = await buildXlsxBuffer([
+      ['244000000001', '2001326541', 32076, '2026-10-08', '2026-10-31'],
+      ['244000000001', '2001326542', 18900, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows[0].errors.length, 0, JSON.stringify(res.body.rows[0].errors));
+    assert.strictEqual(res.body.rows[1].errors.length, 0, JSON.stringify(res.body.rows[1].errors));
+    assert.deepStrictEqual(lastCheckDealerCustIdsArg, ['244000000001'], 'chỉ tra 1 lần cho Mã Khách B2B phân biệt, dù lặp lại 2 dòng');
+  });
+
+  await test('POST /preview: dòng ĐÃ lỗi khác (thiếu dữ liệu) -> KHÔNG tốn thêm 1 lượt tra DEALER cho dòng đó', async () => {
+    lastCheckDealerCustIdsArg = null;
+    const buf = await buildXlsxBuffer([
+      ['', '2001326541', 32076, '2026-10-08', '2026-10-31'],
+      ['244000000001', '2001326542', 18900, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('Thiếu Mã Khách B2B')), JSON.stringify(res.body.rows[0].errors));
+    assert.deepStrictEqual(lastCheckDealerCustIdsArg, ['244000000001']);
+  });
+
+  await test('POST /preview: lỗi kiểm tra DEALER (mất kết nối/thiếu quyền) -> trả lỗi rõ ràng cho CẢ preview, không âm thầm coi như hợp lệ', async () => {
+    forceDealerCheckError = true;
+    const buf = await buildXlsxBuffer([
+      ['244000000001', '2001326541', 32076, '2026-10-08', '2026-10-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    forceDealerCheckError = false;
+    assert.notStrictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.error && res.body.error.includes('DEALER'), JSON.stringify(res.body));
   });
 
   await test('POST /apply: lỗi DsmartConfigError dừng sớm, không thử tiếp các dòng còn lại', async () => {

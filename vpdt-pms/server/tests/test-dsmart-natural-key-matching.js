@@ -134,6 +134,16 @@ class FakeRequest {
       const first = Object.keys(DEALER_DB)[0];
       return { recordset: first ? [{ CUST_ID: first }] : [] };
     }
+    // checkDealerCustIds() — bản TRA HÀNG LOẠT dùng riêng ở POST /preview (12/2026), IN-list tham số hoá
+    // (@c0, @c1, ...) thay vì 1 câu/1 Mã Khách B2B như validateDealerExists().
+    if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE BLOCK_CODE = 0 AND CUST_ID IN \(/.test(sql)) {
+      if (DEALER_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'DEALER', database 'DSMART16', schema 'dbo'.");
+      }
+      const askedCustIds = Object.values(this.inputs);
+      const valid = askedCustIds.filter(id => DEALER_DB[id]?.BLOCK_CODE === 0);
+      return { recordset: valid.map(id => ({ CUST_ID: id })) };
+    }
     // lookupSkuDefUnitInfo() — tra Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế theo SKU_ID, bảng KHÁC CSPRICE nên
     // được phép SELECT (nếu tài khoản có quyền riêng, SKU_DEF_PERMISSION_DENIED mô phỏng trường hợp chưa
     // được cấp quyền).
@@ -469,6 +479,37 @@ async function main() {
     DEALER_PERMISSION_DENIED = false;
     assert(threw instanceof DsmartConfigError, 'phải ném DsmartConfigError khi bị từ chối quyền');
     assert(/DEALER/.test(threw.message), `thông báo phải nêu rõ bảng DEALER — got: ${threw.message}`);
+  });
+
+  // checkDealerCustIds() (12/2026, POST /preview tra DEALER NGAY ở bước xem trước — xem chú thích đầy đủ
+  // tại hàm, lib/dsmartSqlClient.js) — bản TRA HÀNG LOẠT của validateDealerExists(), dùng đúng 1 câu
+  // SELECT IN-list cho nhiều Mã Khách B2B cùng lúc, KHÔNG ném lỗi cho từng mã không hợp lệ (chỉ trả về
+  // đúng tập mã HỢP LỆ, để route tự so khớp gắn lỗi đúng dòng).
+  await run.run('checkDealerCustIds(): trả về ĐÚNG tập Mã Khách B2B hợp lệ (có trong DEALER, chưa bị khoá), bỏ qua mã sai/đang khoá', async () => {
+    DEALER_DB = { C1: { BLOCK_CODE: 0 }, C2: { BLOCK_CODE: 0 }, 'C-BLOCKED': { BLOCK_CODE: 1 } };
+    const { getDsmartPool, checkDealerCustIds } = freshClient();
+    const valid = await checkDealerCustIds(await getDsmartPool(), ['C1', 'C2', 'C-BLOCKED', 'C-KHONG-TON-TAI']);
+    assert(valid instanceof Set, 'phải trả về 1 Set');
+    assertEqual([...valid].sort().join(','), 'C1,C2', 'chỉ C1/C2 hợp lệ — C-BLOCKED đang khoá, C-KHONG-TON-TAI không có trong DEALER');
+    DEALER_DB = { C1: { BLOCK_CODE: 0 } }; // khôi phục cho các test sau
+  });
+
+  await run.run('checkDealerCustIds(): danh sách rỗng -> trả Set rỗng NGAY, KHÔNG gọi SQL nào', async () => {
+    queryLog = [];
+    const { getDsmartPool, checkDealerCustIds } = freshClient();
+    const valid = await checkDealerCustIds(await getDsmartPool(), []);
+    assertEqual(valid.size, 0);
+    assert(!queryLog.some(q => /dbo\.DEALER/.test(q)), 'không được tốn 1 câu SQL nào khi danh sách rỗng');
+  });
+
+  await run.run('checkDealerCustIds(): bị từ chối quyền SELECT trên DEALER -> ném DsmartSqlError rõ ràng (KHÔNG âm thầm coi như rỗng/hợp lệ hết)', async () => {
+    DEALER_PERMISSION_DENIED = true;
+    const { getDsmartPool, checkDealerCustIds, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await checkDealerCustIds(await getDsmartPool(), ['C1']); } catch (err) { threw = err; }
+    DEALER_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi bị từ chối quyền');
+    assert(/GRANT SELECT trên dbo\.DEALER/.test(threw.message), `thông báo phải hướng dẫn rõ cần GRANT SELECT trên DEALER — got: ${threw.message}`);
   });
 
   await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá chính thật (CUST_ID, SKU_ID — 2 cột, Lần 5), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {

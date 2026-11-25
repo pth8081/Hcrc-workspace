@@ -290,10 +290,14 @@ async function upsertPriceOnPool(pool, { custId, skuId, price, frDate, toDate })
 
 // CHẾ ĐỘ "🌐 Giá Theo API" (12/2026, theo yêu cầu người dùng: "hai cái lựa chọn, một là... kết nối trực
 // tiếp vào cơ sở dữ liệu, hai là có thể qua API. Chỉ chọn được một trong hai") — khi admin bật chế độ này
-// (PriceOperationMode = 'EXTERNAL_API'), insertWholesalePrice()/updateWholesalePrice()/deleteWholesalePrice()
-// KHÔNG đụng SQL Server nào nữa (bỏ qua cả getDsmartPool() lẫn fanOutToStores() ở trên) — gọi THẲNG API đối
-// tác (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
+// (PriceOperationMode = 'EXTERNAL_API'), updateWholesalePrice()/deleteWholesalePrice() KHÔNG đụng SQL
+// Server nào nữa (bỏ qua cả getDsmartPool() lẫn fanOutToStores() ở trên) — gọi THẲNG API đối tác
+// (lib/dsmartPriceExternalApiClient.js) theo đúng hợp đồng đã gửi, trả về storeResults RỖNG (đối tác tự
 // lo đồng bộ xuống mọi siêu thị qua hạ tầng của họ, không phải việc của hệ thống này nữa ở chế độ này).
+// RIÊNG insertWholesalePrice() ("Thêm Giá Mới") VẪN gọi getDsmartPool() ở CẢ 2 chế độ — xem
+// validateDealerExists() ngay trong hàm đó: CHẶN CỨNG Mã Khách B2B không hợp lệ áp dụng cho cả 2 chế độ,
+// không riêng gì DIRECT_DB (lỗi thật production đã gặp: ban đầu chỉ đặt ở nhánh DIRECT_DB, chế độ API vẫn
+// lọt qua không chặn được gì).
 //
 // buildStoreScope(targetStoreIds): dù KHÔNG tự fan-out ở chế độ API, vẫn PHẢI báo đúng phạm vi siêu thị cho
 // đối tác biết (field `storeScope`, ĐÚNG khuôn đã thống nhất ở tài liệu "Yêu Cầu API: Giá Bán Buôn DSmart",
@@ -324,17 +328,27 @@ async function insertWholesalePrice(params, targetStoreIds) {
   if (!Number.isFinite(Number(params.price))) {
     throw new DsmartSqlError(`Giá trị Giá không hợp lệ: ${params.price}`);
   }
+  // validateDealerExists() (12/2026, theo yêu cầu người dùng, xem chú thích đầy đủ tại hàm): CHẶN CỨNG nếu
+  // Mã Khách B2B không có/đang bị khoá trong danh mục DEALER — chỉ kiểm tra 1 LẦN tại DSmart16 Trung Tâm
+  // (không lặp lại ở từng siêu thị, khác SKU_DEF — ở đây chỉ cần biết tồn tại/không bị khoá, không cần lấy
+  // thêm giá trị cột nào để ghi riêng cho từng siêu thị).
+  //
+  // BẮT BUỘC chạy TRƯỚC khi rẽ nhánh theo chế độ (12/2026, LỖI THẬT production phát hiện ngay sau khi
+  // merge bản chặn ban đầu): bản vá lúc đầu đặt bước này SAU nhánh rẽ "🌐 Theo API" (EXTERNAL_API) — người
+  // dùng đang dùng ĐÚNG chế độ này, nên lượt "Thêm Giá Mới" với Mã Khách B2B sai (244000000780, thực tế
+  // CHƯA có trên DEALER) vẫn báo "✅ Đã thêm thành công", vì validateDealerExists() chưa từng được gọi tới
+  // (code return sớm ở nhánh EXTERNAL_API, ngay phía trên dòng gọi hàm này). Nay kiểm tra NGAY ĐẦU HÀM,
+  // ÁP DỤNG CHO CẢ 2 CHẾ ĐỘ — kết nối DSmart16 Trung Tâm luôn cấu hình được độc lập với chế độ đang chọn
+  // (xem applyDsmartPricePriceModeUI(), public/js/module-itsupport-dsmartprice.js: "2 modal ... luôn cấu
+  // hình được bình thường, độc lập với việc đang chọn dùng cái nào"), nên gọi getDsmartPool() ở đây không
+  // phụ thuộc gì vào việc đang ghi giá qua SQL trực tiếp hay qua API đối tác.
+  const pool = await getDsmartPool();
+  await validateDealerExists(pool, params.custId);
   if (await getPriceOperationMode() === 'EXTERNAL_API') {
     const storeScope = await buildStoreScope(targetStoreIds);
     const apiResult = await applyPriceViaApi({ ...params, storeScope }, await getExternalApiConfig());
     return { ...apiResult, storeResults: [], storeFanOutError: null };
   }
-  const pool = await getDsmartPool();
-  // validateDealerExists() (12/2026, theo yêu cầu người dùng, xem chú thích đầy đủ tại hàm): CHẶN CỨNG nếu
-  // Mã Khách B2B không có/đang bị khoá trong danh mục DEALER — chỉ kiểm tra 1 LẦN tại DSmart16 Trung Tâm
-  // (không lặp lại ở từng siêu thị, khác SKU_DEF — ở đây chỉ cần biết tồn tại/không bị khoá, không cần lấy
-  // thêm giá trị cột nào để ghi riêng cho từng siêu thị).
-  await validateDealerExists(pool, params.custId);
   const hoResult = await upsertPriceOnPool(pool, params);
   const { storeResults, storeFanOutError } = await fanOutToStores((storePool) => upsertPriceOnPool(storePool, params), targetStoreIds);
   return { ...hoResult, storeResults, storeFanOutError };
@@ -476,6 +490,33 @@ async function validateDealerExists(pool, custId) {
   if (!result.recordset?.length) {
     throw new DsmartSqlError(`Không tìm thấy Mã Khách B2B "${custId}" trong danh mục DEALER trên DSmart (hoặc khách hàng đang bị khoá — BLOCK_CODE khác 0) — kiểm tra lại đúng mã, hoặc khách hàng chưa được tạo/đã bị khoá trên DSmart.`);
   }
+}
+
+// checkDealerCustIds(pool, custIds) — bản TRA HÀNG LOẠT của validateDealerExists(), dùng riêng cho
+// POST /preview (12/2026, theo phát hiện thực tế người dùng: màn xem trước vẫn báo "✅ Sẽ thêm mới" cho
+// Mã Khách B2B CHƯA CÓ thật trên DEALER, vì validateDealerExists() trước nay CHỈ chạy ở bước ghi thật
+// insertWholesalePrice() — preview thuần đọc file, KHÔNG đụng DSmart, nên không bắt được lỗi này cho tới
+// khi bấm ghi). Trả về 1 `Set` các CUST_ID HỢP LỆ (có trong DEALER, BLOCK_CODE=0) trong số `custIds`
+// truyền vào — route tự so để gắn lỗi đúng dòng, KHÔNG ném lỗi cho TỪNG custId không hợp lệ (khác
+// validateDealerExists() vốn ném lỗi ngay cho an toàn khi ghi thật) vì ở đây cần xem đủ TOÀN BỘ file.
+// Chỉ 1 câu SELECT duy nhất (IN list tham số hoá, KHÔNG nối chuỗi trực tiếp) dù file có hàng ngàn dòng,
+// miễn số CUST_ID PHÂN BIỆT không quá lớn (MAX_ROWS=2000 ở lib/dsmartWholesalePriceFileParser.js).
+async function checkDealerCustIds(pool, custIds) {
+  const unique = [...new Set(custIds)];
+  if (!unique.length) return new Set();
+  const req = pool.request();
+  const placeholders = unique.map((id, i) => {
+    const p = `c${i}`;
+    req.input(p, sql.NVarChar(50), String(id));
+    return `@${p}`;
+  });
+  let result;
+  try {
+    result = await req.query(`SELECT CUST_ID FROM dbo.DEALER WHERE BLOCK_CODE = 0 AND CUST_ID IN (${placeholders.join(', ')});`);
+  } catch (err) {
+    throw new DsmartSqlError(`Lỗi kiểm tra danh sách Mã Khách B2B trong danh mục DEALER: ${err.message} — kiểm tra tài khoản SQL đã được GRANT SELECT trên dbo.DEALER chưa (khác quyền trên CSPRICE/SKU_DEF).`);
+  }
+  return new Set((result.recordset || []).map(r => String(r.CUST_ID).trim()));
 }
 
 // naturalKeyFromRow(row): chuyển 1 dòng kết quả OUTPUT (hoặc tương đương) thành object "khoá tự nhiên"
@@ -925,5 +966,5 @@ async function retryStoreFanOut(storeId, action, payload) {
 module.exports = {
   getDsmartPool, insertWholesalePrice, updateWholesalePrice, deleteWholesalePrice, closeDsmartPool,
   closeAllStorePools, closeStorePool, testStoreConnection, retryStoreFanOut,
-  testDsmartConnection, testSkuDefAccess, testDealerAccess, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
+  testDsmartConnection, testSkuDefAccess, testDealerAccess, checkDealerCustIds, inspectCspriceColumns, DsmartConfigError, DsmartSqlError
 };
