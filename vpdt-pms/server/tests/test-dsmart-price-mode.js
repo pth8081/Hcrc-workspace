@@ -201,6 +201,12 @@ async function main() {
     function mockFetch(responder) {
       global.fetch = async (url, opts) => { lastFetchCall = { url, opts }; return responder(url, opts); };
     }
+    // LỖI ĐÃ VÁ (12/2026, báo cáo thật người dùng — nhập hàng loạt bị 429 "quá tần suất"): callExternalApi()
+    // giờ tự retry 429/5xx có chờ (setTimeout thật) — thay global.setTimeout bằng bản chạy NGAY
+    // (setImmediate) trong toàn bộ Phần B để test không phải chờ thật vài giây mỗi lần retry, vẫn giữ
+    // đúng số lần gọi/thứ tự async thật (không bỏ qua logic, chỉ bỏ qua thời gian chờ thật).
+    const originalSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => setImmediate(fn);
 
     // Thiếu Base URL -> DsmartApiConfigError, KHÔNG gọi fetch.
     lastFetchCall = null;
@@ -299,6 +305,65 @@ async function main() {
     );
     check('validateCustAndSkuViaApi(): API đối tác báo lỗi -> DsmartApiError nêu đúng nội dung', true);
 
+    // ===== LỖI ĐÃ VÁ (12/2026, báo cáo thật — nhập hàng loạt 66 dòng, 20 dòng lỗi 429) =====
+    // 429 thoáng qua (2 lần đầu), lần 3 thành công -> callExternalApi() tự retry, trả về kết quả thành
+    // công cuối cùng, KHÔNG để lộ lỗi 429 ra ngoài cho người dùng.
+    {
+      let callCount = 0;
+      mockFetch(async () => {
+        callCount++;
+        if (callCount < 3) return { ok: false, status: 429, headers: { get: () => null }, json: async () => { throw new Error('không phải JSON (trang lỗi rate-limit)'); } };
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: true, custId: 'C1', skuId: 'S1', overwritten: false }) };
+      });
+      const retryResult = await apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+      check('callExternalApi(): 429 thoáng qua (2 lần) rồi thành công ở lần 3 -> tự retry, trả kết quả thành công, không ném lỗi', retryResult.custId === 'C1' && callCount === 3, { retryResult, callCount });
+    }
+
+    // 429 liên tục đủ 3 lần (hết số lần thử) -> ném DsmartApiError nêu rõ "429"/"quá tần suất", KHÔNG còn
+    // thông báo chung chung "không phải JSON hợp lệ" che mất nguyên nhân thật.
+    {
+      let callCount = 0;
+      mockFetch(async () => {
+        callCount++;
+        return { ok: false, status: 429, headers: { get: () => null }, json: async () => { throw new Error('không phải JSON (trang lỗi rate-limit)'); } };
+      });
+      await assert.rejects(
+        () => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+        (err) => err instanceof apiClient.DsmartApiError && /429/.test(err.message) && /quá tần suất/.test(err.message)
+      );
+      check('callExternalApi(): 429 liên tục đủ 3 lần -> DsmartApiError nêu rõ "429"/"quá tần suất" (không còn báo chung chung "không phải JSON")', callCount === 3, callCount);
+    }
+
+    // Tôn trọng header Retry-After (giây) nếu đối tác có gửi — kiểm tra setTimeout nhận đúng số mili-giây.
+    {
+      let callCount = 0;
+      const timeoutCalls = [];
+      global.setTimeout = (fn, ms) => { timeoutCalls.push(ms); return setImmediate(fn); };
+      mockFetch(async () => {
+        callCount++;
+        if (callCount === 1) return { ok: false, status: 429, headers: { get: (h) => (h === 'retry-after' ? '2' : null) }, json: async () => { throw new Error('rate-limit page'); } };
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: true, custId: 'C1', skuId: 'S1', overwritten: false }) };
+      });
+      await apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' });
+      // timeoutCalls lẫn cả setTimeout(abort timeout REQUEST_TIMEOUT_MS=15000) của MỖI lượt gọi fetch —
+      // chỉ cần xác nhận có ĐÚNG 1 lượt chờ 2000ms (2s, đúng Retry-After) xen giữa, không dùng mặc định 5000ms.
+      check('callExternalApi(): có header Retry-After -> chờ ĐÚNG số giây đối tác yêu cầu (2s = 2000ms), không dùng mặc định 5s', timeoutCalls.includes(2000) && !timeoutCalls.includes(5000), timeoutCalls);
+      global.setTimeout = (fn) => setImmediate(fn);
+    }
+
+    // Đối chứng: lỗi 500 (KHÁC 429) KHÔNG retry — ném lỗi NGAY, giữ nguyên nội dung cụ thể đối tác trả
+    // về (không bị nuốt mất bởi cơ chế retry mới, CHỈ áp dụng cho đúng 429).
+    {
+      let callCount = 0;
+      mockFetch(async () => { callCount++; return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({ ok: false, error: 'Service Unavailable' }) }; });
+      await assert.rejects(
+        () => apiClient.applyPriceViaApi({ custId: 'C1', skuId: 'S1', price: 1, frDate: '2026-01-01', toDate: '2026-12-31' }, { externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' }),
+        (err) => err instanceof apiClient.DsmartApiError && err.message.includes('Service Unavailable')
+      );
+      check('callExternalApi(): lỗi 500 (KHÁC 429) KHÔNG retry -> ném lỗi NGAY, giữ nguyên nội dung cụ thể đối tác trả về', callCount === 1, callCount);
+    }
+
+    global.setTimeout = originalSetTimeout;
     global.fetch = originalFetch;
   }
 

@@ -10548,6 +10548,18 @@ cập nhật (không bắt buộc phải xong ngay, nhưng PHẢI xong TRƯỚC 
 chặn kết nối SQL trực tiếp, nếu không mọi lượt xem trước/"Thêm Giá Mới"
 ở chế độ API sẽ báo lỗi kết nối).
 
+**LỖI ĐÃ VÁ thêm (12/2026, báo cáo thật người dùng)**: nhập hàng loạt
+nhiều dòng ở chế độ "🌐 Theo API" báo lỗi `"API đối tác trả về không
+phải JSON hợp lệ ... status 429"` cho 1 phần dòng. Nguyên nhân: mỗi
+dòng gọi 2 lượt API đối tác (validate + apply), chạy tuần tự không
+nghỉ — file nhiều dòng dồn dập vượt giới hạn tần suất (rate limit)
+phía đối tác. `callExternalApi()` (`lib/dsmartPriceExternalApiClient.js`)
+giờ **tự động thử lại khi gặp 429** (tôn trọng header `Retry-After`
+nếu đối tác có gửi, mặc định 5 giây nếu không — tối đa 3 lượt thử),
+để các lượt dồn dập tạm thời tự phục hồi thay vì dòng đó thất bại hẳn.
+Lỗi khác 429 (VD 500 kèm lý do cụ thể từ đối tác) giữ nguyên hành vi
+cũ — báo lỗi ngay, không retry, không mất nội dung lỗi cụ thể.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần
