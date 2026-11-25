@@ -29,39 +29,62 @@ const REQUEST_TIMEOUT_MS = 15000;
 class DsmartApiConfigError extends HttpError { constructor(message) { super(400, message); } }
 class DsmartApiError extends HttpError { constructor(message) { super(502, message); } }
 
+// LỖI ĐÃ VÁ (12/2026, theo báo cáo thật người dùng — nhập hàng loạt 66 dòng "Thêm Giá Mới", 20 dòng lỗi
+// "API đối tác trả về không phải JSON hợp lệ ... status 429"): mỗi dòng gọi TỚI 2 lượt API đối tác
+// (validate + apply, xem insertWholesalePrice()/lib/dsmartSqlClient.js) CHẠY TUẦN TỰ không nghỉ
+// (routes/dsmartWholesalePrice.js POST /apply, vòng for từng dòng) — với file nhiều dòng, tổng số lượt
+// gọi dồn dập vượt quá giới hạn tần suất (rate limit) phía đối tác, trả về HTTP 429 kèm trang lỗi KHÔNG
+// phải JSON (thường là trang lỗi mặc định của hạ tầng chặn rate-limit), khiến `res.json()` ném lỗi và bản
+// tin chung chung "không phải JSON hợp lệ" che mất nguyên nhân thật (429) đằng sau. Tự ĐỘNG THỬ LẠI khi
+// gặp 429 (tôn trọng header `Retry-After` nếu đối tác có gửi, mặc định 5 giây nếu không có) — CÙNG khuôn
+// đã dùng cho đối tác BRGMART (xem lib/inventoryApiClient.js::requestPage(), đã áp dụng ổn định trước
+// đó) — tối đa 3 lượt thử, để các lượt dồn dập tạm thời tự phục hồi thay vì để hẳn dòng đó thất bại.
+// CHỈ retry đúng 429 — lỗi 4xx/5xx khác (VD 500 kèm JSON lỗi nghiệp vụ cụ thể từ đối tác) GIỮ NGUYÊN hành
+// vi cũ (ném lỗi ngay, nêu rõ nội dung đối tác trả về) để không mất thông tin chẩn đoán cụ thể hơn.
 async function callExternalApi(cfg, path, body) {
   if (!cfg || !cfg.externalApiBaseUrl) {
     throw new DsmartApiConfigError('Chưa cấu hình API đối tác (Base URL) — vào Hỗ Trợ IT > Cài Đặt Giá Bán Buôn > Cấu Hình Kết Nối, bật "🌐 Giá Theo API" và nhập Base URL/API Key trước.');
   }
   const url = cfg.externalApiBaseUrl.replace(/\/+$/, '') + path;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cfg.externalApiKey ? { 'X-API-Key': cfg.externalApiKey } : {})
-      },
-      body: JSON.stringify(body || {}),
-      signal: controller.signal
-    });
-  } catch (err) {
-    throw new DsmartApiError(`Không gọi được API đối tác (${url}): ${err.name === 'AbortError' ? 'hết thời gian chờ (timeout)' : err.message}`);
-  } finally {
-    clearTimeout(timeout);
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cfg.externalApiKey ? { 'X-API-Key': cfg.externalApiKey } : {})
+        },
+        body: JSON.stringify(body || {}),
+        signal: controller.signal
+      });
+    } catch (err) {
+      throw new DsmartApiError(`Không gọi được API đối tác (${url}): ${err.name === 'AbortError' ? 'hết thời gian chờ (timeout)' : err.message}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (res.status === 429) {
+      if (attempt >= maxAttempts) throw new DsmartApiError(`API đối tác quá tần suất gọi (429) sau ${maxAttempts} lần thử (${url}) — thử lại sau ít phút, hoặc liên hệ đối tác tăng giới hạn tần suất nếu lặp lại thường xuyên.`);
+      const retryAfterSec = Number(res.headers.get('retry-after')) || 5;
+      await new Promise((r) => setTimeout(r, retryAfterSec * 1000));
+      continue;
+    }
+
+    let data;
+    try {
+      data = await res.json();
+    } catch (err) {
+      throw new DsmartApiError(`API đối tác trả về không phải JSON hợp lệ (${url}, status ${res.status}).`);
+    }
+    if (!res.ok || data.ok === false) {
+      throw new DsmartApiError(`API đối tác báo lỗi (${url}, status ${res.status}): ${data && data.error ? data.error : JSON.stringify(data)}`);
+    }
+    return data;
   }
-  let data;
-  try {
-    data = await res.json();
-  } catch (err) {
-    throw new DsmartApiError(`API đối tác trả về không phải JSON hợp lệ (${url}, status ${res.status}).`);
-  }
-  if (!res.ok || data.ok === false) {
-    throw new DsmartApiError(`API đối tác báo lỗi (${url}, status ${res.status}): ${data && data.error ? data.error : JSON.stringify(data)}`);
-  }
-  return data;
 }
 
 // applyPriceViaApi()/deletePriceViaApi() nhận thêm `storeScope` ({mode:'ALL'} hoặc
