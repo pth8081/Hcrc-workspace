@@ -50,7 +50,7 @@ function freshRequire(relPath) {
 const databases = new Map();
 function dbKey(cfg) { return `${cfg.server}:${cfg.port}/${cfg.database}/${cfg.user}`; }
 function getOrCreateDb(key) {
-  if (!databases.has(key)) databases.set(key, { csprice: new Map(), skuDef: new Map(), dsmartPriceDbConfig: null });
+  if (!databases.has(key)) databases.set(key, { csprice: new Map(), skuDef: new Map(), dealer: new Map(), dsmartPriceDbConfig: null });
   return databases.get(key);
 }
 
@@ -59,6 +59,12 @@ function dispatchQuery(db, rawText, params) {
   if (/FROM dbo\.SKU_DEF WHERE SKU_ID/i.test(t)) {
     const row = db.skuDef.get(params.skuId);
     return { recordset: row ? [row] : [] };
+  }
+  // validateDealerExists()/checkDealerCustIds() (12/2026) — insertWholesalePrice() NAY gọi ở CẢ 2 chế độ
+  // (DIRECT_DB lẫn EXTERNAL_API), xem lib/dsmartSqlClient.js.
+  if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;?$/i.test(t)) {
+    const info = db.dealer.get(params.custId);
+    return { recordset: (info && info.BLOCK_CODE === 0) ? [{ CUST_ID: params.custId }] : [] };
   }
   if (/UPDATE dbo\.CSPRICE\s/i.test(t) && /SET TYPE = '04'/i.test(t)) {
     const key = `${params.custId}|${params.skuId}`;
@@ -255,14 +261,20 @@ async function main() {
 
   // ===================== C. lib/dsmartSqlClient.js — rẽ nhánh theo priceOperationMode =====================
   {
-    // Stub dsmartPriceConfigStore ĐƠN GIẢN (điều khiển mode bằng 1 biến), KHÔNG cần fake mssql/DB thật cho
-    // phần API — EXTERNAL_API mode không được đụng SQL/pool nào cả (xác nhận bằng cách KHÔNG cung cấp
-    // host/database/user hợp lệ trong getRawConfig(), nếu code lỡ gọi getDsmartPool() sẽ tự ném
-    // DsmartConfigError ngay — bắt được lỗi code "quên" rẽ nhánh).
+    // Stub dsmartPriceConfigStore (điều khiển mode bằng 1 biến) — KHÁC trước đây (12/2026, LỖI THẬT
+    // production): giờ PHẢI cung cấp 1 config DSmart16 Trung Tâm HỢP LỆ dù đang ở chế độ EXTERNAL_API, vì
+    // insertWholesalePrice() NAY gọi getDsmartPool()+validateDealerExists() ở CẢ 2 chế độ (xem chú thích
+    // đầy đủ tại hàm, lib/dsmartSqlClient.js) — updateWholesalePrice()/deleteWholesalePrice() ở chế độ API
+    // thì VẪN KHÔNG đụng SQL/pool nào (không đổi, chỉ riêng "Thêm Giá Mới" mới cần tra DEALER).
     let CURRENT_MODE = 'EXTERNAL_API';
+    // HO_CFG: khuôn getRawConfig() trả về (field `host`, khớp lib/dsmartPriceConfigStore.js) — getDsmartPool()
+    // tự đổi `host` -> `server` khi truyền cho `new sql.ConnectionPool()`, nên dbKey() (dùng `server`) phải
+    // tính theo field ĐÓ, không phải HO_CFG nguyên văn (khác tên field).
+    const HO_CFG = { host: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' };
+    const HO_KEY = dbKey({ server: HO_CFG.host, port: HO_CFG.port, database: HO_CFG.database, user: HO_CFG.user });
     stubModule('lib/dsmartPriceConfigStore', {
-      getRawConfig: async () => null, // KHÔNG có cấu hình DB hợp lệ -> getDsmartPool() sẽ ném lỗi nếu lỡ bị gọi
-      decryptSecret: (v) => v,
+      getRawConfig: async () => ({ ...HO_CFG, passwordEnc: 'enc-pass' }),
+      decryptSecret: () => 'ho-pass',
       getPriceOperationMode: async () => CURRENT_MODE,
       getExternalApiConfig: async () => ({ externalApiBaseUrl: 'https://api.test/dsmart', externalApiKey: 'k' })
     });
@@ -274,8 +286,26 @@ async function main() {
     let listRawCalls = 0;
     const FAKE_STORES = [{ id: 5, storeCode: 'ST05' }, { id: 7, storeCode: 'ST07' }, { id: 9, storeCode: 'ST09' }];
     stubModule('lib/dsmartStorePriceConnectionsStore', { listRaw: async () => { listRawCalls++; return FAKE_STORES; } });
+    // Seed DEALER (dùng cho validateDealerExists() mới gọi ở CẢ 2 chế độ) — CAPI1/CAPI2 hợp lệ,
+    // CAPI-KHONG-TON-TAI KHÔNG có trong DEALER (dùng ở test tái hiện đúng lỗi thật production bên dưới).
+    const hoDb = getOrCreateDb(HO_KEY);
+    hoDb.dealer.set('CAPI1', { BLOCK_CODE: 0 });
+    hoDb.dealer.set('CAPI2', { BLOCK_CODE: 0 });
 
     const dsmartSqlClient = freshRequire('lib/dsmartSqlClient');
+
+    // LỖI THẬT PRODUCTION (12/2026, người dùng phát hiện ngay sau khi merge bản chặn DEALER ban đầu): ở
+    // chế độ "🌐 Theo API", "Thêm Giá Mới" với Mã Khách B2B KHÔNG có trong DEALER vẫn báo "✅ Đã thêm thành
+    // công" — vì validateDealerExists() lúc đó đặt SAU nhánh rẽ EXTERNAL_API nên không bao giờ chạy tới.
+    // Tái hiện ĐÚNG kịch bản này + xác nhận đã vá: phải NÉM LỖI, KHÔNG được gọi applyPriceViaApi().
+    {
+      let threw = null;
+      try {
+        await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI-KHONG-TON-TAI', skuId: 'SAPI1', price: 999, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
+      } catch (err) { threw = err; }
+      check('LỖI THẬT ĐÃ VÁ — EXTERNAL_API: Mã Khách B2B KHÔNG có trong DEALER -> insertWholesalePrice() NÉM LỖI, KHÔNG báo thành công', threw && /DEALER/.test(threw.message), threw);
+      check('LỖI THẬT ĐÃ VÁ — EXTERNAL_API: Mã Khách B2B sai -> KHÔNG được gọi applyPriceViaApi() (trước đây lỗi này vẫn gọi, API đối tác báo "thành công")', applyCalls.length === 0, applyCalls);
+    }
 
     const insResult = await dsmartSqlClient.insertWholesalePrice({ custId: 'CAPI1', skuId: 'SAPI1', price: 1000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
     check('EXTERNAL_API: insertWholesalePrice() gọi applyPriceViaApi() ĐÚNG 1 lần, custId/skuId đúng', applyCalls.length === 1 && applyCalls[0].custId === 'CAPI1' && applyCalls[0].skuId === 'SAPI1', applyCalls);
@@ -317,7 +347,9 @@ async function main() {
       getExternalApiConfig: async () => ({ externalApiBaseUrl: '', externalApiKey: null })
     });
     applyCalls = []; deleteCalls = []; listRawCalls = 0;
-    getOrCreateDb(dbKey({ server: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' })).skuDef.set('SDIRECT1', { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' });
+    const hoDbDirect = getOrCreateDb(dbKey({ server: 'ho-dsmart16', port: 1433, database: 'DSMART16', user: 'b2b_price' }));
+    hoDbDirect.skuDef.set('SDIRECT1', { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' });
+    hoDbDirect.dealer.set('CDIRECT1', { BLOCK_CODE: 0 }); // validateDealerExists() nay chạy cho CẢ 2 chế độ
     const dsmartSqlClient2 = freshRequire('lib/dsmartSqlClient');
     const insDirect = await dsmartSqlClient2.insertWholesalePrice({ custId: 'CDIRECT1', skuId: 'SDIRECT1', price: 5000, frDate: '2026-01-01', toDate: '2026-12-31' }, null);
     check('DIRECT_DB: insertWholesalePrice() KHÔNG gọi applyPriceViaApi() (đi SQL thật)', applyCalls.length === 0);

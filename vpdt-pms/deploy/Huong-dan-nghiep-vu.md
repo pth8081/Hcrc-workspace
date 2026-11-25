@@ -10365,6 +10365,65 @@ trước).
 
 Không cần thao tác deploy gì thêm ngoài copy code.
 
+### 6j-4. LỖI THẬT PRODUCTION đã vá: chặn DEALER (6j-2) KHÔNG hoạt động ở chế độ "🌐 Theo API" + bổ sung chặn ngay ở bước xem trước (12/2026)
+
+Ngay sau khi deploy bản chặn cứng DEALER (6j-2) lên server thật, người
+dùng thử tải file với Mã Khách B2B thực tế CHƯA có (`244000000780`) và
+phát hiện 2 vấn đề liên tiếp:
+
+1. **Màn xem trước (preview) vẫn báo "✅ Sẽ thêm mới"** cho dòng có mã
+   sai — vì `validateDealerExists()` trước nay CHỈ chạy ở bước ghi thật
+   `insertWholesalePrice()` (`POST /apply`), còn `POST /preview` thuần
+   đọc file, không đụng gì tới DSmart nên không bắt được lỗi này cho
+   tới khi bấm ghi.
+2. **Bấm "✅ Thêm Giá Mới Vào DSmart" vẫn báo "Đã thêm 1/1 dòng thành
+   công"** dù mã khách sai — nghiêm trọng hơn hẳn vấn đề 1, vì đây là
+   đúng bước lẽ ra phải CHẶN CỨNG. Xác nhận với người dùng: đã pull code
+   mới + `pm2 restart` đầy đủ, không phải do chưa deploy. Hỏi tiếp thì
+   phát hiện ra nguyên nhân thật: hệ thống đang chạy ở chế độ **"🌐 Theo
+   API"** (`PriceOperationMode = EXTERNAL_API`, xem mục cấu hình "Chế Độ
+   Áp Dụng Giá") — mà bản vá DEALER ban đầu đặt `validateDealerExists()`
+   **SAU** nhánh rẽ `if (mode === 'EXTERNAL_API') { ...gọi API đối tác,
+   return sớm... }` trong `insertWholesalePrice()`, nên ở chế độ API,
+   dòng kiểm tra DEALER không bao giờ được chạy tới — lượt ghi đi thẳng
+   qua `applyPriceViaApi()`, đối tác tự báo "thành công" mà không hề
+   biết gì về DEALER của DSmart16.
+
+**Cách vá — cả 2 vấn đề**:
+- **Vấn đề 2 (nghiêm trọng hơn, vá trước)**: chuyển `validateDealerExists()`
+  lên **ĐẦU HÀM** `insertWholesalePrice()`, **TRƯỚC** nhánh rẽ theo chế
+  độ — áp dụng cho CẢ 2 chế độ (Theo Phần Mềm lẫn Theo API). Vẫn luôn
+  dùng kết nối DSmart16 Trung Tâm qua `getDsmartPool()` (kết nối này
+  luôn cấu hình được độc lập với chế độ đang chọn — 2 khối cấu hình
+  "⚙️ Cấu Hình Kết Nối"/"🌐 Cấu Hình API Đối Tác" tồn tại song song,
+  không loại trừ nhau). `updateWholesalePrice()`/`deleteWholesalePrice()`
+  **KHÔNG đổi** — giữ nguyên phạm vi "chỉ áp dụng cho Thêm Giá Mới" đã
+  thống nhất từ đầu (6j-2).
+- **Vấn đề 1**: thêm `checkDealerCustIds(pool, custIds)` (bản TRA HÀNG
+  LOẠT của `validateDealerExists()`, 1 câu SELECT IN-list cho nhiều Mã
+  Khách B2B cùng lúc, trả về `Set` các mã HỢP LỆ thay vì ném lỗi ngay)
+  — gọi trong `POST /preview` ngay sau khi parse file: chỉ tra các Mã
+  Khách B2B PHÂN BIỆT của những dòng CHƯA lỗi gì khác, gắn lỗi "không có
+  trong danh mục DEALER" vào đúng dòng nếu không hợp lệ. Người dùng thấy
+  lỗi NGAY khi xem trước, không cần bấm ghi mới biết.
+
+**Lưu ý vận hành quan trọng**: vì DEALER nay được tra NGAY TRONG LƯỢT
+GHI dù đang ở chế độ nào, **kết nối DSmart16 Trung Tâm (Host/CSDL/Tài
+khoản/Mật khẩu ở "⚙️ Cấu Hình Kết Nối") PHẢI luôn cấu hình đúng VÀ còn
+GRANT SELECT trên `dbo.DEALER`, kể cả khi đang dùng chế độ "🌐 Theo
+API"** — nếu thiếu/sai, MỌI lượt "Thêm Giá Mới" ở CẢ 2 chế độ sẽ báo lỗi
+ngay, không ghi được gì (kể cả qua API đối tác).
+
+Test: `tests/test-dsmart-price-mode.js` thêm 1 kịch bản tái hiện CHÍNH
+XÁC lỗi thật production (chế độ EXTERNAL_API + Mã Khách B2B sai -> phải
+ném lỗi, KHÔNG được gọi `applyPriceViaApi()`) — 46/46 pass (trước đó
+phải sửa lại stub `getRawConfig()`/seed `dbo.DEALER` giả lập vì giờ
+`insertWholesalePrice()` luôn cần kết nối DSmart16 Trung Tâm dù đang ở
+chế độ nào). `tests/test-dsmart-wholesale-price.js` thêm 5 kịch bản cho
+`checkDealerCustIds()` ở `POST /preview` — 115/115 pass.
+`tests/test-dsmart-natural-key-matching.js` thêm 3 kịch bản đơn vị cho
+`checkDealerCustIds()` — 27/27 pass.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần
