@@ -58,6 +58,13 @@ const DEFAULT_TYPE = '04', DEFAULT_STK_ID = '', DEFAULT_WS_ID = 0;
 let SKU_DEF_DB = { S1: { PICEUNIT: 'BO ', UNITCONV: 1, TAX_CODE: 'T5' } };
 let SKU_DEF_PERMISSION_DENIED = false; // mô phỏng trường hợp tài khoản CHƯA được cấp quyền SELECT riêng trên SKU_DEF
 
+// ===== Giả lập dbo.DEALER (danh mục khách hàng B2B thật, CÙNG CSDL DSmart16 nhưng KHÁC CSPRICE/SKU_DEF)
+// — người dùng gửi nguyên văn BRG_APP.sql (12/2026), lộ ra bảng này qua sp_BRG_WEBAPP_VendorExist, rồi tự
+// hỏi DBA và XÁC NHẬN đây chính là danh mục khách hàng B2B thật — xem validateDealerExists()/
+// lib/dsmartSqlClient.js. BLOCK_CODE=0 = khách còn hoạt động (đúng điều kiện sp_BRG_WEBAPP_VendorExist).
+let DEALER_DB = { C1: { BLOCK_CODE: 0 } };
+let DEALER_PERMISSION_DENIED = false; // mô phỏng trường hợp tài khoản CHƯA được cấp quyền SELECT riêng trên DEALER
+
 function dateMs(v) { return v instanceof Date ? v.getTime() : new Date(v).getTime(); }
 function sameDate(a, b) { return dateMs(a) === dateMs(b); }
 
@@ -109,6 +116,23 @@ class FakeRequest {
     // ghi INSERT/UPDATE nên không cần giữ lại, cũng không còn phụ thuộc quyền SELECT trên CSPRICE nữa.)
     if (/^SELECT\b/.test(sql) && /\bdbo\.CSPRICE\b/.test(sql)) {
       throw new Error("The SELECT permission was denied on the object 'CSPRICE', database 'DSMART16', schema 'dbo'.");
+    }
+    // validateDealerExists() — CHẶN CỨNG Mã Khách B2B không có/đang bị khoá trong danh mục DEALER trước
+    // khi ghi (12/2026, theo yêu cầu người dùng, xem lib/dsmartSqlClient.js). Bảng KHÁC CSPRICE, cần quyền
+    // SELECT RIÊNG (DEALER_PERMISSION_DENIED mô phỏng trường hợp chưa được cấp quyền).
+    if (/^SELECT CUST_ID FROM dbo\.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;?$/.test(sql)) {
+      if (DEALER_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'DEALER', database 'DSMART16', schema 'dbo'.");
+      }
+      const info = DEALER_DB[this.inputs.custId];
+      return { recordset: (info && info.BLOCK_CODE === 0) ? [{ CUST_ID: this.inputs.custId }] : [] };
+    }
+    if (/^SELECT TOP 1 CUST_ID FROM dbo\.DEALER;?$/.test(sql)) {
+      if (DEALER_PERMISSION_DENIED) {
+        throw new Error("The SELECT permission was denied on the object 'DEALER', database 'DSMART16', schema 'dbo'.");
+      }
+      const first = Object.keys(DEALER_DB)[0];
+      return { recordset: first ? [{ CUST_ID: first }] : [] };
     }
     // lookupSkuDefUnitInfo() — tra Đơn Vị Tính/Hệ Số Quy Đổi/Mã Thuế theo SKU_ID, bảng KHÁC CSPRICE nên
     // được phép SELECT (nếu tài khoản có quyền riêng, SKU_DEF_PERMISSION_DENIED mô phỏng trường hợp chưa
@@ -382,6 +406,69 @@ async function main() {
     SKU_DEF_PERMISSION_DENIED = false;
     assert(threw instanceof DsmartConfigError, 'phải ném DsmartConfigError khi bị từ chối quyền');
     assert(/SKU_DEF/.test(threw.message), `thông báo phải nêu rõ bảng SKU_DEF — got: ${threw.message}`);
+  });
+
+  // validateDealerExists() — CHẶN CỨNG Mã Khách B2B (12/2026, theo yêu cầu người dùng: "Nếu không có thì
+  // không cho nhập nữa. Bạn phải kiểm tra chứ" — sau khi gỡ hẳn cảnh báo MỀM custIdExistsInCsprice() cũ).
+  await run.run('insertWholesalePrice(): Mã Khách B2B KHÔNG có trong DEALER -> báo lỗi rõ ràng, KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    DEALER_DB = {}; // không có khách hàng nào trong danh mục
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'KHONG_TON_TAI', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi không tìm thấy Mã Khách B2B trong DEALER');
+    assert(/Không tìm thấy Mã Khách B2B/.test(threw.message), `thông báo phải nêu rõ không tìm thấy Mã Khách B2B — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi Mã Khách B2B không hợp lệ');
+    DEALER_DB = { C1: { BLOCK_CODE: 0 } }; // khôi phục cho các test sau
+  });
+
+  await run.run('insertWholesalePrice(): Mã Khách B2B có trong DEALER nhưng ĐANG BỊ KHOÁ (BLOCK_CODE khác 0) -> báo lỗi rõ ràng, KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    DEALER_DB = { 'C-BLOCKED': { BLOCK_CODE: 1 } };
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C-BLOCKED', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi Mã Khách B2B đang bị khoá');
+    assert(/đang bị khoá/.test(threw.message), `thông báo phải nêu rõ khách hàng đang bị khoá — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi Mã Khách B2B đang bị khoá');
+    DEALER_DB = { C1: { BLOCK_CODE: 0 } }; // khôi phục cho các test sau
+  });
+
+  await run.run('insertWholesalePrice(): Mã Khách B2B CÓ trong DEALER và KHÔNG bị khoá -> ghi bình thường', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    const { insertWholesalePrice } = freshClient();
+    const key = await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' });
+    assertEqual(key.custId, 'C1');
+    assertEqual(CSPRICE_DB.length, 1, 'phải ghi được 1 dòng khi Mã Khách B2B hợp lệ');
+    assert(queryLog.some(q => /^SELECT CUST_ID FROM dbo\.DEALER WHERE CUST_ID = @custId AND BLOCK_CODE = 0;?$/.test(q)), `phải tra DEALER trước khi ghi — queryLog: ${JSON.stringify(queryLog)}`);
+  });
+
+  await run.run('insertWholesalePrice(): tài khoản CHƯA được cấp quyền SELECT trên DEALER -> báo lỗi rõ ràng phân biệt với lỗi "không tìm thấy", KHÔNG ghi gì vào CSPRICE', async () => {
+    queryLog = []; CSPRICE_DB = []; seq = 0;
+    DEALER_PERMISSION_DENIED = true;
+    const { insertWholesalePrice, DsmartSqlError } = freshClient();
+    let threw = null;
+    try { await insertWholesalePrice({ custId: 'C1', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' }); }
+    catch (err) { threw = err; }
+    DEALER_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartSqlError, 'phải ném DsmartSqlError khi bị từ chối quyền SELECT trên DEALER');
+    assert(/GRANT SELECT trên dbo\.DEALER/.test(threw.message), `thông báo phải hướng dẫn rõ cần GRANT SELECT trên DEALER — got: ${threw.message}`);
+    assertEqual(CSPRICE_DB.length, 0, 'KHÔNG được ghi gì vào CSPRICE khi bị từ chối quyền tra DEALER');
+  });
+
+  await run.run('testDealerAccess(): đọc được DEALER -> trả ms + sampleRow; bị từ chối quyền -> DsmartConfigError rõ ràng', async () => {
+    const { testDealerAccess, DsmartConfigError } = freshClient();
+    DEALER_PERMISSION_DENIED = false;
+    const ok = await testDealerAccess();
+    assert(ok.sampleRow && ok.sampleRow.CUST_ID === 'C1', 'phải trả về 1 dòng mẫu từ DEALER khi đọc được');
+    DEALER_PERMISSION_DENIED = true;
+    let threw = null;
+    try { await testDealerAccess(); } catch (err) { threw = err; }
+    DEALER_PERMISSION_DENIED = false;
+    assert(threw instanceof DsmartConfigError, 'phải ném DsmartConfigError khi bị từ chối quyền');
+    assert(/DEALER/.test(threw.message), `thông báo phải nêu rõ bảng DEALER — got: ${threw.message}`);
   });
 
   await run.run('updateWholesalePrice()/deleteWholesalePrice(): khớp đúng 1 dòng theo khoá chính thật (CUST_ID, SKU_ID — 2 cột, Lần 5), dùng OUTPUT trong 1 TRANSACTION THẬT, không cần SELECT riêng', async () => {

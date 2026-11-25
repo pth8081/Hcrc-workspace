@@ -86,6 +86,29 @@ async function parseWholesalePriceFile(buffer) {
 
   if (!headerCells) throw new HttpError(400, 'File Excel không có dòng tiêu đề');
   if (!rows.length) throw new HttpError(400, 'File không có dòng dữ liệu nào (ngoài dòng tiêu đề)');
+
+  // Trùng Mã Khách B2B + Mã sản phẩm TRONG CÙNG 1 FILE (12/2026, theo yêu cầu người dùng: "1 ncc mà có
+  // nhiều dòng trùng mã thì đưa ra thông báo và không cho nhập") — CSPRICE chỉ cho phép ĐÚNG 1 dòng/cặp
+  // (CUST_ID, SKU_ID) tại 1 thời điểm, nên 2 dòng trùng cặp trong CÙNG 1 lượt tải lên luôn là lỗi nhập
+  // liệu (dòng nào mới là giá đúng không rõ ràng) — CHẶN CỨNG ngay từ bước xem trước (gắn lỗi vào `errors`
+  // như mọi lỗi khác, không ghi gì cho các dòng này), không đợi tới lúc ghi mới phát hiện. Gắn lỗi lên
+  // TẤT CẢ các dòng trùng (không chỉ dòng xuất hiện sau) để người dùng thấy rõ toàn bộ dòng liên quan.
+  const dupRowNumbers = new Map(); // key "custId|skuId" -> [rowNumber, ...]
+  for (const r of rows) {
+    if (!r.custId || !r.skuId) continue; // đã lỗi thiếu dữ liệu, không cần xét trùng nữa
+    const key = `${r.custId}|${r.skuId}`;
+    if (!dupRowNumbers.has(key)) dupRowNumbers.set(key, []);
+    dupRowNumbers.get(key).push(r.rowNumber);
+  }
+  for (const r of rows) {
+    if (!r.custId || !r.skuId) continue;
+    const group = dupRowNumbers.get(`${r.custId}|${r.skuId}`);
+    if (group.length > 1) {
+      const others = group.filter(n => n !== r.rowNumber);
+      r.errors.push(`Trùng Mã Khách B2B + Mã sản phẩm với dòng ${others.join(', ')} trong cùng file`);
+    }
+  }
+
   return { rows };
 }
 

@@ -10275,6 +10275,96 @@ badge tím + lớp xác nhận riêng ở giao diện
 (`module-itsupport-dsmartprice.js`) — không cần thao tác deploy gì thêm
 ngoài copy code.
 
+### 6j-2. Giá Bán Buôn: CHẶN CỨNG Mã Khách B2B không hợp lệ qua `dbo.DEALER` (12/2026)
+
+Sau khi gỡ hẳn cảnh báo mềm ở trên, người dùng hỏi tiếp: "Tôi vẫn có
+quyền select mà. Thế thì bạn phải kiểm tra mã khách và mã hàng chứ. Nếu
+không có thì không cho nhập nữa." — yêu cầu CHẶN CỨNG thật sự, không
+còn chỉ cảnh báo. Rà lại phát hiện: **Mã Hàng (SKU_ID) đã được chặn
+cứng từ trước** (`lookupSkuDefUnitInfo()` tra `dbo.SKU_DEF`, không tìm
+thấy thì ném lỗi, không ghi gì — không liên quan gì đến đợt sửa này).
+Riêng **Mã Khách B2B (CUST_ID) chưa từng có chặn cứng nào** — đây mới
+là việc cần làm thêm.
+
+Người dùng gửi nguyên văn `BRG_APP.sql` (phần mềm áp giá CŨ) để tìm
+bảng danh mục khách hàng thật — lộ ra `sp_BRG_WEBAPP_VendorExist`
+(SELECT `TYPE`/`CUST_ID`/`CUST_NAME` FROM `dbo.DEALER` WHERE
+`BLOCK_CODE=0` AND `CUST_ID=@vendorNo`) — rồi tự hỏi DBA và **xác nhận
+`dbo.DEALER` chính là danh mục khách hàng B2B thật** trên DSmart16
+(gửi kèm dữ liệu thật đối chiếu).
+
+**Cách làm — `validateDealerExists(pool, custId)`
+(`lib/dsmartSqlClient.js`)**: dùng ĐÚNG điều kiện
+`sp_BRG_WEBAPP_VendorExist` đã dùng (`SELECT CUST_ID FROM dbo.DEALER
+WHERE CUST_ID = @custId AND BLOCK_CODE = 0`) — không tìm thấy, hoặc
+tìm thấy nhưng `BLOCK_CODE` khác 0 (khách đang bị khoá), đều ném lỗi
+rõ ràng, **KHÔNG ghi gì vào CSPRICE**. Gọi **1 LẦN DUY NHẤT tại DSmart16
+Trung Tâm** trong `insertWholesalePrice()` (trước cả bước ghi HO lẫn
+fan-out xuống từng siêu thị) — **không lặp lại ở từng siêu thị** (khác
+`SKU_DEF`, vốn phải tra lại ở mỗi siêu thị vì cần LẤY GIÁ TRỊ Đơn Vị
+Tính/Thuế để ghi; ở đây chỉ cần biết tồn tại/không bị khoá, không cần
+giá trị cột nào riêng cho từng siêu thị). Chỉ áp dụng cho **"Thêm Giá
+Mới"** (cả luồng upload Excel lẫn "↩️ Dùng Lại") — **KHÔNG** áp dụng
+lại cho "Sửa"/"Xoá" (khớp theo khoá đã lưu sẵn từ dòng đã tồn tại,
+CUST_ID không đổi, giống hệt cách SKU_ID cũng không re-validate lúc
+Sửa/Xoá).
+
+Cần **GRANT SELECT RIÊNG trên `dbo.DEALER`** (độc lập hoàn toàn với
+quyền trên CSPRICE/SKU_DEF) — thêm nút "🔍 Kiểm Tra Quyền Đọc DEALER"
+(đúng khuôn nút SKU_DEF đã có) để đội IT tự xác nhận quyền đã đủ TRƯỚC
+khi dùng thật. Không đọc/trả về `CUST_NAME` (dữ liệu DSmart16 lưu tiếng
+Việt theo bảng mã TCVN3 cũ — xem `fTCVNToUnicode()`/`Unicode2TCVN()`
+trong `BRG_APP.sql` — giải mã đúng cần bảng chuyển đổi riêng, không cần
+thiết chỉ để xác nhận tồn tại).
+
+Test: `test-dsmart-natural-key-matching.js` thêm 5 kịch bản (không có
+trong DEALER, đang bị khoá, hợp lệ ghi bình thường, chưa được cấp
+quyền SELECT, `testDealerAccess()`) — 24/24 pass. Cập nhật mock DEALER
+ở `test-dsmart-store-fanout.js` (seed tại HO, không lặp ở từng siêu
+thị) — 23/23 pass.
+
+Không cần thao tác deploy gì thêm ngoài copy code — **nhưng bắt buộc
+GRANT SELECT trên `dbo.DEALER` TRƯỚC khi deploy**, nếu không mọi lượt
+"Thêm Giá Mới" sẽ báo lỗi "bị từ chối quyền SELECT trên DEALER" và
+không ghi được gì.
+
+### 6j-3. Giá Bán Buôn: chặn trùng Mã Khách B2B + Mã sản phẩm TRONG CÙNG 1 file/lượt ghi (12/2026)
+
+Người dùng yêu cầu: "Bạn cung cho kiểm tra khi file upload 1 nhà cung
+cấp chỉ cài đặt 1 mã hàng, nếu file có 1 ncc mà có nhiều dòng trùng mã
+thì đưa ra thông báo và không cho nhập nhé" — vì CSPRICE chỉ cho phép
+ĐÚNG 1 dòng cho mỗi cặp (CUST_ID, SKU_ID) tại 1 thời điểm (xem mục 6c -
+khoá tự nhiên), 2 dòng trùng cặp trong CÙNG 1 lượt tải lên luôn là lỗi
+nhập liệu (không rõ dòng nào mới là giá đúng), nên CHẶN CỨNG ngay từ
+bước xem trước, không đợi tới lúc ghi mới phát hiện.
+
+**Cách làm — 2 lớp (đúng chuẩn "không tin dữ liệu client" đã áp dụng
+toàn bộ tính năng này)**:
+- **`parseWholesalePriceFile()`** (`lib/dsmartWholesalePriceFileParser.js`):
+  sau khi đọc xong mọi dòng, gom theo khoá `CUST_ID|SKU_ID` (đã trim) —
+  cặp nào xuất hiện > 1 lần thì gắn lỗi "Trùng Mã Khách B2B + Mã sản
+  phẩm với dòng ..." vào **TẤT CẢ** các dòng thuộc cặp đó (không chỉ
+  dòng xuất hiện sau), người dùng xem trước thấy rõ toàn bộ dòng liên
+  quan cần sửa. Dòng thiếu Mã Khách B2B/Mã sản phẩm (đã lỗi dữ liệu
+  riêng) không bị xét trùng thêm.
+- **`POST /apply`** (`routes/dsmartWholesalePrice.js`): đếm lại ĐỘC
+  LẬP theo đúng dữ liệu `rows` client gửi lên (không tin "đã qua
+  preview rồi") — cặp trùng thì mọi dòng thuộc cặp đó trả
+  `success: false` kèm lỗi "Trùng Mã Khách B2B + Mã sản phẩm với 1 dòng
+  khác trong cùng lượt ghi", các dòng KHÔNG trùng trong cùng lượt vẫn
+  ghi bình thường (không chặn cả lượt chỉ vì 1 cặp bị trùng).
+
+Test: `test-dsmart-wholesale-price.js` thêm 5 kịch bản (2 dòng trùng ->
+cả 2 báo lỗi; trùng Mã Khách B2B nhưng khác Mã sản phẩm -> KHÔNG báo
+lỗi trùng; 3 dòng trùng CÙNG cặp -> cả 3 đều nêu đúng số dòng còn lại;
+gửi thẳng `/apply` 2 dòng trùng không qua preview -> chặn cứng cả 2,
+không ghi gì; trùng 1 cặp nhưng còn dòng khác không trùng -> dòng
+không trùng vẫn ghi được) — 110/110 pass. Không đổi gì ở client (badge
+lỗi `r.errors.join('; ')` đã hiển thị chung cho mọi loại lỗi dòng từ
+trước).
+
+Không cần thao tác deploy gì thêm ngoài copy code.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần

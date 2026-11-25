@@ -659,6 +659,69 @@ async function main() {
     assert.ok(res.body.rows[0].errors.some(e => e.includes('quá dài')), JSON.stringify(res.body.rows[0].errors));
   });
 
+  // ===== Trùng Mã Khách B2B + Mã sản phẩm TRONG CÙNG 1 FILE/LƯỢT GHI (12/2026, theo yêu cầu người dùng:
+  // "nếu file có 1 ncc mà có nhiều dòng trùng mã thì đưa ra thông báo và không cho nhập") =====
+  await test('POST /preview: 2 dòng trùng Mã Khách B2B + Mã sản phẩm trong CÙNG file -> CẢ 2 dòng đều báo lỗi trùng', async () => {
+    const buf = await buildXlsxBuffer([
+      ['240000000900', '2001326541', 10000, '2026-01-01', '2026-01-31'],
+      ['240000000900', '2001326541', 20000, '2026-02-01', '2026-02-28']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows.length, 2);
+    assert.ok(res.body.rows[0].errors.some(e => e.includes('Trùng')), JSON.stringify(res.body.rows[0].errors));
+    assert.ok(res.body.rows[1].errors.some(e => e.includes('Trùng')), JSON.stringify(res.body.rows[1].errors));
+  });
+
+  await test('POST /preview: trùng Mã Khách B2B nhưng KHÁC Mã sản phẩm -> KHÔNG báo lỗi trùng (hợp lệ, 1 khách nhiều SP)', async () => {
+    const buf = await buildXlsxBuffer([
+      ['240000000901', '2001326541', 10000, '2026-01-01', '2026-01-31'],
+      ['240000000901', '2001326542', 20000, '2026-01-01', '2026-01-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.rows[0].errors.length, 0, JSON.stringify(res.body.rows[0].errors));
+    assert.strictEqual(res.body.rows[1].errors.length, 0, JSON.stringify(res.body.rows[1].errors));
+  });
+
+  await test('POST /preview: 3 dòng trùng CÙNG 1 cặp -> cả 3 đều báo lỗi, nêu đúng số dòng còn lại trong file', async () => {
+    const buf = await buildXlsxBuffer([
+      ['240000000902', '2001326541', 10000, '2026-01-01', '2026-01-31'],
+      ['240000000902', '2001326541', 20000, '2026-02-01', '2026-02-28'],
+      ['240000000902', '2001326541', 30000, '2026-03-01', '2026-03-31']
+    ]);
+    const res = await apiUploadPreview(buf);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.rows[0].errors.some(e => /Trùng.*dòng 3, 4/.test(e)), JSON.stringify(res.body.rows[0].errors));
+    assert.ok(res.body.rows[1].errors.some(e => /Trùng.*dòng 2, 4/.test(e)), JSON.stringify(res.body.rows[1].errors));
+    assert.ok(res.body.rows[2].errors.some(e => /Trùng.*dòng 2, 3/.test(e)), JSON.stringify(res.body.rows[2].errors));
+  });
+
+  await test('POST /apply: gửi THẲNG 2 dòng trùng cặp (không qua /preview) -> CHẶN CỨNG cả 2, KHÔNG ghi gì (phòng vệ server-side)', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const res = await apiPost('/apply', { rows: [
+      { custId: '240000000903', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' },
+      { custId: '240000000903', skuId: 'S1', price: 200, frDate: '2026-02-01', toDate: '2026-02-28' }
+    ], sourceFileName: 'test.xlsx', sourceAction: 'UPLOAD' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.successCount, 0, JSON.stringify(res.body));
+    assert.ok(res.body.results.every(r => /Trùng/.test(r.error)), JSON.stringify(res.body.results));
+    assert.strictEqual(CSPRICE.length, 0, 'KHÔNG được ghi gì khi 2 dòng trùng cặp trong cùng lượt ghi');
+  });
+
+  await test('POST /apply: trùng 1 cặp nhưng CÒN dòng khác không trùng -> dòng không trùng vẫn ghi được bình thường', async () => {
+    CSPRICE = []; ENTRIES = [];
+    const res = await apiPost('/apply', { rows: [
+      { custId: '240000000904', skuId: 'S1', price: 100, frDate: '2026-01-01', toDate: '2026-01-31' },
+      { custId: '240000000904', skuId: 'S1', price: 200, frDate: '2026-02-01', toDate: '2026-02-28' },
+      { custId: '240000000905', skuId: 'S2', price: 300, frDate: '2026-01-01', toDate: '2026-01-31' }
+    ], sourceFileName: 'test.xlsx', sourceAction: 'UPLOAD' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.successCount, 1, JSON.stringify(res.body));
+    assert.strictEqual(CSPRICE.length, 1);
+    assert.strictEqual(CSPRICE[0].CUST_ID, '240000000905');
+  });
+
   await test('POST /apply: lỗi DsmartConfigError dừng sớm, không thử tiếp các dòng còn lại', async () => {
     CSPRICE = []; ENTRIES = [];
     forceConfigError = true;
