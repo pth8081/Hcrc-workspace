@@ -1902,6 +1902,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     đang thiếu Thời Gian Tạo) **tự động sắp xếp đúng vị trí ngay khi tải
     lại trang** — không cần thao tác gì thêm, không cần sửa dữ liệu: màn
     hình tự suy luận lại mốc thời gian từ chính mã nội bộ của ticket đó.
+    **LỖI ĐÃ VÁ thêm (cùng đợt, theo yêu cầu người dùng kèm ảnh thật)**:
+    ticket tự sinh từ Onboarding/Offboarding cũng thiếu luôn "Mã Yêu Cầu"
+    (cột trống) — nay tự sinh đúng khuôn `HCRC-<Phòng Ban>-ITHT-<số thứ
+    tự>` như ticket tạo bằng tay. Chỉ áp dụng cho ticket tạo MỚI SAU bản
+    vá — ticket CŨ đã tạo trước đó (3 ticket "[Onboarding] Tạo email công
+    ty..." trong ảnh gốc người dùng gửi) vẫn giữ nguyên "Mã Yêu Cầu" trống
+    (không hồi tố được vì không còn đủ dữ liệu để sinh đúng số thứ tự lịch
+    sử tại đúng thời điểm đó).
   - **📐 Mẫu Giá tách riêng theo kênh (10/2026)** — mỗi Mẫu Giá (Hệ Thống →
     Hỗ Trợ IT → "📐 Mẫu Giá", khuôn cột đối chiếu tên cột với file bảng giá
     nộp lên) giờ gắn cố định với ĐÚNG 1 kênh (Bán Lẻ hoặc Bán Buôn) — màn

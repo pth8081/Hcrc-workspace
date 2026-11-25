@@ -1087,7 +1087,10 @@ function createDispatcher(state) {
         const idx = list.findIndex(x => x.id === id);
         if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
         const ticketId = Date.now() + Math.floor(Math.random() * 100000);
-        const draft = recordActions.createItTicketForHrTask(freshUser, list[idx], body, ticketId); // mutates task.linkedTicketId = ticketId
+        // deptAbbrs/existingTickets (11/2026, theo yêu cầu người dùng — ticket tạo từ Onboarding/
+        // Offboarding cũng cần "Mã Yêu Cầu") — mirror ĐÚNG routes/records.js thật, truyền thêm 2 tham số
+        // mới để createItTicketForHrTask() tự sinh code qua recordCodeGen.generateHcrcCode().
+        const draft = recordActions.createItTicketForHrTask(freshUser, list[idx], body, ticketId, { deptAbbrs: state.deptAbbrs }, state.itSupportTickets || []); // mutates task.linkedTicketId = ticketId
         const ticket = Object.assign({}, draft, { id: ticketId });
         state.itSupportTickets = state.itSupportTickets || [];
         state.itSupportTickets.push(ticket);
