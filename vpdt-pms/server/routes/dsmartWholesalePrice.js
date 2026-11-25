@@ -726,6 +726,17 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
   if (!rows.length) return res.status(400).json({ error: 'Không có dòng nào để ghi' });
   if (rows.length > 2000) return res.status(400).json({ error: 'Quá nhiều dòng trong 1 lượt ghi (tối đa 2000)' });
 
+  // Trùng Mã Khách B2B + Mã sản phẩm TRONG CÙNG 1 LƯỢT GHI (12/2026, theo yêu cầu người dùng — xem chú
+  // thích đầy đủ tại parseWholesalePriceFile()/lib/dsmartWholesalePriceFileParser.js) — CHẶN CỨNG lại ở
+  // ĐÂY, KHÔNG tin "preview đã lọc hết rồi" (preview chỉ là gợi ý hiển thị, client vẫn có thể tự dựng
+  // mảng rows gửi thẳng lên /apply mà không qua /preview). Đếm theo ĐÚNG dữ liệu đã trim (khớp cách
+  // CUST_ID/SKU_ID được dùng để ghi CSPRICE bên dưới).
+  const dupCountByKey = new Map();
+  for (const r of rows) {
+    const key = `${String(r.custId || '').trim()}|${String(r.skuId || '').trim()}`;
+    dupCountByKey.set(key, (dupCountByKey.get(key) || 0) + 1);
+  }
+
   const today = todayDateOnlyIso();
   const results = [];
   for (const r of rows) {
@@ -736,6 +747,10 @@ router.post('/apply', uploadRateLimiter, async (req, res) => {
     const toDate = String(r.toDate || '');
     if (!custId || !skuId || custId.length > 50 || skuId.length > 50 || !Number.isFinite(price) || price < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(frDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate) || frDate > toDate) {
       results.push({ custId, skuId, success: false, error: 'Dữ liệu dòng không hợp lệ (đã kiểm tra lại server-side)' });
+      continue;
+    }
+    if (dupCountByKey.get(`${custId}|${skuId}`) > 1) {
+      results.push({ custId, skuId, success: false, error: 'Trùng Mã Khách B2B + Mã sản phẩm với 1 dòng khác trong cùng lượt ghi — sửa lại file/dữ liệu và thử lại' });
       continue;
     }
     if (schedule && frDate > today) {

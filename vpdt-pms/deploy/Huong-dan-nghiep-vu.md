@@ -10328,6 +10328,43 @@ GRANT SELECT trên `dbo.DEALER` TRƯỚC khi deploy**, nếu không mọi lượ
 "Thêm Giá Mới" sẽ báo lỗi "bị từ chối quyền SELECT trên DEALER" và
 không ghi được gì.
 
+### 6j-3. Giá Bán Buôn: chặn trùng Mã Khách B2B + Mã sản phẩm TRONG CÙNG 1 file/lượt ghi (12/2026)
+
+Người dùng yêu cầu: "Bạn cung cho kiểm tra khi file upload 1 nhà cung
+cấp chỉ cài đặt 1 mã hàng, nếu file có 1 ncc mà có nhiều dòng trùng mã
+thì đưa ra thông báo và không cho nhập nhé" — vì CSPRICE chỉ cho phép
+ĐÚNG 1 dòng cho mỗi cặp (CUST_ID, SKU_ID) tại 1 thời điểm (xem mục 6c -
+khoá tự nhiên), 2 dòng trùng cặp trong CÙNG 1 lượt tải lên luôn là lỗi
+nhập liệu (không rõ dòng nào mới là giá đúng), nên CHẶN CỨNG ngay từ
+bước xem trước, không đợi tới lúc ghi mới phát hiện.
+
+**Cách làm — 2 lớp (đúng chuẩn "không tin dữ liệu client" đã áp dụng
+toàn bộ tính năng này)**:
+- **`parseWholesalePriceFile()`** (`lib/dsmartWholesalePriceFileParser.js`):
+  sau khi đọc xong mọi dòng, gom theo khoá `CUST_ID|SKU_ID` (đã trim) —
+  cặp nào xuất hiện > 1 lần thì gắn lỗi "Trùng Mã Khách B2B + Mã sản
+  phẩm với dòng ..." vào **TẤT CẢ** các dòng thuộc cặp đó (không chỉ
+  dòng xuất hiện sau), người dùng xem trước thấy rõ toàn bộ dòng liên
+  quan cần sửa. Dòng thiếu Mã Khách B2B/Mã sản phẩm (đã lỗi dữ liệu
+  riêng) không bị xét trùng thêm.
+- **`POST /apply`** (`routes/dsmartWholesalePrice.js`): đếm lại ĐỘC
+  LẬP theo đúng dữ liệu `rows` client gửi lên (không tin "đã qua
+  preview rồi") — cặp trùng thì mọi dòng thuộc cặp đó trả
+  `success: false` kèm lỗi "Trùng Mã Khách B2B + Mã sản phẩm với 1 dòng
+  khác trong cùng lượt ghi", các dòng KHÔNG trùng trong cùng lượt vẫn
+  ghi bình thường (không chặn cả lượt chỉ vì 1 cặp bị trùng).
+
+Test: `test-dsmart-wholesale-price.js` thêm 5 kịch bản (2 dòng trùng ->
+cả 2 báo lỗi; trùng Mã Khách B2B nhưng khác Mã sản phẩm -> KHÔNG báo
+lỗi trùng; 3 dòng trùng CÙNG cặp -> cả 3 đều nêu đúng số dòng còn lại;
+gửi thẳng `/apply` 2 dòng trùng không qua preview -> chặn cứng cả 2,
+không ghi gì; trùng 1 cặp nhưng còn dòng khác không trùng -> dòng
+không trùng vẫn ghi được) — 110/110 pass. Không đổi gì ở client (badge
+lỗi `r.errors.join('; ')` đã hiển thị chung cho mọi loại lỗi dòng từ
+trước).
+
+Không cần thao tác deploy gì thêm ngoài copy code.
+
 ## 6k. LỖI THẬT PRODUCTION đã vá: dữ liệu đã XOÁ "sống lại" sau mỗi lần deploy code mới (12/2026)
 
 Người dùng báo: đã xoá hết "Kỳ Kiểm Kê" (Tab 1, Kiểm Kê) nhưng **mỗi lần
