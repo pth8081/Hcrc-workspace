@@ -25,6 +25,13 @@
 --   - dbo.SKU_DEF  : CHỈ GRANT SELECT (ứng dụng tra Đơn Vị Tính/Hệ Số Quy
 --     Đổi/Mã Thuế theo Mã Sản Phẩm trước khi ghi giá — xem
 --     lookupSkuDefUnitInfo(), server/lib/dsmartSqlClient.js).
+--   - dbo.DEALER   : CHỈ GRANT SELECT, CHỈ CẦN TRÊN DSMART16 TRUNG TÂM
+--     (12/2026 — CHẶN CỨNG Mã Khách B2B không hợp lệ/đang bị khoá trước
+--     khi ghi giá, xem validateDealerExists(), server/lib/dsmartSqlClient.js).
+--     KHÁC CSPRICE/SKU_DEF ở trên: KHÔNG cần cấp lại quyền này trên CSDL
+--     DSmart của từng siêu thị (ứng dụng chỉ tra DEALER đúng 1 lần tại
+--     Trung Tâm, không lặp lại khi fan-out xuống siêu thị) — nếu đang chạy
+--     script này cho 1 siêu thị (mục B ở trên), BỎ QUA bước GRANT DEALER.
 --   - KHÔNG cấp thêm bất kỳ quyền nào khác (không sysadmin, không db_owner,
 --     không quyền trên bảng/view nào khác của CSDL DSmart).
 --
@@ -68,6 +75,13 @@ GO
 GRANT SELECT ON [dbo].[SKU_DEF] TO [b2b_price];
 GO
 
+-- 5) DEALER: CHỈ đọc (kiểm tra Mã Khách B2B hợp lệ/không bị khoá trước khi
+--    ghi giá) — CHỈ CHẠY BƯỚC NÀY TRÊN DSMART16 TRUNG TÂM. Nếu đang chạy
+--    script này để cấp quyền cho 1 siêu thị (fan-out, mục B ở đầu file),
+--    BỎ QUA/XOÁ bước này — không cần GRANT DEALER trên CSDL của siêu thị.
+GRANT SELECT ON [dbo].[DEALER] TO [b2b_price];
+GO
+
 -- ============================================================================
 -- Kiểm tra lại sau khi chạy (tuỳ chọn, chạy dưới tài khoản sysadmin để xem
 -- — KHÔNG phải câu lệnh tài khoản b2b_price tự chạy được, vì chính nó
@@ -79,7 +93,9 @@ GO
 -- WHERE dp.grantee_principal_id = USER_ID('b2b_price')
 -- ORDER BY obj.name, dp.permission_name;
 --
--- Kỳ vọng ĐÚNG 5 dòng: CSPRICE (SELECT/INSERT/UPDATE/DELETE) + SKU_DEF (SELECT).
+-- Kỳ vọng ĐÚNG 6 dòng trên DSmart16 Trung Tâm: CSPRICE (SELECT/INSERT/
+-- UPDATE/DELETE) + SKU_DEF (SELECT) + DEALER (SELECT). Trên CSDL của TỪNG
+-- siêu thị (nếu đã bỏ bước 5): kỳ vọng ĐÚNG 5 dòng (không có DEALER).
 -- ============================================================================
 
 -- ============================================================================
@@ -87,7 +103,10 @@ GO
 -- HCRC Workspace nhập Host/Port/Tên CSDL/b2b_price/<MAT_KHAU> ở:
 --   - DSmart16 Trung Tâm  -> Hỗ Trợ IT > Cài Đặt Giá Bán Buôn > "⚙️ Cấu
 --     Hình Kết Nối" (admin), rồi bấm "🔌 Kiểm Tra Kết Nối" VÀ "🔍 Kiểm Tra
---     Quyền Đọc SKU_DEF" để tự xác nhận quyền đã đủ TRƯỚC khi ghi giá thật.
+--     Quyền Đọc SKU_DEF" VÀ "🔍 Kiểm Tra Quyền Đọc DEALER" để tự xác nhận
+--     quyền đã đủ TRƯỚC khi ghi giá thật (thiếu quyền DEALER thì MỌI lượt
+--     "Thêm Giá Mới" sẽ báo lỗi ngay, không ghi được gì — xem mục 6j-2,
+--     Huong-dan-nghiep-vu.md).
 --   - 1 siêu thị (fan-out) -> Hỗ Trợ IT > Cài Đặt Giá Bán Buôn > "🏬 Kết
 --     Nối Siêu Thị" (admin) > Thêm/Sửa đúng siêu thị đó, rồi bấm "🔌 Kiểm
 --     Tra" trên dòng siêu thị đó để xác nhận kết nối + quyền ghi đã đúng
