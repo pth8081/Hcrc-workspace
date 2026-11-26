@@ -6314,14 +6314,25 @@ tính trên 100% của chính số đó").
   1 bài nộp trong khoảng ngày đang lọc — cột Số Mẫu Đã Hoàn Thành/Số Mẫu
   Đạt/Tỉ Lệ/**Đạt Chung** (✓ Đạt khi tỉ lệ = 100%, ✗ Chưa đạt nếu có ít
   nhất 1 mẫu đã hoàn thành bị Không đạt).
-- **Cố ý KHÔNG áp dụng bộ lọc "Mẫu Checklist"** ở trên (dù đang chọn cụ thể
-  1 mẫu) — mục đích của khối này là GỘP nhiều mẫu khác nhau của cùng 1 siêu
-  thị lại để tính 1 trạng thái chung, nên luôn tính trên TOÀN BỘ mẫu
-  STORE_SELF/QA, chỉ tôn trọng bộ lọc khoảng ngày. Nếu 1 mẫu có nhiều bài
-  nộp trong cùng kỳ (làm lại sau khi sửa lỗi), lấy bài nộp SAU CÙNG làm đại
-  diện cho mẫu đó.
+- **SỬA 11/2026 (báo cáo thật người dùng)**: TRƯỚC ĐÂY khối này CỐ Ý bỏ qua
+  bộ lọc "Mẫu Checklist" ở trên (luôn GỘP mọi mẫu STORE_SELF/QA của siêu thị
+  trong kỳ để tính 1 trạng thái chung) — gây hiểu nhầm nghiêm trọng: người
+  dùng chọn lọc đúng 1 mẫu để xem bảng chi tiết bên dưới (điểm cao, phần lớn
+  Đạt), nhưng khối "Đạt Chung" phía trên vẫn âm thầm gộp CẢ các mẫu KHÁC
+  không hiện trên màn hình (có thể Không Đạt), khiến 2 khối trông như lệch
+  nhau dù mỗi khối đều tính đúng theo đúng tập dữ liệu của nó. Từ nay:
+  - Khi bộ lọc "Mẫu Checklist" đang **chọn đúng 1 mẫu cụ thể** → "Đạt Chung"
+    CHỈ tính trên mẫu đó (khớp đúng bảng chi tiết bên dưới cùng màn).
+  - Khi bộ lọc đang để **"Tất cả"** → vẫn GỘP mọi mẫu STORE_SELF/QA của siêu
+    thị trong kỳ như hành vi gốc (10/2026) — chỉ tôn trọng bộ lọc khoảng
+    ngày. Nếu 1 mẫu có nhiều bài nộp trong cùng kỳ (làm lại sau khi sửa
+    lỗi), lấy bài nộp SAU CÙNG làm đại diện cho mẫu đó.
+  - Dòng chú thích ngay trên bảng "Đạt Chung" tự đổi theo đúng 2 trường hợp
+    trên để người dùng luôn biết rõ đang xem phạm vi nào.
 - Hàm tính: `computeChecklistStoreOverallPass()` (`lib/checklist.js`, mirror
-  client `computeChecklistStoreOverallPassClient()` ở `module-checklist.js`).
+  client `computeChecklistStoreOverallPassClient()` ở `module-checklist.js`)
+  — bản thân hàm này KHÔNG đổi, chỉ đổi tập dữ liệu đầu vào truyền tới nó
+  (`getChecklistStoreSelfQaRowsForPeriod()` nhận thêm tham số `templateId`).
   Không áp dụng cho mẫu "Kiểm Soát Siêu Thị" (CONTROL_AUDIT/DEDUCTION) — loại
   đó có Dashboard VSATTP riêng, bản chất đo mức độ tuân thủ khác hẳn.
 

@@ -785,17 +785,25 @@ function parseChecklistFilterDateLocal(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 // Lấy mọi bài nộp STORE_SELF/QA (khác DEDUCTION — Dashboard VSATTP tính riêng) trong đúng khoảng ngày
-// fromDate/toDate — CỐ Ý bỏ qua bộ lọc "Mẫu Checklist" phía trên (mục đích gộp NHIỀU mẫu của 1 siêu thị)
-// — mirror khuôn getChecklistVsattpFilteredSubmissions() bên dưới, dùng parseChecklistSubmittedAtDate()
-// (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới TỪNG lấy nhầm token giờ làm ngày — ĐÃ VÁ,
-// xem chú thích đầy đủ tại parseChecklistSubmittedAtDate()).
-function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate) {
+// fromDate/toDate — mirror khuôn getChecklistVsattpFilteredSubmissions() bên dưới, dùng
+// parseChecklistSubmittedAtDate() (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới TỪNG lấy
+// nhầm token giờ làm ngày — ĐÃ VÁ, xem chú thích đầy đủ tại parseChecklistSubmittedAtDate()).
+// `templateId` (11/2026, theo phản hồi người dùng — báo cáo thật "Đạt Chung" hiện tỉ lệ thấp bất thường so
+// với bảng chi tiết bên dưới): TRƯỚC ĐÂY hàm này CỐ Ý bỏ qua bộ lọc "Mẫu Checklist" phía trên, LUÔN
+// gộp TẤT CẢ mẫu STORE_SELF của 1 siêu thị trong kỳ — gây hiểu nhầm khi người dùng đã chọn lọc rõ 1 mẫu cụ
+// thể ở trên (bảng chi tiết bên dưới tôn trọng bộ lọc đó, điểm cao) nhưng "Đạt Chung" vẫn âm thầm gộp cả
+// NHỮNG MẪU KHÁC không hiện trên màn hình (có thể đang Không Đạt) vào kết quả — khiến 2 khối trông như lệch
+// nhau dù cả 2 đều tính đúng theo đúng tập dữ liệu CỦA RIÊNG NÓ. Từ nay: nếu người dùng ĐÃ chọn cụ thể 1 mẫu
+// (`templateId` có giá trị) thì CHỈ tính trên mẫu đó (khớp đúng bảng chi tiết); chỉ gộp TẤT CẢ mẫu như cũ khi
+// bộ lọc đang để "Tất cả" (`templateId` rỗng/null).
+function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate, templateId) {
   const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
   let rows = (DB.checklistSubmissions || []).filter(s => {
     if (s.status !== 'SUBMITTED') return false;
     const t = templatesById.get(s.templateId);
     return t && t.templateType === 'STORE_SELF' && t.templateKind !== 'DEDUCTION';
   });
+  if (templateId) rows = rows.filter(s => s.templateId === Number(templateId));
   const from = fromDate ? parseChecklistFilterDateLocal(fromDate) : null;
   const to = toDate ? parseChecklistFilterDateLocal(toDate) : null;
   if (from || to) {
@@ -809,7 +817,7 @@ function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate) {
   }
   return rows;
 }
-function renderChecklistStoreOverallPass(storeStats) {
+function renderChecklistStoreOverallPass(storeStats, templateId) {
   const el = document.getElementById('checklistReportStoreOverallWrap');
   if (!el) return;
   if (!storeStats.length) {
@@ -817,8 +825,13 @@ function renderChecklistStoreOverallPass(storeStats) {
     return;
   }
   const passCount = storeStats.filter(s => s.overallStatus === 'PASS').length;
+  // (11/2026) Chú thích rõ phạm vi tính — tránh hiểu nhầm lệch với bảng chi tiết như báo cáo thật của người
+  // dùng: khi ĐANG lọc 1 mẫu cụ thể, nói rõ CHỈ tính trên mẫu đó; khi "Tất cả", nói rõ đang GỘP mọi mẫu.
+  const scopeNote = templateId
+    ? 'tính trên ĐÚNG mẫu Checklist đang lọc ở trên (khớp bảng chi tiết bên dưới).'
+    : 'gộp TẤT CẢ các mẫu Checklist "Thường" siêu thị đã nộp trong kỳ (đang để "Tất cả" ở bộ lọc Mẫu Checklist) — đạt 1 mẫu nhưng chưa đạt mẫu khác vẫn tính Chưa Đạt Chung.';
   el.innerHTML = `
-    <p class="text-[11px] text-gray-500 mb-2"><span class="font-bold text-emerald-700">${passCount}/${storeStats.length}</span> siêu thị Đạt Chung — tính trên SỐ MẪU ĐÃ HOÀN THÀNH trong kỳ (không phải tổng số mẫu đang có).</p>
+    <p class="text-[11px] text-gray-500 mb-2"><span class="font-bold text-emerald-700">${passCount}/${storeStats.length}</span> siêu thị Đạt Chung — ${scopeNote}</p>
     <table class="w-full text-xs border-collapse">
       <thead><tr class="border-b text-left text-gray-500">
         <th class="p-1.5">Siêu Thị</th><th class="p-1.5 text-center">Đã Hoàn Thành</th><th class="p-1.5 text-center">Đạt</th><th class="p-1.5 text-center">Tỉ Lệ</th><th class="p-1.5 text-center">Đạt Chung</th>
@@ -911,11 +924,14 @@ function applyChecklistReportFilter() {
   const coverage = computeChecklistCoverageClient(DB.stores || [], qaRows);
   renderChecklistCoverageBlock('checklistReportCoverage', coverage);
 
-  // "Đạt Chung Theo Siêu Thị" (10/2026) — CỐ Ý KHÔNG dùng `qaRows` ở trên (đã bị lọc theo 1 mẫu nếu bộ
-  // lọc "Mẫu Checklist" đang chọn cụ thể) vì mục đích của khối này là gộp NHIỀU mẫu khác nhau của CÙNG 1
-  // siêu thị lại — luôn lấy lại TOÀN BỘ mẫu STORE_SELF/QA theo đúng khoảng ngày đang lọc.
-  const storeOverallRows = getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate);
-  renderChecklistStoreOverallPass(computeChecklistStoreOverallPassClient(storeOverallRows));
+  // "Đạt Chung Theo Siêu Thị" (10/2026, SỬA 11/2026 theo phản hồi người dùng — xem chú thích đầy đủ tại
+  // getChecklistStoreSelfQaRowsForPeriod()): CỐ Ý KHÔNG dùng `qaRows` ở trên (đã bị lọc theo 1 mẫu nếu bộ
+  // lọc "Mẫu Checklist" đang chọn cụ thể LẪN theo templateKind!=='DEDUCTION' chung) — tự lấy lại qua
+  // getChecklistStoreSelfQaRowsForPeriod(), nhưng từ nay CÓ truyền `templateId` đang chọn: nếu người dùng
+  // đã lọc đúng 1 mẫu cụ thể, "Đạt Chung" chỉ tính trên mẫu đó (khớp đúng bảng chi tiết bên dưới); để trống
+  // ("Tất cả") thì vẫn gộp mọi mẫu STORE_SELF/QA của siêu thị trong kỳ như trước.
+  const storeOverallRows = getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate, templateId);
+  renderChecklistStoreOverallPass(computeChecklistStoreOverallPassClient(storeOverallRows), templateId);
 
   const total = rows.length;
   const passed = rows.filter(r => r.isPassed === true).length;
