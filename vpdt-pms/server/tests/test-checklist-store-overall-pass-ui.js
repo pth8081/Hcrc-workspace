@@ -12,6 +12,12 @@
 // CHỌN đúng 1 mẫu cụ thể, khối Đạt Chung chỉ tính trên mẫu đó (khớp đúng bảng chi tiết cùng màn) — để
 // "Tất cả" mới gộp mọi mẫu như hành vi gốc. Xem getChecklistStoreSelfQaRowsForPeriod() (module-checklist.js).
 //
+// SỬA 11/2026 (ĐỢT 2, báo cáo thật người dùng — "0.0%"/"Chưa đạt" cho MỌI siêu thị dù bảng chi tiết cùng
+// màn hiện điểm 91-100%): mẫu SCORED chưa cấu hình "Ngưỡng Đạt (%)" lúc chấm luôn lưu isPassed=null VĨNH
+// VIỄN — "Đạt Chung" coi null này là Chưa đạt. Giờ tính lại theo Ngưỡng Đạt HIỆN TẠI của mẫu (dù mới thêm
+// SAU khi bài đã nộp); mẫu chưa từng có ngưỡng thì loại khỏi "Đạt Chung" hẳn (không tính Chưa đạt oan). Xem
+// resolveChecklistEffectiveVerdict() (module-checklist.js).
+//
 // Chạy: node server/tests/test-checklist-store-overall-pass-ui.js
 'use strict';
 const {
@@ -24,6 +30,12 @@ const REPORTER = { username: 'bc3', name: 'Người Xem Báo Cáo 3', dept: 'Ph�
 
 const TEMPLATE_1 = { id: 701, templateCode: 'CL_1', templateName: 'Checklist Vệ Sinh', templateType: 'STORE_SELF', templateKind: 'QA', status: 'ACTIVE' };
 const TEMPLATE_2 = { id: 702, templateCode: 'CL_2', templateName: 'Checklist An Toàn', templateType: 'STORE_SELF', templateKind: 'QA', status: 'ACTIVE' };
+// Mẫu SCORED CÓ cấu hình Ngưỡng Đạt 80% — dùng để test suy "kết quả hiệu lực" khi bài nộp có isPassed=null
+// (thường gặp khi admin đặt ngưỡng SAU khi đã có bài nộp cũ — xem resolveChecklistEffectiveVerdict()).
+const TEMPLATE_3 = { id: 703, templateCode: 'CL_3', templateName: 'Checklist Hàng Ngày', templateType: 'STORE_SELF', templateKind: 'QA', status: 'ACTIVE', scoringMode: 'SCORED', passThreshold: 80 };
+// Mẫu SCORED CHƯA TỪNG cấu hình Ngưỡng Đạt — không có cách nào suy Đạt/Không đạt, phải bị LOẠI khỏi "Đạt
+// Chung" hẳn (không được tính là "đã hoàn thành nhưng Không đạt").
+const TEMPLATE_4 = { id: 704, templateCode: 'CL_4', templateName: 'Checklist Chưa Cấu Hình Ngưỡng', templateType: 'STORE_SELF', templateKind: 'QA', status: 'ACTIVE', scoringMode: 'SCORED', passThreshold: null };
 
 const SUBMISSIONS = [
   // Siêu thị A: hoàn thành CẢ 2 mẫu, cả 2 Đạt -> Đạt Chung
@@ -33,12 +45,18 @@ const SUBMISSIONS = [
   { id: 3, templateId: 701, storeCode: 'Siêu thị B', status: 'SUBMITTED', isPassed: true, submittedAt: '08:00:00 6/9/2026', submittedByUsername: 'nv_b', submittedByName: 'NV B' },
   // Siêu thị C: hoàn thành 2 mẫu, 1 KHÔNG đạt -> Chưa đạt
   { id: 4, templateId: 701, storeCode: 'Siêu thị C', status: 'SUBMITTED', isPassed: true, submittedAt: '08:00:00 6/9/2026', submittedByUsername: 'nv_c', submittedByName: 'NV C' },
-  { id: 5, templateId: 702, storeCode: 'Siêu thị C', status: 'SUBMITTED', isPassed: false, submittedAt: '09:00:00 6/9/2026', submittedByUsername: 'nv_c', submittedByName: 'NV C' }
+  { id: 5, templateId: 702, storeCode: 'Siêu thị C', status: 'SUBMITTED', isPassed: false, submittedAt: '09:00:00 6/9/2026', submittedByUsername: 'nv_c', submittedByName: 'NV C' },
+  // Siêu thị D: CHỈ nộp mẫu 703 (SCORED, Ngưỡng 80%), isPassed/scorePercent=null (chấm TRƯỚC khi admin đặt
+  // ngưỡng) nhưng passedCount/totalVisibleCount suy ra 91.8% (>= 80%) -> phải hiện Đạt sau khi suy lại.
+  { id: 6, templateId: 703, storeCode: 'Siêu thị D', status: 'SUBMITTED', isPassed: null, scorePercent: null, passedCount: 45, totalVisibleCount: 49, submittedAt: '08:00:00 7/9/2026', submittedByUsername: 'nv_d', submittedByName: 'NV D' },
+  // Siêu thị E: CHỈ nộp mẫu 704 (SCORED, CHƯA TỪNG có Ngưỡng Đạt) — isPassed=null và KHÔNG CÁCH NÀO suy ra
+  // Đạt/Không đạt -> phải bị loại khỏi "Đạt Chung" hẳn (siêu thị E KHÔNG được xuất hiện trong bảng).
+  { id: 7, templateId: 704, storeCode: 'Siêu thị E', status: 'SUBMITTED', isPassed: null, scorePercent: null, passedCount: 44, totalVisibleCount: 49, submittedAt: '08:00:00 7/9/2026', submittedByUsername: 'nv_e', submittedByName: 'NV E' }
 ];
 
 const state = createMockState({
-  depts: ['Phòng Vận Hành'], stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'],
-  users: [REPORTER], checklistTemplates: [TEMPLATE_1, TEMPLATE_2], checklistSubmissions: SUBMISSIONS
+  depts: ['Phòng Vận Hành'], stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C', 'Siêu thị D', 'Siêu thị E'],
+  users: [REPORTER], checklistTemplates: [TEMPLATE_1, TEMPLATE_2, TEMPLATE_3, TEMPLATE_4], checklistSubmissions: SUBMISSIONS
 });
 
 async function main() {
@@ -52,12 +70,24 @@ async function main() {
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, REPORTER);
     await page.evaluate(() => { switchTab('checklist'); setChecklistSubTab('REPORT'); });
 
-    await run.run('Khối "Đạt Chung Theo Siêu Thị" render đúng 3 dòng khi bộ lọc "Tất cả" (không chọn mẫu cụ thể)', async () => {
+    await run.run('Khối "Đạt Chung Theo Siêu Thị" render đúng 4 dòng khi bộ lọc "Tất cả" (A/B/C/D — Siêu thị E bị loại vì mẫu 704 chưa từng có Ngưỡng Đạt)', async () => {
       const html = await page.evaluate(() => document.getElementById('checklistReportStoreOverallWrap').innerHTML);
       assertIncludes(html, 'Siêu thị A');
       assertIncludes(html, 'Siêu thị B');
       assertIncludes(html, 'Siêu thị C');
-      assertIncludes(html, '2/3', 'Phải hiện đúng 2/3 siêu thị Đạt Chung (A và B đạt, C chưa đạt)');
+      assertIncludes(html, 'Siêu thị D');
+      assertEqual(html.includes('Siêu thị E'), false, 'Siêu thị E (chỉ nộp mẫu 704 chưa từng có Ngưỡng Đạt, không thể suy Đạt/Không đạt) phải bị loại khỏi bảng hẳn, không được hiện "Chưa đạt" oan');
+      assertIncludes(html, '3/4', 'Phải hiện đúng 3/4 siêu thị Đạt Chung (A, B, D đạt; C chưa đạt) — mẫu số là 4 vì E đã bị loại khỏi phạm vi tính toán');
+    });
+
+    await run.run('SỬA 11/2026 ĐỢT 2: Siêu thị D (mẫu SCORED có Ngưỡng Đạt 80%, isPassed/scorePercent=null do chấm trước khi admin đặt ngưỡng) phải hiện Đạt vì suy lại 45/49≈91.8% >= 80%', async () => {
+      const rowText = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('#checklistReportStoreOverallWrap tbody tr')];
+        const row = rows.find(r => r.textContent.includes('Siêu thị D'));
+        return row ? row.textContent : null;
+      });
+      assertIncludes(rowText, '✓ Đạt', 'Siêu thị D phải hiện Đạt sau khi suy lại kết quả hiệu lực theo Ngưỡng Đạt hiện tại của mẫu 703');
+      assertIncludes(rowText, '100.0%', 'Tỉ lệ Đạt Chung của Siêu thị D phải là 100% (1/1 mẫu đã hoàn thành, suy ra Đạt)');
     });
 
     await run.run('Siêu thị B CHỈ hoàn thành 1/2 mẫu nhưng Đạt -> vẫn phải tính "Đạt Chung" (không bị phạt vì thiếu mẫu còn lại)', async () => {
@@ -102,7 +132,7 @@ async function main() {
         applyChecklistReportFilter();
       });
       const html = await page.evaluate(() => document.getElementById('checklistReportStoreOverallWrap').innerHTML);
-      assertIncludes(html, '2/3', 'Về "Tất cả" phải quay lại đúng hành vi gộp mọi mẫu (A, B đạt; C chưa đạt)');
+      assertIncludes(html, '3/4', 'Về "Tất cả" phải quay lại đúng hành vi gộp mọi mẫu (A, B, D đạt; C chưa đạt; E vẫn bị loại)');
       assertIncludes(html, 'gộp TẤT CẢ các mẫu', 'Chú thích phải nói rõ đang gộp mọi mẫu khi bộ lọc để Tất cả');
     });
 

@@ -784,6 +784,20 @@ function parseChecklistFilterDateLocal(str) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return isNaN(d.getTime()) ? null : d;
 }
+// (11/2026) Tính "kết quả hiệu lực" cho 1 bài nộp phục vụ RIÊNG khối "Đạt Chung Theo Siêu Thị" — KHÔNG đổi
+// `s.isPassed`/`s.scorePercent` gốc (vẫn hiển thị nguyên trạng ở bảng chi tiết/Top 5/thẻ số khác). Trả về
+// bản sao của `s` với `isPassed` đã suy lại nếu gốc là null, hoặc `null` (loại khỏi "Đạt Chung" hẳn) nếu
+// không có cách nào suy ra Đạt/Không đạt — xem chú thích đầy đủ tại nơi gọi (getChecklistStoreSelfQaRowsForPeriod()).
+function resolveChecklistEffectiveVerdict(sub, templatesById) {
+  if (sub.isPassed === true || sub.isPassed === false) return sub;
+  const template = templatesById.get(sub.templateId);
+  const threshold = template?.passThreshold;
+  if (threshold == null) return null;
+  const percent = sub.scorePercent != null ? sub.scorePercent
+    : (sub.totalVisibleCount ? (sub.passedCount / sub.totalVisibleCount) * 100 : null);
+  if (percent == null) return null;
+  return Object.assign({}, sub, { isPassed: percent >= threshold });
+}
 // Lấy mọi bài nộp STORE_SELF/QA (khác DEDUCTION — Dashboard VSATTP tính riêng) trong đúng khoảng ngày
 // fromDate/toDate — mirror khuôn getChecklistVsattpFilteredSubmissions() bên dưới, dùng
 // parseChecklistSubmittedAtDate() (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới TỪNG lấy
@@ -804,6 +818,17 @@ function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate, templateId) {
     return t && t.templateType === 'STORE_SELF' && t.templateKind !== 'DEDUCTION';
   });
   if (templateId) rows = rows.filter(s => s.templateId === Number(templateId));
+  // SỬA 11/2026 (ĐỢT 2, báo cáo thật người dùng — "0.0%", "Chưa đạt" cho MỌI siêu thị dù bảng chi tiết
+  // cùng màn hiện điểm 91-100%): các mẫu SCORED CHƯA cấu hình "Ngưỡng Đạt (%)" lúc bài được chấm luôn lưu
+  // isPassed=scorePercent=null VĨNH VIỄN cho bài đó (xem computeChecklistScoring(), lib/checklist.js) —
+  // "Đạt Chung" trước đây đọc thẳng s.isPassed nên coi MỌI bài null này là "Chưa đạt" (false), dù bảng chi
+  // tiết (formatChecklistReportScoreCell/formatChecklistReportResultCell) chỉ hiện % suy từ
+  // passedCount/totalVisibleCount để tham khảo, không khẳng định Đạt/Không đạt. Từ nay: tính lại 1 "kết quả
+  // hiệu lực" theo đúng Ngưỡng Đạt (%) mẫu ĐANG cấu hình HIỆN TẠI (dù threshold được admin thêm SAU khi bài
+  // đã nộp) — xem resolveChecklistEffectiveVerdict(). Bài nào vẫn không có cách nào suy ra Đạt/Không đạt
+  // (mẫu chưa từng cấu hình ngưỡng) bị LOẠI KHỎI "Đạt Chung" hẳn (coi như mẫu không có khả năng chấm —
+  // KHÔNG được tính là "đã hoàn thành nhưng Không đạt", tránh hạ oan tỉ lệ của siêu thị).
+  rows = rows.map(s => resolveChecklistEffectiveVerdict(s, templatesById)).filter(Boolean);
   const from = fromDate ? parseChecklistFilterDateLocal(fromDate) : null;
   const to = toDate ? parseChecklistFilterDateLocal(toDate) : null;
   if (from || to) {
