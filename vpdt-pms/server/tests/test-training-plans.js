@@ -502,6 +502,56 @@ async function main() {
       assertEqual(unnamed.avgRating, null, 'a plan with no instructorRating filled in should average to null, not 0');
     });
 
+    // LỖI ĐÃ VÁ (12/2026, báo cáo thật người dùng — Dashboard hiện "Giờ TT" 483 giờ cho 1 lớp, hỏi "giờ
+    // thực tế lấy ở đâu ra" vì file Excel KHÔNG có cột này) — Giờ TT tính SỐNG từ chênh lệch Bắt Đầu/Kết
+    // Thúc của trainingClasses (KHÔNG liên quan gì tới file Excel/"Ghi Nhận Thực Tế"), 1 lớp nhập nhầm
+    // Kết Thúc (chọn nhầm tháng/ngày) âm thầm kéo lệch cả báo cáo. computeAbnormalTrainingClasses() quét
+    // TOÀN BỘ trainingClasses liệt kê sẵn mọi lớp vượt ngưỡng 24 giờ, hiện ngay ở Dashboard kèm nút "Sửa"
+    // mở thẳng đúng lớp đó (openEditTrainingClassModal()) để BP Đào Tạo tự sửa tận gốc.
+    await run('computeAbnormalTrainingClasses(): KHÔNG có lớp nào vượt ngưỡng 24 giờ ở trạng thái dữ liệu bình thường hiện có', async () => {
+      const abnormal = await page.evaluate(() => computeAbnormalTrainingClasses());
+      assertEqual(abnormal.length, 0, `expected no abnormal classes among the normal seeded data, got ${JSON.stringify(abnormal)}`);
+    });
+
+    let abnormalClassId = null;
+    await run('computeAbnormalTrainingClasses(): phát hiện ĐÚNG lớp có Kết Thúc nhập nhầm (vượt xa 24 giờ), sắp xếp giờ cao nhất lên đầu', async () => {
+      abnormalClassId = await page.evaluate((cid) => {
+        const id = 90999;
+        // Mô phỏng ĐÚNG lỗi thật: Bắt Đầu 09/11/2026 08:30, Kết Thúc bị chọn nhầm sang 10/11/2026 (tháng
+        // sau) 12:00 thay vì cùng tháng — ra đúng khoảng ~483 giờ như báo cáo thật người dùng gặp.
+        DB.trainingClasses.push({
+          id, code: 'LOP-TANBINH-11', title: 'Đào tạo Tân binh', category: 'Nghiệp vụ', courseId: cid,
+          mode: 'OFFLINE', status: 'OPEN', instructor: 'Nguyễn Thị Nga và Nguyễn Thị Thu Trang',
+          startTime: '2026-11-09T08:30', endTime: '2026-12-10T12:00',
+          creator: 'gv.linh', creatorName: 'Trần Thị Linh', dept: 'Phòng Nhân Sự'
+        });
+        return id;
+      }, courseId);
+      const abnormal = await page.evaluate(() => computeAbnormalTrainingClasses());
+      assertEqual(abnormal.length, 1, `expected exactly 1 abnormal class, got ${JSON.stringify(abnormal)}`);
+      assertEqual(abnormal[0].cls.id, abnormalClassId, 'the flagged class must be the one just seeded');
+      assert(abnormal[0].hours > 700, `expected the Nov->Dec gap to compute to a large hour count, got ${abnormal[0].hours}`);
+    });
+
+    await run('Dashboard "Theo Dõi Kế Hoạch Đào Tạo" hiện khối cảnh báo "Lớp Học Có Thời Lượng Bất Thường" kèm nút Sửa mở ĐÚNG lớp lỗi', async () => {
+      const html = await page.evaluate(() => { renderTrainingPlanDashboard(); return document.getElementById('tpDashResultWrap').innerHTML; });
+      assert(html.includes('Lớp Học Có Thời Lượng Bất Thường'), 'dashboard phải hiện tiêu đề cảnh báo khi có lớp bất thường');
+      assert(html.includes('LOP-TANBINH-11'), 'dashboard phải liệt kê đúng mã lớp bị lỗi');
+      assert(new RegExp(`data-op="openEditTrainingClassModal"\\s+data-arg0="${abnormalClassId}"`).test(html), 'nút Sửa phải trỏ đúng data-arg0 = id của lớp lỗi, qua đúng cơ chế CSP data-op');
+
+      // Bấm "Sửa" (qua ĐÚNG hàm thật, không phải mô phỏng DOM) phải mở modal với Bắt Đầu/Kết Thúc đúng dữ
+      // liệu lỗi hiện có — xác nhận BP Đào Tạo thấy đúng chỗ cần sửa.
+      await page.evaluate((id) => openEditTrainingClassModal(id), abnormalClassId);
+      const modalValues = await page.evaluate(() => ({ start: document.getElementById('teStart').value, end: document.getElementById('teEnd').value, visible: !document.getElementById('trainingEditClassModal')?.classList.contains('hidden') }));
+      assertEqual(modalValues.start, '2026-11-09T08:30', 'modal Sửa phải nạp đúng Bắt Đầu hiện có của lớp lỗi');
+      assertEqual(modalValues.end, '2026-12-10T12:00', 'modal Sửa phải nạp đúng Kết Thúc SAI hiện có, để BP Đào Tạo sửa lại');
+
+      // Dọn lại để không ảnh hưởng các kịch bản dashboard phía sau đếm số liệu theo seed cũ.
+      await page.evaluate((id) => { DB.trainingClasses = DB.trainingClasses.filter((c) => c.id !== id); }, abnormalClassId);
+      const abnormalAfterCleanup = await page.evaluate(() => computeAbnormalTrainingClasses());
+      assertEqual(abnormalAfterCleanup.length, 0, 'sau khi dọn lớp lỗi, danh sách bất thường phải rỗng lại');
+    });
+
     await run('tpCategory lọc tpCourseId theo Loại Đào Tạo + category lưu đúng trên bản ghi khi lập kế hoạch', async () => {
       // LỖI ĐÃ XÁC NHẬN PRE-EXISTING KHÔNG LIÊN QUAN (cùng cụm "Nhập Kế Hoạch Từ Excel" đã bị timeout ở
       // 2 kịch bản phía trên — xác nhận qua git stash, không phải do đợt sửa 11/2026 này): luồng parse

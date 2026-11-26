@@ -1456,6 +1456,19 @@ function confirmTrainingClassDurationIfAbnormal(startTime, endTime) {
   if (hours <= TRAINING_CLASS_DURATION_WARN_HOURS) return true;
   return confirm(`⚠️ Khoảng thời gian Bắt Đầu → Kết Thúc đang tính ra ${hours.toFixed(1)} giờ — bất thường cho 1 lớp học (thường do chọn nhầm ngày/tháng ở ô Kết Thúc). Số giờ này sẽ cộng vào cột "Giờ TT" ở báo cáo Theo Dõi Kế Hoạch Đào Tạo.\n\nBạn có CHẮC CHẮN đã nhập đúng Bắt Đầu/Kết Thúc không?\n\nBấm OK để vẫn lưu, Hủy để sửa lại.`);
 }
+// LỖI ĐÃ VÁ (12/2026, theo yêu cầu người dùng — báo cáo thật phát hiện 1 lớp "Đào tạo Tân binh" ra tới
+// 483 giờ TT, hỏi "giờ thực tế lấy ở đâu ra") — confirmTrainingClassDurationIfAbnormal() ở trên CHỈ cảnh
+// báo LÚC NHẬP (lớp tạo/sửa TRƯỚC khi có cảnh báo này, hoặc người dùng lỡ bấm OK bỏ qua, vẫn nằm im
+// trong CSDL và âm thầm kéo lệch báo cáo mà không ai biết). Quét TOÀN BỘ DB.trainingClasses (KHÔNG lệ
+// thuộc bộ lọc đang xem ở Dashboard — lỗi nhập liệu loại này có thể nằm ở BẤT KỲ lớp nào, không chỉ lớp
+// đang lọc) để liệt kê sẵn mọi lớp vượt ngưỡng, giúp BP Đào Tạo tự rà soát + sửa tận gốc 1 lần, không phải
+// dò tay từng lớp trong "🏫 Danh Sách Lớp Học".
+function computeAbnormalTrainingClasses() {
+  return (DB.trainingClasses || [])
+    .map(c => ({ cls: c, hours: trainingClassDurationHours(c) }))
+    .filter(x => x.hours > TRAINING_CLASS_DURATION_WARN_HOURS)
+    .sort((a, b) => b.hours - a.hours);
+}
 
 // Cảnh báo KHÔNG CHẶN CỨNG khi "SL Tham Gia Thực Tế" (actualParticipants, 1 trong 6 field "Ghi Nhận Thực
 // Tế" điền tay — KHÔNG đối chiếu/thay thế Học Viên TT tính sống, xem chú thích ở createValidation.js) nhập
@@ -1659,6 +1672,35 @@ function renderTrainingPlanDashboard() {
       </div>
     </div>`;
 
+  // ⚠️ Lớp Học Có Thời Lượng Bất Thường (12/2026) — xem chú thích đầy đủ tại computeAbnormalTrainingClasses().
+  const abnormalClasses = computeAbnormalTrainingClasses();
+  const abnormalSection = abnormalClasses.length ? `
+    <div class="mt-3">
+      <h4 class="font-bold text-xs text-red-700 mb-1">⚠️ Lớp Học Có Thời Lượng Bất Thường (&gt; ${TRAINING_CLASS_DURATION_WARN_HOURS} giờ) — nên rà soát lại Thời Gian Kết Thúc</h4>
+      <p class="text-[11px] text-gray-500 mb-1">Các lớp dưới đây đang cộng số giờ rất lớn vào cột "Giờ TT" ở báo cáo trên, thường do chọn nhầm ngày/tháng ở ô Kết Thúc lúc tạo/sửa lớp. Bấm "✏️ Sửa" để chỉnh lại Thời Gian Kết Thúc cho đúng.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs bg-white">
+          <thead><tr class="bg-red-50 text-left">
+            <th class="border p-1.5">Mã &amp; Tên Lớp</th>
+            <th class="border p-1.5">Giảng Viên</th>
+            <th class="border p-1.5">Bắt Đầu</th>
+            <th class="border p-1.5">Kết Thúc</th>
+            <th class="border p-1.5 text-center">Số Giờ Tính Ra</th>
+            <th class="border p-1.5 text-center">Thao Tác</th>
+          </tr></thead>
+          <tbody>${abnormalClasses.map(({ cls, hours }) => `
+            <tr>
+              <td class="border p-1.5">${escapeHtml(cls.code || '')}${cls.title ? ` — ${escapeHtml(cls.title)}` : ''}</td>
+              <td class="border p-1.5">${cls.instructor ? escapeHtml(cls.instructor) : '<span class="text-gray-400 italic">—</span>'}</td>
+              <td class="border p-1.5">${escapeHtml((cls.startTime || '').replace('T', ' '))}</td>
+              <td class="border p-1.5">${escapeHtml((cls.endTime || '').replace('T', ' '))}</td>
+              <td class="border p-1.5 text-center font-bold text-red-700">${fmtHours(hours)}</td>
+              <td class="border p-1.5 text-center"><button type="button" data-op="openEditTrainingClassModal" data-arg0="${cls.id}" class="bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button></td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : '';
+
   const overdueRows = data.overdue.map(({ plan, stats }) => {
     const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
     return `<tr>
@@ -1682,6 +1724,7 @@ function renderTrainingPlanDashboard() {
     ${breakdownTable('Theo Tháng', data.byMonth, 'Tháng')}
     ${instructorTable}
     ${breakdownTable('Theo Chương Trình', data.byCourse, 'Chương Trình')}
+    ${abnormalSection}
     <div class="mt-3">
       <h4 class="font-bold text-xs text-gray-700 mb-1">⚠️ Quá Hạn / Chưa Thực Hiện</h4>
       <div class="overflow-x-auto">

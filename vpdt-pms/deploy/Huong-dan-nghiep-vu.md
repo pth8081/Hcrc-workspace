@@ -11403,3 +11403,35 @@ thuộc storeScope** — storeScope chỉ chi phối phần fan-out xuống từ
   nên KHÔNG đổi hành vi đang chạy cho tới khi admin tự vào bật "🌐 Theo API").
 - Không thêm biến `.env`, không thêm package npm (gọi API đối tác dùng `fetch` có sẵn trong Node.js, không
   cần cài thêm thư viện HTTP client nào).
+
+## 6x. Đào Tạo Nội Bộ: khối cảnh báo "Lớp Học Có Thời Lượng Bất Thường" trên Dashboard (12/2026)
+
+Nối tiếp mục 6t (cảnh báo LÚC NHẬP khi 1 Lớp Học tính ra quá 24 giờ) — người dùng hỏi thêm: lớp "Đào tạo
+Tân binh" gây ra 483 giờ ở mục 6t đã được tạo/sửa TRƯỚC KHI có cảnh báo đó (hoặc người dùng đã lỡ bấm OK bỏ
+qua), nên vẫn nằm im trong CSDL và âm thầm kéo lệch "Giờ TT" trên Dashboard "📊 Theo Dõi Kế Hoạch Đào Tạo" mà
+không ai biết, vì không có cách nào tự rà soát lại các lớp CŨ đã lỗi ngoài cảnh báo lúc nhập mới.
+
+**Tính năng mới**: hàm `computeAbnormalTrainingClasses()` (`public/js/module-internalcomms-daotao.js`) quét
+TOÀN BỘ `DB.trainingClasses` hiện có trong hệ thống (không lệ thuộc bộ lọc tháng/chương trình/đơn vị đang
+xem ở Dashboard — lỗi nhập liệu loại này có thể nằm ở bất kỳ lớp nào), lọc ra các lớp có thời lượng tính ra
+vượt ngưỡng 24 giờ (`TRAINING_CLASS_DURATION_WARN_HOURS`, dùng chung với cảnh báo lúc nhập ở mục 6t), sắp
+xếp giờ cao nhất lên đầu.
+
+Kết quả hiện ngay trong Dashboard (`renderTrainingPlanDashboard()`, 📅 Đào Tạo → 📊 Theo Dõi Kế Hoạch Đào
+Tạo), dưới bảng "Theo Chương Trình" và trên khối "Quá Hạn/Chưa Thực Hiện" — chỉ hiện khi có ít nhất 1 lớp bất
+thường. Mỗi dòng hiện Mã & Tên Lớp, Giảng Viên, Bắt Đầu, Kết Thúc, số giờ tính ra, kèm nút "✏️ Sửa" mở thẳng
+đúng lớp đó (tái dùng `openEditTrainingClassModal()` có sẵn, qua cơ chế CSP `data-op` chuẩn) để Bộ Phận Đào
+Tạo tự sửa lại ô "Kết Thúc" cho đúng — đây là công cụ tự rà soát 1 lần, không tự động sửa gì, không thêm
+bảng/API/quyền mới (toàn bộ tính toán + hiển thị đều ở phía client, dựa trên dữ liệu `trainingClasses` đã có
+sẵn trên trang).
+
+**Test**: thêm 3 kịch bản vào `tests/test-training-plans.js` — xác nhận không có lớp bất thường nào ở dữ
+liệu bình thường, seed 1 lớp lỗi (Bắt Đầu tháng 11, Kết Thúc tháng 12 — tính ra hơn 700 giờ) để xác nhận
+`computeAbnormalTrainingClasses()` phát hiện đúng, Dashboard hiện đúng khối cảnh báo + nút Sửa trỏ đúng
+`data-arg0`, mở modal Sửa nạp đúng dữ liệu lớp lỗi. Đã chạy lại toàn bộ `test-training-plans.js` (27/29,
+2 FAIL còn lại là lỗi CÓ SẴN từ trước — xác nhận bằng `git stash`, không liên quan tới thay đổi này),
+`test-internal-training.js` (56/56) và `test-training-report-full.js` (8/8) — không regression. CSP sweep
+sạch (không `onclick=`/`style=` nội tuyến, dùng đúng `data-op`/`escapeHtml()`).
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm biến
+`.env`, không thêm package npm.
