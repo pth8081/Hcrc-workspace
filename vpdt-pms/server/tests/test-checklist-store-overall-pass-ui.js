@@ -4,10 +4,13 @@
 // Chung Theo Siêu Thị" ở tab Báo Cáo > Checklist Siêu Thị/Cửa Hàng (10/2026, yêu cầu người dùng): siêu
 // thị làm bao nhiêu mẫu STORE_SELF tuỳ ý trong kỳ, "Đạt" tính trên SỐ MẪU ĐÃ HOÀN THÀNH — KHÔNG phải
 // tổng số mẫu đang có. Test phần logic thuần (computeChecklistStoreOverallPass) đã có riêng ở
-// tests/test-checklist-store-overall-pass.js — bài này CHỈ xác minh lớp render DOM + hành vi quan trọng
-// nhất dễ bị vỡ: bộ lọc "Mẫu Checklist" (chỉ 1 mẫu cụ thể) KHÔNG được ảnh hưởng tới khối Đạt Chung (mục
-// đích của khối này là gộp NHIỀU mẫu của CÙNG 1 siêu thị, nên phải luôn tính trên TOÀN BỘ mẫu bất kể bộ
-// lọc "Mẫu Checklist" đang chọn gì).
+// tests/test-checklist-store-overall-pass.js — bài này CHỈ xác minh lớp render DOM.
+//
+// SỬA 11/2026 (báo cáo thật người dùng — "Đạt Chung" hiện tỉ lệ Chưa Đạt cao bất thường so với bảng chi
+// tiết bên dưới cùng màn, gây hiểu nhầm là lỗi tính điểm): TRƯỚC ĐÂY bộ lọc "Mẫu Checklist" phía trên CỐ Ý
+// KHÔNG ảnh hưởng tới khối Đạt Chung (luôn gộp TẤT CẢ mẫu). Giờ đổi lại: nếu bộ lọc "Mẫu Checklist" đang
+// CHỌN đúng 1 mẫu cụ thể, khối Đạt Chung chỉ tính trên mẫu đó (khớp đúng bảng chi tiết cùng màn) — để
+// "Tất cả" mới gộp mọi mẫu như hành vi gốc. Xem getChecklistStoreSelfQaRowsForPeriod() (module-checklist.js).
 //
 // Chạy: node server/tests/test-checklist-store-overall-pass-ui.js
 'use strict';
@@ -76,19 +79,31 @@ async function main() {
       assertIncludes(rowText, '✗ Chưa đạt');
     });
 
-    await run.run('QUAN TRỌNG: chọn bộ lọc "Mẫu Checklist" = CHỈ 1 mẫu cụ thể -> khối "Đạt Chung" KHÔNG bị ảnh hưởng, vẫn gộp CẢ 2 mẫu', async () => {
+    await run.run('QUAN TRỌNG (SỬA 11/2026): chọn bộ lọc "Mẫu Checklist" = CHỈ mẫu 701 -> khối "Đạt Chung" CHỈ tính trên mẫu 701, bỏ qua mẫu 702 (khớp bảng chi tiết đang lọc)', async () => {
       await page.evaluate(() => {
         document.getElementById('checklistReportTemplateFilter').value = '701';
         applyChecklistReportFilter();
       });
       const html = await page.evaluate(() => document.getElementById('checklistReportStoreOverallWrap').innerHTML);
-      assertIncludes(html, '2/3', 'Dù bộ lọc đang chọn ĐÚNG 1 mẫu (701), khối Đạt Chung vẫn phải gộp CẢ mẫu 702 — không được lọc theo bộ lọc này');
+      // Mẫu 701: A đạt, B đạt, C đạt (mẫu 702 của C bị loại khỏi phạm vi) -> cả 3/3 siêu thị Đạt Chung.
+      assertIncludes(html, '3/3', 'Khi lọc đúng 1 mẫu (701), Siêu thị C cũng phải tính Đạt (mẫu 702 không đạt bị loại khỏi phạm vi đang lọc)');
+      assertIncludes(html, 'ĐÚNG mẫu Checklist đang lọc', 'Chú thích phải nói rõ đang tính trên đúng mẫu đang lọc, không phải gộp Tất cả');
       const rowTextC = await page.evaluate(() => {
         const rows = [...document.querySelectorAll('#checklistReportStoreOverallWrap tbody tr')];
         const row = rows.find(r => r.textContent.includes('Siêu thị C'));
         return row ? row.textContent : null;
       });
-      assertIncludes(rowTextC, '✗ Chưa đạt', 'Siêu thị C vẫn phải hiện Chưa đạt (mẫu 702 không đạt) dù bộ lọc đang chỉ chọn mẫu 701');
+      assertIncludes(rowTextC, '✓ Đạt', 'Siêu thị C phải hiện Đạt khi chỉ xét riêng mẫu 701 (mẫu 702 không đạt không còn trong phạm vi)');
+    });
+
+    await run.run('SỬA 11/2026: bỏ lọc về "Tất cả" -> khối "Đạt Chung" quay lại gộp CẢ 2 mẫu như trước', async () => {
+      await page.evaluate(() => {
+        document.getElementById('checklistReportTemplateFilter').value = '';
+        applyChecklistReportFilter();
+      });
+      const html = await page.evaluate(() => document.getElementById('checklistReportStoreOverallWrap').innerHTML);
+      assertIncludes(html, '2/3', 'Về "Tất cả" phải quay lại đúng hành vi gộp mọi mẫu (A, B đạt; C chưa đạt)');
+      assertIncludes(html, 'gộp TẤT CẢ các mẫu', 'Chú thích phải nói rõ đang gộp mọi mẫu khi bộ lọc để Tất cả');
     });
 
     await run.run('Không có lỗi JS (pageerror) nào phát sinh trong suốt bài test', () => {

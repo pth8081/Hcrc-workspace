@@ -71,7 +71,10 @@
         <!-- "Đạt Chung Theo Siêu Thị" (10/2026, yêu cầu người dùng) — siêu thị làm BAO NHIÊU mẫu STORE_SELF
              tuỳ ý trong kỳ (không bắt buộc hết), "Đạt" tính TRÊN SỐ MẪU ĐÃ HOÀN THÀNH đó, KHÔNG chia cho
              tổng số mẫu đang ACTIVE — xem computeChecklistStoreOverallPass()/applyChecklistReportFilter()
-             (module-checklist.js) cho lý do thiết kế đầy đủ. -->
+             (module-checklist.js) cho lý do thiết kế đầy đủ. SỬA 11/2026 (báo cáo thật người dùng — "Đạt
+             Chung" hiện tỉ lệ thấp bất thường so với bảng chi tiết): khi bộ lọc "Mẫu Checklist" phía trên
+             đang CHỌN đúng 1 mẫu, khối này giờ CHỈ tính trên mẫu đó (khớp bảng chi tiết); để "Tất cả" mới
+             gộp mọi mẫu như trước — xem getChecklistStoreSelfQaRowsForPeriod() cho chi tiết đầy đủ. -->
         <div class="bg-white border rounded p-3">
           <h4 class="font-bold text-emerald-800 text-xs mb-2">📋 Đạt Chung Theo Siêu Thị (tính trên số mẫu đã hoàn thành trong kỳ)</h4>
           <div id="checklistReportStoreOverallWrap" class="overflow-x-auto"></div>
