@@ -6336,6 +6336,36 @@ tính trên 100% của chính số đó").
   Không áp dụng cho mẫu "Kiểm Soát Siêu Thị" (CONTROL_AUDIT/DEDUCTION) — loại
   đó có Dashboard VSATTP riêng, bản chất đo mức độ tuân thủ khác hẳn.
 
+- **SỬA 11/2026 (ĐỢT 2, báo cáo thật người dùng — "0.0%"/"✗ Chưa đạt" cho
+  MỌI siêu thị dù bảng chi tiết cùng màn hiện điểm 91-100%, "siêu thị họ
+  hiểu nhầm")**: nguyên nhân thật — mẫu **SCORED CHƯA cấu hình "Ngưỡng Đạt
+  (%)"** lúc bài được nộp/chấm thì lưu `isPassed`/`scorePercent` = **null
+  VĨNH VIỄN** cho đúng bài đó (xem `computeChecklistScoring()`,
+  `lib/checklist.js`) — không tự tính lại khi sau này admin mới vào đặt
+  Ngưỡng Đạt cho mẫu. "Đạt Chung" trước đây đọc thẳng `isPassed` nên coi MỌI
+  bài `null` này là Chưa đạt (0%), trong khi bảng chi tiết bên dưới chỉ hiện
+  % suy từ số-câu-đạt/tổng-số-câu để tham khảo (`formatChecklistReportScoreCell`/
+  `formatChecklistReportResultCell`), không hề khẳng định Đạt hay Không đạt.
+  Từ nay, `getChecklistStoreSelfQaRowsForPeriod()` tự tính lại 1 "kết quả
+  hiệu lực" cho riêng khối "Đạt Chung" (`resolveChecklistEffectiveVerdict()`,
+  KHÔNG đổi `isPassed`/`scorePercent` gốc hiển thị ở nơi khác):
+  - Bài đã có `isPassed` rõ ràng (true/false) → giữ nguyên.
+  - Bài `isPassed=null` nhưng mẫu **ĐANG CÓ** "Ngưỡng Đạt (%)" cấu hình (dù
+    được thêm SAU khi bài đã nộp) → so % thật (ưu tiên `scorePercent` đã
+    lưu, nếu null thì suy `passedCount/totalVisibleCount`, đúng công thức
+    bảng chi tiết) với ngưỡng đó để quyết Đạt/Không đạt.
+  - Bài `isPassed=null` và mẫu **CHƯA TỪNG** cấu hình ngưỡng (không có cách
+    nào suy ra verdict) → **LOẠI HẲN khỏi "Đạt Chung"** (không tính là "đã
+    hoàn thành nhưng Không đạt" — tránh hạ oan tỉ lệ của siêu thị). Nếu TẤT
+    CẢ mẫu của 1 siêu thị trong kỳ đều rơi vào trường hợp này, siêu thị đó
+    không xuất hiện trong bảng "Đạt Chung" (không có mẫu nào đủ điều kiện
+    để chấm, không phải lỗi phần mềm).
+  - **Khuyến nghị cho người dùng**: nếu 1 mẫu checklist muốn áp dụng ngưỡng
+    % cụ thể (VD 80%) để tính Đạt/Không đạt, phải vào Admin → Checklist →
+    Cấu Hình Mẫu đặt "Ngưỡng Đạt (%)" cho đúng mẫu đó — hệ thống không tự
+    suy đoán ngưỡng, và sẽ không hiện verdict Đạt/Chưa đạt cho tới khi được
+    cấu hình.
+
 **Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng)** — tab **📊
 Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
 `checklistReportView` (KHÔNG tách quyền riêng, theo xác nhận người dùng):
