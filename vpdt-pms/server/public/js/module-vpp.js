@@ -139,16 +139,23 @@ function vppEffectiveDeptRate(dept) {
 // "Phòng Ban Tham Gia VPP" (vppParticipatingDepts, 11/2026 — theo yêu cầu người dùng, báo cáo kèm ảnh
 // chụp: bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký hiện TOÀN BỘ DB.depts, kể cả phòng không bao
 // giờ phát sinh đăng ký VPP, gây rác khi Danh Mục Phòng Ban có nhiều mục). Rỗng (mặc định, CHƯA ai cấu
-// hình ở "🧩 Nhóm Quyền Đặc Biệt") -> giữ NGUYÊN hành vi cũ 100%, trả về ĐỦ DB.depts. Admin chọn 1 danh
-// sách cụ thể -> CHỈ trả về đúng các phòng đã chọn (lọc thêm bớt nếu phòng đã bị xoá khỏi DB.depts, tránh
-// hiện "ma"). Dùng CHUNG cho cả bảng chính (renderVppDeptHeadcountTable()) lẫn ô chọn phòng ban của
-// "Nhóm mức riêng" (renderVppRateGroupsList()) — nhất quán, admin không chọn nhầm 1 phòng KHÔNG tham gia
-// VPP vào nhóm mức riêng.
+// hình ở "🧩 Nhóm Quyền Đặc Biệt") -> giữ NGUYÊN hành vi cũ 100%, trả về ĐỦ DB.depts (KHÔNG tự thêm siêu
+// thị nào). Admin chọn 1 danh sách cụ thể -> CHỈ trả về đúng các mục đã chọn (lọc thêm bớt nếu mục đã bị
+// xoá khỏi Danh Mục Phòng Ban/Siêu Thị, tránh hiện "ma"). Dùng CHUNG cho cả bảng chính
+// (renderVppDeptHeadcountTable()) lẫn ô chọn phòng ban của "Nhóm mức riêng" (renderVppRateGroupsList())
+// — nhất quán, admin không chọn nhầm 1 phòng/siêu thị KHÔNG tham gia VPP vào nhóm mức riêng.
+//
+// SỬA 11/2026 (ĐỢT 2, theo yêu cầu người dùng "cho phép lọc thêm cả siêu thị"): đối chiếu `chosen` với CẢ
+// DB.depts LẪN DB.stores (trước đây chỉ DB.depts — 1 siêu thị đã chọn trước đó, nếu có, sẽ bị lọc mất coi
+// như "ma" dù thực ra vẫn tồn tại trong Danh Mục Siêu Thị). Nhân sự Siêu Thị có `user.dept` = đúng mã/tên
+// siêu thị họ thuộc về (cùng quy ước `storeCode === user.dept` dùng xuyên suốt hệ thống), nên 1 khi tên
+// siêu thị xuất hiện trong danh sách trả về ở đây, renderVppDeptHeadcountTable()/vppActiveHeadcountForDept()
+// tự động đối chiếu đúng nhân sự siêu thị đó mà KHÔNG cần sửa gì thêm.
 function vppParticipatingDeptsList() {
   const chosen = DB.vppParticipatingDepts || [];
   if (!chosen.length) return DB.depts;
-  const deptSet = new Set(DB.depts);
-  return chosen.filter(d => deptSet.has(d));
+  const validSet = new Set([...DB.depts, ...(DB.stores || [])]);
+  return chosen.filter(d => validSet.has(d));
 }
 
 // Dựng bảng "Nhân sự theo phòng ban" — gọi lại mỗi khi đổi chế độ/mức mặc định/nhóm (không còn ô Mức/

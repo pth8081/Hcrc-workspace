@@ -547,13 +547,16 @@
            "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký hiện TOÀN BỘ Danh Mục Phòng Ban dù nhiều phòng
            không bao giờ đăng ký VPP). Cùng khuôn widget "🚫 Nhóm Không Cấp Văn Phòng Phẩm" ngay trên —
            khác hẳn vppExcludedJobTitles (lọc theo CHỨC DANH của người), khối này lọc theo PHÒNG BAN hiện
-           ở bảng "Nhân sự theo phòng ban" lúc tạo kỳ mới. -->
+           ở bảng "Nhân sự theo phòng ban" lúc tạo kỳ mới.
+           SỬA 11/2026 ĐỢT 2 (theo yêu cầu người dùng "cho phép lọc thêm cả siêu thị"): ô tìm-chọn giờ liệt
+           CẢ Danh Mục Phòng Ban LẪN Danh Mục Siêu Thị (DB.stores) — xem renderVppParticipatingDeptsWidget()
+           (module-admin-specialperm.js) + vppParticipatingDeptsList() (module-vpp.js). -->
       <div class="border-b pb-3">
-        <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Phòng Ban Tham Gia VPP</h5>
-        <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới — nếu đã chọn, bảng "Nhân sự theo phòng ban" lúc Hành Chính <b>Tạo Kỳ Đăng Ký Mới</b> sẽ CHỈ còn hiện đúng các phòng ban này (đỡ phải lướt qua những phòng không bao giờ đăng ký Văn Phòng Phẩm). Để trống (mặc định) thì vẫn hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước — không ảnh hưởng tới các Kỳ Đăng Ký ĐÃ tạo trước đó (dữ liệu đã lưu của kỳ cũ giữ nguyên). Chọn xong thì bấm "Lưu" 1 lần.</p>
+        <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Phòng Ban/Siêu Thị Tham Gia VPP</h5>
+        <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban/siêu thị ngay trong ô bên dưới — nếu đã chọn, bảng "Nhân sự theo phòng ban" lúc Hành Chính <b>Tạo Kỳ Đăng Ký Mới</b> sẽ CHỈ còn hiện đúng các mục này (đỡ phải lướt qua những phòng không bao giờ đăng ký Văn Phòng Phẩm, đồng thời cho phép thêm ĐÚNG siêu thị cần cấp phát VPP). Để trống (mặc định) thì vẫn hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước (KHÔNG tự thêm siêu thị nào) — không ảnh hưởng tới các Kỳ Đăng Ký ĐÃ tạo trước đó (dữ liệu đã lưu của kỳ cũ giữ nguyên). Chọn xong thì bấm "Lưu" 1 lần.</p>
         <div id="vppParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
         <div class="flex justify-end mt-2">
-          <button type="button" data-op="saveVppParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Phòng Ban</button>
+          <button type="button" data-op="saveVppParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Phòng Ban/Siêu Thị</button>
         </div>
       </div>
       <div>

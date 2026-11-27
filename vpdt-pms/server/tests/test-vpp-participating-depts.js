@@ -67,6 +67,38 @@ check('vppParticipatingDepts còn tên "ma" (phòng đã bị xoá khỏi DB.dep
   assert.deepStrictEqual(list, ['Phòng Nhân Sự']);
 });
 
+// SỬA 11/2026 ĐỢT 2 (theo yêu cầu người dùng "cho phép lọc thêm cả siêu thị nữa để add vào ds được cấp
+// phát vpp"): nhân sự Siêu Thị có user.dept = ĐÚNG mã/tên siêu thị (không nằm trong DB.depts) — ô tìm-chọn
+// phải cho phép thêm CẢ siêu thị, và vppParticipatingDeptsList() không được lọc mất 1 siêu thị đã chọn.
+check('vppParticipatingDepts ĐÃ chọn CẢ phòng ban LẪN 1 siêu thị -> trả về đủ cả 2 loại, không lọc mất siêu thị', () => {
+  const ctx = makeSandbox({
+    depts: ['Phòng Nhân Sự', 'Phòng CNTT'],
+    stores: ['Siêu thị Minh Khai', 'Siêu thị Hải Dương'],
+    vppParticipatingDepts: ['Phòng Nhân Sự', 'Siêu thị Minh Khai']
+  });
+  const list = call(ctx, 'vppParticipatingDeptsList()');
+  assert.deepStrictEqual(list, ['Phòng Nhân Sự', 'Siêu thị Minh Khai']);
+});
+
+check('vppParticipatingDepts còn tên siêu thị "ma" (đã bị xoá khỏi DB.stores) -> tự lọc bỏ, không hiện siêu thị không tồn tại', () => {
+  const ctx = makeSandbox({
+    depts: ['Phòng Nhân Sự'],
+    stores: ['Siêu thị Minh Khai'],
+    vppParticipatingDepts: ['Phòng Nhân Sự', 'Siêu thị Minh Khai', 'Siêu Thị Đã Xoá']
+  });
+  const list = call(ctx, 'vppParticipatingDeptsList()');
+  assert.deepStrictEqual(list, ['Phòng Nhân Sự', 'Siêu thị Minh Khai']);
+});
+
+check('DB.stores vắng mặt hoàn toàn (CSDL cũ/sandbox tối giản) -> KHÔNG crash, vẫn lọc đúng theo DB.depts', () => {
+  const ctx = makeSandbox({
+    depts: ['Phòng Nhân Sự'],
+    vppParticipatingDepts: ['Phòng Nhân Sự', 'Siêu thị Minh Khai']
+  });
+  const list = call(ctx, 'vppParticipatingDeptsList()');
+  assert.deepStrictEqual(list, ['Phòng Nhân Sự']);
+});
+
 console.log('\n=== Phần 2: assertPlainArrayShape() (server, lib/workflowEngine.js) ===');
 const { assertPlainArrayShape } = require('../lib/workflowEngine');
 
