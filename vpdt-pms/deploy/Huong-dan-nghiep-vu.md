@@ -1732,6 +1732,21 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   Excel"** để xuất lại NGUYÊN danh mục mặt hàng đã chốt của kỳ đó ra file Excel
   cùng đúng 6 cột trên — dùng làm cơ sở cho kỳ sau (import lại được ngay) hoặc
   đối chiếu với file gốc hành chính đã nộp.
+  **"🏢 Phòng Ban/Siêu Thị Tham Gia VPP" (`vppParticipatingDepts`, Hệ Thống →
+  🧩 Nhóm Quyền Đặc Biệt, 11/2026)** — ô tìm-chọn nhiều, giới hạn lại đúng danh
+  sách phòng ban/siêu thị sẽ hiện ở bảng "Nhân sự theo phòng ban" lúc Hành
+  Chính **Tạo Kỳ Đăng Ký Mới** (đỡ phải lướt qua những phòng không bao giờ
+  đăng ký VPP khi Danh Mục Phòng Ban có nhiều mục). Để trống (mặc định) vẫn
+  hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước, KHÔNG tự thêm siêu thị nào.
+  **SỬA 11/2026 ĐỢT 2 (theo yêu cầu người dùng "cho phép lọc thêm cả siêu thị
+  để add vào ds được cấp phát vpp")**: ô tìm-chọn giờ liệt kê CẢ Danh Mục Phòng
+  Ban LẪN Danh Mục Siêu Thị — nhân sự thuộc Siêu Thị có `dept` = đúng tên siêu
+  thị họ thuộc về (quy ước chung toàn hệ thống), nên chỉ cần thêm tên siêu thị
+  vào danh sách này là siêu thị đó xuất hiện ngay ở bảng "Nhân sự theo phòng
+  ban" để Hành Chính đặt số nhân sự/ngân sách, không cần sửa gì thêm ở luồng
+  đăng ký/phê duyệt (vốn đã dùng field `dept` chung cho cả 2 loại từ trước).
+  Đổi tên 1 phòng ban/siêu thị đã chọn vẫn tự cascade đúng tên mới (dùng chung
+  hạ tầng đổi tên phòng ban/siêu thị sẵn có, `lib/catalogRename.js`).
 - **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
   xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
   nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã

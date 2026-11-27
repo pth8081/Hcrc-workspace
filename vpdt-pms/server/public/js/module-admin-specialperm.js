@@ -308,10 +308,19 @@ async function saveVppExcludedJobTitles() {
 // chuỗi phẳng, KHÔNG dùng "nhiều nhóm" như workflowParticipatingDeptGroups vì VPP chỉ cần ĐÚNG 1 danh
 // sách CHUNG, không có khái niệm "mỗi nhóm áp dụng 1 module khác nhau"). Rỗng (mặc định) = hiện đủ toàn
 // bộ DB.depts như hành vi cũ — xem vppParticipatingDeptsList() ở module-vpp.js.
+//
+// SỬA 11/2026 (ĐỢT 2, theo yêu cầu người dùng "cho phép lọc thêm cả siêu thị nữa để add vào ds được cấp
+// phát vpp"): nhân sự thuộc Siêu Thị (posType='STORE') có `user.dept` = ĐÚNG mã/tên siêu thị họ thuộc về
+// (xem `s.storeCode === user.dept` ở module-checklist.js, cùng quy ước toàn hệ thống) — KHÔNG nằm trong
+// Danh Mục Phòng Ban (DB.depts) nên trước đây KHÔNG CÓ CÁCH NÀO thêm 1 siêu thị cụ thể vào danh sách
+// tham gia VPP (ô tìm-chọn chỉ liệt DB.depts). Nối thêm DB.stores vào danh sách lựa chọn — admin giờ
+// chọn được CẢ phòng ban LẪN siêu thị vào cùng 1 danh sách phẳng duy nhất (vppParticipatingDeptsList()
+// dùng ĐÚNG field `dept` để đối chiếu nhân sự nên không cần phân biệt "là phòng ban hay siêu thị" ở bất
+// kỳ đâu khác — chỉ cần xuất hiện ở đây là đủ điều kiện vào bảng "Nhân sự theo phòng ban" lúc tạo kỳ).
 function renderVppParticipatingDeptsWidget() {
-  renderMultiSelectDropdown('vppParticipatingDeptsMultiSelect', DB.depts, DB.vppParticipatingDepts || [], {
-    placeholder: '🔍 Tìm phòng ban để thêm...',
-    emptyText: 'Chưa chọn phòng ban nào — để trống thì bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký vẫn hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước.'
+  renderMultiSelectDropdown('vppParticipatingDeptsMultiSelect', [...DB.depts, ...DB.stores], DB.vppParticipatingDepts || [], {
+    placeholder: '🔍 Tìm phòng ban/siêu thị để thêm...',
+    emptyText: 'Chưa chọn phòng ban/siêu thị nào — để trống thì bảng "Nhân sự theo phòng ban" lúc Tạo Kỳ Đăng Ký vẫn hiện ĐỦ toàn bộ Danh Mục Phòng Ban như trước (KHÔNG tự thêm siêu thị nào).'
   });
 }
 
@@ -325,8 +334,8 @@ async function saveVppParticipatingDepts() {
     renderVppParticipatingDeptsWidget();
     return;
   }
-  logSystemAction('USER_MGM', 'SAVE_VPP_PARTICIPATING_DEPTS', `Cập nhật danh sách Phòng Ban Tham Gia VPP (${next.length} phòng ban)`, 'SUCCESS');
-  alert('✅ Đã lưu danh sách phòng ban.');
+  logSystemAction('USER_MGM', 'SAVE_VPP_PARTICIPATING_DEPTS', `Cập nhật danh sách Phòng Ban/Siêu Thị Tham Gia VPP (${next.length} mục)`, 'SUCCESS');
+  alert('✅ Đã lưu danh sách phòng ban/siêu thị.');
 }
 
 // ============ Vị Trí Tham Gia Quy Trình (workflowParticipatingPositions, MỚI) ============
