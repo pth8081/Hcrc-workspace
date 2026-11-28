@@ -588,8 +588,14 @@ async function main() {
     window.__alerts = [];
     renderVppExcludedJobTitlesWidget();
     // Bấm nút "×" trên đúng chip "Bảo vệ" (gmsRemove) — mirror thao tác chuột thật, không gọi thẳng hàm nội bộ.
+    // LỖI TEST ĐÃ VÁ: data-arg1 không mang đúng "Bảo vệ" nguyên văn — cspArgLiteral() (core.js) CHỦ Ý bọc
+    // mọi giá trị chuỗi trong dấu nháy đơn literal ngay trong thuộc tính HTML (VD data-arg1="'Bảo vệ'",
+    // 10 ký tự kể cả 2 dấu nháy) để cspCoerceArg() phân biệt được chuỗi với số khi đọc lại lúc dispatch
+    // thật — so sánh thẳng getAttribute('data-arg1') === 'Bảo vệ' (không dấu nháy) nên KHÔNG BAO GIỜ khớp,
+    // khiến bài test này luôn fail dù hành vi xoá chip thật (qua click thật) vẫn đúng. Tìm theo nội dung
+    // hiển thị của chip (đúng cách 1 người dùng thật nhận diện) thay vì đọc thẳng thuộc tính data-argN.
     const chipRemoveBtn = [...document.querySelectorAll('#vppExcludedJobTitlesMultiSelect [data-pms-chips] button[data-op="gmsRemove"]')]
-      .find((btn) => btn.getAttribute('data-arg1') === 'Bảo vệ');
+      .find((btn) => btn.closest('span')?.textContent?.includes('Bảo vệ'));
     if (chipRemoveBtn) chipRemoveBtn.click();
     await saveVppExcludedJobTitles();
     return { dbAfterSave: [...DB.vppExcludedJobTitles] };
