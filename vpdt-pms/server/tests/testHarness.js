@@ -30,6 +30,7 @@ const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/crea
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
 const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterKiemKeShelfLocationsForUser } = require('../lib/recordViewScope');
 const { aggregateSystemInventoryRowsByMaHang } = require('../lib/shelfInventoryAggregate');
+const { computeEligibleUnregisteredUsers: computeVppEligibleUnregisteredUsers } = require('../lib/vppCatalog');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -589,6 +590,21 @@ function createDispatcher(state) {
       // bất kỳ field quyền nào trang tự gửi lên (đúng nguyên tắc "server tự xác minh lại" của cả hệ thống).
       const freshUser = state.users.find(u => u.username === username);
       if (!freshUser) return { status: 401, body: { error: 'Chưa đăng nhập' } };
+
+      // GET /api/vpp/eligible-counts (12/2026, "Mở Lại Kỳ") — mirror ĐÚNG route thật
+      // routes/vppCatalog.js, dùng CHÍNH computeEligibleUnregisteredUsers() thật (lib/vppCatalog.js) với
+      // danh sách users CHƯA bị sanitize (khớp đúng lý do route thật phải tách riêng — xem chú thích tại
+      // route đó + refreshVppEligibleCounts() ở module-vpp.js).
+      if (method === 'GET' && pathName === '/api/vpp/eligible-counts') {
+        if (!freshUser.perms?.admin && !freshUser.perms?.vppManage) {
+          return { status: 403, body: { error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được xem số liệu này' } };
+        }
+        const counts = {};
+        for (const p of (state.vppPeriods || [])) {
+          counts[p.id] = computeVppEligibleUnregisteredUsers(state.users, state.vppRegistrations, p.id, state.vppExcludedJobTitles).length;
+        }
+        return { status: 200, body: { counts } };
+      }
 
       // ===== "🏷️ Gán Vị Trí Kiêm Nhiệm" (quyền riêng hrSecondaryPositionManage, 11/2026) — mirror ĐÚNG
       // 3 route thật ở routes/employeeProfile.js, dùng cho demo-hr-secondary-position-manage.js. =====

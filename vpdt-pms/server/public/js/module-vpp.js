@@ -280,7 +280,7 @@ function setVppSubTab(subTab) {
   document.getElementById('btnVppSubReports').className = (subTab === 'REPORTS' ? activeCls : inactiveCls) + (canSeeReports ? '' : ' hidden');
 
   if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); renderExtraApprovalMount('VPP', 'extraApprovalMount_VPP'); }
-  if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); renderDynamicInputsForModule('VPP', 'dynamicFieldsContainer_VPP'); }
+  if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); renderDynamicInputsForModule('VPP', 'dynamicFieldsContainer_VPP'); refreshVppEligibleCounts(); }
   if (subTab === 'REPORTS') { renderVppReportPeriodOptions(); renderVppReports(); }
 }
 
@@ -1222,14 +1222,26 @@ function vppPeriodStatusBadge(p) {
   return `<span class="badge-success">🟢 Đang mở</span>`;
 }
 
-// Bản sao phía client của computeEligibleUnregisteredUsers() (lib/vppCatalog.js) — chỉ để hiển thị/ẩn
-// nút "Mở Lại Kỳ" trên UI, KHÔNG phải nguồn xác thực cuối cùng (server luôn tính lại khi xử lý action).
-function vppComputeEligibleUnregisteredUsers(periodId) {
-  const registeredUsernames = new Set((DB.vppRegistrations || [])
-    .filter(r => r.periodId === periodId && r.status !== 'REJECTED')
-    .map(r => r.creator));
-  return (DB.users || []).filter(u =>
-    u.active !== false && canRegisterVpp(u) && !isUserVppExcluded(u) && !registeredUsernames.has(u.username));
+// vppEligibleCountsCache — {periodId: số người đủ điều kiện nhưng CHƯA đăng ký}, nạp từ
+// GET /api/vpp/eligible-counts (chỉ nạp được khi canManageVpp, cùng khuôn vppDeptBudgetStatus ở trên).
+//
+// LỖI ĐÃ VÁ (12/2026, phát hiện qua agent review độc lập TRƯỚC KHI merge tính năng "Mở Lại Kỳ" — đúng quy
+// trình CLAUDE.md mới): bản đầu tiên tự tính con số này ở CLIENT bằng cách đọc thẳng DB.users[].perms —
+// nhưng GET /api/data (sanitizeUsersPermsForViewer(), lib/recordViewScope.js) XOÁ field `perms` của MỌI
+// user KHÁC chính người xem, với bất kỳ ai KHÔNG có quyền `admin` — một người quản lý VPP chỉ có
+// `vppManage` (không có `admin`, ĐÚNG đối tượng chính tính năng này nhắm tới) sẽ luôn tính ra 0 (vì
+// canRegisterVpp() đọc u.perms?.vppRegisterCreate, mà perms đã bị xoá), khiến "🔓 Mở Lại Kỳ" không bao
+// giờ hiện ra được cho đúng người cần dùng, CHỈ admin mới thấy — sai hẳn yêu cầu "vppManage hoặc admin".
+// Sửa bằng cách chuyển hẳn việc tính sang server (route riêng, dùng danh sách users CHƯA bị sanitize),
+// client chỉ cache lại CON SỐ trả về, không tự suy luận từ dữ liệu có thể đã bị ẩn bớt.
+let vppEligibleCountsCache = {};
+async function refreshVppEligibleCounts() {
+  if (!canManageVpp(currentUser)) return;
+  try {
+    const res = await fetch('/api/vpp/eligible-counts');
+    if (res.ok) vppEligibleCountsCache = (await res.json()).counts || {};
+  } catch (e) { /* im lặng — số liệu phụ trợ hiển thị, không chặn render chính nếu mạng lỗi */ }
+  renderVppPeriods();
 }
 
 function renderVppPeriods() {
@@ -1246,7 +1258,7 @@ function renderVppPeriods() {
     const secondaryOptions = [];
     if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Kết Thúc Kỳ' });
     if (!isOpen && canManage) {
-      const eligibleCount = vppComputeEligibleUnregisteredUsers(p.id).length;
+      const eligibleCount = vppEligibleCountsCache[p.id];
       if (eligibleCount > 0) secondaryOptions.push({ value: 'reopen', label: `🔓 Mở Lại Kỳ (còn ${eligibleCount} người chưa ĐK)` });
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -1299,23 +1311,25 @@ function closeVppPeriodAction(id) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       logSystemAction('VPP', 'CLOSE_VPP_PERIOD', `Kết thúc kỳ đăng ký Văn phòng phẩm [${p.name}]`, 'SUCCESS', p.code);
       renderVppPeriods();
+      refreshVppEligibleCounts(); // kỳ vừa đóng cần số liệu "còn ai chưa ĐK" MỚI (trước đó đang mở, chưa có số)
     }
   });
 }
 
 // Mở Lại Kỳ (sau khi đã Kết Thúc) — CHỈ áp dụng khi còn người đủ điều kiện đăng ký nhưng chưa đăng ký
-// (ví dụ bị sót), theo đúng yêu cầu người dùng. Số liệu hiển thị ở đây CHỈ để tham khảo/cảnh báo — server
-// (reopenVppPeriod() ở lib/recordActions.js) luôn tự tính lại và chặn cứng nếu không còn ai đủ điều kiện,
-// không tin suông vào số đã tính phía client lúc render bảng (dữ liệu users/registrations có thể đã đổi).
+// (ví dụ bị sót), theo đúng yêu cầu người dùng. Số liệu hiển thị ở đây đọc từ vppEligibleCountsCache (xem
+// chú thích tại khai báo biến đó) — CHỈ để tham khảo/cảnh báo, server (reopenVppPeriod() ở
+// lib/recordActions.js) luôn tự tính lại bằng danh sách users THẬT và chặn cứng nếu không còn ai đủ điều
+// kiện, không tin suông vào số đã cache phía client (có thể đã lệch nếu vừa có người đăng ký thêm).
 function reopenVppPeriodAction(id) {
   const p = DB.vppPeriods.find(x => x.id === id);
   if (!p) return;
-  const eligible = vppComputeEligibleUnregisteredUsers(id);
-  if (!eligible.length) return alert('⛔ Không còn ai đủ điều kiện mà chưa đăng ký trong kỳ này — không cần mở lại.');
+  const eligibleCount = vppEligibleCountsCache[id] || 0;
+  if (!eligibleCount) return alert('⛔ Không còn ai đủ điều kiện mà chưa đăng ký trong kỳ này — không cần mở lại.');
   const todayStr = new Date().toISOString().slice(0, 10);
   showConfirmModal({
     title: 'Mở Lại Kỳ Đăng Ký',
-    bodyHTML: `Kỳ <b>${escapeHtml(p.name)}</b> đã kết thúc, hiện còn <b>${eligible.length} người</b> đủ điều kiện nhưng chưa đăng ký. Mở lại kỳ để những người này đăng ký bổ sung — chọn hạn đăng ký mới:
+    bodyHTML: `Kỳ <b>${escapeHtml(p.name)}</b> đã kết thúc, hiện còn <b>${eligibleCount} người</b> đủ điều kiện nhưng chưa đăng ký. Mở lại kỳ để những người này đăng ký bổ sung — chọn hạn đăng ký mới:
       <div class="mt-3 text-left">
         <label class="block text-xs font-semibold text-gray-600 mb-1">📅 Hạn đăng ký mới:</label>
         <input type="date" id="vppReopenEndDateInput" class="w-full border p-2 rounded text-xs" value="${escapeHtml(todayStr)}" min="${escapeHtml(todayStr)}">

@@ -8,7 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { parseCatalogFile, calcItemsTotal, resolveVppDeptBudget } = require('../lib/vppCatalog');
+const { parseCatalogFile, calcItemsTotal, resolveVppDeptBudget, computeEligibleUnregisteredUsers } = require('../lib/vppCatalog');
+const { getAppDataValue } = require('../lib/appData');
 const { buildSummaryWorkbook, buildByDeptWorkbook, buildCatalogTemplateWorkbook, buildCatalogWorkbook } = require('../lib/vppExport');
 const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -143,6 +144,39 @@ router.get('/dept-budget-status/:periodId', async (req, res) => {
     res.json({ dept, rate, headcount, totalBudget, used, remaining: Math.max(0, totalBudget - used) });
   } catch (err) {
     sendCatchError(res, err, 'GET /api/vpp/dept-budget-status', 500);
+  }
+});
+
+// GET /api/vpp/eligible-counts (12/2026, LỖI ĐÃ VÁ — phát hiện qua agent review độc lập trước khi merge
+// tính năng "Mở Lại Kỳ") — trả về {periodId: số người đủ điều kiện nhưng CHƯA đăng ký} cho MỌI kỳ, để
+// client quyết định có hiện tuỳ chọn "🔓 Mở Lại Kỳ" hay không (vppComputeEligibleUnregisteredUsers() ở
+// module-vpp.js). LÝ DO BẮT BUỘC PHẢI CÓ ROUTE RIÊNG (không tính thẳng ở client từ DB.users như bản đầu
+// tiên): GET /api/data sanitizeUsersPermsForViewer() (lib/recordViewScope.js) XOÁ field `perms` của MỌI
+// user KHÁC bản thân người xem, với bất kỳ ai KHÔNG có `perms.admin` — một người quản lý VPP CHỈ có
+// `vppManage` (không có `admin`, đúng đối tượng người dùng yêu cầu tính năng này nhắm tới) sẽ có
+// DB.users[].perms === undefined cho gần như toàn bộ nhân sự khác, khiến canRegisterVpp() luôn trả về
+// false và đếm sai thành 0 — "Mở Lại Kỳ" không bao giờ hiện ra được cho đúng người cần dùng nó, chỉ admin
+// mới thấy. Route này tính lại bằng danh sách `users` THẬT (chưa qua sanitize) ở phía server, chỉ trả về
+// CON SỐ (không trả tên/chi tiết từng người) nên không lộ thêm thông tin nhạy cảm nào ngoài những gì
+// admin/vppManage vốn đã được quyền thấy qua các route xuất báo cáo khác ở file này.
+router.get('/eligible-counts', async (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.vppManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được xem số liệu này' });
+  }
+  try {
+    const [periods, users, registrations, excludedJobTitles] = await Promise.all([
+      getAllForCollection('vppPeriods'),
+      getAppDataValue('users'),
+      getAllForCollection('vppRegistrations'),
+      getAppDataValue('vppExcludedJobTitles')
+    ]);
+    const counts = {};
+    for (const p of periods) {
+      counts[p.id] = computeEligibleUnregisteredUsers(users, registrations, p.id, excludedJobTitles).length;
+    }
+    res.json({ counts });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/vpp/eligible-counts', 500);
   }
 });
 
