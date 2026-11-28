@@ -11,7 +11,7 @@
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent, resolveOperationPersonInChargeUsername, validateItPriceCoreFields } = require('./createValidation');
-const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
+const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget, computeEligibleUnregisteredUsers: computeVppEligibleUnregisteredUsers } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { resolveStepApproverUsernames } = require('./positionApprovers');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -4642,6 +4642,111 @@ function closeVppPeriod(user, period) {
   period.status = 'CLOSED';
   period.closedAt = nowVN();
   period.closedBy = user.username;
+  return period;
+}
+
+// isVppPeriodCurrentlyOpen() — mirror ĐÚNG điều kiện "còn mở" dùng để CHẶN THẬT lúc đăng ký
+// (CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate, lib/createValidation.js: `period.status !==
+// 'OPEN' || pastEndDate`) — 1 kỳ status='OPEN' NHƯNG đã qua endDate vẫn coi là ĐÃ ĐÓNG (tự đóng theo
+// ngày, không cần admin bấm "Kết Thúc Kỳ"). Dùng để quyết định "Sửa Kỳ" (chỉ cho phép khi ĐANG mở) và
+// "Mở Lại Kỳ" (chỉ cho phép khi ĐÃ đóng, dù đóng tay hay đóng do qua hạn) — khớp vppPeriodIsOpen() phía
+// client (module-vpp.js).
+function isVppPeriodCurrentlyOpen(period) {
+  if (period.status !== 'OPEN') return false;
+  if (!period.endDate) return true;
+  return require('./attendance').localDateStr(new Date()) <= period.endDate;
+}
+
+// updateVppPeriod() (12/2026, theo yêu cầu người dùng kèm ảnh chụp màn "Kỳ Đăng Ký" — "nếu đang mở thì
+// cho phép sửa lại kỳ... bổ sung thông tin") — CHỈ sửa được khi kỳ ĐANG MỞ (isVppPeriodCurrentlyOpen).
+// Mirror ĐÚNG phần làm sạch dữ liệu của CREATE_MODULE_CONFIGS.vppPeriods.extraValidate (lib/
+// createValidation.js) cho các field có thể sửa — name/startDate/endDate/perPersonBudget/deptHeadcounts/
+// deptBudgetRates LUÔN ghi đè theo payload mới; catalogItems CHỈ thay khi payload thật sự gửi kèm (admin
+// tải file MỚI để THAY THẾ danh mục) — không gửi (payload.catalogItems rỗng/thiếu) thì GIỮ NGUYÊN danh
+// mục hiện có của kỳ, tránh bắt buộc phải tải lại đúng 1 file y hệt mỗi lần chỉ muốn sửa tên/ngày/ngân
+// sách. CỐ Ý KHÔNG đụng tới customData/code/creator/creatorName/status/closedAt/closedBy — cùng phạm vi
+// "chỉ sửa field nghiệp vụ, không đụng field hệ thống" như updateVppRegistrationDraft() ở trên.
+function updateVppPeriod(user, period, body) {
+  if (!user.perms?.admin && !user.perms?.vppManage) {
+    throw new HttpError(403, 'Chỉ người có quyền quản lý Văn phòng phẩm mới được sửa kỳ đăng ký');
+  }
+  if (!isVppPeriodCurrentlyOpen(period)) {
+    throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc — không thể sửa, chỉ có thể "Mở Lại Kỳ" để đăng ký bổ sung');
+  }
+  const name = String(body?.name || '').trim();
+  if (!name) throw new HttpError(400, 'Thiếu tên kỳ đăng ký');
+  const startDate = body?.startDate ? String(body.startDate) : '';
+  const endDate = body?.endDate ? String(body.endDate) : '';
+  if (startDate && endDate && endDate < startDate) throw new HttpError(400, 'Ngày kết thúc phải sau ngày bắt đầu');
+
+  const itemsRaw = Array.isArray(body?.catalogItems) ? body.catalogItems : null;
+  if (itemsRaw) {
+    const cleaned = itemsRaw
+      .map(it => ({
+        code: String(it?.code || '').trim(), name: String(it?.name || '').trim(),
+        unit: String(it?.unit || '').trim(), origin: String(it?.origin || '').trim(), spec: String(it?.spec || '').trim(),
+        price: (it?.price === null || it?.price === undefined || it?.price === '') ? null
+          : (Number.isFinite(Number(it.price)) ? Number(it.price) : null)
+      }))
+      .filter(it => it.name);
+    if (!cleaned.length) throw new HttpError(400, 'Danh mục mặt hàng trống — vui lòng tải lên file danh mục hợp lệ');
+    period.catalogItems = cleaned;
+    period.catalogFileUrl = body.catalogFileUrl || null;
+    period.catalogFileName = body.catalogFileName || null;
+  }
+
+  const perPersonBudgetRaw = body?.perPersonBudget;
+  period.perPersonBudget = (perPersonBudgetRaw === null || perPersonBudgetRaw === undefined || perPersonBudgetRaw === '')
+    ? null : Math.max(0, Number(perPersonBudgetRaw) || 0);
+  const headcountsRaw = (body?.deptHeadcounts && typeof body.deptHeadcounts === 'object') ? body.deptHeadcounts : {};
+  const cleanedHeadcounts = {};
+  Object.keys(headcountsRaw).forEach(dept => {
+    const n = Math.max(0, Math.round(Number(headcountsRaw[dept]) || 0));
+    if (dept && n > 0) cleanedHeadcounts[dept] = n;
+  });
+  period.deptHeadcounts = cleanedHeadcounts;
+  const ratesRaw = (body?.deptBudgetRates && typeof body.deptBudgetRates === 'object') ? body.deptBudgetRates : {};
+  const cleanedRates = {};
+  Object.keys(ratesRaw).forEach(dept => {
+    const n = Math.max(0, Number(ratesRaw[dept]) || 0);
+    if (dept && n > 0) cleanedRates[dept] = n;
+  });
+  period.deptBudgetRates = cleanedRates;
+  period.name = name;
+  period.startDate = startDate;
+  period.endDate = endDate;
+  if (!period.editHistory) period.editHistory = [];
+  period.editHistory.push({ action: 'EDIT', by: user.username, byName: user.name, at: nowVN() });
+  return period;
+}
+
+// reopenVppPeriod() (12/2026, theo yêu cầu người dùng: "đóng rồi thì cho phép mở lại kỳ... để ví dụ có
+// sót người đăng ký... CHỈ mở lại nếu có người chưa đăng ký, không thì không cho sửa lại kỳ") — CHỈ mở
+// lại được khi kỳ ĐÃ ĐÓNG (dù đóng tay hay tự đóng do qua hạn), VÀ còn ÍT NHẤT 1 người đủ điều kiện đăng
+// ký (admin/vppRegisterCreate, không thuộc "Nhóm Không Cấp VPP") nhưng CHƯA có đăng ký ở kỳ này — chặn
+// THẬT (không chỉ ẩn nút ở UI) để không ai lỡ mở lại 1 kỳ mà mọi người đã đăng ký đủ. `users`/
+// `registrations`/`excludedJobTitles` do nơi gọi (routes/records.js) tải sẵn — hàm này giữ đúng nguyên
+// tắc "không tự đọc DB/collection khác" như phần còn lại của file (xem đầu file).
+function reopenVppPeriod(user, period, newEndDate, users, registrations, excludedJobTitles) {
+  if (!user.perms?.admin && !user.perms?.vppManage) {
+    throw new HttpError(403, 'Chỉ người có quyền quản lý Văn phòng phẩm mới được mở lại kỳ đăng ký');
+  }
+  if (isVppPeriodCurrentlyOpen(period)) throw new HttpError(409, 'Kỳ đăng ký này đang mở, không cần mở lại');
+  const eligible = computeVppEligibleUnregisteredUsers(users, registrations, period.id, excludedJobTitles);
+  if (!eligible.length) {
+    throw new HttpError(409, 'Mọi nhân sự đủ điều kiện đã đăng ký ở kỳ này — không cần mở lại kỳ');
+  }
+  const endDate = newEndDate ? String(newEndDate) : '';
+  if (endDate) {
+    const todayStr = require('./attendance').localDateStr(new Date());
+    if (endDate < todayStr) throw new HttpError(400, 'Ngày kết thúc mới phải từ hôm nay trở đi');
+  }
+  period.status = 'OPEN';
+  period.endDate = endDate;
+  period.closedAt = null;
+  period.closedBy = null;
+  if (!period.editHistory) period.editHistory = [];
+  period.editHistory.push({ action: 'REOPEN', by: user.username, byName: user.name, at: nowVN() });
   return period;
 }
 
@@ -9896,7 +10001,7 @@ module.exports = {
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
   addSubtask, toggleSubtask, deleteSubtask, editSubtask,
-  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft, canCancelVppRegistration, cancelVppRegistration,
+  closeVppPeriod, isVppPeriodCurrentlyOpen, updateVppPeriod, reopenVppPeriod, submitVppRegistration, updateVppRegistrationDraft, canCancelVppRegistration, cancelVppRegistration,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,

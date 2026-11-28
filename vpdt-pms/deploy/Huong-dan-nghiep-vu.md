@@ -1747,6 +1747,34 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đăng ký/phê duyệt (vốn đã dùng field `dept` chung cho cả 2 loại từ trước).
   Đổi tên 1 phòng ban/siêu thị đã chọn vẫn tự cascade đúng tên mới (dùng chung
   hạ tầng đổi tên phòng ban/siêu thị sẵn có, `lib/catalogRename.js`).
+  **"✏️ Sửa Kỳ" + "🔓 Mở Lại Kỳ" (từ 12/2026, theo yêu cầu người dùng kèm ảnh
+  chụp màn "Các Kỳ Đăng Ký")** — người có quyền quản lý VPP (`vppManage` hoặc
+  admin) giờ sửa/mở lại được 1 kỳ đã tạo, thay vì chỉ tạo mới/kết thúc/xóa như
+  trước:
+  - **Kỳ ĐANG MỞ**: nút **"✏️ Sửa Kỳ"** (cạnh "📤 Xuất Excel") nạp lại nguyên
+    dữ liệu kỳ đó vào ĐÚNG form "Tạo Kỳ Đăng Ký Mới" (đổi tiêu đề/nhãn nút
+    thành "Sửa Kỳ Đăng Ký"/"💾 Lưu Thay Đổi") — sửa được tên/ngày bắt đầu-kết
+    thúc/mức ngân sách (toàn công ty hay theo nhóm)/số nhân sự từng phòng.
+    **File danh mục mặt hàng là TÙY CHỌN lúc sửa** (khác lúc tạo mới, bắt buộc
+    phải tải file): không chọn file mới thì GIỮ NGUYÊN danh mục hiện có (hiện
+    dòng chữ "📋 Danh mục hiện tại: N mặt hàng..." ngay trên ô chọn file), chỉ
+    cần tải file MỚI nếu thật sự muốn THAY THẾ. Không sửa được `customData`
+    (các trường tùy biến nếu Hành Chính có cấu hình thêm) — chỉ sửa đúng các
+    trường nghiệp vụ gốc. Chặn THẬT ở server: kỳ đã kết thúc (kể cả tự kết
+    thúc do đã qua "Ngày kết thúc") thì không sửa được nữa, dù có tự gọi API.
+  - **Kỳ ĐÃ KẾT THÚC** (kết thúc tay hoặc tự kết thúc do qua "Ngày kết thúc"):
+    KHÔNG cho sửa lại nội dung kỳ nữa — chỉ cho **"🔓 Mở Lại Kỳ"** (mục "Khác
+    ▾"), và CHỈ hiện nút này khi hệ thống phát hiện còn ít nhất 1 người đủ
+    điều kiện đăng ký (có quyền `vppRegisterCreate`, không thuộc "Nhóm Không
+    Cấp VPP", còn hoạt động) nhưng CHƯA có đăng ký ở kỳ này — đúng ý "chỉ mở
+    lại nếu có người chưa đăng ký, không thì không cho". Nhãn nút tự hiện số
+    người đang thiếu (VD "🔓 Mở Lại Kỳ (còn 3 người chưa ĐK)"). Bấm vào yêu
+    cầu chọn lại **Hạn đăng ký mới** (bắt buộc từ hôm nay trở đi, hoặc để
+    trống = không giới hạn ngày) — xác nhận xong, kỳ quay lại trạng thái "Đang
+    mở" để những người còn thiếu đăng ký bổ sung, không ảnh hưởng tới các đăng
+    ký đã có từ trước. Chặn THẬT ở server (không chỉ ẩn nút trên giao diện):
+    nếu gọi thẳng API lúc kỳ đang mở, hoặc lúc mọi người đủ điều kiện đã đăng
+    ký đủ rồi, đều bị từ chối rõ lý do.
 - **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
   xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
   nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã

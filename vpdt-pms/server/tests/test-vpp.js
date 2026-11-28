@@ -323,7 +323,9 @@ async function main() {
     // headless, nhưng dùng ĐÚNG hình dạng dữ liệu + đi qua toàn bộ createVppPeriod() thật phía sau.
     vppPendingCatalog = { items: catalogItems, fileUrl: '/uploads/vpp/catalog-test.xlsx', fileName: 'catalog-test.xlsx' };
 
-    await createVppPeriod();
+    // createVppPeriod() đổi tên thành saveVppPeriod() (12/2026, tính năng "Sửa Kỳ" — hàm giờ rẽ nhánh
+    // create/update theo vppEditingPeriodId, mặc định null = tạo mới, khớp đúng hành vi cũ ở đây).
+    await saveVppPeriod();
     return {
       alerts: window.__alerts.slice(),
       count: DB.vppPeriods.length,
@@ -660,7 +662,7 @@ async function main() {
     row.querySelector('.vpp-headcount-input').value = '2';
     onVppHeadcountInput(row.querySelector('.vpp-headcount-input'));
     vppPendingCatalog = { items: catalogItems, fileUrl: '/uploads/vpp/catalog-test2.xlsx', fileName: 'catalog-test2.xlsx' };
-    await createVppPeriod();
+    await saveVppPeriod();
     return { alerts: window.__alerts.slice(), saved: DB.vppPeriods[0] };
   }, CATALOG_ITEMS);
 

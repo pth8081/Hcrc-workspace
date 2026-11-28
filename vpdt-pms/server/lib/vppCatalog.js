@@ -222,4 +222,22 @@ function resolveVppDeptBudget(period, dept) {
   return { rate, headcount, totalBudget: rate * headcount, rateConfiguredButNoHeadcount: rate > 0 && headcount <= 0 };
 }
 
-module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal, resolveVppDeptBudget };
+// computeEligibleUnregisteredUsers() (12/2026, theo yêu cầu người dùng — "Mở Lại Kỳ" đã đóng CHỈ có ý
+// nghĩa khi còn người đủ điều kiện đăng ký nhưng CHƯA đăng ký, VD "có sót người đăng ký") — mirror ĐÚNG
+// 2 điều kiện "được đăng ký" ở CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate (lib/createValidation.js):
+// (1) admin/vppRegisterCreate, (2) jobTitle KHÔNG thuộc "Nhóm Không Cấp VPP" (vppExcludedJobTitles) — rồi
+// loại tiếp những người ĐÃ có đăng ký (status != REJECTED) ở ĐÚNG kỳ này (khớp duplicate-check cùng file).
+// Dùng CHUNG cho cả route reopen (chặn thật) lẫn client (hiện/ẩn nút "🔓 Mở Lại Kỳ" + số người còn thiếu).
+function computeEligibleUnregisteredUsers(users, registrations, periodId, excludedJobTitles) {
+  const registeredUsernames = new Set((registrations || [])
+    .filter(r => r.periodId === periodId && r.status !== 'REJECTED')
+    .map(r => r.creator));
+  const excluded = new Set(excludedJobTitles || []);
+  return (users || []).filter(u =>
+    u.active !== false &&
+    !!(u.perms?.admin || u.perms?.vppRegisterCreate) &&
+    !(u.jobTitle && excluded.has(u.jobTitle)) &&
+    !registeredUsernames.has(u.username));
+}
+
+module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal, resolveVppDeptBudget, computeEligibleUnregisteredUsers };
