@@ -25,6 +25,32 @@ từ Danh Mục Đầu Tư, 11/2026):
   đưa vào hệ thống thật, không đánh đổi tốc độ lấy rủi ro cho người dùng
   thật đang thao tác hằng ngày trên hệ thống.
 
+## Sau MỖI lần triển khai: bắt buộc có 1 agent độc lập review code, có lỗi thì xử lý luôn
+
+Người dùng yêu cầu rõ ràng (12/2026): **"sau mỗi lần triển khai phải có một
+agent độc lập review code nhé. Và nếu mà lỗi xử lý luôn."** — áp dụng cho MỌI
+lần triển khai từ nay, không chỉ tính năng lớn. Cụ thể:
+
+- Sau khi code xong 1 tính năng/thay đổi (dù đã tự test/CSP sweep/hồi quy),
+  **PHẢI** giao cho 1 agent ĐỘC LẬP (Agent tool, dùng skill `code-review` nếu
+  phù hợp, hoặc 1 subagent review riêng — không phải Claude chính tự đọc lại
+  code của chính mình rồi tự kết luận "ổn") review lại code trước khi merge
+  vào main. Đây là BƯỚC BẮT BUỘC, không phải tuỳ chọn, và không thay thế cho
+  việc Claude chính tự test/CSP sweep/hồi quy đã làm — là lớp kiểm tra THÊM,
+  độc lập góc nhìn.
+- Agent review vẫn phải tuân thủ đúng quy tắc "KHÔNG BAO GIỜ được tự
+  `git push`/merge" ở mục ngay dưới đây — chỉ đọc code + báo cáo phát hiện,
+  không tự sửa gì nếu không được giao nhiệm vụ đó.
+- **Nếu agent review phát hiện lỗi thật (CONFIRMED)**: Claude chính (phiên
+  điều phối) **xử lý SỬA LUÔN ngay**, không gác lại "để báo cáo người dùng
+  rồi hỏi có sửa không" — trừ phát hiện đó cần người dùng quyết định hướng xử
+  lý nghiệp vụ (VD đánh đổi UX, phạm vi tính năng). Sửa xong thì chạy lại
+  đúng bộ test liên quan + CSP sweep (nếu có sửa HTML/JS) trước khi coi là
+  xong, rồi mới merge.
+- Áp dụng CẢ KHI chỉ sửa nhỏ/vá lỗi — không chỉ tính năng lớn mới cần agent
+  review, vì lỗi nhỏ lọt lưới vẫn ảnh hưởng hệ thống thật đang chạy (đúng
+  tinh thần "QUY TẮC SỐNG CÒN" ở mục trên).
+
 ## Giao việc cho agent phụ (sub-agent): KHÔNG BAO GIỜ được tự `git push`/merge/tạo PR
 
 Phát hiện thực tế (11/2026, đợt rà soát sâu v28.76 — người dùng yêu cầu "nhiều
