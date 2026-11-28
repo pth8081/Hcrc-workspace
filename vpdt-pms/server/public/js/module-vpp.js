@@ -161,6 +161,15 @@ function vppParticipatingDeptsList() {
 // Dựng bảng "Nhân sự theo phòng ban" — gọi lại mỗi khi đổi chế độ/mức mặc định/nhóm (không còn ô Mức/
 // Người sửa tay ngay trong bảng như trước v22.8 nên render lại toàn bộ không lo mất focus đang gõ dở ở
 // CHỖ KHÁC — chỉ giữ lại đúng giá trị Số Nhân Sự đã sửa tay trước đó, không reset về gợi ý ban đầu).
+//
+// SỬA 12/2026 (tính năng "Sửa Kỳ" — xem openVppEditPeriodForm()): khi đang SỬA 1 kỳ đã lưu, nếu
+// deptHeadcounts của kỳ đó có phòng/siêu thị KHÔNG còn trong "Phòng Ban Tham Gia VPP" hiện tại (admin bớt
+// đi SAU khi kỳ này đã tạo) — vẫn PHẢI giữ dòng đó trong bảng, không được âm thầm làm rơi mất số nhân
+// sự/ngân sách đã lưu của kỳ khi bấm "Lưu Thay Đổi" (nếu không, Object.keys() phía collectVppDeptHeadcounts()
+// đơn giản sẽ không còn dòng đó -> server ghi đè mất). Giá trị ban đầu (lần render đầu của phiên sửa,
+// prevHeadcounts rỗng) ưu tiên lấy từ SỐ ĐÃ LƯU của kỳ (editingPeriod.deptHeadcounts), KHÔNG tính lại từ
+// số nhân sự ĐANG hoạt động như lúc tạo mới (headcount lúc tạo kỳ là snapshot admin đã chốt, có thể khác
+// số tài khoản thật hiện tại).
 function renderVppDeptHeadcountTable() {
   const tbody = document.getElementById('vppDeptHeadcountBody');
   if (!tbody) return;
@@ -170,8 +179,13 @@ function renderVppDeptHeadcountTable() {
     const hc = tr.querySelector('.vpp-headcount-input')?.value;
     if (dept !== undefined) prevHeadcounts[dept] = hc;
   });
-  tbody.innerHTML = vppParticipatingDeptsList().map(dept => {
-    const headcount = dept in prevHeadcounts ? Math.max(0, Math.round(Number(prevHeadcounts[dept]) || 0)) : vppActiveHeadcountForDept(dept);
+  const editingPeriod = vppEditingPeriodId ? DB.vppPeriods.find(x => x.id === vppEditingPeriodId) : null;
+  const baseDepts = vppParticipatingDeptsList();
+  const ghostDepts = editingPeriod ? Object.keys(editingPeriod.deptHeadcounts || {}).filter(d => !baseDepts.includes(d)) : [];
+  tbody.innerHTML = [...baseDepts, ...ghostDepts].map(dept => {
+    const headcount = dept in prevHeadcounts
+      ? Math.max(0, Math.round(Number(prevHeadcounts[dept]) || 0))
+      : (editingPeriod && editingPeriod.deptHeadcounts?.[dept] != null ? editingPeriod.deptHeadcounts[dept] : vppActiveHeadcountForDept(dept));
     const { rate, groupIdx } = vppEffectiveDeptRate(dept);
     const deptBudget = rate * headcount;
     const rateColorCls = groupIdx === -1 ? 'text-gray-500 font-normal' : `font-bold ${vppRateGroupColor(groupIdx).text}`;
@@ -988,18 +1002,80 @@ async function processVppReg(actionType) {
 }
 
 // ============ KỲ ĐĂNG KÝ (quản lý — chỉ vppManage/admin) ============
-let vppPendingCatalog = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ bấm "Tạo Kỳ Đăng Ký"
+let vppPendingCatalog = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ bấm "Lưu"
+// vppEditingPeriodId (12/2026, tính năng "Sửa Kỳ" — theo yêu cầu người dùng kèm ảnh chụp màn "Kỳ Đăng
+// Ký": "nếu đang mở thì cho phép sửa lại kỳ") — null = form đang ở chế độ TẠO MỚI; có giá trị = đang SỬA
+// đúng kỳ này, tái dùng NGUYÊN form "Tạo Kỳ Đăng Ký Mới" (saveVppPeriod() tự rẽ nhánh create/update theo
+// biến này) thay vì dựng form riêng — tránh lặp lại toàn bộ UI phức tạp (2 chế độ ngân sách + upload Excel).
+let vppEditingPeriodId = null;
 
 // Thu gọn form "Tạo Kỳ Đăng Ký Mới" (pattern chuẩn mhVendorFormWrap/openMhVendorForm, module-muahang.js).
 // openVppNewPeriodForm() CHỦ Ý gọi lại resetVppNewPeriodForm() (hàm khởi tạo ĐẦY ĐỦ, đã dùng chung cho
 // nút "↺ Làm Mới" VÀ sau khi tạo kỳ thành công từ trước — xem chú thích tại hàm đó) để form LUÔN ở trạng
 // thái sạch mỗi lần mở lại, không giữ dữ liệu/preview Excel/nhóm mức riêng của lần mở trước.
 function openVppNewPeriodForm() {
+  vppEditingPeriodId = null;
   resetVppNewPeriodForm();
+  document.getElementById('vppNewPeriodFormTitle').innerText = '➕ Tạo Kỳ Đăng Ký Mới';
+  document.getElementById('btnVppPeriodSave').innerText = 'Tạo Kỳ Đăng Ký';
   document.getElementById('vppNewPeriodFormWrap').classList.remove('hidden');
 }
 function closeVppNewPeriodForm() {
   document.getElementById('vppNewPeriodFormWrap').classList.add('hidden');
+}
+
+// openVppEditPeriodForm() (12/2026, theo yêu cầu người dùng) — CHỈ sửa được khi kỳ ĐANG MỞ (đã chặn thật
+// ở server qua updateVppPeriod(), đây chỉ chặn sớm ở UI cho gọn). Nạp lại NGUYÊN dữ liệu đã lưu của kỳ
+// vào ĐÚNG form "Tạo Kỳ Đăng Ký Mới" (loadVppPeriodIntoForm()) rồi đổi tiêu đề/nhãn nút cho rõ đang SỬA.
+function openVppEditPeriodForm(id) {
+  const p = DB.vppPeriods.find(x => x.id === id);
+  if (!p) return;
+  if (!vppPeriodIsOpen(p)) return alert('⛔ Kỳ đăng ký này đã kết thúc — không thể sửa, chỉ có thể "Mở Lại Kỳ" ở mục "Khác ▾" (nếu còn người chưa đăng ký).');
+  vppEditingPeriodId = id;
+  loadVppPeriodIntoForm(p);
+  document.getElementById('vppNewPeriodFormTitle').innerText = `✏️ Sửa Kỳ Đăng Ký: ${p.name}`;
+  document.getElementById('btnVppPeriodSave').innerText = '💾 Lưu Thay Đổi';
+  document.getElementById('vppNewPeriodFormWrap').classList.remove('hidden');
+  document.getElementById('vppNewPeriodFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// loadVppPeriodIntoForm() — nạp dữ liệu 1 kỳ ĐÃ LƯU vào form dùng chung, dùng cho CẢ lúc mở "Sửa Kỳ" lẫn
+// lúc bấm "↺ Làm Mới" trong khi đang sửa (xem resetVppNewPeriodForm() — "Làm Mới" lúc sửa nghĩa là hoàn
+// tác về đúng dữ liệu đã lưu, KHÔNG xoá trắng như lúc tạo mới). Danh mục mặt hàng KHÔNG bắt tải lại — chỉ
+// hiện thông tin danh mục HIỆN CÓ, admin chỉ cần tải file MỚI nếu thật sự muốn THAY THẾ (xem saveVppPeriod()).
+// "Nhóm mức riêng" suy ngược từ deptBudgetRates đã lưu (gộp các phòng/siêu thị có CÙNG mức vào 1 nhóm) —
+// Số Nhân Sự từng dòng tự nạp đúng qua renderVppDeptHeadcountTable() (gọi gián tiếp bởi setVppRateMode()
+// ngay dưới) nhờ vppEditingPeriodId đã được gán TRƯỚC khi hàm này chạy, không cần set tay lại ở đây.
+function loadVppPeriodIntoForm(p) {
+  document.getElementById('vppNewPeriodName').value = p.name || '';
+  document.getElementById('vppNewPeriodStart').value = p.startDate || '';
+  document.getElementById('vppNewPeriodEnd').value = p.endDate || '';
+  document.getElementById('vppNewPeriodBudget').value = p.perPersonBudget != null ? Number(p.perPersonBudget).toLocaleString('vi-VN') : '';
+  vppPendingCatalog = null;
+  document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
+  clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip');
+  document.getElementById('vppCatalogStatus').innerText = '';
+  const catInfo = document.getElementById('vppCatalogCurrentInfo');
+  if (catInfo) {
+    catInfo.classList.remove('hidden');
+    catInfo.innerText = `📋 Danh mục hiện tại: ${(p.catalogItems || []).length} mặt hàng${p.catalogFileName ? ` (file "${p.catalogFileName}")` : ''} — chỉ cần tải file MỚI ở trên nếu muốn THAY THẾ, để trống thì giữ nguyên danh mục hiện tại.`;
+  }
+  vppRateGroups = [];
+  vppRateGroupNextId = 1;
+  const rates = p.deptBudgetRates || {};
+  const rateKeys = Object.keys(rates);
+  if (rateKeys.length) {
+    const byRate = new Map();
+    rateKeys.forEach(dept => {
+      const r = rates[dept];
+      if (!byRate.has(r)) byRate.set(r, []);
+      byRate.get(r).push(dept);
+    });
+    byRate.forEach((depts, rate) => { vppRateGroups.push({ id: vppRateGroupNextId++, rate, depts }); });
+    setVppRateMode('GROUPS');
+  } else {
+    setVppRateMode('DEFAULT');
+  }
 }
 
 async function onVppCatalogFileChange(event) {
@@ -1039,60 +1115,95 @@ async function onVppCatalogFileChange(event) {
   }
 }
 
-async function createVppPeriod() {
+// saveVppPeriod() (12/2026, trước đây tên createVppPeriod() — đổi tên + rẽ nhánh theo vppEditingPeriodId
+// để tái dùng NGUYÊN 1 form cho CẢ tạo mới lẫn sửa, theo yêu cầu người dùng "cho phép sửa lại kỳ nếu
+// kỳ chưa đóng"). Khác biệt DUY NHẤT giữa 2 nhánh: (1) file danh mục BẮT BUỘC lúc tạo mới, TUỲ CHỌN lúc
+// sửa (không chọn file mới = giữ nguyên danh mục hiện có — server tự hiểu catalogItems vắng mặt trong
+// payload nghĩa là "không đổi", xem updateVppPeriod() lib/recordActions.js); (2) gọi callCreateAction()
+// (tạo mới) hay callRecordAction(..., 'update', ...) (sửa, chỉ cho phép khi kỳ ĐANG MỞ — chặn thật ở
+// server). Đều dùng chung 1 payload nền tảng.
+async function saveVppPeriod() {
+  const isEditing = !!vppEditingPeriodId;
   const name = document.getElementById('vppNewPeriodName').value.trim();
   const startDate = document.getElementById('vppNewPeriodStart').value;
   const endDate = document.getElementById('vppNewPeriodEnd').value;
   if (!name) return alert('Vui lòng nhập tên kỳ đăng ký!');
-  if (!vppPendingCatalog) return alert('Vui lòng tải lên file danh mục mặt hàng!');
+  if (!isEditing && !vppPendingCatalog) return alert('Vui lòng tải lên file danh mục mặt hàng!');
   if (startDate && endDate && endDate < startDate) return alert('Ngày kết thúc phải sau ngày bắt đầu!');
 
   const budgetInput = document.getElementById('vppNewPeriodBudget');
   const perPersonBudget = budgetInput.value.trim() ? getMoneyValue(budgetInput) : null;
-  let customData;
-  try {
-    customData = await collectDynamicFieldsData('VPP');
-  } catch (err) {
-    return alert(`⛔ ${err.message}`);
-  }
   const payload = {
-    code: `VPP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`,
     name, startDate: startDate || '', endDate: endDate || '',
-    catalogItems: vppPendingCatalog.items,
-    catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
-    perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(), deptBudgetRates: collectVppDeptBudgetRates(),
-    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-    customData
+    perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(), deptBudgetRates: collectVppDeptBudgetRates()
   };
-
-  let newPeriod;
-  try {
-    const result = await callCreateAction('vppPeriods', payload);
-    newPeriod = result.item;
-  } catch (err) {
-    return alert(`⛔ ${err.message}`);
+  if (vppPendingCatalog) {
+    payload.catalogItems = vppPendingCatalog.items;
+    payload.catalogFileUrl = vppPendingCatalog.fileUrl;
+    payload.catalogFileName = vppPendingCatalog.fileName;
   }
 
-  DB.vppPeriods.unshift(newPeriod);
-  logSystemAction('VPP', 'CREATE_VPP_PERIOD', `Tạo kỳ đăng ký Văn phòng phẩm [${newPeriod.name}]`, 'SUCCESS', newPeriod.code);
-  alert('✅ Đã tạo kỳ đăng ký mới!');
+  if (isEditing) {
+    let updated;
+    try {
+      const result = await callRecordAction('vppPeriods', vppEditingPeriodId, 'update', payload);
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.vppPeriods.findIndex(x => x.id === vppEditingPeriodId);
+    if (idx !== -1) DB.vppPeriods[idx] = updated;
+    logSystemAction('VPP', 'UPDATE_VPP_PERIOD', `Sửa kỳ đăng ký Văn phòng phẩm [${updated.name}]`, 'SUCCESS', updated.code);
+    alert('✅ Đã lưu thay đổi kỳ đăng ký!');
+  } else {
+    let customData;
+    try {
+      customData = await collectDynamicFieldsData('VPP');
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    payload.code = `VPP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`;
+    payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    payload.customData = customData;
+    let newPeriod;
+    try {
+      const result = await callCreateAction('vppPeriods', payload);
+      newPeriod = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    DB.vppPeriods.unshift(newPeriod);
+    logSystemAction('VPP', 'CREATE_VPP_PERIOD', `Tạo kỳ đăng ký Văn phòng phẩm [${newPeriod.name}]`, 'SUCCESS', newPeriod.code);
+    alert('✅ Đã tạo kỳ đăng ký mới!');
+  }
 
+  vppEditingPeriodId = null;
   resetVppNewPeriodForm();
   closeVppNewPeriodForm();
   renderVppPeriods();
 }
 
 // resetVppNewPeriodForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung) VÀ tái dùng lại cho đúng
-// phần dọn form sau khi tạo kỳ thành công ở trên (KHÔNG duplicate). Không phải <form> thật (cùng lý do
+// phần dọn form sau khi tạo/sửa kỳ thành công ở trên (KHÔNG duplicate).
+//
+// SỬA 12/2026 (tính năng "Sửa Kỳ"): nếu đang SỬA 1 kỳ có sẵn (vppEditingPeriodId), "Làm Mới" nghĩa là
+// HOÀN TÁC về đúng dữ liệu đã lưu của kỳ đó (gọi lại loadVppPeriodIntoForm()), KHÔNG xoá trắng như lúc
+// tạo mới — tránh nhầm lẫn "Làm Mới" xoá mất thông tin kỳ đang sửa dở. Không phải <form> thật (cùng lý do
 // resetVppRegForm() ở trên — không có .reset() để gọi) nên set tay từng ô, GIỮ NGUYÊN mặc định
-// "100.000" của Ngân sách/người (khớp value="100.000" gõ cứng sẵn trong HTML — không phải rỗng).
+// "100.000" của Ngân sách/người lúc TẠO MỚI (khớp value="100.000" gõ cứng sẵn trong HTML — không phải rỗng).
 function resetVppNewPeriodForm() {
+  if (vppEditingPeriodId) {
+    const p = DB.vppPeriods.find(x => x.id === vppEditingPeriodId);
+    if (p) { loadVppPeriodIntoForm(p); return; }
+  }
   document.getElementById('vppNewPeriodName').value = '';
   document.getElementById('vppNewPeriodStart').value = '';
   document.getElementById('vppNewPeriodEnd').value = '';
   document.getElementById('vppNewPeriodBudget').value = '100.000'; // mặc định ban đầu 100.000đ/người, admin vẫn sửa được ở lượt tạo kỳ tiếp theo
   document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
   document.getElementById('vppCatalogStatus').innerText = '';
+  const catInfo = document.getElementById('vppCatalogCurrentInfo');
+  if (catInfo) catInfo.classList.add('hidden');
   vppPendingCatalog = null;
   clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip');
   vppRateGroups = [];
@@ -1111,6 +1222,16 @@ function vppPeriodStatusBadge(p) {
   return `<span class="badge-success">🟢 Đang mở</span>`;
 }
 
+// Bản sao phía client của computeEligibleUnregisteredUsers() (lib/vppCatalog.js) — chỉ để hiển thị/ẩn
+// nút "Mở Lại Kỳ" trên UI, KHÔNG phải nguồn xác thực cuối cùng (server luôn tính lại khi xử lý action).
+function vppComputeEligibleUnregisteredUsers(periodId) {
+  const registeredUsernames = new Set((DB.vppRegistrations || [])
+    .filter(r => r.periodId === periodId && r.status !== 'REJECTED')
+    .map(r => r.creator));
+  return (DB.users || []).filter(u =>
+    u.active !== false && canRegisterVpp(u) && !isUserVppExcluded(u) && !registeredUsernames.has(u.username));
+}
+
 function renderVppPeriods() {
   const tbody = document.getElementById('vppPeriodsTableBody');
   if (!tbody) return;
@@ -1118,13 +1239,21 @@ function renderVppPeriods() {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có kỳ đăng ký nào.</td></tr>`;
     return;
   }
+  const canManage = canManageVpp(currentUser);
   tbody.innerHTML = sortByCreatedAtDesc(DB.vppPeriods).map(p => {
     const regCount = DB.vppRegistrations.filter(r => r.periodId === p.id).length;
     const isOpen = vppPeriodIsOpen(p);
     const secondaryOptions = [];
     if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Kết Thúc Kỳ' });
+    if (!isOpen && canManage) {
+      const eligibleCount = vppComputeEligibleUnregisteredUsers(p.id).length;
+      if (eligibleCount > 0) secondaryOptions.push({ value: 'reopen', label: `🔓 Mở Lại Kỳ (còn ${eligibleCount} người chưa ĐK)` });
+    }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
-    const primaryBtnHTML = `<button data-op="downloadVppCatalogExport" data-arg0="${p.id}" class="px-2.5 py-1 bg-orange-600 text-white rounded text-xs hover:opacity-90 font-bold" title="Xuất danh mục mặt hàng của kỳ này ra Excel (để dùng lại làm cơ sở cho kỳ sau)">📤 Xuất Excel</button>`;
+    let primaryBtnHTML = `<button data-op="downloadVppCatalogExport" data-arg0="${p.id}" class="px-2.5 py-1 bg-orange-600 text-white rounded text-xs hover:opacity-90 font-bold" title="Xuất danh mục mặt hàng của kỳ này ra Excel (để dùng lại làm cơ sở cho kỳ sau)">📤 Xuất Excel</button>`;
+    if (isOpen && canManage) {
+      primaryBtnHTML = `<button data-op="openVppEditPeriodForm" data-arg0="${p.id}" class="px-2.5 py-1 bg-blue-600 text-white rounded text-xs hover:opacity-90 font-bold mr-1" title="Sửa lại thông tin kỳ đăng ký này">✏️ Sửa Kỳ</button>` + primaryBtnHTML;
+    }
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-orange-800">${escapeHtml(p.name)}</td>
@@ -1141,6 +1270,7 @@ function renderVppPeriods() {
 function runVppPeriodAction(id, action) {
   switch (action) {
     case 'close': closeVppPeriodAction(id); break;
+    case 'reopen': reopenVppPeriodAction(id); break;
     case 'delete': deleteVppPeriodAction(id); break;
   }
 }
@@ -1168,6 +1298,38 @@ function closeVppPeriodAction(id) {
         if (idx !== -1) DB.vppPeriods[idx] = result.item;
       } catch (err) { return alert(`⛔ ${err.message}`); }
       logSystemAction('VPP', 'CLOSE_VPP_PERIOD', `Kết thúc kỳ đăng ký Văn phòng phẩm [${p.name}]`, 'SUCCESS', p.code);
+      renderVppPeriods();
+    }
+  });
+}
+
+// Mở Lại Kỳ (sau khi đã Kết Thúc) — CHỈ áp dụng khi còn người đủ điều kiện đăng ký nhưng chưa đăng ký
+// (ví dụ bị sót), theo đúng yêu cầu người dùng. Số liệu hiển thị ở đây CHỈ để tham khảo/cảnh báo — server
+// (reopenVppPeriod() ở lib/recordActions.js) luôn tự tính lại và chặn cứng nếu không còn ai đủ điều kiện,
+// không tin suông vào số đã tính phía client lúc render bảng (dữ liệu users/registrations có thể đã đổi).
+function reopenVppPeriodAction(id) {
+  const p = DB.vppPeriods.find(x => x.id === id);
+  if (!p) return;
+  const eligible = vppComputeEligibleUnregisteredUsers(id);
+  if (!eligible.length) return alert('⛔ Không còn ai đủ điều kiện mà chưa đăng ký trong kỳ này — không cần mở lại.');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  showConfirmModal({
+    title: 'Mở Lại Kỳ Đăng Ký',
+    bodyHTML: `Kỳ <b>${escapeHtml(p.name)}</b> đã kết thúc, hiện còn <b>${eligible.length} người</b> đủ điều kiện nhưng chưa đăng ký. Mở lại kỳ để những người này đăng ký bổ sung — chọn hạn đăng ký mới:
+      <div class="mt-3 text-left">
+        <label class="block text-xs font-semibold text-gray-600 mb-1">📅 Hạn đăng ký mới:</label>
+        <input type="date" id="vppReopenEndDateInput" class="w-full border p-2 rounded text-xs" value="${escapeHtml(todayStr)}" min="${escapeHtml(todayStr)}">
+      </div>`,
+    confirmLabel: 'Mở Lại Kỳ',
+    onConfirm: async () => {
+      const newEndDate = document.getElementById('vppReopenEndDateInput')?.value;
+      if (!newEndDate) return alert('⛔ Vui lòng chọn hạn đăng ký mới.');
+      try {
+        const result = await callRecordAction('vppPeriods', id, 'reopen', { newEndDate });
+        const idx = DB.vppPeriods.findIndex(x => x.id === id);
+        if (idx !== -1) DB.vppPeriods[idx] = result.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      logSystemAction('VPP', 'REOPEN_VPP_PERIOD', `Mở lại kỳ đăng ký Văn phòng phẩm [${p.name}]`, 'SUCCESS', p.code);
       renderVppPeriods();
     }
   });

@@ -98,7 +98,7 @@
         <button type="button" data-op="openVppNewPeriodForm" id="btnVppPeriodNew" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">+ Tạo Kỳ Đăng Ký Mới</button>
       </div>
       <div id="vppNewPeriodFormWrap" class="hidden bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
-        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">➕ Tạo Kỳ Đăng Ký Mới</h3>
+        <h3 id="vppNewPeriodFormTitle" class="font-bold text-orange-900 text-sm flex items-center gap-1">➕ Tạo Kỳ Đăng Ký Mới</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border">
           <div class="md:col-span-3">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên kỳ đăng ký</label>
@@ -155,6 +155,7 @@
           <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onVppCatalogFileChange" data-arg-event="0" class="text-xs">
           <div id="vppCatalogFileChip" class="mt-1 flex flex-wrap gap-1"></div>
           <p id="vppCatalogStatus" class="text-[11px] text-gray-500 italic"></p>
+          <p id="vppCatalogCurrentInfo" class="hidden text-[11px] text-gray-600 italic mt-1"></p>
           <div id="vppCatalogPreviewWrap" class="hidden">
             <p class="text-[11px] font-semibold text-gray-600 mb-1">Xem trước danh mục (<span id="vppCatalogPreviewCount">0</span> mặt hàng):</p>
             <div class="max-h-48 overflow-y-auto border rounded">
@@ -173,7 +174,7 @@
         <div id="dynamicFieldsContainer_VPP" class="contents"></div>
         <div class="flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="vppNewPeriodFormWrap" data-arg1="resetVppNewPeriodForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
-          <button type="button" data-op="createVppPeriod" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
+          <button type="button" id="btnVppPeriodSave" data-op="saveVppPeriod" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
           <button type="button" data-op="closeVppNewPeriodForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
         </div>
       </div>

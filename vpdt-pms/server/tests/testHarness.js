@@ -510,6 +510,14 @@ function createDispatcher(state) {
     return recordActions.confirmOperationUse(u, item, items, 'OPERATION_REPAIR');
   };
 
+  // VPP — "✏️ Sửa Kỳ" + "🔓 Mở Lại Kỳ" (12/2026) — mirror ĐÚNG 2 route thật (routes/records.js POST
+  // /vppPeriods/:id/update|reopen), xem lib/recordActions.js updateVppPeriod()/reopenVppPeriod().
+  actionHandlers['vppPeriods:close'] = (u, item) => recordActions.closeVppPeriod(u, item);
+  actionHandlers['vppPeriods:update'] = (u, item, body) => recordActions.updateVppPeriod(u, item, body || {});
+  actionHandlers['vppPeriods:reopen'] = (u, item, body) => recordActions.reopenVppPeriod(
+    u, item, body && body.newEndDate, state.users, state.vppRegistrations || [], state.vppExcludedJobTitles || []
+  );
+
   function buildDataPayload(username) {
     // Khớp đúng field mà initDatabase() (public/index.html) gán từ GET /api/data — chỉ liệt kê những
     // field 3 module test này thực sự đọc, phần còn lại initDatabase() tự "|| []"/"|| {}" nên an toàn.

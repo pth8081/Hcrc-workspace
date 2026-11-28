@@ -2763,6 +2763,40 @@ router.post('/vppPeriods/:id/close', async (req, res) => {
   }
 });
 
+// POST /api/records/vppPeriods/:id/update — Sửa kỳ (chỉ khi ĐANG MỞ, xem recordActions.updateVppPeriod()).
+router.post('/vppPeriods/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('vppPeriods', itemId, (item) =>
+      recordActions.updateVppPeriod(freshUser, item, req.body || {})
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppPeriods/${req.params.id}/update`, err);
+  }
+});
+
+// POST /api/records/vppPeriods/:id/reopen — Mở lại kỳ ĐÃ ĐÓNG, CHỈ khi còn người đủ điều kiện chưa đăng
+// ký (recordActions.reopenVppPeriod() tự tính lại + chặn thật, không chỉ ẩn nút ở UI).
+router.post('/vppPeriods/:id/reopen', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const users = (await getAppDataValue('users')) || [];
+    const registrations = await getAllForCollection('vppRegistrations');
+    const excludedJobTitles = await getAppDataValue('vppExcludedJobTitles');
+    const result = await withLockedRecordForCollection('vppPeriods', itemId, (item) =>
+      recordActions.reopenVppPeriod(freshUser, item, req.body?.newEndDate, users, registrations, excludedJobTitles)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppPeriods/${req.params.id}/reopen`, err);
+  }
+});
+
 // ===================== "BỔ SUNG" — sửa lại + gửi lại sau khi bị người duyệt yêu cầu bổ sung =====================
 // Sau khi người duyệt bấm "Bổ Sung" (POST /api/workflow/<module>/:id/request-changes, xem
 // lib/workflowEngine.js), hồ sơ về NHÁP — 4 cặp route dưới đây (update/submit) cùng khuôn
